@@ -3939,36 +3939,61 @@ def apply_late_leave():
                     active_section='hr')
 
 
-def _notify_leave_cancellation(conn, user, records, reason):
-    """Email the reporting manager that a leave was cancelled; CC the team member."""
+def _leave_action_allowed(user, leave, conn):
+    """Who may modify / cancel / reschedule a leave: the owner, any admin, or
+    the employee's reporting manager (i.e. someone who can approve their
+    leave). Returns (allowed: bool, leave_emp: row|None)."""
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
+    if leave['employee_id'] == user['id']:
+        return True, leave_emp
+    if user.get('is_admin'):
+        return True, leave_emp
+    if leave_emp:
+        try:
+            allowed, _ = can_approve_leave(user, leave_emp, conn)
+        except Exception:
+            allowed = False
+        if allowed:
+            return True, leave_emp
+    return False, leave_emp
+
+
+def _notify_leave_cancellation(conn, leave_owner, records, reason, actor=None):
+    """Email the reporting manager AND the team member that a leave was
+    cancelled. leave_owner = the employee whose leave it is; actor = who
+    performed it (defaults to the owner, e.g. a manager cancelling on their
+    behalf)."""
     try:
         from email_utils import send_email
-        mgr_email = mgr_name = None
-        if user.get('reporting_to'):
-            mgr = conn.execute('SELECT name, email FROM employees WHERE id = ?',
-                               (user['reporting_to'],)).fetchone()
-            if mgr:
-                mgr_name, mgr_email = mgr['name'], mgr['email']
-        if not mgr_email:
+        actor = actor or leave_owner
+        recipients = []
+        if leave_owner.get('reporting_to'):
+            mgr = conn.execute('SELECT email FROM employees WHERE id = ?',
+                               (leave_owner['reporting_to'],)).fetchone()
+            if mgr and mgr['email']:
+                recipients.append(mgr['email'])
+        if leave_owner.get('email'):
+            recipients.append(leave_owner['email'])
+        recipients = [e for e in dict.fromkeys(recipients) if e]  # de-dupe, drop blanks
+        if not recipients:
             return False
         dates = sorted(str(r['leave_date']) for r in records)
         date_range = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]} ({len(dates)} days)"
         l_type = records[0]['leave_type']
-        emp_name = user.get('name') or 'A team member'
-        emp_email = user.get('email')
+        emp_name = leave_owner.get('name') or 'A team member'
+        by_line = '' if actor.get('id') == leave_owner.get('id') else f" by {actor.get('name')}"
         subject = f"Leave Cancellation — {emp_name} ({date_range})"
         body = f"""<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">
-            <p>Hi {mgr_name},</p>
-            <p><strong>{emp_name}</strong> has cancelled the following leave:</p>
+            <p>Hi,</p>
+            <p>The following leave for <strong>{emp_name}</strong> was cancelled{by_line}:</p>
             <ul>
               <li><strong>Type:</strong> {l_type}</li>
               <li><strong>Date(s):</strong> {date_range}</li>
               <li><strong>Reason for cancellation:</strong> {reason or '—'}</li>
             </ul>
-            <p style="color:#6b7280;">This was cancelled before the leave date; no approval action is required.</p>
+            <p style="color:#6b7280;">Cancelled before the leave date; the day(s) have been freed.</p>
             <p>— GooCampus HR Portal</p></div>"""
-        cc = [emp_email] if emp_email else None
-        return send_email([mgr_email], subject, body, cc_list=cc)
+        return send_email(recipients, subject, body)
     except Exception as e:
         logging.error(f"_notify_leave_cancellation: {e}")
         return False
@@ -3984,10 +4009,16 @@ def cancel_leave(leave_id):
     conn = get_db()
 
     leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
-    if not leave or leave['employee_id'] != user['id']:
-        flash('Leave not found or unauthorized', 'error')
+    if not leave:
+        flash('Leave not found', 'error')
         conn.close()
         return redirect(url_for('my_leave_applications'))
+    allowed, leave_emp = _leave_action_allowed(user, leave, conn)
+    if not allowed:
+        flash('You are not allowed to cancel this leave', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('my_leave_applications'))
+    owner_id = leave['employee_id']
 
     reason = (request.form.get('retrieve_reason') or request.form.get('cancel_reason') or '').strip()
     group_id = request.args.get('group_id') or leave['leave_group_id']
@@ -3996,7 +4027,7 @@ def cancel_leave(leave_id):
     if group_id:
         rows = conn.execute(
             "SELECT * FROM leave_records WHERE leave_group_id = ? AND employee_id = ?",
-            (group_id, user['id'])).fetchall()
+            (group_id, owner_id)).fetchall()
     else:
         rows = [leave]
     # Only cancel days that are still active (pending/approved) and not yet passed.
@@ -4005,7 +4036,7 @@ def cancel_leave(leave_id):
     if not cancellable:
         flash('This leave can no longer be cancelled — it has already been actioned or the date has passed.', 'error')
         conn.close()
-        return redirect(url_for('my_leave_applications'))
+        return redirect(request.referrer or url_for('my_leave_applications'))
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ids = [r['id'] for r in cancellable]
@@ -4015,15 +4046,16 @@ def cancel_leave(leave_id):
         [reason, now_str] + ids)
     conn.commit()
 
-    notified = _notify_leave_cancellation(conn, user, cancellable, reason)
+    notified = _notify_leave_cancellation(conn, leave_emp, cancellable, reason, actor=user)
     conn.close()
 
     n = len(cancellable)
+    by_self = (owner_id == user['id'])
     msg = f'Leave cancelled ({n} day{"s" if n > 1 else ""}).'
     if notified:
-        msg += ' Your reporting manager has been notified (you are cc’d).'
+        msg += ' The reporting manager and team member have been notified.' if not by_self else ' Your reporting manager has been notified (you are cc’d).'
     flash(msg, 'success')
-    return redirect(url_for('my_leave_applications'))
+    return redirect(request.referrer or url_for('my_leave_applications'))
 
 
 @app.route('/retrieve-leave/<int:leave_id>', methods=['POST'])
@@ -4034,15 +4066,20 @@ def retrieve_leave(leave_id):
     conn = get_db()
 
     leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
-    if not leave or leave['employee_id'] != user['id']:
-        flash('Leave not found or unauthorized', 'error')
+    if not leave:
+        flash('Leave not found', 'error')
         conn.close()
         return redirect(url_for('my_leave_report'))
+    allowed, _leave_emp = _leave_action_allowed(user, leave, conn)
+    if not allowed:
+        flash('You are not allowed to retrieve this leave', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('my_leave_report'))
 
     if leave['status'] == 'retrieved':
         flash('This leave has already been retrieved', 'error')
         conn.close()
-        return redirect(url_for('my_leave_report'))
+        return redirect(request.referrer or url_for('my_leave_report'))
 
     # Check leave date is today or in the future
     try:
@@ -4078,15 +4115,24 @@ def modify_leave(leave_id):
     conn = get_db()
 
     leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
-    if not leave or leave['employee_id'] != user['id']:
-        flash('Leave not found or unauthorized', 'error')
+    if not leave:
+        flash('Leave not found', 'error')
         conn.close()
         return redirect(url_for('my_leave_report'))
+    allowed, leave_emp = _leave_action_allowed(user, leave, conn)
+    if not allowed:
+        flash('You are not allowed to modify this leave', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('my_leave_report'))
+    owner_id = leave['employee_id']
+    # Where to send the actor back after a successful modify.
+    _back = url_for('my_leave_report') if owner_id == user['id'] else (
+        url_for('admin_leave_applications') if user.get('is_admin') else url_for('team_leave_applications'))
 
     if leave['status'] in ('retrieved', 'modified', 'cancelled'):
         flash('This leave has already been retrieved, modified or cancelled', 'error')
         conn.close()
-        return redirect(url_for('my_leave_report'))
+        return redirect(_back)
 
     # Can't modify a leave whose date has already passed (approved leaves can
     # still be modified up to the leave date — modifying re-submits for approval).
@@ -4094,7 +4140,7 @@ def modify_leave(leave_id):
         if str(leave['leave_date']) < datetime.now().strftime('%Y-%m-%d'):
             flash('This leave date has passed and can no longer be modified.', 'error')
             conn.close()
-            return redirect(url_for('my_leave_report'))
+            return redirect(_back)
     except Exception:
         pass
 
@@ -4179,14 +4225,15 @@ def modify_leave(leave_id):
                 INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion,
                     reason, status, is_late, original_id, original_reason, modification_reason, created_at, leave_group_id)
                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
-            ''', (user['id'], new_leave_type, date_str, day_val, portion,
+            ''', (owner_id, new_leave_type, date_str, day_val, portion,
                   new_reason, is_late, leave_id, original_reason, mod_reason, now_str, group_id))
 
         conn.commit()
         conn.close()
 
-        flash(f'Leave modified ({total_days:.1f} day(s)). Re-approval is required.', 'success')
-        return redirect(url_for('my_leave_report'))
+        whose = 'Leave' if owner_id == user['id'] else f"{leave_emp['name']}'s leave" if leave_emp else 'Leave'
+        flash(f'{whose} modified ({total_days:.1f} day(s)). Re-approval is required.', 'success')
+        return redirect(_back)
 
     # GET: show modification form
     conn.close()
