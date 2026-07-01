@@ -485,6 +485,12 @@ def ops_australia_client_detail(client_id):
         documents = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client['id'],)).fetchall()
     except Exception:
         documents = []
+    try:
+        from app import get_package_services
+        package_services = get_package_services(
+            conn, client.get('product_id'), client.get('plan_type'))
+    except Exception:
+        package_services = []
     conn.close()
 
     return render_template(
@@ -493,6 +499,7 @@ def ops_australia_client_detail(client_id):
         plab_doc_types=PLAB_DOC_TYPES,
         user=user,
         client=client,
+        package_services=package_services,
         sections=sections,
         amount_paid=amount_paid,
         gst_paid=gst_paid,
