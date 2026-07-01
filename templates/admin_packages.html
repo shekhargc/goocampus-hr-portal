@@ -31,12 +31,23 @@
     <div style="background:#fff;border:1px dashed #d1d5db;border-radius:10px;padding:30px;text-align:center;color:#94a3b8;">
       Pick a product above to define its plan packages and services.
     </div>
-  {% elif not plans %}
-    <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:20px;color:#9A3412;font-size:0.9rem;">
-      <strong>{{ selected.name }}</strong> has no plan types yet. Add plan types first (Sales lookups / plan_type), then they'll appear here to define packages.
-    </div>
   {% else %}
-    <h2 style="font-size:1.05rem;font-weight:700;color:#1e3a5f;margin:0 0 0.8rem;">{{ selected.name }}{% if selected.pathway %} <span style="font-weight:500;color:#94a3b8;font-size:0.85rem;">· {{ selected.pathway }}</span>{% endif %}</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.4rem;">
+      <h2 style="font-size:1.05rem;font-weight:700;color:#1e3a5f;margin:0;">{{ selected.name }}{% if selected.pathway %} <span style="font-weight:500;color:#94a3b8;font-size:0.85rem;">· {{ selected.pathway }}</span>{% endif %}</h2>
+      <form method="POST" action="/admin/packages/plan-type/add" style="display:flex;gap:6px;align-items:center;">
+        <input type="hidden" name="product_id" value="{{ selected.id }}">
+        <input type="text" name="plan_type" required placeholder="New plan type name"
+               style="padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;width:200px;">
+        <button type="submit" style="background:#059669;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:600;font-size:0.82rem;cursor:pointer;">+ Add plan type</button>
+      </form>
+    </div>
+    <p style="font-size:0.76rem;color:#94a3b8;margin:0 0 14px;">Plan types are shared with the Field Manager and the sales form — adding one here syncs everywhere.</p>
+
+    {% if not plans %}
+    <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:18px;color:#9A3412;font-size:0.9rem;margin-bottom:14px;">
+      <strong>{{ selected.name }}</strong> has no plan types yet. Add one above to start defining its package + services.
+    </div>
+    {% endif %}
 
     {% for plan in plans %}
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
