@@ -38,6 +38,22 @@ app.url_map.strict_slashes = False
 app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
 app.config['DEBUG'] = False
 
+# ─── Session persistence ──────────────────────────────────────────────
+# Without this, Flask issues a *session cookie* (no expiry) that the
+# browser clears on close — so team members who shut or idle their browser
+# get logged out, while the founder who keeps a tab open all day appears to
+# stay in. Make every session permanent with a rolling 30-day lifetime that
+# is refreshed on each request, so an actively-used login never expires and
+# an idle one only lapses after 30 days. Applies uniformly to employees,
+# managers, clients and partners.
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SESSION_REFRESH_EACH_REQUEST'] = True
+
+
+@app.before_request
+def _make_session_permanent():
+    session.permanent = True
+
 
 # ─── Global Jinja2 date filter: DD-Mon-YYYY (e.g. 15-Apr-2026) ───
 @app.template_filter('format_date')
@@ -34244,6 +34260,10 @@ ACCESS_ROUTE_MAP = {
     'ops_training_client_edit_page':        _ap('training_pathway', 'registration', 'edit'),
     'ops_training_client_edit_save':        _ap('training_pathway', 'registration', 'edit'),
     'ops_training_client_delete':           _ap('training_pathway', 'registration', 'edit'),
+    # Cross-pathway add: creating a Training entry from another pathway's
+    # client counts as adding a Training registration.
+    'ops_add_to_training_form':             _ap('training_pathway', 'registration', 'add'),
+    'ops_add_to_training_save':             _ap('training_pathway', 'registration', 'add'),
     'ops_training_documents_list':          _ap('training_pathway', 'documents'),
     'ops_training_payments_list':           _ap('training_pathway', 'payments'),
     'ops_training_payments_detail':         _ap('training_pathway', 'payments'),
