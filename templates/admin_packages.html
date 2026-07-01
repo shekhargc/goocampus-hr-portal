@@ -135,9 +135,11 @@
                  style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100px;">
         </div>
         <div>
-          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Delivery stage</label>
-          <input type="text" name="delivery_stage" placeholder="Month 1"
-                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:130px;">
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Delivery stage (client stage)</label>
+          <select name="delivery_stage" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:170px;background:#fff;">
+            <option value="">— select stage —</option>
+            {% for so in stage_options %}<option value="{{ so }}">{{ so }}</option>{% endfor %}
+          </select>
         </div>
         <div>
           <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Budget (₹)</label>
