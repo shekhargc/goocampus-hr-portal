@@ -1316,6 +1316,41 @@ def admin_packages_service_delete(sid):
     return redirect(url_for('admin_packages', product_id=product_id))
 
 
+@app.route('/admin/packages/plan-type/add', methods=['POST'])
+@admin_required
+def admin_packages_plan_type_add():
+    """Add a plan type from the Products & Services editor. Writes to the SAME
+    lookup_options table the Ops Field Manager uses (with product_name + pathway
+    set), so plan types stay synced across Field Manager, the sales cascade, and
+    here — you can add from either place."""
+    product_id = request.form.get('product_id', type=int)
+    plan_name = (request.form.get('plan_type') or '').strip()
+    conn = get_db()
+    prod = conn.execute("SELECT name, COALESCE(pathway,'') AS pathway FROM products_services WHERE id = ?",
+                        (product_id,)).fetchone()
+    if not prod or not plan_name:
+        conn.close()
+        flash('Plan type name is required.', 'error')
+        return redirect(url_for('admin_packages', product_id=product_id))
+    existing = conn.execute(
+        "SELECT id FROM lookup_options WHERE category = 'plan_type' AND LOWER(value) = LOWER(?) "
+        "AND COALESCE(product_name, '') = ?", (plan_name, prod['name'])).fetchone()
+    if existing:
+        conn.close()
+        flash('That plan type already exists for this product.', 'info')
+        return redirect(url_for('admin_packages', product_id=product_id))
+    mx = conn.execute("SELECT COALESCE(MAX(sort_order), 0) AS m FROM lookup_options "
+                      "WHERE category = 'plan_type'").fetchone()['m']
+    conn.execute(
+        "INSERT INTO lookup_options (category, label, value, product_name, pathway, is_active, sort_order) "
+        "VALUES ('plan_type', ?, ?, ?, ?, TRUE, ?)",
+        (plan_name, plan_name, prod['name'], (prod['pathway'] or None), mx + 1))
+    conn.commit()
+    conn.close()
+    flash(f'Plan type "{plan_name}" added to {prod["name"]} (also shows in Field Manager).', 'success')
+    return redirect(url_for('admin_packages', product_id=product_id))
+
+
 @app.route('/client/dashboard')
 @client_required
 def client_dashboard():
