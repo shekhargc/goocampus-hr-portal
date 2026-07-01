@@ -1236,21 +1236,22 @@ def admin_packages():
 def admin_packages_plan_save():
     product_id = request.form.get('product_id', type=int)
     plan_type = (request.form.get('plan_type') or '').strip()
-    try:
-        amount = float(request.form.get('package_amount') or 0)
-    except ValueError:
-        amount = 0
+    def _num(name):
+        try: return float(request.form.get(name) or 0)
+        except (TypeError, ValueError): return 0
+    amount = _num('package_amount')  # gross / sale price
+    cost = _num('plan_cost')
     summary = (request.form.get('summary') or '').strip()
     conn = get_db()
     existing = conn.execute(
         "SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
         (product_id, plan_type)).fetchone()
     if existing:
-        conn.execute("UPDATE plan_packages SET package_amount = ?, summary = ?, "
-                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (amount, summary, existing['id']))
+        conn.execute("UPDATE plan_packages SET package_amount = ?, plan_cost = ?, summary = ?, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (amount, cost, summary, existing['id']))
     else:
-        conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, summary) "
-                     "VALUES (?, ?, ?, ?)", (product_id, plan_type, amount, summary))
+        conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, plan_cost, summary) "
+                     "VALUES (?, ?, ?, ?, ?)", (product_id, plan_type, amount, cost, summary))
     conn.commit()
     conn.close()
     flash('Package saved.', 'success')
@@ -1278,6 +1279,10 @@ def admin_packages_service_add():
     quantity = (request.form.get('quantity') or '').strip()
     stage = (request.form.get('delivery_stage') or '').strip()
     desc = (request.form.get('description') or '').strip()
+    try:
+        budget = float(request.form.get('budget') or 0)
+    except (TypeError, ValueError):
+        budget = 0
     if not service_name:
         flash('Service name is required.', 'error')
         return redirect(url_for('admin_packages', product_id=product_id))
@@ -1286,8 +1291,8 @@ def admin_packages_service_add():
     mx = conn.execute("SELECT COALESCE(MAX(sort_order), 0) AS m FROM package_services "
                       "WHERE plan_package_id = ?", (pkg_id,)).fetchone()['m']
     conn.execute("INSERT INTO package_services (plan_package_id, service_name, description, "
-                 "quantity, delivery_stage, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-                 (pkg_id, service_name, desc, quantity, stage, mx + 1))
+                 "quantity, delivery_stage, budget, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                 (pkg_id, service_name, desc, quantity, stage, budget, mx + 1))
     # Add to the reusable catalogue if it's a new name.
     cat = conn.execute("SELECT id FROM service_catalogue WHERE LOWER(name) = LOWER(?)",
                        (service_name,)).fetchone()
@@ -28248,6 +28253,8 @@ def ensure_package_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
         "CREATE INDEX IF NOT EXISTS idx_plan_packages_product ON plan_packages(product_id)",
         "CREATE INDEX IF NOT EXISTS idx_package_services_plan ON package_services(plan_package_id)",
+        "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS plan_cost NUMERIC(14,2) DEFAULT 0",
+        "ALTER TABLE package_services ADD COLUMN IF NOT EXISTS budget NUMERIC(14,2) DEFAULT 0",
     ):
         try:
             conn.execute(ddl); conn.commit()

@@ -42,18 +42,30 @@
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
         <div style="font-size:1rem;font-weight:700;color:#0F172A;"><i class="bi bi-box-seam" aria-hidden="true"></i> {{ plan.plan_type }}</div>
-        {% if plan.pkg %}<span style="font-size:0.78rem;color:#065F46;background:#D1FAE5;padding:3px 10px;border-radius:999px;">Package ₹{{ '{:,.0f}'.format(plan.pkg.package_amount|float) }}</span>{% else %}<span style="font-size:0.78rem;color:#92400E;background:#FEF3C7;padding:3px 10px;border-radius:999px;">No package defined yet</span>{% endif %}
+        {% if plan.pkg %}
+        {% set _gross = plan.pkg.package_amount|float %}{% set _cost = plan.pkg.plan_cost|float %}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:0.74rem;">
+          <span style="color:#065F46;background:#D1FAE5;padding:3px 10px;border-radius:999px;">Gross ₹{{ '{:,.0f}'.format(_gross) }}</span>
+          <span style="color:#991B1B;background:#FEE2E2;padding:3px 10px;border-radius:999px;">Cost ₹{{ '{:,.0f}'.format(_cost) }}</span>
+          <span style="color:#3730A3;background:#E0E7FF;padding:3px 10px;border-radius:999px;">Revenue ₹{{ '{:,.0f}'.format(_gross - _cost) }}</span>
+        </div>
+        {% else %}<span style="font-size:0.78rem;color:#92400E;background:#FEF3C7;padding:3px 10px;border-radius:999px;">Not set up yet</span>{% endif %}
       </div>
 
       <form method="POST" action="/admin/packages/plan/save" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;background:#F8FAFC;border:1px solid #EEF2F6;border-radius:8px;padding:12px;">
         <input type="hidden" name="product_id" value="{{ selected.id }}">
         <input type="hidden" name="plan_type" value="{{ plan.plan_type }}">
         <div>
-          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Package amount (₹)</label>
-          <input type="number" step="1" min="0" name="package_amount" value="{{ '{:.0f}'.format(plan.pkg.package_amount|float) if plan.pkg else 0 }}"
-                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:160px;">
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Cost (₹)</label>
+          <input type="number" step="1" min="0" name="plan_cost" value="{{ '{:.0f}'.format(plan.pkg.plan_cost|float) if plan.pkg else 0 }}"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:130px;">
         </div>
-        <div style="flex:1;min-width:220px;">
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Gross / sale price (₹)</label>
+          <input type="number" step="1" min="0" name="package_amount" value="{{ '{:.0f}'.format(plan.pkg.package_amount|float) if plan.pkg else 0 }}"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:150px;">
+        </div>
+        <div style="flex:1;min-width:200px;">
           <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Summary (shown to client, optional)</label>
           <input type="text" name="summary" value="{{ plan.pkg.summary if plan.pkg else '' }}" placeholder="e.g. End-to-end AMC consulting support"
                  style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100%;box-sizing:border-box;">
@@ -62,19 +74,23 @@
       </form>
 
       {% if plan.services %}
+      {% set ns = namespace(tbudget=0) %}
       <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:10px;">
         <thead><tr style="background:#F8FAFC;">
           <th style="text-align:left;padding:7px 10px;color:#475569;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Service</th>
           <th style="text-align:left;padding:7px 10px;color:#475569;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Qty</th>
           <th style="text-align:left;padding:7px 10px;color:#475569;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Delivery stage</th>
+          <th style="text-align:right;padding:7px 10px;color:#475569;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Budget (₹)</th>
           <th style="border-bottom:1px solid #e5e7eb;"></th>
         </tr></thead>
         <tbody>
           {% for sv in plan.services %}
+          {% set ns.tbudget = ns.tbudget + (sv.budget|float) %}
           <tr>
             <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#0F172A;font-weight:600;">{{ sv.service_name }}{% if sv.description %}<div style="font-weight:400;color:#94a3b8;font-size:0.78rem;">{{ sv.description }}</div>{% endif %}</td>
             <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.quantity or '—' }}</td>
             <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.delivery_stage or '—' }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;text-align:right;">{% if sv.budget and sv.budget|float > 0 %}₹{{ '{:,.0f}'.format(sv.budget|float) }}{% else %}—{% endif %}</td>
             <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">
               <form method="POST" action="/admin/packages/service/delete/{{ sv.id }}" onsubmit="return confirm('Remove this service?');" style="display:inline;">
                 <input type="hidden" name="product_id" value="{{ selected.id }}">
@@ -84,6 +100,11 @@
           </tr>
           {% endfor %}
         </tbody>
+        <tfoot><tr>
+          <td colspan="3" style="padding:7px 10px;text-align:right;font-size:0.78rem;color:#64748b;">Total service budget</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:700;color:#991B1B;">₹{{ '{:,.0f}'.format(ns.tbudget) }}</td>
+          <td style="padding:7px 10px;text-align:right;font-size:0.72rem;color:#94a3b8;">{% if plan.pkg %}vs cost ₹{{ '{:,.0f}'.format(plan.pkg.plan_cost|float) }}{% endif %}</td>
+        </tr></tfoot>
       </table>
       {% else %}
       <p style="color:#94a3b8;font-size:0.84rem;margin:0 0 10px;">No services added yet.</p>
@@ -92,7 +113,7 @@
       <form method="POST" action="/admin/packages/service/add" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;border-top:1px dashed #e5e7eb;padding-top:12px;">
         <input type="hidden" name="product_id" value="{{ selected.id }}">
         <input type="hidden" name="plan_type" value="{{ plan.plan_type }}">
-        <div style="flex:1;min-width:200px;">
+        <div style="flex:1;min-width:180px;">
           <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Service</label>
           <input type="text" name="service_name" list="svc-catalogue" required placeholder="e.g. Mock interview"
                  style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100%;box-sizing:border-box;">
@@ -100,14 +121,19 @@
         <div>
           <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Qty</label>
           <input type="text" name="quantity" placeholder="3 / Unlimited"
-                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:110px;">
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100px;">
         </div>
         <div>
           <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Delivery stage</label>
-          <input type="text" name="delivery_stage" placeholder="Month 1 / Before exam"
-                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:160px;">
+          <input type="text" name="delivery_stage" placeholder="Month 1"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:130px;">
         </div>
-        <div style="flex:1;min-width:160px;">
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Budget (₹)</label>
+          <input type="number" step="1" min="0" name="budget" placeholder="0"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:110px;">
+        </div>
+        <div style="flex:1;min-width:140px;">
           <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Note (optional)</label>
           <input type="text" name="description" placeholder="Short detail"
                  style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100%;box-sizing:border-box;">

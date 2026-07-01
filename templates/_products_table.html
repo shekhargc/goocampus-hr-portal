@@ -57,6 +57,7 @@
             </td>
             {% if user.is_admin == 1 %}
             <td>
+                {% if is_admin %}<a href="/admin/packages?product_id={{ product.id }}" style="background:#FEF3C7;color:#92400E;text-decoration:none;display:inline-block;padding:0.35rem 0.7rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;margin-right:0.3rem;">Plans &amp; Services</a>{% endif %}
                 <a href="/products/{{ product.id }}/edit" style="background:var(--blue-light);color:var(--blue-dark);text-decoration:none;display:inline-block;padding:0.35rem 0.7rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;margin-right:0.3rem;">Edit</a>
                 <form method="POST" action="/products/{{ product.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete {{ product.name }}?');">
                     <input type="hidden" name="source" value="project" />
