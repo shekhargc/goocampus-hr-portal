@@ -533,6 +533,7 @@
                     </td>
                     {% if is_admin %}
                     <td class="col-actions" onclick="event.stopPropagation();">
+                        <a href="/admin/packages?product_id={{ p.id }}" style="text-decoration:none;display:inline-block;background:#FEF3C7;color:#92400E;padding:0.3rem 0.6rem;border-radius:0.3rem;font-size:0.74rem;font-weight:600;margin-right:0.3rem;">Plans &amp; Services</a>
                         <a href="/products/{{ p.id }}/edit" class="btn-sm-edit" style="text-decoration:none;display:inline-block;">Edit</a>
                         <form method="POST" action="/products/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete &quot;{{ p.name }}&quot;?');">
                             <input type="hidden" name="source" value="products" />
@@ -719,6 +720,7 @@
         {% if is_admin %}
         <div class="prod-drawer-foot">
             <a href="#" class="prod-drawer-btn prod-drawer-btn-project" id="pd-btn-project">View Project</a>
+            <a href="#" class="prod-drawer-btn prod-drawer-btn-edit" id="pd-btn-packages" style="background:#FEF3C7;color:#92400E;">Plans &amp; Services</a>
             <a href="#" class="prod-drawer-btn prod-drawer-btn-edit" id="pd-btn-edit">Edit</a>
             <form method="POST" id="pd-delete-form" style="flex:1;min-width:120px;margin:0;" onsubmit="return confirm('Delete this product?');">
                 <input type="hidden" name="source" value="products" />
@@ -904,6 +906,8 @@ function openProductDrawer(pid, ev) {
     if (IS_ADMIN) {
         const btnEdit = document.getElementById('pd-btn-edit');
         if (btnEdit) btnEdit.href = '/products/' + p.id + '/edit';
+        const btnPkg = document.getElementById('pd-btn-packages');
+        if (btnPkg) btnPkg.href = '/admin/packages?product_id=' + p.id;
         const btnProj = document.getElementById('pd-btn-project');
         if (btnProj) {
             if (p.project_id) { btnProj.href = '/projects/' + p.project_id; btnProj.style.display = ''; }
