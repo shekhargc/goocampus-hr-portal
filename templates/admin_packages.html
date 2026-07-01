@@ -3,6 +3,48 @@
 {% block title %}Packages &amp; Services{% endblock %}
 
 {% block section_content %}
+
+{% macro svc_row(sv, product_id, stage_options) %}
+  <tr>
+    <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#0F172A;font-weight:600;">{{ sv.service_name }}{% if sv.description %}<div style="font-weight:400;color:#94a3b8;font-size:0.78rem;white-space:pre-line;margin-top:2px;">{{ sv.description }}</div>{% endif %}</td>
+    <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.quantity or '—' }}</td>
+    <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.delivery_stage or '—' }}</td>
+    <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;text-align:right;">{% if sv.budget and sv.budget|float > 0 %}₹{{ '{:,.0f}'.format(sv.budget|float) }}{% else %}—{% endif %}</td>
+    <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap;">
+      <button type="button" onclick="togglePkgEdit({{ sv.id }})" style="background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:5px;padding:4px 9px;font-size:0.76rem;cursor:pointer;margin-right:4px;">Edit</button>
+      <form method="POST" action="/admin/packages/service/delete/{{ sv.id }}" onsubmit="return confirm('Remove this service?');" style="display:inline;">
+        <input type="hidden" name="product_id" value="{{ product_id }}">
+        <button type="submit" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:5px;padding:4px 9px;font-size:0.76rem;cursor:pointer;">Remove</button>
+      </form>
+    </td>
+  </tr>
+  <tr id="pkg-svc-edit-{{ sv.id }}" style="display:none;background:#F8FAFC;">
+    <td colspan="5" style="padding:12px;">
+      <form method="POST" action="/admin/packages/service/edit/{{ sv.id }}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <input type="hidden" name="product_id" value="{{ product_id }}">
+        <div style="flex:1;min-width:160px;"><label style="display:block;font-size:0.72rem;color:#64748b;font-weight:600;margin-bottom:3px;">Service</label>
+          <input type="text" name="service_name" value="{{ sv.service_name }}" required style="padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;width:100%;box-sizing:border-box;"></div>
+        <div><label style="display:block;font-size:0.72rem;color:#64748b;font-weight:600;margin-bottom:3px;">Qty</label>
+          <input type="text" name="quantity" value="{{ sv.quantity or '' }}" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;width:100px;"></div>
+        <div><label style="display:block;font-size:0.72rem;color:#64748b;font-weight:600;margin-bottom:3px;">Delivery stage</label>
+          <select name="delivery_stage" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;width:170px;background:#fff;">
+            <option value="">— select stage —</option>
+            {% for so in stage_options %}<option value="{{ so }}" {% if sv.delivery_stage == so %}selected{% endif %}>{{ so }}</option>{% endfor %}
+            <optgroup label="Or, if timing isn't fixed">
+              <option value="Client will decide" {% if sv.delivery_stage == 'Client will decide' %}selected{% endif %}>Client will decide</option>
+            </optgroup>
+          </select></div>
+        <div><label style="display:block;font-size:0.72rem;color:#64748b;font-weight:600;margin-bottom:3px;">Budget (₹)</label>
+          <input type="number" step="1" min="0" name="budget" value="{{ '{:.0f}'.format(sv.budget|float) if sv.budget else 0 }}" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;width:100px;"></div>
+        <div style="flex:2;min-width:240px;"><label style="display:block;font-size:0.72rem;color:#64748b;font-weight:600;margin-bottom:3px;">Description (shown to client)</label>
+          <textarea name="description" rows="3" style="padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;width:100%;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ sv.description or '' }}</textarea></div>
+        <button type="submit" style="background:#1e3a5f;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:600;font-size:0.82rem;cursor:pointer;">Save</button>
+        <button type="button" onclick="togglePkgEdit({{ sv.id }})" style="background:#fff;color:#64748b;border:1px solid #d1d5db;padding:8px 12px;border-radius:6px;font-weight:600;font-size:0.82rem;cursor:pointer;">Cancel</button>
+      </form>
+    </td>
+  </tr>
+{% endmacro %}
+
 <div style="padding:24px;max-width:1040px;margin:0 auto;">
 
   <h1 style="font-size:1.4rem;font-weight:700;color:#1e3a5f;margin:0 0 0.3rem;">Packages &amp; Services</h1>
@@ -66,18 +108,7 @@
         <tbody>
           {% for sv in standard_services %}
           {% set nss.tbudget = nss.tbudget + (sv.budget|float) %}
-          <tr>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#0F172A;font-weight:600;">{{ sv.service_name }}{% if sv.description %}<div style="font-weight:400;color:#94a3b8;font-size:0.78rem;">{{ sv.description }}</div>{% endif %}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.quantity or '—' }}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.delivery_stage or '—' }}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;text-align:right;">{% if sv.budget and sv.budget|float > 0 %}₹{{ '{:,.0f}'.format(sv.budget|float) }}{% else %}—{% endif %}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">
-              <form method="POST" action="/admin/packages/service/delete/{{ sv.id }}" onsubmit="return confirm('Remove this standard service?');" style="display:inline;">
-                <input type="hidden" name="product_id" value="{{ selected.id }}">
-                <button type="submit" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:5px;padding:4px 9px;font-size:0.76rem;cursor:pointer;">Remove</button>
-              </form>
-            </td>
-          </tr>
+          {{ svc_row(sv, selected.id, stage_options) }}
           {% endfor %}
         </tbody>
         <tfoot><tr><td colspan="3" style="padding:7px 10px;text-align:right;font-size:0.78rem;color:#64748b;">Total standard budget</td><td style="padding:7px 10px;text-align:right;font-weight:700;color:#991B1B;">₹{{ '{:,.0f}'.format(nss.tbudget) }}</td><td></td></tr></tfoot>
@@ -104,7 +135,7 @@
           <select name="delivery_stage" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:170px;background:#fff;">
             <option value="">— select stage —</option>
             {% for so in stage_options %}<option value="{{ so }}">{{ so }}</option>{% endfor %}
-            <option value="Client will decide">Client will decide</option>
+            <optgroup label="Or, if timing isn't fixed"><option value="Client will decide">Client will decide</option></optgroup>
           </select>
         </div>
         <div>
@@ -169,18 +200,7 @@
         <tbody>
           {% for sv in plan.services %}
           {% set ns.tbudget = ns.tbudget + (sv.budget|float) %}
-          <tr>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#0F172A;font-weight:600;">{{ sv.service_name }}{% if sv.description %}<div style="font-weight:400;color:#94a3b8;font-size:0.78rem;">{{ sv.description }}</div>{% endif %}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.quantity or '—' }}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.delivery_stage or '—' }}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;text-align:right;">{% if sv.budget and sv.budget|float > 0 %}₹{{ '{:,.0f}'.format(sv.budget|float) }}{% else %}—{% endif %}</td>
-            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">
-              <form method="POST" action="/admin/packages/service/delete/{{ sv.id }}" onsubmit="return confirm('Remove this service?');" style="display:inline;">
-                <input type="hidden" name="product_id" value="{{ selected.id }}">
-                <button type="submit" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:5px;padding:4px 9px;font-size:0.76rem;cursor:pointer;">Remove</button>
-              </form>
-            </td>
-          </tr>
+          {{ svc_row(sv, selected.id, stage_options) }}
           {% endfor %}
         </tbody>
         <tfoot><tr>
@@ -211,7 +231,7 @@
           <select name="delivery_stage" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:170px;background:#fff;">
             <option value="">— select stage —</option>
             {% for so in stage_options %}<option value="{{ so }}">{{ so }}</option>{% endfor %}
-            <option value="Client will decide">Client will decide</option>
+            <optgroup label="Or, if timing isn't fixed"><option value="Client will decide">Client will decide</option></optgroup>
           </select>
         </div>
         <div>
@@ -234,4 +254,10 @@
     </datalist>
   {% endif %}
 </div>
+<script>
+function togglePkgEdit(id) {
+  var row = document.getElementById('pkg-svc-edit-' + id);
+  if (row) row.style.display = (row.style.display === 'none' || !row.style.display) ? 'table-row' : 'none';
+}
+</script>
 {% endblock %}

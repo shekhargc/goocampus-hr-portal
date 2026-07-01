@@ -1346,6 +1346,30 @@ def admin_packages_service_delete(sid):
     return redirect(url_for('admin_packages', product_id=product_id))
 
 
+@app.route('/admin/packages/service/edit/<int:sid>', methods=['POST'])
+@admin_required
+def admin_packages_service_edit(sid):
+    product_id = request.form.get('product_id', type=int)
+    name = (request.form.get('service_name') or '').strip()
+    qty = (request.form.get('quantity') or '').strip()
+    stage = (request.form.get('delivery_stage') or '').strip()
+    desc = (request.form.get('description') or '').strip()
+    try:
+        budget = float(request.form.get('budget') or 0)
+    except (TypeError, ValueError):
+        budget = 0
+    if not name:
+        flash('Service name is required.', 'error')
+        return redirect(url_for('admin_packages', product_id=product_id))
+    conn = get_db()
+    conn.execute("UPDATE package_services SET service_name = ?, quantity = ?, delivery_stage = ?, "
+                 "budget = ?, description = ? WHERE id = ?", (name, qty, stage, budget, desc, sid))
+    conn.commit()
+    conn.close()
+    flash('Service updated.', 'success')
+    return redirect(url_for('admin_packages', product_id=product_id))
+
+
 @app.route('/admin/packages/plan-type/add', methods=['POST'])
 @admin_required
 def admin_packages_plan_type_add():
