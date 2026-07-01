@@ -49,6 +49,73 @@
     </div>
     {% endif %}
 
+    <div style="background:#fff;border:1px solid #C7D2FE;border-radius:12px;padding:18px 20px;margin-bottom:20px;">
+      <div style="font-size:1rem;font-weight:700;color:#3730A3;margin-bottom:2px;"><i class="bi bi-stars" aria-hidden="true"></i> Standard services — included in every plan</div>
+      <p style="font-size:0.78rem;color:#94a3b8;margin:0 0 12px;">These appear on every {{ selected.name }} package (the contract inclusions). Add plan-specific extras in the plan sections below.</p>
+
+      {% if standard_services %}
+      {% set nss = namespace(tbudget=0) %}
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:10px;">
+        <thead><tr style="background:#EEF2FF;">
+          <th style="text-align:left;padding:7px 10px;color:#3730A3;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #C7D2FE;">Service</th>
+          <th style="text-align:left;padding:7px 10px;color:#3730A3;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #C7D2FE;">Qty</th>
+          <th style="text-align:left;padding:7px 10px;color:#3730A3;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #C7D2FE;">Delivery stage</th>
+          <th style="text-align:right;padding:7px 10px;color:#3730A3;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #C7D2FE;">Budget (₹)</th>
+          <th style="border-bottom:1px solid #C7D2FE;"></th>
+        </tr></thead>
+        <tbody>
+          {% for sv in standard_services %}
+          {% set nss.tbudget = nss.tbudget + (sv.budget|float) %}
+          <tr>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#0F172A;font-weight:600;">{{ sv.service_name }}{% if sv.description %}<div style="font-weight:400;color:#94a3b8;font-size:0.78rem;">{{ sv.description }}</div>{% endif %}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.quantity or '—' }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.delivery_stage or '—' }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;text-align:right;">{% if sv.budget and sv.budget|float > 0 %}₹{{ '{:,.0f}'.format(sv.budget|float) }}{% else %}—{% endif %}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">
+              <form method="POST" action="/admin/packages/service/delete/{{ sv.id }}" onsubmit="return confirm('Remove this standard service?');" style="display:inline;">
+                <input type="hidden" name="product_id" value="{{ selected.id }}">
+                <button type="submit" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:5px;padding:4px 9px;font-size:0.76rem;cursor:pointer;">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td colspan="3" style="padding:7px 10px;text-align:right;font-size:0.78rem;color:#64748b;">Total standard budget</td><td style="padding:7px 10px;text-align:right;font-weight:700;color:#991B1B;">₹{{ '{:,.0f}'.format(nss.tbudget) }}</td><td></td></tr></tfoot>
+      </table>
+      {% else %}
+      <p style="color:#94a3b8;font-size:0.84rem;margin:0 0 10px;">No standard services yet.</p>
+      {% endif %}
+
+      <form method="POST" action="/admin/packages/service/add" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;border-top:1px dashed #C7D2FE;padding-top:12px;">
+        <input type="hidden" name="product_id" value="{{ selected.id }}">
+        <input type="hidden" name="plan_type" value="__standard__">
+        <div style="flex:1;min-width:180px;">
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Standard service</label>
+          <input type="text" name="service_name" list="svc-catalogue" required placeholder="e.g. Visa Support"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100%;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Qty</label>
+          <input type="text" name="quantity" placeholder="1 / Unlimited"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Delivery stage (client stage)</label>
+          <select name="delivery_stage" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:170px;background:#fff;">
+            <option value="">— select stage —</option>
+            {% for so in stage_options %}<option value="{{ so }}">{{ so }}</option>{% endfor %}
+            <option value="Client will decide">Client will decide</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Budget (₹)</label>
+          <input type="number" step="1" min="0" name="budget" placeholder="0"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:110px;">
+        </div>
+        <button type="submit" style="background:#4338CA;color:#fff;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:0.85rem;cursor:pointer;">+ Add standard service</button>
+      </form>
+    </div>
+
     {% for plan in plans %}
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
