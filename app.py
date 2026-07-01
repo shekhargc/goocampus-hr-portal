@@ -1203,11 +1203,29 @@ def admin_packages():
     product_id = request.args.get('product_id', type=int)
     selected = None
     plans = []
+    stage_options = []
     if product_id:
         selected = conn.execute(
             "SELECT id, name, COALESCE(pathway,'') AS pathway, sale_price "
             "FROM products_services WHERE id = ?", (product_id,)).fetchone()
         if selected:
+            # Delivery-stage options = the pathway's client stages (current_stage),
+            # so package delivery maps to the same stages Ops tracks. Product
+            # pathway may be blank → fall back to its plan types' pathway.
+            eff_pathway = selected['pathway'] or ''
+            if not eff_pathway:
+                pw_row = conn.execute(
+                    "SELECT pathway FROM lookup_options WHERE category = 'plan_type' AND product_name = ? "
+                    "AND pathway IS NOT NULL AND pathway <> '' ORDER BY id LIMIT 1", (selected['name'],)).fetchone()
+                eff_pathway = (pw_row['pathway'] if pw_row else '') or ''
+            if eff_pathway:
+                stage_options = [r['value'] for r in conn.execute(
+                    "SELECT value FROM lookup_options WHERE category = 'current_stage' AND is_active = TRUE "
+                    "AND COALESCE(pathway,'plab') = ? ORDER BY sort_order, value", (eff_pathway,)).fetchall()]
+            else:
+                stage_options = [r['value'] for r in conn.execute(
+                    "SELECT DISTINCT value FROM lookup_options WHERE category = 'current_stage' "
+                    "AND is_active = TRUE ORDER BY value").fetchall()]
             ptypes = conn.execute(
                 "SELECT DISTINCT value FROM lookup_options WHERE category = 'plan_type' "
                 "AND is_active = TRUE AND product_name = ? ORDER BY value", (selected['name'],)).fetchall()
@@ -1228,7 +1246,7 @@ def admin_packages():
     conn.close()
     return render_template('admin_packages.html', user=user, products=products,
                            selected=selected, plans=plans, catalogue=catalogue,
-                           active_section='company')
+                           stage_options=stage_options, active_section='company')
 
 
 @app.route('/admin/packages/plan/save', methods=['POST'])
