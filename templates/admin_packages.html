@@ -139,6 +139,7 @@
           <select name="delivery_stage" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:170px;background:#fff;">
             <option value="">— select stage —</option>
             {% for so in stage_options %}<option value="{{ so }}">{{ so }}</option>{% endfor %}
+            <option value="Client will decide">Client will decide</option>
           </select>
         </div>
         <div>
