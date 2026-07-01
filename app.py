@@ -1243,9 +1243,21 @@ def admin_packages():
                     'pkg': dict(pkg) if pkg else None,
                     'services': [dict(s) for s in services],
                 })
+    # Standard services that apply to EVERY plan of this product (the contract
+    # inclusions). Stored as a plan_packages row with the sentinel plan_type.
+    standard_services = []
+    if selected:
+        std_pkg = conn.execute(
+            "SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = '__standard__'",
+            (product_id,)).fetchone()
+        if std_pkg:
+            standard_services = [dict(s) for s in conn.execute(
+                "SELECT * FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+                (std_pkg['id'],)).fetchall()]
     conn.close()
     return render_template('admin_packages.html', user=user, products=products,
                            selected=selected, plans=plans, catalogue=catalogue,
+                           standard_services=standard_services,
                            stage_options=stage_options, active_section='company')
 
 
