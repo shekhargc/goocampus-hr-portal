@@ -161,6 +161,11 @@ def register_operations_modules(app):
     tr_payments.register_routes(app)
     tr_call_notes.register_routes(app)
 
+    # Cross-pathway add: drop an existing client (consulting / australia /
+    # etc.) into the Training pathway list without re-registering them.
+    from . import cross_pathway_add
+    cross_pathway_add.register_routes(app)
+
     # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
     # Each module owns one /operations/australia/<section>/* slice:
     #   list (with drawer), detail page, edit form GET, edit save POST.

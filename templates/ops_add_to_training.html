@@ -1,0 +1,101 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Add to Training — {{ src.first_name }} {{ src.last_name }}{% endblock %}
+{% block ops_content %}
+<style>
+.att-head{display:flex;align-items:center;gap:9px;font-size:0.93rem;font-weight:700;color:var(--navy);margin:1.7rem 0 1rem;padding:0.62rem 0.95rem;background:linear-gradient(90deg,#FFF7ED,#FFFFFF 65%);border-left:4px solid var(--orange);border-radius:9px;}
+.att-head:first-of-type{margin-top:0.3rem;}
+.att-lbl{display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;}
+.att-in{width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;}
+.att-in[readonly]{background:var(--gray-50);color:var(--gray-600);}
+</style>
+<div style="max-width:820px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="javascript:history.back()" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Client</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">Add to Training Pathway</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.2rem 0;">
+            This creates a <strong>new Training entry</strong> for this client — their existing
+            registration stays exactly as it is. Only the details Training needs are captured below.
+        </p>
+
+        <!-- Source client summary -->
+        <div style="background:#F8FAFC;border:1px solid var(--gray-200);border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:1rem;font-size:0.85rem;color:var(--navy);">
+            <strong>{{ src.prefix or '' }} {{ src.first_name or '' }} {{ src.last_name or '' }}</strong>
+            &nbsp;·&nbsp; {{ src.registration_number }}
+            &nbsp;·&nbsp; <span style="text-transform:capitalize;">{{ src.src_pathway }}</span> pathway
+        </div>
+
+        {% if existing %}
+        <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:0.8rem 1.1rem;margin-bottom:1.2rem;font-size:0.82rem;color:#92400E;">
+            ⚠️ This client is <strong>already in Training</strong> as
+            {% for e in existing %}{{ e.registration_number }} ({{ e.plan_type or '—' }}){% if not loop.last %}, {% endif %}{% endfor %}.
+            Only continue if you genuinely need another entry (e.g. AMC 1 <em>and</em> AMC 2).
+        </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('ops_add_to_training_save', src_id=src.id) }}">
+
+            <!-- ===== TRAINING DETAILS ===== -->
+            <h3 class="att-head"><span>🎓</span>Training Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label class="att-lbl">Training Plan *</label>
+                    <select name="plan_type" required class="att-in">
+                        {% for pt in plan_types %}<option value="{{ pt }}" {% if pt == 'AMC 1' %}selected{% endif %}>{{ pt }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="att-lbl">Current Stage</label>
+                    <select name="current_stage" class="att-in">
+                        <option value="">— not set —</option>
+                        {% for s in stages %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="att-lbl">Account Status</label>
+                    <select name="account_status" class="att-in">
+                        {% for a in account_statuses %}<option value="{{ a }}" {% if a == 'In Process' %}selected{% endif %}>{{ a }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="att-lbl">Registration Date</label>
+                    <input type="date" name="registration_date" value="{{ today }}" class="att-in" />
+                </div>
+            </div>
+
+            <!-- ===== PERSONAL DETAILS (pre-filled) ===== -->
+            <h3 class="att-head"><span>👤</span>Personal Details <span style="font-weight:500;font-size:0.75rem;color:var(--gray-400);margin-left:6px;">(pre-filled — edit if needed)</span></h3>
+            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div><label class="att-lbl">Prefix</label><input type="text" name="prefix" value="{{ src.prefix or '' }}" class="att-in" /></div>
+                <div><label class="att-lbl">First Name *</label><input type="text" name="first_name" value="{{ src.first_name or '' }}" required class="att-in" /></div>
+                <div><label class="att-lbl">Last Name</label><input type="text" name="last_name" value="{{ src.last_name or '' }}" class="att-in" /></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div><label class="att-lbl">Mobile</label><input type="text" name="mobile" value="{{ src.mobile or '' }}" class="att-in" /></div>
+                <div><label class="att-lbl">WhatsApp</label><input type="text" name="whatsapp1" value="{{ src.whatsapp1 or '' }}" class="att-in" /></div>
+                <div><label class="att-lbl">Email</label><input type="email" name="email" value="{{ src.email or '' }}" class="att-in" /></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div><label class="att-lbl">Date of Birth</label><input type="date" name="dob" value="{{ src.dob or '' }}" class="att-in" /></div>
+                <div><label class="att-lbl">City</label><input type="text" name="city" value="{{ src.city or '' }}" class="att-in" /></div>
+                <div><label class="att-lbl">State</label><input type="text" name="state" value="{{ src.state or '' }}" class="att-in" /></div>
+            </div>
+
+            <!-- ===== COUNSELLOR ===== -->
+            <h3 class="att-head"><span>🧑‍💼</span>Counsellor</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.4rem;">
+                <div><label class="att-lbl">Counsellor</label><input type="text" name="counsellor" value="{{ src.counsellor or '' }}" class="att-in" /></div>
+                <div><label class="att-lbl">Counsellor Email</label><input type="email" name="counsellor_email" value="{{ src.counsellor_email or '' }}" class="att-in" /></div>
+                <div><label class="att-lbl">Counsellor Number</label><input type="text" name="counsellor_number" value="{{ src.counsellor_number or '' }}" class="att-in" /></div>
+            </div>
+
+            <div style="display:flex;gap:0.7rem;align-items:center;">
+                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.7rem 1.6rem;border-radius:8px;font-size:0.9rem;font-weight:700;cursor:pointer;">Add to Training Pathway</button>
+                <a href="javascript:history.back()" style="color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
