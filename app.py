@@ -1346,6 +1346,60 @@ def admin_packages_service_delete(sid):
     return redirect(url_for('admin_packages', product_id=product_id))
 
 
+def get_package_services(conn, product_id, plan_type):
+    """Merged package service list for a (product, plan): the product's standard
+    services (contract inclusions, plan_type='__standard__') followed by the
+    plan-specific services. Each dict has service_name, description, quantity,
+    delivery_stage, budget. Callers decide whether to expose budget (never to
+    the client)."""
+    out = []
+    if not product_id:
+        return out
+    cols = "service_name, description, quantity, delivery_stage, budget"
+    std = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = '__standard__'",
+                       (product_id,)).fetchone()
+    if std:
+        out += [dict(s) for s in conn.execute(
+            f"SELECT {cols} FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+            (std['id'],)).fetchall()]
+    if plan_type:
+        pp = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+                          (product_id, plan_type)).fetchone()
+        if pp:
+            out += [dict(s) for s in conn.execute(
+                f"SELECT {cols} FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+                (pp['id'],)).fetchall()]
+    return out
+
+
+def get_plan_package_amount(conn, product_id, plan_type):
+    """The gross/sale price defined for a (product, plan) in Packages, or None."""
+    if not product_id or not plan_type:
+        return None
+    r = conn.execute("SELECT package_amount FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+                     (product_id, plan_type)).fetchone()
+    return float(r['package_amount']) if r and r['package_amount'] is not None else None
+
+
+@app.route('/sales/api/plan-package')
+@login_required
+def sales_plan_package_info():
+    """For the sales form: a plan's defined package amount + the services it
+    includes (standard + plan-specific), so the rep sees what's covered and the
+    package value auto-fills."""
+    product_id = request.args.get('product_id', type=int)
+    plan_type = (request.args.get('plan_type') or '').strip()
+    conn = get_db()
+    amt = get_plan_package_amount(conn, product_id, plan_type)
+    svcs = get_package_services(conn, product_id, plan_type)
+    conn.close()
+    return jsonify({
+        'package_amount': amt,
+        'services': [{'name': s['service_name'], 'description': s.get('description') or '',
+                      'quantity': s.get('quantity') or ''} for s in svcs],
+    })
+
+
 @app.route('/admin/packages/service/edit/<int:sid>', methods=['POST'])
 @admin_required
 def admin_packages_service_edit(sid):
@@ -1516,6 +1570,9 @@ def client_dashboard():
         d['timeline'] = _build_client_timeline(
             onboarding_by_reg.get(d.get('registration_number')),
             holidays_set=holidays_set)
+        # What's included in the client's package (standard + plan-specific).
+        # Names + descriptions only for the client — NEVER budget/cost.
+        d['package_services'] = get_package_services(conn, d.get('product_id'), d.get('plan_type'))
         registrations.append(d)
 
     # Get doc requests for all registrations
@@ -2879,11 +2936,16 @@ def admin_client_detail(reg_id):
     lookup_options = {}
     for row in lookup_rows:
         lookup_options.setdefault(row['category'], []).append(row['value'])
+    try:
+        package_services = get_package_services(conn, reg.get('product_id'), reg.get('plan_type'))
+    except Exception:
+        package_services = []
     conn.close()
     return render_template('admin_client_detail.html', reg=reg, academics=academics,
         documents=documents, doc_requests=doc_requests, notifications=notifications,
         counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
-        ops_config=ops_config, lookup_options=lookup_options, user=user, active_section='clients')
+        ops_config=ops_config, lookup_options=lookup_options, package_services=package_services,
+        user=user, active_section='clients')
 
 
 # ── ADMIN: Sales completes their section ──

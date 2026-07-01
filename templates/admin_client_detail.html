@@ -544,6 +544,28 @@
             <p style="color: var(--gray-400); font-size: 0.95rem;">No academic information submitted yet.</p>
         </div>
         {% endif %}
+
+        <!-- Package Deliverables (what this client is owed) -->
+        {% if package_services %}
+        <div class="card" style="margin-top: 1.25rem;">
+            <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 0 0 0.25rem;">Package Deliverables</h3>
+            <p style="margin: 0 0 1rem; font-size: 0.8rem; color: var(--gray-400);">Services included in {{ reg.plan_type or 'this plan' }} — part of the contract.</p>
+            <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+                {% for sv in package_services %}
+                <div style="display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.75rem 0.9rem; background: #F8FAFC; border: 1px solid var(--gray-100); border-radius: 8px;">
+                    <span style="color: #15803D; font-weight: 700; font-size: 0.95rem;">&#10003;</span>
+                    <div style="flex: 1;">
+                        <div style="font-size: 0.9rem; font-weight: 600; color: var(--navy);">
+                            {{ sv.service_name }}{% if sv.quantity %} <span style="color: #166534;">({{ sv.quantity }})</span>{% endif %}
+                            {% if sv.delivery_stage %}<span style="margin-left: 0.4rem; font-size: 0.68rem; font-weight: 600; color: #92400E; background: #FEF3C7; padding: 0.1rem 0.5rem; border-radius: 999px;">{{ sv.delivery_stage }}</span>{% endif %}
+                        </div>
+                        {% if sv.description %}<div style="margin-top: 0.25rem; font-size: 0.8rem; color: var(--gray-500); white-space: pre-line; line-height: 1.5;">{{ sv.description }}</div>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- ============================================================ -->

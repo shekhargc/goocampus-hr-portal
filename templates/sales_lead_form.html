@@ -114,6 +114,10 @@
                         <div id="pkgPlanDisplay" class="slf-ro">&mdash;</div>
                     </div>
                 </div>
+                <div id="pkgServicesBox" style="display:none;margin:0.2rem 0 0.9rem;padding:0.7rem 0.9rem;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:0.5rem;">
+                    <div style="font-size:0.74rem;font-weight:700;color:#166534;margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.03em;">Included in this plan · what the client gets</div>
+                    <div id="pkgServicesList" style="font-size:0.82rem;color:#14532D;line-height:1.5;"></div>
+                </div>
 
                 <div class="slf-row3">
                     <div>
@@ -201,6 +205,32 @@
                 prodDisp.textContent = (po && po.value) ? po.textContent : '—';
                 planDisp.textContent = planSel.value || '—';
             }
+            var svcBox  = document.getElementById('pkgServicesBox');
+            var svcList = document.getElementById('pkgServicesList');
+            function loadPlanPackage(autoFill) {
+                if (!svcBox) return;
+                var pid = productSel.value, pt = planSel.value;
+                if (!pid || !pt) { svcBox.style.display = 'none'; return; }
+                fetch('/sales/api/plan-package?product_id=' + encodeURIComponent(pid) + '&plan_type=' + encodeURIComponent(pt))
+                    .then(function(r){ return r.json(); }).then(function(d){
+                        // Auto-fill Package Value from the PLAN's package amount when set.
+                        // Only on a live change (autoFill), never when re-opening an edit.
+                        if (autoFill && pkgValue && d.package_amount != null && d.package_amount > 0) {
+                            pkgValue.value = d.package_amount;
+                            syncPackage();
+                        }
+                        var svcs = d.services || [];
+                        if (!svcs.length) { svcBox.style.display = 'none'; return; }
+                        var html = '';
+                        svcs.forEach(function(s){
+                            var qty = s.quantity ? ' <span style="color:#166534;font-weight:600;">(' + s.quantity + ')</span>' : '';
+                            var desc = s.description ? '<div style="color:#3F6212;font-size:0.76rem;margin:0.1rem 0 0.4rem;white-space:pre-line;">' + s.description + '</div>' : '';
+                            html += '<div style="margin-bottom:0.35rem;"><span style="color:#15803D;font-weight:700;">&#10003;</span> <span style="font-weight:600;">' + (s.name || '') + '</span>' + qty + desc + '</div>';
+                        });
+                        svcList.innerHTML = html;
+                        svcBox.style.display = 'block';
+                    }).catch(function(){ svcBox.style.display = 'none'; });
+            }
             function loadPlans(keepCurrent) {
                 var pid = productSel.value;
                 if (!pid) { planSel.innerHTML = '<option value="">Select a product first</option>'; updateDisplays(); return; }
@@ -221,10 +251,11 @@
                     plans.forEach(function(p){ var o=document.createElement('option'); o.value=p; o.textContent=p; if(current&&p===current){o.selected=true;found=true;} planSel.appendChild(o); });
                     if (current && !found) { var o=document.createElement('option'); o.value=current; o.textContent=current; o.selected=true; planSel.appendChild(o); }
                     updateDisplays();
+                    loadPlanPackage(false);
                 }).catch(function(){});
             }
             if (productSel) productSel.addEventListener('change', function(){ loadPlans(false); });
-            if (planSel) planSel.addEventListener('change', updateDisplays);
+            if (planSel) planSel.addEventListener('change', function(){ updateDisplays(); loadPlanPackage(true); });
             if (productSel && productSel.value) loadPlans(true);
             syncPackage();
             updateDisplays();
