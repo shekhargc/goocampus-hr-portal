@@ -63,7 +63,7 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Event Type *</label>
-                    <select name="event_type" id="webinar_service_select" data-current="{{ record.event_type if record else '' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="event_type" id="webinar_service_select" data-current="{{ record.event_type if record and record.event_type else '' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Type</option>
                         {% for t in event_types %}
                         <option value="{{ t }}" {% if record and record.event_type == t %}selected{% endif %}>{{ t }}</option>

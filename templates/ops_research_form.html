@@ -63,7 +63,7 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Service / Deliverable</label>
-                    <select name="service" id="research_service_select" data-current="{{ record.service if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="service" id="research_service_select" data-current="{{ record.service if record and record.service else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Service</option>
                         {% for s in research_services %}
                         <option value="{{ s }}" {% if record and record.service == s %}selected{% endif %}>{{ s }}</option>
