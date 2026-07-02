@@ -297,12 +297,38 @@ def inject_manager_status():
         # "Ops Team Verification" queue link.
         can_verify_xfer = bool(session.get('is_admin') or
                         (user and has_section_permission(user, 'clients', 'internal_transfers', 'edit')))
+
+        # has_clients_access — any Clients sub-section grant. The top-level
+        # "Clients" menu only existed for admins, so a team member granted
+        # (say) just Client Feedback saw no way in. Land them on the FIRST
+        # Clients page they actually have, not /admin/clients (which needs
+        # the 'registrations' grant and would 403 a feedback-only user).
+        _clients_subs = [
+            ('registrations',       '/admin/clients'),
+            ('invitations',         '/admin/client-invitations'),
+            ('form_config',         '/admin/client-form-config'),
+            ('welcome_kit',         '/admin/welcome-kit'),
+            ('payments_hub',        '/admin/payments'),
+            ('refunds',             '/admin/refunds'),
+            ('internal_transfers',  '/admin/internal-transfers'),
+            ('feedback',            '/admin/feedback'),
+        ]
+        clients_access = False
+        clients_landing = '/admin/clients'
+        if user:
+            for _sub, _url in _clients_subs:
+                if has_section_permission(user, 'clients', _sub, 'view'):
+                    if not clients_access:
+                        clients_landing = _url
+                    clients_access = True
         return {
             'is_manager': mgr,
             'pending_team_count': pending_team,
             'has_sales_access': sales_access,
             'has_operations_access': ops_access,
             'operations_landing_url': ops_landing,
+            'has_clients_access': clients_access,
+            'clients_landing_url': clients_landing,
             'current_user_name': (user['name'] if user else ''),
             'can_request_transfer': can_xfer,
             'can_verify_transfer': can_verify_xfer,
@@ -310,6 +336,7 @@ def inject_manager_status():
     return {
         'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
+        'has_clients_access': False, 'clients_landing_url': '/admin/clients',
         'current_user_name': '', 'can_request_transfer': False, 'can_verify_transfer': False,
     }
 
