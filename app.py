@@ -31336,6 +31336,7 @@ ACCESS_SECTION_CATALOG = [
             ('payments_hub',    'Payments Hub',        'Centralised admin payments + GST'),
             ('refunds',         'Refunds',             'Refund ledger + processing'),
             ('internal_transfers','Internal Transfers','Move clients between pathways + approvals'),
+            ('feedback',        'Client Feedback',     'Anonymous stage-wise feedback forms, sending + results'),
         ],
     },
     # ── Dashboard (landing pages) ──────────────────────────────────────────
@@ -34073,6 +34074,12 @@ ACCESS_ROUTE_MAP = {
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),
     'admin_payments_edit':                          _ap('clients', 'payments_hub', 'edit'),
+    # Client Feedback (anonymous stage-wise forms) — under Clients.
+    'admin_feedback':                               _ap('clients', 'feedback'),
+    'admin_feedback_send':                          _ap('clients', 'feedback', 'add'),
+    'admin_feedback_send_post':                     _ap('clients', 'feedback', 'add'),
+    'admin_feedback_results':                       _ap('clients', 'feedback'),
+    'admin_feedback_form_edit':                     _ap('clients', 'feedback', 'edit'),
     'admin_refunds':                                _ap('clients', 'refunds'),
     'admin_refunds_add':                            _ap('clients', 'refunds', 'add'),
     'admin_internal_transfers':                     _ap('clients', 'internal_transfers'),
@@ -38384,6 +38391,11 @@ register_internal_transfer_completion(app)
 
 from routes.verification_queues import register_verification_queues
 register_verification_queues(app)
+
+# Client Feedback — anonymous stage-wise forms (public /feedback/<token>) +
+# centralised admin under Clients (Access Master 'clients'/'feedback').
+from routes.feedback import register_routes as register_feedback
+register_feedback(app)
 
 
 if __name__ == '__main__':
