@@ -137,12 +137,16 @@
 </style>
 
 <div class="am-page">
-    <div class="am-head">
-        <h1><span>Access</span> Master</h1>
-        <p class="sub">
-            Manage per-section permissions for both team members and partners.
-            View / Edit / Add are independent flags. Admins always bypass.
-        </p>
+    <div class="am-head" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+        <div>
+            <h1><span>Access</span> Master</h1>
+            <p class="sub">
+                Manage per-section permissions for both team members and partners.
+                View / Edit / Add are independent flags. Admins always bypass.
+            </p>
+        </div>
+        <a href="{{ url_for('access_master_summary') }}"
+           style="white-space:nowrap;background:var(--navy);color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:0.82rem;">📋 Permission Summary</a>
     </div>
 
     <!-- Subject-type toggle (Team vs Partner) -->

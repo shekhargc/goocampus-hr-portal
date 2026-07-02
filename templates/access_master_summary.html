@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Permission Summary &mdash; GooCampus Portal{% endblock %}
+{% block content %}
+<div style="max-width:1050px;margin:0 auto;padding:24px 20px 60px;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+    <div>
+      <a href="{{ url_for('access_master') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Access Master</a>
+      <h1 style="margin:8px 0 4px;font-size:1.6rem;color:var(--navy);">Permission Summary</h1>
+      <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Exactly what every team member currently has ticked — the single source of truth (individual and bulk grants both land here).</p>
+    </div>
+  </div>
+
+  <input id="permSearch" type="text" placeholder="Search team member, department…" onkeyup="filterPerm()"
+         style="width:100%;max-width:420px;margin:18px 0 20px;padding:10px 14px;border:1px solid var(--gray-300);border-radius:9px;font-size:0.9rem;">
+
+  {% for e in employees %}
+  <div class="perm-card" data-name="{{ (e.name ~ ' ' ~ (e.department or '') ~ ' ' ~ (e.emp_code or ''))|lower }}"
+       style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="font-weight:700;color:var(--navy);font-size:1rem;">{{ e.name }}</span>
+        <span style="color:var(--gray-400);font-size:0.8rem;margin-left:8px;">{{ e.emp_code }}{% if e.department %} · {{ e.department }}{% endif %}{% if e.designation %} · {{ e.designation }}{% endif %}</span>
+      </div>
+      <a href="{{ url_for('access_master', subject_id=e.id) }}" style="font-size:0.78rem;font-weight:600;color:var(--blue-dark);text-decoration:none;background:var(--blue-light);padding:5px 12px;border-radius:7px;">
+        {{ e.grant_count }} permission{{ '' if e.grant_count == 1 else 's' }} · Edit &rsaquo;</a>
+    </div>
+    {% if e.grant_sections %}
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+      {% for g in e.grant_sections %}
+      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;">
+        <div style="min-width:180px;font-size:0.82rem;font-weight:600;color:#334e68;">{{ g.main_label }}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          {% for s in g.subs %}
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:0.74rem;background:#f1f5f9;border:1px solid var(--gray-200);border-radius:999px;padding:3px 9px;">
+            {{ s.sub_label }}
+            {% if s.view %}<b style="color:#1e3a5f;">V</b>{% endif %}{% if s.edit %}<b style="color:#d97706;">E</b>{% endif %}{% if s.add %}<b style="color:#059669;">A</b>{% endif %}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="margin-top:8px;color:var(--gray-400);font-size:0.82rem;">No access granted.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  <div id="permNoResult" style="display:none;color:var(--gray-400);text-align:center;padding:30px;">No team members match.</div>
+</div>
+<script>
+function filterPerm(){
+  var q=(document.getElementById('permSearch').value||'').toLowerCase().trim();
+  var any=false;
+  document.querySelectorAll('.perm-card').forEach(function(c){
+    var show=!q||c.dataset.name.indexOf(q)>=0; c.style.display=show?'':'none'; if(show) any=true;
+  });
+  document.getElementById('permNoResult').style.display=any?'none':'block';
+}
+</script>
+<p style="max-width:1050px;margin:6px auto 0;padding:0 20px;color:var(--gray-400);font-size:0.72rem;">Legend: <b style="color:#1e3a5f;">V</b> View · <b style="color:#d97706;">E</b> Edit · <b style="color:#059669;">A</b> Add</p>
+{% endblock %}
