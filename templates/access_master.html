@@ -193,13 +193,20 @@
 
     <div class="am-card" id="bs-step-2" style="display:none;">
         <h2><span class="am-step-num">2</span>Choose sub-sections + permissions</h2>
+
+        <!-- Grant / Revoke mode -->
+        <div style="display:flex;gap:0;background:#eef2f7;border-radius:0.6rem;padding:0.28rem;margin-bottom:0.85rem;max-width:360px;">
+            <button type="button" id="bs-mode-grant" onclick="bsSetMode('grant')"
+                style="flex:1;padding:0.5rem;border:none;border-radius:0.45rem;font-weight:700;font-size:0.82rem;cursor:pointer;background:#059669;color:#fff;">✓ Grant access</button>
+            <button type="button" id="bs-mode-revoke" onclick="bsSetMode('revoke')"
+                style="flex:1;padding:0.5rem;border:none;border-radius:0.45rem;font-weight:700;font-size:0.82rem;cursor:pointer;background:transparent;color:#475569;">✕ Revoke access</button>
+        </div>
         <p style="font-size:0.8rem;color:var(--gray-500);margin:0 0 0.75rem;">
-            All sub-sections are pre-checked. Uncheck any you don't want to grant.
-            The View / Edit / Add toggles apply to <em>every</em> selected sub-section.
+            <span id="bs-mode-hint">Tick the sub-sections to <b>grant</b> to the selected people. Nothing is pre-selected — only what you tick is changed; untouched sub-sections are never affected.</span>
         </p>
 
-        <!-- Global View/Edit/Add toggles -->
-        <div style="display:flex;gap:1rem;padding:0.85rem 1rem;background:var(--gray-50);border-radius:0.5rem;margin-bottom:1rem;">
+        <!-- Global View/Edit/Add toggles (grant mode only) -->
+        <div id="bs-grant-levels" style="display:flex;gap:1rem;padding:0.85rem 1rem;background:var(--gray-50);border-radius:0.5rem;margin-bottom:1rem;">
             <label style="display:flex;align-items:center;gap:0.45rem;font-weight:600;color:var(--navy);font-size:0.9rem;cursor:pointer;">
                 <input type="checkbox" id="bs-grant-view" checked style="width:18px;height:18px;cursor:pointer;"> Grant View
             </label>
@@ -310,7 +317,7 @@
             const list = document.getElementById('bs-subs-list');
             list.innerHTML = subs.map(([key, label, desc]) => `
                 <label class="bs-sub-item" style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.5rem 0.65rem;border:1px solid var(--gray-200);border-radius:0.4rem;cursor:pointer;">
-                    <input type="checkbox" class="bs-sub-cb" data-sub-key="${key}" checked onchange="bsRecountSubs()" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:0.15rem;">
+                    <input type="checkbox" class="bs-sub-cb" data-sub-key="${key}" onchange="bsRecountSubs()" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-top:0.15rem;">
                     <div>
                         <div style="font-weight:600;color:var(--navy);font-size:0.85rem;">${label}</div>
                         <div style="font-size:0.7rem;color:var(--gray-500);margin-top:0.1rem;">${desc}</div>
@@ -357,6 +364,24 @@
             });
         }
 
+        var BS_MODE = 'grant';
+        function bsSetMode(m) {
+            BS_MODE = m;
+            var g = document.getElementById('bs-mode-grant'), r = document.getElementById('bs-mode-revoke');
+            var levels = document.getElementById('bs-grant-levels'), hint = document.getElementById('bs-mode-hint');
+            if (m === 'revoke') {
+                r.style.background = '#dc2626'; r.style.color = '#fff';
+                g.style.background = 'transparent'; g.style.color = '#475569';
+                levels.style.display = 'none';
+                hint.innerHTML = 'Tick the sub-sections to <b>revoke</b> from the selected people. Only what you tick is removed; untouched sub-sections are never affected.';
+            } else {
+                g.style.background = '#059669'; g.style.color = '#fff';
+                r.style.background = 'transparent'; r.style.color = '#475569';
+                levels.style.display = 'flex';
+                hint.innerHTML = 'Tick the sub-sections to <b>grant</b> to the selected people. Nothing is pre-selected — only what you tick is changed; untouched sub-sections are never affected.';
+            }
+        }
+
         function bsSave() {
             const mainKey = document.getElementById('bs-main-section').value;
             if (!mainKey) return;
@@ -364,20 +389,25 @@
             const empIds = Array.from(document.querySelectorAll('.bs-emp-cb:checked')).map(cb => parseInt(cb.dataset.empId, 10));
             const status = document.getElementById('bs-save-status');
 
-            if (!subKeys.length)   { status.textContent = 'Pick at least one sub-section.'; status.className = 'error'; return; }
+            if (!subKeys.length)   { status.textContent = 'Tick at least one sub-section.'; status.className = 'error'; return; }
             if (!empIds.length)    { status.textContent = 'Pick at least one team member.';  status.className = 'error'; return; }
 
-            const view = document.getElementById('bs-grant-view').checked ? 1 : 0;
-            const edit = document.getElementById('bs-grant-edit').checked ? 1 : 0;
-            const add  = document.getElementById('bs-grant-add').checked  ? 1 : 0;
-            if (!view && !edit && !add) {
-                status.textContent = 'Tick at least one of View / Edit / Add.';
-                status.className = 'error';
-                return;
+            let view = 0, edit = 0, add = 0;
+            if (BS_MODE === 'grant') {
+                view = document.getElementById('bs-grant-view').checked ? 1 : 0;
+                edit = document.getElementById('bs-grant-edit').checked ? 1 : 0;
+                add  = document.getElementById('bs-grant-add').checked  ? 1 : 0;
+                if (!view && !edit && !add) {
+                    status.textContent = 'Tick at least one of View / Edit / Add.';
+                    status.className = 'error';
+                    return;
+                }
             }
+            // Revoke: send the ticked subs with all flags 0 -> the server deletes
+            // those rows for the selected people. Untouched subs are never sent.
 
             const permissions = subKeys.map(sub => ({ main: mainKey, sub, view, edit, add }));
-            status.textContent = `Granting to ${empIds.length} team member(s)…`;
+            status.textContent = (BS_MODE === 'revoke' ? 'Revoking from ' : 'Granting to ') + empIds.length + ' team member(s)…';
             status.className = '';
             const subjectType = {{ subject_type|tojson }};
             fetch('/api/access-master/save-bulk', {
