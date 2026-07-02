@@ -20,6 +20,18 @@
         <span class="sec-nav-text">Closures</span>
     </a>
     {% endif %}
+    {% if session.is_admin or has_sales_access or can_access('sales','clients_pipeline','view') or can_request_transfer %}
+    <a href="/verifications/sales" class="sec-nav-item" data-tooltip="Sales Verification — fill balance details for submitted registrations">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></span>
+        <span class="sec-nav-text">Sales Verification</span>
+    </a>
+    {% endif %}
+    {% if session.is_admin or can_verify_transfer %}
+    <a href="/verifications/ops" class="sec-nav-item" data-tooltip="Ops Verification — verify &amp; go live">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+        <span class="sec-nav-text">Ops Verification</span>
+    </a>
+    {% endif %}
     {% if can_access('sales','reports','view') %}
     <a href="/sales/targets" class="sec-nav-item" data-tooltip="Targets">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
