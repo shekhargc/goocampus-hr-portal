@@ -61,6 +61,20 @@ def _training_reg_number(conn):
     return f"{prefix}/{fy}/{seq:03d}"
 
 
+def _existing_training_for(conn, src):
+    """Return any Training-pathway rows that already represent this person —
+    either added from this source before (referral link) or matched by the
+    same mobile number. Used to BLOCK a duplicate add."""
+    mobile = (src['mobile'] or '').strip()
+    return conn.execute(
+        "SELECT id, registration_number, plan_type FROM plab_clients "
+        "WHERE COALESCE(pathway,'plab') = 'training' "
+        "  AND (referral_client_reg = ? OR (? <> '' AND mobile = ?)) "
+        "ORDER BY id",
+        (src['registration_number'], mobile, mobile),
+    ).fetchall()
+
+
 @admin_required
 def ops_add_to_training_form(src_id):
     """GET — pre-filled 'add this client to Training' form."""
@@ -74,13 +88,14 @@ def ops_add_to_training_form(src_id):
         flash('Source client not found.', 'error')
         return redirect(url_for('dashboard'))
 
-    # Already-in-training warning (same person added before).
-    existing = conn.execute(
-        "SELECT id, registration_number, plan_type FROM plab_clients "
-        "WHERE COALESCE(pathway,'plab') = 'training' AND referral_client_reg = ? "
-        "ORDER BY id",
-        (src['registration_number'],),
-    ).fetchall()
+    # Already in Training? Then block the add entirely — no duplicate entry.
+    existing = _existing_training_for(conn, src)
+    if existing:
+        first_id = existing[0]['id']
+        conn.close()
+        flash('This client is already in the Training pathway, so a new entry '
+              'was not created. Opening the existing Training record.', 'info')
+        return redirect(url_for('ops_training_client_detail', client_id=first_id))
 
     lk = section_client_lookups('training')
     conn.close()
@@ -110,6 +125,15 @@ def ops_add_to_training_save(src_id):
         if not src:
             flash('Source client not found.', 'error')
             return redirect(url_for('dashboard'))
+
+        # Hard block: never create a second Training entry for someone who is
+        # already in the Training pathway.
+        existing = _existing_training_for(conn, src)
+        if existing:
+            conn.close()
+            flash('This client is already in the Training pathway — no new '
+                  'entry was created.', 'error')
+            return redirect(url_for('ops_training_client_detail', client_id=existing[0]['id']))
 
         f = request.form
         plan_type = (f.get('plan_type') or 'AMC 1').strip()
