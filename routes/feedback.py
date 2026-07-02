@@ -69,8 +69,11 @@ def ensure_feedback_tables():
             id SERIAL PRIMARY KEY,
             response_id INTEGER NOT NULL REFERENCES feedback_responses(id) ON DELETE CASCADE,
             question_id INTEGER, qtype TEXT, question_text TEXT, answer_value TEXT)""",
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS quarter_key TEXT",
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS quarter_label TEXT",
         "CREATE INDEX IF NOT EXISTS idx_feedback_q_form ON feedback_questions(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_form ON feedback_invites(form_id)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_inv_quarter ON feedback_invites(quarter_key)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_reg ON feedback_invites(registration_number)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_ans_resp ON feedback_answers(response_id)",
     ):
@@ -134,6 +137,90 @@ def _form_questions(conn, form_id):
 
 def _base_url():
     return request.host_url.rstrip('/')
+
+
+# ─────────────────────────── quarters + metrics ───────────────────────────
+
+_MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July',
+           'August', 'September', 'October', 'November', 'December']
+
+
+def _quarter_for(dt):
+    """Reporting quarter for a send date = the calendar quarter that just
+    ended. Feedback is sent the month AFTER the quarter closes:
+      sent Jul-Sep -> Apr-Jun (Q1) | Oct-Dec -> Jul-Sep (Q2)
+      sent Jan-Mar -> Oct-Dec prev year (Q3) | Apr-Jun -> Jan-Mar (Q4)
+    Returns (key, label). Key sorts chronologically by period start."""
+    m, y = dt.month, dt.year
+    if 7 <= m <= 9:      s, e, sy, ey = 4, 6, y, y
+    elif 10 <= m <= 12:  s, e, sy, ey = 7, 9, y, y
+    elif 1 <= m <= 3:    s, e, sy, ey = 10, 12, y - 1, y - 1
+    else:                s, e, sy, ey = 1, 3, y, y
+    return f"{sy}-{s:02d}", f"{_MONTHS[s]} {sy} - {_MONTHS[e]} {ey}"
+
+
+def _metrics(conn, form_id=None, quarter_key=None):
+    """CSAT / NPS / avg-star + invite counts, filtered by form and/or quarter.
+
+    CSAT = % of 5-star answers that are 4 or 5 (satisfied).
+    NPS  = %promoters(9-10) − %detractors(0-6) on the 0-10 recommend scale.
+    """
+    where, params = [], []
+    if form_id:
+        where.append("r.form_id = ?"); params.append(form_id)
+    if quarter_key:
+        where.append("i.quarter_key = ?"); params.append(quarter_key)
+    wsql = (" AND " + " AND ".join(where)) if where else ""
+
+    def nums(qtype):
+        rows = conn.execute(
+            "SELECT a.answer_value AS v FROM feedback_answers a "
+            "JOIN feedback_responses r ON r.id = a.response_id "
+            "JOIN feedback_invites i ON i.id = r.invite_id "
+            "WHERE a.qtype = ?" + wsql, [qtype] + params).fetchall()
+        out = []
+        for r in rows:
+            try: out.append(float(r['v']))
+            except Exception: pass
+        return out
+
+    stars, scales = nums('star'), nums('scale')
+    avg_star = round(sum(stars) / len(stars), 2) if stars else None
+    csat = round(sum(1 for s in stars if s >= 4) / len(stars) * 100) if stars else None
+    nps = None
+    if scales:
+        promo = sum(1 for s in scales if s >= 9)
+        detr = sum(1 for s in scales if s <= 6)
+        nps = round((promo - detr) / len(scales) * 100)
+
+    iw, ip = [], []
+    if form_id:
+        iw.append("form_id = ?"); ip.append(form_id)
+    if quarter_key:
+        iw.append("quarter_key = ?"); ip.append(quarter_key)
+    iwsql = (" WHERE " + " AND ".join(iw)) if iw else ""
+    st = conn.execute(
+        "SELECT COUNT(*) AS sent, "
+        "SUM(CASE WHEN status='submitted' THEN 1 ELSE 0 END) AS submitted, "
+        "SUM(CASE WHEN status='opened' THEN 1 ELSE 0 END) AS opened "
+        "FROM feedback_invites" + iwsql, ip).fetchone()
+    return {'avg_star': avg_star, 'csat': csat, 'nps': nps,
+            'star_n': len(stars), 'nps_n': len(scales),
+            'sent': st['sent'] or 0, 'submitted': st['submitted'] or 0,
+            'opened': st['opened'] or 0}
+
+
+def _quarters_with_data(conn, form_id=None):
+    if form_id:
+        rows = conn.execute(
+            "SELECT DISTINCT quarter_key, quarter_label FROM feedback_invites "
+            "WHERE form_id = ? AND quarter_key IS NOT NULL ORDER BY quarter_key DESC",
+            (form_id,)).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT DISTINCT quarter_key, quarter_label FROM feedback_invites "
+            "WHERE quarter_key IS NOT NULL ORDER BY quarter_key DESC").fetchall()
+    return [dict(r) for r in rows]
 
 
 def _wa_link(mobile, message):
@@ -258,13 +345,12 @@ def admin_feedback():
     forms = conn.execute("SELECT * FROM feedback_forms ORDER BY sort_order, id").fetchall()
     cards = []
     for f in forms:
-        stats = conn.execute(
-            "SELECT COUNT(*) AS sent, "
-            "SUM(CASE WHEN status='submitted' THEN 1 ELSE 0 END) AS submitted "
-            "FROM feedback_invites WHERE form_id = ?", (f['id'],)).fetchone()
-        cards.append({'form': f, 'sent': stats['sent'] or 0, 'submitted': stats['submitted'] or 0})
+        m = _metrics(conn, f['id'], None)  # all-time per form
+        cards.append({'form': f, **m})
+    overall = _metrics(conn, None, None)  # product-wide, all-time
     conn.close()
-    return render_template('admin_feedback.html', cards=cards, active_section='clients')
+    return render_template('admin_feedback.html', cards=cards, overall=overall,
+                           active_section='clients')
 
 
 # ─────────────────────────── ADMIN: send ───────────────────────────
@@ -330,6 +416,7 @@ def admin_feedback_send_post():
         return redirect(url_for('admin_feedback_send', form_id=form_id))
 
     base = _base_url()
+    qkey, qlabel = _quarter_for(datetime.now())
     sent_rows = []
     email_ok = 0
     for reg in reg_numbers:
@@ -343,10 +430,12 @@ def admin_feedback_send_post():
         try:
             conn.execute(
                 "INSERT INTO feedback_invites (token, form_id, registration_number, client_name, "
-                "pathway, stage_key, mobile, email, sent_via, sent_by, sent_by_name) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "pathway, stage_key, mobile, email, sent_via, sent_by, sent_by_name, "
+                "quarter_key, quarter_label) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (token, form['id'], reg, name, form['pathway'], form['stage_key'],
-                 c['mobile'], c['email'], 'email', (user or {}).get('id'), (user or {}).get('name')))
+                 c['mobile'], c['email'], 'email', (user or {}).get('id'), (user or {}).get('name'),
+                 qkey, qlabel))
             conn.commit()
         except Exception as e:
             logging.error(f"feedback invite insert {reg}: {e}")
@@ -379,40 +468,79 @@ def admin_feedback_results(form_id):
         conn.close()
         flash('Form not found.', 'error')
         return redirect(url_for('admin_feedback'))
+
+    quarters = _quarters_with_data(conn, form_id)
+    # Default to the most recent quarter with data; 'all' = every quarter.
+    quarter = request.args.get('quarter')
+    if quarter is None:
+        quarter = quarters[0]['quarter_key'] if quarters else 'all'
+    qfilter = None if quarter == 'all' else quarter
+
+    metrics = _metrics(conn, form_id, qfilter)
+
+    # per-question aggregates (quarter-filtered)
+    qextra, qparams = "", []
+    if qfilter:
+        qextra = " AND i.quarter_key = ? "
+        qparams = [qfilter]
     questions = _form_questions(conn, form_id)
-    # aggregate per question
     for q in questions:
         answers = conn.execute(
-            "SELECT a.answer_value FROM feedback_answers a "
+            "SELECT a.answer_value AS v FROM feedback_answers a "
             "JOIN feedback_responses r ON r.id = a.response_id "
-            "WHERE r.form_id = ? AND a.question_id = ?", (form_id, q['id'])).fetchall()
-        vals = [a['answer_value'] for a in answers if (a['answer_value'] or '').strip() != '']
+            "JOIN feedback_invites i ON i.id = r.invite_id "
+            "WHERE r.form_id = ? AND a.question_id = ?" + qextra,
+            [form_id, q['id']] + qparams).fetchall()
+        vals = [a['v'] for a in answers if (a['v'] or '').strip() != '']
         q['n'] = len(vals)
         if q['qtype'] in ('star', 'scale'):
-            nums = []
+            ns = []
             for v in vals:
-                try: nums.append(float(v))
+                try: ns.append(float(v))
                 except Exception: pass
-            q['avg'] = round(sum(nums) / len(nums), 2) if nums else None
+            q['avg'] = round(sum(ns) / len(ns), 2) if ns else None
         elif q['qtype'] == 'choice':
             dist = {}
             for v in vals:
                 dist[v] = dist.get(v, 0) + 1
             q['dist'] = dist
-        else:  # text
+        else:
             q['comments'] = vals
-    # submissions list (internal — who submitted)
+
+    # submissions list (internal — who submitted), quarter-filtered
     subs = conn.execute(
         "SELECT r.id, r.submitted_at, i.registration_number, i.client_name "
         "FROM feedback_responses r JOIN feedback_invites i ON i.id = r.invite_id "
-        "WHERE r.form_id = ? ORDER BY r.submitted_at DESC", (form_id,)).fetchall()
-    inv_stats = conn.execute(
-        "SELECT COUNT(*) AS sent, SUM(CASE WHEN status='submitted' THEN 1 ELSE 0 END) AS submitted, "
-        "SUM(CASE WHEN status='opened' THEN 1 ELSE 0 END) AS opened FROM feedback_invites WHERE form_id = ?",
-        (form_id,)).fetchone()
+        "WHERE r.form_id = ?" + (" AND i.quarter_key = ?" if qfilter else "") +
+        " ORDER BY r.submitted_at DESC", [form_id] + ([qfilter] if qfilter else [])).fetchall()
     conn.close()
     return render_template('admin_feedback_results.html', form=form, questions=questions,
-                           subs=subs, stats=inv_stats, active_section='clients')
+                           subs=subs, metrics=metrics, quarters=quarters, quarter=quarter,
+                           active_section='clients')
+
+
+@admin_required
+def admin_feedback_response(response_id):
+    """JSON — one client's full response, for the right-side drawer."""
+    conn = get_db()
+    r = conn.execute(
+        "SELECT r.id, r.submitted_at, i.client_name, i.registration_number, "
+        "i.pathway, i.stage_key, i.quarter_label "
+        "FROM feedback_responses r JOIN feedback_invites i ON i.id = r.invite_id "
+        "WHERE r.id = ?", (response_id,)).fetchone()
+    if not r:
+        conn.close()
+        return jsonify({'error': 'not found'}), 404
+    ans = conn.execute(
+        "SELECT question_text, qtype, answer_value FROM feedback_answers "
+        "WHERE response_id = ? ORDER BY id", (response_id,)).fetchall()
+    conn.close()
+    return jsonify({
+        'client_name': r['client_name'], 'reg': r['registration_number'],
+        'submitted_at': str(r['submitted_at'] or ''), 'quarter': r['quarter_label'] or '',
+        'answers': [{'q': a['question_text'], 'type': a['qtype'],
+                     'value': a['answer_value']} for a in ans],
+    })
 
 
 # ─────────────────────────── ADMIN: edit form/questions ───────────────────────────
@@ -485,5 +613,7 @@ def register_routes(app):
                      view_func=admin_feedback_send_post, methods=['POST'])
     app.add_url_rule('/admin/feedback/results/<int:form_id>', endpoint='admin_feedback_results',
                      view_func=admin_feedback_results, methods=['GET'])
+    app.add_url_rule('/admin/feedback/response/<int:response_id>', endpoint='admin_feedback_response',
+                     view_func=admin_feedback_response, methods=['GET'])
     app.add_url_rule('/admin/feedback/form/<int:form_id>/edit', endpoint='admin_feedback_form_edit',
                      view_func=admin_feedback_form_edit, methods=['GET', 'POST'])

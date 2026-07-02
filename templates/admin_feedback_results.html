@@ -1,19 +1,57 @@
 {% extends "clients_sidebar_base.html" %}
 {% block title %}Feedback Results{% endblock %}
 {% block section_content %}
-<div style="padding:24px;max-width:960px;">
+{% set rate = ((metrics.submitted / metrics.sent * 100) if metrics.sent else 0) %}
+<div style="padding:24px;max-width:1000px;">
   <a href="{{ url_for('admin_feedback') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Feedback</a>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin:10px 0 4px;">
-    <h1 style="margin:0;font-size:1.5rem;color:var(--navy);">{{ form.title }} — Results</h1>
+    <div>
+      <h1 style="margin:0;font-size:1.5rem;color:var(--navy);">{{ form.title }}</h1>
+      <p style="margin:4px 0 0;color:var(--gray-400);font-size:0.82rem;text-transform:capitalize;">{{ form.pathway }} · Operations performance report</p>
+    </div>
     <a href="{{ url_for('admin_feedback_send', form_id=form.id) }}" style="background:var(--orange);color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:0.85rem;">+ Send more</a>
   </div>
 
-  <div style="display:flex;gap:22px;margin:16px 0 26px;">
-    <div><div style="font-size:1.6rem;font-weight:700;color:var(--navy);">{{ stats.sent or 0 }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Sent</div></div>
-    <div><div style="font-size:1.6rem;font-weight:700;color:#7c3aed;">{{ stats.opened or 0 }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Opened</div></div>
-    <div><div style="font-size:1.6rem;font-weight:700;color:#059669;">{{ stats.submitted or 0 }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Responses</div></div>
+  <!-- Quarter tabs -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 20px;">
+    {% for qd in quarters %}
+    <a href="{{ url_for('admin_feedback_results', form_id=form.id, quarter=qd.quarter_key) }}"
+       style="text-decoration:none;padding:7px 15px;border-radius:999px;font-size:0.82rem;font-weight:600;{% if quarter == qd.quarter_key %}background:var(--navy);color:#fff;{% else %}background:#eef2f7;color:#475569;{% endif %}">{{ qd.quarter_label }}</a>
+    {% endfor %}
+    <a href="{{ url_for('admin_feedback_results', form_id=form.id, quarter='all') }}"
+       style="text-decoration:none;padding:7px 15px;border-radius:999px;font-size:0.82rem;font-weight:600;{% if quarter == 'all' %}background:var(--navy);color:#fff;{% else %}background:#eef2f7;color:#475569;{% endif %}">All time</a>
+    {% if not quarters %}<span style="color:var(--gray-400);font-size:0.85rem;padding:7px 0;">No responses recorded yet.</span>{% endif %}
   </div>
 
+  <!-- KPI cards -->
+  {% macro kpi(label, value, suffix, color, sub) %}
+  <div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--gray-200);border-radius:14px;padding:18px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <div style="font-size:0.72rem;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.6px;">{{ label }}</div>
+    <div style="font-size:2.1rem;font-weight:800;color:{{ color }};line-height:1.15;margin-top:6px;">{{ value }}{% if suffix %}<span style="font-size:1rem;font-weight:600;color:var(--gray-400);">{{ suffix }}</span>{% endif %}</div>
+    <div style="font-size:0.72rem;color:var(--gray-400);margin-top:2px;">{{ sub }}</div>
+  </div>
+  {% endmacro %}
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;">
+    {{ kpi('CSAT Score',
+           (metrics.csat if metrics.csat is not none else '—'),
+           ('%' if metrics.csat is not none else ''),
+           ('#059669' if metrics.csat is not none and metrics.csat >= 80 else ('#d97706' if metrics.csat is not none and metrics.csat >= 60 else '#dc2626')),
+           metrics.star_n ~ ' star ratings · % rated 4–5') }}
+    {{ kpi('NPS Score',
+           (metrics.nps if metrics.nps is not none else '—'), '',
+           ('#059669' if metrics.nps is not none and metrics.nps >= 50 else ('#d97706' if metrics.nps is not none and metrics.nps >= 0 else '#dc2626')),
+           metrics.nps_n ~ ' recommend scores · −100 to +100') }}
+    {{ kpi('Avg Star Rating',
+           (metrics.avg_star if metrics.avg_star is not none else '—'),
+           ('/5' if metrics.avg_star is not none else ''),
+           ('#059669' if metrics.avg_star is not none and metrics.avg_star >= 4 else ('#d97706' if metrics.avg_star is not none and metrics.avg_star >= 3 else '#dc2626')),
+           'across all star questions') }}
+    {{ kpi('Response Rate', rate|round(0)|int, '%', '#7c3aed',
+           metrics.submitted ~ ' of ' ~ metrics.sent ~ ' sent · ' ~ metrics.opened ~ ' opened') }}
+  </div>
+  <p style="font-size:0.72rem;color:var(--gray-400);margin:4px 0 22px;">CSAT = share of star ratings that are 4 or 5. NPS = % promoters (9–10) minus % detractors (0–6) on the recommend scale.</p>
+
+  <!-- Per-question breakdown -->
   {% for q in questions %}
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:18px;margin-bottom:14px;">
     <div style="font-weight:600;color:var(--navy);font-size:0.95rem;margin-bottom:12px;">{{ q.question_text }}
@@ -22,7 +60,7 @@
       {% set maxv = 5 if q.qtype == 'star' else 10 %}
       <div style="display:flex;align-items:baseline;gap:10px;">
         <div style="font-size:2rem;font-weight:800;color:{{ '#059669' if q.avg and q.avg >= (maxv*0.7) else ('#d97706' if q.avg and q.avg >= (maxv*0.4) else '#dc2626') }};">{{ q.avg if q.avg is not none else '—' }}</div>
-        <div style="color:var(--gray-400);font-size:0.85rem;">/ {{ maxv }} average{% if q.qtype == 'scale' %} (recommend score){% endif %}</div>
+        <div style="color:var(--gray-400);font-size:0.85rem;">/ {{ maxv }} average{% if q.qtype == 'scale' %} (recommend){% endif %}</div>
       </div>
       {% if q.avg is not none %}
       <div style="height:9px;background:#eef2f7;border-radius:999px;margin-top:10px;overflow:hidden;"><div style="height:100%;width:{{ (q.avg / maxv * 100)|round(0) }}%;background:linear-gradient(90deg,#1e3a5f,#3b82f6);"></div></div>
@@ -45,19 +83,66 @@
   </div>
   {% endfor %}
 
-  <!-- Internal: who submitted (kept out of the client's view) -->
+  <!-- Who responded — click a name to open their full response -->
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:18px;margin-top:20px;">
-    <div style="font-weight:700;color:var(--navy);margin-bottom:4px;">Who responded <span style="font-size:0.72rem;color:var(--gray-400);font-weight:500;">(internal — clients never see this)</span></div>
+    <div style="font-weight:700;color:var(--navy);margin-bottom:4px;">Who responded <span style="font-size:0.72rem;color:var(--gray-400);font-weight:500;">(internal — click a name to see their answers)</span></div>
     {% if subs %}
-    <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin-top:8px;">
-      <thead><tr style="text-align:left;color:var(--gray-500);"><th style="padding:6px 8px;">Client</th><th style="padding:6px 8px;">Reg #</th><th style="padding:6px 8px;">Submitted</th></tr></thead>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:8px;">
+      <thead><tr style="text-align:left;color:var(--gray-500);"><th style="padding:7px 8px;">Client</th><th style="padding:7px 8px;">Reg #</th><th style="padding:7px 8px;">Submitted</th><th></th></tr></thead>
       <tbody>
       {% for s in subs %}
-      <tr style="border-top:1px solid #f1f5f9;"><td style="padding:7px 8px;font-weight:600;color:var(--navy);">{{ s.client_name or '—' }}</td><td style="padding:7px 8px;color:var(--gray-500);">{{ s.registration_number }}</td><td style="padding:7px 8px;color:var(--gray-500);">{{ s.submitted_at }}</td></tr>
+      <tr style="border-top:1px solid #f1f5f9;cursor:pointer;" onclick="openResp({{ s.id }})">
+        <td style="padding:9px 8px;font-weight:600;color:var(--blue-dark);">{{ s.client_name or '—' }}</td>
+        <td style="padding:9px 8px;color:var(--gray-500);">{{ s.registration_number }}</td>
+        <td style="padding:9px 8px;color:var(--gray-500);">{{ s.submitted_at }}</td>
+        <td style="padding:9px 8px;text-align:right;color:var(--orange);font-weight:600;">View &rsaquo;</td>
+      </tr>
       {% endfor %}
       </tbody>
     </table>
-    {% else %}<div style="color:var(--gray-400);font-size:0.85rem;">No responses yet.</div>{% endif %}
+    {% else %}<div style="color:var(--gray-400);font-size:0.85rem;">No responses in this period yet.</div>{% endif %}
   </div>
 </div>
+
+<!-- Right-side response drawer -->
+<div id="respOverlay" onclick="closeResp()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.4);z-index:900;"></div>
+<aside id="respDrawer" style="position:fixed;top:0;right:0;height:100vh;width:440px;max-width:92vw;background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,0.15);z-index:901;transform:translateX(100%);transition:transform .22s ease;overflow-y:auto;">
+  <div style="background:#1e3a5f;color:#fff;padding:20px 22px;position:sticky;top:0;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div id="respName" style="font-size:1.05rem;font-weight:700;">—</div>
+        <div id="respMeta" style="font-size:0.76rem;opacity:.85;margin-top:3px;"></div>
+      </div>
+      <button onclick="closeResp()" style="background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+  </div>
+  <div id="respBody" style="padding:20px 22px;"></div>
+</aside>
+
+<script>
+function starStr(v){ v=parseInt(v)||0; return '★★★★★'.slice(0,v)+'☆☆☆☆☆'.slice(0,5-v)+' ('+v+'/5)'; }
+function openResp(id){
+  var ov=document.getElementById('respOverlay'), dr=document.getElementById('respDrawer');
+  ov.style.display='block'; requestAnimationFrame(function(){ dr.style.transform='translateX(0)'; });
+  document.getElementById('respBody').innerHTML='<div style="color:#94a3b8;">Loading…</div>';
+  fetch('{{ url_for("admin_feedback") }}/response/'+id).then(function(r){return r.json();}).then(function(d){
+    document.getElementById('respName').textContent=d.client_name||'—';
+    document.getElementById('respMeta').textContent=(d.reg||'')+(d.quarter?(' · '+d.quarter):'')+(d.submitted_at?(' · '+d.submitted_at):'');
+    var h='';
+    (d.answers||[]).forEach(function(a){
+      var val=a.value||'—';
+      if(a.type==='star') val=starStr(a.value);
+      else if(a.type==='scale') val=(a.value||'—')+' / 10';
+      h+='<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #f1f5f9;">'
+        +'<div style="font-size:0.82rem;font-weight:600;color:#334e68;margin-bottom:5px;">'+a.q+'</div>'
+        +'<div style="font-size:0.95rem;'+(a.type==='star'?'color:#F59E0B;letter-spacing:2px;':'color:#0f172a;')+'white-space:pre-line;">'+val+'</div></div>';
+    });
+    document.getElementById('respBody').innerHTML=h||'<div style="color:#94a3b8;">No answers.</div>';
+  }).catch(function(){ document.getElementById('respBody').innerHTML='<div style="color:#dc2626;">Could not load response.</div>'; });
+}
+function closeResp(){
+  document.getElementById('respDrawer').style.transform='translateX(100%)';
+  document.getElementById('respOverlay').style.display='none';
+}
+</script>
 {% endblock %}
