@@ -146,10 +146,13 @@ def _wa_link(mobile, message):
 
 
 def _feedback_message(name, link, stage_title):
-    first = (name or 'there').split()[0] if name else 'there'
-    return (f"Hi {first}, we'd love your honest feedback on your {stage_title} experience with "
-            f"GooCampus. It's anonymous and takes under 2 minutes — it genuinely helps us improve "
-            f"our service for you: {link}")
+    # Full name incl. prefix (e.g. "Dr. Sonali Nanda"); collapse stray spaces.
+    greeting = ' '.join((name or '').split()) or 'there'
+    return (f"Hi {greeting},\n\n"
+            f"We'd love your honest feedback on your {stage_title} experience with GooCampus. "
+            f"It's anonymous and takes under 2 minutes — it genuinely helps us improve our "
+            f"service for you:\n\n"
+            f"{link}")
 
 
 def _send_feedback_email(email, name, link, stage_title):
@@ -157,13 +160,14 @@ def _send_feedback_email(email, name, link, stage_title):
         return False
     try:
         from email_utils import send_email
-        first = (name or 'there').split()[0] if name else 'there'
+        # Full name incl. prefix (e.g. "Dr. Sonali Nanda"); collapse stray spaces.
+        greeting = ' '.join((name or '').split()) or 'there'
         html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;background:#f5f5f5;">
   <div style="max-width:600px;margin:0 auto;background:#fff;">
     <div style="background-color:#1e3a5f;padding:22px;text-align:center;"><h1 style="color:white;margin:0;font-size:22px;">GooCampus Edu Solutions</h1></div>
     <div style="padding:30px;">
       <h2 style="color:#1e3a5f;margin-top:0;">Your feedback shapes our service</h2>
-      <p style="font-size:16px;">Hello {first},</p>
+      <p style="font-size:16px;">Hello {greeting},</p>
       <p>We're committed to giving you the best possible support on your journey. Could you spare
       <strong>under 2 minutes</strong> to tell us how we're doing?</p>
       <p style="background:#f0f6ff;border-left:4px solid #1e3a5f;padding:12px 16px;border-radius:4px;font-size:14px;">
