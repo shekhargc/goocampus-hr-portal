@@ -4,7 +4,12 @@
 <div style="padding:24px;max-width:1000px;">
   <a href="{{ url_for('admin_feedback') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Feedback</a>
   <h1 style="margin:10px 0 4px;font-size:1.5rem;color:var(--navy);">Links created — {{ form.title }}</h1>
-  <p style="margin:0 0 18px;color:var(--gray-500);font-size:0.9rem;">Emails were sent automatically where an address was on file. For WhatsApp, tap <strong>Send on WhatsApp</strong> next to each client — it opens WhatsApp with the message and link ready to send from your own account.</p>
+  <p style="margin:0 0 12px;color:var(--gray-500);font-size:0.9rem;">Emails were sent automatically where an address was on file. For WhatsApp, tap <strong>Send on WhatsApp</strong> next to each client — it opens WhatsApp with the message and link ready to send from your own account.</p>
+  <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:11px 14px;margin-bottom:18px;font-size:0.85rem;color:#166534;">
+    💡 Want to wait a few days for email responses first? Open the
+    <a href="{{ url_for('admin_feedback_followup', form_id=form.id) }}" style="color:#166534;font-weight:700;">Follow-up page</a>
+    anytime — it shows who has <b>Submitted</b> vs who's still <b>Pending</b>, so you only WhatsApp the ones who haven't responded.
+  </div>
 
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;">
     <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">

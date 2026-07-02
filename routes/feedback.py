@@ -543,6 +543,53 @@ def admin_feedback_response(response_id):
     })
 
 
+@admin_required
+def admin_feedback_followup(form_id):
+    """Persistent follow-up view: every client the form was sent to, with
+    live status — once a client submits, their WhatsApp 'Send' turns into a
+    'Submitted' badge. Lets the team send emails, wait a few days, then only
+    WhatsApp the ones who haven't responded yet."""
+    conn = get_db()
+    form = conn.execute("SELECT * FROM feedback_forms WHERE id = ?", (form_id,)).fetchone()
+    if not form:
+        conn.close()
+        flash('Form not found.', 'error')
+        return redirect(url_for('admin_feedback'))
+    quarters = _quarters_with_data(conn, form_id)
+    quarter = request.args.get('quarter')
+    if quarter is None:
+        quarter = quarters[0]['quarter_key'] if quarters else 'all'
+    qfilter = None if quarter == 'all' else quarter
+
+    q = ("SELECT id, token, client_name, registration_number, mobile, email, "
+         "status, submitted_at, sent_at FROM feedback_invites WHERE form_id = ?")
+    params = [form_id]
+    if qfilter:
+        q += " AND quarter_key = ?"
+        params.append(qfilter)
+    # Pending (not submitted) first, so the team sees who still needs a nudge.
+    q += " ORDER BY CASE WHEN status = 'submitted' THEN 1 ELSE 0 END, client_name"
+    invites = conn.execute(q, params).fetchall()
+    conn.close()
+
+    base = _base_url()
+    rows, done = [], 0
+    for iv in invites:
+        submitted = (iv['status'] == 'submitted') or bool(iv['submitted_at'])
+        if submitted:
+            done += 1
+        link = f"{base}/feedback/{iv['token']}"
+        rows.append({
+            'name': iv['client_name'], 'reg': iv['registration_number'],
+            'mobile': iv['mobile'], 'email': iv['email'], 'status': iv['status'],
+            'submitted': submitted, 'submitted_at': iv['submitted_at'], 'link': link,
+            'wa_link': _wa_link(iv['mobile'], _feedback_message(iv['client_name'], link, form['title'])),
+        })
+    return render_template('admin_feedback_followup.html', form=form, rows=rows,
+                           total=len(rows), done=done, pending=len(rows) - done,
+                           quarters=quarters, quarter=quarter, active_section='clients')
+
+
 # ─────────────────────────── ADMIN: edit form/questions ───────────────────────────
 
 @admin_required
@@ -615,5 +662,7 @@ def register_routes(app):
                      view_func=admin_feedback_results, methods=['GET'])
     app.add_url_rule('/admin/feedback/response/<int:response_id>', endpoint='admin_feedback_response',
                      view_func=admin_feedback_response, methods=['GET'])
+    app.add_url_rule('/admin/feedback/followup/<int:form_id>', endpoint='admin_feedback_followup',
+                     view_func=admin_feedback_followup, methods=['GET'])
     app.add_url_rule('/admin/feedback/form/<int:form_id>/edit', endpoint='admin_feedback_form_edit',
                      view_func=admin_feedback_form_edit, methods=['GET', 'POST'])
