@@ -27,14 +27,6 @@
             &nbsp;·&nbsp; <span style="text-transform:capitalize;">{{ src.src_pathway }}</span> pathway
         </div>
 
-        {% if existing %}
-        <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:0.8rem 1.1rem;margin-bottom:1.2rem;font-size:0.82rem;color:#92400E;">
-            ⚠️ This client is <strong>already in Training</strong> as
-            {% for e in existing %}{{ e.registration_number }} ({{ e.plan_type or '—' }}){% if not loop.last %}, {% endif %}{% endfor %}.
-            Only continue if you genuinely need another entry (e.g. AMC 1 <em>and</em> AMC 2).
-        </div>
-        {% endif %}
-
         <form method="POST" action="{{ url_for('ops_add_to_training_save', src_id=src.id) }}">
 
             <!-- ===== TRAINING DETAILS ===== -->
