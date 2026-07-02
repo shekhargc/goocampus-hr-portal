@@ -265,21 +265,26 @@ def admin_feedback():
 
 # ─────────────────────────── ADMIN: send ───────────────────────────
 
-def _clients_for_form(conn, form):
+def _clients_for_form(conn, form, status='In Process'):
     """Clients eligible for this form: same pathway, and (if the form lists
-    match_stages) whose current_stage is in that list."""
+    match_stages) whose current_stage is in that list. By default only
+    'In Process' (active) clients — feedback shouldn't chase dropped ones;
+    pass status='all' to include every status."""
     try:
         stages = json.loads(form['match_stages']) if form['match_stages'] else []
     except Exception:
         stages = []
     q = ("SELECT id, registration_number, prefix, first_name, last_name, mobile, email, "
-         "current_stage, plan_type FROM plab_clients "
+         "current_stage, account_status, plan_type FROM plab_clients "
          "WHERE COALESCE(pathway,'plab') = ? ")
     params = [form['pathway']]
     if stages:
         ph = ','.join(['?'] * len(stages))
         q += f" AND current_stage IN ({ph}) "
         params += stages
+    if status and status != 'all':
+        q += " AND account_status = ? "
+        params.append(status)
     q += " ORDER BY first_name, last_name"
     try:
         return conn.execute(q, params).fetchall()
@@ -292,15 +297,16 @@ def admin_feedback_send():
     conn = get_db()
     forms = conn.execute("SELECT * FROM feedback_forms WHERE is_active = 1 ORDER BY sort_order, id").fetchall()
     form_id = request.args.get('form_id', type=int)
+    status = request.args.get('status', 'In Process')
     selected = None
     clients = []
     if form_id:
         selected = conn.execute("SELECT * FROM feedback_forms WHERE id = ?", (form_id,)).fetchone()
         if selected:
-            clients = _clients_for_form(conn, selected)
+            clients = _clients_for_form(conn, selected, status)
     conn.close()
     return render_template('admin_feedback_send.html', forms=forms, selected=selected,
-                           clients=clients, active_section='clients')
+                           clients=clients, status=status, active_section='clients')
 
 
 @admin_required
