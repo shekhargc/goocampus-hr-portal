@@ -39,9 +39,13 @@ PATHWAY_EDIT_ENDPOINT = {
 
 
 def _can_fill(user):
+    # Filling balance details is a SALES task (they closed the deal), so any
+    # sales-access user qualifies — not just internal-transfer grantees.
     from app import has_section_permission
     return bool(session.get('is_admin') or
-                (user and has_section_permission(user, 'clients', 'internal_transfers', 'add')))
+                (user and (has_section_permission(user, 'clients', 'internal_transfers', 'add')
+                           or has_section_permission(user, 'sales', 'clients_pipeline', 'view')
+                           or has_section_permission(user, 'sales', 'meetings', 'view'))))
 
 
 def _can_verify(user):
