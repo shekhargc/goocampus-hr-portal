@@ -39,19 +39,22 @@ PATHWAY_EDIT_ENDPOINT = {
 
 
 def _can_fill(user):
-    # Filling balance details is a SALES task (they closed the deal), so any
-    # sales-access user qualifies — not just internal-transfer grantees.
+    # Governed by its own Access Master permission now: Sales > Sales
+    # Verification. (Legacy internal-transfer 'add' still qualifies so the
+    # existing transfer hand-off keeps working.)
     from app import has_section_permission
     return bool(session.get('is_admin') or
-                (user and (has_section_permission(user, 'clients', 'internal_transfers', 'add')
-                           or has_section_permission(user, 'sales', 'clients_pipeline', 'view')
-                           or has_section_permission(user, 'sales', 'meetings', 'view'))))
+                (user and (has_section_permission(user, 'sales', 'sales_verification', 'view')
+                           or has_section_permission(user, 'clients', 'internal_transfers', 'add'))))
 
 
 def _can_verify(user):
+    # Governed by Sales > Ops Verification. (Legacy internal-transfer 'edit'
+    # still qualifies for the existing transfer hand-off.)
     from app import has_section_permission
     return bool(session.get('is_admin') or
-                (user and has_section_permission(user, 'clients', 'internal_transfers', 'edit')))
+                (user and (has_section_permission(user, 'sales', 'ops_verification', 'view')
+                           or has_section_permission(user, 'clients', 'internal_transfers', 'edit'))))
 
 
 def _name(prefix, first, last):
