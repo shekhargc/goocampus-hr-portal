@@ -53,6 +53,12 @@ app.config['DEBUG'] = False
 # responses no longer carry Set-Cookie.
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 app.config['SESSION_REFRESH_EACH_REQUEST'] = False
+# Session-cookie hardening (defence in depth). Render serves over HTTPS, so
+# Secure is safe. HttpOnly keeps JS from reading the cookie; SameSite=Lax
+# stops it being sent on cross-site requests.
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 
 @app.after_request
