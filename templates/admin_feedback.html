@@ -10,6 +10,17 @@
     <a href="{{ url_for('admin_feedback_send') }}" style="background:var(--orange);color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:700;font-size:0.9rem;">+ Send Feedback</a>
   </div>
 
+  <!-- Overall product performance (all forms, all time) -->
+  <div style="background:linear-gradient(120deg,#1e3a5f,#2d5580);border-radius:16px;padding:22px 24px;margin-top:18px;color:#fff;">
+    <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;opacity:.8;">Overall Product Performance</div>
+    <div style="display:flex;gap:34px;flex-wrap:wrap;margin-top:14px;">
+      <div><div style="font-size:2.4rem;font-weight:800;line-height:1;">{{ overall.csat if overall.csat is not none else '—' }}{% if overall.csat is not none %}<span style="font-size:1.1rem;opacity:.7;">%</span>{% endif %}</div><div style="font-size:0.74rem;opacity:.8;margin-top:4px;">CSAT Score</div></div>
+      <div><div style="font-size:2.4rem;font-weight:800;line-height:1;">{{ overall.nps if overall.nps is not none else '—' }}</div><div style="font-size:0.74rem;opacity:.8;margin-top:4px;">NPS Score</div></div>
+      <div><div style="font-size:2.4rem;font-weight:800;line-height:1;">{{ overall.avg_star if overall.avg_star is not none else '—' }}{% if overall.avg_star is not none %}<span style="font-size:1.1rem;opacity:.7;">/5</span>{% endif %}</div><div style="font-size:0.74rem;opacity:.8;margin-top:4px;">Avg Star Rating</div></div>
+      <div><div style="font-size:2.4rem;font-weight:800;line-height:1;">{{ overall.submitted }}</div><div style="font-size:0.74rem;opacity:.8;margin-top:4px;">Total Responses</div></div>
+    </div>
+  </div>
+
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:20px;">
     {% for c in cards %}
     {% set rate = ((c.submitted / c.sent * 100) if c.sent else 0) %}
@@ -19,11 +30,12 @@
         {% if not c.form.is_active %}<span style="font-size:0.66rem;background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:999px;">inactive</span>{% endif %}
       </div>
       <div style="font-size:0.74rem;color:var(--gray-400);text-transform:capitalize;margin-top:2px;">{{ c.form.pathway }} · {{ c.form.stage_key }}</div>
-      <div style="display:flex;gap:18px;margin:16px 0;">
-        <div><div style="font-size:1.4rem;font-weight:700;color:var(--navy);">{{ c.sent }}</div><div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;">Sent</div></div>
-        <div><div style="font-size:1.4rem;font-weight:700;color:#059669;">{{ c.submitted }}</div><div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;">Responses</div></div>
-        <div><div style="font-size:1.4rem;font-weight:700;color:#7c3aed;">{{ '%.0f'|format(rate) }}%</div><div style="font-size:0.7rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;">Rate</div></div>
+      <div style="display:flex;gap:16px;margin:16px 0 10px;">
+        <div><div style="font-size:1.4rem;font-weight:800;color:{{ '#059669' if c.csat is not none and c.csat >= 80 else ('#d97706' if c.csat is not none and c.csat >= 60 else ('#dc2626' if c.csat is not none else 'var(--gray-300)')) }};">{{ c.csat if c.csat is not none else '—' }}{% if c.csat is not none %}%{% endif %}</div><div style="font-size:0.66rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;">CSAT</div></div>
+        <div><div style="font-size:1.4rem;font-weight:800;color:{{ '#059669' if c.nps is not none and c.nps >= 50 else ('#d97706' if c.nps is not none and c.nps >= 0 else ('#dc2626' if c.nps is not none else 'var(--gray-300)')) }};">{{ c.nps if c.nps is not none else '—' }}</div><div style="font-size:0.66rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;">NPS</div></div>
+        <div><div style="font-size:1.4rem;font-weight:800;color:{{ '#F59E0B' if c.avg_star is not none else 'var(--gray-300)' }};">{{ c.avg_star if c.avg_star is not none else '—' }}{% if c.avg_star is not none %}<span style="font-size:0.8rem;color:var(--gray-400);">/5</span>{% endif %}</div><div style="font-size:0.66rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;">Stars</div></div>
       </div>
+      <div style="font-size:0.72rem;color:var(--gray-400);margin-bottom:14px;">{{ c.submitted }} responses · {{ c.sent }} sent · {{ '%.0f'|format(rate) }}% rate</div>
       <div style="display:flex;gap:8px;">
         <a href="{{ url_for('admin_feedback_send', form_id=c.form.id) }}" style="flex:1;text-align:center;background:#FFF7ED;color:#9a3412;text-decoration:none;padding:8px;border-radius:7px;font-size:0.8rem;font-weight:600;">Send</a>
         <a href="{{ url_for('admin_feedback_results', form_id=c.form.id) }}" style="flex:1;text-align:center;background:var(--blue-light);color:var(--blue-dark);text-decoration:none;padding:8px;border-radius:7px;font-size:0.8rem;font-weight:600;">Results</a>

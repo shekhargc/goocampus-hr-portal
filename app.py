@@ -34106,6 +34106,7 @@ ACCESS_ROUTE_MAP = {
     'admin_feedback_send':                          _ap('clients', 'feedback', 'add'),
     'admin_feedback_send_post':                     _ap('clients', 'feedback', 'add'),
     'admin_feedback_results':                       _ap('clients', 'feedback'),
+    'admin_feedback_response':                       _ap('clients', 'feedback'),
     'admin_feedback_form_edit':                     _ap('clients', 'feedback', 'edit'),
     'admin_refunds':                                _ap('clients', 'refunds'),
     'admin_refunds_add':                            _ap('clients', 'refunds', 'add'),
