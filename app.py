@@ -35,24 +35,40 @@ app = Flask(__name__)
 # properties (e.g. /georgia/) doesn't 404. Single switch, applies to
 # every route -- no per-route change needed.
 app.url_map.strict_slashes = False
-app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
+# SECRET_KEY rotated 2026-07-02 after a cross-user session leak — bumping the
+# default invalidates every previously-issued cookie so any leaked/shared
+# session stops working and everyone re-logs in cleanly. Set SECRET_KEY in the
+# environment to override.
+app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-session-2026-07-02-rot1')
 app.config['DEBUG'] = False
 
-# ─── Session persistence ──────────────────────────────────────────────
-# Without this, Flask issues a *session cookie* (no expiry) that the
-# browser clears on close — so team members who shut or idle their browser
-# get logged out, while the founder who keeps a tab open all day appears to
-# stay in. Make every session permanent with a rolling 30-day lifetime that
-# is refreshed on each request, so an actively-used login never expires and
-# an idle one only lapses after 30 days. Applies uniformly to employees,
-# managers, clients and partners.
+# ─── Session persistence (safe) ───────────────────────────────────────
+# Keep the team logged in for 30 days WITHOUT re-issuing the cookie on every
+# response. The earlier version set SESSION_REFRESH_EACH_REQUEST=True and
+# marked the session modified on every request, so EVERY response carried a
+# Set-Cookie. A shared cache/proxy could then hand one user's session cookie
+# to another (users landing in each other's portals). Fix: the cookie is set
+# ONCE at login (session.permanent=True in the login handlers) with a 30-day
+# absolute lifetime; it is NOT refreshed per request, so authenticated
+# responses no longer carry Set-Cookie.
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
-app.config['SESSION_REFRESH_EACH_REQUEST'] = True
+app.config['SESSION_REFRESH_EACH_REQUEST'] = False
 
 
-@app.before_request
-def _make_session_permanent():
-    session.permanent = True
+@app.after_request
+def _no_store_authenticated(resp):
+    """Never let a shared cache store a logged-in response (defence in depth
+    against session bleed): mark authenticated pages private + no-store.
+    Static assets (not user-specific) keep normal caching."""
+    try:
+        if request.endpoint == 'static':
+            return resp
+        if session.get('user_id') or session.get('is_client') or session.get('is_partner'):
+            resp.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0'
+            resp.headers['Pragma'] = 'no-cache'
+    except Exception:
+        pass
+    return resp
 
 
 # ─── Global Jinja2 date filter: DD-Mon-YYYY (e.g. 15-Apr-2026) ───
@@ -495,6 +511,8 @@ def login():
         conn.close()
 
         if user and user['password'] == hash_password(password):
+            session.clear()  # fresh session on login (prevents fixation/leftover keys)
+            session.permanent = True  # 30-day login; cookie set once, here
             session['user_id'] = user['id']
             session['is_admin'] = user['is_admin']
             session['emp_code'] = user['emp_code']
@@ -693,6 +711,7 @@ def partner_login():
     conn.close()
 
     if partner and partner['password_hash'] and partner['password_hash'] == hash_password(password):
+        session.permanent = True
         session['user_id'] = partner['id']
         session['is_partner'] = True
         session['partner_name'] = partner['company_name']
@@ -944,6 +963,7 @@ def client_login_page():
         acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ? AND is_active = 1", (clean,)).fetchone()
         conn.close()
         if acct and acct['password_hash'] == hash_password(password):
+            session.permanent = True
             session['user_id'] = acct['id']
             session['is_client'] = True
             session['client_name'] = (acct['first_name'] or '') + ' ' + (acct['last_name'] or '')
@@ -1084,6 +1104,7 @@ def client_register(token):
         conn.close()
 
         # Auto-login the client
+        session.permanent = True
         session['user_id'] = acct_id
         session['is_client'] = True
         session['client_name'] = f"{first_name} {last_name}"
@@ -28065,6 +28086,7 @@ def partner_onboard_submit(token):
             logging.error(f"Failed to create partner registration notification: {e}")
 
         # Set partner session
+        session.permanent = True
         session['user_id'] = partner_id
         session['is_partner'] = True
         session['partner_name'] = company_name
