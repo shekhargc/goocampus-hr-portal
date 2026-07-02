@@ -77,6 +77,39 @@
     <h1>Reports</h1>
 </div>
 
+<!-- ══ Quick Downloads by Pathway & Section ══ -->
+<div class="quick-section" style="margin-bottom:24px;">
+  <h2>Quick Downloads</h2>
+  <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 14px;">Pick a pathway, then download any section's records to Excel — exactly the data you want to extract.</p>
+
+  <!-- Pathway tabs -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    {% for pw_key, pw_label in pathway_tabs %}
+    <a href="{{ url_for('ops_reports', pathway=pw_key) }}"
+       style="text-decoration:none;padding:8px 16px;border-radius:999px;font-size:0.83rem;font-weight:700;{% if active_pathway == pw_key %}background:var(--navy);color:#fff;{% else %}background:#eef2f7;color:#475569;{% endif %}">{{ pw_label }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- Section download cards for the active pathway -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;">
+    {% for s in download_sections %}
+    <div style="border:1px solid #E5E7EB;border-radius:10px;padding:13px 15px;display:flex;justify-content:space-between;align-items:center;gap:10px;{% if not s.count %}opacity:.6;{% endif %}">
+      <div>
+        <div style="font-weight:700;color:var(--navy);font-size:0.86rem;">{{ s.label }}</div>
+        <div style="font-size:0.72rem;color:var(--gray-500);margin-top:2px;">{{ s.count }} record{{ '' if s.count == 1 else 's' }}</div>
+      </div>
+      {% if s.count %}
+      <a href="{{ url_for('ops_reports_export', pathway=active_pathway, table=s.table) }}"
+         title="Download {{ s.label }} (Excel)"
+         style="flex-shrink:0;background:#059669;color:#fff;text-decoration:none;padding:8px 12px;border-radius:8px;font-size:0.78rem;font-weight:700;white-space:nowrap;">&#8681; Excel</a>
+      {% else %}
+      <span style="flex-shrink:0;color:var(--gray-400);font-size:0.74rem;">no data</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="quick-section" style="margin-bottom:24px;">
   <h2>Exam Pipeline</h2>
   <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 14px;">Upcoming exams and exams awaiting results, across pathways &middot; editable from each list.</p>
