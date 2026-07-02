@@ -62,7 +62,7 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training / Program</label>
-                    <select name="english_training" id="training_program_select" data-current="{{ record.english_training if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="english_training" id="training_program_select" data-current="{{ record.english_training if record and record.english_training else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select English Training / Program</option>
                         {% for tp in training_programs %}
                         <option value="{{ tp }}" {% if record.english_training == tp %}selected{% endif %}>{{ tp }}</option>

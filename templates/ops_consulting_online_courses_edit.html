@@ -58,7 +58,7 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Name</label>
-                    <select name="courses_name" id="course_name_select" data-current="{{ record.courses_name if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="courses_name" id="course_name_select" data-current="{{ record.courses_name if record and record.courses_name else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Course Name</option>
                         {% for c in course_names %}
                         <option value="{{ c }}" {% if record.courses_name == c %}selected{% endif %}>{{ c }}</option>
