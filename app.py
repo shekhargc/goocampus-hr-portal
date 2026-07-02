@@ -18879,11 +18879,31 @@ def ops_reports():
         ).fetchall()
     except Exception:
         templates = []
+
+    # Quick-download sections for the active pathway: Registration + every ops
+    # section table, each with its row count so the team sees what's there.
+    def _count(tbl):
+        try:
+            return conn.execute(
+                f"SELECT COUNT(*) AS c FROM {tbl} WHERE COALESCE(pathway,'plab') = ?",
+                (pathway,)).fetchone()['c']
+        except Exception:
+            return 0
+    download_sections = [{'table': 'plab_clients', 'label': 'Registration / Clients',
+                          'count': _count('plab_clients')}]
+    for tbl in OPS_PATHWAY_TABLES:
+        download_sections.append({'table': tbl, 'label': OPS_SECTION_LABELS.get(tbl, tbl),
+                                  'count': _count(tbl)})
     conn.close()
+
+    pathway_tabs = [('plab', 'UK PGCP'), ('australia', 'AUS PGCP'), ('consulting', 'Consulting'),
+                    ('portfolio', 'Portfolio'), ('training', 'Training'), ('uae', 'UAE')]
 
     return render_template('ops_reports.html',
         templates=templates,
         field_defs=REPORT_FIELD_DEFS,
+        download_sections=download_sections,
+        pathway_tabs=pathway_tabs,
         active_ops_page='reports',
         active_section='operations',
         active_pathway=pathway)
@@ -19161,6 +19181,72 @@ def ops_reports_download():
         as_attachment=True,
         download_name=filename
     )
+
+
+@app.route('/operations/reports/export')
+@admin_required
+def ops_reports_export():
+    """Generic per-pathway, per-section Excel export. Any ops section table
+    (or the client registration table) scoped to one pathway, one click.
+    Lets the team extract exactly the data they want, section by section,
+    across every pathway — not just the registration list."""
+    import io
+    from datetime import datetime as _dt, date as _date
+    from decimal import Decimal
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if pathway not in BULK_PATHWAYS:
+        pathway = 'plab'
+    table = (request.args.get('table') or '').strip()
+    allowed = set(OPS_PATHWAY_TABLES) | {'plab_clients'}
+    if table not in allowed:
+        flash('Unknown section to export.', 'error')
+        return redirect(url_for('ops_reports', pathway=pathway))
+    label = 'Registration - Clients' if table == 'plab_clients' else OPS_SECTION_LABELS.get(table, table)
+
+    conn = get_db()
+    rows = []
+    try:
+        rows = conn.execute(
+            f"SELECT * FROM {table} WHERE COALESCE(pathway,'plab') = ? ORDER BY id",
+            (pathway,)).fetchall()
+    except Exception as e:
+        logging.error(f"ops_reports_export {table}/{pathway}: {e}")
+        rows = []
+    cols = list(rows[0].keys()) if rows else []
+    if not cols:
+        try:
+            cols = [c['column_name'] for c in conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = ? ORDER BY ordinal_position", (table,)).fetchall()]
+        except Exception:
+            cols = []
+    conn.close()
+
+    def _clean(v):
+        if v is None or isinstance(v, (str, int, float, bool, _dt, _date)):
+            return v
+        if isinstance(v, Decimal):
+            return float(v)
+        return str(v)
+
+    wb = Workbook(); ws = wb.active
+    ws.title = (label[:28] or 'Export')
+    if cols:
+        ws.append([c.replace('_', ' ').title() for c in cols])
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill('solid', fgColor='1E3A5F')
+        for r in rows:
+            ws.append([_clean(r[c]) for c in cols])
+    else:
+        ws.append(['No data for this section / pathway.'])
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    fname = f"{pathway}_{table.replace('ops_', '')}.xlsx"
+    return send_file(out, as_attachment=True, download_name=fname,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 @app.route('/operations/plab')
@@ -34433,6 +34519,8 @@ ACCESS_ROUTE_MAP = {
 
     # ── Operations: Shared ────────────────────────────────────────────────
     'ops_reports':                  _ap('operations_shared', 'reports'),
+    'ops_reports_download':          _ap('operations_shared', 'reports'),
+    'ops_reports_export':            _ap('operations_shared', 'reports'),
     'ops_field_manager':            _ap('operations_shared', 'field_manager'),
     'ops_vendors_providers':        _ap('operations_shared', 'vendors_providers'),
 
