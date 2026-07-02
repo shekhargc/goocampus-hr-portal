@@ -1,0 +1,63 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Edit Feedback Form{% endblock %}
+{% block section_content %}
+{% set QTYPES = [('star','Star rating (1-5)'),('scale','Recommend scale (0-10)'),('choice','Choice (Yes/No etc.)'),('short','Short text'),('long','Paragraph text')] %}
+<div style="padding:24px;max-width:820px;">
+  <a href="{{ url_for('admin_feedback') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Feedback</a>
+  <h1 style="margin:10px 0 16px;font-size:1.5rem;color:var(--navy);">Edit — {{ form.title }}</h1>
+
+  <!-- Form meta -->
+  <form method="POST" style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:18px;margin-bottom:22px;">
+    <input type="hidden" name="action" value="form_meta">
+    <div style="margin-bottom:12px;"><label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Title</label>
+      <input type="text" name="title" value="{{ form.title }}" style="width:100%;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;"></div>
+    <div style="margin-bottom:12px;"><label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Intro / description (optional)</label>
+      <input type="text" name="description" value="{{ form.description or '' }}" style="width:100%;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;"></div>
+    <div style="margin-bottom:12px;"><label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Thank-you message (shown after submit)</label>
+      <textarea name="thank_you_message" style="width:100%;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;min-height:60px;">{{ form.thank_you_message or '' }}</textarea></div>
+    <label style="font-size:0.85rem;color:var(--gray-600);display:flex;align-items:center;gap:8px;margin-bottom:12px;"><input type="checkbox" name="is_active" {% if form.is_active %}checked{% endif %}> Active (available to send)</label>
+    <button type="submit" style="background:var(--navy);color:#fff;border:none;padding:9px 18px;border-radius:8px;font-weight:600;font-size:0.85rem;cursor:pointer;">Save form</button>
+  </form>
+
+  <h3 style="color:var(--navy);font-size:1.05rem;margin:0 0 10px;">Questions</h3>
+  {% for q in questions %}
+  <form method="POST" style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:14px;margin-bottom:10px;">
+    <input type="hidden" name="action" value="q_edit"><input type="hidden" name="qid" value="{{ q.id }}">
+    <div style="display:flex;gap:10px;align-items:flex-start;">
+      <div style="flex:1;">
+        <input type="text" name="question_text" value="{{ q.question_text }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.88rem;margin-bottom:8px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <select name="qtype" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.82rem;">
+            {% for val,lab in QTYPES %}<option value="{{ val }}" {% if q.qtype == val %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+          </select>
+          <label style="font-size:0.8rem;color:var(--gray-600);display:flex;align-items:center;gap:5px;"><input type="checkbox" name="is_required" {% if q.is_required %}checked{% endif %}> Required</label>
+        </div>
+        <div style="margin-top:8px;">
+          <label style="display:block;font-size:0.72rem;color:var(--gray-400);margin-bottom:3px;">Choices (one per line — only for Choice type)</label>
+          <textarea name="options" placeholder="Yes&#10;No" style="width:100%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.82rem;min-height:44px;">{% if q.options_parsed and q.options_parsed is iterable and q.options_parsed is not mapping %}{{ q.options_parsed|join('\n') }}{% endif %}</textarea>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button type="submit" style="background:var(--navy);color:#fff;border:none;padding:7px 12px;border-radius:7px;font-size:0.78rem;font-weight:600;cursor:pointer;">Save</button>
+      </div>
+    </div>
+    <div style="margin-top:8px;"><button type="submit" name="action" value="q_delete" onclick="return confirm('Delete this question?');" style="background:none;border:none;color:#dc2626;font-size:0.76rem;cursor:pointer;padding:0;">Delete question</button></div>
+  </form>
+  {% endfor %}
+
+  <!-- Add question -->
+  <form method="POST" style="background:#F8FAFC;border:1px dashed var(--gray-300);border-radius:10px;padding:14px;margin-top:14px;">
+    <input type="hidden" name="action" value="q_add">
+    <div style="font-weight:600;color:var(--navy);font-size:0.9rem;margin-bottom:8px;">Add a question</div>
+    <input type="text" name="question_text" placeholder="Question text" required style="width:100%;padding:8px 10px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.88rem;margin-bottom:8px;">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <select name="qtype" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.82rem;">
+        {% for val,lab in QTYPES %}<option value="{{ val }}">{{ lab }}</option>{% endfor %}
+      </select>
+      <label style="font-size:0.8rem;color:var(--gray-600);display:flex;align-items:center;gap:5px;"><input type="checkbox" name="is_required" checked> Required</label>
+      <button type="submit" style="background:var(--orange);color:#fff;border:none;padding:8px 16px;border-radius:7px;font-size:0.82rem;font-weight:600;cursor:pointer;">Add</button>
+    </div>
+    <textarea name="options" placeholder="Choices (one per line — Choice type only)" style="width:100%;margin-top:8px;padding:7px 9px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.82rem;min-height:44px;"></textarea>
+  </form>
+</div>
+{% endblock %}

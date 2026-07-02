@@ -44,6 +44,12 @@
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></span>
         <span class="sec-nav-text">Internal Transfers</span>
     </a>
+    {% if session.is_admin or can_access('clients','feedback','view') %}
+    <a href="/admin/feedback" class="sec-nav-item {% if request.path.startswith('/admin/feedback') %}active{% endif %}" data-tooltip="Client Feedback">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><polyline points="8 10 11 13 16 8"/></svg></span>
+        <span class="sec-nav-text">Client Feedback</span>
+    </a>
+    {% endif %}
     <div class="sec-nav-group-label">Client Access</div>
     <a href="/client/login" class="sec-nav-item" data-tooltip="Client Login" target="_blank">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></span>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GooCampus Feedback</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:#eef2f7; color:#243b53; line-height:1.5; }
+  .wrap { max-width:640px; margin:0 auto; padding:24px 16px 60px; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 6px 24px rgba(30,58,95,0.08); overflow:hidden; }
+  .head { background:#1e3a5f; color:#fff; padding:26px 28px; }
+  .head h1 { margin:0; font-size:20px; letter-spacing:.3px; }
+  .head p { margin:8px 0 0; font-size:13.5px; opacity:.9; }
+  .body { padding:24px 28px 28px; }
+  .anon { background:#f0f6ff; border-left:4px solid #1e3a5f; padding:10px 14px; border-radius:6px; font-size:12.5px; color:#334e68; margin-bottom:22px; }
+  .q { margin:0 0 22px; padding:0 0 20px; border-bottom:1px solid #f0f2f5; }
+  .q:last-of-type { border-bottom:none; }
+  .q-label { font-size:15px; font-weight:600; margin-bottom:12px; }
+  .req { color:#e0393e; }
+  .stars { display:inline-flex; flex-direction:row-reverse; gap:4px; }
+  .stars input { display:none; }
+  .stars label { font-size:34px; color:#d7dee7; cursor:pointer; transition:color .12s; line-height:1; }
+  .stars label:hover, .stars label:hover ~ label,
+  .stars input:checked ~ label { color:#F5A623; }
+  .scale { display:flex; flex-wrap:wrap; gap:6px; }
+  .scale label { flex:1; min-width:34px; text-align:center; border:1.5px solid #d7dee7; border-radius:8px; padding:9px 0; font-weight:600; font-size:14px; cursor:pointer; color:#486581; }
+  .scale input { display:none; }
+  .scale input:checked + label, .scale label:hover { background:#1e3a5f; color:#fff; border-color:#1e3a5f; }
+  .scale-ends { display:flex; justify-content:space-between; font-size:11.5px; color:#829ab1; margin-top:6px; }
+  .choice label { display:flex; align-items:center; gap:10px; padding:11px 14px; border:1.5px solid #d7dee7; border-radius:10px; margin-bottom:8px; cursor:pointer; font-size:14.5px; }
+  .choice input { accent-color:#1e3a5f; width:17px; height:17px; }
+  .choice input:checked + span { font-weight:600; }
+  input[type=text], textarea { width:100%; border:1.5px solid #d7dee7; border-radius:10px; padding:11px 13px; font-size:14.5px; font-family:inherit; }
+  textarea { min-height:90px; resize:vertical; }
+  .submit { width:100%; background:#F58220; color:#fff; border:none; border-radius:10px; padding:15px; font-size:16px; font-weight:700; cursor:pointer; margin-top:6px; }
+  .submit:hover { background:#e0741a; }
+  .foot { text-align:center; font-size:11px; color:#9fb3c8; padding:16px; }
+  .center-msg { text-align:center; padding:44px 28px; }
+  .center-msg .big { font-size:46px; }
+  .center-msg h2 { color:#1e3a5f; margin:14px 0 8px; }
+  .center-msg p { color:#486581; font-size:14.5px; margin:0 auto; max-width:420px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    {% if invalid %}
+      <div class="center-msg"><div class="big">🔗</div><h2>Link not found</h2>
+        <p>This feedback link is invalid or has expired. If you think this is a mistake, please contact your GooCampus counsellor.</p></div>
+    {% elif already %}
+      <div class="center-msg"><div class="big">✅</div><h2>Already submitted</h2>
+        <p>{{ thank_you or "You've already shared your feedback for this stage — thank you!" }}</p></div>
+    {% elif submitted %}
+      <div class="center-msg"><div class="big">🎉</div><h2>Thank you!</h2>
+        <p>{{ thank_you or "Thank you for your feedback! It helps us serve you better." }}</p></div>
+    {% else %}
+      <div class="head">
+        <h1>{{ form.title }}</h1>
+        <p>Operations Team Feedback · Please take a couple of minutes to share your honest experience.</p>
+      </div>
+      <div class="body">
+        {% if error %}<div class="anon" style="background:#fdecea;border-color:#e0393e;color:#a12a2f;">Something went wrong saving your response. Please try again.</div>{% endif %}
+        <div class="anon">🔒 Your feedback is <strong>anonymous</strong>. Please be open and honest — it genuinely helps us improve the service we deliver for you.</div>
+        <form method="POST" action="{{ url_for('feedback_public', token=token) }}">
+          {% for q in questions %}
+          <div class="q">
+            <div class="q-label">{{ q.question_text }}{% if q.is_required %} <span class="req">*</span>{% endif %}</div>
+            {% if q.qtype == 'star' %}
+              <div class="stars">
+                {% for n in [5,4,3,2,1] %}
+                <input type="radio" id="q{{ q.id }}_{{ n }}" name="q_{{ q.id }}" value="{{ n }}" {% if q.is_required %}required{% endif %}>
+                <label for="q{{ q.id }}_{{ n }}" title="{{ n }}">★</label>
+                {% endfor %}
+              </div>
+            {% elif q.qtype == 'scale' %}
+              <div class="scale">
+                {% for n in range(0, 11) %}
+                <input type="radio" id="q{{ q.id }}_{{ n }}" name="q_{{ q.id }}" value="{{ n }}" {% if q.is_required %}required{% endif %}>
+                <label for="q{{ q.id }}_{{ n }}">{{ n }}</label>
+                {% endfor %}
+              </div>
+              <div class="scale-ends"><span>{{ (q.options_parsed.left if q.options_parsed else '') or "Not likely" }}</span><span>{{ (q.options_parsed.right if q.options_parsed else '') or "Very likely" }}</span></div>
+            {% elif q.qtype == 'choice' %}
+              <div class="choice">
+                {% for opt in (q.options_parsed or ['Yes','No']) %}
+                <label><input type="radio" name="q_{{ q.id }}" value="{{ opt }}" {% if q.is_required %}required{% endif %}><span>{{ opt }}</span></label>
+                {% endfor %}
+              </div>
+            {% elif q.qtype == 'long' %}
+              <textarea name="q_{{ q.id }}" {% if q.is_required %}required{% endif %} placeholder="Type your answer…"></textarea>
+            {% else %}
+              <input type="text" name="q_{{ q.id }}" {% if q.is_required %}required{% endif %} placeholder="Type your answer…">
+            {% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="submit">Submit Feedback</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+  <div class="foot">GooCampus Edu Solutions Pvt Ltd</div>
+</div>
+</body>
+</html>

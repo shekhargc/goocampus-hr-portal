@@ -1,0 +1,59 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Send Feedback{% endblock %}
+{% block section_content %}
+<div style="padding:24px;max-width:1000px;">
+  <a href="{{ url_for('admin_feedback') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Feedback</a>
+  <h1 style="margin:10px 0 4px;font-size:1.5rem;color:var(--navy);">Send Feedback</h1>
+  <p style="margin:0 0 18px;color:var(--gray-500);font-size:0.9rem;">Pick a stage form, then choose the clients to send it to. Each client gets a unique anonymous link tied to their registration number.</p>
+
+  <!-- Step 1: pick form (stage) -->
+  <form method="GET" action="{{ url_for('admin_feedback_send') }}" style="margin-bottom:20px;">
+    <label style="display:block;font-weight:600;font-size:0.82rem;color:var(--gray-600);margin-bottom:6px;">Stage / Form</label>
+    <select name="form_id" onchange="this.form.submit()" style="width:100%;max-width:460px;padding:10px 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;background:#fff;">
+      <option value="">— Select a stage form —</option>
+      {% for f in forms %}<option value="{{ f.id }}" {% if selected and selected.id == f.id %}selected{% endif %}>{{ f.title }}</option>{% endfor %}
+    </select>
+  </form>
+
+  {% if selected %}
+    {% if clients %}
+    <form method="POST" action="{{ url_for('admin_feedback_send_post') }}">
+      <input type="hidden" name="form_id" value="{{ selected.id }}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-weight:600;color:var(--navy);">{{ clients|length }} client(s) in this stage</div>
+        <label style="font-size:0.82rem;color:var(--gray-600);cursor:pointer;"><input type="checkbox" id="selall" onclick="document.querySelectorAll('.rowck').forEach(c=>c.checked=this.checked)"> Select all</label>
+      </div>
+      <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+          <thead><tr style="background:#f8fafc;text-align:left;color:var(--gray-500);">
+            <th style="padding:10px 12px;width:38px;"></th><th style="padding:10px 12px;">Client</th>
+            <th style="padding:10px 12px;">Reg #</th><th style="padding:10px 12px;">Stage</th>
+            <th style="padding:10px 12px;">Mobile</th><th style="padding:10px 12px;">Email</th>
+          </tr></thead>
+          <tbody>
+          {% for c in clients %}
+          <tr style="border-top:1px solid #f1f5f9;">
+            <td style="padding:9px 12px;"><input class="rowck" type="checkbox" name="reg" value="{{ c.registration_number }}"></td>
+            <td style="padding:9px 12px;font-weight:600;color:var(--navy);">{{ c.prefix or '' }} {{ c.first_name or '' }} {{ c.last_name or '' }}</td>
+            <td style="padding:9px 12px;color:var(--gray-500);">{{ c.registration_number }}</td>
+            <td style="padding:9px 12px;">{{ c.current_stage or '—' }}</td>
+            <td style="padding:9px 12px;">{{ c.mobile or '—' }}</td>
+            <td style="padding:9px 12px;color:{{ 'var(--gray-400)' if not c.email else 'inherit' }};">{{ c.email or 'no email' }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:16px;">
+        <button type="submit" style="background:var(--orange);color:#fff;border:none;padding:12px 26px;border-radius:8px;font-weight:700;font-size:0.95rem;cursor:pointer;">Create Links & Send Emails</button>
+        <span style="margin-left:10px;color:var(--gray-400);font-size:0.8rem;">WhatsApp send buttons appear on the next screen.</span>
+      </div>
+    </form>
+    {% else %}
+    <div style="background:#fff;border:1px dashed var(--gray-300);border-radius:12px;padding:32px;text-align:center;color:var(--gray-400);">
+      No clients found for this stage yet.
+    </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Feedback Results{% endblock %}
+{% block section_content %}
+<div style="padding:24px;max-width:960px;">
+  <a href="{{ url_for('admin_feedback') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Feedback</a>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin:10px 0 4px;">
+    <h1 style="margin:0;font-size:1.5rem;color:var(--navy);">{{ form.title }} — Results</h1>
+    <a href="{{ url_for('admin_feedback_send', form_id=form.id) }}" style="background:var(--orange);color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:0.85rem;">+ Send more</a>
+  </div>
+
+  <div style="display:flex;gap:22px;margin:16px 0 26px;">
+    <div><div style="font-size:1.6rem;font-weight:700;color:var(--navy);">{{ stats.sent or 0 }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Sent</div></div>
+    <div><div style="font-size:1.6rem;font-weight:700;color:#7c3aed;">{{ stats.opened or 0 }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Opened</div></div>
+    <div><div style="font-size:1.6rem;font-weight:700;color:#059669;">{{ stats.submitted or 0 }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Responses</div></div>
+  </div>
+
+  {% for q in questions %}
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:18px;margin-bottom:14px;">
+    <div style="font-weight:600;color:var(--navy);font-size:0.95rem;margin-bottom:12px;">{{ q.question_text }}
+      <span style="font-size:0.72rem;color:var(--gray-400);font-weight:500;">· {{ q.n }} response(s)</span></div>
+    {% if q.qtype in ['star','scale'] %}
+      {% set maxv = 5 if q.qtype == 'star' else 10 %}
+      <div style="display:flex;align-items:baseline;gap:10px;">
+        <div style="font-size:2rem;font-weight:800;color:{{ '#059669' if q.avg and q.avg >= (maxv*0.7) else ('#d97706' if q.avg and q.avg >= (maxv*0.4) else '#dc2626') }};">{{ q.avg if q.avg is not none else '—' }}</div>
+        <div style="color:var(--gray-400);font-size:0.85rem;">/ {{ maxv }} average{% if q.qtype == 'scale' %} (recommend score){% endif %}</div>
+      </div>
+      {% if q.avg is not none %}
+      <div style="height:9px;background:#eef2f7;border-radius:999px;margin-top:10px;overflow:hidden;"><div style="height:100%;width:{{ (q.avg / maxv * 100)|round(0) }}%;background:linear-gradient(90deg,#1e3a5f,#3b82f6);"></div></div>
+      {% endif %}
+    {% elif q.qtype == 'choice' %}
+      {% for opt, cnt in (q.dist or {}).items() %}
+      {% set pct = (cnt / q.n * 100) if q.n else 0 %}
+      <div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.83rem;"><span>{{ opt }}</span><span style="color:var(--gray-500);">{{ cnt }} ({{ '%.0f'|format(pct) }}%)</span></div>
+        <div style="height:8px;background:#eef2f7;border-radius:999px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:{{ pct|round(0) }}%;background:{{ '#dc2626' if opt|lower == 'yes' and 'issue' in q.question_text|lower else '#1e3a5f' }};"></div></div>
+      </div>
+      {% else %}<div style="color:var(--gray-400);font-size:0.85rem;">No responses yet.</div>{% endfor %}
+    {% else %}
+      {% if q.comments %}
+        {% for cmt in q.comments %}
+        <div style="background:#f8fafc;border-left:3px solid var(--gray-300);padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:6px;font-size:0.86rem;color:#334e68;">{{ cmt }}</div>
+        {% endfor %}
+      {% else %}<div style="color:var(--gray-400);font-size:0.85rem;">No comments yet.</div>{% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- Internal: who submitted (kept out of the client's view) -->
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:18px;margin-top:20px;">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:4px;">Who responded <span style="font-size:0.72rem;color:var(--gray-400);font-weight:500;">(internal — clients never see this)</span></div>
+    {% if subs %}
+    <table style="width:100%;border-collapse:collapse;font-size:0.83rem;margin-top:8px;">
+      <thead><tr style="text-align:left;color:var(--gray-500);"><th style="padding:6px 8px;">Client</th><th style="padding:6px 8px;">Reg #</th><th style="padding:6px 8px;">Submitted</th></tr></thead>
+      <tbody>
+      {% for s in subs %}
+      <tr style="border-top:1px solid #f1f5f9;"><td style="padding:7px 8px;font-weight:600;color:var(--navy);">{{ s.client_name or '—' }}</td><td style="padding:7px 8px;color:var(--gray-500);">{{ s.registration_number }}</td><td style="padding:7px 8px;color:var(--gray-500);">{{ s.submitted_at }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div style="color:var(--gray-400);font-size:0.85rem;">No responses yet.</div>{% endif %}
+  </div>
+</div>
+{% endblock %}
