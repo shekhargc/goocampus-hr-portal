@@ -38574,3 +38574,5 @@ if __name__ == '__main__':
 # ── College module (Portal + Medical Predictor + NEET-PG PDFs + partner pages) ──
 from college import register_college
 register_college(app)
+
+# redeploy trigger 2026-07-02 (ensure sales-verification sidebar commit is deployed)
