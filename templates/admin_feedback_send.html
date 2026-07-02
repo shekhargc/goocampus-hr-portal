@@ -16,11 +16,19 @@
   </form>
 
   {% if selected %}
+    <!-- Status filter: default to active (In Process) clients -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      {% set cur = status or 'In Process' %}
+      <a href="{{ url_for('admin_feedback_send', form_id=selected.id, status='In Process') }}"
+         style="text-decoration:none;padding:7px 14px;border-radius:999px;font-size:0.8rem;font-weight:600;{% if cur != 'all' %}background:var(--navy);color:#fff;{% else %}background:#f1f5f9;color:#475569;{% endif %}">In Process only</a>
+      <a href="{{ url_for('admin_feedback_send', form_id=selected.id, status='all') }}"
+         style="text-decoration:none;padding:7px 14px;border-radius:999px;font-size:0.8rem;font-weight:600;{% if cur == 'all' %}background:var(--navy);color:#fff;{% else %}background:#f1f5f9;color:#475569;{% endif %}">All statuses</a>
+    </div>
     {% if clients %}
     <form method="POST" action="{{ url_for('admin_feedback_send_post') }}">
       <input type="hidden" name="form_id" value="{{ selected.id }}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-weight:600;color:var(--navy);">{{ clients|length }} client(s) in this stage</div>
+        <div style="font-weight:600;color:var(--navy);">{{ clients|length }} client(s){% if (status or 'In Process') != 'all' %} · In Process{% endif %}</div>
         <label style="font-size:0.82rem;color:var(--gray-600);cursor:pointer;"><input type="checkbox" id="selall" onclick="document.querySelectorAll('.rowck').forEach(c=>c.checked=this.checked)"> Select all</label>
       </div>
       <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;">
@@ -28,6 +36,7 @@
           <thead><tr style="background:#f8fafc;text-align:left;color:var(--gray-500);">
             <th style="padding:10px 12px;width:38px;"></th><th style="padding:10px 12px;">Client</th>
             <th style="padding:10px 12px;">Reg #</th><th style="padding:10px 12px;">Stage</th>
+            <th style="padding:10px 12px;">Status</th>
             <th style="padding:10px 12px;">Mobile</th><th style="padding:10px 12px;">Email</th>
           </tr></thead>
           <tbody>
@@ -37,6 +46,7 @@
             <td style="padding:9px 12px;font-weight:600;color:var(--navy);">{{ c.prefix or '' }} {{ c.first_name or '' }} {{ c.last_name or '' }}</td>
             <td style="padding:9px 12px;color:var(--gray-500);">{{ c.registration_number }}</td>
             <td style="padding:9px 12px;">{{ c.current_stage or '—' }}</td>
+            <td style="padding:9px 12px;"><span style="font-size:0.72rem;padding:2px 8px;border-radius:999px;{% if c.account_status == 'In Process' %}background:#dcfce7;color:#166534;{% else %}background:#f1f5f9;color:#64748b;{% endif %}">{{ c.account_status or '—' }}</span></td>
             <td style="padding:9px 12px;">{{ c.mobile or '—' }}</td>
             <td style="padding:9px 12px;color:{{ 'var(--gray-400)' if not c.email else 'inherit' }};">{{ c.email or 'no email' }}</td>
           </tr>
