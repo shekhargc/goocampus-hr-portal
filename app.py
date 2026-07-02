@@ -35083,6 +35083,57 @@ def access_master():
     )
 
 
+@app.route('/admin/access-master/summary')
+@login_required
+def access_master_summary():
+    """Read-only summary: every active team member and exactly which
+    section/sub-section permissions they currently have ticked. Lets the
+    admin verify grants at a glance (both individual + bulk grants land in
+    the same user_section_permissions table, so this is the single source
+    of truth)."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    employees_list = [dict(r) for r in conn.execute(
+        "SELECT id, emp_code, name, department, designation "
+        "FROM employees WHERE is_active = 1 ORDER BY name").fetchall()]
+    rows = conn.execute(
+        "SELECT subject_id, main_section, sub_section, can_view, can_edit, can_add "
+        "FROM user_section_permissions "
+        "WHERE subject_type = 'employee' AND subject_id IS NOT NULL "
+        "  AND (can_view = 1 OR can_edit = 1 OR can_add = 1)").fetchall()
+    conn.close()
+
+    main_label = {s['key']: s['label'] for s in ACCESS_SECTION_CATALOG}
+    main_order = {s['key']: i for i, s in enumerate(ACCESS_SECTION_CATALOG)}
+    sub_label = {}
+    for s in ACCESS_SECTION_CATALOG:
+        for sk, lbl, _desc in s['sub_sections']:
+            sub_label[(s['key'], sk)] = lbl
+
+    by_emp = {}
+    for r in rows:
+        d = by_emp.setdefault(r['subject_id'], {})
+        m = d.setdefault(r['main_section'], [])
+        m.append({
+            'sub_label': sub_label.get((r['main_section'], r['sub_section']), r['sub_section']),
+            'view': bool(r['can_view']), 'edit': bool(r['can_edit']), 'add': bool(r['can_add']),
+        })
+    # attach a sorted grant list + count to each employee
+    for e in employees_list:
+        grants = by_emp.get(e['id'], {})
+        e['grant_sections'] = sorted(
+            ([{'main': mk, 'main_label': main_label.get(mk, mk), 'subs': subs}
+              for mk, subs in grants.items()]),
+            key=lambda g: main_order.get(g['main'], 999))
+        e['grant_count'] = sum(len(g['subs']) for g in e['grant_sections'])
+
+    return render_template('access_master_summary.html', user=user,
+                           employees=employees_list, active_section='company')
+
+
 @app.route('/api/access-master/save', methods=['POST'])
 @login_required
 def access_master_save():
