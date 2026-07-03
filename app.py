@@ -22429,25 +22429,23 @@ def ops_payments_add():
     if request.method == 'POST':
         registration_number = request.form.get('registration_number')
         payment_date = request.form.get('payment_date')
-        amount_paid = request.form.get('amount_paid', '0')
-        gst_paid = request.form.get('gst_paid', '0')
+        total_amount_paid = request.form.get('total_amount_paid', '0')
         instalment = request.form.get('instalment')
         payment_method = request.form.get('payment_method')
-        total_package = request.form.get('total_package', '0')
         notes = request.form.get('notes', '')
 
         try:
-            amount_paid = float(amount_paid or 0)
-            gst_paid = float(gst_paid or 0)
-            total_amount_paid = amount_paid + gst_paid
-            total_package = float(total_package or 0)
+            # Total is entered incl. GST; split into base + GST @18% (÷1.18).
+            total_amount_paid = float(total_amount_paid or 0)
+            amount_paid = round(total_amount_paid / 1.18, 2)
+            gst_paid = round(total_amount_paid - amount_paid, 2)
 
             conn.execute('''INSERT INTO ops_payments
                 (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
-                 instalment, payment_method, total_package, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                 instalment, payment_method, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
-                 instalment, payment_method, total_package, notes, session.get('user_id')))
+                 instalment, payment_method, notes, session.get('user_id')))
             conn.commit()
             flash('Payment added successfully', 'success')
             next_url = request.args.get('next')
@@ -22491,26 +22489,24 @@ def ops_payments_edit(record_id):
     if request.method == 'POST':
         registration_number = request.form.get('registration_number')
         payment_date = request.form.get('payment_date')
-        amount_paid = request.form.get('amount_paid', '0')
-        gst_paid = request.form.get('gst_paid', '0')
+        total_amount_paid = request.form.get('total_amount_paid', '0')
         instalment = request.form.get('instalment')
         payment_method = request.form.get('payment_method')
-        total_package = request.form.get('total_package', '0')
         notes = request.form.get('notes', '')
 
         try:
-            amount_paid = float(amount_paid or 0)
-            gst_paid = float(gst_paid or 0)
-            total_amount_paid = amount_paid + gst_paid
-            total_package = float(total_package or 0)
+            # Total is entered incl. GST; split into base + GST @18% (÷1.18).
+            total_amount_paid = float(total_amount_paid or 0)
+            amount_paid = round(total_amount_paid / 1.18, 2)
+            gst_paid = round(total_amount_paid - amount_paid, 2)
 
             conn.execute('''UPDATE ops_payments SET
                 registration_number = ?, payment_date = ?, amount_paid = ?, gst_paid = ?,
-                total_amount_paid = ?, instalment = ?, payment_method = ?, total_package = ?,
+                total_amount_paid = ?, instalment = ?, payment_method = ?,
                 notes = ?
                 WHERE id = ?''',
                 (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
-                 instalment, payment_method, total_package, notes, record_id))
+                 instalment, payment_method, notes, record_id))
             conn.commit()
             flash('Payment updated successfully', 'success')
             return redirect(url_for('ops_payments_list'))

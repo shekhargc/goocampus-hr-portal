@@ -72,19 +72,8 @@
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Amount Paid (₹) *</label>
-                    <input type="number" name="amount_paid" step="0.01" value="{{ record.amount_paid or '0' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">GST Paid (₹)</label>
-                    <input type="number" name="gst_paid" step="0.01" value="{{ record.gst_paid or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Total Amount (₹)</label>
-                    <input type="number" id="total_amount_paid" readonly name="total_amount_paid_readonly" step="0.01" value="{{ record.total_amount_paid or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Total Amount Paid (₹) * <span style="font-weight:400;color:var(--gray-500);">(as received, incl. GST)</span></label>
+                    <input type="number" id="total_amount_paid" name="total_amount_paid" step="0.01" value="{{ record.total_amount_paid or '' }}" required placeholder="Total received from client" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Payment Method</label>
@@ -97,9 +86,16 @@
                 </div>
             </div>
 
-            <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Total Package (₹)</label>
-                <input type="number" name="total_package" step="0.01" value="{{ record.total_package or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            <!-- Auto-split from the total above (GST is always 18%). Read-only. -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Amount (₹) <span style="font-weight:400;color:var(--gray-500);">(auto, excl. GST)</span></label>
+                    <input type="number" id="amount_paid" name="amount_paid" readonly step="0.01" value="{{ record.amount_paid or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">GST @18% (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                    <input type="number" id="gst_paid" name="gst_paid" readonly step="0.01" value="{{ record.gst_paid or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
             </div>
 
             <!-- ===== NOTES ===== -->
@@ -122,23 +118,23 @@
 </div>
 
 <script>
-  // Auto-calculate total_amount_paid = amount_paid + gst_paid
+  // Total is entered incl. GST; auto-split into base + GST @18% (÷1.18).
   (function() {
-    const amountPaidInput = document.querySelector('input[name="amount_paid"]');
-    const gstPaidInput = document.querySelector('input[name="gst_paid"]');
-    const totalAmountInput = document.getElementById('total_amount_paid');
+    const totalInput = document.getElementById('total_amount_paid');
+    const amountInput = document.getElementById('amount_paid');
+    const gstInput = document.getElementById('gst_paid');
 
-    function updateTotal() {
-      const amount = parseFloat(amountPaidInput.value) || 0;
-      const gst = parseFloat(gstPaidInput.value) || 0;
-      totalAmountInput.value = (amount + gst).toFixed(2);
+    function splitTotal() {
+      const total = parseFloat(totalInput.value) || 0;
+      const base = total / 1.18;
+      amountInput.value = base.toFixed(2);
+      gstInput.value = (total - base).toFixed(2);
     }
 
-    amountPaidInput.addEventListener('input', updateTotal);
-    gstPaidInput.addEventListener('input', updateTotal);
+    totalInput.addEventListener('input', splitTotal);
 
     // Initialize on page load
-    updateTotal();
+    splitTotal();
   })();
 </script>
 
