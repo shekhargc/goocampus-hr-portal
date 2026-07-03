@@ -487,7 +487,18 @@
                 {{ f.placeholder or f.field_label }}
             </label>
         {% else %}
-            <input type="{{ f.field_type or 'text' }}" name="{{ f.field_name }}" value="{{ value or '' }}" placeholder="{{ f.placeholder or '' }}"{% if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
+            {% set fn = f.field_name|lower %}
+            {% set itype = f.field_type or 'text' %}
+            {% if itype in ['text', '', none] %}
+                {% if 'email' in fn %}{% set itype = 'email' %}
+                {% elif 'phone' in fn or 'mobile' in fn or 'whatsapp' in fn %}{% set itype = 'tel' %}
+                {% elif 'gap_in_month' in fn or fn.endswith('_months') or fn == 'months' %}{% set itype = 'number' %}
+                {% endif %}
+            {% endif %}
+            <input type="{{ itype }}" name="{{ f.field_name }}" value="{{ value or '' }}" placeholder="{{ f.placeholder or '' }}"
+                {%- if itype == 'tel' %} inputmode="numeric" pattern="[+]?[0-9][0-9 \-]{6,16}" oninput="this.value=this.value.replace(/[^0-9+ \-]/g,'')" title="Digits only — you may start with + and country code (e.g. +91 9876543210)"{% endif %}
+                {%- if itype == 'number' %} inputmode="numeric" min="0" step="1" oninput="this.value=this.value.replace(/[^0-9]/g,'')"{% endif %}
+                {%- if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
         {% endif %}
         {% if f.hint_text %}<small style="color:var(--text-muted);font-size:12px;">{{ f.hint_text }}</small>{% endif %}
     </div>

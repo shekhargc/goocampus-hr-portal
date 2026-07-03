@@ -1779,14 +1779,17 @@ def client_form(reg_id):
         flash('Progress saved!', 'success')
         return redirect(url_for('client_form', reg_id=reg_id))
 
-    # Load lookup options for academic dropdowns
+    # Load lookup options for academic dropdowns. DEDUPE per category — the
+    # same value is defined once per pathway (e.g. 'Rheumatology' for plab +
+    # australia + consulting), so appending every row made each option appear
+    # 3-4 times in the dropdown. Keep the first occurrence only.
     lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
     lookup_options = {}
     for row in lookup_rows:
         cat = row['category']
-        if cat not in lookup_options:
-            lookup_options[cat] = []
-        lookup_options[cat].append(row['value'])
+        bucket = lookup_options.setdefault(cat, [])
+        if row['value'] not in bucket:
+            bucket.append(row['value'])
     conn.close()
     return render_template('client_form.html',
         reg=reg, academics=academics, documents=documents,
