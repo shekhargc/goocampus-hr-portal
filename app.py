@@ -1082,29 +1082,34 @@ def client_register(token):
         inst_amts = [float(closure_meta.get(f'inst{i}_amount', 0) or 0) for i in (1,2,3,4)]
         inst_dts  = [closure_meta.get(f'inst{i}_date', '') or '' for i in (1,2,3,4)]
         inst_nts  = [closure_meta.get(f'inst{i}_note', '') or '' for i in (1,2,3,4)]
+        inst_mts  = [closure_meta.get(f'inst{i}_method', '') or '' for i in (1,2,3,4)]
+        inst_sts  = [closure_meta.get(f'inst{i}_status', '') or '' for i in (1,2,3,4)]
 
         conn.execute('''INSERT INTO client_registrations
             (account_id, invitation_id, product_id, registration_number,
              first_name, last_name, mobile, email,
              counsellor_id, counsellor_name,
              plan_type, package_amount, discount_allowed, final_package,
-             inst1_amount, inst1_date, inst1_note,
-             inst2_amount, inst2_date, inst2_note,
-             inst3_amount, inst3_date, inst3_note,
-             inst4_amount, inst4_date, inst4_note,
+             inst1_amount, inst1_date, inst1_note, inst1_method, inst1_status,
+             inst2_amount, inst2_date, inst2_note, inst2_method, inst2_status,
+             inst3_amount, inst3_date, inst3_note, inst3_method, inst3_status,
+             inst4_amount, inst4_date, inst4_note, inst4_method, inst4_status,
              lead_source, additional_notes, ops_notes,
              form_status, current_step)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
                     ?, ?, ?, 'draft', 1)''',
             (acct_id, inv['id'], inv['product_id'], reg_num,
              first_name, last_name, clean, inv['client_email'] or '',
              counsellor_id, counsellor_name,
              plan_type, package_amount, discount_allowed, final_package,
-             inst_amts[0], inst_dts[0], inst_nts[0],
-             inst_amts[1], inst_dts[1], inst_nts[1],
-             inst_amts[2], inst_dts[2], inst_nts[2],
-             inst_amts[3], inst_dts[3], inst_nts[3],
+             inst_amts[0], inst_dts[0], inst_nts[0], inst_mts[0], inst_sts[0],
+             inst_amts[1], inst_dts[1], inst_nts[1], inst_mts[1], inst_sts[1],
+             inst_amts[2], inst_dts[2], inst_nts[2], inst_mts[2], inst_sts[2],
+             inst_amts[3], inst_dts[3], inst_nts[3], inst_mts[3], inst_sts[3],
              lead_source, addl_notes, ops_notes_val))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
@@ -1614,11 +1619,15 @@ def client_dashboard():
             base = float(d.get(f'inst{i}_amount') or 0)
             draw = d.get(f'inst{i}_date') or ''
             dparsed = _parse_inst_date(draw)
-            # Date-driven status: a scheduled installment whose date has
-            # arrived/passed is shown as Received; a future date is still Due.
-            received = bool(base > 0 and dparsed is not None and dparsed <= _today)
-            # Installment amounts are entered as the BASE; 18% GST is added on
-            # top, so the client sees Amount + GST = Total.
+            status = (d.get(f'inst{i}_status') or '').strip()
+            # Explicit Received/Pending status wins; otherwise fall back to the
+            # date (a scheduled installment whose date has passed shows Received).
+            if status:
+                received = (status.lower() == 'received')
+            else:
+                received = bool(base > 0 and dparsed is not None and dparsed <= _today)
+            # Amounts are stored as the BASE; 18% GST is added on top so the
+            # client sees Amount + GST = Total (the total is what was received).
             gst = round(base * 0.18)
             total = round(base + gst)
             insts.append({
@@ -1626,6 +1635,8 @@ def client_dashboard():
                 'amount': base, 'gst': gst, 'total': total,
                 'date': draw, 'date_obj': dparsed,
                 'note': d.get(f'inst{i}_note') or '',
+                'method': d.get(f'inst{i}_method') or '',
+                'status': status or ('Received' if received else 'Pending'),
                 'received': received,
             })
         # Only keep installments that have an amount or date set so we
@@ -15261,6 +15272,14 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # New-flow installment fields (payment method + Received/Pending status).
+        # Additive; existing rows get NULL and fall back to date-driven status.
+        for _i in (1, 2, 3, 4):
+            for _c in ('method', 'status'):
+                try:
+                    conn.execute(f"ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS inst{_i}_{_c} TEXT")
+                except Exception:
+                    pass
 
         # ── Client Academics (mirrors ops_academic_details fields) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_academics (
@@ -26321,18 +26340,29 @@ def sales_leads_add():
                             'discount_allowed':         _n('discount_allowed'),
                             'final_package':            _n('final_package'),
                             'additional_package_notes': _f('additional_package_notes'),
-                            'inst1_amount':             _n('inst1_amount'),
+                            # Installment amounts are ENTERED as the total incl. GST;
+                            # store the base (÷1.18) so existing base-stored records and
+                            # the base->GST->total display stay consistent.
+                            'inst1_amount':             round(_n('inst1_amount')/1.18, 2),
                             'inst1_date':               _f('inst1_date'),
                             'inst1_note':               _f('inst1_note'),
-                            'inst2_amount':             _n('inst2_amount'),
+                            'inst1_method':             _f('inst1_method'),
+                            'inst1_status':             _f('inst1_status'),
+                            'inst2_amount':             round(_n('inst2_amount')/1.18, 2),
                             'inst2_date':               _f('inst2_date'),
                             'inst2_note':               _f('inst2_note'),
-                            'inst3_amount':             _n('inst3_amount'),
+                            'inst2_method':             _f('inst2_method'),
+                            'inst2_status':             _f('inst2_status'),
+                            'inst3_amount':             round(_n('inst3_amount')/1.18, 2),
                             'inst3_date':               _f('inst3_date'),
                             'inst3_note':               _f('inst3_note'),
-                            'inst4_amount':             _n('inst4_amount'),
+                            'inst3_method':             _f('inst3_method'),
+                            'inst3_status':             _f('inst3_status'),
+                            'inst4_amount':             round(_n('inst4_amount')/1.18, 2),
                             'inst4_date':               _f('inst4_date'),
                             'inst4_note':               _f('inst4_note'),
+                            'inst4_method':             _f('inst4_method'),
+                            'inst4_status':             _f('inst4_status'),
                             'lead_source':              _f('source') or _f('lead_source'),
                             # 'notes' is the rep's INTERNAL note ("not shown to client")
                             # -> route to ops_notes so it never reaches the client portal.
@@ -26534,9 +26564,12 @@ def sales_leads_edit(lead_id):
                 'additional_notes':         _ef('notes') or _ef('additional_notes'),
             }
             for i in (1, 2, 3, 4):
-                edited[f'inst{i}_amount'] = _en(f'inst{i}_amount')
+                # Amount entered as total incl. GST -> store base (÷1.18).
+                edited[f'inst{i}_amount'] = round(_en(f'inst{i}_amount')/1.18, 2)
                 edited[f'inst{i}_date']   = _ef(f'inst{i}_date')
                 edited[f'inst{i}_note']   = _ef(f'inst{i}_note')
+                edited[f'inst{i}_method'] = _ef(f'inst{i}_method')
+                edited[f'inst{i}_status'] = _ef(f'inst{i}_status')
             _ph = (request.form.get('phone') or lead['phone'] or '').lstrip('+').lstrip('0')
             if _ph.startswith('91') and len(_ph) == 12:
                 _ph = _ph[2:]
@@ -26555,18 +26588,18 @@ def sales_leads_edit(lead_id):
                     conn.execute('''UPDATE client_registrations SET
                         plan_type = ?, package_amount = ?, discount_allowed = ?, final_package = ?,
                         additional_notes = ?,
-                        inst1_amount = ?, inst1_date = ?, inst1_note = ?,
-                        inst2_amount = ?, inst2_date = ?, inst2_note = ?,
-                        inst3_amount = ?, inst3_date = ?, inst3_note = ?,
-                        inst4_amount = ?, inst4_date = ?, inst4_note = ?,
+                        inst1_amount = ?, inst1_date = ?, inst1_note = ?, inst1_method = ?, inst1_status = ?,
+                        inst2_amount = ?, inst2_date = ?, inst2_note = ?, inst2_method = ?, inst2_status = ?,
+                        inst3_amount = ?, inst3_date = ?, inst3_note = ?, inst3_method = ?, inst3_status = ?,
+                        inst4_amount = ?, inst4_date = ?, inst4_note = ?, inst4_method = ?, inst4_status = ?,
                         updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?''',
                         (edited['plan_type'], edited['package_amount'], edited['discount_allowed'],
                          edited['final_package'], edited['additional_notes'],
-                         edited['inst1_amount'], edited['inst1_date'], edited['inst1_note'],
-                         edited['inst2_amount'], edited['inst2_date'], edited['inst2_note'],
-                         edited['inst3_amount'], edited['inst3_date'], edited['inst3_note'],
-                         edited['inst4_amount'], edited['inst4_date'], edited['inst4_note'],
+                         edited['inst1_amount'], edited['inst1_date'], edited['inst1_note'], edited['inst1_method'], edited['inst1_status'],
+                         edited['inst2_amount'], edited['inst2_date'], edited['inst2_note'], edited['inst2_method'], edited['inst2_status'],
+                         edited['inst3_amount'], edited['inst3_date'], edited['inst3_note'], edited['inst3_method'], edited['inst3_status'],
+                         edited['inst4_amount'], edited['inst4_date'], edited['inst4_note'], edited['inst4_method'], edited['inst4_status'],
                          reg['id']))
         except Exception as _pe:
             logging.warning(f"sales_leads_edit closure persist: {_pe}")
