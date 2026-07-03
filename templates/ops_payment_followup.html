@@ -1,0 +1,49 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Payment Follow-up - Operations{% endblock %}
+
+{% block ops_content %}
+<div style="max-width:1000px;margin:0 auto;padding:2rem 1.5rem;">
+    <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Payment Follow-up</h1>
+    <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.5rem 0;">
+        Installments on new registrations still marked <strong>Pending</strong> (not yet received) — sorted by date so you can chase them. Once received, they move to <a href="/operations/payment-approvals" style="color:var(--orange);font-weight:600;text-decoration:none;">Payment Approvals</a>.
+    </p>
+
+    {% if pending %}
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <thead>
+                <tr style="background:var(--gray-50);text-align:left;">
+                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Client</th>
+                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Installment</th>
+                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);text-align:right;">Total (₹, incl GST)</th>
+                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Method</th>
+                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Due date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for x in pending %}
+                <tr style="border-top:1px solid var(--gray-100);">
+                    <td style="padding:0.7rem 0.9rem;">
+                        <div style="font-weight:600;color:var(--navy);">{{ x.name }}</div>
+                        <div style="font-size:0.75rem;color:var(--gray-500);">{{ x.registration_number }}</div>
+                    </td>
+                    <td style="padding:0.7rem 0.9rem;">{{ x.ordinal }} installment</td>
+                    <td style="padding:0.7rem 0.9rem;text-align:right;">
+                        <div style="font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(x.total) }}</div>
+                        <div style="font-size:0.72rem;color:var(--gray-500);">₹{{ '{:,.0f}'.format(x.base) }} + GST ₹{{ '{:,.0f}'.format(x.gst) }}</div>
+                    </td>
+                    <td style="padding:0.7rem 0.9rem;">{{ x.method or '—' }}</td>
+                    <td style="padding:0.7rem 0.9rem;">{{ x.date or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);padding:2.5rem;text-align:center;color:var(--gray-500);font-size:0.9rem;">
+        No pending installments to follow up.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

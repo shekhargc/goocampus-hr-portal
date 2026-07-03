@@ -14396,6 +14396,32 @@ def ensure_ops_tables():
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # New-flow: flag payments auto-created from an approved installment.
+        try:
+            conn.execute("ALTER TABLE ops_payments ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual'")
+        except Exception:
+            pass
+        # Installment approval decisions: a Received installment on a new-reg
+        # client shows as pending here; approving it posts an ops_payments row
+        # and records the link; rejecting it just records the decision.
+        conn.execute('''CREATE TABLE IF NOT EXISTS installment_approvals (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER,
+            registration_number TEXT,
+            inst_no INTEGER,
+            base_amount NUMERIC(14,2) DEFAULT 0,
+            gst_amount NUMERIC(14,2) DEFAULT 0,
+            total_amount NUMERIC(14,2) DEFAULT 0,
+            payment_method TEXT,
+            payment_date TEXT,
+            pathway TEXT,
+            status TEXT DEFAULT 'pending',
+            ops_payment_id INTEGER,
+            reviewed_by INTEGER,
+            reviewed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(registration_id, inst_no)
+        )''')
 
         # ── EPIC Registration ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_epic_registration (
@@ -22552,6 +22578,153 @@ def ops_payments_delete(record_id):
     conn.close()
     flash('Payment deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  Payment Approvals + Follow-up (new-registration installment flow)
+#  A Received installment on a new-reg client needs admin sign-off before it
+#  posts into that pathway's Payments; Pending ones show on the Follow-up page.
+# ─────────────────────────────────────────────────────────
+_INST_ORD = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th'}
+
+
+def _reg_pathway(conn, product_id):
+    """Pathway slug for a client_registrations product (same logic as reg-number prefix)."""
+    if not product_id:
+        return 'plab'
+    try:
+        p = conn.execute("SELECT name FROM products_services WHERE id = ?", (product_id,)).fetchone()
+    except Exception:
+        p = None
+    from core.registration import pathway_from_product_name
+    return pathway_from_product_name(p['name'] if p else None)
+
+
+def _new_reg_installments(conn):
+    """Every installment with an amount on a new-registration client, with its
+    base/gst/total (base stored; total = base+18%) and current decision state."""
+    rows = conn.execute(
+        "SELECT id, registration_number, product_id, first_name, last_name, "
+        "       inst1_amount, inst1_date, inst1_method, inst1_status, "
+        "       inst2_amount, inst2_date, inst2_method, inst2_status, "
+        "       inst3_amount, inst3_date, inst3_method, inst3_status, "
+        "       inst4_amount, inst4_date, inst4_method, inst4_status "
+        "  FROM client_registrations "
+        " WHERE registration_number IS NOT NULL AND registration_number <> '' "
+        " ORDER BY id DESC"
+    ).fetchall()
+    decided = {}
+    try:
+        for a in conn.execute("SELECT registration_id, inst_no, status FROM installment_approvals").fetchall():
+            decided[(a['registration_id'], a['inst_no'])] = a['status']
+    except Exception:
+        pass
+    out = []
+    for r in rows:
+        for i in (1, 2, 3, 4):
+            base = float(r[f'inst{i}_amount'] or 0)
+            if base <= 0:
+                continue
+            gst = round(base * 0.18)
+            total = round(base + gst)
+            status = (r[f'inst{i}_status'] or '').strip()
+            out.append({
+                'registration_id': r['id'],
+                'registration_number': r['registration_number'],
+                'name': (f"{r['first_name'] or ''} {r['last_name'] or ''}").strip() or '(unnamed)',
+                'inst_no': i, 'ordinal': _INST_ORD[i],
+                'base': base, 'gst': gst, 'total': total,
+                'date': r[f'inst{i}_date'] or '',
+                'method': r[f'inst{i}_method'] or '',
+                'status': status or 'Pending',
+                'decision': decided.get((r['id'], i)),
+            })
+    return out
+
+
+@app.route('/operations/payment-approvals')
+@admin_required
+def ops_payment_approvals():
+    conn = get_db()
+    items = _new_reg_installments(conn)
+    pending = [x for x in items if x['status'].lower() == 'received' and not x['decision']]
+    approved = [x for x in items if x['decision'] == 'approved']
+    conn.close()
+    return render_template('ops_payment_approvals.html',
+        pending=pending, approved=approved, active_ops_page='payment-approvals')
+
+
+@app.route('/operations/payment-approvals/<int:reg_id>/<int:inst_no>/approve', methods=['POST'])
+@admin_required
+def ops_payment_approve(reg_id, inst_no):
+    conn = get_db()
+    if inst_no not in (1, 2, 3, 4):
+        conn.close(); flash('Invalid installment', 'error'); return redirect(url_for('ops_payment_approvals'))
+    existing = conn.execute("SELECT status FROM installment_approvals WHERE registration_id = ? AND inst_no = ?",
+                            (reg_id, inst_no)).fetchone()
+    if existing and existing['status'] == 'approved':
+        conn.close(); flash('That installment was already approved', 'info'); return redirect(url_for('ops_payment_approvals'))
+    r = conn.execute("SELECT * FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    if not r:
+        conn.close(); flash('Client not found', 'error'); return redirect(url_for('ops_payment_approvals'))
+    base = float(r[f'inst{inst_no}_amount'] or 0)
+    if base <= 0:
+        conn.close(); flash('Installment has no amount', 'error'); return redirect(url_for('ops_payment_approvals'))
+    gst = round(base * 0.18)
+    total = round(base + gst)
+    method = r[f'inst{inst_no}_method'] or ''
+    pdate = r[f'inst{inst_no}_date'] or None
+    reg_no = r['registration_number']
+    pathway = _reg_pathway(conn, r['product_id'])
+    conn.execute(
+        "INSERT INTO ops_payments (registration_number, payment_date, amount_paid, gst_paid, "
+        " total_amount_paid, instalment, payment_method, notes, pathway, source, created_by) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'installment', ?)",
+        (reg_no, pdate, base, gst, total, _INST_ORD[inst_no], method,
+         f"Auto-posted from {_INST_ORD[inst_no]} installment (approved)", pathway, session.get('user_id')))
+    pay = conn.execute(
+        "SELECT id FROM ops_payments WHERE registration_number = ? AND source = 'installment' "
+        "AND instalment = ? ORDER BY id DESC LIMIT 1", (reg_no, _INST_ORD[inst_no])).fetchone()
+    pay_id = pay['id'] if pay else None
+    conn.execute(
+        "INSERT INTO installment_approvals (registration_id, registration_number, inst_no, base_amount, "
+        " gst_amount, total_amount, payment_method, payment_date, pathway, status, ops_payment_id, reviewed_by, reviewed_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP) "
+        "ON CONFLICT (registration_id, inst_no) DO UPDATE SET status = 'approved', "
+        " ops_payment_id = EXCLUDED.ops_payment_id, reviewed_by = EXCLUDED.reviewed_by, reviewed_at = CURRENT_TIMESTAMP",
+        (reg_id, reg_no, inst_no, base, gst, total, method, pdate, pathway, pay_id, session.get('user_id')))
+    conn.commit(); conn.close()
+    flash(f'{_INST_ORD[inst_no]} installment approved and posted to {pathway.title()} Payments', 'success')
+    return redirect(url_for('ops_payment_approvals'))
+
+
+@app.route('/operations/payment-approvals/<int:reg_id>/<int:inst_no>/reject', methods=['POST'])
+@admin_required
+def ops_payment_reject(reg_id, inst_no):
+    conn = get_db()
+    r = conn.execute("SELECT registration_number FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    reg_no = r['registration_number'] if r else None
+    conn.execute(
+        "INSERT INTO installment_approvals (registration_id, registration_number, inst_no, status, reviewed_by, reviewed_at) "
+        "VALUES (?, ?, ?, 'rejected', ?, CURRENT_TIMESTAMP) "
+        "ON CONFLICT (registration_id, inst_no) DO UPDATE SET status = 'rejected', "
+        " reviewed_by = EXCLUDED.reviewed_by, reviewed_at = CURRENT_TIMESTAMP",
+        (reg_id, reg_no, inst_no, session.get('user_id')))
+    conn.commit(); conn.close()
+    flash('Installment rejected', 'success')
+    return redirect(url_for('ops_payment_approvals'))
+
+
+@app.route('/operations/payment-followup')
+@admin_required
+def ops_payment_followup():
+    conn = get_db()
+    items = _new_reg_installments(conn)
+    pending = [x for x in items if x['status'].lower() != 'received' and x['decision'] != 'approved']
+    pending.sort(key=lambda x: (x['date'] == '', x['date']))
+    conn.close()
+    return render_template('ops_payment_followup.html',
+        pending=pending, active_ops_page='payment-followup')
 
 
 # ─────────────────────────────────────────────────────────
