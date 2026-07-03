@@ -20114,6 +20114,40 @@ def _r2_object_key_or_none(file_path):
     return s
 
 
+def _resolve_contract_key(stored_path, pathway=None, reg_number=None):
+    """Find the REAL R2 object key for a client's contract.
+
+    The stored contract_path can be stale — e.g. bulk-imported from Zoho with
+    a reg number that dropped a leading zero (GCAUSIP_25-26_05 vs _005) or a
+    generated filename that no longer matches. So instead of blindly trusting
+    the exact key (which then 302s to a 404), verify it exists; if not, search
+    the client's Contract folder(s) and serve the first file found."""
+    from core import storage
+    stored = _r2_object_key_or_none(stored_path)
+    prefixes = []
+    if stored and '/' in stored:
+        prefixes.append(stored.rsplit('/', 1)[0] + '/')      # the stored file's own folder
+    try:
+        pw = storage._safe_segment(pathway or 'plab')
+        seg = storage._safe_segment(reg_number or '')
+        if seg:
+            prefixes.append(f"{pw}/{seg}/Contract/")           # canonical folder for this reg
+    except Exception:
+        pass
+    seen = set(); prefixes = [p for p in prefixes if not (p in seen or seen.add(p))]
+    for pref in prefixes:
+        try:
+            keys = storage.list_objects(pref, max_keys=20)
+        except Exception:
+            keys = []
+        if not keys:
+            continue
+        if stored and stored in keys:      # exact match still there — use it
+            return stored
+        return keys[0]                      # otherwise serve the file that IS there
+    return stored                           # nothing found — fall back (may 404)
+
+
 @app.route('/operations/plab/doc/<int:doc_id>/file')
 @admin_required
 def ops_plab_serve_doc(doc_id):
@@ -20227,10 +20261,10 @@ def ops_client_contract_upload(client_id):
 @admin_required
 def ops_client_contract_view(client_id):
     """Inline view of the contract (presigned R2 URL) — used by the profile viewer iframe."""
-    conn = get_db(); c = conn.execute("SELECT contract_path FROM plab_clients WHERE id = ?", (client_id,)).fetchone(); conn.close()
+    conn = get_db(); c = conn.execute("SELECT contract_path, COALESCE(pathway,'plab') AS pathway, registration_number FROM plab_clients WHERE id = ?", (client_id,)).fetchone(); conn.close()
     if not c or not c['contract_path']:
         return "No contract on file", 404
-    key = _r2_object_key_or_none(c['contract_path'])
+    key = _resolve_contract_key(c['contract_path'], c['pathway'], c['registration_number'])
     if key:
         try:
             from core import storage
@@ -20244,10 +20278,10 @@ def ops_client_contract_view(client_id):
 @admin_required
 def ops_client_contract_download(client_id):
     """Download the contract with a friendly filename."""
-    conn = get_db(); c = conn.execute("SELECT contract_path, registration_number FROM plab_clients WHERE id = ?", (client_id,)).fetchone(); conn.close()
+    conn = get_db(); c = conn.execute("SELECT contract_path, COALESCE(pathway,'plab') AS pathway, registration_number FROM plab_clients WHERE id = ?", (client_id,)).fetchone(); conn.close()
     if not c or not c['contract_path']:
         return "No contract on file", 404
-    key = _r2_object_key_or_none(c['contract_path'])
+    key = _resolve_contract_key(c['contract_path'], c['pathway'], c['registration_number'])
     if key:
         try:
             from core import storage
