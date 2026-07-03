@@ -1078,6 +1078,7 @@ def client_register(token):
         addl_pack_notes  = closure_meta.get('additional_package_notes', '') or ''
         lead_source      = closure_meta.get('lead_source', '') or ''
         addl_notes       = closure_meta.get('additional_notes', '') or ''
+        ops_notes_val    = closure_meta.get('ops_notes', '') or ''
         inst_amts = [float(closure_meta.get(f'inst{i}_amount', 0) or 0) for i in (1,2,3,4)]
         inst_dts  = [closure_meta.get(f'inst{i}_date', '') or '' for i in (1,2,3,4)]
         inst_nts  = [closure_meta.get(f'inst{i}_note', '') or '' for i in (1,2,3,4)]
@@ -1091,11 +1092,11 @@ def client_register(token):
              inst2_amount, inst2_date, inst2_note,
              inst3_amount, inst3_date, inst3_note,
              inst4_amount, inst4_date, inst4_note,
-             lead_source, additional_notes,
+             lead_source, additional_notes, ops_notes,
              form_status, current_step)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, 'draft', 1)''',
+                    ?, ?, ?, 'draft', 1)''',
             (acct_id, inv['id'], inv['product_id'], reg_num,
              first_name, last_name, clean, inv['client_email'] or '',
              counsellor_id, counsellor_name,
@@ -1104,7 +1105,7 @@ def client_register(token):
              inst_amts[1], inst_dts[1], inst_nts[1],
              inst_amts[2], inst_dts[2], inst_nts[2],
              inst_amts[3], inst_dts[3], inst_nts[3],
-             lead_source, addl_notes))
+             lead_source, addl_notes, ops_notes_val))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
         conn.close()
@@ -26337,7 +26338,12 @@ def sales_leads_add():
                             'inst4_date':               _f('inst4_date'),
                             'inst4_note':               _f('inst4_note'),
                             'lead_source':              _f('source') or _f('lead_source'),
-                            'additional_notes':         _f('notes') or _f('additional_notes'),
+                            # 'notes' is the rep's INTERNAL note ("not shown to client")
+                            # -> route to ops_notes so it never reaches the client portal.
+                            # The client sees additional_notes, which we feed from the
+                            # client-facing 'Additional Package Notes' field only.
+                            'additional_notes':         _f('additional_package_notes') or _f('additional_notes'),
+                            'ops_notes':                _f('notes') or _f('ops_notes'),
                         }
                         # The selected Owner is the client's counsellor — use it
                         # as invited_by so the registration's counsellor_id (and
