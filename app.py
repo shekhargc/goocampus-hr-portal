@@ -18924,6 +18924,20 @@ def ops_reports():
     for tbl in OPS_PATHWAY_TABLES:
         download_sections.append({'table': tbl, 'label': OPS_SECTION_LABELS.get(tbl, tbl),
                                   'count': _count(tbl)})
+
+    # Per-section column lists for the field-picker download (below the preset
+    # all-columns download). {table: [{'name':.., 'label':..}, ...]}
+    section_columns = {}
+    for s in download_sections:
+        try:
+            cols = conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = ? ORDER BY ordinal_position", (s['table'],)).fetchall()
+            section_columns[s['table']] = [
+                {'name': c['column_name'], 'label': c['column_name'].replace('_', ' ').title()}
+                for c in cols]
+        except Exception:
+            section_columns[s['table']] = []
     conn.close()
 
     pathway_tabs = [('plab', 'UK PGCP'), ('australia', 'AUS PGCP'), ('consulting', 'Consulting'),
@@ -18933,6 +18947,7 @@ def ops_reports():
         templates=templates,
         field_defs=REPORT_FIELD_DEFS,
         download_sections=download_sections,
+        section_columns=section_columns,
         pathway_tabs=pathway_tabs,
         active_ops_page='reports',
         active_section='operations',
@@ -19254,6 +19269,15 @@ def ops_reports_export():
         except Exception:
             cols = []
     conn.close()
+
+    # Optional field selection (from the section-wise field picker): keep only
+    # the requested columns, in the order given, validated against real columns.
+    requested = request.args.getlist('fields')
+    if requested:
+        valid = set(cols)
+        picked = [c for c in requested if c in valid]
+        if picked:
+            cols = picked
 
     def _clean(v):
         if v is None or isinstance(v, (str, int, float, bool, _dt, _date)):

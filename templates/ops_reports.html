@@ -110,6 +110,68 @@
   </div>
 </div>
 
+<!-- ══ Custom Download — pick fields per section ══ -->
+<div class="quick-section" style="margin-bottom:24px;" id="custom">
+  <h2>Custom Download — choose fields</h2>
+  <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 14px;">Pick a pathway, choose a section, tick only the fields you want, and download as Excel.</p>
+
+  <!-- Pathway tabs (reloads the page for the chosen pathway) -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+    {% for pw_key, pw_label in pathway_tabs %}
+    <a href="{{ url_for('ops_reports', pathway=pw_key) }}#custom"
+       style="text-decoration:none;padding:8px 16px;border-radius:999px;font-size:0.83rem;font-weight:700;{% if active_pathway == pw_key %}background:var(--navy);color:#fff;{% else %}background:#eef2f7;color:#475569;{% endif %}">{{ pw_label }}</a>
+    {% endfor %}
+  </div>
+
+  <div style="max-width:420px;margin-bottom:14px;">
+    <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:5px;">Section</label>
+    <select id="cf-section" onchange="cfRenderFields()" style="width:100%;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;background:#fff;">
+      <option value="">— Select a section —</option>
+      {% for s in download_sections %}<option value="{{ s.table }}">{{ s.label }} ({{ s.count }})</option>{% endfor %}
+    </select>
+  </div>
+
+  <div id="cf-fields-wrap" style="display:none;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <label style="font-size:0.83rem;font-weight:600;color:var(--navy);cursor:pointer;"><input type="checkbox" id="cf-all" checked onclick="cfToggleAll(this.checked)"> Select all</label>
+      <span id="cf-count" style="font-size:0.76rem;color:var(--gray-400);"></span>
+    </div>
+    <div id="cf-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 14px;max-height:320px;overflow:auto;padding:4px 2px;border-top:1px solid var(--gray-100);"></div>
+    <div style="margin-top:14px;">
+      <a id="cf-download" href="#" onclick="return cfDownload()" style="background:#059669;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:0.85rem;font-weight:700;">&#8681; Download Excel</a>
+    </div>
+  </div>
+</div>
+<script>
+  var CF_COLS = {{ section_columns|tojson }};
+  var CF_PATHWAY = {{ active_pathway|tojson }};
+  function cfRenderFields(){
+    var tbl = document.getElementById('cf-section').value;
+    var wrap = document.getElementById('cf-fields-wrap');
+    if(!tbl){ wrap.style.display='none'; return; }
+    var cols = CF_COLS[tbl] || [];
+    document.getElementById('cf-fields').innerHTML = cols.map(function(c){
+      return '<label style="font-size:0.82rem;color:#334e68;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" class="cf-cb" value="'+c.name+'" checked onchange="cfUpdateCount()"> '+c.label+'</label>';
+    }).join('');
+    document.getElementById('cf-all').checked = true;
+    wrap.style.display='block';
+    cfUpdateCount();
+  }
+  function cfToggleAll(s){ document.querySelectorAll('.cf-cb').forEach(function(c){c.checked=s;}); cfUpdateCount(); }
+  function cfUpdateCount(){
+    var n=document.querySelectorAll('.cf-cb:checked').length, t=document.querySelectorAll('.cf-cb').length;
+    document.getElementById('cf-count').textContent=n+' / '+t+' fields selected';
+    document.getElementById('cf-all').checked = (n===t && t>0);
+  }
+  function cfDownload(){
+    var tbl=document.getElementById('cf-section').value; if(!tbl) return false;
+    var fields=Array.prototype.slice.call(document.querySelectorAll('.cf-cb:checked')).map(function(c){return c.value;});
+    if(!fields.length){ alert('Pick at least one field to download.'); return false; }
+    window.location.href='/operations/reports/export?pathway='+encodeURIComponent(CF_PATHWAY)+'&table='+encodeURIComponent(tbl)+'&'+fields.map(function(f){return 'fields='+encodeURIComponent(f);}).join('&');
+    return false;
+  }
+</script>
+
 <div class="quick-section" style="margin-bottom:24px;">
   <h2>Exam Pipeline</h2>
   <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 14px;">Upcoming exams and exams awaiting results, across pathways &middot; editable from each list.</p>
