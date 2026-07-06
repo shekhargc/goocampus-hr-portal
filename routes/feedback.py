@@ -141,6 +141,18 @@ def _base_url():
     return request.host_url.rstrip('/')
 
 
+def _days_ago(dt):
+    """Whole days between a timestamp and now — for 'sent N days ago' cues."""
+    if not dt:
+        return None
+    try:
+        if isinstance(dt, str):
+            dt = datetime.fromisoformat(dt[:19])
+        return (datetime.now() - dt).days
+    except Exception:
+        return None
+
+
 # ─────────────────────────── quarters + metrics ───────────────────────────
 
 _MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -611,7 +623,8 @@ def admin_feedback_followup(form_id):
         row = {
             'invite_id': iv['id'], 'name': iv['client_name'], 'reg': iv['registration_number'],
             'mobile': iv['mobile'], 'email': iv['email'], 'status': iv['status'],
-            'opened': iv['status'] == 'opened', 'sent_at': iv['sent_at'], 'link': link,
+            'opened': iv['status'] == 'opened', 'sent_at': iv['sent_at'],
+            'days_ago': _days_ago(iv['sent_at']), 'link': link,
             'email_status': iv['email_status'], 'failed': (iv['email_status'] == 'failed'),
             'wa_link': _wa_link(iv['mobile'], _feedback_message(iv['client_name'], link, form['title'])),
         }
@@ -621,11 +634,22 @@ def admin_feedback_followup(form_id):
         lst.sort(key=lambda r: (0 if r['failed'] else 1, (r['name'] or '').lower()))
     failed_count = sum(1 for r in sent_rows + opened_rows if r['failed'])
     total = len(sent_rows) + len(opened_rows) + submitted_count
+    # Most-recent send across this form/quarter, so the team sees how long it's been.
+    _sent = [iv['sent_at'] for iv in invites if iv['sent_at']]
+    last_sent = max(_sent) if _sent else None
+    last_sent_str, last_sent_days = None, None
+    if last_sent is not None:
+        try:
+            last_sent_str = last_sent.strftime('%d %b %Y')
+        except Exception:
+            last_sent_str = str(last_sent)[:10]
+        last_sent_days = _days_ago(last_sent)
     return render_template('admin_feedback_followup.html', form=form,
                            sent_rows=sent_rows, opened_rows=opened_rows,
                            total=total, submitted_count=submitted_count,
                            sent_count=len(sent_rows), opened_count=len(opened_rows),
                            failed_count=failed_count,
+                           last_sent_str=last_sent_str, last_sent_days=last_sent_days,
                            quarters=quarters, quarter=quarter, active_section='clients')
 
 

@@ -11,6 +11,14 @@
     <a href="{{ url_for('admin_feedback_send', form_id=form.id) }}" style="background:var(--orange);color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:0.85rem;">+ Send to new clients</a>
   </div>
 
+  {% if last_sent_str %}
+  <div style="display:inline-flex;align-items:center;gap:8px;margin:12px 0 2px;padding:8px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:0.82rem;color:#1e3a5f;">
+    <span>📨 Last sent to this stage:</span>
+    <b>{{ last_sent_str }}</b>
+    <span style="color:#2563eb;font-weight:700;">· {% if last_sent_days == 0 %}today{% elif last_sent_days == 1 %}yesterday (1 day ago){% else %}{{ last_sent_days }} days ago{% endif %}</span>
+  </div>
+  {% endif %}
+
   <!-- progress -->
   <div style="display:flex;gap:22px;margin:16px 0 18px;flex-wrap:wrap;">
     <div><div style="font-size:1.6rem;font-weight:800;color:var(--navy);">{{ total }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Sent to</div></div>
@@ -51,7 +59,7 @@
           <div style="font-weight:600;color:var(--navy);">{{ r.name }}{% if r.failed %} <span style="font-size:0.66rem;font-weight:700;color:#b91c1c;background:#fee2e2;padding:2px 7px;border-radius:999px;">✕ email failed</span>{% endif %}</div>
           <div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} · {{ r.mobile or 'no mobile' }}</div>
         </td>
-        <td style="padding:10px 12px;color:var(--gray-500);font-size:0.78rem;">{{ r.sent_at or '—' }}</td>
+        <td style="padding:10px 12px;color:var(--gray-500);font-size:0.78rem;">{% if r.days_ago is none %}—{% elif r.days_ago == 0 %}today{% elif r.days_ago == 1 %}1 day ago{% else %}{{ r.days_ago }} days ago{% endif %}</td>
         <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
           <button type="button" onclick="navigator.clipboard.writeText('{{ r.link }}');this.textContent='Copied!';" style="background:#f1f5f9;color:#475569;border:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:600;cursor:pointer;">Copy link</button>
           <form method="POST" action="{{ url_for('admin_feedback_resend', invite_id=r.invite_id) }}" style="display:inline-flex;gap:4px;align-items:center;margin-left:4px;vertical-align:middle;">
