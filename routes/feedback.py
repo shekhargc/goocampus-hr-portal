@@ -218,12 +218,13 @@ def _metrics(conn, form_id=None, quarter_key=None):
     st = conn.execute(
         "SELECT COUNT(DISTINCT registration_number) AS sent, "
         "COUNT(DISTINCT CASE WHEN status='submitted' THEN registration_number END) AS submitted, "
-        "COUNT(DISTINCT CASE WHEN status='opened' THEN registration_number END) AS opened "
+        "COUNT(DISTINCT CASE WHEN status='opened' THEN registration_number END) AS opened, "
+        "COUNT(DISTINCT CASE WHEN email_status='failed' THEN registration_number END) AS failed "
         "FROM feedback_invites" + iwsql, ip).fetchone()
     return {'avg_star': avg_star, 'csat': csat, 'nps': nps,
             'star_n': len(stars), 'nps_n': len(scales),
             'sent': st['sent'] or 0, 'submitted': st['submitted'] or 0,
-            'opened': st['opened'] or 0}
+            'opened': st['opened'] or 0, 'failed': st['failed'] or 0}
 
 
 def _quarters_with_data(conn, form_id=None):
