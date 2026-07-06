@@ -36,9 +36,12 @@
                     </td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.method or '—' }}</td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.date or '—' }}</td>
-                    <td style="padding:0.7rem 0.9rem;text-align:center;white-space:nowrap;">
-                        <form method="POST" action="/operations/payment-approvals/{{ x.registration_id }}/{{ x.inst_no }}/approve" style="display:inline;">
-                            <button type="submit" style="background:#16A34A;color:white;border:none;padding:0.4rem 0.9rem;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;">Approve</button>
+                    <td style="padding:0.7rem 0.9rem;text-align:right;white-space:nowrap;">
+                        <form method="POST" action="/operations/payment-approvals/{{ x.registration_id }}/{{ x.inst_no }}/approve" style="display:inline-flex;gap:5px;align-items:center;vertical-align:middle;">
+                            <span style="font-size:0.72rem;color:var(--gray-500);">₹</span>
+                            <input type="number" name="total_amount" value="{{ '%.0f'|format(x.total) }}" step="0.01" title="Actual total received incl GST — edit if the client paid a different amount (e.g. Consulting + Training together)"
+                                   style="width:104px;padding:5px 7px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;text-align:right;" />
+                            <button type="submit" style="background:#16A34A;color:white;border:none;padding:0.42rem 0.9rem;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;">Approve</button>
                         </form>
                         <form method="POST" action="/operations/payment-approvals/{{ x.registration_id }}/{{ x.inst_no }}/reject" style="display:inline;" onsubmit="return confirm('Reject this installment? It will not be posted to Payments.');">
                             <button type="submit" style="background:white;color:#B91C1C;border:1px solid #FCA5A5;padding:0.4rem 0.9rem;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;margin-left:0.3rem;">Reject</button>

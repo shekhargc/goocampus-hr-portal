@@ -22667,20 +22667,27 @@ def ops_payment_approve(reg_id, inst_no):
     r = conn.execute("SELECT * FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
     if not r:
         conn.close(); flash('Client not found', 'error'); return redirect(url_for('ops_payment_approvals'))
-    base = float(r[f'inst{inst_no}_amount'] or 0)
-    if base <= 0:
-        conn.close(); flash('Installment has no amount', 'error'); return redirect(url_for('ops_payment_approvals'))
-    gst = round(base * 0.18)
-    total = round(base + gst)
-    method = r[f'inst{inst_no}_method'] or ''
-    pdate = r[f'inst{inst_no}_date'] or None
+    base_plan = float(r[f'inst{inst_no}_amount'] or 0)
+    # Editable at approval: the ACTUAL total received (incl GST). Defaults to the
+    # planned installment total (base + 18%); admin can adjust for split / combined
+    # / bundled collections (e.g. AMC Consulting + Training) before it posts.
+    try:
+        total = float(request.form.get('total_amount') or round(base_plan * 1.18, 2))
+    except (TypeError, ValueError):
+        total = round(base_plan * 1.18, 2)
+    if total <= 0:
+        conn.close(); flash('Enter the amount received before approving.', 'error'); return redirect(url_for('ops_payment_approvals'))
+    amount = round(total / 1.18, 2)
+    gst = round(total - amount, 2)
+    method = (request.form.get('payment_method') or r[f'inst{inst_no}_method'] or '')
+    pdate = (request.form.get('payment_date') or r[f'inst{inst_no}_date'] or None)
     reg_no = r['registration_number']
     pathway = _reg_pathway(conn, r['product_id'])
     conn.execute(
         "INSERT INTO ops_payments (registration_number, payment_date, amount_paid, gst_paid, "
         " total_amount_paid, instalment, payment_method, notes, pathway, source, created_by) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'installment', ?)",
-        (reg_no, pdate, base, gst, total, _INST_ORD[inst_no], method,
+        (reg_no, pdate, amount, gst, total, _INST_ORD[inst_no], method,
          f"Auto-posted from {_INST_ORD[inst_no]} installment (approved)", pathway, session.get('user_id')))
     pay = conn.execute(
         "SELECT id FROM ops_payments WHERE registration_number = ? AND source = 'installment' "
@@ -22692,7 +22699,7 @@ def ops_payment_approve(reg_id, inst_no):
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP) "
         "ON CONFLICT (registration_id, inst_no) DO UPDATE SET status = 'approved', "
         " ops_payment_id = EXCLUDED.ops_payment_id, reviewed_by = EXCLUDED.reviewed_by, reviewed_at = CURRENT_TIMESTAMP",
-        (reg_id, reg_no, inst_no, base, gst, total, method, pdate, pathway, pay_id, session.get('user_id')))
+        (reg_id, reg_no, inst_no, amount, gst, total, method, pdate, pathway, pay_id, session.get('user_id')))
     conn.commit(); conn.close()
     flash(f'{_INST_ORD[inst_no]} installment approved and posted to {pathway.title()} Payments', 'success')
     return redirect(url_for('ops_payment_approvals'))
