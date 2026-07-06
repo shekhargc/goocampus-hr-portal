@@ -1113,6 +1113,50 @@ def client_register(token):
              lead_source, addl_notes, ops_notes_val))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
+
+        # AMC Consulting + AMC 1 combined signup: if the closure opted the client
+        # into Training too, create a SECOND registration in the Training pathway
+        # (product 'AMC MCQ', plan 'AMC 1', its own GCTRN reg number + its own
+        # installments) sharing the same client account. Sales already entered the
+        # training split, so it's sales-complete -> lands in the Ops verify queue.
+        if closure_meta.get('include_training'):
+            try:
+                tprod = conn.execute("SELECT id FROM products_services WHERE name = 'AMC MCQ' LIMIT 1").fetchone()
+                if tprod:
+                    from core.registration import next_registration_number as _nrn
+                    t_reg = _nrn(conn, 'AMC MCQ')
+                    t_pkg = float(closure_meta.get('training_package', 0) or 0)
+                    t_disc = float(closure_meta.get('training_discount', 0) or 0)
+                    t_final = float(closure_meta.get('training_final', 0) or (t_pkg - t_disc))
+                    trow = {
+                        'account_id': acct_id, 'invitation_id': inv['id'], 'product_id': tprod['id'],
+                        'registration_number': t_reg, 'first_name': first_name, 'last_name': last_name,
+                        'mobile': clean, 'email': inv['client_email'] or '',
+                        'counsellor_id': counsellor_id, 'counsellor_name': counsellor_name,
+                        'plan_type': 'AMC 1', 'package_amount': t_pkg, 'discount_allowed': t_disc,
+                        'final_package': t_final, 'lead_source': lead_source,
+                        'additional_notes': addl_notes, 'ops_notes': ops_notes_val,
+                        'form_status': 'submitted', 'current_step': 1, 'sales_completed': 1,
+                    }
+                    for i in (1, 2, 3, 4):
+                        trow[f'inst{i}_amount'] = float(closure_meta.get(f'training_inst{i}_amount', 0) or 0)
+                        trow[f'inst{i}_date']   = closure_meta.get(f'training_inst{i}_date', '') or ''
+                        trow[f'inst{i}_note']   = ''
+                        trow[f'inst{i}_method'] = closure_meta.get(f'training_inst{i}_method', '') or ''
+                        trow[f'inst{i}_status'] = closure_meta.get(f'training_inst{i}_status', '') or ''
+                    tcols = list(trow.keys())
+                    conn.execute(
+                        f"INSERT INTO client_registrations ({', '.join(tcols)}) "
+                        f"VALUES ({', '.join(['?'] * len(tcols))})",
+                        [trow[k] for k in tcols])
+                    conn.execute("UPDATE client_registrations SET sales_completed_at = CURRENT_TIMESTAMP "
+                                 "WHERE registration_number = ?", (t_reg,))
+                    conn.commit()
+            except Exception as _te:
+                logging.warning(f"combined AMC 1 training registration failed: {_te}")
+                try: conn.rollback()
+                except Exception: pass
+
         conn.close()
 
         # Auto-login the client
@@ -26543,6 +26587,28 @@ def sales_leads_add():
                             'inst4_note':               _f('inst4_note'),
                             'inst4_method':             _f('inst4_method'),
                             'inst4_status':             _f('inst4_status'),
+                            # AMC Consulting + AMC 1 combined signup — the Training (AMC 1)
+                            # split. Installments entered as total incl GST -> stored base.
+                            'include_training':         (request.form.get('include_training') in ('on', '1', 'true', 'yes')),
+                            'training_package':         _n('training_package'),
+                            'training_discount':        _n('training_discount'),
+                            'training_final':           _n('training_final'),
+                            'training_inst1_amount':    round(_n('training_inst1_amount')/1.18, 2),
+                            'training_inst1_date':      _f('training_inst1_date'),
+                            'training_inst1_method':    _f('training_inst1_method'),
+                            'training_inst1_status':    _f('training_inst1_status'),
+                            'training_inst2_amount':    round(_n('training_inst2_amount')/1.18, 2),
+                            'training_inst2_date':      _f('training_inst2_date'),
+                            'training_inst2_method':    _f('training_inst2_method'),
+                            'training_inst2_status':    _f('training_inst2_status'),
+                            'training_inst3_amount':    round(_n('training_inst3_amount')/1.18, 2),
+                            'training_inst3_date':      _f('training_inst3_date'),
+                            'training_inst3_method':    _f('training_inst3_method'),
+                            'training_inst3_status':    _f('training_inst3_status'),
+                            'training_inst4_amount':    round(_n('training_inst4_amount')/1.18, 2),
+                            'training_inst4_date':      _f('training_inst4_date'),
+                            'training_inst4_method':    _f('training_inst4_method'),
+                            'training_inst4_status':    _f('training_inst4_status'),
                             'lead_source':              _f('source') or _f('lead_source'),
                             # 'notes' is the rep's INTERNAL note ("not shown to client")
                             # -> route to ops_notes so it never reaches the client portal.
