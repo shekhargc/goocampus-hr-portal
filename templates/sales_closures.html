@@ -75,7 +75,12 @@
                         </td>
                         <td style="padding:0.65rem 0.5rem;">
                             <div style="display:flex;align-items:center;gap:0.45rem;">
-                                <img src="{{ c.photo_src }}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                                {% if c.photo_src %}
+                                <img src="{{ c.photo_src }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                                <span style="display:none;width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;align-items:center;justify-content:center;font-size:0.68rem;font-weight:700;flex:0 0 auto;">{{ (c.employee_name or '?')[0]|upper }}</span>
+                                {% else %}
+                                <span style="display:flex;width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;align-items:center;justify-content:center;font-size:0.68rem;font-weight:700;flex:0 0 auto;">{{ (c.employee_name or '?')[0]|upper }}</span>
+                                {% endif %}
                                 <span style="color:var(--navy);font-weight:600;font-size:0.82rem;">{{ c.employee_name or '—' }}</span>
                             </div>
                         </td>

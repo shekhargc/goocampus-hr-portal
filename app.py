@@ -26436,7 +26436,7 @@ def sales_leads_list():
     leads_dicts = []
     for l in leads:
         d = dict(l)
-        d['photo_src'] = d.get('owner_photo') or '/static/default-avatar.png'
+        d['photo_src'] = d.get('owner_photo') or ''
         leads_dicts.append(d)
     return render_template('sales_leads.html', user=user, leads=leads_dicts,
                            stages=stages, owners=owners, role=role,
@@ -27127,7 +27127,7 @@ def sales_closures_list():
     closures_dicts = []
     for c in closures:
         d = dict(c)
-        d['photo_src'] = d.get('emp_photo') or '/static/default-avatar.png'
+        d['photo_src'] = d.get('emp_photo') or ''
         d['display_name'] = d.get('product_name') or d.get('product_name_live') or '—'
         closures_dicts.append(d)
 
