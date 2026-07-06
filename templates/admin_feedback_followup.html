@@ -68,7 +68,8 @@
             <button type="submit" style="background:{% if r.failed %}#dc2626{% else %}#e0e7ff{% endif %};color:{% if r.failed %}#fff{% else %}#3730a3{% endif %};border:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;cursor:pointer;">{% if r.failed %}Fix &amp; re-send{% else %}Re-send{% endif %}</button>
           </form>
           {% if r.mobile %}
-          <a href="{{ r.wa_link }}" target="_blank" rel="noopener" style="background:#25D366;color:#fff;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;display:inline-block;margin-left:4px;">WhatsApp</a>
+          <a href="{{ r.wa_link }}" target="_blank" rel="noopener" onclick="markWaSent(this, {{ r.invite_id }})"
+             style="background:{% if r.wa_sent %}#94a3b8{% else %}#25D366{% endif %};color:#fff;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;display:inline-block;margin-left:4px;">{% if r.wa_sent %}WhatsApp&nbsp;&#10003;{% else %}WhatsApp{% endif %}</a>
           {% endif %}
         </td>
       </tr>
@@ -85,6 +86,11 @@
   <p style="font-size:0.72rem;color:var(--gray-400);margin-top:10px;">Re-send uses the same link (no duplicate is created, counts stay accurate). Reload to refresh who has responded.</p>
 </div>
 <script>
+function markWaSent(el, id){
+  try { fetch('/admin/feedback/wa-sent/' + id, {method:'POST'}); } catch(e){}
+  el.style.background = '#94a3b8';
+  el.innerHTML = 'WhatsApp&nbsp;&#10003;';
+}
 function fbTab(which){
   var on = which === 'opened';
   document.getElementById('tab-sent').style.display = on ? 'none' : '';

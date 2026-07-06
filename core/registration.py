@@ -65,11 +65,12 @@ def pathway_from_product_name(product_name):
     #   Training pathway   -> 'AMC MCQ' or anything containing TRAINING
     if 'PORTFOLIO' in n:
         return 'portfolio'
-    if 'TRAINING' in n or 'AMC MCQ' in n:
+    # Training pathway: AMC MCQ (AMC 1) and AMC Clinical (AMC 2) both belong here.
+    if 'TRAINING' in n or 'AMC MCQ' in n or 'AMC CLINICAL' in n:
         return 'training'
     # Consulting — checked BEFORE Australia/AMC so 'AMC Consulting' resolves to
     # the consulting pathway (GCCSS), not australia (GCAUSIP). Only a bare AMC
-    # exam product (e.g. 'AMC Clinical') without 'CONSULT' falls through below.
+    # exam product (e.g. bare 'AMC') without 'CONSULT' falls through below.
     if 'CONSULT' in n:
         return 'consulting'
     # Australia / AMC pathway
