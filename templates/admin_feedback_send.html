@@ -25,7 +25,7 @@
          style="text-decoration:none;padding:7px 14px;border-radius:999px;font-size:0.8rem;font-weight:600;{% if cur == 'all' %}background:var(--navy);color:#fff;{% else %}background:#f1f5f9;color:#475569;{% endif %}">All statuses</a>
     </div>
     {% if clients %}
-    <form method="POST" action="{{ url_for('admin_feedback_send_post') }}">
+    <form method="POST" action="{{ url_for('admin_feedback_send_post') }}" id="sendForm" onsubmit="return showSending(this)">
       <input type="hidden" name="form_id" value="{{ selected.id }}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <div style="font-weight:600;color:var(--navy);">{{ clients|length }} client(s){% if (status or 'In Process') != 'all' %} · In Process{% endif %}</div>
@@ -66,4 +66,29 @@
     {% endif %}
   {% endif %}
 </div>
+
+<!-- Sending overlay: full-screen blurred backdrop + spinner while the batch sends -->
+<div id="sendingOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(255,255,255,0.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;justify-content:center;">
+  <div style="text-align:center;background:#fff;padding:34px 44px;border-radius:16px;box-shadow:0 12px 44px rgba(0,0,0,0.18);">
+    <div class="fb-spinner"></div>
+    <div style="font-size:1.05rem;font-weight:700;color:var(--navy);margin-top:18px;">Sending feedback emails…</div>
+    <div id="sendingCount" style="font-size:0.85rem;color:var(--gray-500);margin-top:6px;"></div>
+    <div style="font-size:0.78rem;color:var(--gray-400);margin-top:12px;max-width:300px;line-height:1.5;">This can take a little while — sends are paced to stay within the email limit. Please don't close this tab.</div>
+  </div>
+</div>
+<style>
+.fb-spinner{width:52px;height:52px;margin:0 auto;border:5px solid #FFEDD5;border-top-color:var(--orange);border-radius:50%;animation:fbspin 0.9s linear infinite;}
+@keyframes fbspin{to{transform:rotate(360deg);}}
+</style>
+<script>
+function showSending(form){
+  var n = form.querySelectorAll('input.rowck:checked').length;
+  if(!n){ alert('Select at least one client.'); return false; }
+  var cnt = document.getElementById('sendingCount');
+  if(cnt) cnt.textContent = 'Creating links & emailing ' + n + ' client' + (n>1?'s':'') + '…';
+  var ov = document.getElementById('sendingOverlay');
+  if(ov) ov.style.display = 'flex';
+  return true;
+}
+</script>
 {% endblock %}
