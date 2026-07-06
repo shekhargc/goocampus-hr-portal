@@ -589,23 +589,59 @@ def admin_feedback_followup(form_id):
     conn.close()
 
     base = _base_url()
-    rows, done = [], 0
+    sent_rows, opened_rows = [], []
+    submitted_count = 0
     for iv in invites:
         submitted = (iv['status'] == 'submitted') or bool(iv['submitted_at'])
         if submitted:
-            done += 1
+            # Responders drop off the follow-up list entirely.
+            submitted_count += 1
+            continue
         link = f"{base}/feedback/{iv['token']}"
-        rows.append({
-            'name': iv['client_name'], 'reg': iv['registration_number'],
+        row = {
+            'invite_id': iv['id'], 'name': iv['client_name'], 'reg': iv['registration_number'],
             'mobile': iv['mobile'], 'email': iv['email'], 'status': iv['status'],
-            'submitted': submitted, 'submitted_at': iv['submitted_at'], 'link': link,
+            'opened': iv['status'] == 'opened', 'sent_at': iv['sent_at'], 'link': link,
             'wa_link': _wa_link(iv['mobile'], _feedback_message(iv['client_name'], link, form['title'])),
-        })
-    # Display order: pending first (still need a nudge), then by name.
-    rows.sort(key=lambda r: (1 if r['submitted'] else 0, (r['name'] or '').lower()))
-    return render_template('admin_feedback_followup.html', form=form, rows=rows,
-                           total=len(rows), done=done, pending=len(rows) - done,
+        }
+        (opened_rows if row['opened'] else sent_rows).append(row)
+    for lst in (sent_rows, opened_rows):
+        lst.sort(key=lambda r: (r['name'] or '').lower())
+    total = len(sent_rows) + len(opened_rows) + submitted_count
+    return render_template('admin_feedback_followup.html', form=form,
+                           sent_rows=sent_rows, opened_rows=opened_rows,
+                           total=total, submitted_count=submitted_count,
+                           sent_count=len(sent_rows), opened_count=len(opened_rows),
                            quarters=quarters, quarter=quarter, active_section='clients')
+
+
+@admin_required
+def admin_feedback_resend(invite_id):
+    """Re-send the feedback email for an existing invite (reuses the same
+    token/link — no new invite row, so counts and follow-up stay clean).
+    Only from the Follow-up page; the first send is done from the Send page."""
+    conn = get_db()
+    iv = conn.execute(
+        "SELECT fi.*, f.title AS form_title FROM feedback_invites fi "
+        "LEFT JOIN feedback_forms f ON f.id = fi.form_id WHERE fi.id = ?", (invite_id,)).fetchone()
+    if not iv:
+        conn.close()
+        flash('Invite not found.', 'error')
+        return redirect(url_for('admin_feedback'))
+    if iv['status'] == 'submitted':
+        fid = iv['form_id']
+        conn.close()
+        flash('That client already submitted — no need to re-send.', 'info')
+        return redirect(url_for('admin_feedback_followup', form_id=fid))
+    link = f"{_base_url()}/feedback/{iv['token']}"
+    ok = _send_feedback_email(iv['email'], iv['client_name'], link, iv['form_title'] or 'Feedback')
+    conn.execute("UPDATE feedback_invites SET sent_at = CURRENT_TIMESTAMP WHERE id = ?", (invite_id,))
+    conn.commit()
+    fid = iv['form_id']
+    conn.close()
+    flash('Re-sent the feedback email.' if ok else 'Could not send the email (check the address).',
+          'success' if ok else 'error')
+    return redirect(url_for('admin_feedback_followup', form_id=fid))
 
 
 # ─────────────────────────── ADMIN: edit form/questions ───────────────────────────
@@ -682,5 +718,7 @@ def register_routes(app):
                      view_func=admin_feedback_response, methods=['GET'])
     app.add_url_rule('/admin/feedback/followup/<int:form_id>', endpoint='admin_feedback_followup',
                      view_func=admin_feedback_followup, methods=['GET'])
+    app.add_url_rule('/admin/feedback/resend/<int:invite_id>', endpoint='admin_feedback_resend',
+                     view_func=admin_feedback_resend, methods=['POST'])
     app.add_url_rule('/admin/feedback/form/<int:form_id>/edit', endpoint='admin_feedback_form_edit',
                      view_func=admin_feedback_form_edit, methods=['GET', 'POST'])

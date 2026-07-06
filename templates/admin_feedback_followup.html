@@ -6,21 +6,21 @@
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin:10px 0 4px;">
     <div>
       <h1 style="margin:0;font-size:1.5rem;color:var(--navy);">{{ form.title }} — Follow-up</h1>
-      <p style="margin:4px 0 0;color:var(--gray-500);font-size:0.88rem;">Send the emails, wait a few days, then WhatsApp only those who haven't responded. Once a client submits, their button turns to <b style="color:#059669;">Submitted</b>.</p>
+      <p style="margin:4px 0 0;color:var(--gray-500);font-size:0.88rem;">Only clients who haven't responded appear here. Once a client submits, they drop off this list. <b style="color:#7c3aed;">Opened</b> means they saw it but didn't submit — worth a separate nudge.</p>
     </div>
-    <a href="{{ url_for('admin_feedback_send', form_id=form.id) }}" style="background:var(--orange);color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:0.85rem;">+ Send more</a>
+    <a href="{{ url_for('admin_feedback_send', form_id=form.id) }}" style="background:var(--orange);color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:0.85rem;">+ Send to new clients</a>
   </div>
 
   <!-- progress -->
-  <div style="display:flex;gap:22px;margin:16px 0 18px;">
+  <div style="display:flex;gap:22px;margin:16px 0 18px;flex-wrap:wrap;">
     <div><div style="font-size:1.6rem;font-weight:800;color:var(--navy);">{{ total }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Sent to</div></div>
-    <div><div style="font-size:1.6rem;font-weight:800;color:#059669;">{{ done }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Submitted</div></div>
-    <div><div style="font-size:1.6rem;font-weight:800;color:#d97706;">{{ pending }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Pending</div></div>
+    <div><div style="font-size:1.6rem;font-weight:800;color:#059669;">{{ submitted_count }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Responded</div></div>
+    <div><div style="font-size:1.6rem;font-weight:800;color:#d97706;">{{ sent_count + opened_count }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">To follow up</div></div>
   </div>
 
   <!-- quarter tabs -->
   {% if quarters %}
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
     {% for qd in quarters %}
     <a href="{{ url_for('admin_feedback_followup', form_id=form.id, quarter=qd.quarter_key) }}"
        style="text-decoration:none;padding:6px 14px;border-radius:999px;font-size:0.8rem;font-weight:600;{% if quarter == qd.quarter_key %}background:var(--navy);color:#fff;{% else %}background:#eef2f7;color:#475569;{% endif %}">{{ qd.quarter_label }}</a>
@@ -30,37 +30,58 @@
   </div>
   {% endif %}
 
+  <!-- status tabs: Sent (not opened) vs Opened (not submitted) -->
+  <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:2px solid var(--gray-200);">
+    <button type="button" id="tab-sent-btn" onclick="fbTab('sent')" style="background:none;border:none;border-bottom:2px solid var(--orange);margin-bottom:-2px;padding:8px 16px;font-size:0.85rem;font-weight:700;color:var(--navy);cursor:pointer;">Sent · not opened ({{ sent_count }})</button>
+    <button type="button" id="tab-opened-btn" onclick="fbTab('opened')" style="background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;padding:8px 16px;font-size:0.85rem;font-weight:700;color:var(--gray-400);cursor:pointer;">Opened · no response ({{ opened_count }})</button>
+  </div>
+
+  {% macro rowtable(rows, empty_msg) %}
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;">
     <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
       <thead><tr style="background:#f8fafc;text-align:left;color:var(--gray-500);">
-        <th style="padding:10px 12px;">Client</th><th style="padding:10px 12px;">Status</th>
-        <th style="padding:10px 12px;">Link</th><th style="padding:10px 12px;text-align:right;">Action</th>
+        <th style="padding:10px 12px;">Client</th><th style="padding:10px 12px;">Last sent</th>
+        <th style="padding:10px 12px;text-align:right;">Follow up</th>
       </tr></thead>
       <tbody>
       {% for r in rows %}
-      <tr style="border-top:1px solid #f1f5f9;{% if r.submitted %}background:#f6fef9;{% endif %}">
-        <td style="padding:10px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} · {{ r.mobile or 'no mobile' }}</div></td>
-        <td style="padding:10px 12px;">
-          {% if r.submitted %}<span style="color:#059669;font-weight:700;">&#10003; Submitted</span>{% if r.submitted_at %}<div style="font-size:0.7rem;color:var(--gray-400);">{{ r.submitted_at }}</div>{% endif %}
-          {% elif r.status == 'opened' %}<span style="color:#7c3aed;font-weight:600;">Opened</span>
-          {% else %}<span style="color:var(--gray-400);">Sent</span>{% endif %}
-        </td>
-        <td style="padding:10px 12px;">
-          <button type="button" onclick="navigator.clipboard.writeText('{{ r.link }}');this.textContent='Copied!';" style="background:#f1f5f9;color:#475569;border:none;padding:6px 12px;border-radius:6px;font-size:0.76rem;font-weight:600;cursor:pointer;">Copy link</button>
-        </td>
-        <td style="padding:10px 12px;text-align:right;">
-          {% if r.submitted %}
-            <span style="background:#dcfce7;color:#166534;padding:8px 14px;border-radius:7px;font-size:0.78rem;font-weight:700;display:inline-block;">&#10003; Submitted</span>
-          {% elif r.mobile %}
-            <a href="{{ r.wa_link }}" target="_blank" rel="noopener" style="background:#25D366;color:#fff;text-decoration:none;padding:8px 14px;border-radius:7px;font-size:0.78rem;font-weight:700;display:inline-block;">Send on WhatsApp</a>
-          {% else %}<span style="color:var(--gray-400);font-size:0.78rem;">no mobile</span>{% endif %}
+      <tr style="border-top:1px solid #f1f5f9;">
+        <td style="padding:10px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} · {{ r.mobile or 'no mobile' }} · {{ r.email or 'no email' }}</div></td>
+        <td style="padding:10px 12px;color:var(--gray-500);font-size:0.78rem;">{{ r.sent_at or '—' }}</td>
+        <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
+          <button type="button" onclick="navigator.clipboard.writeText('{{ r.link }}');this.textContent='Copied!';" style="background:#f1f5f9;color:#475569;border:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:600;cursor:pointer;">Copy link</button>
+          {% if r.email %}
+          <form method="POST" action="{{ url_for('admin_feedback_resend', invite_id=r.invite_id) }}" style="display:inline;">
+            <button type="submit" style="background:#e0e7ff;color:#3730a3;border:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;cursor:pointer;margin-left:4px;">Re-send email</button>
+          </form>
+          {% endif %}
+          {% if r.mobile %}
+          <a href="{{ r.wa_link }}" target="_blank" rel="noopener" style="background:#25D366;color:#fff;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;display:inline-block;margin-left:4px;">WhatsApp</a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
-      {% if not rows %}<tr><td colspan="4" style="padding:26px;text-align:center;color:var(--gray-400);">Nothing sent in this period yet.</td></tr>{% endif %}
+      {% if not rows %}<tr><td colspan="3" style="padding:26px;text-align:center;color:var(--gray-400);">{{ empty_msg }}</td></tr>{% endif %}
       </tbody>
     </table>
   </div>
-  <p style="font-size:0.72rem;color:var(--gray-400);margin-top:10px;">Tip: bookmark this page — reopen it after 2–3 days and WhatsApp only the ones still marked Pending. Reload to refresh who has submitted.</p>
+  {% endmacro %}
+
+  <div id="tab-sent">{{ rowtable(sent_rows, 'No un-opened invites — everyone here has at least opened it.') }}</div>
+  <div id="tab-opened" style="display:none;">{{ rowtable(opened_rows, 'Nobody has opened-without-submitting yet.') }}</div>
+
+  <p style="font-size:0.72rem;color:var(--gray-400);margin-top:10px;">Re-send uses the same link (no duplicate is created, counts stay accurate). Reload to refresh who has responded.</p>
 </div>
+<script>
+function fbTab(which){
+  var on = which === 'opened';
+  document.getElementById('tab-sent').style.display = on ? 'none' : '';
+  document.getElementById('tab-opened').style.display = on ? '' : 'none';
+  var sb = document.getElementById('tab-sent-btn'), ob = document.getElementById('tab-opened-btn');
+  sb.style.borderBottomColor = on ? 'transparent' : 'var(--orange)';
+  sb.style.color = on ? 'var(--gray-400)' : 'var(--navy)';
+  ob.style.borderBottomColor = on ? 'var(--orange)' : 'transparent';
+  ob.style.color = on ? 'var(--navy)' : 'var(--gray-400)';
+}
+</script>
 {% endblock %}
