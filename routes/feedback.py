@@ -71,6 +71,8 @@ def ensure_feedback_tables():
             question_id INTEGER, qtype TEXT, question_text TEXT, answer_value TEXT)""",
         "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS quarter_key TEXT",
         "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS quarter_label TEXT",
+        # Did the email actually send? 'sent' / 'failed' (NULL = unknown/legacy).
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS email_status TEXT",
         "CREATE INDEX IF NOT EXISTS idx_feedback_q_form ON feedback_questions(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_form ON feedback_invites(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_quarter ON feedback_invites(quarter_key)",
@@ -458,6 +460,14 @@ def admin_feedback_send_post():
         ok = _send_feedback_email(c['email'], name, link, form['title'])
         if ok:
             email_ok += 1
+        # Remember whether the email actually went, so Follow-up can flag failures.
+        try:
+            conn.execute("UPDATE feedback_invites SET email_status = ? WHERE token = ?",
+                         ('sent' if ok else 'failed', token))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         sent_rows.append({
             'name': name, 'reg': reg, 'mobile': c['mobile'], 'email': c['email'],
             'link': link, 'email_ok': ok,
@@ -576,7 +586,7 @@ def admin_feedback_followup(form_id):
     qfilter = None if quarter == 'all' else quarter
 
     q = ("SELECT DISTINCT ON (registration_number) id, token, client_name, registration_number, "
-         "mobile, email, status, submitted_at, sent_at FROM feedback_invites WHERE form_id = ?")
+         "mobile, email, status, submitted_at, sent_at, email_status FROM feedback_invites WHERE form_id = ?")
     params = [form_id]
     if qfilter:
         q += " AND quarter_key = ?"
@@ -602,16 +612,20 @@ def admin_feedback_followup(form_id):
             'invite_id': iv['id'], 'name': iv['client_name'], 'reg': iv['registration_number'],
             'mobile': iv['mobile'], 'email': iv['email'], 'status': iv['status'],
             'opened': iv['status'] == 'opened', 'sent_at': iv['sent_at'], 'link': link,
+            'email_status': iv['email_status'], 'failed': (iv['email_status'] == 'failed'),
             'wa_link': _wa_link(iv['mobile'], _feedback_message(iv['client_name'], link, form['title'])),
         }
         (opened_rows if row['opened'] else sent_rows).append(row)
+    # Failed-email rows first (they need a correction), then by name.
     for lst in (sent_rows, opened_rows):
-        lst.sort(key=lambda r: (r['name'] or '').lower())
+        lst.sort(key=lambda r: (0 if r['failed'] else 1, (r['name'] or '').lower()))
+    failed_count = sum(1 for r in sent_rows + opened_rows if r['failed'])
     total = len(sent_rows) + len(opened_rows) + submitted_count
     return render_template('admin_feedback_followup.html', form=form,
                            sent_rows=sent_rows, opened_rows=opened_rows,
                            total=total, submitted_count=submitted_count,
                            sent_count=len(sent_rows), opened_count=len(opened_rows),
+                           failed_count=failed_count,
                            quarters=quarters, quarter=quarter, active_section='clients')
 
 
@@ -633,13 +647,33 @@ def admin_feedback_resend(invite_id):
         conn.close()
         flash('That client already submitted — no need to re-send.', 'info')
         return redirect(url_for('admin_feedback_followup', form_id=fid))
-    link = f"{_base_url()}/feedback/{iv['token']}"
-    ok = _send_feedback_email(iv['email'], iv['client_name'], link, iv['form_title'] or 'Feedback')
-    conn.execute("UPDATE feedback_invites SET sent_at = CURRENT_TIMESTAMP WHERE id = ?", (invite_id,))
-    conn.commit()
     fid = iv['form_id']
+    # Optional inline email correction from Follow-up: fix a wrong/invalid address
+    # on the invite AND at the source (the client record), then re-send.
+    new_email = (request.form.get('email') or '').strip()
+    email_to_use = iv['email']
+    if new_email and new_email != (iv['email'] or ''):
+        try:
+            conn.execute("UPDATE feedback_invites SET email = ? WHERE id = ?", (new_email, invite_id))
+            conn.execute("UPDATE plab_clients SET email = ? WHERE registration_number = ? "
+                         "AND COALESCE(pathway,'plab') = ?",
+                         (new_email, iv['registration_number'], iv['pathway'] or 'plab'))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        email_to_use = new_email
+    if not email_to_use:
+        conn.close()
+        flash('No email on file — enter an email address, then re-send.', 'error')
+        return redirect(url_for('admin_feedback_followup', form_id=fid))
+    link = f"{_base_url()}/feedback/{iv['token']}"
+    ok = _send_feedback_email(email_to_use, iv['client_name'], link, iv['form_title'] or 'Feedback')
+    conn.execute("UPDATE feedback_invites SET sent_at = CURRENT_TIMESTAMP, email_status = ? WHERE id = ?",
+                 ('sent' if ok else 'failed', invite_id))
+    conn.commit()
     conn.close()
-    flash('Re-sent the feedback email.' if ok else 'Could not send the email (check the address).',
+    flash('Re-sent the feedback email.' if ok else 'Still could not send — double-check the email address.',
           'success' if ok else 'error')
     return redirect(url_for('admin_feedback_followup', form_id=fid))
 

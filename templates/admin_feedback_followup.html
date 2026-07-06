@@ -16,6 +16,7 @@
     <div><div style="font-size:1.6rem;font-weight:800;color:var(--navy);">{{ total }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Sent to</div></div>
     <div><div style="font-size:1.6rem;font-weight:800;color:#059669;">{{ submitted_count }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Responded</div></div>
     <div><div style="font-size:1.6rem;font-weight:800;color:#d97706;">{{ sent_count + opened_count }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">To follow up</div></div>
+    {% if failed_count %}<div><div style="font-size:1.6rem;font-weight:800;color:#dc2626;">{{ failed_count }}</div><div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;">Email failed</div></div>{% endif %}
   </div>
 
   <!-- quarter tabs -->
@@ -45,16 +46,19 @@
       </tr></thead>
       <tbody>
       {% for r in rows %}
-      <tr style="border-top:1px solid #f1f5f9;">
-        <td style="padding:10px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} · {{ r.mobile or 'no mobile' }} · {{ r.email or 'no email' }}</div></td>
+      <tr style="border-top:1px solid #f1f5f9;{% if r.failed %}background:#fef2f2;{% endif %}">
+        <td style="padding:10px 12px;">
+          <div style="font-weight:600;color:var(--navy);">{{ r.name }}{% if r.failed %} <span style="font-size:0.66rem;font-weight:700;color:#b91c1c;background:#fee2e2;padding:2px 7px;border-radius:999px;">✕ email failed</span>{% endif %}</div>
+          <div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} · {{ r.mobile or 'no mobile' }}</div>
+        </td>
         <td style="padding:10px 12px;color:var(--gray-500);font-size:0.78rem;">{{ r.sent_at or '—' }}</td>
         <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
           <button type="button" onclick="navigator.clipboard.writeText('{{ r.link }}');this.textContent='Copied!';" style="background:#f1f5f9;color:#475569;border:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:600;cursor:pointer;">Copy link</button>
-          {% if r.email %}
-          <form method="POST" action="{{ url_for('admin_feedback_resend', invite_id=r.invite_id) }}" style="display:inline;">
-            <button type="submit" style="background:#e0e7ff;color:#3730a3;border:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;cursor:pointer;margin-left:4px;">Re-send email</button>
+          <form method="POST" action="{{ url_for('admin_feedback_resend', invite_id=r.invite_id) }}" style="display:inline-flex;gap:4px;align-items:center;margin-left:4px;vertical-align:middle;">
+            <input type="email" name="email" value="{{ r.email or '' }}" placeholder="email address"
+                   style="padding:6px 8px;border:1px solid {% if r.failed %}#fca5a5{% else %}#d1d5db{% endif %};border-radius:6px;font-size:0.76rem;width:190px;box-sizing:border-box;" />
+            <button type="submit" style="background:{% if r.failed %}#dc2626{% else %}#e0e7ff{% endif %};color:{% if r.failed %}#fff{% else %}#3730a3{% endif %};border:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;cursor:pointer;">{% if r.failed %}Fix &amp; re-send{% else %}Re-send{% endif %}</button>
           </form>
-          {% endif %}
           {% if r.mobile %}
           <a href="{{ r.wa_link }}" target="_blank" rel="noopener" style="background:#25D366;color:#fff;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:0.76rem;font-weight:700;display:inline-block;margin-left:4px;">WhatsApp</a>
           {% endif %}
