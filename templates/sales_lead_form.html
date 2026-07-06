@@ -182,6 +182,57 @@
                 </div>
             </div>
 
+            {# ===== AMC Consulting + AMC 1 combined signup (shown only for AMC Consulting) ===== #}
+            <div id="amcTrainingToggleBox" style="display:none;margin-bottom:1.2rem;padding:1rem 1.2rem;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0.65rem;">
+                <label style="display:flex;align-items:center;gap:0.6rem;font-size:0.88rem;font-weight:600;color:#1E3A5F;cursor:pointer;">
+                    <input type="checkbox" name="include_training" id="includeTraining" onchange="toggleTraining()" style="width:18px;height:18px;">
+                    Also enrolling in <b>&nbsp;AMC MCQ (AMC 1 – Training)&nbsp;</b>? Collect the training fee here too.
+                </label>
+                <div id="amcTrainingSection" style="display:none;margin-top:1rem;padding-top:0.9rem;border-top:1px solid #BFDBFE;">
+                    <p class="slf-head" style="color:#1E40AF;margin-bottom:0.7rem;">Training (AMC 1) · package + installments — posts to the Training pathway (GCTRN)</p>
+                    <div class="slf-row3">
+                        <div>
+                            <label class="slf-lbl">Training Package (₹)</label>
+                            <input type="number" step="1" min="0" name="training_package" id="trPkg" oninput="updateTrFinal()" value="{{ '{:.0f}'.format(closure.training_package|float) if closure and closure.training_package else 0 }}" class="slf-inp" />
+                        </div>
+                        <div>
+                            <label class="slf-lbl">Discount (₹)</label>
+                            <input type="number" step="1" min="0" name="training_discount" id="trDisc" oninput="updateTrFinal()" value="{{ '{:.0f}'.format(closure.training_discount|float) if closure and closure.training_discount else 0 }}" class="slf-inp" />
+                        </div>
+                        <div>
+                            <label class="slf-lbl">Final (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                            <input type="number" step="1" min="0" name="training_final" id="trFinal" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
+                        </div>
+                    </div>
+                    <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Training Installments <span style="font-weight:400;color:var(--gray-500);">· enter the total received (incl. 18% GST)</span></p>
+                    <div id="trInstContainer">
+                    {% for i in range(1, 5) %}
+                    {% set _ta = closure['training_inst' ~ i ~ '_amount'] if closure else None %}
+                    <div class="tr-inst-row" data-inst="{{ i }}" style="margin-bottom:0.7rem;{% if i > 1 and not (_ta and _ta|float > 0) %}display:none;{% endif %}">
+                        <div style="font-size:0.72rem;font-weight:700;color:#1E40AF;margin-bottom:0.25rem;">{{ ['','1st','2nd','3rd','4th'][i] }} Installment</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.7rem;">
+                            <input type="number" step="1" min="0" name="training_inst{{ i }}_amount" placeholder="Total (incl GST)" value="{{ '{:.0f}'.format((_ta|float) * 1.18) if _ta else '' }}" oninput="updateTrInstHint(this)"
+                                   style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                            <input type="date" name="training_inst{{ i }}_date" value="{{ (closure['training_inst' ~ i ~ '_date']|string)[:10] if closure and closure['training_inst' ~ i ~ '_date'] else '' }}" oninput="updateTrInstStatus(this)"
+                                   style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                            <select name="training_inst{{ i }}_method" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
+                                <option value="">Method…</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Cash Deposit">Cash Deposit</option>
+                            </select>
+                            <select name="training_inst{{ i }}_status" data-touched="0" onchange="this.dataset.touched='1'" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
+                                <option value="Pending" selected>Pending</option>
+                                <option value="Received">Received</option>
+                            </select>
+                        </div>
+                        <div class="tr-inst-hint" style="font-size:0.7rem;color:var(--gray-500);margin-top:0.2rem;"></div>
+                    </div>
+                    {% endfor %}
+                    </div>
+                    <button type="button" id="addTrInstBtn" onclick="addTrInstallment()" style="background:white;color:#1E40AF;border:1px dashed #60A5FA;padding:0.5rem 0.9rem;border-radius:0.4rem;font-size:0.8rem;font-weight:600;cursor:pointer;">+ Add another training installment</button>
+                </div>
+            </div>
+
             <div style="margin-bottom:1.5rem;">
                 <label class="slf-lbl">Internal Notes <span style="font-weight:400;color:var(--gray-500);">(not shown to client)</span></label>
                 <textarea name="notes" rows="3" class="slf-inp" style="font-family:inherit;resize:vertical;">{{ lead.notes if lead else '' }}</textarea>
@@ -218,6 +269,7 @@
                 var po = productSel.options[productSel.selectedIndex];
                 prodDisp.textContent = (po && po.value) ? po.textContent : '—';
                 planDisp.textContent = planSel.value || '—';
+                if (window.syncTrainingToggle) window.syncTrainingToggle();
             }
             var svcBox  = document.getElementById('pkgServicesBox');
             var svcList = document.getElementById('pkgServicesList');
@@ -321,6 +373,68 @@
                 rows.forEach(function(r){ if (r.style.display === 'none') anyHidden = true; });
                 var b = document.getElementById('addInstBtn');
                 if (b && !anyHidden) b.style.display = 'none';
+            })();
+
+            // ── AMC Consulting + AMC 1 combined signup ──
+            window.syncTrainingToggle = function() {
+                var box = document.getElementById('amcTrainingToggleBox');
+                if (!box || !productSel) return;
+                var po = productSel.options[productSel.selectedIndex];
+                var isAmc = po && (po.textContent || '').trim().toLowerCase() === 'amc consulting';
+                box.style.display = isAmc ? 'block' : 'none';
+                if (!isAmc) {
+                    var cb = document.getElementById('includeTraining');
+                    if (cb) { cb.checked = false; toggleTraining(); }
+                }
+            };
+            window.toggleTraining = function() {
+                var cb = document.getElementById('includeTraining');
+                var sec = document.getElementById('amcTrainingSection');
+                if (sec) sec.style.display = (cb && cb.checked) ? 'block' : 'none';
+            };
+            window.updateTrFinal = function() {
+                var p = parseFloat((document.getElementById('trPkg') || {}).value) || 0;
+                var d = parseFloat((document.getElementById('trDisc') || {}).value) || 0;
+                var f = document.getElementById('trFinal'); if (f) f.value = Math.max(0, p - d).toFixed(0);
+            };
+            window.updateTrInstHint = function(inp) {
+                var row = inp.closest('.tr-inst-row'); if (!row) return;
+                var hint = row.querySelector('.tr-inst-hint'); if (!hint) return;
+                var total = parseFloat(inp.value) || 0;
+                if (total > 0) {
+                    var base = total / 1.18, gst = total - base;
+                    hint.textContent = 'Base ₹' + Math.round(base).toLocaleString('en-IN') +
+                                       ' + 18% GST ₹' + Math.round(gst).toLocaleString('en-IN') +
+                                       ' (of ₹' + Math.round(total).toLocaleString('en-IN') + ' incl. GST)';
+                } else { hint.textContent = ''; }
+            };
+            window.updateTrInstStatus = function(dateInp) {
+                var row = dateInp.closest('.tr-inst-row'); if (!row) return;
+                var sel = row.querySelector('select[name$="_status"]'); if (!sel) return;
+                if (sel.dataset.touched === '1') return;
+                if (!dateInp.value) return;
+                var today = new Date(); today.setHours(0,0,0,0);
+                var d = new Date(dateInp.value + 'T00:00:00');
+                sel.value = (d <= today) ? 'Received' : 'Pending';
+            };
+            window.addTrInstallment = function() {
+                var rows = document.querySelectorAll('#trInstContainer .tr-inst-row');
+                for (var i = 0; i < rows.length; i++) {
+                    if (rows[i].style.display === 'none') {
+                        rows[i].style.display = '';
+                        if (i === rows.length - 1) { var bb = document.getElementById('addTrInstBtn'); if (bb) bb.style.display = 'none'; }
+                        return;
+                    }
+                }
+                var b2 = document.getElementById('addTrInstBtn'); if (b2) b2.style.display = 'none';
+            };
+            (function(){
+                document.querySelectorAll('#trInstContainer .tr-inst-row input[name$="_amount"]').forEach(function(inp){ updateTrInstHint(inp); });
+                updateTrFinal();
+                syncTrainingToggle();
+                var cb = document.getElementById('includeTraining');
+                {% if closure and closure.include_training %}if (cb) cb.checked = true;{% endif %}
+                if (cb && cb.checked) toggleTraining();
             })();
         })();
         </script>
