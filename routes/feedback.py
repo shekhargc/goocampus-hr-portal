@@ -73,6 +73,9 @@ def ensure_feedback_tables():
         "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS quarter_label TEXT",
         # Did the email actually send? 'sent' / 'failed' (NULL = unknown/legacy).
         "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS email_status TEXT",
+        # When the team last clicked the WhatsApp 'Send' for this client (so the
+        # button turns 'sent' colour and stays that way on reload).
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS wa_sent_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS idx_feedback_q_form ON feedback_questions(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_form ON feedback_invites(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_quarter ON feedback_invites(quarter_key)",
@@ -599,7 +602,7 @@ def admin_feedback_followup(form_id):
     qfilter = None if quarter == 'all' else quarter
 
     q = ("SELECT DISTINCT ON (registration_number) id, token, client_name, registration_number, "
-         "mobile, email, status, submitted_at, sent_at, email_status FROM feedback_invites WHERE form_id = ?")
+         "mobile, email, status, submitted_at, sent_at, email_status, wa_sent_at FROM feedback_invites WHERE form_id = ?")
     params = [form_id]
     if qfilter:
         q += " AND quarter_key = ?"
@@ -627,6 +630,7 @@ def admin_feedback_followup(form_id):
             'opened': iv['status'] == 'opened', 'sent_at': iv['sent_at'],
             'days_ago': _days_ago(iv['sent_at']), 'link': link,
             'email_status': iv['email_status'], 'failed': (iv['email_status'] == 'failed'),
+            'wa_sent': bool(iv['wa_sent_at']),
             'wa_link': _wa_link(iv['mobile'], _feedback_message(iv['client_name'], link, form['title'])),
         }
         (opened_rows if row['opened'] else sent_rows).append(row)
@@ -759,6 +763,21 @@ def admin_feedback_form_edit(form_id):
                            active_section='clients')
 
 
+@admin_required
+def admin_feedback_wa_sent(invite_id):
+    """Mark that the team clicked 'Send on WhatsApp' for this invite, so the
+    button shows the 'sent' colour and stays that way on reload."""
+    conn = get_db()
+    try:
+        conn.execute("UPDATE feedback_invites SET wa_sent_at = CURRENT_TIMESTAMP WHERE id = ?", (invite_id,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    return ('', 204)
+
+
 def register_routes(app):
     ensure_feedback_tables()
     # Public (no login)
@@ -779,5 +798,7 @@ def register_routes(app):
                      view_func=admin_feedback_followup, methods=['GET'])
     app.add_url_rule('/admin/feedback/resend/<int:invite_id>', endpoint='admin_feedback_resend',
                      view_func=admin_feedback_resend, methods=['POST'])
+    app.add_url_rule('/admin/feedback/wa-sent/<int:invite_id>', endpoint='admin_feedback_wa_sent',
+                     view_func=admin_feedback_wa_sent, methods=['POST'])
     app.add_url_rule('/admin/feedback/form/<int:form_id>/edit', endpoint='admin_feedback_form_edit',
                      view_func=admin_feedback_form_edit, methods=['GET', 'POST'])

@@ -29880,6 +29880,71 @@ ensure_leave_cancel_request_columns()
 ensure_package_tables()
 ensure_attendance_table()
 
+
+def seed_pathway_product_plans():
+    """Idempotent sync of the founder's Pathway -> Product -> Plan Type sheet into
+    lookup_options (the plan-type cascade) + plan_packages. Links every plan type
+    to its product + pathway and adds the new ones, so sales dropdowns are complete
+    and correct. NEVER touches client records or existing package amounts."""
+    #   (pathway slug used by clients/reg-numbers, product name, [plan types])
+    mapping = [
+        ('australia',  'AUS PGCP',           ['Australia PGCP 2023', 'Australia PGCP 2024',
+                                              'Australia PGCP 2025', 'Australia PGCP 2026']),
+        ('portfolio',  'Portfolio Services', ['Portfolio Plus']),
+        ('consulting', 'AMC Consulting',     ['Australia CSS 2024', 'Australia CSS 2025',
+                                              'Australia CSS 2026', 'Australia CSS 2026 (V2)']),
+        ('consulting', 'UK Consulting',      ['UK CSS 2024', 'UK CSS 2025', 'UK CSS 2026']),
+        ('consulting', 'USA Consulting',     ['USA CSS 2025', 'USA CSS 2026']),
+        ('consulting', 'UAE Consulting',     ['UAE CSS 2025']),
+        ('training',   'AMC MCQ',            ['AMC 1']),
+        ('training',   'AMC Clinical',       ['AMC 2']),
+        ('uae',        'UAE PGCP',           ['GULF PGCP 2025', 'UAE PGCP 2025', 'UAE PGCP 2026']),
+        ('plab',       'UK PGCP',            ['2022 Integrated Consulting', '2022 Integrated Consulting - Dual',
+                                              '2022 Premium Consulting', 'Full Spon', 'Integrated Consulting',
+                                              'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2025']),
+    ]
+    try:
+        conn = get_db()
+    except Exception:
+        return
+    linked = added = 0
+    try:
+        for pathway, product, plans in mapping:
+            prod = conn.execute("SELECT id FROM products_services WHERE name = ? LIMIT 1", (product,)).fetchone()
+            pid = prod['id'] if prod else None
+            for i, pt in enumerate(plans):
+                try:
+                    ex = conn.execute("SELECT id FROM lookup_options WHERE category = 'plan_type' AND value = ? LIMIT 1", (pt,)).fetchone()
+                    if ex:
+                        conn.execute("UPDATE lookup_options SET product_name = ?, pathway = ?, is_active = TRUE "
+                                     "WHERE category = 'plan_type' AND value = ?", (product, pathway, pt))
+                        linked += 1
+                    else:
+                        conn.execute("INSERT INTO lookup_options (category, label, value, product_name, pathway, is_active, sort_order) "
+                                     "VALUES ('plan_type', ?, ?, ?, ?, TRUE, ?)", (pt, pt, product, pathway, i))
+                        added += 1
+                    conn.commit()
+                except Exception:
+                    try: conn.rollback()
+                    except Exception: pass
+                if pid:
+                    try:
+                        pp = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?", (pid, pt)).fetchone()
+                        if not pp:
+                            conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, is_active, sort_order) "
+                                         "VALUES (?, ?, 0, 1, ?)", (pid, pt, i))
+                            conn.commit()
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+        logging.info(f"seed_pathway_product_plans: linked {linked}, added {added} plan-type mappings")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_pathway_product_plans()
+
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
 # ═══════════════════════════════════════════════════════════════
