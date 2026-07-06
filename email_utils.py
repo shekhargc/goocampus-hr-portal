@@ -76,27 +76,38 @@ def send_email(
         logger.error("Cannot send email: recipient list is empty")
         return False
 
-    try:
-        params = {
-            "from": from_address,
-            "to": to_list,
-            "subject": subject,
-            "html": html_body,
-        }
-        if cc_list:
-            params["cc"] = cc_list
+    import time
+    params = {
+        "from": from_address,
+        "to": to_list,
+        "subject": subject,
+        "html": html_body,
+    }
+    if cc_list:
+        params["cc"] = cc_list
 
-        result = resend.Emails.send(params)
+    # Resend caps sending at 2 requests/second, so a fast batch loop loses the
+    # overflow to HTTP 429. Back off and retry on rate-limit errors so no email
+    # is dropped just because it landed in a busy moment.
+    last_err = None
+    for attempt in range(4):
+        try:
+            result = resend.Emails.send(params)
+            logger.info(
+                f"Email sent successfully via Resend to {len(to_list)} recipient(s). "
+                f"Subject: {subject}, ID: {result.get('id', 'N/A')}"
+            )
+            return True
+        except Exception as e:
+            last_err = e
+            msg = str(e).lower()
+            if attempt < 3 and ('too many requests' in msg or 'rate limit' in msg or '429' in msg):
+                time.sleep(0.7 * (attempt + 1))
+                continue
+            break
 
-        logger.info(
-            f"Email sent successfully via Resend to {len(to_list)} recipient(s). "
-            f"Subject: {subject}, ID: {result.get('id', 'N/A')}"
-        )
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to send email via Resend: {str(e)}")
-        return False
+    logger.error(f"Failed to send email via Resend: {str(last_err)}")
+    return False
 
 
 # ---------------------------------------------------------------------------
