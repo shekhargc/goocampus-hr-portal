@@ -134,26 +134,40 @@
                     </div>
                 </div>
 
-                <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments <span style="font-weight:400;color:var(--gray-500);">· enter the base amount; 18% GST is added on top for the client</span></p>
+                <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments <span style="font-weight:400;color:var(--gray-500);">· enter the total received (incl. 18% GST); the base + GST split is shown under each row</span></p>
                 {% set _ords = ['', '1st', '2nd', '3rd', '4th'] %}
                 <div id="instContainer">
                 {% for i in range(1, 5) %}
                 {% set _amt = closure['inst' ~ i ~ '_amount'] if closure else None %}
                 {% set _dt  = closure['inst' ~ i ~ '_date']   if closure else None %}
                 {% set _nt  = closure['inst' ~ i ~ '_note']   if closure else None %}
+                {% set _mt  = closure['inst' ~ i ~ '_method']  if closure else None %}
+                {% set _st  = closure['inst' ~ i ~ '_status']  if closure else None %}
                 {% set _has = (_amt and _amt|float > 0) or _dt %}
                 {% set _show = (i == 1) or _has %}
-                <div class="inst-row" data-inst="{{ i }}" style="margin-bottom:0.55rem;{% if not _show %}display:none;{% endif %}">
+                <div class="inst-row" data-inst="{{ i }}" style="margin-bottom:0.7rem;{% if not _show %}display:none;{% endif %}">
                     <div style="font-size:0.72rem;font-weight:700;color:#9A3412;margin-bottom:0.25rem;">{{ _ords[i] }} Installment</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:0.7rem;">
-                        <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Base amount" value="{{ '{:.0f}'.format(_amt|float) if _amt else 0 }}"
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.7rem;">
+                        <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Total (incl GST)" value="{{ '{:.0f}'.format((_amt|float) * 1.18) if _amt else '' }}"
                                oninput="updateInstHint(this)"
                                style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
                         <input type="date" name="inst{{ i }}_date" value="{{ (_dt|string)[:10] if _dt else '' }}"
+                               oninput="updateInstStatus(this)"
                                style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
-                        <input type="text" name="inst{{ i }}_note" placeholder="Note (optional)" value="{{ _nt or '' }}"
-                               style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                        <select name="inst{{ i }}_method"
+                               style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
+                            <option value="">Method…</option>
+                            <option value="Bank Transfer" {% if _mt == 'Bank Transfer' %}selected{% endif %}>Bank Transfer</option>
+                            <option value="Cash Deposit" {% if _mt == 'Cash Deposit' %}selected{% endif %}>Cash Deposit</option>
+                        </select>
+                        <select name="inst{{ i }}_status" data-touched="{{ '1' if _st else '0' }}" onchange="this.dataset.touched='1'"
+                               style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
+                            <option value="Pending" {% if _st == 'Pending' or not _st %}selected{% endif %}>Pending</option>
+                            <option value="Received" {% if _st == 'Received' %}selected{% endif %}>Received</option>
+                        </select>
                     </div>
+                    <input type="text" name="inst{{ i }}_note" placeholder="Note (optional)" value="{{ _nt or '' }}"
+                           style="margin-top:0.4rem;width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
                     <div class="inst-hint" style="font-size:0.7rem;color:var(--gray-500);margin-top:0.2rem;"></div>
                 </div>
                 {% endfor %}
@@ -264,12 +278,24 @@
             window.updateInstHint = function(inp) {
                 var row = inp.closest('.inst-row'); if (!row) return;
                 var hint = row.querySelector('.inst-hint'); if (!hint) return;
-                var base = parseFloat(inp.value) || 0;
-                if (base > 0) {
-                    var gst = Math.round(base * 0.18);
-                    hint.textContent = '+ 18% GST ₹' + gst.toLocaleString('en-IN') +
-                                       ' = Total ₹' + (base + gst).toLocaleString('en-IN');
+                var total = parseFloat(inp.value) || 0;
+                if (total > 0) {
+                    var base = total / 1.18;
+                    var gst = total - base;
+                    hint.textContent = 'Base ₹' + Math.round(base).toLocaleString('en-IN') +
+                                       ' + 18% GST ₹' + Math.round(gst).toLocaleString('en-IN') +
+                                       ' (of ₹' + Math.round(total).toLocaleString('en-IN') + ' incl. GST)';
                 } else { hint.textContent = ''; }
+            };
+            // Auto-set Received/Pending from the date, unless the user picked one.
+            window.updateInstStatus = function(dateInp) {
+                var row = dateInp.closest('.inst-row'); if (!row) return;
+                var sel = row.querySelector('select[name$="_status"]'); if (!sel) return;
+                if (sel.dataset.touched === '1') return;
+                if (!dateInp.value) return;
+                var today = new Date(); today.setHours(0,0,0,0);
+                var d = new Date(dateInp.value + 'T00:00:00');
+                sel.value = (d <= today) ? 'Received' : 'Pending';
             };
             window.addInstallment = function() {
                 var rows = document.querySelectorAll('#instContainer .inst-row');

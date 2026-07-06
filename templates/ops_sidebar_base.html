@@ -411,6 +411,16 @@
                 <span class="ops-nav-text">Ops Verification</span>
             </a>
             {% endif %}
+            {% if session.is_admin %}
+            <a href="/operations/payment-approvals" class="ops-nav-item {% if active_ops_page == 'payment-approvals' %}active{% endif %}" data-tooltip="Payment Approvals — received installments awaiting sign-off">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span>
+                <span class="ops-nav-text">Payment Approvals</span>
+            </a>
+            <a href="/operations/payment-followup" class="ops-nav-item {% if active_ops_page == 'payment-followup' %}active{% endif %}" data-tooltip="Payment Follow-up — pending installments to chase">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+                <span class="ops-nav-text">Payment Follow-up</span>
+            </a>
+            {% endif %}
             {% if active_pathway == 'australia' %}
             {# ─── AUSTRALIA PATHWAY SIDEBAR (per-item gated via can_access) ─── #}
             <!-- Overview -->

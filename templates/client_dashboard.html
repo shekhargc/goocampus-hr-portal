@@ -584,31 +584,17 @@
 
         <!-- Upload New Document -->
         <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
-            <h6 style="font-size:0.88rem;font-weight:700;color:#1f2937;margin:0 0 12px 0;">Upload Document</h6>
+            <h6 style="font-size:0.88rem;font-weight:700;color:#1f2937;margin:0 0 12px 0;">Upload Photograph</h6>
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-                <select id="clientDocType" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.82rem;flex:1;min-width:180px;">
-                    <optgroup label="Personal">
-                    {% for dt in plab_doc_types.get('personal', []) %}<option value="{{ dt }}" data-cat="personal">{{ dt }}</option>{% endfor %}
-                    </optgroup>
-                    <optgroup label="Academic">
-                    {% for dt in plab_doc_types.get('academic', []) %}<option value="{{ dt }}" data-cat="academic">{{ dt }}</option>{% endfor %}
-                    </optgroup>
+                <!-- Client portal upload is restricted to a single Photograph. Hidden
+                     single-option select keeps uploadClientDoc() working unchanged. -->
+                <select id="clientDocType" style="display:none;">
+                    <option value="Photograph" data-cat="personal">Photograph</option>
                 </select>
-                <input type="file" id="clientDocFile" accept=".pdf,.jpg,.jpeg,.png" style="font-size:0.8rem;flex:1;min-width:160px;" />
+                <span style="font-size:0.82rem;color:#374151;font-weight:600;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">Photograph</span>
+                <input type="file" id="clientDocFile" accept=".jpg,.jpeg,.png,.pdf" style="font-size:0.8rem;flex:1;min-width:160px;" />
                 <button onclick="uploadClientDoc()" style="background:#f97316;color:white;border:none;padding:6px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap;">Upload</button>
             </div>
-            {% if plab_documents %}
-            {% set uploaded_types = plab_documents|map(attribute='doc_type')|list %}
-            {% set all_required = plab_doc_types.get('personal', []) + plab_doc_types.get('academic', []) %}
-            {% set missing = [] %}
-            {% for dt in all_required %}{% if dt not in uploaded_types %}{% if missing.append(dt) %}{% endif %}{% endif %}{% endfor %}
-            {% if missing %}
-            <div style="margin-top:12px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
-                <span style="font-size:0.75rem;font-weight:600;color:#9a3412;">Missing: </span>
-                {% for m in missing %}<span style="font-size:0.72rem;color:#9a3412;">{{ m }}{% if not loop.last %}, {% endif %}</span>{% endfor %}
-            </div>
-            {% endif %}
-            {% endif %}
         </div>
         {% endif %}
     </div>
