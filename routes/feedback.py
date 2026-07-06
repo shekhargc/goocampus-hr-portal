@@ -199,10 +199,12 @@ def _metrics(conn, form_id=None, quarter_key=None):
     if quarter_key:
         iw.append("quarter_key = ?"); ip.append(quarter_key)
     iwsql = (" WHERE " + " AND ".join(iw)) if iw else ""
+    # Count DISTINCT clients, not raw invite rows — a client re-sent the form
+    # (or historical duplicate invites) must not inflate the "sent" total.
     st = conn.execute(
-        "SELECT COUNT(*) AS sent, "
-        "SUM(CASE WHEN status='submitted' THEN 1 ELSE 0 END) AS submitted, "
-        "SUM(CASE WHEN status='opened' THEN 1 ELSE 0 END) AS opened "
+        "SELECT COUNT(DISTINCT registration_number) AS sent, "
+        "COUNT(DISTINCT CASE WHEN status='submitted' THEN registration_number END) AS submitted, "
+        "COUNT(DISTINCT CASE WHEN status='opened' THEN registration_number END) AS opened "
         "FROM feedback_invites" + iwsql, ip).fetchone()
     return {'avg_star': avg_star, 'csat': csat, 'nps': nps,
             'star_n': len(stars), 'nps_n': len(scales),
@@ -419,11 +421,21 @@ def admin_feedback_send_post():
     qkey, qlabel = _quarter_for(datetime.now())
     sent_rows = []
     email_ok = 0
+    skipped = 0
     for reg in reg_numbers:
         c = conn.execute(
             "SELECT * FROM plab_clients WHERE registration_number = ? AND COALESCE(pathway,'plab') = ? LIMIT 1",
             (reg, form['pathway'])).fetchone()
         if not c:
+            continue
+        # De-dup: never re-send to a client who already submitted, and don't
+        # create a second invite for the same client within the same quarter.
+        dup = conn.execute(
+            "SELECT 1 FROM feedback_invites WHERE form_id = ? AND registration_number = ? "
+            "AND (status = 'submitted' OR quarter_key = ?) LIMIT 1",
+            (form['id'], reg, qkey)).fetchone()
+        if dup:
+            skipped += 1
             continue
         name = ((c['prefix'] or '') + ' ' + (c['first_name'] or '') + ' ' + (c['last_name'] or '')).strip()
         token = uuid.uuid4().hex
@@ -452,8 +464,10 @@ def admin_feedback_send_post():
             'wa_link': _wa_link(c['mobile'], _feedback_message(name, link, form['title'])),
         })
     conn.close()
-    flash(f"Created {len(sent_rows)} feedback link(s); {email_ok} email(s) sent. "
-          f"Use the WhatsApp buttons below to send those too.", 'success')
+    msg = f"Created {len(sent_rows)} feedback link(s); {email_ok} email(s) sent."
+    if skipped:
+        msg += f" Skipped {skipped} already sent this quarter / already submitted."
+    flash(msg + " Use the WhatsApp buttons below to send those too.", 'success')
     return render_template('admin_feedback_sent.html', form=form, rows=sent_rows,
                            active_section='clients')
 
@@ -561,14 +575,16 @@ def admin_feedback_followup(form_id):
         quarter = quarters[0]['quarter_key'] if quarters else 'all'
     qfilter = None if quarter == 'all' else quarter
 
-    q = ("SELECT id, token, client_name, registration_number, mobile, email, "
-         "status, submitted_at, sent_at FROM feedback_invites WHERE form_id = ?")
+    q = ("SELECT DISTINCT ON (registration_number) id, token, client_name, registration_number, "
+         "mobile, email, status, submitted_at, sent_at FROM feedback_invites WHERE form_id = ?")
     params = [form_id]
     if qfilter:
         q += " AND quarter_key = ?"
         params.append(qfilter)
-    # Pending (not submitted) first, so the team sees who still needs a nudge.
-    q += " ORDER BY CASE WHEN status = 'submitted' THEN 1 ELSE 0 END, client_name"
+    # One row per client (collapse duplicate sends): prefer a submitted invite,
+    # else the most recent. DISTINCT ON requires registration_number first.
+    q += (" ORDER BY registration_number, "
+          "CASE WHEN status = 'submitted' THEN 0 ELSE 1 END, sent_at DESC")
     invites = conn.execute(q, params).fetchall()
     conn.close()
 
@@ -585,6 +601,8 @@ def admin_feedback_followup(form_id):
             'submitted': submitted, 'submitted_at': iv['submitted_at'], 'link': link,
             'wa_link': _wa_link(iv['mobile'], _feedback_message(iv['client_name'], link, form['title'])),
         })
+    # Display order: pending first (still need a nudge), then by name.
+    rows.sort(key=lambda r: (1 if r['submitted'] else 0, (r['name'] or '').lower()))
     return render_template('admin_feedback_followup.html', form=form, rows=rows,
                            total=len(rows), done=done, pending=len(rows) - done,
                            quarters=quarters, quarter=quarter, active_section='clients')
