@@ -74,7 +74,12 @@
                     </td>
                     <td style="padding:0.7rem 0.6rem;">
                         <div style="display:flex;align-items:center;gap:0.5rem;">
-                            <img src="{{ l.photo_src }}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                            {% if l.photo_src %}
+                            <img src="{{ l.photo_src }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                            <span style="display:none;width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;flex:0 0 auto;">{{ (l.owner_name or '?')[0]|upper }}</span>
+                            {% else %}
+                            <span style="display:flex;width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;flex:0 0 auto;">{{ (l.owner_name or '?')[0]|upper }}</span>
+                            {% endif %}
                             <span style="color:var(--navy);font-weight:600;font-size:0.84rem;">{{ l.owner_name or '—' }}</span>
                         </div>
                     </td>
