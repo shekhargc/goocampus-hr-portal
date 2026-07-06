@@ -3011,7 +3011,7 @@ def admin_client_detail(reg_id):
     sales_config = conn.execute('''
         SELECT * FROM client_form_configs
         WHERE product_id = ? AND role = 'sales' AND is_visible = 1
-          AND field_name NOT LIKE 'inst%'
+          AND field_name NOT LIKE 'inst%%'
         ORDER BY step_number, display_order
     ''', (reg['product_id'],)).fetchall()
     # Ops-section fields are config-driven too (role='ops'); ops has its own
@@ -3057,7 +3057,7 @@ def admin_client_sales_complete(reg_id):
                       'discount_allowed', 'final_package', 'additional_notes'}
     sales_cfg = conn.execute(
         "SELECT field_name, field_type FROM client_form_configs WHERE product_id = ? "
-        "AND role = 'sales' AND is_visible = 1 AND field_name NOT LIKE 'inst%'",
+        "AND role = 'sales' AND is_visible = 1 AND field_name NOT LIKE 'inst%%'",
         (reg['product_id'],)).fetchall()
     dyn = {}
     for f in sales_cfg:
