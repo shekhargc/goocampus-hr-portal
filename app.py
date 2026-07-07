@@ -30094,6 +30094,45 @@ def seed_pathway_product_plans():
 
 seed_pathway_product_plans()
 
+
+def seed_academic_field_order():
+    """Order the Step-2 (Academic Details) fields to match the guided cascade:
+    IMG/FMG -> college -> MBBS -> internship -> gap -> working -> speciality.
+    Idempotent — re-runs each boot, only touches these known academic fields.
+    'country' is disambiguated to step 2 (the FMG country of study), so the
+    step-1 personal 'country' field is left untouched."""
+    order = ['img_fmg', 'img_medical_college', 'fmg_medical_college', 'country',
+             'mbbs_status', 'mbbs_start_date', 'mbbs_end_date',
+             'internship_status', 'internship_hospital', 'internship_location',
+             'internship_start_date', 'internship_end_date',
+             'internship_hospital_2', 'internship_location_2',
+             'internship_gap', 'gap_in_months', 'gap_reason',
+             'working_status', 'working_hospital_name',
+             'speciality_interest_1', 'speciality_interest_2', 'additional_info']
+    conn = get_db()
+    try:
+        for i, fn in enumerate(order):
+            try:
+                if fn == 'country':
+                    conn.execute("UPDATE client_form_configs SET display_order = ? "
+                                 "WHERE field_name = ? AND role = 'client' AND step_number = 2",
+                                 (i * 10, fn))
+                else:
+                    conn.execute("UPDATE client_form_configs SET display_order = ? "
+                                 "WHERE field_name = ? AND role = 'client'", (i * 10, fn))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_academic_field_order {fn}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        logging.info("seed_academic_field_order: applied academic step-2 ordering")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_academic_field_order()
+
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
 # ═══════════════════════════════════════════════════════════════

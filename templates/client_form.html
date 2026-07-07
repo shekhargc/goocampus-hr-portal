@@ -457,7 +457,7 @@
 {# ── Dynamic field renderer (config-driven) ── #}
 {% macro render_field(f, value) %}
     {% set ro = readonly|default(false) %}
-    <div class="form-group full-width">
+    <div class="form-group full-width" data-fname="{{ f.field_name }}">
         <label>{{ f.field_label }}{% if f.is_required %} <span class="req">*</span>{% endif %}</label>
         {% if f.field_name in ['mobile', 'whatsapp', 'whatsapp2', 'father_phone', 'mother_phone'] %}
             {# Phone: country-code dropdown (shows country name) + separate number.
@@ -1190,6 +1190,95 @@ function initPhoneFields(){
   });
 }
 document.addEventListener('DOMContentLoaded', initPhoneFields);
+
+// ── Academic Details: progressive disclosure (each answer opens the next) ──
+function initAcademicCascade(){
+  var step2 = document.getElementById('step-2');
+  if(!step2) return;
+  var isRO = !!step2.querySelector('select[disabled], input[disabled], textarea[disabled]');
+
+  function grp(name){ return step2.querySelector('.form-group[data-fname="'+name+'"]'); }
+  function ctrl(name){ var g = grp(name); return g ? g.querySelector('select,input,textarea') : null; }
+  function val(name){ var c = ctrl(name); return c ? (c.value||'').trim() : ''; }
+
+  var MBBS_IMG = ['1st Year','2nd Year','3rd Year','4th Year/Final Year','Completed'];
+  var MBBS_FMG = ['1st Year','2nd Year','3rd Year','4th Year','5th Year','6th Year','Completed'];
+  var INTERN = ['Not Started','Started','Completed'];
+  var YESNO = ['No','Yes'];
+  var IMGFMG = ['IMG','FMG'];
+
+  function setOptions(sel, opts){
+    if(!sel || sel.tagName!=='SELECT') return;
+    var cur = sel.value;
+    var html = '<option value="">Select…</option>';
+    opts.forEach(function(o){ html += '<option value="'+o+'">'+o+'</option>'; });
+    sel.innerHTML = html;
+    if(cur && opts.indexOf(cur)>=0) sel.value = cur;
+  }
+  // Normalise the driver dropdowns so the cascade triggers always match exactly
+  var cImgFmg = ctrl('img_fmg'); setOptions(cImgFmg, IMGFMG);
+  var cIntern = ctrl('internship_status'); setOptions(cIntern, INTERN);
+  var cGap = ctrl('internship_gap'); setOptions(cGap, YESNO);
+  var cWork = ctrl('working_status'); setOptions(cWork, YESNO);
+  function rebuildMbbs(){ setOptions(ctrl('mbbs_status'), val('img_fmg')==='FMG' ? MBBS_FMG : MBBS_IMG); }
+  rebuildMbbs();
+
+  function show(name, on){
+    var g = grp(name); if(!g) return;
+    g.style.display = on ? '' : 'none';
+    var c = g.querySelector('select,input,textarea');
+    if(c){
+      if(!on){ if(c.hasAttribute('required')){ c.setAttribute('data-was-req','1'); c.removeAttribute('required'); } }
+      else if(c.getAttribute('data-was-req')==='1'){ c.setAttribute('required','required'); }
+    }
+  }
+
+  // "Add another hospital" — hospital 2 stays hidden until clicked (or if already filled)
+  var hospital2Open = false;
+  var h2c = ctrl('internship_hospital_2'), l2c = ctrl('internship_location_2');
+  if((h2c && h2c.value) || (l2c && l2c.value)) hospital2Open = true;
+  var addBtn = null;
+  if(!isRO && grp('internship_hospital_2')){
+    addBtn = document.createElement('button');
+    addBtn.type='button'; addBtn.textContent='+ Add another hospital';
+    addBtn.className='btn btn-outline';
+    addBtn.style.cssText='margin:2px 0 10px;font-size:0.85rem;padding:6px 12px;';
+    addBtn.addEventListener('click', function(){ hospital2Open = true; recompute(); });
+    var anchor = grp('internship_end_date') || grp('internship_location') || grp('internship_hospital');
+    if(anchor) anchor.parentNode.insertBefore(addBtn, anchor.nextSibling);
+  }
+
+  function recompute(){
+    var iv = val('img_fmg'), mv = val('mbbs_status'), sv = val('internship_status'),
+        gv = val('internship_gap'), wv = val('working_status');
+    show('img_medical_college', iv==='IMG');
+    show('fmg_medical_college', iv==='FMG');
+    show('country', iv==='FMG');
+    var hasQ = (iv==='IMG' || iv==='FMG');
+    show('mbbs_status', hasQ); show('mbbs_start_date', hasQ); show('mbbs_end_date', hasQ);
+    var mbbsDone = (mv==='Completed');
+    show('internship_status', mbbsDone);
+    var internOn = mbbsDone && (sv==='Started' || sv==='Completed');
+    show('internship_hospital', internOn); show('internship_location', internOn);
+    show('internship_start_date', internOn); show('internship_end_date', internOn);
+    if(addBtn) addBtn.style.display = (internOn && !hospital2Open) ? '' : 'none';
+    show('internship_hospital_2', internOn && hospital2Open);
+    show('internship_location_2', internOn && hospital2Open);
+    var internDone = mbbsDone && (sv==='Completed');
+    show('internship_gap', internDone);
+    show('gap_in_months', internDone && gv==='Yes');
+    show('gap_reason', internDone && gv==='Yes');
+    show('working_status', internDone);
+    show('working_hospital_name', internDone && wv==='Yes');
+  }
+
+  [cImgFmg, ctrl('mbbs_status'), cIntern, cGap, cWork].forEach(function(c){
+    if(c) c.addEventListener('change', function(){ if(c===cImgFmg) rebuildMbbs(); recompute(); });
+  });
+  recompute();
+}
+if(document.readyState !== 'loading') initAcademicCascade();
+else document.addEventListener('DOMContentLoaded', initAcademicCascade);
 </script>
 
 </body>
