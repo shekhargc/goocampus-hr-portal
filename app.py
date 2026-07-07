@@ -939,6 +939,27 @@ def partner_profile_cities():
     return jsonify([c['name'] for c in cities])
 
 
+@app.route('/client/api/cities')
+def client_api_cities():
+    """Cities for a state (state->city cascade on the client registration form).
+    Public like the partner variant — city names aren't sensitive and the form
+    is filled from an invite link before the client has a session."""
+    state = (request.args.get('state') or '').strip()
+    if not state:
+        return jsonify([])
+    conn = get_db()
+    try:
+        state_row = conn.execute('SELECT id FROM states WHERE name = ?', (state,)).fetchone()
+        if not state_row:
+            return jsonify([])
+        cities = conn.execute(
+            'SELECT name FROM cities WHERE state_id = ? ORDER BY name', (state_row['id'],)
+        ).fetchall()
+        return jsonify([c['name'] for c in cities])
+    finally:
+        conn.close()
+
+
 # ── Partner: College Portal ──
 
 

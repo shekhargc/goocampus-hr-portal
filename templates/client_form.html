@@ -460,12 +460,15 @@
     <div class="form-group full-width">
         <label>{{ f.field_label }}{% if f.is_required %} <span class="req">*</span>{% endif %}</label>
         {% if f.field_type == 'select' %}
-            <select name="{{ f.field_name }}"{% if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
+            <select name="{{ f.field_name }}"{% if f.field_name == 'state' %} id="state-select" onchange="loadCities()"{% elif f.field_name == 'city' %} id="city-select" data-current="{{ value or '' }}"{% endif %}{% if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
                 <option value="">Select…</option>
                 {% if f.field_name == 'state' or f.field_options == 'db:state' %}
                     {% for s in states %}
                     <option value="{{ s.state_name }}"{% if value == s.state_name %} selected{% endif %}>{{ s.state_name }}</option>
                     {% endfor %}
+                {% elif f.field_name == 'city' or f.field_options == 'db:cities' %}
+                    {# City list is loaded by JS (loadCities) based on the selected state. #}
+                    {% if value %}<option value="{{ value }}" selected>{{ value }}</option>{% endif %}
                 {% elif f.field_options and f.field_options.startswith('db:') %}
                     {% for opt in lookup_options.get(f.field_options[3:], []) %}
                     <option value="{{ opt }}"{% if value == opt %} selected{% endif %}>{{ opt }}</option>
@@ -1061,6 +1064,34 @@ function toggleImgFmg(val) {
 (function(){
     var sel = document.querySelector('select[name="img_fmg"]');
     if(sel && sel.value) toggleImgFmg(sel.value);
+})();
+
+// State -> City cascade. The city dropdown is filled from /client/api/cities
+// whenever a state is picked (and once on load, to restore a saved city).
+function loadCities(){
+    var st = document.getElementById('state-select');
+    var city = document.getElementById('city-select');
+    if(!st || !city) return;
+    var current = city.getAttribute('data-current') || '';
+    if(!st.value){
+        city.innerHTML = '<option value="">Select a state first…</option>';
+        return;
+    }
+    city.innerHTML = '<option value="">Loading…</option>';
+    fetch('/client/api/cities?state=' + encodeURIComponent(st.value))
+        .then(function(r){ return r.json(); })
+        .then(function(list){
+            var html = '<option value="">Select…</option>';
+            (list || []).forEach(function(name){
+                html += '<option value="' + name + '"' + (name === current ? ' selected' : '') + '>' + name + '</option>';
+            });
+            city.innerHTML = html;
+        })
+        .catch(function(){ city.innerHTML = '<option value="">Could not load cities</option>'; });
+}
+(function(){
+    var st = document.getElementById('state-select');
+    if(st && st.value) loadCities();
 })();
 </script>
 
