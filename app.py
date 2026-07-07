@@ -30136,6 +30136,31 @@ def seed_academic_field_order():
 
 seed_academic_field_order()
 
+
+def seed_fix_state_city_fields():
+    """Ensure every product's client registration form has State and City as
+    proper cascade dropdowns. Older per-product configs sometimes stored these
+    as plain text or with the wrong field_options, so picking a state produced
+    no city list. Idempotent — safe no-op when already correct."""
+    conn = get_db()
+    try:
+        conn.execute("UPDATE client_form_configs SET field_type = 'select', field_options = 'db:states' "
+                     "WHERE field_name = 'state' AND role = 'client'")
+        conn.execute("UPDATE client_form_configs SET field_type = 'select', field_options = 'db:cities' "
+                     "WHERE field_name = 'city' AND role = 'client'")
+        conn.commit()
+        logging.info("seed_fix_state_city_fields: normalised state/city cascade fields")
+    except Exception as e:
+        logging.warning(f"seed_fix_state_city_fields: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_fix_state_city_fields()
+
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
 # ═══════════════════════════════════════════════════════════════
