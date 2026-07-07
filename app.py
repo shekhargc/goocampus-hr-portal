@@ -14968,9 +14968,12 @@ def ensure_ops_tables():
             UNIQUE(state_id, name)
         )''')
 
-        # Seed states & cities if empty
+        # Seed states & cities if empty. Also backfill when the cities table is
+        # empty but states already exist (older builds seeded states without
+        # cities, which broke the state->city cascade on the registration form).
         state_count = conn.execute("SELECT COUNT(*) as c FROM states").fetchone()['c']
-        if state_count == 0:
+        city_count = conn.execute("SELECT COUNT(*) as c FROM cities").fetchone()['c']
+        if state_count == 0 or city_count == 0:
             INDIA_STATES_CITIES = {
                 'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Nellore', 'Kurnool', 'Rajahmundry', 'Tirupati', 'Kakinada', 'Kadapa', 'Anantapur', 'Eluru', 'Ongole', 'Chittoor', 'Machilipatnam', 'Srikakulam', 'Adoni', 'Tenali', 'Proddatur', 'Hindupur', 'Bhimavaram'],
                 'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Pasighat', 'Tawang', 'Ziro', 'Bomdila', 'Along', 'Tezu', 'Roing', 'Daporijo'],
@@ -15010,10 +15013,10 @@ def ensure_ops_tables():
                 'Puducherry': ['Puducherry', 'Karaikal', 'Mahe', 'Yanam'],
             }
             for sort_idx, (state_name, cities_list) in enumerate(sorted(INDIA_STATES_CITIES.items()), 1):
-                conn.execute("INSERT INTO states (name, sort_order, is_active) VALUES (?, ?, TRUE)", (state_name, sort_idx))
+                conn.execute("INSERT INTO states (name, sort_order, is_active) VALUES (?, ?, TRUE) ON CONFLICT (name) DO NOTHING", (state_name, sort_idx))
                 state_row = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
                 for city_name in cities_list:
-                    conn.execute("INSERT INTO cities (state_id, name, is_active) VALUES (?, ?, TRUE)", (state_row['id'], city_name))
+                    conn.execute("INSERT INTO cities (state_id, name, is_active) VALUES (?, ?, TRUE) ON CONFLICT (state_id, name) DO NOTHING", (state_row['id'], city_name))
             conn.commit()
 
         # ── Lookup Options (for PLAB Settings) ──
