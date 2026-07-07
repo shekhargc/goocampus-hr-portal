@@ -2849,7 +2849,7 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
         return None
     try:
         existing = conn.execute(
-            "SELECT token FROM client_invitations "
+            "SELECT token, COALESCE(status,'pending') AS status FROM client_invitations "
             " WHERE client_mobile = ? AND product_id = ? "
             "   AND COALESCE(status,'pending') <> 'cancelled' "
             " ORDER BY id DESC LIMIT 1",
@@ -2857,9 +2857,6 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
         ).fetchone()
     except Exception:
         existing = None
-    if existing:
-        return existing['token']
-    token = uuid.uuid4().hex
     closure_json = None
     if closure_data:
         try:
@@ -2868,20 +2865,48 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
             )
         except Exception as e:
             logging.warning(f"_auto_invite: closure_data serialize: {e}")
-    try:
-        conn.execute(
-            "INSERT INTO client_invitations "
-            "(token, product_id, client_name, client_mobile, client_email, "
-            " invited_by, closure_metadata) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (token, product_id, client_name, mobile, client_email,
-             invited_by, closure_json),
-        )
-    except Exception as e:
-        logging.warning(f"_auto_invite_from_closure: insert failed: {e}")
-        try: conn.rollback()
-        except Exception: pass
-        return None
+    if existing:
+        token = existing['token']
+        # Client already completed registration from this invite — don't
+        # re-send (they'd get a "complete your registration" nudge for
+        # something already done). Just hand back the token.
+        if existing['status'] == 'registered':
+            return token
+        # Re-close of an existing (still-pending) lead: refresh the stored
+        # closure metadata (e.g. include_training, corrected installments) and
+        # counsellor, then fall through to re-send the invite. Previously the
+        # old invitation was reused untouched, so a corrected re-close kept
+        # sending the stale email format.
+        try:
+            conn.execute(
+                "UPDATE client_invitations "
+                "   SET closure_metadata = COALESCE(?, closure_metadata), "
+                "       client_email = COALESCE(NULLIF(?, ''), client_email), "
+                "       invited_by = COALESCE(?, invited_by) "
+                " WHERE token = ?",
+                (closure_json, client_email or '', invited_by, token),
+            )
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"_auto_invite: refresh existing invite: {e}")
+            try: conn.rollback()
+            except Exception: pass
+    else:
+        token = uuid.uuid4().hex
+        try:
+            conn.execute(
+                "INSERT INTO client_invitations "
+                "(token, product_id, client_name, client_mobile, client_email, "
+                " invited_by, closure_metadata) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (token, product_id, client_name, mobile, client_email,
+                 invited_by, closure_json),
+            )
+        except Exception as e:
+            logging.warning(f"_auto_invite_from_closure: insert failed: {e}")
+            try: conn.rollback()
+            except Exception: pass
+            return None
     # WhatsApp invite is a side-effect; don't let a delivery failure roll
     # back the row.
     try:
@@ -27003,6 +27028,17 @@ def sales_leads_resend_invite(lead_id):
     svc_name, cns_name = '', ''
     pr = conn.execute("SELECT name FROM products_services WHERE id = ?", (lead['product_id'],)).fetchone()
     if pr: svc_name = pr['name'] or ''
+    # Combined AMC Consulting + AMC MCQ (AMC 1) enrolment: the invitation's
+    # stored closure_metadata carries include_training. Honour it here so the
+    # RE-SENT email lists both programs, matching the auto-invite on close.
+    also_svc = ''
+    try:
+        import json as _json
+        _meta = _json.loads(inv['closure_metadata']) if inv['closure_metadata'] else {}
+        if _meta.get('include_training'):
+            also_svc = 'AMC MCQ (AMC 1) — Training'
+    except Exception:
+        also_svc = ''
     if owner_id:
         em = conn.execute("SELECT name FROM employees WHERE id = ?", (owner_id,)).fetchone()
         if em: cns_name = em['name'] or ''
@@ -27028,7 +27064,8 @@ def sales_leads_resend_invite(lead_id):
     try:
         if inv['client_email']:
             email_ok = _send_client_invite_email(inv['client_email'], inv['client_name'], invite_url,
-                                                 service_name=svc_name, counsellor_name=cns_name)
+                                                 service_name=svc_name, counsellor_name=cns_name,
+                                                 also_service=also_svc)
     except Exception as e:
         logging.error(f"resend-invite email: {e}")
     sent = (['WhatsApp'] if wa_ok else []) + (['email'] if email_ok else [])
