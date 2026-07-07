@@ -2903,14 +2903,21 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
                     em = conn.execute("SELECT name FROM employees WHERE id = ?", (invited_by,)).fetchone()
                     if em: cns_name = em['name'] or ''
             except Exception: pass
+            # Combined AMC Consulting + AMC MCQ (AMC 1) enrolment: the single
+            # registration covers BOTH programs, so tell the client they're
+            # signing up for consulting AND training (not consulting alone).
+            also_svc = ''
+            if closure_data and closure_data.get('include_training'):
+                also_svc = 'AMC MCQ (AMC 1) — Training'
             _send_client_invite_email(client_email, client_name, invite_url,
-                                      service_name=svc_name, counsellor_name=cns_name)
+                                      service_name=svc_name, counsellor_name=cns_name,
+                                      also_service=also_svc)
     except Exception as e:
         logging.warning(f"_auto_invite_from_closure: email send failed: {e}")
     return token
 
 
-def _send_client_invite_email(email, name, link, service_name='', counsellor_name=''):
+def _send_client_invite_email(email, name, link, service_name='', counsellor_name='', also_service=''):
     """Email the client their registration-invitation link via Resend.
     Mirrors the partner-invite email. Returns True if Resend accepted it,
     False if email isn't configured or the send failed (never raises).
@@ -2923,7 +2930,24 @@ def _send_client_invite_email(email, name, link, service_name='', counsellor_nam
         return False
     try:
         from email_utils import send_email
-        service_line = (f' for <strong>{service_name}</strong>' if service_name else '')
+        # When the client is enrolling in TWO programs (AMC Consulting + AMC MCQ
+        # / AMC 1 Training), list both clearly instead of naming only one so the
+        # client knows this single registration covers both.
+        combined_block = ''
+        if also_service:
+            service_line = ''
+            combined_block = (
+                f'<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;'
+                f'padding:14px 18px;margin:18px 0;">'
+                f'<p style="margin:0 0 8px;font-weight:700;color:#1e3a5f;font-size:15px;">'
+                f'You are registering for two programs:</p>'
+                f'<ul style="margin:0;padding-left:20px;color:#333;font-size:15px;line-height:1.7;">'
+                f'<li><strong>{service_name}</strong></li>'
+                f'<li><strong>{also_service}</strong></li>'
+                f'</ul></div>'
+            )
+        else:
+            service_line = (f' for <strong>{service_name}</strong>' if service_name else '')
         counsellor_block = ''
         if counsellor_name:
             counsellor_block = (
@@ -2939,6 +2963,7 @@ def _send_client_invite_email(email, name, link, service_name='', counsellor_nam
     <h2 style="color:#1e3a5f;margin-top:0;">Welcome to GooCampus!</h2>
     <p style="font-size:16px;">Hello {name},</p>
     <p>Thank you for choosing GooCampus{service_line}. Please click the button below to complete your registration and get started.</p>
+    {combined_block}
     {counsellor_block}
     <div style="text-align:center;margin:30px 0;">
       <a href="{link}" style="background-color:#F58220;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block;">Complete Registration</a>
