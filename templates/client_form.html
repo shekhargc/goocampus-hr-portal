@@ -459,7 +459,18 @@
     {% set ro = readonly|default(false) %}
     <div class="form-group full-width">
         <label>{{ f.field_label }}{% if f.is_required %} <span class="req">*</span>{% endif %}</label>
-        {% if f.field_type == 'select' %}
+        {% if f.field_name in ['mobile', 'whatsapp', 'whatsapp2', 'father_phone', 'mother_phone'] %}
+            {# Phone: country-code dropdown (shows country name) + separate number.
+               India (+91) enforces exactly 10 digits; other countries digits-only,
+               no max. JS (initPhoneFields) fills the code list, parses the saved
+               value, and combines code+number into the hidden field on input. #}
+            <div class="gc-phone" style="display:flex;gap:8px;align-items:stretch;">
+                <select class="gc-cc" aria-label="Country code" style="max-width:190px;flex:0 0 auto;"{% if ro %} disabled{% endif %}></select>
+                <input type="tel" class="gc-num" inputmode="numeric" value="" placeholder="{{ f.placeholder or 'Phone number' }}"
+                       style="flex:1 1 auto;min-width:0;"{% if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
+            </div>
+            <input type="hidden" name="{{ f.field_name }}" value="{{ value or '' }}">
+        {% elif f.field_type == 'select' %}
             <select name="{{ f.field_name }}"{% if f.field_name == 'state' %} id="state-select" onchange="loadCities()"{% elif f.field_name == 'city' %} id="city-select" data-current="{{ value or '' }}"{% endif %}{% if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
                 <option value="">Select…</option>
                 {% if f.field_name == 'state' or f.field_options == 'db:state' %}
@@ -1093,6 +1104,92 @@ function loadCities(){
     var st = document.getElementById('state-select');
     if(st && st.value) loadCities();
 })();
+
+// ── Phone fields: country-code dropdown (country name shown) + number ──
+var GC_COUNTRIES = [
+  {g:'', c:[['India','+91']]},
+  {g:'Asian Countries', c:[
+     ['Bangladesh','+880'],['Bhutan','+975'],['China','+86'],['Hong Kong','+852'],
+     ['Indonesia','+62'],['Japan','+81'],['Malaysia','+60'],['Maldives','+960'],
+     ['Nepal','+977'],['Pakistan','+92'],['Philippines','+63'],['Singapore','+65'],
+     ['South Korea','+82'],['Sri Lanka','+94'],['Thailand','+66'],['Vietnam','+84']
+  ]},
+  {g:'Middle East Countries', c:[
+     ['United Arab Emirates','+971'],['Saudi Arabia','+966'],['Qatar','+974'],
+     ['Kuwait','+965'],['Oman','+968'],['Bahrain','+973'],['Jordan','+962'],
+     ['Israel','+972'],['Lebanon','+961'],['Iraq','+964'],['Iran','+98']
+  ]},
+  {g:'European Countries', c:[
+     ['United Kingdom','+44'],['Ireland','+353'],['Germany','+49'],['France','+33'],
+     ['Italy','+39'],['Spain','+34'],['Netherlands','+31'],['Belgium','+32'],
+     ['Switzerland','+41'],['Austria','+43'],['Sweden','+46'],['Norway','+47'],
+     ['Denmark','+45'],['Finland','+358'],['Poland','+48'],['Portugal','+351'],
+     ['Greece','+30'],['Czech Republic','+420'],['Hungary','+36'],['Romania','+40']
+  ]},
+  {g:'United States & Canada', c:[
+     ['United States','+1'],['Canada','+1']
+  ]},
+  {g:'Caribbean Countries', c:[
+     ['Jamaica','+1876'],['Trinidad & Tobago','+1868'],['Barbados','+1246'],
+     ['Bahamas','+1242'],['Dominican Republic','+1809'],['Grenada','+1473'],
+     ['Saint Lucia','+1758'],['Antigua & Barbuda','+1268'],['Cuba','+53'],['Haiti','+509']
+  ]},
+  {g:'Australia & New Zealand', c:[
+     ['Australia','+61'],['New Zealand','+64']
+  ]},
+  {g:'Russia & CIS', c:[
+     ['Russia','+7'],['Kazakhstan','+7'],['Ukraine','+380'],['Georgia','+995'],
+     ['Armenia','+374'],['Uzbekistan','+998']
+  ]}
+];
+var GC_CODES = [];
+GC_COUNTRIES.forEach(function(grp){ grp.c.forEach(function(x){ if(GC_CODES.indexOf(x[1])<0) GC_CODES.push(x[1]); }); });
+GC_CODES.sort(function(a,b){ return b.length - a.length; });   // longest first, for parsing
+
+function gcBuildOptions(sel){
+  var html = '';
+  GC_COUNTRIES.forEach(function(grp){
+    if(grp.g) html += '<optgroup label="'+grp.g+'">';
+    grp.c.forEach(function(x){ html += '<option value="'+x[1]+'">'+x[0]+' ('+x[1]+')</option>'; });
+    if(grp.g) html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+}
+function gcApplyLimit(cc, num){
+  if(cc.value === '+91'){ num.maxLength = 10; num.setAttribute('pattern','[0-9]{10}'); num.title = 'Enter the 10-digit mobile number'; }
+  else { num.removeAttribute('maxlength'); num.removeAttribute('pattern'); num.title = 'Digits only'; }
+}
+function gcSync(hidden, cc, num){
+  var digits = (num.value || '').replace(/[^0-9]/g, '');
+  if(cc.value === '+91') digits = digits.slice(0, 10);
+  num.value = digits;
+  hidden.value = digits ? (cc.value + digits) : '';
+}
+function initPhoneFields(){
+  document.querySelectorAll('.gc-phone').forEach(function(wrap){
+    var cc = wrap.querySelector('.gc-cc');
+    var num = wrap.querySelector('.gc-num');
+    var hidden = wrap.nextElementSibling;      // the hidden input right after the wrapper
+    if(!cc || !num || !hidden || hidden.type !== 'hidden') return;
+    gcBuildOptions(cc);
+    var saved = (hidden.value || '').trim();
+    var code = '+91', rest = '';
+    if(saved.charAt(0) === '+'){
+      for(var i=0;i<GC_CODES.length;i++){ if(saved.indexOf(GC_CODES[i]) === 0){ code = GC_CODES[i]; rest = saved.slice(GC_CODES[i].length); break; } }
+      if(!rest && saved !== code){ rest = saved.replace(/[^0-9]/g,''); }
+    } else if(saved){
+      rest = saved.replace(/[^0-9]/g, '');
+    }
+    cc.value = code;
+    if(cc.selectedIndex < 0) cc.value = '+91';
+    num.value = rest.replace(/[^0-9]/g, '');
+    gcApplyLimit(cc, num);
+    gcSync(hidden, cc, num);
+    cc.addEventListener('change', function(){ gcApplyLimit(cc, num); gcSync(hidden, cc, num); });
+    num.addEventListener('input', function(){ gcSync(hidden, cc, num); });
+  });
+}
+document.addEventListener('DOMContentLoaded', initPhoneFields);
 </script>
 
 </body>
