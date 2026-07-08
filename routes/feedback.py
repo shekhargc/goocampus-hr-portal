@@ -26,7 +26,20 @@ import os
 import json
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+
+# GooCampus operates in India — timestamps are stored in UTC (server clock) but
+# should be shown to the team in IST (UTC+5:30, no DST).
+IST_OFFSET = timedelta(hours=5, minutes=30)
+
+def _ist_str(dt, fmt='%d %b %Y, %I:%M %p'):
+    """Format a naive-UTC datetime as an IST string (e.g. '08 Jul 2026, 04:04 PM')."""
+    if not dt:
+        return None
+    try:
+        return (dt + IST_OFFSET).strftime(fmt) + ' IST'
+    except Exception:
+        return str(dt)[:16]
 
 from flask import (
     render_template, request, redirect, url_for, flash, jsonify, session,
@@ -391,10 +404,9 @@ def admin_feedback():
         last_wa_str = None
         recent = False
         if lwa:
-            try: last_wa_str = lwa.strftime('%d %b %Y %H:%M')
-            except Exception: last_wa_str = str(lwa)[:16]
+            last_wa_str = _ist_str(lwa)   # shown in IST
             try:
-                recent = (datetime.utcnow() - lwa).total_seconds() < 7200  # sent within 2h
+                recent = (datetime.utcnow() - lwa).total_seconds() < 7200  # sent within 2h (UTC vs UTC)
             except Exception:
                 recent = False
         cards.append({'form': f, 'pending': pending, 'last_wa_str': last_wa_str, 'recent': recent,
@@ -678,10 +690,7 @@ def admin_feedback_followup(form_id):
     last_sent = max(_sent) if _sent else None
     last_sent_str, last_sent_days = None, None
     if last_sent is not None:
-        try:
-            last_sent_str = last_sent.strftime('%d %b %Y')
-        except Exception:
-            last_sent_str = str(last_sent)[:10]
+        last_sent_str = _ist_str(last_sent)   # IST
         last_sent_days = _days_ago(last_sent)
     return render_template('admin_feedback_followup.html', form=form,
                            sent_rows=sent_rows, opened_rows=opened_rows,
