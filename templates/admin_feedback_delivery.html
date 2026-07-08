@@ -1,0 +1,54 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Delivery Report{% endblock %}
+{% block section_content %}
+<div style="padding:24px;max-width:1000px;">
+  <a href="{{ url_for('admin_feedback') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Feedback</a>
+  <h1 style="margin:10px 0 2px;font-size:1.5rem;color:var(--navy);">{{ form.title }} — WhatsApp Delivery</h1>
+  <p style="margin:4px 0 16px;color:var(--gray-500);font-size:0.86rem;">
+    <b>Delivered</b> &amp; <b>Read</b> come from WhatsApp (Infobip). <b>Read</b> only shows for clients who keep
+    read-receipts on, so it undercounts — that's a WhatsApp limitation. <b>Opened form</b> (they tapped the link)
+    is the reliable engagement signal.
+  </p>
+
+  <!-- funnel -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+    {% macro stat(label, val, total, color) %}
+    <div style="flex:1;min-width:130px;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px 16px;">
+      <div style="font-size:1.7rem;font-weight:800;color:{{ color }};">{{ val }}{% if total %}<span style="font-size:0.9rem;color:var(--gray-400);font-weight:600;">/{{ total }}</span>{% endif %}</div>
+      <div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">{{ label }}</div>
+    </div>
+    {% endmacro %}
+    {{ stat('Sent', funnel.sent, 0, 'var(--navy)') }}
+    {{ stat('Delivered', funnel.delivered, funnel.sent, '#2563eb') }}
+    {{ stat('Read (WA)', funnel.read, funnel.sent, '#7c3aed') }}
+    {{ stat('Opened form', funnel.opened_form, funnel.sent, '#0891b2') }}
+    {{ stat('Submitted', funnel.submitted, funnel.sent, '#059669') }}
+  </div>
+
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+      <thead><tr style="background:#f8fafc;text-align:left;color:var(--gray-500);">
+        <th style="padding:10px 12px;">Client</th>
+        <th style="padding:10px 12px;text-align:center;">Delivered</th>
+        <th style="padding:10px 12px;text-align:center;">Read&nbsp;(WA)</th>
+        <th style="padding:10px 12px;text-align:center;">Opened&nbsp;form</th>
+        <th style="padding:10px 12px;text-align:center;">Submitted</th>
+      </tr></thead>
+      <tbody>
+      {% macro tick(on, color) %}<span style="color:{% if on %}{{ color }}{% else %}var(--gray-300){% endif %};font-weight:700;font-size:1rem;">{% if on %}&#10003;{% else %}&ndash;{% endif %}</span>{% endmacro %}
+      {% for r in rows %}
+      <tr style="border-top:1px solid #f1f5f9;">
+        <td style="padding:9px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} &middot; {{ r.mobile or 'no mobile' }}</div></td>
+        <td style="padding:9px 12px;text-align:center;">{{ tick(r.delivered, '#2563eb') }}</td>
+        <td style="padding:9px 12px;text-align:center;">{{ tick(r.read, '#7c3aed') }}</td>
+        <td style="padding:9px 12px;text-align:center;">{{ tick(r.opened_form, '#0891b2') }}</td>
+        <td style="padding:9px 12px;text-align:center;">{{ tick(r.submitted, '#059669') }}</td>
+      </tr>
+      {% endfor %}
+      {% if not rows %}<tr><td colspan="5" style="padding:26px;text-align:center;color:var(--gray-400);">No WhatsApp sends recorded for this stage yet. Send via the WhatsApp button and delivery reports will appear here.</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:0.7rem;color:var(--gray-400);margin-top:10px;">Delivered / Read update as WhatsApp reports arrive (usually within seconds). Reload to refresh. Only sends made after this feature went live are tracked.</p>
+</div>
+{% endblock %}

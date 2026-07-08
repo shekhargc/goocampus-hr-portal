@@ -57,6 +57,9 @@
         Last WhatsApp blast: <b>{{ c.last_wa_str }}</b>{% if c.last_wa_count %} &middot; {{ c.last_wa_count }} sent{% endif %}
       </div>
       {% endif %}
+      <div style="text-align:center;margin-top:6px;">
+        <a href="{{ url_for('admin_feedback_delivery', form_id=c.form.id) }}" style="font-size:0.74rem;color:#2563eb;text-decoration:none;font-weight:600;">&#128202; Delivery report</a>
+      </div>
     </div>
     {% endfor %}
   </div>
