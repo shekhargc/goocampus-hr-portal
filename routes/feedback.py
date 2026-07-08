@@ -594,12 +594,16 @@ def admin_feedback_results(form_id):
             q['comments'] = vals
 
     # submissions list (internal — who submitted), quarter-filtered
-    subs = conn.execute(
+    subs_rows = conn.execute(
         "SELECT r.id, r.submitted_at, i.registration_number, i.client_name "
         "FROM feedback_responses r JOIN feedback_invites i ON i.id = r.invite_id "
         "WHERE r.form_id = ?" + (" AND i.quarter_key = ?" if qfilter else "") +
         " ORDER BY r.submitted_at DESC", [form_id] + ([qfilter] if qfilter else [])).fetchall()
     conn.close()
+    # submitted_at shown in IST (server stores UTC)
+    subs = [{'id': s['id'], 'submitted_at': _ist_str(s['submitted_at']),
+             'registration_number': s['registration_number'], 'client_name': s['client_name']}
+            for s in subs_rows]
     return render_template('admin_feedback_results.html', form=form, questions=questions,
                            subs=subs, metrics=metrics, quarters=quarters, quarter=quarter,
                            active_section='clients')
@@ -623,7 +627,7 @@ def admin_feedback_response(response_id):
     conn.close()
     return jsonify({
         'client_name': r['client_name'], 'reg': r['registration_number'],
-        'submitted_at': str(r['submitted_at'] or ''), 'quarter': r['quarter_label'] or '',
+        'submitted_at': _ist_str(r['submitted_at']) or '', 'quarter': r['quarter_label'] or '',
         'answers': [{'q': a['question_text'], 'type': a['qtype'],
                      'value': a['answer_value']} for a in ans],
     })
