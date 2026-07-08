@@ -80,6 +80,13 @@ def ensure_feedback_tables():
         # follow-up list, and how many went out that time.
         "ALTER TABLE feedback_forms ADD COLUMN IF NOT EXISTS last_wa_bulk_at TIMESTAMP",
         "ALTER TABLE feedback_forms ADD COLUMN IF NOT EXISTS last_wa_bulk_count INTEGER",
+        # WhatsApp delivery funnel (from Infobip delivery-report webhook, keyed by
+        # callbackData = invite id). wa_status: SENT/DELIVERED/READ/FAILED.
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS wa_message_id TEXT",
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS wa_status TEXT",
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS wa_delivered_at TIMESTAMP",
+        "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS wa_read_at TIMESTAMP",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_inv_wamsg ON feedback_invites(wa_message_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_q_form ON feedback_questions(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_form ON feedback_invites(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_quarter ON feedback_invites(quarter_key)",
@@ -821,8 +828,9 @@ def _send_feedback_wa_batch(recipients):
         logging.error("feedback WA bulk NOT sent: INFOBIP_API_KEY / INFOBIP_BASE_URL not configured")
         return set(), 0, False
     url = f"https://{base}/whatsapp/1/message/template"
+    dlr_url = os.environ.get('INFOBIP_DLR_URL', 'https://goocampus.org/webhooks/infobip/dlr')
     headers = {"Authorization": f"App {key}", "Content-Type": "application/json", "Accept": "application/json"}
-    accepted, rejected = set(), 0
+    accepted, rejected, msg_map = set(), 0, {}
     CHUNK = 50
     for start in range(0, len(recipients), CHUNK):
         chunk = recipients[start:start + CHUNK]
@@ -833,6 +841,11 @@ def _send_feedback_wa_batch(recipients):
                 digits = '91' + digits
             msgs.append({
                 "from": sender, "to": digits,
+                # callbackData lets the DLR webhook map a report back to this invite
+                # without us storing the messageId first; notifyUrl is where Infobip
+                # POSTs delivery/read reports.
+                "callbackData": str(r['invite_id']),
+                "notifyUrl": dlr_url,
                 "content": {
                     "templateName": "registered_client_feedback_request",
                     "templateData": {
@@ -850,17 +863,21 @@ def _send_feedback_wa_batch(recipients):
             data = resp.json() if resp.text else {}
             rmsgs = data.get('messages') or []
             for i, r in enumerate(chunk):
-                grp = ''
+                grp, mid = '', None
                 if i < len(rmsgs):
-                    grp = (((rmsgs[i] or {}).get('status') or {}).get('groupName') or '').upper()
+                    rm = rmsgs[i] or {}
+                    grp = ((rm.get('status') or {}).get('groupName') or '').upper()
+                    mid = rm.get('messageId')
                 if grp == 'REJECTED':
                     rejected += 1
                 else:
                     accepted.add(r['invite_id'])
+                    if mid:
+                        msg_map[r['invite_id']] = mid
         except Exception as e:
             logging.error(f"_send_feedback_wa_batch: {e}")
             rejected += len(chunk)
-    return accepted, rejected, True
+    return accepted, rejected, True, msg_map
 
 
 @admin_required
@@ -915,14 +932,16 @@ def admin_feedback_wa_bulk(form_id):
         conn.close()
         flash('Nobody to message — the follow-up list is empty (everyone responded, or no mobiles on file).', 'info')
         return redirect(url_for('admin_feedback'))
-    accepted, rejected, config_ok = _send_feedback_wa_batch(recips)
+    accepted, rejected, config_ok, msg_map = _send_feedback_wa_batch(recips)
     if not config_ok:
         conn.close()
         flash('WhatsApp is not configured on the server (Infobip keys missing). Nothing was sent.', 'error')
         return redirect(url_for('admin_feedback'))
     for iid in accepted:
         try:
-            conn.execute("UPDATE feedback_invites SET wa_sent_at = CURRENT_TIMESTAMP WHERE id = ?", (iid,))
+            conn.execute("UPDATE feedback_invites SET wa_sent_at = CURRENT_TIMESTAMP, wa_status = 'SENT', "
+                         "wa_message_id = ?, wa_delivered_at = NULL, wa_read_at = NULL WHERE id = ?",
+                         (msg_map.get(iid), iid))
             conn.commit()
         except Exception:
             try: conn.rollback()
@@ -942,6 +961,90 @@ def admin_feedback_wa_bulk(form_id):
         msg += f" {no_mobile} had no mobile."
     flash(msg, 'success' if accepted else 'error')
     return redirect(url_for('admin_feedback'))
+
+
+def infobip_dlr_webhook():
+    """Receive Infobip WhatsApp delivery/read reports and update the feedback
+    funnel per invite. Matched by callbackData (the invite id we set on send) or
+    by messageId. Public endpoint — Infobip POSTs here; it only flips per-invite
+    status flags (no sensitive data returned)."""
+    payload = request.get_json(force=True, silent=True) or {}
+    results = payload.get('results') or payload.get('messages') or []
+    if isinstance(results, dict):
+        results = [results]
+    conn = get_db()
+    for res in results:
+        try:
+            cb = str(res.get('callbackData') or '').strip()
+            mid = res.get('messageId')
+            status = res.get('status') or {}
+            gname = (status.get('groupName') or '').upper()
+            sname = (status.get('name') or '').upper()
+            seen_at = res.get('seenAt') or res.get('readAt')
+            inv = None
+            if cb.isdigit():
+                inv = conn.execute("SELECT id FROM feedback_invites WHERE id = ?", (int(cb),)).fetchone()
+            if not inv and mid:
+                inv = conn.execute("SELECT id FROM feedback_invites WHERE wa_message_id = ?", (mid,)).fetchone()
+            if not inv:
+                continue
+            iid = inv['id']
+            if 'SEEN' in sname or 'READ' in sname or seen_at:
+                conn.execute("UPDATE feedback_invites SET wa_status='READ', "
+                             "wa_read_at=COALESCE(wa_read_at, CURRENT_TIMESTAMP), "
+                             "wa_delivered_at=COALESCE(wa_delivered_at, CURRENT_TIMESTAMP) WHERE id=?", (iid,))
+            elif 'DELIVERED' in gname or 'DELIVERED' in sname:
+                conn.execute("UPDATE feedback_invites SET "
+                             "wa_status=CASE WHEN wa_status='READ' THEN 'READ' ELSE 'DELIVERED' END, "
+                             "wa_delivered_at=COALESCE(wa_delivered_at, CURRENT_TIMESTAMP) WHERE id=?", (iid,))
+            elif gname in ('REJECTED', 'UNDELIVERABLE', 'EXPIRED') or 'UNDELIVER' in sname or 'REJECT' in sname or 'FAIL' in sname:
+                conn.execute("UPDATE feedback_invites SET wa_status='FAILED' "
+                             "WHERE id=? AND COALESCE(wa_status,'') NOT IN ('DELIVERED','READ')", (iid,))
+            if mid:
+                conn.execute("UPDATE feedback_invites SET wa_message_id=COALESCE(wa_message_id, ?) WHERE id=?", (mid, iid))
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"infobip_dlr_webhook item: {e}")
+            try: conn.rollback()
+            except Exception: pass
+    conn.close()
+    return ('', 200)
+
+
+@admin_required
+def admin_feedback_delivery(form_id):
+    """WhatsApp delivery funnel for a stage: Sent -> Delivered -> Read (WhatsApp)
+    -> Opened form -> Submitted, with a per-client breakdown."""
+    conn = get_db()
+    form = conn.execute("SELECT * FROM feedback_forms WHERE id = ?", (form_id,)).fetchone()
+    if not form:
+        conn.close()
+        flash('Form not found.', 'error')
+        return redirect(url_for('admin_feedback'))
+    rows = conn.execute(
+        "SELECT DISTINCT ON (registration_number) id, client_name, registration_number, mobile, "
+        "wa_sent_at, wa_status, wa_delivered_at, wa_read_at, opened_at, submitted_at, status "
+        "FROM feedback_invites WHERE form_id = ? AND wa_sent_at IS NOT NULL "
+        "ORDER BY registration_number, sent_at DESC", (form_id,)).fetchall()
+    conn.close()
+    funnel = {'sent': 0, 'delivered': 0, 'read': 0, 'opened_form': 0, 'submitted': 0}
+    data = []
+    for r in rows:
+        funnel['sent'] += 1
+        deliv = bool(r['wa_delivered_at']) or (r['wa_status'] in ('DELIVERED', 'READ'))
+        read = bool(r['wa_read_at']) or (r['wa_status'] == 'READ')
+        opened_form = bool(r['opened_at']) or (r['status'] in ('opened', 'submitted'))
+        submitted = bool(r['submitted_at']) or (r['status'] == 'submitted')
+        if deliv: funnel['delivered'] += 1
+        if read: funnel['read'] += 1
+        if opened_form: funnel['opened_form'] += 1
+        if submitted: funnel['submitted'] += 1
+        data.append({'name': r['client_name'], 'reg': r['registration_number'], 'mobile': r['mobile'],
+                     'wa_status': r['wa_status'] or 'SENT', 'delivered': deliv, 'read': read,
+                     'opened_form': opened_form, 'submitted': submitted, 'sent_at': r['wa_sent_at']})
+    data.sort(key=lambda x: (x['submitted'], x['read'], x['delivered']), reverse=True)
+    return render_template('admin_feedback_delivery.html', form=form, funnel=funnel, rows=data,
+                           active_section='clients')
 
 
 def register_routes(app):
@@ -968,5 +1071,10 @@ def register_routes(app):
                      view_func=admin_feedback_wa_sent, methods=['POST'])
     app.add_url_rule('/admin/feedback/wa-bulk/<int:form_id>', endpoint='admin_feedback_wa_bulk',
                      view_func=admin_feedback_wa_bulk, methods=['POST'])
+    app.add_url_rule('/admin/feedback/delivery/<int:form_id>', endpoint='admin_feedback_delivery',
+                     view_func=admin_feedback_delivery, methods=['GET'])
+    # Public: Infobip WhatsApp delivery/read report callback
+    app.add_url_rule('/webhooks/infobip/dlr', endpoint='infobip_dlr_webhook',
+                     view_func=infobip_dlr_webhook, methods=['POST', 'GET'])
     app.add_url_rule('/admin/feedback/form/<int:form_id>/edit', endpoint='admin_feedback_form_edit',
                      view_func=admin_feedback_form_edit, methods=['GET', 'POST'])
