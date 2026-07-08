@@ -426,7 +426,7 @@ def ops_training_client_detail(client_id):
 
     sections = {
         'payments':       fetch('ops_payments', 'payment_date DESC NULLS LAST'),
-        'call_notes':     fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
+        'call_notes':     fetch('ops_call_notes', 'created_at DESC, id DESC'),
         # Medical sections stubbed to empty so the template loops still work.
         'test_bookings':  [],
         'training':        [],

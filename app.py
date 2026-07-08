@@ -19589,7 +19589,7 @@ def ops_plab_dashboard(client_id):
     coaching = conn.execute("SELECT * FROM ops_coaching WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     english_logins = conn.execute("SELECT * FROM ops_english_logins WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     test_bookings = conn.execute("SELECT * FROM ops_test_bookings WHERE registration_number = ? ORDER BY exam_date DESC NULLS LAST", (reg,)).fetchall()
-    call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY call_date DESC NULLS LAST LIMIT 20", (reg,)).fetchall()
+    call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY created_at DESC, id DESC", (reg,)).fetchall()
     call_notes_count = conn.execute("SELECT COUNT(*) as cnt FROM ops_call_notes WHERE registration_number = ?", (reg,)).fetchone()['cnt']
     payments = conn.execute("SELECT * FROM ops_payments WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
@@ -19626,7 +19626,7 @@ def ops_plab_dashboard(client_id):
         'uk_visa_travel':      _plab_section('ops_uk_visa_travel', 'id DESC'),
         'uk_cab_bookings':     _plab_section('ops_uk_cab_bookings', 'id DESC'),
         'uk_observerships':    _plab_section('ops_uk_observerships', 'id DESC'),
-        'call_notes':          _plab_section('ops_call_notes', 'call_date DESC NULLS LAST'),
+        'call_notes':          _plab_section('ops_call_notes', 'created_at DESC, id DESC'),
         'payments':            _plab_section('ops_payments', 'payment_date DESC NULLS LAST'),
     }
     try:
