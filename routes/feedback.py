@@ -76,6 +76,10 @@ def ensure_feedback_tables():
         # When the team last clicked the WhatsApp 'Send' for this client (so the
         # button turns 'sent' colour and stays that way on reload).
         "ALTER TABLE feedback_invites ADD COLUMN IF NOT EXISTS wa_sent_at TIMESTAMP",
+        # When the team last fired the bulk-WhatsApp send for a whole form's
+        # follow-up list, and how many went out that time.
+        "ALTER TABLE feedback_forms ADD COLUMN IF NOT EXISTS last_wa_bulk_at TIMESTAMP",
+        "ALTER TABLE feedback_forms ADD COLUMN IF NOT EXISTS last_wa_bulk_count INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_feedback_q_form ON feedback_questions(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_form ON feedback_invites(form_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_inv_quarter ON feedback_invites(quarter_key)",
@@ -366,7 +370,24 @@ def admin_feedback():
     cards = []
     for f in forms:
         m = _metrics(conn, f['id'], None)  # all-time per form
-        cards.append({'form': f, **m})
+        # How many distinct clients are in this form's follow-up list right now
+        # (latest invite per client, not yet submitted) — the bulk-WA audience.
+        try:
+            pending = conn.execute(
+                "SELECT COUNT(*) AS n FROM (SELECT DISTINCT ON (registration_number) status "
+                "FROM feedback_invites WHERE form_id = ? "
+                "ORDER BY registration_number, CASE WHEN status='submitted' THEN 0 ELSE 1 END, sent_at DESC) t "
+                "WHERE status <> 'submitted'", (f['id'],)).fetchone()['n']
+        except Exception:
+            pending = 0
+        lwa = f['last_wa_bulk_at'] if 'last_wa_bulk_at' in f.keys() else None
+        last_wa_str = None
+        if lwa:
+            try: last_wa_str = lwa.strftime('%d %b %Y')
+            except Exception: last_wa_str = str(lwa)[:10]
+        cards.append({'form': f, 'pending': pending, 'last_wa_str': last_wa_str,
+                      'last_wa_count': (f['last_wa_bulk_count'] if 'last_wa_bulk_count' in f.keys() else None),
+                      **m})
     overall = _metrics(conn, None, None)  # product-wide, all-time
     conn.close()
     return render_template('admin_feedback.html', cards=cards, overall=overall,
@@ -778,6 +799,129 @@ def admin_feedback_wa_sent(invite_id):
     return ('', 204)
 
 
+def _send_feedback_wa_batch(recipients):
+    """Send the approved 'client_feedback_request' WhatsApp template to many
+    clients in one (chunked) Infobip call. Each recipient dict needs
+    mobile, name, stage, token, invite_id. Body placeholders = [name, stage];
+    the URL-button parameter = the feedback token (the {{1}} Infobip appends to
+    the template's fixed base URL https://goocampus.in/feedback/). Reuses the
+    same env config as the registration-invite WhatsApp sender.
+    Returns (accepted_invite_ids:set, rejected:int, config_ok:bool)."""
+    import os, requests as http
+    key = os.environ.get('INFOBIP_API_KEY', '')
+    base = os.environ.get('INFOBIP_BASE_URL', '')
+    sender = os.environ.get('INFOBIP_SENDER', '15558246314')
+    if not key or not base:
+        logging.error("feedback WA bulk NOT sent: INFOBIP_API_KEY / INFOBIP_BASE_URL not configured")
+        return set(), 0, False
+    url = f"https://{base}/whatsapp/1/message/template"
+    headers = {"Authorization": f"App {key}", "Content-Type": "application/json", "Accept": "application/json"}
+    accepted, rejected = set(), 0
+    CHUNK = 50
+    for start in range(0, len(recipients), CHUNK):
+        chunk = recipients[start:start + CHUNK]
+        msgs = []
+        for r in chunk:
+            digits = ''.join(ch for ch in (r['mobile'] or '') if ch.isdigit())
+            if digits and not digits.startswith('91') and len(digits) == 10:
+                digits = '91' + digits
+            msgs.append({
+                "from": sender, "to": digits,
+                "content": {
+                    "templateName": "client_feedback_request",
+                    "templateData": {
+                        "body": {"placeholders": [r['name'] or 'there', r['stage'] or 'GooCampus']},
+                        "buttons": [{"type": "URL", "parameter": r['token']}],
+                    },
+                    "language": "en_GB",
+                }})
+        try:
+            resp = http.post(url, json={"messages": msgs}, headers=headers, timeout=25)
+            if resp.status_code >= 300:
+                logging.error(f"feedback WA bulk REJECTED ({resp.status_code}): {resp.text[:500]}")
+                rejected += len(chunk)
+                continue
+            data = resp.json() if resp.text else {}
+            rmsgs = data.get('messages') or []
+            for i, r in enumerate(chunk):
+                grp = ''
+                if i < len(rmsgs):
+                    grp = (((rmsgs[i] or {}).get('status') or {}).get('groupName') or '').upper()
+                if grp == 'REJECTED':
+                    rejected += 1
+                else:
+                    accepted.add(r['invite_id'])
+        except Exception as e:
+            logging.error(f"_send_feedback_wa_batch: {e}")
+            rejected += len(chunk)
+    return accepted, rejected, True
+
+
+@admin_required
+def admin_feedback_wa_bulk(form_id):
+    """Bulk-send the approved WhatsApp feedback template (Infobip) to every
+    client currently in this form's FOLLOW-UP list (not yet submitted), each
+    with their own unique link. Records when the blast was last fired + count."""
+    quarter = request.form.get('quarter') or request.args.get('quarter')
+    conn = get_db()
+    form = conn.execute("SELECT * FROM feedback_forms WHERE id = ?", (form_id,)).fetchone()
+    if not form:
+        conn.close()
+        flash('Form not found.', 'error')
+        return redirect(url_for('admin_feedback'))
+    # Exactly the follow-up selection: one row per client, most recent, not submitted.
+    q = ("SELECT DISTINCT ON (registration_number) id, token, client_name, mobile, status "
+         "FROM feedback_invites WHERE form_id = ?")
+    params = [form_id]
+    if quarter and quarter != 'all':
+        q += " AND quarter_key = ?"
+        params.append(quarter)
+    q += " ORDER BY registration_number, CASE WHEN status='submitted' THEN 0 ELSE 1 END, sent_at DESC"
+    invites = conn.execute(q, params).fetchall()
+    stage = form['title'] or 'GooCampus'
+    recips, no_mobile = [], 0
+    for iv in invites:
+        if iv['status'] == 'submitted':
+            continue  # responders drop off the follow-up list
+        digits = ''.join(ch for ch in (iv['mobile'] or '') if ch.isdigit())
+        if not digits:
+            no_mobile += 1
+            continue
+        recips.append({'invite_id': iv['id'], 'mobile': iv['mobile'],
+                       'name': iv['client_name'], 'stage': stage, 'token': iv['token']})
+    if not recips:
+        conn.close()
+        flash('Nobody to message — the follow-up list is empty (everyone responded, or no mobiles on file).', 'info')
+        return redirect(url_for('admin_feedback'))
+    accepted, rejected, config_ok = _send_feedback_wa_batch(recips)
+    if not config_ok:
+        conn.close()
+        flash('WhatsApp is not configured on the server (Infobip keys missing). Nothing was sent.', 'error')
+        return redirect(url_for('admin_feedback'))
+    for iid in accepted:
+        try:
+            conn.execute("UPDATE feedback_invites SET wa_sent_at = CURRENT_TIMESTAMP WHERE id = ?", (iid,))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    try:
+        conn.execute("UPDATE feedback_forms SET last_wa_bulk_at = CURRENT_TIMESTAMP, last_wa_bulk_count = ? "
+                     "WHERE id = ?", (len(accepted), form_id))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    msg = f"WhatsApp sent to {len(accepted)} client(s) in the follow-up list."
+    if rejected:
+        msg += f" {rejected} rejected by WhatsApp."
+    if no_mobile:
+        msg += f" {no_mobile} had no mobile."
+    flash(msg, 'success' if accepted else 'error')
+    return redirect(url_for('admin_feedback'))
+
+
 def register_routes(app):
     ensure_feedback_tables()
     # Public (no login)
@@ -800,5 +944,7 @@ def register_routes(app):
                      view_func=admin_feedback_resend, methods=['POST'])
     app.add_url_rule('/admin/feedback/wa-sent/<int:invite_id>', endpoint='admin_feedback_wa_sent',
                      view_func=admin_feedback_wa_sent, methods=['POST'])
+    app.add_url_rule('/admin/feedback/wa-bulk/<int:form_id>', endpoint='admin_feedback_wa_bulk',
+                     view_func=admin_feedback_wa_bulk, methods=['POST'])
     app.add_url_rule('/admin/feedback/form/<int:form_id>/edit', endpoint='admin_feedback_form_edit',
                      view_func=admin_feedback_form_edit, methods=['GET', 'POST'])

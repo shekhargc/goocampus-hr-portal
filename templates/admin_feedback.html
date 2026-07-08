@@ -42,6 +42,20 @@
         <a href="{{ url_for('admin_feedback_results', form_id=c.form.id) }}" style="flex:1;text-align:center;background:var(--blue-light);color:var(--blue-dark);text-decoration:none;padding:8px;border-radius:7px;font-size:0.8rem;font-weight:600;">Results</a>
         <a href="{{ url_for('admin_feedback_form_edit', form_id=c.form.id) }}" style="flex:1;text-align:center;background:#f1f5f9;color:#475569;text-decoration:none;padding:8px;border-radius:7px;font-size:0.8rem;font-weight:600;">Edit</a>
       </div>
+      <!-- Bulk WhatsApp to everyone still in the follow-up list (unique link each) -->
+      <form method="POST" action="{{ url_for('admin_feedback_wa_bulk', form_id=c.form.id) }}"
+            onsubmit="return confirm('Send the WhatsApp feedback link to {{ c.pending }} client(s) still in the follow-up list? Each gets their own unique link.');"
+            style="margin-top:8px;">
+        <button type="submit"{% if not c.pending %} disabled{% endif %}
+          style="width:100%;background:{{ '#25D366' if c.pending else '#e5e7eb' }};color:{{ '#fff' if c.pending else '#9ca3af' }};border:none;padding:9px;border-radius:7px;font-size:0.82rem;font-weight:700;cursor:{{ 'pointer' if c.pending else 'not-allowed' }};display:flex;align-items:center;justify-content:center;gap:6px;">
+          <span>&#128241;</span> WhatsApp follow-up list{% if c.pending %} ({{ c.pending }}){% endif %}
+        </button>
+      </form>
+      {% if c.last_wa_str %}
+      <div style="font-size:0.68rem;color:var(--gray-400);margin-top:6px;text-align:center;">
+        Last WhatsApp blast: <b>{{ c.last_wa_str }}</b>{% if c.last_wa_count %} &middot; {{ c.last_wa_count }} sent{% endif %}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
