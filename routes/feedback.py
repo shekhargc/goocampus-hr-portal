@@ -828,7 +828,7 @@ def _send_feedback_wa_batch(recipients):
             msgs.append({
                 "from": sender, "to": digits,
                 "content": {
-                    "templateName": "client_feedback_request",
+                    "templateName": "registered_client_feedback_request",
                     "templateData": {
                         "body": {"placeholders": [r['name'] or 'there', r['stage'] or 'GooCampus']},
                         "buttons": [{"type": "URL", "parameter": r['token']}],
