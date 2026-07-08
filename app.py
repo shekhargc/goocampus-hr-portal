@@ -27439,6 +27439,56 @@ def sales_targets_view():
                     active_section='sales')
 
 
+# ---- Actual Sales Revenue by team member -------------------------------
+@app.route('/sales/revenue-report')
+@login_required
+@sales_crm_required
+def sales_revenue_report():
+    """Per sales team member (counsellor): Actual Sales Revenue.
+
+    Sales Revenue (per client) = package (gross) - plan cost   [cost lives only
+    in the plan definition; looked up from plan_packages by product+plan_type].
+    Actual Sales Revenue        = Sales Revenue - discount.
+    final_package (= package - discount) is the client's number and does NOT
+    subtract cost — cost is only used to derive Sales Revenue here.
+    Aggregated over all clients (plab_clients) with a real package, grouped by
+    counsellor, with an optional date range on the client's registration date.
+    """
+    user = get_user()
+    d_from = (request.args.get('from') or '').strip()
+    d_to = (request.args.get('to') or '').strip()
+    conn = get_db()
+    where = "WHERE COALESCE(c.package_amount,0) > 0"
+    params = []
+    if d_from:
+        where += " AND c.registration_date >= ?"; params.append(d_from)
+    if d_to:
+        where += " AND c.registration_date <= ?"; params.append(d_to)
+    rows = []
+    try:
+        rows = conn.execute(
+            "SELECT COALESCE(NULLIF(TRIM(c.counsellor),''),'Unassigned') AS counsellor, "
+            "       COUNT(*) AS clients, "
+            "       COALESCE(SUM(c.package_amount),0) AS total_package, "
+            "       COALESCE(SUM(COALESCE(pp.plan_cost,0)),0) AS total_cost, "
+            "       COALESCE(SUM(c.discount_allowed),0) AS total_discount, "
+            "       COALESCE(SUM(c.package_amount - COALESCE(pp.plan_cost,0)),0) AS sales_revenue, "
+            "       COALESCE(SUM(c.package_amount - COALESCE(pp.plan_cost,0) - COALESCE(c.discount_allowed,0)),0) AS actual_revenue "
+            "FROM plab_clients c "
+            "LEFT JOIN plan_packages pp ON pp.product_id = c.product_id AND pp.plan_type = c.plan_type "
+            + where +
+            " GROUP BY 1 ORDER BY actual_revenue DESC", params).fetchall()
+    except Exception as e:
+        logging.error(f"sales_revenue_report: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    totals = {k: sum((r[k] or 0) for r in rows) for k in
+              ('clients', 'total_package', 'total_cost', 'total_discount', 'sales_revenue', 'actual_revenue')}
+    return render_template('sales_revenue_report.html', user=user, rows=rows, totals=totals,
+                           d_from=d_from, d_to=d_to, active_section='sales')
+
+
 # ---- Call logs ---------------------------------------------------------
 @app.route('/sales/calls', methods=['GET', 'POST'])
 @login_required
