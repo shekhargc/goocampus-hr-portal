@@ -476,7 +476,7 @@ def ops_australia_client_detail(client_id):
         'online_subscriptions': fetch('ops_online_subscriptions', 'id DESC'),
         'research':             fetch('ops_research_publication', 'id DESC'),
         'webinars':             fetch('ops_webinars_conferences', 'id DESC'),
-        'call_notes':           fetch('ops_call_notes', 'id DESC'),
+        'call_notes':           fetch('ops_call_notes', 'created_at DESC, id DESC'),
         'payments':             fetch('ops_payments', 'id DESC'),
     }
 

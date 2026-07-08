@@ -425,7 +425,7 @@ def ops_uae_client_detail(client_id):
 
     sections = {
         'payments':   fetch('ops_payments', 'payment_date DESC NULLS LAST'),
-        'call_notes': fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
+        'call_notes': fetch('ops_call_notes', 'created_at DESC, id DESC'),
         # UAE-specific manual sections, so the profile shows every record type.
         'self_assessment':   fetch('ops_self_assessment', 'id DESC'),
         'eligibility_letter': fetch('ops_eligibility_letter', 'id DESC'),

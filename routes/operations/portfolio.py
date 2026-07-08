@@ -425,7 +425,7 @@ def ops_portfolio_client_detail(client_id):
 
     sections = {
         'payments':   fetch('ops_payments', 'payment_date DESC NULLS LAST'),
-        'call_notes': fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
+        'call_notes': fetch('ops_call_notes', 'created_at DESC, id DESC'),
         # All Portfolio service sections, so the profile shows every record type.
         'research':   fetch('ops_research_publication', 'id DESC'),
         'courses':    fetch('ops_online_courses', 'id DESC'),
