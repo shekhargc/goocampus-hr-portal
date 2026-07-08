@@ -30161,6 +30161,63 @@ def seed_fix_state_city_fields():
 
 seed_fix_state_city_fields()
 
+
+def seed_clean_junk_cities():
+    """A bad city import left rows containing stray control characters (e.g. a
+    lone U+000E), which showed as a blank first option in every state's city
+    dropdown. This strips control characters everywhere they appear so real
+    names survive ('Bangalore\\x0e' -> 'Bangalore'), removes rows that are pure
+    junk (empty after stripping), de-dupes the resulting (state, name) pairs,
+    and — most importantly — repairs the SAME junk in every client's saved city
+    so no client record is left pointing at a bad value. Idempotent."""
+    conn = get_db()
+    try:
+        # 1) Repair client-facing saved city values FIRST (keep the real name,
+        #    blank only if the whole value was junk). Cities are stored by name.
+        for tbl in ('client_registrations', 'plab_clients'):
+            try:
+                conn.execute(
+                    f"UPDATE {tbl} SET city = NULLIF(BTRIM(regexp_replace(city, '[[:cntrl:]]', '', 'g')), '') "
+                    f"WHERE city IS NOT NULL AND city ~ '[[:cntrl:]]'")
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_clean_junk_cities {tbl}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        # 2) Strip control chars from the cities lookup names
+        try:
+            conn.execute("UPDATE cities SET name = BTRIM(regexp_replace(name, '[[:cntrl:]]', '', 'g')) "
+                         "WHERE name ~ '[[:cntrl:]]'")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"seed_clean_junk_cities strip: {e}")
+            try: conn.rollback()
+            except Exception: pass
+        # 3) Delete rows that are now empty (pure junk)
+        try:
+            conn.execute("DELETE FROM cities WHERE COALESCE(BTRIM(name), '') = ''")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"seed_clean_junk_cities delete-empty: {e}")
+            try: conn.rollback()
+            except Exception: pass
+        # 4) De-dupe identical (state_id, name) rows the strip may have created
+        try:
+            conn.execute("DELETE FROM cities a USING cities b "
+                         "WHERE a.id > b.id AND a.state_id = b.state_id AND a.name = b.name")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"seed_clean_junk_cities dedupe: {e}")
+            try: conn.rollback()
+            except Exception: pass
+        logging.info("seed_clean_junk_cities: cleaned control-char city data")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_clean_junk_cities()
+
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
 # ═══════════════════════════════════════════════════════════════
@@ -35519,20 +35576,20 @@ def seed_client_form_configs():
             (2, 'Academic Details', 'mbbs_status', 'MBBS Status', 'select', 'db:mbbs_status', 'client', 1, 50, '', ''),
             (2, 'Academic Details', 'mbbs_start_date', 'MBBS Start Date', 'date', '', 'client', 0, 60, '', ''),
             (2, 'Academic Details', 'mbbs_end_date', 'MBBS End Date', 'date', '', 'client', 0, 70, '', ''),
-            (2, 'Academic Details', 'speciality_interest_1', 'Speciality Interest 1', 'text', '', 'client', 0, 80, 'Primary speciality', ''),
-            (2, 'Academic Details', 'speciality_interest_2', 'Speciality Interest 2', 'text', '', 'client', 0, 90, 'Secondary speciality', ''),
-            (2, 'Academic Details', 'internship_status', 'Internship Status', 'select', 'db:internship_status', 'client', 0, 100, '', ''),
-            (2, 'Academic Details', 'internship_hospital', 'Internship Hospital', 'text', '', 'client', 0, 110, '', ''),
-            (2, 'Academic Details', 'internship_location', 'Internship Location', 'text', '', 'client', 0, 120, '', ''),
+            (2, 'Academic Details', 'internship_status', 'Internship Status', 'select', 'db:internship_status', 'client', 0, 80, '', ''),
+            (2, 'Academic Details', 'internship_hospital', 'Internship Hospital', 'text', '', 'client', 0, 90, '', ''),
+            (2, 'Academic Details', 'internship_location', 'Internship Location', 'text', '', 'client', 0, 100, '', ''),
+            (2, 'Academic Details', 'internship_start_date', 'Internship Start Date', 'date', '', 'client', 0, 110, '', ''),
+            (2, 'Academic Details', 'internship_end_date', 'Internship End Date', 'date', '', 'client', 0, 120, '', ''),
             (2, 'Academic Details', 'internship_hospital_2', 'Internship Hospital 2', 'text', '', 'client', 0, 130, '', 'If rotated to another hospital'),
             (2, 'Academic Details', 'internship_location_2', 'Internship Location 2', 'text', '', 'client', 0, 140, '', ''),
-            (2, 'Academic Details', 'internship_start_date', 'Internship Start Date', 'date', '', 'client', 0, 150, '', ''),
-            (2, 'Academic Details', 'internship_end_date', 'Internship End Date', 'date', '', 'client', 0, 160, '', ''),
-            (2, 'Academic Details', 'internship_gap', 'Internship Gap', 'select', 'db:internship_gap', 'client', 0, 170, '', ''),
-            (2, 'Academic Details', 'gap_in_months', 'Gap in Months', 'text', '', 'client', 0, 180, '', 'If gap, specify months'),
-            (2, 'Academic Details', 'gap_reason', 'Gap Reason', 'textarea', '', 'client', 0, 190, '', ''),
-            (2, 'Academic Details', 'working_status', 'Working Status', 'select', 'db:working_status', 'client', 0, 200, '', ''),
-            (2, 'Academic Details', 'working_hospital_name', 'Working Hospital Name', 'text', '', 'client', 0, 210, '', 'If currently working'),
+            (2, 'Academic Details', 'internship_gap', 'Internship Gap', 'select', 'db:internship_gap', 'client', 0, 150, '', ''),
+            (2, 'Academic Details', 'gap_in_months', 'Gap in Months', 'text', '', 'client', 0, 160, '', 'If gap, specify months'),
+            (2, 'Academic Details', 'gap_reason', 'Gap Reason', 'textarea', '', 'client', 0, 170, '', ''),
+            (2, 'Academic Details', 'working_status', 'Working Status', 'select', 'db:working_status', 'client', 0, 180, '', ''),
+            (2, 'Academic Details', 'working_hospital_name', 'Working Hospital Name', 'text', '', 'client', 0, 190, '', 'If currently working'),
+            (2, 'Academic Details', 'speciality_interest_1', 'Speciality Interest 1', 'text', '', 'client', 0, 200, 'Primary speciality', ''),
+            (2, 'Academic Details', 'speciality_interest_2', 'Speciality Interest 2', 'text', '', 'client', 0, 210, 'Secondary speciality', ''),
             (2, 'Academic Details', 'additional_info', 'Additional Info', 'textarea', '', 'client', 0, 220, '', ''),
 
             # ── Step 3: Sales Section (sales fills) ──
