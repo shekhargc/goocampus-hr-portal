@@ -382,10 +382,16 @@ def admin_feedback():
             pending = 0
         lwa = f['last_wa_bulk_at'] if 'last_wa_bulk_at' in f.keys() else None
         last_wa_str = None
+        recent = False
         if lwa:
-            try: last_wa_str = lwa.strftime('%d %b %Y')
-            except Exception: last_wa_str = str(lwa)[:10]
-        cards.append({'form': f, 'pending': pending, 'last_wa_str': last_wa_str,
+            try: last_wa_str = lwa.strftime('%d %b %Y %H:%M')
+            except Exception: last_wa_str = str(lwa)[:16]
+            try:
+                recent = (datetime.utcnow() - lwa).total_seconds() < 7200  # sent within 2h
+            except Exception:
+                recent = False
+        cards.append({'form': f, 'pending': pending, 'last_wa_str': last_wa_str, 'recent': recent,
+                      'wa_title': (f['title'] or '').replace("'", "").replace('"', ''),
                       'last_wa_count': (f['last_wa_bulk_count'] if 'last_wa_bulk_count' in f.keys() else None),
                       **m})
     overall = _metrics(conn, None, None)  # product-wide, all-time
@@ -869,6 +875,22 @@ def admin_feedback_wa_bulk(form_id):
         conn.close()
         flash('Form not found.', 'error')
         return redirect(url_for('admin_feedback'))
+    # SAFETY GUARD: don't let a stage be blasted twice within 2 hours by accident
+    # (e.g. two team members clicking). Requires an explicit force=1 (set by the
+    # "re-send anyway" confirm) to override.
+    force = (request.form.get('force') == '1')
+    if not force:
+        try:
+            rec = conn.execute(
+                "SELECT (last_wa_bulk_at IS NOT NULL AND last_wa_bulk_at > CURRENT_TIMESTAMP - interval '2 hours') AS r "
+                "FROM feedback_forms WHERE id = ?", (form_id,)).fetchone()
+        except Exception:
+            rec = None
+        if rec and rec['r']:
+            conn.close()
+            flash('This stage was already WhatsApp-blasted within the last 2 hours — not sending again. '
+                  'If you really need to re-send, click the button once more and confirm "re-send anyway".', 'warning')
+            return redirect(url_for('admin_feedback'))
     # Exactly the follow-up selection: one row per client, most recent, not submitted.
     q = ("SELECT DISTINCT ON (registration_number) id, token, client_name, mobile, status "
          "FROM feedback_invites WHERE form_id = ?")

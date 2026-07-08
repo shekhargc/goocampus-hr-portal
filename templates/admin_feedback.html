@@ -44,8 +44,9 @@
       </div>
       <!-- Bulk WhatsApp to everyone still in the follow-up list (unique link each) -->
       <form method="POST" action="{{ url_for('admin_feedback_wa_bulk', form_id=c.form.id) }}"
-            onsubmit="return confirm('Send the WhatsApp feedback link to {{ c.pending }} client(s) still in the follow-up list? Each gets their own unique link.');"
+            onsubmit="return confirmWA(this, {{ c.pending or 0 }}, {{ 'true' if c.recent else 'false' }}, '{{ c.last_wa_str or '' }}', {{ c.last_wa_count or 0 }}, '{{ c.wa_title }}');"
             style="margin-top:8px;">
+        <input type="hidden" name="force" value="0">
         <button type="submit"{% if not c.pending %} disabled{% endif %}
           style="width:100%;background:{{ '#25D366' if c.pending else '#e5e7eb' }};color:{{ '#fff' if c.pending else '#9ca3af' }};border:none;padding:9px;border-radius:7px;font-size:0.82rem;font-weight:700;cursor:{{ 'pointer' if c.pending else 'not-allowed' }};display:flex;align-items:center;justify-content:center;gap:6px;">
           <span>&#128241;</span> WhatsApp follow-up list{% if c.pending %} ({{ c.pending }}){% endif %}
@@ -60,4 +61,19 @@
     {% endfor %}
   </div>
 </div>
+<script>
+function confirmWA(form, pending, recent, lastStr, lastCount, title){
+  if(pending < 1){ alert('No clients in the "' + title + '" follow-up list right now.'); return false; }
+  if(recent){
+    var w = 'HOLD ON — "' + title + '" was already sent on ' + lastStr +
+            (lastCount ? ' (' + lastCount + ' clients)' : '') +
+            '.\n\nSending again will message ' + pending + ' client(s) a SECOND time.\n\nRe-send anyway?';
+    if(!confirm(w)) return false;
+    var f = form.querySelector('input[name="force"]'); if(f) f.value = '1';
+    return true;
+  }
+  return confirm('Send the WhatsApp feedback link to ' + pending + ' client(s) in the "' + title +
+                 '" follow-up list?\n\nThis sends real WhatsApp messages right now — each client gets their own unique link.');
+}
+</script>
 {% endblock %}
