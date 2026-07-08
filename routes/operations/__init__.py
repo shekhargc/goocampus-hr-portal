@@ -182,3 +182,8 @@ def register_operations_modules(app):
     au_call_notes.register_routes(app)
     au_research.register_routes(app)
     au_webinars.register_routes(app)
+
+    # Call Notes -> Reports tab: ONE shared report engine for every pathway
+    # (plab / consulting / uae / australia / portfolio / training).
+    from . import call_notes_report
+    call_notes_report.register_routes(app)
