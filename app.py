@@ -1938,17 +1938,20 @@ def client_upload_plab_doc():
     """Client uploads a document to plab_client_documents for ops review."""
     acct_id = session.get('user_id')
     conn = get_db()
-    # Find client's registration and linked plab_client
-    reg = conn.execute("""SELECT cr.registration_number FROM client_registrations cr
-        WHERE cr.account_id = ? AND cr.registration_number IS NOT NULL LIMIT 1""", (acct_id,)).fetchone()
-    if not reg or not reg['registration_number']:
+    # Find the client's registration. Prefer one that already has a reg number
+    # (post-verify), but a pre-verify registration is fine too — the photo then
+    # gets stored against the registration until ops verify creates the PLAB row.
+    reg = conn.execute("""SELECT cr.id, cr.registration_number FROM client_registrations cr
+        WHERE cr.account_id = ?
+        ORDER BY (cr.registration_number IS NOT NULL) DESC, cr.id DESC LIMIT 1""", (acct_id,)).fetchone()
+    if not reg:
         conn.close()
         return jsonify({'error': 'No linked registration found'}), 404
-    plab_client = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg['registration_number'],)).fetchone()
-    if not plab_client:
-        conn.close()
-        return jsonify({'error': 'PLAB client not found'}), 404
-    doc_type = request.form.get('doc_type', 'Other')
+    plab_client = None
+    if reg['registration_number']:
+        plab_client = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?",
+                                   (reg['registration_number'],)).fetchone()
+    doc_type = request.form.get('doc_type', 'Photograph')
     doc_category = request.form.get('doc_category', 'personal')
     file = request.files.get('file')
     if not file or not file.filename:
@@ -1956,16 +1959,35 @@ def client_upload_plab_doc():
         return jsonify({'error': 'No file selected'}), 400
     import os, uuid
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
-    fname = f"plab_{plab_client['id']}_{uuid.uuid4().hex[:8]}.{ext}"
-    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'plab_docs')
-    os.makedirs(upload_dir, exist_ok=True)
-    fpath = os.path.join(upload_dir, fname)
-    file.save(fpath)
-    file_size = os.path.getsize(fpath)
-    conn.execute("""INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by)
-        VALUES (?, ?, ?, ?, ?, ?, 'client')""",
-        (plab_client['id'], doc_type, doc_category, file.filename, f'static/uploads/plab_docs/{fname}', file_size))
-    conn.commit()
+    try:
+        if plab_client:
+            # Verified client -> ops-side documents keyed by plab_client id.
+            fname = f"plab_{plab_client['id']}_{uuid.uuid4().hex[:8]}.{ext}"
+            upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'plab_docs')
+            os.makedirs(upload_dir, exist_ok=True)
+            file.save(os.path.join(upload_dir, fname))
+            file_size = os.path.getsize(os.path.join(upload_dir, fname))
+            conn.execute("""INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by)
+                VALUES (?, ?, ?, ?, ?, ?, 'client')""",
+                (plab_client['id'], doc_type, doc_category, file.filename,
+                 f'static/uploads/plab_docs/{fname}', file_size))
+        else:
+            # Not yet verified -> store against the registration (client_documents).
+            fname = f"client_{reg['id']}_{uuid.uuid4().hex[:8]}.{ext}"
+            upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'client_docs')
+            os.makedirs(upload_dir, exist_ok=True)
+            file.save(os.path.join(upload_dir, fname))
+            file_size = os.path.getsize(os.path.join(upload_dir, fname))
+            conn.execute("""INSERT INTO client_documents (registration_id, doc_type, file_name, file_path, file_size)
+                VALUES (?, ?, ?, ?, ?)""",
+                (reg['id'], doc_type, file.filename, f'/static/uploads/client_docs/{fname}', file_size))
+        conn.commit()
+    except Exception as e:
+        logging.error(f"client_upload_plab_doc: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        conn.close()
+        return jsonify({'error': 'Upload failed — please try again.'}), 500
     conn.close()
     return jsonify({'success': True})
 
