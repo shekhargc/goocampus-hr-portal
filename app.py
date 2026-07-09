@@ -27200,11 +27200,15 @@ def sales_leads_edit(lead_id):
                                 _basis = f"invite_{inv['id']}" if inv else f"lead_{lead_id}"
                                 ckey = storage.make_doc_key('client', _basis, 'Contract', cfile.filename)
                                 if storage.upload_bytes(ckey, cbytes, _CONTRACT_CT.get(cext, 'application/octet-stream')):
+                                    _linked = False
                                     if inv:
-                                        conn.execute("UPDATE client_invitations SET contract_path = ? WHERE id = ?", (ckey, inv['id']))
+                                        conn.execute("UPDATE client_invitations SET contract_path = ? WHERE id = ?", (ckey, inv['id'])); _linked = True
                                     if reg:
-                                        conn.execute("UPDATE client_registrations SET contract_path = ? WHERE id = ?", (ckey, reg['id']))
-                                    flash('Contract updated for this client.', 'success')
+                                        conn.execute("UPDATE client_registrations SET contract_path = ? WHERE id = ?", (ckey, reg['id'])); _linked = True
+                                    if _linked:
+                                        flash('✓ Contract uploaded and attached to this client. They will read & sign it in their dashboard.', 'success')
+                                    else:
+                                        flash('Contract uploaded but no invitation/registration was found to attach it to — check the client’s phone/product match.', 'warning')
                                 else:
                                     flash('Contract not saved: upload to storage failed', 'warning')
                             else:

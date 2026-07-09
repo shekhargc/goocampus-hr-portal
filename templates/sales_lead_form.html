@@ -103,6 +103,11 @@
             {# ===== Service / Package details — shown to the client on their portal ===== #}
             <div style="margin-bottom:1.1rem;background:#FFF7ED;border:1px solid #FED7AA;border-radius:0.65rem;padding:1.2rem;">
                 <p class="slf-head" style="color:#9A3412;">&#128722; Service / Package details · these are shown to the client on their portal</p>
+                {% if closure and closure.contract_path %}
+                <div style="display:inline-flex;align-items:center;gap:0.4rem;background:#DCFCE7;border:1px solid #86EFAC;color:#166534;font-size:0.8rem;font-weight:700;padding:0.4rem 0.8rem;border-radius:0.5rem;margin-bottom:0.6rem;">
+                    &#10003; Signed contract on file for this client
+                </div>
+                {% endif %}
 
                 <div class="slf-row" style="margin-bottom:0.9rem;">
                     <div>
