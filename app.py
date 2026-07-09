@@ -1907,7 +1907,15 @@ def client_upload_doc(reg_id):
     conn.commit()
     doc_id = conn.execute("SELECT id FROM client_documents WHERE file_path = ?", (f'/static/uploads/client_docs/{fname}',)).fetchone()['id']
     conn.close()
-    return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
+    # Nested under 'doc' with every field the client_form.html row-builder reads,
+    # so the uploaded file shows up immediately in the list below the upload box.
+    return jsonify({'success': True, 'doc': {
+        'id': doc_id,
+        'file_name': file.filename,
+        'doc_type': doc_type,
+        'file_size': file_size,
+        'uploaded_at': 'Just now',
+    }})
 
 
 @app.route('/client/delete-doc/<int:doc_id>', methods=['POST'])
