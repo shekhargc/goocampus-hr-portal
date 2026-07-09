@@ -1923,10 +1923,30 @@ def client_dashboard():
                 docs = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (plab_client['id'],)).fetchall()
                 plab_documents.extend(docs)
 
+    # Photograph: detect an already-uploaded photo across BOTH the post-verify
+    # (plab_client_documents) and pre-verify (client_documents) stores, so the
+    # dashboard can show the photo + a done tick and block re-uploading.
+    def _photo_url(fp):
+        fp = fp or ''
+        return fp if fp.startswith('/') else '/' + fp
+    photo_doc = None
+    for d in plab_documents:
+        if (d.get('doc_type') or '') == 'Photograph':
+            photo_doc = {'url': _photo_url(d.get('file_path'))}
+            break
+    if not photo_doc and reg_ids:
+        _php = ','.join(['?' for _ in reg_ids])
+        _prow = conn.execute(
+            f"SELECT file_path FROM client_documents WHERE registration_id IN ({_php}) "
+            "AND doc_type = 'Photograph' ORDER BY id DESC LIMIT 1", reg_ids).fetchone()
+        if _prow:
+            photo_doc = {'url': _photo_url(_prow['file_path'])}
+
     conn.close()
     return render_template('client_dashboard.html',
         account=account, registrations=registrations, doc_requests=doc_requests,
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
+        photo_doc=photo_doc,
         onboarding_stages=onboarding_stages,
         first_login=session.get('first_login', False))
 

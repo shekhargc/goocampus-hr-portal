@@ -586,9 +586,22 @@
         </div>
         {% endif %}
 
-        <!-- Upload New Document -->
+        <!-- Photograph: once uploaded, show the photo + a done tick and block re-upload -->
         <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
-            <h6 style="font-size:0.88rem;font-weight:700;color:#1f2937;margin:0 0 12px 0;">Upload Photograph</h6>
+            <h6 style="font-size:0.88rem;font-weight:700;color:#1f2937;margin:0 0 12px 0;">Photograph</h6>
+            {% if photo_doc %}
+            <div style="display:flex;align-items:center;gap:14px;">
+                <img src="{{ photo_doc.url }}" alt="Your photograph"
+                     style="width:78px;height:78px;object-fit:cover;border-radius:10px;border:1px solid #e5e7eb;background:#f9fafb;flex:0 0 auto;">
+                <div>
+                    <div style="display:inline-flex;align-items:center;gap:7px;color:#166534;font-weight:700;font-size:0.88rem;">
+                        <span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;align-items:center;justify-content:center;font-size:0.72rem;">&#10003;</span>
+                        Photograph uploaded
+                    </div>
+                    <div style="font-size:0.76rem;color:#9ca3af;margin-top:4px;">Your photo is on file. Contact GooCampus if you need to change it.</div>
+                </div>
+            </div>
+            {% else %}
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                 <!-- Client portal upload is restricted to a single Photograph. Hidden
                      single-option select keeps uploadClientDoc() working unchanged. -->
@@ -596,9 +609,10 @@
                     <option value="Photograph" data-cat="personal">Photograph</option>
                 </select>
                 <span style="font-size:0.82rem;color:#374151;font-weight:600;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">Photograph</span>
-                <input type="file" id="clientDocFile" accept=".jpg,.jpeg,.png,.pdf" style="font-size:0.8rem;flex:1;min-width:160px;" />
-                <button onclick="uploadClientDoc()" style="background:#f97316;color:white;border:none;padding:6px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap;">Upload</button>
+                <input type="file" id="clientDocFile" accept=".jpg,.jpeg,.png" style="font-size:0.8rem;flex:1;min-width:160px;" />
+                <button onclick="uploadClientDoc()" id="photoUploadBtn" style="background:#f97316;color:white;border:none;padding:6px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap;">Upload</button>
             </div>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -608,7 +622,10 @@
     function uploadClientDoc() {
         var sel = document.getElementById('clientDocType');
         var fileInput = document.getElementById('clientDocFile');
+        var btn = document.getElementById('photoUploadBtn');
         if (!fileInput.files.length) { alert('Please select a file.'); return; }
+        // Prevent a second upload while this one is in flight.
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Uploading…'; }
         var opt = sel.options[sel.selectedIndex];
         var fd = new FormData();
         fd.append('file', fileInput.files[0]);
@@ -617,10 +634,10 @@
         fetch('/client/upload-plab-doc', { method: 'POST', body: fd })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (data.success) { location.reload(); }
-                else { alert(data.error || 'Upload failed'); }
+                if (data.success) { location.reload(); }  // reloads into the "uploaded" state (photo + tick, no uploader)
+                else { alert(data.error || 'Upload failed'); if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Upload'; } }
             })
-            .catch(function() { alert('Upload failed'); });
+            .catch(function() { alert('Upload failed'); if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Upload'; } });
     }
     </script>
 </body>
