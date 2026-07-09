@@ -27273,16 +27273,16 @@ def sales_leads_edit(lead_id):
             _ph = _ph[2:]
         if _ph and lead['product_id']:
             inv = conn.execute(
-                "SELECT closure_metadata, contract_path FROM client_invitations "
+                "SELECT * FROM client_invitations "
                 "WHERE client_mobile = ? AND product_id = ? "
                 "  AND COALESCE(status,'pending') <> 'cancelled' "
                 "ORDER BY id DESC LIMIT 1", (_ph, lead['product_id'])).fetchone()
-            if inv and inv['closure_metadata']:
+            if inv and inv.get('closure_metadata'):
                 try:
                     closure = _json.loads(inv['closure_metadata']) or {}
                 except Exception:
                     closure = {}
-            if inv and inv['contract_path']:
+            if inv and inv.get('contract_path'):
                 closure['contract_path'] = inv['contract_path']
             reg = conn.execute(
                 "SELECT * FROM client_registrations "
@@ -27294,7 +27294,7 @@ def sales_leads_edit(lead_id):
                 closure['discount_allowed'] = reg['discount_allowed'] if reg['discount_allowed'] is not None else closure.get('discount_allowed', 0)
                 closure['final_package']    = reg['final_package'] if reg['final_package'] is not None else closure.get('final_package', 0)
                 closure['additional_notes'] = reg['additional_notes'] or closure.get('additional_notes', '')
-                if reg['contract_path']:
+                if reg.get('contract_path'):
                     closure['contract_path'] = reg['contract_path']
                 for i in (1, 2, 3, 4):
                     closure[f'inst{i}_amount'] = reg[f'inst{i}_amount'] if reg[f'inst{i}_amount'] is not None else closure.get(f'inst{i}_amount', 0)
