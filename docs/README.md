@@ -6,6 +6,8 @@ work can jump straight to the right code.
 
 ## Start here
 
+0. **[EXPLAINER.md](EXPLAINER.md)** — plain-English, cover-to-cover walkthrough of the whole system
+   (no code, no jargon). Best first read for a non-technical person or a new hire.
 1. **[ARCHITECTURE.md](ARCHITECTURE.md)** — what the app is, tech stack, the core business flow, code
    layout, and the cross-cutting conventions/gotchas. **Read this first.**
 2. **[MAP.md](MAP.md)** — "where does X live": every area → its routes, files, and tables. Use this
