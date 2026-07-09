@@ -384,24 +384,54 @@
 
         /* ── Review Section ── */
         .review-section {
-            margin-bottom: 24px;
+            margin-bottom: 18px;
+            border: 1px solid var(--grey-light);
+            border-radius: 10px;
+            overflow: hidden;
+            background: #fff;
         }
-        .review-section h3 {
-            font-size: 16px;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 12px;
-            padding-bottom: 6px;
+        .review-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 11px 16px;
+            background: #f4f6fb;
             border-bottom: 1px solid var(--grey-light);
         }
+        .review-head h3 {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--navy);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .review-edit {
+            background: #fff;
+            border: 1px solid var(--navy);
+            color: var(--navy);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 13px;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background .15s, color .15s;
+        }
+        .review-edit:hover { background: var(--navy); color: #fff; }
         .review-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 8px 24px;
+            gap: 2px 24px;
+            padding: 14px 16px;
         }
-        .review-item { padding: 6px 0; }
-        .review-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
-        .review-value { font-size: 14px; font-weight: 500; }
+        .review-item { padding: 7px 0; border-bottom: 1px dashed var(--grey-light); }
+        .review-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+        .review-value { font-size: 14px; font-weight: 500; word-break: break-word; }
+        .review-section .doc-table { margin: 4px 16px 16px; width: calc(100% - 32px); }
+        .review-empty { color: var(--text-muted); font-size: 14px; padding: 14px 16px; }
 
         .submit-warning {
             background: #fffbeb;
@@ -724,113 +754,62 @@
     <div class="step-panel{% if reg.current_step == 4 %} active{% endif %}" id="step-4">
         <h2 class="panel-title">Review &amp; Submit</h2>
 
+        {# Review sections are config-driven: they loop over the SAME form_config the
+           form uses, so every field the client entered is shown — nothing hardcoded,
+           nothing missed. Only non-empty fields render (keeps the academic cascade tidy). #}
+
         <!-- Personal Info Review -->
         <div class="review-section">
-            <h3>Personal Information</h3>
-            <div class="review-grid">
-                <div class="review-item">
-                    <div class="review-label">Name</div>
-                    <div class="review-value">{{ reg.prefix or '' }} {{ reg.first_name or '' }} {{ reg.last_name or '' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Date of Birth</div>
-                    <div class="review-value">{{ reg.dob or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Mobile</div>
-                    <div class="review-value">{{ reg.mobile or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">WhatsApp</div>
-                    <div class="review-value">{{ reg.whatsapp or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Email</div>
-                    <div class="review-value">{{ reg.email or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">City / State</div>
-                    <div class="review-value">{{ reg.city or '' }}{% if reg.city and reg.state %}, {% endif %}{{ reg.state or '—' }}</div>
-                </div>
-                <div class="review-item full-width" style="grid-column:1/-1;">
-                    <div class="review-label">Address</div>
-                    <div class="review-value">{{ reg.address or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Country</div>
-                    <div class="review-value">{{ reg.country or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Father</div>
-                    <div class="review-value">{{ reg.father_name or '—' }}{% if reg.father_phone %} ({{ reg.father_phone }}){% endif %}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Mother</div>
-                    <div class="review-value">{{ reg.mother_name or '—' }}{% if reg.mother_phone %} ({{ reg.mother_phone }}){% endif %}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Parent's Email</div>
-                    <div class="review-value">{{ reg.parents_email or '—' }}</div>
-                </div>
+            <div class="review-head">
+                <h3>Personal Information</h3>
+                {% if not readonly %}<button type="button" class="review-edit" onclick="goToStep(1)">&#9998; Edit</button>{% endif %}
             </div>
+            {% set ns_p = namespace(count=0) %}
+            <div class="review-grid">
+                {% for f in form_config if (f.step_number or 1) == 1 %}
+                {% set val = reg[f.field_name] %}
+                {% if val is not none and (val|string|trim) != '' %}
+                {% set ns_p.count = ns_p.count + 1 %}
+                <div class="review-item"{% if f.field_type == 'textarea' or f.field_name == 'address' %} style="grid-column:1/-1;"{% endif %}>
+                    <div class="review-label">{{ f.field_label }}</div>
+                    <div class="review-value">{% if f.field_type == 'checkbox' %}Yes{% else %}{{ val }}{% endif %}</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% if ns_p.count == 0 %}<p class="review-empty">No personal details entered yet.</p>{% endif %}
         </div>
 
         <!-- Academic Review -->
         <div class="review-section">
-            <h3>Academic Details</h3>
+            <div class="review-head">
+                <h3>Academic Details</h3>
+                {% if not readonly %}<button type="button" class="review-edit" onclick="goToStep(2)">&#9998; Edit</button>{% endif %}
+            </div>
+            {% set ns_a = namespace(count=0) %}
             {% if academics %}
             <div class="review-grid">
-                <div class="review-item">
-                    <div class="review-label">IMG / FMG</div>
-                    <div class="review-value">{{ academics.img_fmg or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Medical College</div>
-                    <div class="review-value">{{ academics.img_medical_college or academics.fmg_medical_college or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Country</div>
-                    <div class="review-value">{{ academics.country or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">MBBS Status</div>
-                    <div class="review-value">{{ academics.mbbs_status or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">MBBS Period</div>
-                    <div class="review-value">{{ academics.mbbs_start_date or '' }} — {{ academics.mbbs_end_date or '' }}{{ '—' if not academics.mbbs_start_date and not academics.mbbs_end_date else '' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Speciality Interest</div>
-                    <div class="review-value">{{ academics.speciality_interest_1 or '—' }}{% if academics.speciality_interest_2 %}, {{ academics.speciality_interest_2 }}{% endif %}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Internship Status</div>
-                    <div class="review-value">{{ academics.internship_status or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Internship Hospital</div>
-                    <div class="review-value">{{ academics.internship_hospital or '—' }}</div>
-                </div>
-                <div class="review-item">
-                    <div class="review-label">Working Status</div>
-                    <div class="review-value">{{ academics.working_status or '—' }}</div>
-                </div>
-                {% if academics.additional_info %}
-                <div class="review-item" style="grid-column:1/-1;">
-                    <div class="review-label">Additional Info</div>
-                    <div class="review-value">{{ academics.additional_info }}</div>
+                {% for f in form_config if (f.step_number or 2) == 2 %}
+                {% set val = academics[f.field_name] %}
+                {% if val is not none and (val|string|trim) != '' %}
+                {% set ns_a.count = ns_a.count + 1 %}
+                <div class="review-item"{% if f.field_type == 'textarea' or f.field_name in ['additional_info', 'address'] %} style="grid-column:1/-1;"{% endif %}>
+                    <div class="review-label">{{ f.field_label }}</div>
+                    <div class="review-value">{% if f.field_type == 'checkbox' %}Yes{% else %}{{ val }}{% endif %}</div>
                 </div>
                 {% endif %}
+                {% endfor %}
             </div>
-            {% else %}
-            <p style="color:var(--text-muted);font-size:14px;">No academic details entered yet.</p>
             {% endif %}
+            {% if not academics or ns_a.count == 0 %}<p class="review-empty">No academic details entered yet.</p>{% endif %}
         </div>
 
         <!-- Documents Review -->
         <div class="review-section">
-            <h3>Documents ({{ documents|length if documents else 0 }})</h3>
+            <div class="review-head">
+                <h3>Documents ({{ documents|length if documents else 0 }})</h3>
+                {% if not readonly %}<button type="button" class="review-edit" onclick="goToStep(3)">&#9998; Edit</button>{% endif %}
+            </div>
             {% if documents %}
             <table class="doc-table">
                 <thead>
