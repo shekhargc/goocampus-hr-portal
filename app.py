@@ -27184,6 +27184,33 @@ def sales_leads_edit(lead_id):
                          edited['inst3_amount'], edited['inst3_date'], edited['inst3_note'], edited['inst3_method'], edited['inst3_status'],
                          edited['inst4_amount'], edited['inst4_date'], edited['inst4_note'], edited['inst4_method'], edited['inst4_status'],
                          reg['id']))
+                # Signed contract (edit / re-close): if the rep attached or replaced
+                # a contract, store it on the invitation AND the registration (if the
+                # client already registered) so the updated contract reaches the client.
+                try:
+                    cfile = request.files.get('contract_file')
+                    if cfile and cfile.filename:
+                        cbytes = cfile.read()
+                        if len(cbytes) > 15 * 1024 * 1024:
+                            flash('Contract not saved: file too large (max 15 MB)', 'warning')
+                        else:
+                            from core import storage
+                            if storage.is_configured():
+                                cext = cfile.filename.rsplit('.', 1)[-1].lower() if '.' in cfile.filename else 'pdf'
+                                _basis = f"invite_{inv['id']}" if inv else f"lead_{lead_id}"
+                                ckey = storage.make_doc_key('client', _basis, 'Contract', cfile.filename)
+                                if storage.upload_bytes(ckey, cbytes, _CONTRACT_CT.get(cext, 'application/octet-stream')):
+                                    if inv:
+                                        conn.execute("UPDATE client_invitations SET contract_path = ? WHERE id = ?", (ckey, inv['id']))
+                                    if reg:
+                                        conn.execute("UPDATE client_registrations SET contract_path = ? WHERE id = ?", (ckey, reg['id']))
+                                    flash('Contract updated for this client.', 'success')
+                                else:
+                                    flash('Contract not saved: upload to storage failed', 'warning')
+                            else:
+                                flash('Contract not saved: file storage not configured', 'warning')
+                except Exception as _ce2:
+                    logging.warning(f"sales_leads_edit contract upload: {_ce2}")
         except Exception as _pe:
             logging.warning(f"sales_leads_edit closure persist: {_pe}")
         conn.commit()
@@ -27223,7 +27250,7 @@ def sales_leads_edit(lead_id):
             _ph = _ph[2:]
         if _ph and lead['product_id']:
             inv = conn.execute(
-                "SELECT closure_metadata FROM client_invitations "
+                "SELECT closure_metadata, contract_path FROM client_invitations "
                 "WHERE client_mobile = ? AND product_id = ? "
                 "  AND COALESCE(status,'pending') <> 'cancelled' "
                 "ORDER BY id DESC LIMIT 1", (_ph, lead['product_id'])).fetchone()
@@ -27232,6 +27259,8 @@ def sales_leads_edit(lead_id):
                     closure = _json.loads(inv['closure_metadata']) or {}
                 except Exception:
                     closure = {}
+            if inv and inv['contract_path']:
+                closure['contract_path'] = inv['contract_path']
             reg = conn.execute(
                 "SELECT * FROM client_registrations "
                 "WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
@@ -27242,6 +27271,8 @@ def sales_leads_edit(lead_id):
                 closure['discount_allowed'] = reg['discount_allowed'] if reg['discount_allowed'] is not None else closure.get('discount_allowed', 0)
                 closure['final_package']    = reg['final_package'] if reg['final_package'] is not None else closure.get('final_package', 0)
                 closure['additional_notes'] = reg['additional_notes'] or closure.get('additional_notes', '')
+                if reg['contract_path']:
+                    closure['contract_path'] = reg['contract_path']
                 for i in (1, 2, 3, 4):
                     closure[f'inst{i}_amount'] = reg[f'inst{i}_amount'] if reg[f'inst{i}_amount'] is not None else closure.get(f'inst{i}_amount', 0)
                     closure[f'inst{i}_date']   = reg[f'inst{i}_date'] or closure.get(f'inst{i}_date', '')
