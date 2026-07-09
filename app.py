@@ -1116,14 +1116,14 @@ def client_register(token):
              inst3_amount, inst3_date, inst3_note, inst3_method, inst3_status,
              inst4_amount, inst4_date, inst4_note, inst4_method, inst4_status,
              lead_source, additional_notes, ops_notes,
-             contract_path,
+             contract_path, onboarding_gated,
              form_status, current_step)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, 'draft', 1)''',
+                    ?, ?, ?, ?, 1, 'draft', 1)''',
             (acct_id, inv['id'], inv['product_id'], reg_num,
              first_name, last_name, clean, inv['client_email'] or '',
              counsellor_id, counsellor_name,
@@ -1245,7 +1245,7 @@ def _client_gate_status(conn, acct_id):
     """
     reg = conn.execute(
         "SELECT * FROM client_registrations WHERE account_id = ? "
-        "AND client_submitted_at IS NOT NULL "
+        "AND client_submitted_at IS NOT NULL AND COALESCE(onboarding_gated, 0) = 1 "
         "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
     if not reg:
         return None, None, []
@@ -1301,8 +1301,11 @@ def client_contract():
     conn.close()
     if not reg or not reg['contract_path']:
         return redirect(url_for('client_refund_policy'))
+    _ck = reg['contract_path'] or ''
+    contract_ext = _ck.rsplit('.', 1)[-1].lower() if '.' in _ck else 'pdf'
     return render_template('client_contract.html', account=account, reg=reg,
-                           agreement=agreement, stages=stages, step=step)
+                           agreement=agreement, stages=stages, step=step,
+                           contract_ext=contract_ext)
 
 
 @app.route('/client/contract/view')
@@ -1326,6 +1329,33 @@ def client_contract_view():
     except Exception as e:
         logging.error(f"client contract view presign: {e}")
     return "Contract temporarily unavailable", 503
+
+
+@app.route('/client/contract/file')
+@client_required
+def client_contract_file():
+    """Stream the contract bytes SAME-ORIGIN so the in-portal PDF.js reader can
+    read it without needing cross-origin/CORS access to R2."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    reg = conn.execute(
+        "SELECT contract_path FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL AND contract_path IS NOT NULL "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    conn.close()
+    if not reg or not reg['contract_path']:
+        return "No contract on file", 404
+    key = reg['contract_path']
+    ext = key.rsplit('.', 1)[-1].lower() if '.' in key else 'pdf'
+    from core import storage
+    data = storage.download_bytes(key)
+    if data is None:
+        return "Contract temporarily unavailable", 503
+    from flask import Response
+    resp = Response(data, mimetype=_CONTRACT_CT.get(ext, 'application/octet-stream'))
+    resp.headers['Content-Disposition'] = 'inline; filename="contract.%s"' % ext
+    resp.headers['Cache-Control'] = 'private, max-age=300'
+    return resp
 
 
 @app.route('/client/contract/agree', methods=['POST'])
@@ -15602,6 +15632,7 @@ def ensure_ops_tables():
             additional_notes TEXT,
             client_submitted_at TIMESTAMP,
             contract_path TEXT,
+            onboarding_gated INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
@@ -15617,6 +15648,15 @@ def ensure_ops_tables():
         # on client_invitations.contract_path). Additive for existing DBs.
         try:
             conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS contract_path TEXT")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        # onboarding_gated: only NEW registrations (created from 2026-07-09 onward)
+        # go through the Contract + Refund-Policy lock. Existing/in-process clients
+        # keep the default 0 so they are never locked out of their dashboard.
+        try:
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS onboarding_gated INTEGER DEFAULT 0")
             conn.commit()
         except Exception:
             try: conn.rollback()

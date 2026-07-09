@@ -147,6 +147,21 @@ def presigned_get_url(key: str, ttl_seconds: int = PRESIGNED_TTL_SECONDS,
         return None
 
 
+def download_bytes(key: str) -> Optional[bytes]:
+    """Download an R2 object's raw bytes (server-side). Used to stream a file
+    same-origin through the portal so the browser (e.g. PDF.js) can read it
+    without needing cross-origin/CORS access to R2. Returns None on failure."""
+    c = get_client()
+    if c is None:
+        return None
+    try:
+        obj = c.get_object(Bucket=get_bucket_name(), Key=key)
+        return obj['Body'].read()
+    except Exception as e:
+        logging.error(f"storage.download_bytes({key}): {e}")
+        return None
+
+
 def delete_object(key: str) -> bool:
     """Delete one R2 object. Used when a client doc is deleted via UI
     or when the bulk importer's wipe step clears prior pathway data."""

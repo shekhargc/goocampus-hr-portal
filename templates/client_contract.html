@@ -6,6 +6,7 @@
     <title>Your Contract &mdash; GooCampus</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet">
     <style>
         :root { --gc-navy:#1e3a5f; --gc-orange:#f97316; }
         body { background:#f4f6f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; min-height:100vh; }
@@ -15,7 +16,13 @@
         .gc-navbar .nav-link, .gc-navbar .client-name { color:#fff; }
         .policy-card { background:#fff; border:1px solid #e5e7eb; border-radius:0.9rem; padding:1.6rem 1.8rem; }
         .agreed-banner { background:#D1FAE5; border:1px solid #6EE7B7; color:#065F46; border-radius:0.6rem; padding:0.9rem 1.1rem; }
-        .contract-frame { width:100%; height:60vh; min-height:380px; border:1px solid #e5e7eb; border-radius:0.6rem; background:#fbfcfe; }
+        #pdfScroll { max-height:62vh; min-height:360px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:0.6rem; background:#525659; padding:14px; text-align:center; }
+        .pdf-page { display:block; margin:0 auto 14px; max-width:100%; box-shadow:0 2px 10px rgba(0,0,0,0.35); border-radius:2px; }
+        #pdfScroll img.contract-img { max-width:100%; border-radius:2px; box-shadow:0 2px 10px rgba(0,0,0,0.35); }
+        .read-note { font-size:0.8rem; margin:0.6rem 0 0; }
+        .sig-preview { font-family:'Dancing Script',cursive; font-size:2.1rem; color:#0f172a; line-height:1.1; min-height:2.2rem; }
+        .sig-block { border:1px solid #e5e7eb; border-radius:0.6rem; padding:0.8rem 1.1rem; background:#fbfcfe; display:inline-block; min-width:260px; }
+        .sig-line { border-top:1px solid #cbd5e1; margin-top:0.35rem; padding-top:0.25rem; font-size:0.72rem; color:#94a3b8; }
     </style>
 </head>
 <body>
@@ -40,15 +47,19 @@
 
         <h2 style="color:var(--gc-navy);font-weight:700;margin:0.3rem 0 0.3rem;">Your Contract</h2>
         <p style="color:#64748b;font-size:0.85rem;margin-bottom:1.1rem;">
-            Please read your signed contract below and confirm your digital agreement. You already
-            signed this physically at enrolment — this records your acknowledgement online.
+            Please read your signed contract below from start to finish, then confirm your digital
+            agreement. You already signed this physically at enrolment — this records your
+            acknowledgement online.
         </p>
 
         {% if agreement %}
         <div class="agreed-banner mb-3">
-            <i class="bi bi-patch-check-fill me-1"></i>
-            <strong>Agreed digitally</strong> by {{ agreement.agreed_name }} on
-            {{ agreement.agreed_at.strftime('%d %b %Y, %H:%M') if agreement.agreed_at.strftime else agreement.agreed_at }}.
+            <div><i class="bi bi-patch-check-fill me-1"></i><strong>Agreed digitally</strong> on
+            {{ agreement.agreed_at.strftime('%d %b %Y, %H:%M') if agreement.agreed_at.strftime else agreement.agreed_at }}.</div>
+            <div class="sig-block mt-2">
+                <div class="sig-preview">{{ agreement.agreed_name }}</div>
+                <div class="sig-line">Digitally signed &mdash; {{ agreement.agreed_name }}</div>
+            </div>
         </div>
         {% endif %}
 
@@ -56,21 +67,36 @@
             <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                 <span style="font-weight:600;color:var(--gc-navy);font-size:0.9rem;"><i class="bi bi-file-earmark-text me-1"></i>Contract document</span>
                 <a href="/client/contract/view" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-box-arrow-up-right me-1"></i>Open full contract in a new tab
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Open in a new tab
                 </a>
             </div>
-            <iframe src="/client/contract/view" class="contract-frame" title="Your contract"></iframe>
+
+            <div id="pdfScroll" data-ext="{{ contract_ext }}">
+                {% if contract_ext in ['jpg','jpeg','png'] %}
+                <img src="/client/contract/file" class="contract-img" alt="Your contract">
+                {% else %}
+                <div id="pdfPages"></div>
+                <div id="pdfLoading" style="color:#e5e7eb;font-size:0.85rem;padding:1.5rem;">Loading your contract…</div>
+                {% endif %}
+            </div>
+            <p id="readNote" class="read-note" style="color:#b45309;"><i class="bi bi-arrow-down-circle me-1"></i>Please scroll through to the end of the contract to continue.</p>
 
             {% if not agreement %}
-            <hr style="margin:1.4rem 0;">
+            <hr style="margin:1.2rem 0;">
             <form method="POST" action="/client/contract/agree">
-                <div class="mb-3">
-                    <label style="font-size:0.85rem;font-weight:600;color:var(--gc-navy);">Type your full name to sign</label>
-                    <input type="text" name="agreed_name" required value="{{ session.client_name or '' }}"
+                <div class="mb-2">
+                    <label style="font-size:0.85rem;font-weight:600;color:var(--gc-navy);">Type your full name — it becomes your digital signature</label>
+                    <input type="text" name="agreed_name" id="sigName" required value="{{ session.client_name or '' }}"
                            class="form-control" style="max-width:360px;" placeholder="Your full name">
                 </div>
+                <div class="mb-3">
+                    <div class="sig-block">
+                        <div class="sig-preview" id="sigPreview">{{ session.client_name or '' }}</div>
+                        <div class="sig-line">Your digital signature</div>
+                    </div>
+                </div>
                 <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" name="agree" id="agreeChk" required>
+                    <input class="form-check-input" type="checkbox" name="agree" id="agreeChk" required disabled>
                     <label class="form-check-label" for="agreeChk" style="font-size:0.9rem;">
                         I have read the entire contract above and I digitally agree to it.
                     </label>
@@ -78,10 +104,10 @@
                 <button type="submit" id="agreeBtn" class="btn" disabled style="background:var(--gc-orange);color:#fff;font-weight:600;padding:0.55rem 1.6rem;opacity:0.5;">
                     <i class="bi bi-pen me-1"></i>Agree &amp; Continue
                 </button>
-                <p style="font-size:0.75rem;color:#94a3b8;margin:0.7rem 0 0;">By agreeing, your name, the date/time and your IP address are recorded. Next, you’ll review the Refund Policy.</p>
+                <p style="font-size:0.75rem;color:#94a3b8;margin:0.7rem 0 0;">Your name, the date/time and your IP address are recorded as your digital signature. Next, you’ll review the Refund Policy.</p>
             </form>
             {% else %}
-            <hr style="margin:1.4rem 0;">
+            <hr style="margin:1.2rem 0;">
             <a href="/client/refund-policy" class="btn" style="background:var(--gc-orange);color:#fff;font-weight:600;padding:0.55rem 1.6rem;">
                 Continue to Refund Policy <i class="bi bi-arrow-right ms-1"></i>
             </a>
@@ -89,15 +115,73 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
     (function () {
+        var box = document.getElementById('pdfScroll');
         var chk = document.getElementById('agreeChk');
         var btn = document.getElementById('agreeBtn');
-        if (!chk || !btn) return;
-        chk.addEventListener('change', function () {
-            btn.disabled = !chk.checked;
-            btn.style.opacity = chk.checked ? '1' : '0.5';
-        });
+        var note = document.getElementById('readNote');
+        var nameInp = document.getElementById('sigName');
+        var sigPrev = document.getElementById('sigPreview');
+
+        // Live signature preview from the typed name.
+        if (nameInp && sigPrev) {
+            nameInp.addEventListener('input', function () { sigPrev.textContent = nameInp.value || ''; });
+        }
+        function syncBtn() { if (btn && chk) { btn.disabled = !chk.checked; btn.style.opacity = chk.checked ? '1' : '0.5'; } }
+        if (chk) chk.addEventListener('change', syncBtn);
+
+        // Unlock the agreement controls once the reader confirms the contract
+        // has been read to the end (or on a technical failure, via the fallback).
+        var unlocked = false;
+        function unlock(msg, ok) {
+            if (unlocked) return; unlocked = true;
+            if (chk) chk.disabled = false;
+            if (note) { note.innerHTML = '<i class="bi bi-check-circle me-1" style="color:#16a34a;"></i>' + (msg || 'You’ve reached the end — you can now agree below.'); note.style.color = ok === false ? '#b45309' : '#16a34a'; }
+        }
+        function atBottom() { return box.scrollTop + box.clientHeight >= box.scrollHeight - 16; }
+        function onScroll() { if (atBottom()) unlock(); }
+        box.addEventListener('scroll', onScroll);
+        function checkFits() { if (box.scrollHeight <= box.clientHeight + 16) unlock(); }
+
+        var ext = box.getAttribute('data-ext');
+        if (['jpg', 'jpeg', 'png'].indexOf(ext) !== -1) {
+            // Image contract: unlock when the image is loaded + scrolled through.
+            var img = box.querySelector('img.contract-img');
+            if (img) { if (img.complete) { checkFits(); } else { img.addEventListener('load', checkFits); img.addEventListener('error', function(){ unlock('Preview unavailable — please open the contract in a new tab, then agree.', false); }); } }
+            else { unlock(); }
+        } else if (window['pdfjsLib']) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            var pagesEl = document.getElementById('pdfPages');
+            var loadingEl = document.getElementById('pdfLoading');
+            pdfjsLib.getDocument('/client/contract/file').promise.then(function (pdf) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                var canvases = [];
+                for (var n = 1; n <= pdf.numPages; n++) {
+                    var c = document.createElement('canvas'); c.className = 'pdf-page'; pagesEl.appendChild(c); canvases.push(c);
+                }
+                var tasks = [];
+                for (var p = 1; p <= pdf.numPages; p++) {
+                    (function (p) {
+                        tasks.push(pdf.getPage(p).then(function (page) {
+                            var un = page.getViewport({ scale: 1 });
+                            var scale = Math.min(1.6, (box.clientWidth - 40) / un.width);
+                            var vp = page.getViewport({ scale: scale });
+                            var c = canvases[p - 1]; c.width = vp.width; c.height = vp.height;
+                            return page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+                        }));
+                    })(p);
+                }
+                Promise.all(tasks).then(function () { checkFits(); onScroll(); });
+            }).catch(function (err) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                unlock('Could not display the contract here. Please open it in a new tab to read it, then agree.', false);
+            });
+        } else {
+            // pdf.js failed to load — fall back to the new-tab reader.
+            unlock('Please open the contract in a new tab to read it, then agree.', false);
+        }
     })();
     </script>
 </body>
