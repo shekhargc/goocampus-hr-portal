@@ -27300,10 +27300,18 @@ def sales_leads_delete(lead_id):
         flash('Admins only', 'error')
         return redirect(url_for('sales_leads_list'))
     conn = get_db()
+    # Delete the lead's closures too. Previously only the lead row was removed,
+    # so a deleted (e.g. duplicate) lead left ORPHAN closures behind — which kept
+    # counting toward Closures revenue (the "1 lead but 2 closures / inflated
+    # revenue" symptom). Closures carry the revenue, so removing the lead should
+    # remove its closures.
+    n_cl = conn.execute('SELECT COUNT(*) AS n FROM sales_closures WHERE lead_id = ?', (lead_id,)).fetchone()
+    conn.execute('DELETE FROM sales_closures WHERE lead_id = ?', (lead_id,))
     conn.execute('DELETE FROM sales_leads WHERE id = ?', (lead_id,))
     conn.commit()
     conn.close()
-    flash('Lead deleted', 'success')
+    _cln = (n_cl['n'] if n_cl else 0) or 0
+    flash('Lead deleted' + (f' (and {_cln} linked closure{"s" if _cln != 1 else ""})' if _cln else ''), 'success')
     return redirect(url_for('sales_leads_list'))
 
 
