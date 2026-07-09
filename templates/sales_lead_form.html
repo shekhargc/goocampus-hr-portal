@@ -15,7 +15,7 @@
         <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Closed Client' if mode == 'edit' else 'Add Closed Client' }}</h1>
         <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Record a finalised client to start onboarding. The closure is recorded automatically and an invitation link is sent to the client.</p>
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="is_hot" value="0" />
 
             {# ===== Sales / lead details ===== #}
@@ -179,6 +179,19 @@
                     <label class="slf-lbl">Additional Package Notes</label>
                     <textarea name="additional_package_notes" rows="2" placeholder="Any package-related notes for the client to see..."
                               style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ closure.additional_package_notes if closure and closure.additional_package_notes else '' }}</textarea>
+                </div>
+
+                {# Signed contract: sales attaches the client's signed contract here when
+                   sending the invite. The client reads it and digitally agrees in their
+                   dashboard after Review & Submit (they already physically signed). #}
+                <div style="margin-top:0.9rem;padding-top:0.8rem;border-top:1px dashed var(--gray-200);">
+                    <label class="slf-lbl">Signed Contract <span style="font-weight:400;color:var(--gray-500);">(PDF / image — the client reads &amp; digitally agrees after registering)</span></label>
+                    {% if closure and closure.contract_path %}
+                    <div style="font-size:0.8rem;color:#166534;font-weight:600;margin:0.15rem 0 0.35rem;">&#10003; Contract already on file — choose a new file only to replace it.</div>
+                    {% endif %}
+                    <input type="file" name="contract_file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                           style="width:100%;padding:0.5rem 0.6rem;border:1px dashed var(--gray-300);border-radius:0.4rem;font-size:0.82rem;box-sizing:border-box;background:#FAFAFA;" />
+                    <p style="margin:0.3rem 0 0;font-size:0.72rem;color:var(--gray-500);">Max 15 MB. Optional — if left blank, the client skips straight to the Refund Policy.</p>
                 </div>
             </div>
 

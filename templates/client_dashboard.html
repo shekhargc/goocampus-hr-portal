@@ -282,6 +282,11 @@
             <p>Manage your registrations and track your application progress below.</p>
         </div>
 
+        <!-- Onboarding progress strip (Registration → … → Completed) -->
+        {% if onboarding_stages %}
+        {% with stages = onboarding_stages %}{% include '_onboarding_strip.html' %}{% endwith %}
+        {% endif %}
+
         <!-- Document Requests Alert -->
         {% if doc_requests %}
         <div class="doc-alert">

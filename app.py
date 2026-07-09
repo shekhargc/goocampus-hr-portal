@@ -1116,13 +1116,14 @@ def client_register(token):
              inst3_amount, inst3_date, inst3_note, inst3_method, inst3_status,
              inst4_amount, inst4_date, inst4_note, inst4_method, inst4_status,
              lead_source, additional_notes, ops_notes,
+             contract_path,
              form_status, current_step)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
-                    ?, ?, ?, 'draft', 1)''',
+                    ?, ?, ?, ?, 'draft', 1)''',
             (acct_id, inv['id'], inv['product_id'], reg_num,
              first_name, last_name, clean, inv['client_email'] or '',
              counsellor_id, counsellor_name,
@@ -1131,7 +1132,8 @@ def client_register(token):
              inst_amts[1], inst_dts[1], inst_nts[1], inst_mts[1], inst_sts[1],
              inst_amts[2], inst_dts[2], inst_nts[2], inst_mts[2], inst_sts[2],
              inst_amts[3], inst_dts[3], inst_nts[3], inst_mts[3], inst_sts[3],
-             lead_source, addl_notes, ops_notes_val))
+             lead_source, addl_notes, ops_notes_val,
+             inv['contract_path']))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
 
@@ -1227,6 +1229,135 @@ def _get_refund_policy(conn):
     return row
 
 
+def _client_gate_status(conn, acct_id):
+    """Post-submit onboarding gate for a client account.
+
+    After the client completes Review & Submit, they must read + digitally
+    agree to (1) their signed Contract — only if sales uploaded one — and then
+    (2) the Refund Policy, before the rest of the dashboard unlocks
+    ('lock until done'). They already physically signed the contract; this is
+    the digital acknowledgement.
+
+    Returns (reg, step, stages):
+      reg    – the client-submitted registration row (client_submitted_at set), or None
+      step   – 'contract' | 'refund' | None  (None = all done, or nothing submitted yet)
+      stages – list of {key,label,state} for the onboarding progress strip
+    """
+    reg = conn.execute(
+        "SELECT * FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    if not reg:
+        return None, None, []
+    has_contract = bool(reg['contract_path'])
+    contract_done = False
+    if has_contract:
+        contract_done = bool(conn.execute(
+            "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+            "AND agreement_type = 'contract' LIMIT 1", (acct_id, reg['id'])).fetchone())
+    policy = _get_refund_policy(conn)
+    pver = policy['version'] if policy else 1
+    refund_done = bool(conn.execute(
+        "SELECT 1 FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
+        "AND policy_version = ? LIMIT 1", (acct_id, pver)).fetchone())
+    if has_contract and not contract_done:
+        step = 'contract'
+    elif not refund_done:
+        step = 'refund'
+    else:
+        step = None
+
+    def _st(done, current):
+        return 'done' if done else ('current' if current else 'upcoming')
+    stages = [
+        {'key': 'register', 'label': 'Registration',    'state': 'done'},
+        {'key': 'review',   'label': 'Review & Submit',  'state': 'done'},
+    ]
+    if has_contract:
+        stages.append({'key': 'contract', 'label': 'Contract',
+                       'state': _st(contract_done, step == 'contract')})
+    stages.append({'key': 'refund', 'label': 'Refund Policy',
+                   'state': _st(refund_done, step == 'refund')})
+    stages.append({'key': 'done', 'label': 'Completed',
+                   'state': 'done' if step is None else 'upcoming'})
+    return reg, step, stages
+
+
+@app.route('/client/contract', methods=['GET'])
+@client_required
+def client_contract():
+    """Client reads their signed contract and digitally agrees. If no contract
+    is on file for them, skip straight to the Refund Policy."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    reg, step, stages = _client_gate_status(conn, acct_id)
+    agreement = None
+    if reg and reg['contract_path']:
+        agreement = conn.execute(
+            "SELECT * FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+            "AND agreement_type = 'contract' ORDER BY id DESC LIMIT 1",
+            (acct_id, reg['id'])).fetchone()
+    conn.close()
+    if not reg or not reg['contract_path']:
+        return redirect(url_for('client_refund_policy'))
+    return render_template('client_contract.html', account=account, reg=reg,
+                           agreement=agreement, stages=stages, step=step)
+
+
+@app.route('/client/contract/view')
+@client_required
+def client_contract_view():
+    """Stream the client's own contract file via a short-lived presigned URL."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    reg = conn.execute(
+        "SELECT contract_path FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL AND contract_path IS NOT NULL "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    conn.close()
+    if not reg or not reg['contract_path']:
+        return "No contract on file", 404
+    try:
+        from core import storage
+        url = storage.presigned_get_url(reg['contract_path'])
+        if url:
+            return redirect(url, code=302)
+    except Exception as e:
+        logging.error(f"client contract view presign: {e}")
+    return "Contract temporarily unavailable", 503
+
+
+@app.route('/client/contract/agree', methods=['POST'])
+@client_required
+def client_contract_agree():
+    acct_id = session.get('user_id')
+    agreed_name = (request.form.get('agreed_name') or '').strip()
+    if not request.form.get('agree') or not agreed_name:
+        flash('Please tick the box and type your full name to digitally agree.', 'error')
+        return redirect(url_for('client_contract'))
+    conn = get_db()
+    reg = conn.execute(
+        "SELECT id FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL AND contract_path IS NOT NULL "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    if not reg:
+        conn.close()
+        return redirect(url_for('client_refund_policy'))
+    existing = conn.execute(
+        "SELECT id FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+        "AND agreement_type = 'contract' LIMIT 1", (acct_id, reg['id'])).fetchone()
+    if not existing:
+        ip = (request.headers.get('X-Forwarded-For', '') or request.remote_addr or '').split(',')[0].strip()
+        conn.execute(
+            "INSERT INTO client_agreements (account_id, registration_id, agreement_type, agreed_name, ip_address) "
+            "VALUES (?, ?, 'contract', ?, ?)", (acct_id, reg['id'], agreed_name, ip))
+        conn.commit()
+    conn.close()
+    flash('Contract agreed digitally. Please now read the Refund Policy.', 'success')
+    return redirect(url_for('client_refund_policy'))
+
+
 @app.route('/client/refund-policy', methods=['GET'])
 @client_required
 def client_refund_policy():
@@ -1237,9 +1368,14 @@ def client_refund_policy():
     agreement = conn.execute(
         "SELECT * FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
         "ORDER BY id DESC LIMIT 1", (acct_id,)).fetchone()
+    _reg, step, stages = _client_gate_status(conn, acct_id)
     conn.close()
+    # Enforce contract-first: if a contract is still pending, send them there.
+    if step == 'contract':
+        return redirect(url_for('client_contract'))
     return render_template('client_refund_policy.html',
-                           account=account, policy=policy, agreement=agreement)
+                           account=account, policy=policy, agreement=agreement,
+                           stages=stages, step=step)
 
 
 @app.route('/client/refund-policy/agree', methods=['POST'])
@@ -1289,8 +1425,8 @@ def client_refund_policy_agree():
     except Exception as e:
         logging.error(f"refund policy agree email: {e}")
     conn.close()
-    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you.', 'success')
-    return redirect(url_for('client_refund_policy'))
+    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you. Your onboarding is complete.', 'success')
+    return redirect(url_for('client_dashboard'))
 
 
 @app.route('/admin/policies/refund', methods=['GET'])
@@ -1611,6 +1747,16 @@ def client_dashboard():
     acct_id = session.get('user_id')
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    # Post-submit onboarding gate: lock the dashboard until the client has
+    # digitally agreed to their Contract (if one is on file) and the Refund
+    # Policy. Redirect to whichever step is still pending.
+    _greg, _gate_step, onboarding_stages = _client_gate_status(conn, acct_id)
+    if _gate_step == 'contract':
+        conn.close()
+        return redirect(url_for('client_contract'))
+    if _gate_step == 'refund':
+        conn.close()
+        return redirect(url_for('client_refund_policy'))
     # Item C-2: fetch counsellor contact for "Your counsellor" card.
     registrations_raw = conn.execute('''
         SELECT cr.*, ps.name as product_name,
@@ -1751,6 +1897,7 @@ def client_dashboard():
     return render_template('client_dashboard.html',
         account=account, registrations=registrations, doc_requests=doc_requests,
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
+        onboarding_stages=onboarding_stages,
         first_login=session.get('first_login', False))
 
 
@@ -15383,6 +15530,17 @@ def ensure_ops_tables():
         except Exception:
             try: conn.rollback()
             except Exception: pass
+        # 2026-07-09: signed contract file the sales rep uploads when sending
+        # the invite. Lives on the invitation (the registration doesn't exist
+        # yet at upload time) and is copied to client_registrations.contract_path
+        # when the client accepts. Shown to the client to read + digitally agree
+        # after Review & Submit.
+        try:
+            conn.execute("ALTER TABLE client_invitations ADD COLUMN contract_path TEXT")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # ── Client Registrations (main client data per product) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_registrations (
@@ -15443,6 +15601,7 @@ def ensure_ops_tables():
             lead_source TEXT,
             additional_notes TEXT,
             client_submitted_at TIMESTAMP,
+            contract_path TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
@@ -15454,6 +15613,14 @@ def ensure_ops_tables():
                     conn.execute(f"ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS inst{_i}_{_c} TEXT")
                 except Exception:
                     pass
+        # Signed contract copied from the invitation at registration time (see note
+        # on client_invitations.contract_path). Additive for existing DBs.
+        try:
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS contract_path TEXT")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # ── Client Academics (mirrors ops_academic_details fields) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_academics (
@@ -26740,6 +26907,32 @@ def sales_leads_add():
                         )
                         if token:
                             flash('Closed client recorded and invitation sent on WhatsApp', 'success')
+                            # Attach the signed contract (if uploaded) to the invitation.
+                            # It's copied to the client_registrations row when the client
+                            # accepts, then shown to them to read + digitally agree.
+                            try:
+                                cfile = request.files.get('contract_file')
+                                if cfile and cfile.filename:
+                                    cbytes = cfile.read()
+                                    if len(cbytes) > 15 * 1024 * 1024:
+                                        flash('Contract not saved: file too large (max 15 MB)', 'warning')
+                                    else:
+                                        from core import storage
+                                        if storage.is_configured():
+                                            cext = cfile.filename.rsplit('.', 1)[-1].lower() if '.' in cfile.filename else 'pdf'
+                                            ckey = storage.make_doc_key('client', f'invite_{token[:12]}', 'Contract', cfile.filename)
+                                            if storage.upload_bytes(ckey, cbytes, _CONTRACT_CT.get(cext, 'application/octet-stream')):
+                                                conn.execute("UPDATE client_invitations SET contract_path = ? WHERE token = ?", (ckey, token))
+                                                conn.commit()
+                                            else:
+                                                flash('Contract not saved: upload to storage failed', 'warning')
+                                        else:
+                                            flash('Contract not saved: file storage not configured', 'warning')
+                            except Exception as _ce:
+                                logging.warning(f"closure contract upload failed: {_ce}")
+                                try: conn.rollback()
+                                except Exception: pass
+                                flash('Contract not saved (upload error -- check logs)', 'warning')
                         else:
                             flash('Closed client recorded (invitation skipped: phone missing or duplicate)', 'success')
                     except Exception as inv_err:
