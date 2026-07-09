@@ -27153,17 +27153,36 @@ def sales_leads_edit(lead_id):
                 edited[f'inst{i}_note']   = _ef(f'inst{i}_note')
                 edited[f'inst{i}_method'] = _ef(f'inst{i}_method')
                 edited[f'inst{i}_status'] = _ef(f'inst{i}_status')
+            # AMC Consulting + AMC 1 (Training) combo — capture it on EDIT too, else
+            # saving an edit wiped the training enrolment out of closure_metadata.
+            edited['include_training'] = (request.form.get('include_training') in ('on', '1', 'true', 'yes'))
+            edited['training_package']  = _en('training_package')
+            edited['training_discount'] = _en('training_discount')
+            edited['training_final']    = _en('training_final')
+            for i in (1, 2, 3, 4):
+                edited[f'training_inst{i}_amount'] = round(_en(f'training_inst{i}_amount')/1.18, 2)
+                edited[f'training_inst{i}_date']   = _ef(f'training_inst{i}_date')
+                edited[f'training_inst{i}_method'] = _ef(f'training_inst{i}_method')
+                edited[f'training_inst{i}_status'] = _ef(f'training_inst{i}_status')
             _ph = (request.form.get('phone') or lead['phone'] or '').lstrip('+').lstrip('0')
             if _ph.startswith('91') and len(_ph) == 12:
                 _ph = _ph[2:]
             if _ph and product_id:
                 inv = conn.execute(
-                    "SELECT id FROM client_invitations WHERE client_mobile = ? AND product_id = ? "
+                    "SELECT id, closure_metadata FROM client_invitations WHERE client_mobile = ? AND product_id = ? "
                     "AND COALESCE(status,'pending') <> 'cancelled' ORDER BY id DESC LIMIT 1",
                     (_ph, product_id)).fetchone()
                 if inv:
+                    # Merge onto the EXISTING closure_metadata so we never wipe keys the
+                    # edit form didn't resubmit (e.g. ops_notes) — the earlier bug that
+                    # lost the AMC-training enrolment on save.
+                    try:
+                        _base = _json.loads(inv['closure_metadata']) if inv['closure_metadata'] else {}
+                    except Exception:
+                        _base = {}
+                    _merged = {**_base, **edited}
                     conn.execute("UPDATE client_invitations SET closure_metadata = ? WHERE id = ?",
-                                 (_json.dumps({k: v for k, v in edited.items() if v not in (None, '')}), inv['id']))
+                                 (_json.dumps({k: v for k, v in _merged.items() if v not in (None, '')}), inv['id']))
                 reg = conn.execute(
                     "SELECT id FROM client_registrations WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
                     (_ph, product_id)).fetchone()
