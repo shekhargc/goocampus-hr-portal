@@ -27184,8 +27184,10 @@ def sales_leads_edit(lead_id):
                     conn.execute("UPDATE client_invitations SET closure_metadata = ? WHERE id = ?",
                                  (_json.dumps({k: v for k, v in _merged.items() if v not in (None, '')}), inv['id']))
                 reg = conn.execute(
-                    "SELECT id FROM client_registrations WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
-                    (_ph, product_id)).fetchone()
+                    "SELECT id FROM client_registrations "
+                    "WHERE regexp_replace(mobile, '[^0-9]', '', 'g') LIKE ? AND product_id = ? "
+                    "ORDER BY id DESC LIMIT 1",
+                    ('%' + _ph, product_id)).fetchone()
                 if reg:
                     conn.execute('''UPDATE client_registrations SET
                         plan_type = ?, package_amount = ?, discount_allowed = ?, final_package = ?,
@@ -27286,8 +27288,9 @@ def sales_leads_edit(lead_id):
                 closure['contract_path'] = inv['contract_path']
             reg = conn.execute(
                 "SELECT * FROM client_registrations "
-                "WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
-                (_ph, lead['product_id'])).fetchone()
+                "WHERE regexp_replace(mobile, '[^0-9]', '', 'g') LIKE ? AND product_id = ? "
+                "ORDER BY id DESC LIMIT 1",
+                ('%' + _ph, lead['product_id'])).fetchone()
             if reg:
                 closure['plan_type']        = reg['plan_type'] or closure.get('plan_type', '')
                 closure['package_amount']   = reg['package_amount'] if reg['package_amount'] is not None else closure.get('package_amount', 0)
