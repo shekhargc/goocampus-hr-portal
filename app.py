@@ -15272,23 +15272,43 @@ def ensure_ops_tables():
             footer_text TEXT,
             buttons TEXT,
             infobip_template_id VARCHAR(120),
+            sender VARCHAR(20),
             synced_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # sender: the WhatsApp number this template is registered/approved under.
+        # Most templates use the default GooCampus sender, but some (e.g.
+        # ug_community_link) live on a DIFFERENT sender and must be sent from it.
+        try:
+            conn.execute("ALTER TABLE wa_templates ADD COLUMN IF NOT EXISTS sender VARCHAR(20)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # Seed approved templates if not already present
         for tpl_seed in [
             {'name': 'communitylink2', 'language': 'en', 'category': 'MARKETING', 'status': 'APPROVED',
              'body_text': 'Hello {{1}}, Join the GooCampus NEET PG WhatsApp community for daily cut-off updates and counselling strategy.'},
             {'name': 'joincommunity', 'language': 'en_IN', 'category': 'MARKETING', 'status': 'APPROVED',
-             'body_text': 'Hello {{1}}, {{2}} cut-off data is now available. Access here: {{3}}'}
+             'body_text': 'Hello {{1}}, {{2}} cut-off data is now available. Access here: {{3}}'},
+            # ug_community_link is approved under a DIFFERENT WhatsApp sender (15558640596),
+            # so it must be sent from that number — not the default GooCampus sender.
+            {'name': 'ug_community_link', 'language': 'en', 'category': 'MARKETING', 'status': 'APPROVED',
+             'body_text': 'Hello {{1}} - join the GooCampus UG community. (Community link is included in the approved WhatsApp message.)',
+             'sender': '15558640596', 'infobip_template_id': '4628176734135544'},
         ]:
             existing_tpl = conn.execute("SELECT id FROM wa_templates WHERE name=? AND language=?",
                 (tpl_seed['name'], tpl_seed['language'])).fetchone()
             if not existing_tpl:
-                conn.execute("""INSERT INTO wa_templates (name, language, category, status, body_text, synced_at)
-                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
-                    (tpl_seed['name'], tpl_seed['language'], tpl_seed['category'], tpl_seed['status'], tpl_seed['body_text']))
+                conn.execute("""INSERT INTO wa_templates (name, language, category, status, body_text, sender, infobip_template_id, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                    (tpl_seed['name'], tpl_seed['language'], tpl_seed['category'], tpl_seed['status'],
+                     tpl_seed['body_text'], tpl_seed.get('sender'), tpl_seed.get('infobip_template_id')))
+            elif tpl_seed.get('sender'):
+                # Back-fill the sender on a template added before the sender column existed.
+                conn.execute("UPDATE wa_templates SET sender = ? WHERE id = ? AND (sender IS NULL OR sender = '')",
+                    (tpl_seed['sender'], existing_tpl['id']))
 
         conn.execute('''CREATE TABLE IF NOT EXISTS wa_campaigns (
             id SERIAL PRIMARY KEY,
@@ -38316,7 +38336,9 @@ def wa_quick_send():
 
         INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
         INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
-        sender = "15558246314"
+        # Send from the template's own approved sender (some templates live on a
+        # different WhatsApp number); fall back to the default GooCampus sender.
+        sender = (tpl.get('sender') or '').strip() or "15558246314"
         sent = 0
         failed = 0
 
