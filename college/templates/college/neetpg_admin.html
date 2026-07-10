@@ -594,8 +594,9 @@
         </div>
         <div class="np-form-actions">
             <div class="np-form-group np-file-group">
-                <label>PDF File</label>
-                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required style="font-size:0.78rem;">
+                <label>PDF File <span style="font-weight:400;color:var(--gray-400);font-size:0.72rem;">(auto-fills form for College Profile / Bond Doc names)</span></label>
+                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required style="font-size:0.78rem;"
+                       onchange="npParseFilename(this)">
             </div>
             <div class="np-form-group np-upload-group">
                 <button type="submit" class="np-btn np-btn-primary" style="justify-content:center;padding:0.55rem 1.5rem;">
@@ -1136,6 +1137,70 @@ function npRefreshTitle() {
     if (npTitleManual) return;
     var t = document.getElementById('npTitle');
     if (t) t.value = npBuildTitle();
+}
+
+// ── Auto-fill the form from a college-doc filename ──
+// ONLY fires for College Profile / College Bond Doc file names, so Cut Off and
+// Stipend uploads are never touched. Expected name (‑ = " - "):
+//   "<State> - <College Name> - <NEET PG|DNB> - AIQ MCC College Profile 2025"
+//   "<State> - <College Name> - <NEET PG|DNB> - AIQ MCC College Bond Doc 2025"
+function npParseFilename(input) {
+    if (!input || !input.files || !input.files.length) return;
+    var name = input.files[0].name.replace(/\.pdf$/i, '').trim();
+    var low = name.toLowerCase();
+
+    // Detect doc type — only the two college-name types trigger auto-fill.
+    var docType = null;
+    if (/college bond|bond doc/.test(low)) docType = 'mcc_bond_doc';
+    else if (/college profile/.test(low)) docType = 'mcc_profile';
+    if (!docType) return;  // not a college doc → leave the form exactly as-is
+
+    // Split on hyphens (tolerating missing spaces, e.g. "NEET PG- AIQ").
+    var parts = name.split(/\s*-\s*/).map(function(s) { return s.trim(); }).filter(Boolean);
+    if (parts.length < 3) return;
+
+    // Category = the segment that equals DNB / NEET PG. College names may contain
+    // hyphens, so everything between the state and the category is the name.
+    var catIdx = -1, category = null;
+    for (var i = 1; i < parts.length; i++) {
+        var pl = parts[i].toLowerCase();
+        if (pl === 'dnb') { catIdx = i; category = 'dnb'; break; }
+        if (pl === 'neet pg' || pl === 'neetpg' || pl === 'md/ms' || pl === 'md' || pl === 'ms') {
+            catIdx = i; category = 'neetpg'; break;
+        }
+    }
+    if (catIdx === -1) { category = /\bdnb\b/.test(low) ? 'dnb' : 'neetpg'; catIdx = 2; }
+
+    var state = parts[0];
+    var college = parts.slice(1, catIdx).join(' - ').trim();
+
+    // Apply — doc type FIRST (relabels field + clears specialty), then the values.
+    var dtEl = document.getElementById('npDocType');
+    if (dtEl) { dtEl.value = docType; npUpdateDocType(); }
+    var catEl = document.getElementById('npCategory');
+    if (catEl) catEl.value = category;
+    npSetStateByName(state);
+    var spEl = document.getElementById('npSpecialty');
+    if (spEl && college) spEl.value = college;
+
+    npTitleManual = false;   // filename wins — rebuild the title
+    npRefreshTitle();
+}
+
+// Select the State dropdown by name (case-insensitive; AIQ/All-India variants → "All India/MCC").
+function npSetStateByName(name) {
+    var sel = document.getElementById('npState');
+    if (!sel || !name) return;
+    var target = name.trim().toLowerCase();
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value.toLowerCase() === target) { sel.selectedIndex = i; return; }
+    }
+    if (/all india|^aiq\b|\bmcc\b/.test(target)) {
+        for (var j = 0; j < sel.options.length; j++) {
+            if (sel.options[j].value.toLowerCase().indexOf('all india') > -1) { sel.selectedIndex = j; return; }
+        }
+    }
+    // No confident match → leave the current selection untouched.
 }
 
 function npGetCurrentCourses() {
