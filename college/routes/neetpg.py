@@ -788,6 +788,7 @@ def neetpg_upload():
     user = get_user()
     if not user.get('is_admin'):
         return jsonify({'error': 'Admin required'}), 403
+    edit_id = request.form.get('edit_id', '').strip()   # set → update in place, keep stats
     title = request.form.get('title', '').strip()
     category = request.form.get('category', 'neetpg')
     doc_type = request.form.get('doc_type', 'cutoff').strip()
@@ -799,31 +800,53 @@ def neetpg_upload():
     # Quota & Category applies to Cut Off only (e.g. 'GM', 'OBC', 'Paid Seats').
     quota_category = request.form.get('quota_category', '').strip() if doc_type == 'cutoff' else ''
     file = request.files.get('pdf_file')
-    if not specialty or not file:
+    has_file = bool(file and file.filename)
+    if not specialty:
         label = 'college name' if doc_type in COLLEGE_NAME_DOC_TYPES else 'specialty'
-        flash(f'{label.capitalize()} and PDF file are required', 'error')
+        flash(f'{label.capitalize()} is required', 'error')
+        return redirect(url_for('neetpg_admin'))
+    # A file is required when adding; optional when editing (keep the current one).
+    if not edit_id and not has_file:
+        flash('A PDF file is required', 'error')
+        return redirect(url_for('neetpg_admin'))
+    if has_file and not file.filename.lower().endswith('.pdf'):
+        flash('Only PDF files are allowed', 'error')
         return redirect(url_for('neetpg_admin'))
     # Title is auto-generated from the fields; only used as-is if admin overrode it.
     if not title:
         title = _build_neetpg_title(doc_type, category, state, specialty, quota_category)
-    if not file.filename.lower().endswith('.pdf'):
-        flash('Only PDF files are allowed', 'error')
-        return redirect(url_for('neetpg_admin'))
-    file_data = file.read()
-    file_size = len(file_data)
-    file_name = file.filename
+    file_data = file_size = file_name = None
+    if has_file:
+        file_data = file.read()
+        file_size = len(file_data)
+        file_name = file.filename
     try:
         conn = get_db()
-        conn.execute(
-            "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
-            (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state)
-        )
-        conn.commit()
+        if edit_id:
+            # ── Update in place — keeps id, download_count, is_published, published_at ──
+            if has_file:
+                conn.execute(
+                    "UPDATE neetpg_pdfs SET title=?, category=?, doc_type=?, specialty=?, quota_category=?, state=?, file_name=?, file_size=?, file_data=? WHERE id=?",
+                    (title, category, doc_type, specialty, quota_category, state, file_name, file_size, file_data, int(edit_id))
+                )
+            else:
+                conn.execute(
+                    "UPDATE neetpg_pdfs SET title=?, category=?, doc_type=?, specialty=?, quota_category=?, state=? WHERE id=?",
+                    (title, category, doc_type, specialty, quota_category, state, int(edit_id))
+                )
+            conn.commit()
+            flash('PDF updated. Stats preserved.', 'success')
+        else:
+            conn.execute(
+                "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
+                (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state)
+            )
+            conn.commit()
+            flash('PDF uploaded as draft. Use Publish to make it live.', 'success')
         conn.close()
-        flash('PDF uploaded as draft. Use Publish to make it live.', 'success')
     except Exception as e:
         logging.error(f"neetpg_upload: {e}")
-        flash('Upload failed', 'error')
+        flash('Save failed', 'error')
     return redirect(url_for('neetpg_admin'))
 
 
