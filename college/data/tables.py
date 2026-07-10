@@ -165,6 +165,26 @@ def ensure_neetpg_doctype_column():
         conn.close()
 
 
+def rename_neetpg_state_all_india_mcc():
+    """Rename the NEET-PG state value 'All India/MCC' -> 'AIQ MCC' on existing rows.
+
+    Only touches neetpg_pdfs.state (NOT the Medical Predictor's
+    counselling_authority, which is a separate 'All India / MCC' value). Guarded
+    by the WHERE clause, so it's a no-op after the first run. Idempotent."""
+    conn = get_db()
+    try:
+        conn.execute("UPDATE neetpg_pdfs SET state = 'AIQ MCC' WHERE state = 'All India/MCC'")
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"rename_neetpg_state_all_india_mcc: {e}")
+    finally:
+        conn.close()
+
+
 def _auto_seed_russian_colleges():
     """Auto-seed Russian colleges from college_seed_data.py if not already present."""
     try:

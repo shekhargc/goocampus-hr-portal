@@ -540,7 +540,7 @@
             <div class="np-form-group">
                 <label>State</label>
                 <select name="state" id="npState" class="np-form-input" required onchange="npRefreshTitle()">
-                    <option value="All India/MCC">All India/MCC</option>
+                    <option value="AIQ MCC">AIQ MCC</option>
                     <option value="Andhra Pradesh">Andhra Pradesh</option>
                     <option value="Arunachal Pradesh">Arunachal Pradesh</option>
                     <option value="Assam">Assam</option>
@@ -594,8 +594,9 @@
         </div>
         <div class="np-form-actions">
             <div class="np-form-group np-file-group">
-                <label>PDF File</label>
-                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required style="font-size:0.78rem;">
+                <label>PDF File <span style="font-weight:400;color:var(--gray-400);font-size:0.72rem;">(auto-fills form for College Profile / Bond Doc names)</span></label>
+                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required style="font-size:0.78rem;"
+                       onchange="npParseFilename(this)">
             </div>
             <div class="np-form-group np-upload-group">
                 <button type="submit" class="np-btn np-btn-primary" style="justify-content:center;padding:0.55rem 1.5rem;">
@@ -669,7 +670,7 @@
                             {{ 'NEET PG' if pdf.category == 'neetpg' else 'DNB' }}
                         </span>
                     </td>
-                    <td style="font-size:0.82rem;">{{ pdf.state or 'All India/MCC' }}</td>
+                    <td style="font-size:0.82rem;">{{ pdf.state or 'AIQ MCC' }}</td>
                     <td style="font-size:0.82rem;">{{ pdf.specialty }}</td>
                     <td style="font-size:0.82rem;white-space:nowrap;">{{ (pdf.file_size / 1024)|int }} KB</td>
                     <td>
@@ -890,7 +891,7 @@
         <select id="crPdfSelect" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem;margin-bottom:14px;background:#f9fafb;">
             <option value="">— Select a PDF —</option>
             {% for p in recent_pdfs %}
-            <option value="{{ p.id }}" data-title="{{ p.title }} ({{ p.state or 'All India' }})">{{ p.title }} ({{ p.state or 'All India' }})</option>
+            <option value="{{ p.id }}" data-title="{{ p.title }} ({{ p.state or 'AIQ MCC' }})">{{ p.title }} ({{ p.state or 'AIQ MCC' }})</option>
             {% endfor %}
         </select>
         <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:6px;">Admin note (optional):</label>
@@ -1115,8 +1116,8 @@ var npTitleManual = false;
 var NP_DOCTYPE_LABELS = {
     'cutoff': 'Cut Off',
     'stipend_bond_penalty': 'Stipend, Bond & Penalty',
-    'mcc_profile': 'All India/ MCC College Profiles',
-    'mcc_bond_doc': 'All India/MCC College Bond Doc'
+    'mcc_profile': 'AIQ MCC College Profiles',
+    'mcc_bond_doc': 'AIQ MCC College Bond Doc'
 };
 // Doc types whose field is a free-text College Name (not a course specialty).
 var NP_COLLEGE_NAME_TYPES = ['mcc_profile', 'mcc_bond_doc'];
@@ -1136,6 +1137,71 @@ function npRefreshTitle() {
     if (npTitleManual) return;
     var t = document.getElementById('npTitle');
     if (t) t.value = npBuildTitle();
+}
+
+// ── Auto-fill the form from a college-doc filename ──
+// ONLY fires for College Profile / College Bond Doc file names, so Cut Off and
+// Stipend uploads are never touched. Expected name (‑ = " - "):
+//   "<State> - <College Name> - <NEET PG|DNB> - AIQ MCC College Profile 2025"
+//   "<State> - <College Name> - <NEET PG|DNB> - AIQ MCC College Bond Doc 2025"
+function npParseFilename(input) {
+    if (!input || !input.files || !input.files.length) return;
+    var name = input.files[0].name.replace(/\.pdf$/i, '').trim();
+    var low = name.toLowerCase();
+
+    // Detect doc type — only the two college-name types trigger auto-fill.
+    var docType = null;
+    if (/college bond|bond doc/.test(low)) docType = 'mcc_bond_doc';
+    else if (/college profile/.test(low)) docType = 'mcc_profile';
+    if (!docType) return;  // not a college doc → leave the form exactly as-is
+
+    // Split on hyphens (tolerating missing spaces, e.g. "NEET PG- AIQ").
+    var parts = name.split(/\s*-\s*/).map(function(s) { return s.trim(); }).filter(Boolean);
+    if (parts.length < 3) return;
+
+    // Category = the segment that equals DNB / NEET PG. College names may contain
+    // hyphens, so everything between the state and the category is the name.
+    var catIdx = -1, category = null;
+    for (var i = 1; i < parts.length; i++) {
+        var pl = parts[i].toLowerCase();
+        if (pl === 'dnb') { catIdx = i; category = 'dnb'; break; }
+        if (pl === 'neet pg' || pl === 'neetpg' || pl === 'md/ms' || pl === 'md' || pl === 'ms') {
+            catIdx = i; category = 'neetpg'; break;
+        }
+    }
+    if (catIdx === -1) { category = /\bdnb\b/.test(low) ? 'dnb' : 'neetpg'; catIdx = 2; }
+
+    var state = parts[0];
+    var college = parts.slice(1, catIdx).join(' - ').trim();
+
+    // Apply — doc type FIRST (relabels field + clears specialty), then the values.
+    var dtEl = document.getElementById('npDocType');
+    if (dtEl) { dtEl.value = docType; npUpdateDocType(); }
+    var catEl = document.getElementById('npCategory');
+    if (catEl) catEl.value = category;
+    npSetStateByName(state);
+    var spEl = document.getElementById('npSpecialty');
+    if (spEl && college) spEl.value = college;
+
+    npTitleManual = false;   // filename wins — rebuild the title
+    npRefreshTitle();
+}
+
+// Select the State dropdown by name (case-insensitive; AIQ / All-India variants → "AIQ MCC").
+function npSetStateByName(name) {
+    var sel = document.getElementById('npState');
+    if (!sel || !name) return;
+    var target = name.trim().toLowerCase();
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value.toLowerCase() === target) { sel.selectedIndex = i; return; }
+    }
+    if (/all india|\baiq\b|\bmcc\b/.test(target)) {
+        for (var j = 0; j < sel.options.length; j++) {
+            var ov = sel.options[j].value.toLowerCase();
+            if (ov.indexOf('aiq') > -1 || ov.indexOf('mcc') > -1) { sel.selectedIndex = j; return; }
+        }
+    }
+    // No confident match → leave the current selection untouched.
 }
 
 function npGetCurrentCourses() {

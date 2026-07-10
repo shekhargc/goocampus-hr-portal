@@ -12,6 +12,7 @@ def register_college(app):
     tpl_dir = os.path.join(os.path.dirname(__file__), 'templates')
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
     for fn in (_tables.ensure_college_tables, _tables.ensure_neetpg_doctype_column,
+               _tables.rename_neetpg_state_all_india_mcc,
                _tables._auto_seed_russian_colleges,
                _tables._auto_import_indian_colleges):
         try:
