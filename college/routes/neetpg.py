@@ -1215,6 +1215,36 @@ def neetpg_bulk_delete():
 
 
 @login_required
+def neetpg_find_missing():
+    """Given a list of filenames (from the admin's folder), report which are NOT
+    present in neetpg_pdfs (by file_name) — i.e. which files didn't get uploaded.
+    Only filenames are sent, not the files."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    data = request.get_json(silent=True) or {}
+    names = data.get('names', [])
+    if not isinstance(names, list):
+        return jsonify({'error': 'names must be a list'}), 400
+    conn = get_db()
+    rows = conn.execute("SELECT file_name FROM neetpg_pdfs").fetchall()
+    conn.close()
+    uploaded = set((r['file_name'] or '').strip() for r in rows)
+    uploaded_lc = set(n.lower() for n in uploaded)
+    missing = []
+    seen = set()
+    for n in names:
+        nm = (n or '').strip()
+        if not nm or nm.lower() in seen:
+            continue
+        seen.add(nm.lower())
+        if nm in uploaded or nm.lower() in uploaded_lc:
+            continue
+        missing.append(nm)
+    return jsonify({'checked': len(seen), 'uploaded_total': len(uploaded), 'missing': missing})
+
+
+@login_required
 def neetpg_export_leads():
     user = get_user()
     if not user.get('is_admin'):
