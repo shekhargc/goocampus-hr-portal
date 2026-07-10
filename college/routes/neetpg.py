@@ -27,8 +27,8 @@ from college.utils import _make_slug, _to_inr, _get_exchange_rates, _currency_sy
 NEETPG_DOC_TYPES = [
     ('cutoff', 'Cut Off'),
     ('stipend_bond_penalty', 'Stipend, Bond & Penalty'),
-    ('mcc_profile', 'All India/ MCC College Profiles'),
-    ('mcc_bond_doc', 'All India/MCC College Bond Doc'),
+    ('mcc_profile', 'AIQ MCC College Profiles'),
+    ('mcc_bond_doc', 'AIQ MCC College Bond Doc'),
 ]
 DOC_TYPE_LABELS = dict(NEETPG_DOC_TYPES)
 VALID_DOC_TYPES = set(DOC_TYPE_LABELS)
@@ -116,7 +116,7 @@ def neetpg_landing():
     for p in all_pdfs:
         cat = p['category']
         dt = _dt(p)
-        st = p['state'] or 'All India/MCC'
+        st = p['state'] or 'AIQ MCC'
         state_counts[(cat, dt, st)] = state_counts.get((cat, dt, st), 0) + 1
         sp = p['specialty']
         if sp and (cat, dt, sp) not in course_seen:
@@ -752,7 +752,7 @@ def neetpg_upload():
         doc_type = 'cutoff'
     # For MCC College Profile the "specialty" field holds the College Name.
     specialty = request.form.get('specialty', '').strip()
-    state = request.form.get('state', 'All India/MCC').strip()
+    state = request.form.get('state', 'AIQ MCC').strip()
     file = request.files.get('pdf_file')
     if not specialty or not file:
         label = 'college name' if doc_type in COLLEGE_NAME_DOC_TYPES else 'specialty'
