@@ -653,6 +653,26 @@
         </a>
         {% endfor %}
     </div>
+
+    <!-- Backfill quota from existing cut-off filenames -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
+        <button type="button" onclick="npOpenQuotaBackfill()" style="display:inline-flex;align-items:center;gap:6px;padding:0.4rem 0.9rem;font-size:0.8rem;font-weight:600;color:var(--navy);background:white;border:1.5px solid var(--gray-300);border-radius:2rem;cursor:pointer;">
+            <i class="fas fa-magic"></i> Backfill Quota from filenames
+        </button>
+    </div>
+    <div id="npQuotaBackfillModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:white;border-radius:0.75rem;max-width:660px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--gray-200);font-weight:700;color:var(--navy);">
+                <i class="fas fa-magic" style="color:var(--orange);margin-right:6px;"></i> Backfill Quota from filenames
+            </div>
+            <div style="padding:0.85rem 1.25rem;font-size:0.85rem;color:var(--gray-600);" id="npQBSummary">Loading…</div>
+            <div style="overflow:auto;padding:0 1.25rem;flex:1;" id="npQBTable"></div>
+            <div style="padding:1rem 1.25rem;border-top:1px solid var(--gray-200);display:flex;justify-content:flex-end;gap:0.6rem;">
+                <button type="button" onclick="npCloseQuotaBackfill()" style="padding:0.5rem 1rem;border:1px solid var(--gray-300);background:white;border-radius:0.5rem;cursor:pointer;font-weight:600;color:var(--gray-600);">Cancel</button>
+                <button type="button" id="npQBConfirm" onclick="npApplyQuotaBackfill()" class="np-btn np-btn-primary" style="padding:0.5rem 1.25rem;">Apply</button>
+            </div>
+        </div>
+    </div>
     {% if pdfs %}
     <div class="np-table-wrap">
         <table class="np-table">
@@ -1398,6 +1418,50 @@ document.addEventListener('click', function(e) {
         npHighlightIdx = -1;
     }
 });
+
+// ── Quota backfill (preview → apply) ──
+function npOpenQuotaBackfill() {
+    var m = document.getElementById('npQuotaBackfillModal');
+    m.style.display = 'flex';
+    document.getElementById('npQBSummary').textContent = 'Loading…';
+    document.getElementById('npQBTable').innerHTML = '';
+    document.getElementById('npQBConfirm').disabled = true;
+    fetch('{{ url_for("neetpg_quota_backfill") }}')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        document.getElementById('npQBSummary').innerHTML =
+          '<strong>' + d.to_update + '</strong> of ' + d.total + ' cut-off files will get a quota tag from their filename. Files that already have a quota are left as-is, and download stats are preserved.';
+        var rows = (d.items || []).map(function(it){
+          var st = it.will_update
+            ? '<span style="color:#16a34a;font-weight:600;">→ ' + npEscHtml(it.detected) + '</span>'
+            : (it.current ? '<span style="color:#9ca3af;">already: ' + npEscHtml(it.current) + '</span>'
+                          : '<span style="color:#ef4444;">— none in name</span>');
+          var cellS = 'padding:5px 8px;font-size:0.78rem;border-bottom:1px solid var(--gray-100);';
+          return '<tr><td style="' + cellS + '">' + npEscHtml(it.file_name) + '</td><td style="' + cellS + 'white-space:nowrap;">' + st + '</td></tr>';
+        }).join('');
+        document.getElementById('npQBTable').innerHTML =
+          '<table style="width:100%;border-collapse:collapse;"><thead><tr>' +
+          '<th style="text-align:left;padding:5px 8px;font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;">Filename</th>' +
+          '<th style="text-align:left;padding:5px 8px;font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;">Detected quota</th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table>';
+        document.getElementById('npQBConfirm').disabled = (d.to_update === 0);
+      })
+      .catch(function(){ document.getElementById('npQBSummary').textContent = 'Could not load preview.'; });
+}
+function npCloseQuotaBackfill() {
+    document.getElementById('npQuotaBackfillModal').style.display = 'none';
+}
+function npApplyQuotaBackfill() {
+    var btn = document.getElementById('npQBConfirm');
+    btn.disabled = true; btn.textContent = 'Applying…';
+    fetch('{{ url_for("neetpg_quota_backfill") }}', { method: 'POST' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.success) { npShowToast('Updated ' + d.updated + ' files'); setTimeout(function(){ location.reload(); }, 700); }
+        else { alert('Backfill failed'); btn.disabled = false; btn.textContent = 'Apply'; }
+      })
+      .catch(function(){ alert('Backfill failed'); btn.disabled = false; btn.textContent = 'Apply'; });
+}
 
 // Build the initial auto-title from the default field values.
 npRefreshTitle();
