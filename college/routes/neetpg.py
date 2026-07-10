@@ -27,10 +27,13 @@ from college.utils import _make_slug, _to_inr, _get_exchange_rates, _currency_sy
 NEETPG_DOC_TYPES = [
     ('cutoff', 'Cut Off'),
     ('stipend_bond_penalty', 'Stipend, Bond & Penalty'),
-    ('mcc_profile', 'MCC College Profile'),
+    ('mcc_profile', 'All India/ MCC College Profiles'),
+    ('mcc_bond_doc', 'All India/MCC College Bond Doc'),
 ]
 DOC_TYPE_LABELS = dict(NEETPG_DOC_TYPES)
 VALID_DOC_TYPES = set(DOC_TYPE_LABELS)
+# Doc types whose "specialty" column actually holds a College Name (not a course).
+COLLEGE_NAME_DOC_TYPES = {'mcc_profile', 'mcc_bond_doc'}
 
 
 def _build_neetpg_title(doc_type, category, state, specialty):
@@ -752,7 +755,7 @@ def neetpg_upload():
     state = request.form.get('state', 'All India/MCC').strip()
     file = request.files.get('pdf_file')
     if not specialty or not file:
-        label = 'college name' if doc_type == 'mcc_profile' else 'specialty'
+        label = 'college name' if doc_type in COLLEGE_NAME_DOC_TYPES else 'specialty'
         flash(f'{label.capitalize()} and PDF file are required', 'error')
         return redirect(url_for('neetpg_admin'))
     # Title is auto-generated from the fields; only used as-is if admin overrode it.
