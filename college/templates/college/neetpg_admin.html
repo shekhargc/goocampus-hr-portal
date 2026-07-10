@@ -659,7 +659,6 @@
                     <th>Category</th>
                     <th>State</th>
                     <th>Specialty / College</th>
-                    <th>Size</th>
                     <th>DLs</th>
                     <th>Status</th>
                     <th>Schedule</th>
@@ -683,7 +682,6 @@
                     </td>
                     <td style="font-size:0.82rem;">{{ pdf.state or 'AIQ MCC' }}</td>
                     <td style="font-size:0.82rem;">{{ pdf.specialty }}</td>
-                    <td style="font-size:0.82rem;white-space:nowrap;">{{ (pdf.file_size / 1024)|int }} KB</td>
                     <td>
                         <span style="color:var(--orange);font-weight:600;">{{ pdf.download_count }}</span>
                     </td>
