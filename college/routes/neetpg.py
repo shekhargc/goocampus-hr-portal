@@ -58,7 +58,8 @@ def _parse_quota_from_filename(file_name):
     name = re.sub(r'\.pdf$', '', file_name, flags=re.I).strip()
     if not re.search(r'cut ?off', name, flags=re.I):
         return ''
-    parts = [p.strip() for p in re.split(r'\s*-\s*', name) if p.strip()]
+    # Split only on a spaced hyphen so internal hyphens (Radio-diagnosis) survive.
+    parts = [p.strip() for p in re.split(r'\s+-\s*|\s*-\s+', name) if p.strip()]
     if len(parts) < 3:
         return ''
     cat_idx = -1

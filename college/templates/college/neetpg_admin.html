@@ -1199,20 +1199,39 @@ function npRefreshTitle() {
 // Snap a general course name to the canonical specialty in the filter list
 // (e.g. "Radio-diagnosis" → "MD - Radio-diagnosis"; under DNB → "(NBEMS) …").
 // Falls back to the typed value if there's no confident match.
+// Aliases for course names whose canonical entry carries extra words. Explicit
+// (not fuzzy substring) so there are NO false matches like Paediatric Surgery →
+// Paediatrics. Anything not aliased or exactly matched keeps its clean name.
+var NP_SPECIALTY_ALIAS = {
+    neetpg: {
+        'dermatology': 'MD - Dermatology, Venereology & Leprosy',
+        'gynaecology': 'MS - Obstetrics and Gynaecology',
+        'ent': 'MS - ENT (Otorhinolaryngology)',
+        'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
+        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion'
+    },
+    dnb: {
+        'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
+        'gynaecology': '(NBEMS) Obstetrics and Gynaecology',
+        'ent': '(NBEMS) Oto-Rhino-Laryngology (ENT)',
+        'immunohaematology': '(NBEMS) Immuno Haematology and Blood Transfusion'
+    }
+};
 function npSnapSpecialty(raw, category) {
-    var list = (category === 'dnb') ? DNB_COURSES : NEETPG_COURSES;
+    var isDnb = (category === 'dnb');
+    var list = isDnb ? DNB_COURSES : NEETPG_COURSES;
     var flat = function(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
     var t = flat(raw);
     if (!t) return raw;
+    var al = NP_SPECIALTY_ALIAS[isDnb ? 'dnb' : 'neetpg'];
+    if (al[t]) return al[t];
     function core(e) {
         return e.replace(/^(MD|MS)\s*-\s*/i, '').replace(/^Diploma in\s+/i, '').replace(/^\(NBEMS\)\s*/i, '');
     }
     var i;
     for (i = 0; i < list.length; i++) { if (flat(core(list[i])) === t) return list[i]; }  // exact core
     for (i = 0; i < list.length; i++) { if (flat(list[i]) === t) return list[i]; }          // exact full (prefix typed)
-    var m = list.filter(function(e) { var c = flat(core(e)); return c.indexOf(t) > -1 || t.indexOf(c) > -1; });
-    if (m.length === 1) return m[0];   // unique partial
-    return raw;                        // ambiguous / unknown → keep as typed
+    return raw;   // super-specialty / diploma / unknown → keep the clean name as-is
 }
 
 // ── Auto-fill the form from a well-named filename ──
@@ -1235,8 +1254,10 @@ function npParseFilename(input) {
     else if (/stipend|penalty/.test(low)) docType = 'stipend_bond_penalty';
     if (!docType) return;  // not a recognised doc → leave the form exactly as-is
 
-    // Split on hyphens (tolerating missing spaces, e.g. "NEET PG- AIQ").
-    var parts = name.split(/\s*-\s*/).map(function(s) { return s.trim(); }).filter(Boolean);
+    // Split only on a hyphen that has a space on at least one side (the real
+    // separator), so internal hyphens like "Radio-diagnosis" / "Cardio-Vascular
+    // Surgery" stay intact. Still tolerates a missing space ("NEET PG- AIQ").
+    var parts = name.split(/\s+-\s*|\s*-\s+/).map(function(s) { return s.trim(); }).filter(Boolean);
     if (parts.length < 3) return;
 
     // Locate the Category segment (DNB / NEET PG). Names may contain hyphens, so
