@@ -628,6 +628,62 @@
     </form>
 </div>
 
+<!-- Bulk Tools -->
+<div class="np-upload-card">
+    <div class="np-upload-title"><i class="fas fa-layer-group"></i> Bulk Tools</div>
+    <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-start;">
+        <!-- Bulk upload -->
+        <form action="{{ url_for('neetpg_bulk_upload') }}" method="POST" enctype="multipart/form-data" style="flex:2;min-width:300px;"
+              onsubmit="return npConfirmBulkUpload(this);">
+            <label style="display:block;font-weight:600;font-size:0.78rem;color:var(--gray-700);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;">Bulk Upload <span style="font-weight:400;text-transform:none;color:var(--gray-400);">— select many PDFs; each auto-fills from its filename</span></label>
+            <input type="file" name="pdf_files" id="npBulkFiles" accept=".pdf" multiple class="np-form-input" style="font-size:0.78rem;">
+            <div style="display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--gray-700);">
+                    <input type="checkbox" name="publish" value="1" checked> Publish immediately
+                </label>
+                <button type="submit" class="np-btn np-btn-primary" style="padding:0.5rem 1.25rem;">
+                    <i class="fas fa-cloud-upload-alt"></i> Bulk Upload
+                </button>
+            </div>
+        </form>
+        <!-- Bulk delete -->
+        <div style="flex:1;min-width:220px;">
+            <label style="display:block;font-weight:600;font-size:0.78rem;color:var(--gray-700);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;">Bulk Delete <span style="font-weight:400;text-transform:none;color:var(--gray-400);">— clear a batch before re-uploading</span></label>
+            <button type="button" onclick="npOpenBulkDelete()" style="display:inline-flex;align-items:center;gap:6px;padding:0.5rem 1.1rem;font-size:0.82rem;font-weight:600;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;border-radius:0.5rem;cursor:pointer;">
+                <i class="fas fa-trash"></i> Bulk Delete PDFs
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk delete modal -->
+<div id="npBulkDeleteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;padding:1rem;">
+    <div style="background:white;border-radius:0.75rem;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--gray-200);font-weight:700;color:#b91c1c;">
+            <i class="fas fa-trash" style="margin-right:6px;"></i> Bulk Delete PDFs
+        </div>
+        <div style="padding:1rem 1.25rem;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+                <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;margin-bottom:4px;">Document Type</label>
+                <select id="npBDType" class="np-form-input" style="min-width:200px;">
+                    {% for key, label in doc_types %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;margin-bottom:4px;">State (optional, exact)</label>
+                <input type="text" id="npBDState" class="np-form-input" placeholder="blank = all states" style="min-width:180px;">
+            </div>
+            <button type="button" onclick="npBulkDeletePreview()" class="np-btn" style="background:var(--navy);color:white;padding:0.5rem 1rem;">Preview</button>
+        </div>
+        <div style="padding:0 1.25rem;font-size:0.85rem;color:var(--gray-700);" id="npBDResult"></div>
+        <div style="overflow:auto;padding:0.5rem 1.25rem;flex:1;" id="npBDList"></div>
+        <div style="padding:1rem 1.25rem;border-top:1px solid var(--gray-200);display:flex;justify-content:flex-end;gap:0.6rem;">
+            <button type="button" onclick="npCloseBulkDelete()" style="padding:0.5rem 1rem;border:1px solid var(--gray-300);background:white;border-radius:0.5rem;cursor:pointer;font-weight:600;color:var(--gray-600);">Cancel</button>
+            <button type="button" id="npBDConfirm" onclick="npBulkDeleteApply()" disabled style="padding:0.5rem 1.25rem;border:none;background:#dc2626;color:white;border-radius:0.5rem;cursor:pointer;font-weight:600;opacity:0.5;">Delete</button>
+        </div>
+    </div>
+</div>
+
 <!-- Tabs: PDFs / Leads -->
 <div class="np-tabs">
     <button class="np-tab active" onclick="npSwitchTab('pdfs', this)">
@@ -1158,7 +1214,20 @@ var DNB_COURSES = [
     "(NBEMS) Social and Preventive Medicine",
     "(NBEMS) Sports Medicine",
     "(NBEMS) Transfusion Medicine",
-    "(NBEMS) Tuberculosis and Respiratory Diseases"
+    "(NBEMS) Tuberculosis and Respiratory Diseases",
+    "(NBEMS) Cardio-Vascular Surgery",
+    "(NBEMS) Neuro Surgery",
+    "(NBEMS) Plastic Surgery",
+    "(NBEMS) Paediatric Surgery",
+    "(NBEMS) Radiation Oncology",
+    "(Diploma) Anaesthesiology",
+    "(Diploma) ENT",
+    "(Diploma) Family Medicine",
+    "(Diploma) OBG",
+    "(Diploma) Ophthalmology",
+    "(Diploma) Paediatrics",
+    "(Diploma) Radio-diagnosis",
+    "(Diploma) TB & Chest"
 ];
 
 var npHighlightIdx = -1;
@@ -1545,6 +1614,58 @@ function npCancelEdit() {
     var q = document.getElementById('npQuota'); if (q) q.value = '';
     npTitleManual = false;
     npRefreshTitle();
+}
+
+// ── Bulk upload / delete ──
+function npConfirmBulkUpload(form) {
+    var n = document.getElementById('npBulkFiles').files.length;
+    if (!n) { alert('Select one or more PDF files first.'); return false; }
+    var pub = form.querySelector('input[name="publish"]').checked;
+    return confirm('Upload ' + n + ' file(s)' + (pub ? ' and publish them' : ' as drafts') + '?\nEach is auto-filled from its filename; unrecognised names are skipped.');
+}
+function npBDQuery() {
+    return 'doc_type=' + encodeURIComponent(document.getElementById('npBDType').value) +
+           '&state=' + encodeURIComponent(document.getElementById('npBDState').value.trim());
+}
+function npOpenBulkDelete() {
+    document.getElementById('npBulkDeleteModal').style.display = 'flex';
+    document.getElementById('npBDResult').innerHTML = '';
+    document.getElementById('npBDList').innerHTML = '';
+    var b = document.getElementById('npBDConfirm'); b.disabled = true; b.style.opacity = 0.5; b.textContent = 'Delete';
+}
+function npCloseBulkDelete() { document.getElementById('npBulkDeleteModal').style.display = 'none'; }
+function npBulkDeletePreview() {
+    document.getElementById('npBDResult').textContent = 'Loading…';
+    document.getElementById('npBDList').innerHTML = '';
+    fetch('{{ url_for("neetpg_bulk_delete") }}?' + npBDQuery())
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.error) { document.getElementById('npBDResult').textContent = d.error; return; }
+        document.getElementById('npBDResult').innerHTML = '<strong>' + d.total + '</strong> record(s) match — these will be permanently deleted.';
+        var rows = (d.items || []).map(function(it){
+          return '<div style="font-size:0.78rem;padding:3px 0;border-bottom:1px solid var(--gray-100);">' + npEscHtml(it.title || '') +
+                 (it.quota_category ? ' <span style="color:#2563eb;">[' + npEscHtml(it.quota_category) + ']</span>' : '') + '</div>';
+        }).join('');
+        var extra = (d.total > (d.items || []).length) ? '<div style="font-size:0.75rem;color:var(--gray-400);padding-top:4px;">…and ' + (d.total - d.items.length) + ' more</div>' : '';
+        document.getElementById('npBDList').innerHTML = rows + extra;
+        var b = document.getElementById('npBDConfirm');
+        b.disabled = (d.total === 0); b.style.opacity = (d.total === 0) ? 0.5 : 1; b.textContent = 'Delete ' + d.total;
+      })
+      .catch(function(){ document.getElementById('npBDResult').textContent = 'Preview failed.'; });
+}
+function npBulkDeleteApply() {
+    if (!confirm('Permanently delete these records? This cannot be undone.')) return;
+    var b = document.getElementById('npBDConfirm'); b.disabled = true; b.textContent = 'Deleting…';
+    var fd = new FormData();
+    fd.append('doc_type', document.getElementById('npBDType').value);
+    fd.append('state', document.getElementById('npBDState').value.trim());
+    fetch('{{ url_for("neetpg_bulk_delete") }}', { method: 'POST', body: fd })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.success) { npShowToast('Deleted ' + d.deleted); setTimeout(function(){ location.reload(); }, 700); }
+        else { alert(d.error || 'Delete failed'); b.disabled = false; b.textContent = 'Delete'; }
+      })
+      .catch(function(){ alert('Delete failed'); b.disabled = false; b.textContent = 'Delete'; });
 }
 
 // Build the initial auto-title from the default field values.
