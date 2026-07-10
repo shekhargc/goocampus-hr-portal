@@ -597,6 +597,10 @@
                        oninput="npFilterSpecialties(); npRefreshTitle();" onfocus="npFilterSpecialties()">
                 <div class="np-autocomplete-list" id="npSpecialtyList"></div>
             </div>
+            <div class="np-form-group" id="npQuotaGroup" style="display:none;">
+                <label>Quota &amp; Category <span style="font-weight:400;color:var(--gray-400);font-size:0.72rem;">(Cut Off)</span></label>
+                <input type="text" name="quota_category" id="npQuota" class="np-form-input" placeholder="e.g. GM, OBC, Paid Seats" autocomplete="off" oninput="npRefreshTitle()">
+            </div>
             <div class="np-form-group">
                 <label>Title <span style="font-weight:400;color:var(--gray-400);font-size:0.72rem;">(auto)</span></label>
                 <input type="text" name="title" id="npTitle" class="np-form-input" placeholder="Auto-generated from fields above" autocomplete="off"
@@ -681,7 +685,10 @@
                         </span>
                     </td>
                     <td style="font-size:0.82rem;">{{ pdf.state or 'AIQ MCC' }}</td>
-                    <td style="font-size:0.82rem;">{{ pdf.specialty }}</td>
+                    <td style="font-size:0.82rem;">
+                        {{ pdf.specialty }}
+                        {% if pdf.quota_category %}<div style="margin-top:3px;"><span class="np-badge np-badge-blue">{{ pdf.quota_category }}</span></div>{% endif %}
+                    </td>
                     <td>
                         <span style="color:var(--orange);font-weight:600;">{{ pdf.download_count }}</span>
                     </td>
@@ -1136,9 +1143,12 @@ function npBuildTitle() {
     var cat = document.getElementById('npCategory').value;
     var state = document.getElementById('npState').value;
     var sp = document.getElementById('npSpecialty').value.trim();
+    var qEl = document.getElementById('npQuota');
+    var quota = (dt === 'cutoff' && qEl) ? qEl.value.trim() : '';
     var catLabel = (cat === 'dnb') ? 'DNB' : 'NEET PG';
     var dtLabel = NP_DOCTYPE_LABELS[dt] || 'Cut Off';
-    var parts = [state, sp, catLabel, dtLabel, '2025'].filter(function(p) { return p && p.trim(); });
+    // Order mirrors the filename: State · Course · Category · Quota · Doc Type · Year
+    var parts = [state, sp, catLabel, quota, dtLabel, '2025'].filter(function(p) { return p && p.trim(); });
     return parts.join(' ');
 }
 
@@ -1148,49 +1158,78 @@ function npRefreshTitle() {
     if (t) t.value = npBuildTitle();
 }
 
-// ── Auto-fill the form from a college-doc filename ──
-// ONLY fires for College Profile / College Bond Doc file names, so Cut Off and
-// Stipend uploads are never touched. Expected name (‑ = " - "):
-//   "<State> - <College Name> - <NEET PG|DNB> - AIQ MCC College Profile 2025"
-//   "<State> - <College Name> - <NEET PG|DNB> - AIQ MCC College Bond Doc 2025"
+// Snap a general course name to the canonical specialty in the filter list
+// (e.g. "Radio-diagnosis" → "MD - Radio-diagnosis"; under DNB → "(NBEMS) …").
+// Falls back to the typed value if there's no confident match.
+function npSnapSpecialty(raw, category) {
+    var list = (category === 'dnb') ? DNB_COURSES : NEETPG_COURSES;
+    var flat = function(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+    var t = flat(raw);
+    if (!t) return raw;
+    function core(e) {
+        return e.replace(/^(MD|MS)\s*-\s*/i, '').replace(/^Diploma in\s+/i, '').replace(/^\(NBEMS\)\s*/i, '');
+    }
+    var i;
+    for (i = 0; i < list.length; i++) { if (flat(core(list[i])) === t) return list[i]; }  // exact core
+    for (i = 0; i < list.length; i++) { if (flat(list[i]) === t) return list[i]; }          // exact full (prefix typed)
+    var m = list.filter(function(e) { var c = flat(core(e)); return c.indexOf(t) > -1 || t.indexOf(c) > -1; });
+    if (m.length === 1) return m[0];   // unique partial
+    return raw;                        // ambiguous / unknown → keep as typed
+}
+
+// ── Auto-fill the form from a well-named filename ──
+// Fires for all four doc types. Expected name (‑ = " - "):
+//   Cut Off:  <State> - <Course> - <NEET PG|DNB> - <Quota?> - Cut Off 2025
+//   Stipend:  <State> - <Course> - <NEET PG|DNB> - Stipend, Bond & Penalty 2025
+//   Profile:  <State> - <College> - <NEET PG|DNB> - AIQ MCC College Profile 2025
+//   Bond Doc: <State> - <College> - <NEET PG|DNB> - AIQ MCC College Bond Doc 2025
+// Unrecognised names leave the form untouched.
 function npParseFilename(input) {
     if (!input || !input.files || !input.files.length) return;
     var name = input.files[0].name.replace(/\.pdf$/i, '').trim();
     var low = name.toLowerCase();
 
-    // Detect doc type — only the two college-name types trigger auto-fill.
+    // Detect doc type — college keywords first so "bond doc" ≠ "stipend, bond".
     var docType = null;
     if (/college bond|bond doc/.test(low)) docType = 'mcc_bond_doc';
     else if (/college profile/.test(low)) docType = 'mcc_profile';
-    if (!docType) return;  // not a college doc → leave the form exactly as-is
+    else if (/cut ?off/.test(low)) docType = 'cutoff';
+    else if (/stipend|penalty/.test(low)) docType = 'stipend_bond_penalty';
+    if (!docType) return;  // not a recognised doc → leave the form exactly as-is
 
     // Split on hyphens (tolerating missing spaces, e.g. "NEET PG- AIQ").
     var parts = name.split(/\s*-\s*/).map(function(s) { return s.trim(); }).filter(Boolean);
     if (parts.length < 3) return;
 
-    // Category = the segment that equals DNB / NEET PG. College names may contain
-    // hyphens, so everything between the state and the category is the name.
+    // Locate the Category segment (DNB / NEET PG). Names may contain hyphens, so
+    // everything between State and Category is the course/college.
     var catIdx = -1, category = null;
     for (var i = 1; i < parts.length; i++) {
         var pl = parts[i].toLowerCase();
         if (pl === 'dnb') { catIdx = i; category = 'dnb'; break; }
-        if (pl === 'neet pg' || pl === 'neetpg' || pl === 'md/ms' || pl === 'md' || pl === 'ms') {
-            catIdx = i; category = 'neetpg'; break;
-        }
+        if (pl === 'neet pg' || pl === 'neetpg') { catIdx = i; category = 'neetpg'; break; }
     }
-    if (catIdx === -1) { category = /\bdnb\b/.test(low) ? 'dnb' : 'neetpg'; catIdx = 2; }
+    if (catIdx === -1) return;  // can't locate category → don't guess
 
     var state = parts[0];
-    var college = parts.slice(1, catIdx).join(' - ').trim();
+    var middle = parts.slice(1, catIdx).join(' - ').trim();   // course or college
+    var tail = parts.slice(catIdx + 1);                        // [quota?, doctype+year]
+    var quota = (tail.length > 1) ? tail.slice(0, -1).join(' - ').trim() : '';
 
-    // Apply — doc type FIRST (relabels field + clears specialty), then the values.
+    // Cut Off / Stipend → the middle is a course; snap it to the canonical filter value.
+    var isCourse = (docType === 'cutoff' || docType === 'stipend_bond_penalty');
+    var middleVal = isCourse ? npSnapSpecialty(middle, category) : middle;
+
+    // Apply — doc type FIRST (relabels field, toggles Quota, clears specialty), then values.
     var dtEl = document.getElementById('npDocType');
     if (dtEl) { dtEl.value = docType; npUpdateDocType(); }
     var catEl = document.getElementById('npCategory');
     if (catEl) catEl.value = category;
     npSetStateByName(state);
     var spEl = document.getElementById('npSpecialty');
-    if (spEl && college) spEl.value = college;
+    if (spEl && middleVal) spEl.value = middleVal;
+    var qEl = document.getElementById('npQuota');
+    if (qEl) qEl.value = (docType === 'cutoff') ? quota : '';
 
     npTitleManual = false;   // filename wins — rebuild the title
     npRefreshTitle();
@@ -1233,6 +1272,7 @@ function npIsMccProfile() {
 }
 
 function npUpdateDocType() {
+    var dt = document.getElementById('npDocType').value;
     var label = document.getElementById('npSpecialtyLabel');
     var input = document.getElementById('npSpecialty');
     if (npIsMccProfile()) {
@@ -1245,6 +1285,11 @@ function npUpdateDocType() {
     input.value = '';
     document.getElementById('npSpecialtyList').classList.remove('show');
     npHighlightIdx = -1;
+    // Quota & Category is Cut-Off-only
+    var qGroup = document.getElementById('npQuotaGroup');
+    var qInput = document.getElementById('npQuota');
+    if (qGroup) qGroup.style.display = (dt === 'cutoff') ? '' : 'none';
+    if (qInput && dt !== 'cutoff') qInput.value = '';
     npRefreshTitle();
 }
 

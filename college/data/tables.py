@@ -165,6 +165,26 @@ def ensure_neetpg_doctype_column():
         conn.close()
 
 
+def ensure_neetpg_quota_column():
+    """Add quota_category to neetpg_pdfs (base table created in app.py).
+
+    Holds the reservation/seat quota for Cut-Off files (e.g. 'GM', 'OBC',
+    'Paid Seats', or a comma list like 'GM, ST, OBC'). Blank for other doc
+    types. Idempotent — safe on every boot."""
+    conn = get_db()
+    try:
+        conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN quota_category TEXT DEFAULT ''")
+        conn.commit()
+        logging.info("neetpg_pdfs.quota_category column added")
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
 def rename_neetpg_state_all_india_mcc():
     """Rename the NEET-PG state value 'All India/MCC' -> 'AIQ MCC' on existing rows.
 
