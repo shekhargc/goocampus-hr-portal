@@ -36,14 +36,15 @@ VALID_DOC_TYPES = set(DOC_TYPE_LABELS)
 COLLEGE_NAME_DOC_TYPES = {'mcc_profile', 'mcc_bond_doc'}
 
 
-def _build_neetpg_title(doc_type, category, state, specialty):
+def _build_neetpg_title(doc_type, category, state, specialty, quota=''):
     """Auto-compose a PDF title from the upload fields.
-    Format: "<State> <Specialty/College> <NEET PG|DNB> <Doc Type> 2025".
-    For MCC College Profile, `specialty` holds the College Name. Mirrors the
-    admin-form JS so the saved title matches the live preview."""
+    Format: "<State> <Specialty/College> <NEET PG|DNB> <Quota?> <Doc Type> 2025".
+    Quota only applies to Cut Off. For College Profile / Bond Doc, `specialty`
+    holds the College Name. Mirrors the admin-form JS so the saved title matches
+    the live preview."""
     cat_label = 'DNB' if category == 'dnb' else 'NEET PG'
     dt_label = DOC_TYPE_LABELS.get(doc_type, 'Cut Off')
-    parts = [state, specialty, cat_label, dt_label, '2025']
+    parts = [state, specialty, cat_label, quota, dt_label, '2025']
     return ' '.join(p.strip() for p in parts if p and p.strip())
 
 
@@ -60,14 +61,14 @@ def neetpg_landing():
         logging.error(f"neetpg visit track: {e}")
     # Only show published + active PDFs, newest published first
     all_pdfs = conn.execute(
-        "SELECT id, title, category, doc_type, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
+        "SELECT id, title, category, doc_type, specialty, quota_category, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
     ).fetchall()
     neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
     dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
 
     # ── Fetch scheduled (coming soon) PDFs ──
     scheduled_pdfs = conn.execute(
-        "SELECT id, title, category, doc_type, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+        "SELECT id, title, category, doc_type, specialty, quota_category, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
     ).fetchall()
 
     # ── Compute schedule_map for coming soon PDFs (same FIFO logic as admin) ──
@@ -129,6 +130,22 @@ def neetpg_landing():
     states_items.sort(key=lambda x: (x['cat'], x['doc_type'], x['state']))
     courses_items.sort(key=lambda x: (x['cat'], x['doc_type'], x['course']))
 
+    # Quota filter items (Cut Off only) — comma lists like 'GM, ST, OBC' split
+    # into individual tags so a file shows under each. Tagged by category.
+    def _quota(p):
+        return (p['quota_category'] or '') if 'quota_category' in p.keys() else ''
+    quota_seen = set()
+    quota_items = []
+    for p in all_pdfs:
+        if _dt(p) != 'cutoff':
+            continue
+        for tag in [t.strip() for t in _quota(p).split(',') if t.strip()]:
+            key = (p['category'], tag)
+            if key not in quota_seen:
+                quota_seen.add(key)
+                quota_items.append({'quota': tag, 'cat': p['category']})
+    quota_items.sort(key=lambda x: (x['cat'], x['quota']))
+
     # Published count per doc_type (for the top-level doc-type tab badges)
     doctype_counts = {k: 0 for k in DOC_TYPE_LABELS}
     for p in all_pdfs:
@@ -147,6 +164,7 @@ def neetpg_landing():
                            schedule_map=schedule_map,
                            states_items=states_items,
                            courses_items=courses_items,
+                           quota_items=quota_items,
                            doc_types=NEETPG_DOC_TYPES,
                            doctype_counts=doctype_counts,
                            lead_captured=lead_captured,
@@ -753,6 +771,8 @@ def neetpg_upload():
     # For MCC College Profile the "specialty" field holds the College Name.
     specialty = request.form.get('specialty', '').strip()
     state = request.form.get('state', 'AIQ MCC').strip()
+    # Quota & Category applies to Cut Off only (e.g. 'GM', 'OBC', 'Paid Seats').
+    quota_category = request.form.get('quota_category', '').strip() if doc_type == 'cutoff' else ''
     file = request.files.get('pdf_file')
     if not specialty or not file:
         label = 'college name' if doc_type in COLLEGE_NAME_DOC_TYPES else 'specialty'
@@ -760,7 +780,7 @@ def neetpg_upload():
         return redirect(url_for('neetpg_admin'))
     # Title is auto-generated from the fields; only used as-is if admin overrode it.
     if not title:
-        title = _build_neetpg_title(doc_type, category, state, specialty)
+        title = _build_neetpg_title(doc_type, category, state, specialty, quota_category)
     if not file.filename.lower().endswith('.pdf'):
         flash('Only PDF files are allowed', 'error')
         return redirect(url_for('neetpg_admin'))
@@ -770,8 +790,8 @@ def neetpg_upload():
     try:
         conn = get_db()
         conn.execute(
-            "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
-            (title, category, doc_type, specialty, file_name, file_size, file_data, state)
+            "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
+            (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state)
         )
         conn.commit()
         conn.close()
