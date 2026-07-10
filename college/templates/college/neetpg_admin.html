@@ -1231,7 +1231,12 @@ function npSnapSpecialty(raw, category) {
     var i;
     for (i = 0; i < list.length; i++) { if (flat(core(list[i])) === t) return list[i]; }  // exact core
     for (i = 0; i < list.length; i++) { if (flat(list[i]) === t) return list[i]; }          // exact full (prefix typed)
-    return raw;   // super-specialty / diploma / unknown → keep the clean name as-is
+    // Unmatched DNB names get a consistent prefix: '(Diploma) X' or '(NBEMS) X'.
+    if (isDnb) {
+        var dm = /^diploma\s+(.+)$/i.exec(raw.trim());
+        return dm ? ('(Diploma) ' + dm[1].trim()) : ('(NBEMS) ' + raw.trim());
+    }
+    return raw;   // NEET PG unmatched → keep the clean name as-is
 }
 
 // ── Auto-fill the form from a well-named filename ──
