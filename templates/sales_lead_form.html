@@ -215,6 +215,11 @@
                 </label>
                 <div id="amcTrainingSection" style="display:none;margin-top:1rem;padding-top:0.9rem;border-top:1px solid #BFDBFE;">
                     <p class="slf-head" style="color:#1E40AF;margin-bottom:0.7rem;">Training (AMC 1) · package + installments — posts to the Training pathway (GCTRN)</p>
+                    <!-- AMC 1 is AUD-priced: live rate breakup, locks on save -->
+                    <div id="trAmcAudBox" style="display:none;margin:0 0 0.8rem;padding:0.7rem 0.9rem;background:#DBEAFE;border:1px solid #93C5FD;border-radius:0.5rem;">
+                        <div style="font-size:0.72rem;font-weight:700;color:#1E40AF;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:0.3rem;">AMC 1 &middot; AUD-priced &middot; rate locks on save</div>
+                        <div id="trAmcAudBreak" style="font-size:0.88rem;color:#1E3A5F;line-height:1.5;"></div>
+                    </div>
                     <div class="slf-row3">
                         <div>
                             <label class="slf-lbl">Training Package (₹)</label>
@@ -456,6 +461,27 @@
                 var cb = document.getElementById('includeTraining');
                 var sec = document.getElementById('amcTrainingSection');
                 if (sec) sec.style.display = (cb && cb.checked) ? 'block' : 'none';
+                if (cb && cb.checked) trAmcAudCheck();
+            };
+            // AMC 1 (training add-on) is AUD-priced too: show the live breakup and, for a
+            // new lead, auto-price the training package. On edit we keep the saved (locked)
+            // value and just show the breakup for reference.
+            window.trAmcAudCheck = function() {
+                var box = document.getElementById('trAmcAudBox');
+                var brk = document.getElementById('trAmcAudBreak');
+                var pkg = document.getElementById('trPkg');
+                if (!box) return;
+                fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent('AMC 1'))
+                    .then(function(r){ return r.json(); }).then(function(d){
+                        if (!d || !d.aud_priced) { box.style.display = 'none'; return; }
+                        brk.innerHTML =
+                            '<b>' + Number(d.aud).toLocaleString('en-AU') + ' AUD</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
+                            ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
+                            ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/AUD on save)</span>' +
+                            (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — fallback</span>' : '');
+                        box.style.display = 'block';
+                        if (pkg && (parseFloat(pkg.value) || 0) === 0) { pkg.value = Math.round(d.inr); updateTrFinal(); }
+                    }).catch(function(){ box.style.display = 'none'; });
             };
             window.updateTrFinal = function() {
                 var p = parseFloat((document.getElementById('trPkg') || {}).value) || 0;

@@ -26997,6 +26997,14 @@ def sales_leads_add():
                     logging.warning(f"AMC AUD lock (add): {_fxe}")
                     try: conn.rollback()
                     except Exception: pass
+                # AMC 1 training add-on (AMC Consulting + AMC 1 combo) is AUD-priced too —
+                # lock its rate so the combined deal's training portion is billed the locked INR.
+                train_lock = None
+                try:
+                    if request.form.get('include_training') in ('on', '1', 'true', 'yes'):
+                        train_lock = amc_aud_quote('AMC 1', conn=conn)
+                except Exception:
+                    train_lock = None
                 if new_lead_id:
                     try:
                         cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
@@ -27082,9 +27090,16 @@ def sales_leads_add():
                             # AMC Consulting + AMC 1 combined signup — the Training (AMC 1)
                             # split. Installments entered as total incl GST -> stored base.
                             'include_training':         (request.form.get('include_training') in ('on', '1', 'true', 'yes')),
-                            'training_package':         _n('training_package'),
-                            'training_discount':        _n('training_discount'),
-                            'training_final':           _n('training_final'),
+                            # AMC 1 is AUD-priced: bill the locked INR (no discount) and record
+                            # the frozen forex breakup. Falls back to the form value if not AUD.
+                            'training_package':         (train_lock['inr'] if train_lock else _n('training_package')),
+                            'training_discount':        (0 if train_lock else _n('training_discount')),
+                            'training_final':           (train_lock['inr'] if train_lock else _n('training_final')),
+                            'training_aud':             (train_lock['aud'] if train_lock else 0),
+                            'training_fx_rate':         (train_lock['live_rate'] if train_lock else 0),
+                            'training_fx_markup':       (train_lock['markup_pct'] if train_lock else 0),
+                            'training_fx_effective':    (train_lock['effective_rate'] if train_lock else 0),
+                            'training_fx_locked_at':    (datetime.now().strftime('%Y-%m-%d %H:%M:%S') if train_lock else ''),
                             'training_inst1_amount':    round(_n('training_inst1_amount')/1.18, 2),
                             'training_inst1_date':      _f('training_inst1_date'),
                             'training_inst1_method':    _f('training_inst1_method'),
