@@ -48,6 +48,31 @@ def _build_neetpg_title(doc_type, category, state, specialty, quota=''):
     return ' '.join(p.strip() for p in parts if p and p.strip())
 
 
+def _parse_quota_from_filename(file_name):
+    """Extract the quota segment from a Cut-Off filename (mirrors the admin JS).
+    Pattern: 'State - Course - <NEET PG|DNB> - <Quota> - Cut Off 2025'. The quota
+    is whatever sits between the category segment and the trailing 'Cut Off' part.
+    Returns '' if the name isn't a parseable cut-off name."""
+    if not file_name:
+        return ''
+    name = re.sub(r'\.pdf$', '', file_name, flags=re.I).strip()
+    if not re.search(r'cut ?off', name, flags=re.I):
+        return ''
+    parts = [p.strip() for p in re.split(r'\s*-\s*', name) if p.strip()]
+    if len(parts) < 3:
+        return ''
+    cat_idx = -1
+    for i in range(1, len(parts)):
+        pl = parts[i].lower()
+        if pl == 'dnb' or pl in ('neet pg', 'neetpg'):
+            cat_idx = i
+            break
+    if cat_idx == -1:
+        return ''
+    tail = parts[cat_idx + 1:]                       # [quota?, 'Cut Off 2025']
+    return ' - '.join(tail[:-1]).strip() if len(tail) > 1 else ''
+
+
 def neetpg_landing():
     conn = get_db()
     # Track page visit
@@ -906,6 +931,45 @@ def neetpg_delete_request(req_id):
     conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+
+@login_required
+def neetpg_quota_backfill():
+    """Preview (GET) / apply (POST) filling quota_category on existing Cut-Off
+    files by parsing their stored filenames. Only fills BLANK quotas — never
+    overwrites a value already set — and keeps all stats (id/downloads/publish)."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, title, file_name, quota_category FROM neetpg_pdfs WHERE doc_type = 'cutoff' ORDER BY upload_date DESC"
+    ).fetchall()
+    items = []
+    for r in rows:
+        current = (r['quota_category'] or '').strip()
+        detected = _parse_quota_from_filename(r['file_name'])
+        will_update = bool(detected) and not current
+        items.append({'id': r['id'], 'title': r['title'], 'file_name': r['file_name'] or '',
+                      'current': current, 'detected': detected, 'will_update': will_update})
+
+    if request.method == 'POST':
+        updated = 0
+        for it in items:
+            if it['will_update']:
+                conn.execute("UPDATE neetpg_pdfs SET quota_category = ? WHERE id = ?",
+                             (it['detected'], it['id']))
+                updated += 1
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'updated': updated})
+
+    conn.close()
+    return jsonify({
+        'total': len(items),
+        'to_update': sum(1 for it in items if it['will_update']),
+        'items': items,
+    })
 
 
 @login_required
