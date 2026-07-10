@@ -55,6 +55,12 @@
         <span class="sec-nav-text">Packages &amp; Services</span>
     </a>
     {% endif %}
+    {% if session.is_admin %}
+    <a href="/admin/amc-aud-pricing" class="sec-nav-item {% if request.path.startswith('/admin/amc-aud-pricing') %}active{% endif %}" data-tooltip="AMC 1 / AMC 2 AUD pricing + fixed sales revenue">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 012.5-2h.5a2.5 2.5 0 010 5h-1a2.5 2.5 0 000 5h.5a2.5 2.5 0 002.5-2M12 5v2m0 10v2"/></svg></span>
+        <span class="sec-nav-text">AMC AUD Pricing</span>
+    </a>
+    {% endif %}
     {% if can_access('company','access_master','view') %}
     <a href="/admin/access-master" class="sec-nav-item {% if active_ops_page == 'access-master' or request.path == '/admin/access-master' %}active{% endif %}" data-tooltip="Access Master (per-user permissions)">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></span>

@@ -12,6 +12,7 @@ def register_college(app):
     tpl_dir = os.path.join(os.path.dirname(__file__), 'templates')
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
     for fn in (_tables.ensure_college_tables, _tables.ensure_neetpg_doctype_column,
+               _tables.ensure_neetpg_quota_column,
                _tables.rename_neetpg_state_all_india_mcc,
                _tables._auto_seed_russian_colleges,
                _tables._auto_import_indian_colleges):
@@ -55,6 +56,9 @@ def register_college(app):
     app.add_url_rule('/admin/neetpg-leads/<int:lead_id>', 'neetpg_delete_lead', neetpg.neetpg_delete_lead, methods=['DELETE'])
     app.add_url_rule('/admin/neetpg-requests/<int:req_id>', 'neetpg_delete_request', neetpg.neetpg_delete_request, methods=['DELETE'])
     app.add_url_rule('/admin/neetpg-leads/export', 'neetpg_export_leads', neetpg.neetpg_export_leads, methods=['GET'])
+    app.add_url_rule('/admin/neetpg-pdfs/quota-backfill', 'neetpg_quota_backfill', neetpg.neetpg_quota_backfill, methods=['GET', 'POST'])
+    app.add_url_rule('/admin/neetpg-pdfs/bulk-upload', 'neetpg_bulk_upload', neetpg.neetpg_bulk_upload, methods=['POST'])
+    app.add_url_rule('/admin/neetpg-pdfs/bulk-delete', 'neetpg_bulk_delete', neetpg.neetpg_bulk_delete, methods=['GET', 'POST'])
     app.add_url_rule('/partner/colleges', 'partner_colleges', partner.partner_colleges, methods=['GET'])
     app.add_url_rule('/partner/colleges/<slug>', 'partner_college_profile', partner.partner_college_profile, methods=['GET'])
     app.add_url_rule('/partner/medical-predictor', 'partner_medical_predictor', partner.partner_medical_predictor, methods=['GET'])

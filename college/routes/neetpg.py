@@ -36,15 +36,166 @@ VALID_DOC_TYPES = set(DOC_TYPE_LABELS)
 COLLEGE_NAME_DOC_TYPES = {'mcc_profile', 'mcc_bond_doc'}
 
 
-def _build_neetpg_title(doc_type, category, state, specialty):
+def _build_neetpg_title(doc_type, category, state, specialty, quota=''):
     """Auto-compose a PDF title from the upload fields.
-    Format: "<State> <Specialty/College> <NEET PG|DNB> <Doc Type> 2025".
-    For MCC College Profile, `specialty` holds the College Name. Mirrors the
-    admin-form JS so the saved title matches the live preview."""
+    Format: "<State> <Specialty/College> <NEET PG|DNB> <Quota?> <Doc Type> 2025".
+    Quota only applies to Cut Off. For College Profile / Bond Doc, `specialty`
+    holds the College Name. Mirrors the admin-form JS so the saved title matches
+    the live preview."""
     cat_label = 'DNB' if category == 'dnb' else 'NEET PG'
     dt_label = DOC_TYPE_LABELS.get(doc_type, 'Cut Off')
-    parts = [state, specialty, cat_label, dt_label, '2025']
+    parts = [state, specialty, cat_label, quota, dt_label, '2025']
     return ' '.join(p.strip() for p in parts if p and p.strip())
+
+
+def _parse_quota_from_filename(file_name):
+    """Extract the quota segment from a Cut-Off filename (mirrors the admin JS).
+    Pattern: 'State - Course - <NEET PG|DNB> - <Quota> - Cut Off 2025'. The quota
+    is whatever sits between the category segment and the trailing 'Cut Off' part.
+    Returns '' if the name isn't a parseable cut-off name."""
+    if not file_name:
+        return ''
+    name = re.sub(r'\.pdf$', '', file_name, flags=re.I).strip()
+    if not re.search(r'cut ?off', name, flags=re.I):
+        return ''
+    # Split only on a spaced hyphen so internal hyphens (Radio-diagnosis) survive.
+    parts = [p.strip() for p in re.split(r'\s+-\s*|\s*-\s+', name) if p.strip()]
+    if len(parts) < 3:
+        return ''
+    cat_idx = -1
+    for i in range(1, len(parts)):
+        pl = parts[i].lower()
+        if pl == 'dnb' or pl in ('neet pg', 'neetpg'):
+            cat_idx = i
+            break
+    if cat_idx == -1:
+        return ''
+    tail = parts[cat_idx + 1:]                       # [quota?, 'Cut Off 2025']
+    return ' - '.join(tail[:-1]).strip() if len(tail) > 1 else ''
+
+
+# ── Server-side filename parse + specialty snap (mirror of the admin-form JS) ──
+_SPLIT_RE = re.compile(r'\s+-\s*|\s*-\s+')            # split only on a spaced hyphen
+
+_NEETPG_COURSES = [
+    "MD - Anaesthesiology", "MD - Anatomy", "MD - Biochemistry", "MD - Community Medicine",
+    "MD - Dermatology, Venereology & Leprosy", "MD - Emergency Medicine", "MD - Family Medicine",
+    "MD - Forensic Medicine", "MD - General Medicine", "MD - Geriatrics", "MD - Hospital Administration",
+    "MD - Immuno Haematology and Blood Transfusion", "MD - Microbiology", "MD - Nuclear Medicine",
+    "MD - Paediatrics", "MD - Palliative Medicine", "MD - Pathology", "MD - Pharmacology",
+    "MD - Physical Medicine and Rehabilitation", "MD - Physiology", "MD - Psychiatry",
+    "MD - Radiation Oncology", "MD - Radio-diagnosis", "MD - Radio-therapy", "MD - Respiratory Medicine",
+    "MD - Sports Medicine", "MD - Transfusion Medicine", "MD - Tropical Medicine",
+    "MS - ENT (Otorhinolaryngology)", "MS - General Surgery", "MS - Obstetrics and Gynaecology",
+    "MS - Ophthalmology", "MS - Orthopaedics", "Diploma in Anaesthesiology", "Diploma in Child Health",
+    "Diploma in Ophthalmology", "Diploma in Orthopaedics", "Diploma in Psychiatry",
+]
+_DNB_COURSES = [
+    "(NBEMS) Anaesthesiology", "(NBEMS) Anatomy", "(NBEMS) Biochemistry", "(NBEMS) Community Medicine",
+    "(NBEMS) Dermatology, Venereology & Leprosy", "(NBEMS) Emergency Medicine", "(NBEMS) Family Medicine",
+    "(NBEMS) Forensic Medicine", "(NBEMS) General Medicine", "(NBEMS) General Surgery", "(NBEMS) Geriatrics",
+    "(NBEMS) Hospital Administration", "(NBEMS) Immuno Haematology and Blood Transfusion",
+    "(NBEMS) Maternal and Child Health", "(NBEMS) Microbiology", "(NBEMS) Neonatology",
+    "(NBEMS) Nuclear Medicine", "(NBEMS) Obstetrics and Gynaecology", "(NBEMS) Ophthalmology",
+    "(NBEMS) Orthopaedics", "(NBEMS) Oto-Rhino-Laryngology (ENT)", "(NBEMS) Paediatrics",
+    "(NBEMS) Palliative Medicine", "(NBEMS) Pathology", "(NBEMS) Pharmacology",
+    "(NBEMS) Physical Medicine and Rehabilitation", "(NBEMS) Physiology", "(NBEMS) Psychiatry",
+    "(NBEMS) Radio-diagnosis", "(NBEMS) Radio-therapy", "(NBEMS) Respiratory Medicine",
+    "(NBEMS) Social and Preventive Medicine", "(NBEMS) Sports Medicine", "(NBEMS) Transfusion Medicine",
+    "(NBEMS) Tuberculosis and Respiratory Diseases",
+]
+_SPECIALTY_ALIAS = {
+    'neetpg': {
+        'dermatology': 'MD - Dermatology, Venereology & Leprosy',
+        'gynaecology': 'MS - Obstetrics and Gynaecology',
+        'ent': 'MS - ENT (Otorhinolaryngology)',
+        'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
+        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion',
+    },
+    'dnb': {
+        'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
+        'gynaecology': '(NBEMS) Obstetrics and Gynaecology',
+        'ent': '(NBEMS) Oto-Rhino-Laryngology (ENT)',
+        'immunohaematology': '(NBEMS) Immuno Haematology and Blood Transfusion',
+    },
+}
+
+
+def _flat(s):
+    return re.sub(r'[^a-z0-9]', '', (s or '').lower())
+
+
+def _course_core(e):
+    e = re.sub(r'^(MD|MS)\s*-\s*', '', e, flags=re.I)
+    e = re.sub(r'^Diploma in\s+', '', e, flags=re.I)
+    e = re.sub(r'^\(NBEMS\)\s*', '', e, flags=re.I)
+    return e
+
+
+def _snap_specialty(raw, category):
+    """Snap a general course name to the canonical filter value. Mirrors the JS."""
+    is_dnb = (category == 'dnb')
+    lst = _DNB_COURSES if is_dnb else _NEETPG_COURSES
+    t = _flat(raw)
+    if not t:
+        return raw
+    al = _SPECIALTY_ALIAS['dnb' if is_dnb else 'neetpg']
+    if t in al:
+        return al[t]
+    for e in lst:
+        if _flat(_course_core(e)) == t:
+            return e
+    for e in lst:
+        if _flat(e) == t:
+            return e
+    if is_dnb:
+        m = re.match(r'^diploma\s+(.+)$', (raw or '').strip(), flags=re.I)
+        return '(Diploma) ' + m.group(1).strip() if m else '(NBEMS) ' + (raw or '').strip()
+    return raw
+
+
+def _parse_neetpg_filename(file_name):
+    """Parse a doc filename into fields, or None if unrecognised. Mirrors the JS."""
+    if not file_name:
+        return None
+    name = re.sub(r'\.pdf$', '', file_name, flags=re.I).strip()
+    low = name.lower()
+    if re.search(r'college bond|bond doc', low):
+        doc_type = 'mcc_bond_doc'
+    elif re.search(r'college profile', low):
+        doc_type = 'mcc_profile'
+    elif re.search(r'cut ?off', low):
+        doc_type = 'cutoff'
+    elif re.search(r'stipend|penalty', low):
+        doc_type = 'stipend_bond_penalty'
+    else:
+        return None
+    parts = [p.strip() for p in _SPLIT_RE.split(name) if p.strip()]
+    if len(parts) < 3:
+        return None
+    cat_idx, category = -1, None
+    for i in range(1, len(parts)):
+        pl = parts[i].lower()
+        if pl == 'dnb':
+            cat_idx, category = i, 'dnb'
+            break
+        if pl in ('neet pg', 'neetpg'):
+            cat_idx, category = i, 'neetpg'
+            break
+    if cat_idx == -1:
+        return None
+    state = parts[0]
+    middle = ' - '.join(parts[1:cat_idx]).strip()
+    tail = parts[cat_idx + 1:]
+    quota = ' - '.join(tail[:-1]).strip() if len(tail) > 1 else ''
+    if doc_type in ('cutoff', 'stipend_bond_penalty'):
+        specialty = _snap_specialty(middle, category)
+    else:
+        specialty = middle
+    return {
+        'doc_type': doc_type, 'state': state, 'category': category,
+        'specialty': specialty, 'quota': quota if doc_type == 'cutoff' else '',
+    }
 
 
 def neetpg_landing():
@@ -60,14 +211,14 @@ def neetpg_landing():
         logging.error(f"neetpg visit track: {e}")
     # Only show published + active PDFs, newest published first
     all_pdfs = conn.execute(
-        "SELECT id, title, category, doc_type, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
+        "SELECT id, title, category, doc_type, specialty, quota_category, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
     ).fetchall()
     neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
     dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
 
     # ── Fetch scheduled (coming soon) PDFs ──
     scheduled_pdfs = conn.execute(
-        "SELECT id, title, category, doc_type, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+        "SELECT id, title, category, doc_type, specialty, quota_category, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
     ).fetchall()
 
     # ── Compute schedule_map for coming soon PDFs (same FIFO logic as admin) ──
@@ -129,6 +280,22 @@ def neetpg_landing():
     states_items.sort(key=lambda x: (x['cat'], x['doc_type'], x['state']))
     courses_items.sort(key=lambda x: (x['cat'], x['doc_type'], x['course']))
 
+    # Quota filter items (Cut Off only) — comma lists like 'GM, ST, OBC' split
+    # into individual tags so a file shows under each. Tagged by category.
+    def _quota(p):
+        return (p['quota_category'] or '') if 'quota_category' in p.keys() else ''
+    quota_seen = set()
+    quota_items = []
+    for p in all_pdfs:
+        if _dt(p) != 'cutoff':
+            continue
+        for tag in [t.strip() for t in _quota(p).split(',') if t.strip()]:
+            key = (p['category'], tag)
+            if key not in quota_seen:
+                quota_seen.add(key)
+                quota_items.append({'quota': tag, 'cat': p['category']})
+    quota_items.sort(key=lambda x: (x['cat'], x['quota']))
+
     # Published count per doc_type (for the top-level doc-type tab badges)
     doctype_counts = {k: 0 for k in DOC_TYPE_LABELS}
     for p in all_pdfs:
@@ -147,6 +314,7 @@ def neetpg_landing():
                            schedule_map=schedule_map,
                            states_items=states_items,
                            courses_items=courses_items,
+                           quota_items=quota_items,
                            doc_types=NEETPG_DOC_TYPES,
                            doctype_counts=doctype_counts,
                            lead_captured=lead_captured,
@@ -745,6 +913,7 @@ def neetpg_upload():
     user = get_user()
     if not user.get('is_admin'):
         return jsonify({'error': 'Admin required'}), 403
+    edit_id = request.form.get('edit_id', '').strip()   # set → update in place, keep stats
     title = request.form.get('title', '').strip()
     category = request.form.get('category', 'neetpg')
     doc_type = request.form.get('doc_type', 'cutoff').strip()
@@ -753,32 +922,56 @@ def neetpg_upload():
     # For MCC College Profile the "specialty" field holds the College Name.
     specialty = request.form.get('specialty', '').strip()
     state = request.form.get('state', 'AIQ MCC').strip()
+    # Quota & Category applies to Cut Off only (e.g. 'GM', 'OBC', 'Paid Seats').
+    quota_category = request.form.get('quota_category', '').strip() if doc_type == 'cutoff' else ''
     file = request.files.get('pdf_file')
-    if not specialty or not file:
+    has_file = bool(file and file.filename)
+    if not specialty:
         label = 'college name' if doc_type in COLLEGE_NAME_DOC_TYPES else 'specialty'
-        flash(f'{label.capitalize()} and PDF file are required', 'error')
+        flash(f'{label.capitalize()} is required', 'error')
+        return redirect(url_for('neetpg_admin'))
+    # A file is required when adding; optional when editing (keep the current one).
+    if not edit_id and not has_file:
+        flash('A PDF file is required', 'error')
+        return redirect(url_for('neetpg_admin'))
+    if has_file and not file.filename.lower().endswith('.pdf'):
+        flash('Only PDF files are allowed', 'error')
         return redirect(url_for('neetpg_admin'))
     # Title is auto-generated from the fields; only used as-is if admin overrode it.
     if not title:
-        title = _build_neetpg_title(doc_type, category, state, specialty)
-    if not file.filename.lower().endswith('.pdf'):
-        flash('Only PDF files are allowed', 'error')
-        return redirect(url_for('neetpg_admin'))
-    file_data = file.read()
-    file_size = len(file_data)
-    file_name = file.filename
+        title = _build_neetpg_title(doc_type, category, state, specialty, quota_category)
+    file_data = file_size = file_name = None
+    if has_file:
+        file_data = file.read()
+        file_size = len(file_data)
+        file_name = file.filename
     try:
         conn = get_db()
-        conn.execute(
-            "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
-            (title, category, doc_type, specialty, file_name, file_size, file_data, state)
-        )
-        conn.commit()
+        if edit_id:
+            # ── Update in place — keeps id, download_count, is_published, published_at ──
+            if has_file:
+                conn.execute(
+                    "UPDATE neetpg_pdfs SET title=?, category=?, doc_type=?, specialty=?, quota_category=?, state=?, file_name=?, file_size=?, file_data=? WHERE id=?",
+                    (title, category, doc_type, specialty, quota_category, state, file_name, file_size, file_data, int(edit_id))
+                )
+            else:
+                conn.execute(
+                    "UPDATE neetpg_pdfs SET title=?, category=?, doc_type=?, specialty=?, quota_category=?, state=? WHERE id=?",
+                    (title, category, doc_type, specialty, quota_category, state, int(edit_id))
+                )
+            conn.commit()
+            flash('PDF updated. Stats preserved.', 'success')
+        else:
+            conn.execute(
+                "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
+                (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state)
+            )
+            conn.commit()
+            flash('PDF uploaded as draft. Use Publish to make it live.', 'success')
         conn.close()
-        flash('PDF uploaded as draft. Use Publish to make it live.', 'success')
     except Exception as e:
         logging.error(f"neetpg_upload: {e}")
-        flash('Upload failed', 'error')
+        flash('Save failed', 'error')
     return redirect(url_for('neetpg_admin'))
 
 
@@ -886,6 +1079,139 @@ def neetpg_delete_request(req_id):
     conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+
+@login_required
+def neetpg_quota_backfill():
+    """Preview (GET) / apply (POST) filling quota_category on existing Cut-Off
+    files by parsing their stored filenames. Only fills BLANK quotas — never
+    overwrites a value already set — and keeps all stats (id/downloads/publish)."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, title, file_name, quota_category FROM neetpg_pdfs WHERE doc_type = 'cutoff' ORDER BY upload_date DESC"
+    ).fetchall()
+    items = []
+    for r in rows:
+        current = (r['quota_category'] or '').strip()
+        detected = _parse_quota_from_filename(r['file_name'])
+        will_update = bool(detected) and not current
+        items.append({'id': r['id'], 'title': r['title'], 'file_name': r['file_name'] or '',
+                      'current': current, 'detected': detected, 'will_update': will_update})
+
+    if request.method == 'POST':
+        updated = 0
+        for it in items:
+            if it['will_update']:
+                conn.execute("UPDATE neetpg_pdfs SET quota_category = ? WHERE id = ?",
+                             (it['detected'], it['id']))
+                updated += 1
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'updated': updated})
+
+    conn.close()
+    return jsonify({
+        'total': len(items),
+        'to_update': sum(1 for it in items if it['will_update']),
+        'items': items,
+    })
+
+
+@login_required
+def neetpg_bulk_upload():
+    """Upload many PDFs at once; each is auto-filled from its filename
+    (doc type, state, category, snapped specialty, quota, title). Skips
+    unrecognised names. Optionally publishes on upload (no WA blast)."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    files = request.files.getlist('pdf_files')
+    publish = request.form.get('publish') == '1'
+    files = [f for f in files if f and f.filename]
+    if not files:
+        flash('No files selected for bulk upload', 'error')
+        return redirect(url_for('neetpg_admin'))
+    conn = get_db()
+    inserted = 0
+    skipped = []
+    for f in files:
+        if not f.filename.lower().endswith('.pdf'):
+            skipped.append(f"{f.filename} (not a PDF)")
+            continue
+        parsed = _parse_neetpg_filename(f.filename)
+        if not parsed:
+            skipped.append(f"{f.filename} (name not recognised)")
+            continue
+        try:
+            data = f.read()
+            title = _build_neetpg_title(parsed['doc_type'], parsed['category'],
+                                        parsed['state'], parsed['specialty'], parsed['quota'])
+            if publish:
+                conn.execute(
+                    "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, published_at, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, 0)",
+                    (title, parsed['category'], parsed['doc_type'], parsed['specialty'], parsed['quota'], f.filename, len(data), data, parsed['state'])
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
+                    (title, parsed['category'], parsed['doc_type'], parsed['specialty'], parsed['quota'], f.filename, len(data), data, parsed['state'])
+                )
+            conn.commit()
+            inserted += 1
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            skipped.append(f"{f.filename} (error)")
+            logging.error(f"neetpg_bulk_upload {f.filename}: {e}")
+    conn.close()
+    msg = f"Bulk upload: {inserted} file(s) added" + (" & published" if publish else " as drafts")
+    if skipped:
+        shown = '; '.join(skipped[:6])
+        more = f" …and {len(skipped) - 6} more" if len(skipped) > 6 else ""
+        msg += f". {len(skipped)} skipped: {shown}{more}"
+    flash(msg, 'success' if inserted else 'error')
+    return redirect(url_for('neetpg_admin'))
+
+
+@login_required
+def neetpg_bulk_delete():
+    """Preview (GET) / apply (POST) a scoped bulk delete of PDF records, filtered
+    by doc_type (and optional exact state). Admin power tool for clearing a batch
+    before a fresh bulk upload."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    src = request.form if request.method == 'POST' else request.args
+    doc_type = (src.get('doc_type', '') or '').strip()
+    state = (src.get('state', '') or '').strip()
+    conds, params = [], []
+    if doc_type in VALID_DOC_TYPES:
+        conds.append("doc_type = ?")
+        params.append(doc_type)
+    if state:
+        conds.append("state = ?")
+        params.append(state)
+    # Safety: never allow an unscoped delete-everything.
+    if not conds:
+        return jsonify({'error': 'Pick a document type (and optionally a state) first'}), 400
+    where = " WHERE " + " AND ".join(conds)
+    conn = get_db()
+    if request.method == 'POST':
+        n = conn.execute(f"SELECT COUNT(*) as c FROM neetpg_pdfs{where}", params).fetchone()['c']
+        conn.execute(f"DELETE FROM neetpg_pdfs{where}", params)
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'deleted': n})
+    rows = conn.execute(
+        f"SELECT title, state, quota_category FROM neetpg_pdfs{where} ORDER BY upload_date DESC", params
+    ).fetchall()
+    conn.close()
+    return jsonify({'total': len(rows), 'items': [dict(r) for r in rows[:150]]})
 
 
 @login_required

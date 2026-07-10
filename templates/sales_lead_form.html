@@ -15,7 +15,7 @@
         <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Closed Client' if mode == 'edit' else 'Add Closed Client' }}</h1>
         <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Record a finalised client to start onboarding. The closure is recorded automatically and an invitation link is sent to the client.</p>
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="is_hot" value="0" />
 
             {# ===== Sales / lead details ===== #}
@@ -103,6 +103,11 @@
             {# ===== Service / Package details — shown to the client on their portal ===== #}
             <div style="margin-bottom:1.1rem;background:#FFF7ED;border:1px solid #FED7AA;border-radius:0.65rem;padding:1.2rem;">
                 <p class="slf-head" style="color:#9A3412;">&#128722; Service / Package details · these are shown to the client on their portal</p>
+                {% if closure and closure.contract_path %}
+                <div style="display:inline-flex;align-items:center;gap:0.4rem;background:#DCFCE7;border:1px solid #86EFAC;color:#166534;font-size:0.8rem;font-weight:700;padding:0.4rem 0.8rem;border-radius:0.5rem;margin-bottom:0.6rem;">
+                    &#10003; Signed contract on file for this client
+                </div>
+                {% endif %}
 
                 <div class="slf-row" style="margin-bottom:0.9rem;">
                     <div>
@@ -117,6 +122,13 @@
                 <div id="pkgServicesBox" style="display:none;margin:0.2rem 0 0.9rem;padding:0.7rem 0.9rem;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:0.5rem;">
                     <div style="font-size:0.74rem;font-weight:700;color:#166534;margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.03em;">Included in this plan · what the client gets</div>
                     <div id="pkgServicesList" style="font-size:0.82rem;color:#14532D;line-height:1.5;"></div>
+                </div>
+
+                <!-- AUD-priced plan (AMC 1 / AMC 2): live rate, locked on save -->
+                <div id="amcAudBox" style="display:none;margin:0.2rem 0 0.9rem;padding:0.8rem 1rem;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0.55rem;">
+                    <div style="font-size:0.74rem;font-weight:700;color:#1E40AF;margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.03em;">AUD-priced plan · rate locks when you save</div>
+                    <div id="amcAudBreak" style="font-size:0.9rem;color:#1E3A5F;line-height:1.6;"></div>
+                    <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">The rate + exact date/time are frozen on save; the client is billed this INR total (collected in installments).</div>
                 </div>
 
                 <div class="slf-row3">
@@ -180,6 +192,19 @@
                     <textarea name="additional_package_notes" rows="2" placeholder="Any package-related notes for the client to see..."
                               style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ closure.additional_package_notes if closure and closure.additional_package_notes else '' }}</textarea>
                 </div>
+
+                {# Signed contract: sales attaches the client's signed contract here when
+                   sending the invite. The client reads it and digitally agrees in their
+                   dashboard after Review & Submit (they already physically signed). #}
+                <div style="margin-top:0.9rem;padding-top:0.8rem;border-top:1px dashed var(--gray-200);">
+                    <label class="slf-lbl">Signed Contract <span style="font-weight:400;color:var(--gray-500);">(PDF / image — the client reads &amp; digitally agrees after registering)</span></label>
+                    {% if closure and closure.contract_path %}
+                    <div style="font-size:0.8rem;color:#166534;font-weight:600;margin:0.15rem 0 0.35rem;">&#10003; Contract already on file — choose a new file only to replace it.</div>
+                    {% endif %}
+                    <input type="file" name="contract_file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                           style="width:100%;padding:0.5rem 0.6rem;border:1px dashed var(--gray-300);border-radius:0.4rem;font-size:0.82rem;box-sizing:border-box;background:#FAFAFA;" />
+                    <p style="margin:0.3rem 0 0;font-size:0.72rem;color:var(--gray-500);">Max 15 MB. Optional — if left blank, the client skips straight to the Refund Policy.</p>
+                </div>
             </div>
 
             {# ===== AMC Consulting + AMC 1 combined signup (shown only for AMC Consulting) ===== #}
@@ -190,6 +215,11 @@
                 </label>
                 <div id="amcTrainingSection" style="display:none;margin-top:1rem;padding-top:0.9rem;border-top:1px solid #BFDBFE;">
                     <p class="slf-head" style="color:#1E40AF;margin-bottom:0.7rem;">Training (AMC 1) · package + installments — posts to the Training pathway (GCTRN)</p>
+                    <!-- AMC 1 is AUD-priced: live rate breakup, locks on save -->
+                    <div id="trAmcAudBox" style="display:none;margin:0 0 0.8rem;padding:0.7rem 0.9rem;background:#DBEAFE;border:1px solid #93C5FD;border-radius:0.5rem;">
+                        <div style="font-size:0.72rem;font-weight:700;color:#1E40AF;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:0.3rem;">AMC 1 &middot; AUD-priced &middot; rate locks on save</div>
+                        <div id="trAmcAudBreak" style="font-size:0.88rem;color:#1E3A5F;line-height:1.5;"></div>
+                    </div>
                     <div class="slf-row3">
                         <div>
                             <label class="slf-lbl">Training Package (₹)</label>
@@ -320,11 +350,51 @@
                     loadPlanPackage(false);
                 }).catch(function(){});
             }
+            // AUD-priced plans (AMC 1 / AMC 2): show the AUD→INR breakup + set the package.
+            // If this lead already has a FROZEN rate (edit of a closed lead), show that
+            // locked rate and DON'T re-fetch — the client's price must never change on edit.
+            var amcBox = document.getElementById('amcAudBox');
+            var amcBreak = document.getElementById('amcAudBreak');
+            var AMC_LOCK = {% if lead and lead.amc_fx_locked_at %}{
+                plan_type: {{ (lead.amc_plan_type or '')|tojson }},
+                aud: {{ '{:.2f}'.format(lead.amc_aud_amount|float) if lead.amc_aud_amount else 0 }},
+                effective_rate: {{ '{:.4f}'.format(lead.amc_fx_effective|float) if lead.amc_fx_effective else 0 }},
+                markup: {{ '{:g}'.format(lead.amc_fx_markup|float) if lead.amc_fx_markup else 3 }},
+                inr: {{ '{:.2f}'.format(lead.amc_inr_amount|float) if lead.amc_inr_amount else 0 }},
+                locked_at: {{ (lead.amc_fx_locked_at|string)|tojson }}
+            }{% else %}null{% endif %};
+            window.amcAudCheck = function() {
+                if (!amcBox || !planSel) return;
+                var pt = planSel.value;
+                if (!pt) { amcBox.style.display = 'none'; return; }
+                // Frozen rate on an existing lead — show it, don't re-fetch live.
+                if (AMC_LOCK && AMC_LOCK.plan_type === pt && AMC_LOCK.inr > 0) {
+                    amcBreak.innerHTML =
+                        '<b>' + Number(AMC_LOCK.aud).toLocaleString('en-AU') + ' AUD</b> &times; &#8377;' + Number(AMC_LOCK.effective_rate).toFixed(2) +
+                        '/AUD (incl. ' + AMC_LOCK.markup + '%) = <b>&#8377;' + Math.round(AMC_LOCK.inr).toLocaleString('en-IN') + '</b>' +
+                        ' <span style="color:#166534;font-weight:700;">&#128274; locked ' + (AMC_LOCK.locked_at || '').replace('T',' ').slice(0,16) + '</span>';
+                    amcBox.style.display = 'block';
+                    if (pkgValue) { pkgValue.value = Math.round(AMC_LOCK.inr); syncPackage(); }
+                    return;
+                }
+                fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent(pt))
+                    .then(function(r){ return r.json(); }).then(function(d){
+                        if (!d || !d.aud_priced) { amcBox.style.display = 'none'; return; }
+                        amcBreak.innerHTML =
+                            '<b>' + Number(d.aud).toLocaleString('en-AU') + ' AUD</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
+                            ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
+                            ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/AUD on save)</span>' +
+                            (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — using fallback, check before saving</span>' : '');
+                        amcBox.style.display = 'block';
+                        if (pkgValue) { pkgValue.value = Math.round(d.inr); syncPackage(); }
+                    }).catch(function(){ amcBox.style.display = 'none'; });
+            };
             if (productSel) productSel.addEventListener('change', function(){ loadPlans(false); });
-            if (planSel) planSel.addEventListener('change', function(){ updateDisplays(); loadPlanPackage(true); });
+            if (planSel) planSel.addEventListener('change', function(){ updateDisplays(); loadPlanPackage(true); amcAudCheck(); });
             if (productSel && productSel.value) loadPlans(true);
             syncPackage();
             updateDisplays();
+            amcAudCheck();
 
             // ── Dynamic installments: show the 1st, reveal more on demand ──
             window.updateInstHint = function(inp) {
@@ -391,6 +461,27 @@
                 var cb = document.getElementById('includeTraining');
                 var sec = document.getElementById('amcTrainingSection');
                 if (sec) sec.style.display = (cb && cb.checked) ? 'block' : 'none';
+                if (cb && cb.checked) trAmcAudCheck();
+            };
+            // AMC 1 (training add-on) is AUD-priced too: show the live breakup and, for a
+            // new lead, auto-price the training package. On edit we keep the saved (locked)
+            // value and just show the breakup for reference.
+            window.trAmcAudCheck = function() {
+                var box = document.getElementById('trAmcAudBox');
+                var brk = document.getElementById('trAmcAudBreak');
+                var pkg = document.getElementById('trPkg');
+                if (!box) return;
+                fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent('AMC 1'))
+                    .then(function(r){ return r.json(); }).then(function(d){
+                        if (!d || !d.aud_priced) { box.style.display = 'none'; return; }
+                        brk.innerHTML =
+                            '<b>' + Number(d.aud).toLocaleString('en-AU') + ' AUD</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
+                            ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
+                            ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/AUD on save)</span>' +
+                            (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — fallback</span>' : '');
+                        box.style.display = 'block';
+                        if (pkg && (parseFloat(pkg.value) || 0) === 0) { pkg.value = Math.round(d.inr); updateTrFinal(); }
+                    }).catch(function(){ box.style.display = 'none'; });
             };
             window.updateTrFinal = function() {
                 var p = parseFloat((document.getElementById('trPkg') || {}).value) || 0;

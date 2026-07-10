@@ -1,0 +1,27 @@
+{# Client onboarding progress strip. Expects `stages` = list of
+   {key,label,state} where state is 'done' | 'current' | 'upcoming'.
+   Shared by the dashboard, contract page, and refund-policy page. #}
+{% if stages %}
+<style>
+  .onb-strip{display:flex;flex-wrap:nowrap;align-items:center;background:#fff;border:1px solid #e5e7eb;border-radius:0.9rem;padding:0.9rem 1.1rem;margin-bottom:1.1rem;overflow-x:auto;}
+  .onb-step{display:flex;align-items:center;gap:0.5rem;flex:0 0 auto;}
+  .onb-badge{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;flex:0 0 auto;}
+  .onb-badge.done{background:#16a34a;color:#fff;}
+  .onb-badge.current{background:#f97316;color:#fff;box-shadow:0 0 0 3px #fed7aa;}
+  .onb-badge.upcoming{background:#e5e7eb;color:#9ca3af;}
+  .onb-label{font-size:0.82rem;font-weight:600;white-space:nowrap;}
+  .onb-label.done{color:#16a34a;} .onb-label.current{color:#1e3a5f;} .onb-label.upcoming{color:#9ca3af;}
+  .onb-line{flex:1 1 24px;height:2px;background:#e5e7eb;margin:0 0.5rem;min-width:16px;}
+  .onb-line.done{background:#16a34a;}
+  @media(max-width:640px){.onb-label{display:none;}.onb-line{min-width:12px;margin:0 0.3rem;}}
+</style>
+<div class="onb-strip">
+  {% for s in stages %}
+  <div class="onb-step">
+    <span class="onb-badge {{ s.state }}">{% if s.state == 'done' %}&#10003;{% else %}{{ loop.index }}{% endif %}</span>
+    <span class="onb-label {{ s.state }}">{{ s.label }}</span>
+  </div>
+  {% if not loop.last %}<span class="onb-line {{ 'done' if s.state == 'done' else '' }}"></span>{% endif %}
+  {% endfor %}
+</div>
+{% endif %}

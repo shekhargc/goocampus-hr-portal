@@ -1116,13 +1116,14 @@ def client_register(token):
              inst3_amount, inst3_date, inst3_note, inst3_method, inst3_status,
              inst4_amount, inst4_date, inst4_note, inst4_method, inst4_status,
              lead_source, additional_notes, ops_notes,
+             contract_path, onboarding_gated,
              form_status, current_step)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
-                    ?, ?, ?, 'draft', 1)''',
+                    ?, ?, ?, ?, 1, 'draft', 1)''',
             (acct_id, inv['id'], inv['product_id'], reg_num,
              first_name, last_name, clean, inv['client_email'] or '',
              counsellor_id, counsellor_name,
@@ -1131,7 +1132,8 @@ def client_register(token):
              inst_amts[1], inst_dts[1], inst_nts[1], inst_mts[1], inst_sts[1],
              inst_amts[2], inst_dts[2], inst_nts[2], inst_mts[2], inst_sts[2],
              inst_amts[3], inst_dts[3], inst_nts[3], inst_mts[3], inst_sts[3],
-             lead_source, addl_notes, ops_notes_val))
+             lead_source, addl_notes, ops_notes_val,
+             inv['contract_path']))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
 
@@ -1227,6 +1229,165 @@ def _get_refund_policy(conn):
     return row
 
 
+def _client_gate_status(conn, acct_id):
+    """Post-submit onboarding gate for a client account.
+
+    After the client completes Review & Submit, they must read + digitally
+    agree to (1) their signed Contract — only if sales uploaded one — and then
+    (2) the Refund Policy, before the rest of the dashboard unlocks
+    ('lock until done'). They already physically signed the contract; this is
+    the digital acknowledgement.
+
+    Returns (reg, step, stages):
+      reg    – the client-submitted registration row (client_submitted_at set), or None
+      step   – 'contract' | 'refund' | None  (None = all done, or nothing submitted yet)
+      stages – list of {key,label,state} for the onboarding progress strip
+    """
+    reg = conn.execute(
+        "SELECT * FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL AND COALESCE(onboarding_gated, 0) = 1 "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    if not reg:
+        return None, None, []
+    has_contract = bool(reg['contract_path'])
+    contract_done = False
+    if has_contract:
+        contract_done = bool(conn.execute(
+            "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+            "AND agreement_type = 'contract' LIMIT 1", (acct_id, reg['id'])).fetchone())
+    policy = _get_refund_policy(conn)
+    pver = policy['version'] if policy else 1
+    refund_done = bool(conn.execute(
+        "SELECT 1 FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
+        "AND policy_version = ? LIMIT 1", (acct_id, pver)).fetchone())
+    if has_contract and not contract_done:
+        step = 'contract'
+    elif not refund_done:
+        step = 'refund'
+    else:
+        step = None
+
+    def _st(done, current):
+        return 'done' if done else ('current' if current else 'upcoming')
+    stages = [
+        {'key': 'register', 'label': 'Registration',    'state': 'done'},
+        {'key': 'review',   'label': 'Review & Submit',  'state': 'done'},
+    ]
+    if has_contract:
+        stages.append({'key': 'contract', 'label': 'Contract',
+                       'state': _st(contract_done, step == 'contract')})
+    stages.append({'key': 'refund', 'label': 'Refund Policy',
+                   'state': _st(refund_done, step == 'refund')})
+    stages.append({'key': 'done', 'label': 'Completed',
+                   'state': 'done' if step is None else 'upcoming'})
+    return reg, step, stages
+
+
+@app.route('/client/contract', methods=['GET'])
+@client_required
+def client_contract():
+    """Client reads their signed contract and digitally agrees. If no contract
+    is on file for them, skip straight to the Refund Policy."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    reg, step, stages = _client_gate_status(conn, acct_id)
+    agreement = None
+    if reg and reg['contract_path']:
+        agreement = conn.execute(
+            "SELECT * FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+            "AND agreement_type = 'contract' ORDER BY id DESC LIMIT 1",
+            (acct_id, reg['id'])).fetchone()
+    conn.close()
+    if not reg or not reg['contract_path']:
+        return redirect(url_for('client_refund_policy'))
+    _ck = reg['contract_path'] or ''
+    contract_ext = _ck.rsplit('.', 1)[-1].lower() if '.' in _ck else 'pdf'
+    return render_template('client_contract.html', account=account, reg=reg,
+                           agreement=agreement, stages=stages, step=step,
+                           contract_ext=contract_ext)
+
+
+@app.route('/client/contract/view')
+@client_required
+def client_contract_view():
+    """Stream the client's own contract file via a short-lived presigned URL."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    reg = conn.execute(
+        "SELECT contract_path FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL AND contract_path IS NOT NULL "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    conn.close()
+    if not reg or not reg['contract_path']:
+        return "No contract on file", 404
+    try:
+        from core import storage
+        url = storage.presigned_get_url(reg['contract_path'])
+        if url:
+            return redirect(url, code=302)
+    except Exception as e:
+        logging.error(f"client contract view presign: {e}")
+    return "Contract temporarily unavailable", 503
+
+
+@app.route('/client/contract/file')
+@client_required
+def client_contract_file():
+    """Stream the contract bytes SAME-ORIGIN so the in-portal PDF.js reader can
+    read it without needing cross-origin/CORS access to R2."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    reg = conn.execute(
+        "SELECT contract_path FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL AND contract_path IS NOT NULL "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    conn.close()
+    if not reg or not reg['contract_path']:
+        return "No contract on file", 404
+    key = reg['contract_path']
+    ext = key.rsplit('.', 1)[-1].lower() if '.' in key else 'pdf'
+    from core import storage
+    data = storage.download_bytes(key)
+    if data is None:
+        return "Contract temporarily unavailable", 503
+    from flask import Response
+    resp = Response(data, mimetype=_CONTRACT_CT.get(ext, 'application/octet-stream'))
+    resp.headers['Content-Disposition'] = 'inline; filename="contract.%s"' % ext
+    resp.headers['Cache-Control'] = 'private, max-age=300'
+    return resp
+
+
+@app.route('/client/contract/agree', methods=['POST'])
+@client_required
+def client_contract_agree():
+    acct_id = session.get('user_id')
+    agreed_name = (request.form.get('agreed_name') or '').strip()
+    if not request.form.get('agree') or not agreed_name:
+        flash('Please tick the box and type your full name to digitally agree.', 'error')
+        return redirect(url_for('client_contract'))
+    conn = get_db()
+    reg = conn.execute(
+        "SELECT id FROM client_registrations WHERE account_id = ? "
+        "AND client_submitted_at IS NOT NULL AND contract_path IS NOT NULL "
+        "ORDER BY client_submitted_at DESC, id DESC LIMIT 1", (acct_id,)).fetchone()
+    if not reg:
+        conn.close()
+        return redirect(url_for('client_refund_policy'))
+    existing = conn.execute(
+        "SELECT id FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+        "AND agreement_type = 'contract' LIMIT 1", (acct_id, reg['id'])).fetchone()
+    if not existing:
+        ip = (request.headers.get('X-Forwarded-For', '') or request.remote_addr or '').split(',')[0].strip()
+        conn.execute(
+            "INSERT INTO client_agreements (account_id, registration_id, agreement_type, agreed_name, ip_address) "
+            "VALUES (?, ?, 'contract', ?, ?)", (acct_id, reg['id'], agreed_name, ip))
+        conn.commit()
+    conn.close()
+    flash('Contract agreed digitally. Please now read the Refund Policy.', 'success')
+    return redirect(url_for('client_refund_policy'))
+
+
 @app.route('/client/refund-policy', methods=['GET'])
 @client_required
 def client_refund_policy():
@@ -1237,9 +1398,14 @@ def client_refund_policy():
     agreement = conn.execute(
         "SELECT * FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
         "ORDER BY id DESC LIMIT 1", (acct_id,)).fetchone()
+    _reg, step, stages = _client_gate_status(conn, acct_id)
     conn.close()
+    # Enforce contract-first: if a contract is still pending, send them there.
+    if step == 'contract':
+        return redirect(url_for('client_contract'))
     return render_template('client_refund_policy.html',
-                           account=account, policy=policy, agreement=agreement)
+                           account=account, policy=policy, agreement=agreement,
+                           stages=stages, step=step)
 
 
 @app.route('/client/refund-policy/agree', methods=['POST'])
@@ -1289,8 +1455,8 @@ def client_refund_policy_agree():
     except Exception as e:
         logging.error(f"refund policy agree email: {e}")
     conn.close()
-    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you.', 'success')
-    return redirect(url_for('client_refund_policy'))
+    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you. Your onboarding is complete.', 'success')
+    return redirect(url_for('client_dashboard'))
 
 
 @app.route('/admin/policies/refund', methods=['GET'])
@@ -1400,11 +1566,61 @@ def admin_packages():
             standard_services = [dict(s) for s in conn.execute(
                 "SELECT * FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
                 (std_pkg['id'],)).fetchall()]
+    # AUD-priced plans (AMC 1/AMC 2): map plan_type -> {aud, fixed_sales_revenue, live INR}
+    # so the packages screen shows the FIXED sales revenue for them (not gross-cost).
+    amc_aud = {}
+    try:
+        for _r in conn.execute("SELECT * FROM amc_aud_pricing WHERE COALESCE(is_active,1)=1").fetchall():
+            _q = amc_aud_quote(_r['plan_type'], conn=conn)
+            amc_aud[_r['plan_type']] = {
+                'aud': float(_r['aud_amount'] or 0),
+                'fixed_sales_revenue': float(_r['fixed_sales_revenue'] or 0),
+                'markup_pct': float(_r['markup_pct'] if _r['markup_pct'] is not None else 3),
+                'inr': (_q['inr'] if _q else None),
+                'effective_rate': (_q['effective_rate'] if _q else None),
+            }
+    except Exception:
+        amc_aud = {}
     conn.close()
     return render_template('admin_packages.html', user=user, products=products,
                            selected=selected, plans=plans, catalogue=catalogue,
-                           standard_services=standard_services,
+                           standard_services=standard_services, amc_aud=amc_aud,
                            stage_options=stage_options, active_section='company')
+
+
+@app.route('/admin/amc-aud-pricing', methods=['GET', 'POST'])
+@admin_required
+def admin_amc_aud_pricing():
+    """Edit the AUD-priced AMC plans (AMC 1 / AMC 2): AUD package amount, the
+    fixed sales revenue credited to the rep, and the % markup on the live rate."""
+    conn = get_db()
+    if request.method == 'POST':
+        rid = request.form.get('id')
+        def _n(k):
+            try: return float(request.form.get(k) or 0)
+            except (TypeError, ValueError): return 0.0
+        if rid:
+            conn.execute("UPDATE amc_aud_pricing SET aud_amount=?, fixed_sales_revenue=?, markup_pct=?, "
+                         "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                         (_n('aud_amount'), _n('fixed_sales_revenue'), _n('markup_pct'), rid))
+            conn.commit()
+            flash('AMC AUD pricing updated.', 'success')
+        conn.close()
+        return redirect(url_for('admin_amc_aud_pricing'))
+    rows = []
+    try:
+        for r in conn.execute("SELECT * FROM amc_aud_pricing ORDER BY plan_type").fetchall():
+            d = dict(r)
+            q = amc_aud_quote(d['plan_type'], conn=conn)
+            d['live_rate'] = (q['live_rate'] if q else None)
+            d['effective_rate'] = (q['effective_rate'] if q else None)
+            d['live_inr'] = (q['inr'] if q else None)
+            d['rate_stale'] = (q['rate_stale'] if q else True)
+            rows.append(d)
+    except Exception:
+        rows = []
+    conn.close()
+    return render_template('admin_amc_aud_pricing.html', user=get_user(), rows=rows, active_section='company')
 
 
 @app.route('/admin/packages/plan/save', methods=['POST'])
@@ -1611,6 +1827,16 @@ def client_dashboard():
     acct_id = session.get('user_id')
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    # Post-submit onboarding gate: lock the dashboard until the client has
+    # digitally agreed to their Contract (if one is on file) and the Refund
+    # Policy. Redirect to whichever step is still pending.
+    _greg, _gate_step, onboarding_stages = _client_gate_status(conn, acct_id)
+    if _gate_step == 'contract':
+        conn.close()
+        return redirect(url_for('client_contract'))
+    if _gate_step == 'refund':
+        conn.close()
+        return redirect(url_for('client_refund_policy'))
     # Item C-2: fetch counsellor contact for "Your counsellor" card.
     registrations_raw = conn.execute('''
         SELECT cr.*, ps.name as product_name,
@@ -1747,10 +1973,31 @@ def client_dashboard():
                 docs = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (plab_client['id'],)).fetchall()
                 plab_documents.extend(docs)
 
+    # Photograph: detect an already-uploaded photo across BOTH the post-verify
+    # (plab_client_documents) and pre-verify (client_documents) stores, so the
+    # dashboard can show the photo + a done tick and block re-uploading.
+    def _photo_url(fp):
+        fp = fp or ''
+        return fp if fp.startswith('/') else '/' + fp
+    photo_doc = None
+    for d in plab_documents:
+        if (d.get('doc_type') or '') == 'Photograph':
+            photo_doc = {'url': _photo_url(d.get('file_path'))}
+            break
+    if not photo_doc and reg_ids:
+        _php = ','.join(['?' for _ in reg_ids])
+        _prow = conn.execute(
+            f"SELECT file_path FROM client_documents WHERE registration_id IN ({_php}) "
+            "AND doc_type = 'Photograph' ORDER BY id DESC LIMIT 1", reg_ids).fetchone()
+        if _prow:
+            photo_doc = {'url': _photo_url(_prow['file_path'])}
+
     conn.close()
     return render_template('client_dashboard.html',
         account=account, registrations=registrations, doc_requests=doc_requests,
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
+        photo_doc=photo_doc,
+        onboarding_stages=onboarding_stages,
         first_login=session.get('first_login', False))
 
 
@@ -8086,6 +8333,63 @@ def api_forex_rates():
         'updated': _fx_cache.get('updated_iso', ''),
         'currencies': SUPPORTED_CURRENCIES
     })
+
+
+def amc_aud_quote(plan_type, conn=None):
+    """Live pricing quote for an AUD-priced AMC plan (AMC 1 / AMC 2).
+
+    Returns a dict, or None if the plan_type isn't AUD-priced:
+      aud                – package amount in AUD
+      live_rate          – current AUD→INR from the forex feed
+      markup_pct         – % added to the live rate (approx. ICICI card rate)
+      effective_rate     – live_rate * (1 + markup_pct/100)  ← the rate we lock
+      inr                – aud * effective_rate  ← what the client pays (in INR)
+      fixed_sales_revenue– flat INR credited to the sales member for this plan
+      rate_source/rate_stale – so a fallback (stale) rate is never used silently
+    """
+    if not plan_type:
+        return None
+    _own = False
+    if conn is None:
+        conn = get_db(); _own = True
+    try:
+        row = conn.execute(
+            "SELECT * FROM amc_aud_pricing WHERE plan_type = ? AND COALESCE(is_active,1)=1",
+            (plan_type,)).fetchone()
+    except Exception:
+        row = None
+    finally:
+        if _own:
+            conn.close()
+    if not row:
+        return None
+    aud = float(row['aud_amount'] or 0)
+    markup = float(row['markup_pct'] if row['markup_pct'] is not None else 3)
+    rates = get_fx_rates_inr()
+    live = float(rates.get('AUD', 0) or 0)
+    effective = round(live * (1 + markup / 100.0), 4)
+    return {
+        'plan_type': plan_type,
+        'aud': aud,
+        'live_rate': round(live, 4),
+        'markup_pct': markup,
+        'effective_rate': effective,
+        'inr': round(aud * effective, 2),
+        'fixed_sales_revenue': float(row['fixed_sales_revenue'] or 0),
+        'rate_source': _fx_cache.get('source', 'fallback'),
+        'rate_stale': (_fx_cache.get('source') == 'fallback'),
+    }
+
+
+@app.route('/api/amc-aud-quote')
+def api_amc_aud_quote():
+    """Live AUD→INR quote for an AMC plan — used by the sales close form so the
+    rep sees 'Package 1550 AUD × ₹XX + 3% = ₹YY' before saving."""
+    q = amc_aud_quote(request.args.get('plan_type', ''))
+    if not q:
+        return jsonify({'aud_priced': False})
+    q['aud_priced'] = True
+    return jsonify(q)
 
 
 def ensure_crm_tables():
@@ -15403,6 +15707,17 @@ def ensure_ops_tables():
         except Exception:
             try: conn.rollback()
             except Exception: pass
+        # 2026-07-09: signed contract file the sales rep uploads when sending
+        # the invite. Lives on the invitation (the registration doesn't exist
+        # yet at upload time) and is copied to client_registrations.contract_path
+        # when the client accepts. Shown to the client to read + digitally agree
+        # after Review & Submit.
+        try:
+            conn.execute("ALTER TABLE client_invitations ADD COLUMN contract_path TEXT")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # ── Client Registrations (main client data per product) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_registrations (
@@ -15463,6 +15778,8 @@ def ensure_ops_tables():
             lead_source TEXT,
             additional_notes TEXT,
             client_submitted_at TIMESTAMP,
+            contract_path TEXT,
+            onboarding_gated INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
@@ -15474,6 +15791,23 @@ def ensure_ops_tables():
                     conn.execute(f"ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS inst{_i}_{_c} TEXT")
                 except Exception:
                     pass
+        # Signed contract copied from the invitation at registration time (see note
+        # on client_invitations.contract_path). Additive for existing DBs.
+        try:
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS contract_path TEXT")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        # onboarding_gated: only NEW registrations (created from 2026-07-09 onward)
+        # go through the Contract + Refund-Policy lock. Existing/in-process clients
+        # keep the default 0 so they are never locked out of their dashboard.
+        try:
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS onboarding_gated INTEGER DEFAULT 0")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # ── Client Academics (mirrors ops_academic_details fields) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_academics (
@@ -25878,6 +26212,19 @@ def ensure_sales_crm_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # AUD rate-lock (AMC 1 / AMC 2): frozen at lead generation, never re-floats.
+        # amc_fx_rate = live AUD→INR; amc_fx_effective = live * (1+markup%); amc_inr_amount
+        # = aud * effective (what the client pays, collected in INR). Date+time in locked_at.
+        for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
+                       ('amc_fx_rate', 'NUMERIC(10,4)'), ('amc_fx_markup', 'NUMERIC(5,2)'),
+                       ('amc_fx_effective', 'NUMERIC(10,4)'), ('amc_inr_amount', 'NUMERIC(14,2)'),
+                       ('amc_fx_locked_at', 'TIMESTAMP')):
+            try:
+                conn.execute(f"ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS {_c} {_t}")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         # 4) Sales closures (won deals; margin auto-computed)
         conn.execute('''CREATE TABLE IF NOT EXISTS sales_closures (
             id SERIAL PRIMARY KEY,
@@ -26631,6 +26978,33 @@ def sales_leads_add():
                     (lead_name_new, owner_id)
                 ).fetchone()
                 new_lead_id = new_lead_row['id'] if new_lead_row else None
+                # AUD rate-lock (AMC 1 / AMC 2): freeze the live AUD→INR rate + markup
+                # + timestamp onto the lead at generation. The client then pays this
+                # locked INR (in installments); it never re-floats.
+                amc_lock = None
+                try:
+                    _plan = (request.form.get('plan_type') or '').strip()
+                    amc_lock = amc_aud_quote(_plan, conn=conn)
+                    if new_lead_id and amc_lock:
+                        conn.execute(
+                            "UPDATE sales_leads SET amc_plan_type=?, amc_aud_amount=?, amc_fx_rate=?, "
+                            "amc_fx_markup=?, amc_fx_effective=?, amc_inr_amount=?, amc_fx_locked_at=CURRENT_TIMESTAMP "
+                            "WHERE id=?",
+                            (_plan, amc_lock['aud'], amc_lock['live_rate'], amc_lock['markup_pct'],
+                             amc_lock['effective_rate'], amc_lock['inr'], new_lead_id))
+                        conn.commit()
+                except Exception as _fxe:
+                    logging.warning(f"AMC AUD lock (add): {_fxe}")
+                    try: conn.rollback()
+                    except Exception: pass
+                # AMC 1 training add-on (AMC Consulting + AMC 1 combo) is AUD-priced too —
+                # lock its rate so the combined deal's training portion is billed the locked INR.
+                train_lock = None
+                try:
+                    if request.form.get('include_training') in ('on', '1', 'true', 'yes'):
+                        train_lock = amc_aud_quote('AMC 1', conn=conn)
+                except Exception:
+                    train_lock = None
                 if new_lead_id:
                     try:
                         cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
@@ -26684,9 +27058,11 @@ def sales_leads_add():
                             except ValueError: return 0
                         closure_data = {
                             'plan_type':                _f('plan_type'),
-                            'package_amount':           _n('package_amount'),
-                            'discount_allowed':         _n('discount_allowed'),
-                            'final_package':            _n('final_package'),
+                            # AUD plans (AMC 1/AMC 2): the client pays the locked INR
+                            # (aud × frozen rate), no discount. Otherwise use the form values.
+                            'package_amount':           (amc_lock['inr'] if amc_lock else _n('package_amount')),
+                            'discount_allowed':         (0 if amc_lock else _n('discount_allowed')),
+                            'final_package':            (amc_lock['inr'] if amc_lock else _n('final_package')),
                             'additional_package_notes': _f('additional_package_notes'),
                             # Installment amounts are ENTERED as the total incl. GST;
                             # store the base (÷1.18) so existing base-stored records and
@@ -26714,9 +27090,16 @@ def sales_leads_add():
                             # AMC Consulting + AMC 1 combined signup — the Training (AMC 1)
                             # split. Installments entered as total incl GST -> stored base.
                             'include_training':         (request.form.get('include_training') in ('on', '1', 'true', 'yes')),
-                            'training_package':         _n('training_package'),
-                            'training_discount':        _n('training_discount'),
-                            'training_final':           _n('training_final'),
+                            # AMC 1 is AUD-priced: bill the locked INR (no discount) and record
+                            # the frozen forex breakup. Falls back to the form value if not AUD.
+                            'training_package':         (train_lock['inr'] if train_lock else _n('training_package')),
+                            'training_discount':        (0 if train_lock else _n('training_discount')),
+                            'training_final':           (train_lock['inr'] if train_lock else _n('training_final')),
+                            'training_aud':             (train_lock['aud'] if train_lock else 0),
+                            'training_fx_rate':         (train_lock['live_rate'] if train_lock else 0),
+                            'training_fx_markup':       (train_lock['markup_pct'] if train_lock else 0),
+                            'training_fx_effective':    (train_lock['effective_rate'] if train_lock else 0),
+                            'training_fx_locked_at':    (datetime.now().strftime('%Y-%m-%d %H:%M:%S') if train_lock else ''),
                             'training_inst1_amount':    round(_n('training_inst1_amount')/1.18, 2),
                             'training_inst1_date':      _f('training_inst1_date'),
                             'training_inst1_method':    _f('training_inst1_method'),
@@ -26760,6 +27143,32 @@ def sales_leads_add():
                         )
                         if token:
                             flash('Closed client recorded and invitation sent on WhatsApp', 'success')
+                            # Attach the signed contract (if uploaded) to the invitation.
+                            # It's copied to the client_registrations row when the client
+                            # accepts, then shown to them to read + digitally agree.
+                            try:
+                                cfile = request.files.get('contract_file')
+                                if cfile and cfile.filename:
+                                    cbytes = cfile.read()
+                                    if len(cbytes) > 15 * 1024 * 1024:
+                                        flash('Contract not saved: file too large (max 15 MB)', 'warning')
+                                    else:
+                                        from core import storage
+                                        if storage.is_configured():
+                                            cext = cfile.filename.rsplit('.', 1)[-1].lower() if '.' in cfile.filename else 'pdf'
+                                            ckey = storage.make_doc_key('client', f'invite_{token[:12]}', 'Contract', cfile.filename)
+                                            if storage.upload_bytes(ckey, cbytes, _CONTRACT_CT.get(cext, 'application/octet-stream')):
+                                                conn.execute("UPDATE client_invitations SET contract_path = ? WHERE token = ?", (ckey, token))
+                                                conn.commit()
+                                            else:
+                                                flash('Contract not saved: upload to storage failed', 'warning')
+                                        else:
+                                            flash('Contract not saved: file storage not configured', 'warning')
+                            except Exception as _ce:
+                                logging.warning(f"closure contract upload failed: {_ce}")
+                                try: conn.rollback()
+                                except Exception: pass
+                                flash('Contract not saved (upload error -- check logs)', 'warning')
                         else:
                             flash('Closed client recorded (invitation skipped: phone missing or duplicate)', 'success')
                     except Exception as inv_err:
@@ -26940,20 +27349,41 @@ def sales_leads_edit(lead_id):
                 edited[f'inst{i}_note']   = _ef(f'inst{i}_note')
                 edited[f'inst{i}_method'] = _ef(f'inst{i}_method')
                 edited[f'inst{i}_status'] = _ef(f'inst{i}_status')
+            # AMC Consulting + AMC 1 (Training) combo — capture it on EDIT too, else
+            # saving an edit wiped the training enrolment out of closure_metadata.
+            edited['include_training'] = (request.form.get('include_training') in ('on', '1', 'true', 'yes'))
+            edited['training_package']  = _en('training_package')
+            edited['training_discount'] = _en('training_discount')
+            edited['training_final']    = _en('training_final')
+            for i in (1, 2, 3, 4):
+                edited[f'training_inst{i}_amount'] = round(_en(f'training_inst{i}_amount')/1.18, 2)
+                edited[f'training_inst{i}_date']   = _ef(f'training_inst{i}_date')
+                edited[f'training_inst{i}_method'] = _ef(f'training_inst{i}_method')
+                edited[f'training_inst{i}_status'] = _ef(f'training_inst{i}_status')
             _ph = (request.form.get('phone') or lead['phone'] or '').lstrip('+').lstrip('0')
             if _ph.startswith('91') and len(_ph) == 12:
                 _ph = _ph[2:]
             if _ph and product_id:
                 inv = conn.execute(
-                    "SELECT id FROM client_invitations WHERE client_mobile = ? AND product_id = ? "
+                    "SELECT id, closure_metadata FROM client_invitations WHERE client_mobile = ? AND product_id = ? "
                     "AND COALESCE(status,'pending') <> 'cancelled' ORDER BY id DESC LIMIT 1",
                     (_ph, product_id)).fetchone()
                 if inv:
+                    # Merge onto the EXISTING closure_metadata so we never wipe keys the
+                    # edit form didn't resubmit (e.g. ops_notes) — the earlier bug that
+                    # lost the AMC-training enrolment on save.
+                    try:
+                        _base = _json.loads(inv['closure_metadata']) if inv['closure_metadata'] else {}
+                    except Exception:
+                        _base = {}
+                    _merged = {**_base, **edited}
                     conn.execute("UPDATE client_invitations SET closure_metadata = ? WHERE id = ?",
-                                 (_json.dumps({k: v for k, v in edited.items() if v not in (None, '')}), inv['id']))
+                                 (_json.dumps({k: v for k, v in _merged.items() if v not in (None, '')}), inv['id']))
                 reg = conn.execute(
-                    "SELECT id FROM client_registrations WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
-                    (_ph, product_id)).fetchone()
+                    "SELECT id FROM client_registrations "
+                    "WHERE regexp_replace(mobile, '[^0-9]', '', 'g') LIKE ? AND product_id = ? "
+                    "ORDER BY id DESC LIMIT 1",
+                    ('%' + _ph, product_id)).fetchone()
                 if reg:
                     conn.execute('''UPDATE client_registrations SET
                         plan_type = ?, package_amount = ?, discount_allowed = ?, final_package = ?,
@@ -26971,6 +27401,37 @@ def sales_leads_edit(lead_id):
                          edited['inst3_amount'], edited['inst3_date'], edited['inst3_note'], edited['inst3_method'], edited['inst3_status'],
                          edited['inst4_amount'], edited['inst4_date'], edited['inst4_note'], edited['inst4_method'], edited['inst4_status'],
                          reg['id']))
+                # Signed contract (edit / re-close): if the rep attached or replaced
+                # a contract, store it on the invitation AND the registration (if the
+                # client already registered) so the updated contract reaches the client.
+                try:
+                    cfile = request.files.get('contract_file')
+                    if cfile and cfile.filename:
+                        cbytes = cfile.read()
+                        if len(cbytes) > 15 * 1024 * 1024:
+                            flash('Contract not saved: file too large (max 15 MB)', 'warning')
+                        else:
+                            from core import storage
+                            if storage.is_configured():
+                                cext = cfile.filename.rsplit('.', 1)[-1].lower() if '.' in cfile.filename else 'pdf'
+                                _basis = f"invite_{inv['id']}" if inv else f"lead_{lead_id}"
+                                ckey = storage.make_doc_key('client', _basis, 'Contract', cfile.filename)
+                                if storage.upload_bytes(ckey, cbytes, _CONTRACT_CT.get(cext, 'application/octet-stream')):
+                                    _linked = False
+                                    if inv:
+                                        conn.execute("UPDATE client_invitations SET contract_path = ? WHERE id = ?", (ckey, inv['id'])); _linked = True
+                                    if reg:
+                                        conn.execute("UPDATE client_registrations SET contract_path = ? WHERE id = ?", (ckey, reg['id'])); _linked = True
+                                    if _linked:
+                                        flash('✓ Contract uploaded and attached to this client. They will read & sign it in their dashboard.', 'success')
+                                    else:
+                                        flash('Contract uploaded but no invitation/registration was found to attach it to — check the client’s phone/product match.', 'warning')
+                                else:
+                                    flash('Contract not saved: upload to storage failed', 'warning')
+                            else:
+                                flash('Contract not saved: file storage not configured', 'warning')
+                except Exception as _ce2:
+                    logging.warning(f"sales_leads_edit contract upload: {_ce2}")
         except Exception as _pe:
             logging.warning(f"sales_leads_edit closure persist: {_pe}")
         conn.commit()
@@ -27010,25 +27471,30 @@ def sales_leads_edit(lead_id):
             _ph = _ph[2:]
         if _ph and lead['product_id']:
             inv = conn.execute(
-                "SELECT closure_metadata FROM client_invitations "
+                "SELECT * FROM client_invitations "
                 "WHERE client_mobile = ? AND product_id = ? "
                 "  AND COALESCE(status,'pending') <> 'cancelled' "
                 "ORDER BY id DESC LIMIT 1", (_ph, lead['product_id'])).fetchone()
-            if inv and inv['closure_metadata']:
+            if inv and inv.get('closure_metadata'):
                 try:
                     closure = _json.loads(inv['closure_metadata']) or {}
                 except Exception:
                     closure = {}
+            if inv and inv.get('contract_path'):
+                closure['contract_path'] = inv['contract_path']
             reg = conn.execute(
                 "SELECT * FROM client_registrations "
-                "WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
-                (_ph, lead['product_id'])).fetchone()
+                "WHERE regexp_replace(mobile, '[^0-9]', '', 'g') LIKE ? AND product_id = ? "
+                "ORDER BY id DESC LIMIT 1",
+                ('%' + _ph, lead['product_id'])).fetchone()
             if reg:
                 closure['plan_type']        = reg['plan_type'] or closure.get('plan_type', '')
                 closure['package_amount']   = reg['package_amount'] if reg['package_amount'] is not None else closure.get('package_amount', 0)
                 closure['discount_allowed'] = reg['discount_allowed'] if reg['discount_allowed'] is not None else closure.get('discount_allowed', 0)
                 closure['final_package']    = reg['final_package'] if reg['final_package'] is not None else closure.get('final_package', 0)
                 closure['additional_notes'] = reg['additional_notes'] or closure.get('additional_notes', '')
+                if reg.get('contract_path'):
+                    closure['contract_path'] = reg['contract_path']
                 for i in (1, 2, 3, 4):
                     closure[f'inst{i}_amount'] = reg[f'inst{i}_amount'] if reg[f'inst{i}_amount'] is not None else closure.get(f'inst{i}_amount', 0)
                     closure[f'inst{i}_date']   = reg[f'inst{i}_date'] or closure.get(f'inst{i}_date', '')
@@ -27056,10 +27522,18 @@ def sales_leads_delete(lead_id):
         flash('Admins only', 'error')
         return redirect(url_for('sales_leads_list'))
     conn = get_db()
+    # Delete the lead's closures too. Previously only the lead row was removed,
+    # so a deleted (e.g. duplicate) lead left ORPHAN closures behind — which kept
+    # counting toward Closures revenue (the "1 lead but 2 closures / inflated
+    # revenue" symptom). Closures carry the revenue, so removing the lead should
+    # remove its closures.
+    n_cl = conn.execute('SELECT COUNT(*) AS n FROM sales_closures WHERE lead_id = ?', (lead_id,)).fetchone()
+    conn.execute('DELETE FROM sales_closures WHERE lead_id = ?', (lead_id,))
     conn.execute('DELETE FROM sales_leads WHERE id = ?', (lead_id,))
     conn.commit()
     conn.close()
-    flash('Lead deleted', 'success')
+    _cln = (n_cl['n'] if n_cl else 0) or 0
+    flash('Lead deleted' + (f' (and {_cln} linked closure{"s" if _cln != 1 else ""})' if _cln else ''), 'success')
     return redirect(url_for('sales_leads_list'))
 
 
@@ -27516,16 +27990,22 @@ def sales_revenue_report():
         where += " AND c.registration_date <= ?"; params.append(d_to)
     rows = []
     try:
+        # AUD plans (AMC 1/AMC 2) credit a FIXED sales revenue (amc_aud_pricing),
+        # not package-cost-discount. aap.fixed_sales_revenue is NULL for every other
+        # plan, so the CASE falls back to the normal computation for them.
         rows = conn.execute(
             "SELECT COALESCE(NULLIF(TRIM(c.counsellor),''),'Unassigned') AS counsellor, "
             "       COUNT(*) AS clients, "
             "       COALESCE(SUM(c.package_amount),0) AS total_package, "
             "       COALESCE(SUM(COALESCE(pp.plan_cost,0)),0) AS total_cost, "
             "       COALESCE(SUM(c.discount_allowed),0) AS total_discount, "
-            "       COALESCE(SUM(c.package_amount - COALESCE(pp.plan_cost,0)),0) AS sales_revenue, "
-            "       COALESCE(SUM(c.package_amount - COALESCE(pp.plan_cost,0) - COALESCE(c.discount_allowed,0)),0) AS actual_revenue "
+            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) END),0) AS sales_revenue, "
+            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) - COALESCE(c.discount_allowed,0) END),0) AS actual_revenue "
             "FROM plab_clients c "
             "LEFT JOIN plan_packages pp ON pp.product_id = c.product_id AND pp.plan_type = c.plan_type "
+            "LEFT JOIN amc_aud_pricing aap ON aap.plan_type = c.plan_type AND COALESCE(aap.is_active,1) = 1 "
             + where +
             " GROUP BY 1 ORDER BY actual_revenue DESC", params).fetchall()
     except Exception as e:
@@ -29096,9 +29576,33 @@ def ensure_package_tables():
         "CREATE INDEX IF NOT EXISTS idx_package_services_plan ON package_services(plan_package_id)",
         "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS plan_cost NUMERIC(14,2) DEFAULT 0",
         "ALTER TABLE package_services ADD COLUMN IF NOT EXISTS budget NUMERIC(14,2) DEFAULT 0",
+        # AUD-priced plans (AMC 1 / AMC 2). Keyed by plan_type so it works whatever
+        # product they sit under. aud_amount = package in AUD; fixed_sales_revenue =
+        # the flat INR credited to the sales member (NOT package-cost-discount);
+        # markup_pct = added to the live AUD rate to approximate ICICI's card rate.
+        """CREATE TABLE IF NOT EXISTS amc_aud_pricing (
+            id SERIAL PRIMARY KEY,
+            plan_type TEXT NOT NULL UNIQUE,
+            aud_amount NUMERIC(12,2) DEFAULT 0,
+            fixed_sales_revenue NUMERIC(12,2) DEFAULT 0,
+            markup_pct NUMERIC(5,2) DEFAULT 3,
+            is_active INTEGER DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
     ):
         try:
             conn.execute(ddl); conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    # Seed AMC 1 / AMC 2 AUD pricing (only if absent — never overwrite edited values).
+    for _p in ({'plan_type': 'AMC 1', 'aud': 1550, 'rev': 15000},
+               {'plan_type': 'AMC 2', 'aud': 2000, 'rev': 20000}):
+        try:
+            _ex = conn.execute("SELECT id FROM amc_aud_pricing WHERE plan_type = ?", (_p['plan_type'],)).fetchone()
+            if not _ex:
+                conn.execute("INSERT INTO amc_aud_pricing (plan_type, aud_amount, fixed_sales_revenue, markup_pct) VALUES (?, ?, ?, 3)",
+                             (_p['plan_type'], _p['aud'], _p['rev']))
+                conn.commit()
         except Exception:
             try: conn.rollback()
             except Exception: pass
