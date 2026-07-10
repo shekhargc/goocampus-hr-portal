@@ -8285,6 +8285,63 @@ def api_forex_rates():
     })
 
 
+def amc_aud_quote(plan_type, conn=None):
+    """Live pricing quote for an AUD-priced AMC plan (AMC 1 / AMC 2).
+
+    Returns a dict, or None if the plan_type isn't AUD-priced:
+      aud                – package amount in AUD
+      live_rate          – current AUD→INR from the forex feed
+      markup_pct         – % added to the live rate (approx. ICICI card rate)
+      effective_rate     – live_rate * (1 + markup_pct/100)  ← the rate we lock
+      inr                – aud * effective_rate  ← what the client pays (in INR)
+      fixed_sales_revenue– flat INR credited to the sales member for this plan
+      rate_source/rate_stale – so a fallback (stale) rate is never used silently
+    """
+    if not plan_type:
+        return None
+    _own = False
+    if conn is None:
+        conn = get_db(); _own = True
+    try:
+        row = conn.execute(
+            "SELECT * FROM amc_aud_pricing WHERE plan_type = ? AND COALESCE(is_active,1)=1",
+            (plan_type,)).fetchone()
+    except Exception:
+        row = None
+    finally:
+        if _own:
+            conn.close()
+    if not row:
+        return None
+    aud = float(row['aud_amount'] or 0)
+    markup = float(row['markup_pct'] if row['markup_pct'] is not None else 3)
+    rates = get_fx_rates_inr()
+    live = float(rates.get('AUD', 0) or 0)
+    effective = round(live * (1 + markup / 100.0), 4)
+    return {
+        'plan_type': plan_type,
+        'aud': aud,
+        'live_rate': round(live, 4),
+        'markup_pct': markup,
+        'effective_rate': effective,
+        'inr': round(aud * effective, 2),
+        'fixed_sales_revenue': float(row['fixed_sales_revenue'] or 0),
+        'rate_source': _fx_cache.get('source', 'fallback'),
+        'rate_stale': (_fx_cache.get('source') == 'fallback'),
+    }
+
+
+@app.route('/api/amc-aud-quote')
+def api_amc_aud_quote():
+    """Live AUD→INR quote for an AMC plan — used by the sales close form so the
+    rep sees 'Package 1550 AUD × ₹XX + 3% = ₹YY' before saving."""
+    q = amc_aud_quote(request.args.get('plan_type', ''))
+    if not q:
+        return jsonify({'aud_priced': False})
+    q['aud_priced'] = True
+    return jsonify(q)
+
+
 def ensure_crm_tables():
     """Create CRM tables if they don't exist (safe to run repeatedly)."""
     try:
@@ -26105,6 +26162,19 @@ def ensure_sales_crm_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # AUD rate-lock (AMC 1 / AMC 2): frozen at lead generation, never re-floats.
+        # amc_fx_rate = live AUD→INR; amc_fx_effective = live * (1+markup%); amc_inr_amount
+        # = aud * effective (what the client pays, collected in INR). Date+time in locked_at.
+        for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
+                       ('amc_fx_rate', 'NUMERIC(10,4)'), ('amc_fx_markup', 'NUMERIC(5,2)'),
+                       ('amc_fx_effective', 'NUMERIC(10,4)'), ('amc_inr_amount', 'NUMERIC(14,2)'),
+                       ('amc_fx_locked_at', 'TIMESTAMP')):
+            try:
+                conn.execute(f"ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS {_c} {_t}")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         # 4) Sales closures (won deals; margin auto-computed)
         conn.execute('''CREATE TABLE IF NOT EXISTS sales_closures (
             id SERIAL PRIMARY KEY,
@@ -26858,6 +26928,25 @@ def sales_leads_add():
                     (lead_name_new, owner_id)
                 ).fetchone()
                 new_lead_id = new_lead_row['id'] if new_lead_row else None
+                # AUD rate-lock (AMC 1 / AMC 2): freeze the live AUD→INR rate + markup
+                # + timestamp onto the lead at generation. The client then pays this
+                # locked INR (in installments); it never re-floats.
+                amc_lock = None
+                try:
+                    _plan = (request.form.get('plan_type') or '').strip()
+                    amc_lock = amc_aud_quote(_plan, conn=conn)
+                    if new_lead_id and amc_lock:
+                        conn.execute(
+                            "UPDATE sales_leads SET amc_plan_type=?, amc_aud_amount=?, amc_fx_rate=?, "
+                            "amc_fx_markup=?, amc_fx_effective=?, amc_inr_amount=?, amc_fx_locked_at=CURRENT_TIMESTAMP "
+                            "WHERE id=?",
+                            (_plan, amc_lock['aud'], amc_lock['live_rate'], amc_lock['markup_pct'],
+                             amc_lock['effective_rate'], amc_lock['inr'], new_lead_id))
+                        conn.commit()
+                except Exception as _fxe:
+                    logging.warning(f"AMC AUD lock (add): {_fxe}")
+                    try: conn.rollback()
+                    except Exception: pass
                 if new_lead_id:
                     try:
                         cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
@@ -26911,9 +27000,11 @@ def sales_leads_add():
                             except ValueError: return 0
                         closure_data = {
                             'plan_type':                _f('plan_type'),
-                            'package_amount':           _n('package_amount'),
-                            'discount_allowed':         _n('discount_allowed'),
-                            'final_package':            _n('final_package'),
+                            # AUD plans (AMC 1/AMC 2): the client pays the locked INR
+                            # (aud × frozen rate), no discount. Otherwise use the form values.
+                            'package_amount':           (amc_lock['inr'] if amc_lock else _n('package_amount')),
+                            'discount_allowed':         (0 if amc_lock else _n('discount_allowed')),
+                            'final_package':            (amc_lock['inr'] if amc_lock else _n('final_package')),
                             'additional_package_notes': _f('additional_package_notes'),
                             # Installment amounts are ENTERED as the total incl. GST;
                             # store the base (÷1.18) so existing base-stored records and
@@ -29414,9 +29505,33 @@ def ensure_package_tables():
         "CREATE INDEX IF NOT EXISTS idx_package_services_plan ON package_services(plan_package_id)",
         "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS plan_cost NUMERIC(14,2) DEFAULT 0",
         "ALTER TABLE package_services ADD COLUMN IF NOT EXISTS budget NUMERIC(14,2) DEFAULT 0",
+        # AUD-priced plans (AMC 1 / AMC 2). Keyed by plan_type so it works whatever
+        # product they sit under. aud_amount = package in AUD; fixed_sales_revenue =
+        # the flat INR credited to the sales member (NOT package-cost-discount);
+        # markup_pct = added to the live AUD rate to approximate ICICI's card rate.
+        """CREATE TABLE IF NOT EXISTS amc_aud_pricing (
+            id SERIAL PRIMARY KEY,
+            plan_type TEXT NOT NULL UNIQUE,
+            aud_amount NUMERIC(12,2) DEFAULT 0,
+            fixed_sales_revenue NUMERIC(12,2) DEFAULT 0,
+            markup_pct NUMERIC(5,2) DEFAULT 3,
+            is_active INTEGER DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
     ):
         try:
             conn.execute(ddl); conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    # Seed AMC 1 / AMC 2 AUD pricing (only if absent — never overwrite edited values).
+    for _p in ({'plan_type': 'AMC 1', 'aud': 1550, 'rev': 15000},
+               {'plan_type': 'AMC 2', 'aud': 2000, 'rev': 20000}):
+        try:
+            _ex = conn.execute("SELECT id FROM amc_aud_pricing WHERE plan_type = ?", (_p['plan_type'],)).fetchone()
+            if not _ex:
+                conn.execute("INSERT INTO amc_aud_pricing (plan_type, aud_amount, fixed_sales_revenue, markup_pct) VALUES (?, ?, ?, 3)",
+                             (_p['plan_type'], _p['aud'], _p['rev']))
+                conn.commit()
         except Exception:
             try: conn.rollback()
             except Exception: pass

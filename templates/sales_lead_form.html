@@ -124,6 +124,13 @@
                     <div id="pkgServicesList" style="font-size:0.82rem;color:#14532D;line-height:1.5;"></div>
                 </div>
 
+                <!-- AUD-priced plan (AMC 1 / AMC 2): live rate, locked on save -->
+                <div id="amcAudBox" style="display:none;margin:0.2rem 0 0.9rem;padding:0.8rem 1rem;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0.55rem;">
+                    <div style="font-size:0.74rem;font-weight:700;color:#1E40AF;margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.03em;">AUD-priced plan · rate locks when you save</div>
+                    <div id="amcAudBreak" style="font-size:0.9rem;color:#1E3A5F;line-height:1.6;"></div>
+                    <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">The rate + exact date/time are frozen on save; the client is billed this INR total (collected in installments).</div>
+                </div>
+
                 <div class="slf-row3">
                     <div>
                         <label class="slf-lbl">Package Amount (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
@@ -338,11 +345,32 @@
                     loadPlanPackage(false);
                 }).catch(function(){});
             }
+            // AUD-priced plans (AMC 1 / AMC 2): show the live AUD→INR breakup and set
+            // the package to that INR. The rate is frozen server-side when saved.
+            var amcBox = document.getElementById('amcAudBox');
+            var amcBreak = document.getElementById('amcAudBreak');
+            window.amcAudCheck = function() {
+                if (!amcBox || !planSel) return;
+                var pt = planSel.value;
+                if (!pt) { amcBox.style.display = 'none'; return; }
+                fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent(pt))
+                    .then(function(r){ return r.json(); }).then(function(d){
+                        if (!d || !d.aud_priced) { amcBox.style.display = 'none'; return; }
+                        amcBreak.innerHTML =
+                            '<b>' + Number(d.aud).toLocaleString('en-AU') + ' AUD</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
+                            ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
+                            ' <span style="color:#64748B;">(locked rate &#8377;' + Number(d.effective_rate).toFixed(2) + '/AUD)</span>' +
+                            (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — using fallback, check before saving</span>' : '');
+                        amcBox.style.display = 'block';
+                        if (pkgValue) { pkgValue.value = Math.round(d.inr); syncPackage(); }
+                    }).catch(function(){ amcBox.style.display = 'none'; });
+            };
             if (productSel) productSel.addEventListener('change', function(){ loadPlans(false); });
-            if (planSel) planSel.addEventListener('change', function(){ updateDisplays(); loadPlanPackage(true); });
+            if (planSel) planSel.addEventListener('change', function(){ updateDisplays(); loadPlanPackage(true); amcAudCheck(); });
             if (productSel && productSel.value) loadPlans(true);
             syncPackage();
             updateDisplays();
+            amcAudCheck();
 
             // ── Dynamic installments: show the 1st, reveal more on demand ──
             window.updateInstHint = function(inp) {
