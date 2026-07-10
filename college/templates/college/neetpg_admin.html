@@ -530,8 +530,9 @@
 
 <!-- Upload Form -->
 <div class="np-upload-card">
-    <div class="np-upload-title"><i class="fas fa-cloud-upload-alt"></i> Upload New PDF (saves as Draft)</div>
+    <div class="np-upload-title" id="npUploadCardTitle"><i class="fas fa-cloud-upload-alt"></i> Upload New PDF (saves as Draft)</div>
     <form action="{{ url_for('neetpg_upload') }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="edit_id" id="npEditId" value="">
         <div class="np-form-row">
             <div class="np-form-group">
                 <label>Document Type</label>
@@ -609,13 +610,18 @@
         </div>
         <div class="np-form-actions">
             <div class="np-form-group np-file-group">
-                <label>PDF File <span style="font-weight:400;color:var(--gray-400);font-size:0.72rem;">(auto-fills form for College Profile / Bond Doc names)</span></label>
-                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required style="font-size:0.78rem;"
+                <label>PDF File <span style="font-weight:400;color:var(--gray-400);font-size:0.72rem;" id="npFileNote">(auto-fills form for a well-named file)</span></label>
+                <input type="file" name="pdf_file" id="npFileInput" class="np-form-input" accept=".pdf" required style="font-size:0.78rem;"
                        onchange="npParseFilename(this)">
             </div>
             <div class="np-form-group np-upload-group">
-                <button type="submit" class="np-btn np-btn-primary" style="justify-content:center;padding:0.55rem 1.5rem;">
+                <button type="submit" id="npSubmitBtn" class="np-btn np-btn-primary" style="justify-content:center;padding:0.55rem 1.5rem;">
                     <i class="fas fa-upload"></i> Upload
+                </button>
+            </div>
+            <div class="np-form-group np-upload-group">
+                <button type="button" id="npCancelEditBtn" onclick="npCancelEdit()" style="display:none;justify-content:center;padding:0.55rem 1.1rem;border:1px solid var(--gray-300);background:white;border-radius:0.5rem;cursor:pointer;font-weight:600;color:var(--gray-600);">
+                    Cancel
                 </button>
             </div>
         </div>
@@ -736,6 +742,17 @@
                     </td>
                     <td>
                         <div class="np-actions">
+                            <button class="np-action-btn" title="Edit"
+                                data-id="{{ pdf.id }}"
+                                data-title="{{ pdf.title }}"
+                                data-doctype="{{ pdf.doc_type or 'cutoff' }}"
+                                data-category="{{ pdf.category }}"
+                                data-state="{{ pdf.state or 'AIQ MCC' }}"
+                                data-specialty="{{ pdf.specialty }}"
+                                data-quota="{{ pdf.quota_category or '' }}"
+                                onclick="npEditPdf(this)">
+                                <i class="fas fa-pen"></i>
+                            </button>
                             {% if pdf.is_published %}
                             <button class="np-action-btn unpublish" onclick="togglePublish({{ pdf.id }})" title="Unpublish">
                                 <i class="fas fa-eye-slash"></i>
@@ -1461,6 +1478,46 @@ function npApplyQuotaBackfill() {
         else { alert('Backfill failed'); btn.disabled = false; btn.textContent = 'Apply'; }
       })
       .catch(function(){ alert('Backfill failed'); btn.disabled = false; btn.textContent = 'Apply'; });
+}
+
+// ── Edit an existing PDF in place (keeps stats) ──
+function npEditPdf(btn) {
+    var d = btn.dataset;
+    npTitleManual = false;
+    document.getElementById('npEditId').value = d.id;
+    document.getElementById('npDocType').value = d.doctype || 'cutoff';
+    npUpdateDocType();                      // relabel specialty, show/hide quota, clears specialty
+    document.getElementById('npCategory').value = d.category || 'neetpg';
+    npSetStateByName(d.state || '');
+    document.getElementById('npSpecialty').value = d.specialty || '';
+    var q = document.getElementById('npQuota');
+    if (q) q.value = (d.doctype === 'cutoff') ? (d.quota || '') : '';
+    npRefreshTitle();
+    // Switch the form UI to edit mode
+    document.getElementById('npUploadCardTitle').innerHTML = '<i class="fas fa-pen" style="color:var(--orange);"></i> Edit PDF — updates in place, keeps download stats';
+    document.getElementById('npSubmitBtn').innerHTML = '<i class="fas fa-save"></i> Update';
+    document.getElementById('npCancelEditBtn').style.display = '';
+    document.getElementById('npFileNote').textContent = '(optional — leave empty to keep the current file)';
+    var fi = document.getElementById('npFileInput');
+    fi.required = false; fi.value = '';
+    document.querySelector('.np-upload-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function npCancelEdit() {
+    document.getElementById('npEditId').value = '';
+    document.getElementById('npUploadCardTitle').innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Upload New PDF (saves as Draft)';
+    document.getElementById('npSubmitBtn').innerHTML = '<i class="fas fa-upload"></i> Upload';
+    document.getElementById('npCancelEditBtn').style.display = 'none';
+    document.getElementById('npFileNote').textContent = '(auto-fills form for a well-named file)';
+    var fi = document.getElementById('npFileInput');
+    fi.required = true; fi.value = '';
+    document.getElementById('npDocType').value = 'cutoff';
+    document.getElementById('npCategory').value = 'neetpg';
+    npUpdateDocType();
+    document.getElementById('npSpecialty').value = '';
+    var q = document.getElementById('npQuota'); if (q) q.value = '';
+    npTitleManual = false;
+    npRefreshTitle();
 }
 
 // Build the initial auto-title from the default field values.
