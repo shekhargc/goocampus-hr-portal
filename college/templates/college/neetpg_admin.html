@@ -540,7 +540,7 @@
             <div class="np-form-group">
                 <label>State</label>
                 <select name="state" id="npState" class="np-form-input" required onchange="npRefreshTitle()">
-                    <option value="All India/MCC">All India/MCC</option>
+                    <option value="AIQ MCC">AIQ MCC</option>
                     <option value="Andhra Pradesh">Andhra Pradesh</option>
                     <option value="Arunachal Pradesh">Arunachal Pradesh</option>
                     <option value="Assam">Assam</option>
@@ -670,7 +670,7 @@
                             {{ 'NEET PG' if pdf.category == 'neetpg' else 'DNB' }}
                         </span>
                     </td>
-                    <td style="font-size:0.82rem;">{{ pdf.state or 'All India/MCC' }}</td>
+                    <td style="font-size:0.82rem;">{{ pdf.state or 'AIQ MCC' }}</td>
                     <td style="font-size:0.82rem;">{{ pdf.specialty }}</td>
                     <td style="font-size:0.82rem;white-space:nowrap;">{{ (pdf.file_size / 1024)|int }} KB</td>
                     <td>
@@ -891,7 +891,7 @@
         <select id="crPdfSelect" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem;margin-bottom:14px;background:#f9fafb;">
             <option value="">— Select a PDF —</option>
             {% for p in recent_pdfs %}
-            <option value="{{ p.id }}" data-title="{{ p.title }} ({{ p.state or 'All India' }})">{{ p.title }} ({{ p.state or 'All India' }})</option>
+            <option value="{{ p.id }}" data-title="{{ p.title }} ({{ p.state or 'AIQ MCC' }})">{{ p.title }} ({{ p.state or 'AIQ MCC' }})</option>
             {% endfor %}
         </select>
         <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:6px;">Admin note (optional):</label>
@@ -1116,8 +1116,8 @@ var npTitleManual = false;
 var NP_DOCTYPE_LABELS = {
     'cutoff': 'Cut Off',
     'stipend_bond_penalty': 'Stipend, Bond & Penalty',
-    'mcc_profile': 'All India/ MCC College Profiles',
-    'mcc_bond_doc': 'All India/MCC College Bond Doc'
+    'mcc_profile': 'AIQ MCC College Profiles',
+    'mcc_bond_doc': 'AIQ MCC College Bond Doc'
 };
 // Doc types whose field is a free-text College Name (not a course specialty).
 var NP_COLLEGE_NAME_TYPES = ['mcc_profile', 'mcc_bond_doc'];
@@ -1187,7 +1187,7 @@ function npParseFilename(input) {
     npRefreshTitle();
 }
 
-// Select the State dropdown by name (case-insensitive; AIQ/All-India variants → "All India/MCC").
+// Select the State dropdown by name (case-insensitive; AIQ / All-India variants → "AIQ MCC").
 function npSetStateByName(name) {
     var sel = document.getElementById('npState');
     if (!sel || !name) return;
@@ -1195,9 +1195,10 @@ function npSetStateByName(name) {
     for (var i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value.toLowerCase() === target) { sel.selectedIndex = i; return; }
     }
-    if (/all india|^aiq\b|\bmcc\b/.test(target)) {
+    if (/all india|\baiq\b|\bmcc\b/.test(target)) {
         for (var j = 0; j < sel.options.length; j++) {
-            if (sel.options[j].value.toLowerCase().indexOf('all india') > -1) { sel.selectedIndex = j; return; }
+            var ov = sel.options[j].value.toLowerCase();
+            if (ov.indexOf('aiq') > -1 || ov.indexOf('mcc') > -1) { sel.selectedIndex = j; return; }
         }
     }
     // No confident match → leave the current selection untouched.

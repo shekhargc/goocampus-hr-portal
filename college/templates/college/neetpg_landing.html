@@ -915,7 +915,7 @@
 <!-- Hero -->
 <div class="hero">
     <div class="hero-badge">FREE RESOURCE FOR NEET PG 2026 ASPIRANTS</div>
-    <h1 id="heroTitle">NEET PG 2025 All India/MCC &amp; State Counselling Cut-Off PDFs</h1>
+    <h1 id="heroTitle">NEET PG 2025 AIQ MCC &amp; State Counselling Cut-Off PDFs</h1>
     <p id="heroSubtitle">Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.</p>
     <div class="hero-stats">
         <div class="hero-stat">
@@ -1031,7 +1031,7 @@
             {% if neetpg_pdfs %}
             <div class="pdf-grid" id="grid-neetpg">
                 {% for pdf in neetpg_pdfs %}
-                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
+                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'AIQ MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-new-badge" style="display:none;" data-new-check="1">NEW</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1040,7 +1040,7 @@
                     <div class="pdf-card-body">
                         <div class="pdf-card-tags">
                             <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
-                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'AIQ MCC' }}</span>
                         </div>
                         <div class="pdf-card-meta">
                             <span class="size"><i class="fas fa-file" style="margin-right:3px;font-size:10px;"></i>{{ (pdf.file_size / 1024)|int }} KB</span>
@@ -1058,7 +1058,7 @@
                 {% endfor %}
                 {# ── Coming Soon cards (scheduled, not yet published) ── #}
                 {% for pdf in neetpg_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'AIQ MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1070,7 +1070,7 @@
                     <div class="pdf-card-body">
                         <div class="pdf-card-tags">
                             <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
-                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'AIQ MCC' }}</span>
                         </div>
                         <div class="pdf-card-meta">
                             <span class="size"><i class="fas fa-file" style="margin-right:3px;font-size:10px;"></i>{{ (pdf.file_size / 1024)|int }} KB</span>
@@ -1087,7 +1087,7 @@
             {% if neetpg_scheduled %}
             <div class="pdf-grid" id="grid-neetpg">
                 {% for pdf in neetpg_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'AIQ MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1099,7 +1099,7 @@
                     <div class="pdf-card-body">
                         <div class="pdf-card-tags">
                             <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
-                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'AIQ MCC' }}</span>
                         </div>
                         <div class="pdf-card-meta">
                             <span class="size"><i class="fas fa-file" style="margin-right:3px;font-size:10px;"></i>{{ (pdf.file_size / 1024)|int }} KB</span>
@@ -1126,7 +1126,7 @@
             {% if dnb_pdfs %}
             <div class="pdf-grid" id="grid-dnb">
                 {% for pdf in dnb_pdfs %}
-                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
+                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'AIQ MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-new-badge" style="display:none;" data-new-check="1">NEW</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1135,7 +1135,7 @@
                     <div class="pdf-card-body">
                         <div class="pdf-card-tags">
                             <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
-                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'AIQ MCC' }}</span>
                         </div>
                         <div class="pdf-card-meta">
                             <span class="size">{{ (pdf.file_size / 1024)|int }} KB</span>
@@ -1153,7 +1153,7 @@
                 {% endfor %}
                 {# ── Coming Soon cards (scheduled DNB) ── #}
                 {% for pdf in dnb_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'AIQ MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1165,7 +1165,7 @@
                     <div class="pdf-card-body">
                         <div class="pdf-card-tags">
                             <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
-                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'AIQ MCC' }}</span>
                         </div>
                         <div class="pdf-card-meta">
                             <span class="size">{{ (pdf.file_size / 1024)|int }} KB</span>
@@ -1182,7 +1182,7 @@
             {% if dnb_scheduled %}
             <div class="pdf-grid" id="grid-dnb">
                 {% for pdf in dnb_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'AIQ MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1194,7 +1194,7 @@
                     <div class="pdf-card-body">
                         <div class="pdf-card-tags">
                             <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
-                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'AIQ MCC' }}</span>
                         </div>
                         <div class="pdf-card-meta">
                             <span class="size">{{ (pdf.file_size / 1024)|int }} KB</span>
@@ -1350,7 +1350,7 @@
                 <option value="Uttar Pradesh">Uttar Pradesh</option>
                 <option value="Uttarakhand">Uttarakhand</option>
                 <option value="West Bengal">West Bengal</option>
-                <option value="All India/MCC">All India / MCC</option>
+                <option value="AIQ MCC">AIQ MCC</option>
             </select>
         </div>
         <div class="form-group">
@@ -1387,7 +1387,7 @@
     // Per-doc-type hero copy + sidebar labels (MCC profiles use "College" not "Specialty").
     var DOCTYPE_META = {
         'cutoff': {
-            title: 'NEET PG 2025 All India/MCC & State Counselling Cut-Off PDFs',
+            title: 'NEET PG 2025 AIQ MCC & State Counselling Cut-Off PDFs',
             subtitle: 'Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.',
             courseLabel: 'Specialty', allCourse: 'All Specialties', courseSearch: 'Search specialty...'
         },
@@ -1397,13 +1397,13 @@
             courseLabel: 'Specialty', allCourse: 'All Specialties', courseSearch: 'Search specialty...'
         },
         'mcc_profile': {
-            title: 'All India/MCC College Profiles',
-            subtitle: 'College profiles for NEET PG and DNB institutions under All India / MCC Counselling 2025.',
+            title: 'AIQ MCC College Profiles',
+            subtitle: 'College profiles for NEET PG and DNB institutions under AIQ MCC Counselling 2025.',
             courseLabel: 'College', allCourse: 'All Colleges', courseSearch: 'Search college...'
         },
         'mcc_bond_doc': {
-            title: 'All India/MCC College Bond Documents',
-            subtitle: 'Service bond documents for NEET PG and DNB colleges under All India / MCC Counselling 2025.',
+            title: 'AIQ MCC College Bond Documents',
+            subtitle: 'Service bond documents for NEET PG and DNB colleges under AIQ MCC Counselling 2025.',
             courseLabel: 'College', allCourse: 'All Colleges', courseSearch: 'Search college...'
         }
     };
