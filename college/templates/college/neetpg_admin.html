@@ -264,6 +264,17 @@
     }
     .np-table tbody tr:last-child td { border-bottom: none; }
     .np-table tbody tr:hover { background: var(--gray-50); }
+    /* Pin the Actions column to the right so it stays visible when the table
+       scrolls horizontally (the row is wide with all the doc-type columns). */
+    .np-table th:last-child,
+    .np-table td:last-child {
+        position: sticky;
+        right: 0;
+        background: white;
+        box-shadow: -6px 0 8px -6px rgba(0,0,0,0.12);
+    }
+    .np-table thead th:last-child { background: var(--gray-50); }
+    .np-table tbody tr:hover td:last-child { background: var(--gray-50); }
 
     .np-badge {
         display: inline-block;
@@ -648,7 +659,6 @@
                     <th>Category</th>
                     <th>State</th>
                     <th>Specialty / College</th>
-                    <th>Size</th>
                     <th>DLs</th>
                     <th>Status</th>
                     <th>Schedule</th>
@@ -672,7 +682,6 @@
                     </td>
                     <td style="font-size:0.82rem;">{{ pdf.state or 'AIQ MCC' }}</td>
                     <td style="font-size:0.82rem;">{{ pdf.specialty }}</td>
-                    <td style="font-size:0.82rem;white-space:nowrap;">{{ (pdf.file_size / 1024)|int }} KB</td>
                     <td>
                         <span style="color:var(--orange);font-weight:600;">{{ pdf.download_count }}</span>
                     </td>
