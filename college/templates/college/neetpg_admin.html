@@ -264,6 +264,17 @@
     }
     .np-table tbody tr:last-child td { border-bottom: none; }
     .np-table tbody tr:hover { background: var(--gray-50); }
+    /* Pin the Actions column to the right so it stays visible when the table
+       scrolls horizontally (the row is wide with all the doc-type columns). */
+    .np-table th:last-child,
+    .np-table td:last-child {
+        position: sticky;
+        right: 0;
+        background: white;
+        box-shadow: -6px 0 8px -6px rgba(0,0,0,0.12);
+    }
+    .np-table thead th:last-child { background: var(--gray-50); }
+    .np-table tbody tr:hover td:last-child { background: var(--gray-50); }
 
     .np-badge {
         display: inline-block;
