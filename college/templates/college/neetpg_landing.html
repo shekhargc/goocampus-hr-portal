@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NEET PG 2025 Cut-Off PDFs | GooCampus</title>
-    <meta name="description" content="Download NEET PG 2025 and DNB 2025 MCC cut-off PDFs for all specialties. Free resources for NEET PG 2026 aspirants by GooCampus.">
+    <title>NEET PG &amp; DNB 2025 Counselling Hub — AIQ MCC &amp; State | GooCampus</title>
+    <meta name="description" content="NEET PG and DNB 2025 counselling resources — AIQ MCC &amp; State cut-offs, stipend, bond &amp; penalty, and college profiles. Free for NEET PG aspirants by GooCampus.">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -917,8 +917,8 @@
 <!-- Hero -->
 <div class="hero">
     <div class="hero-badge">FREE RESOURCE FOR NEET PG 2026 ASPIRANTS</div>
-    <h1 id="heroTitle">NEET PG 2025 AIQ MCC &amp; State Counselling Cut-Off PDFs</h1>
-    <p id="heroSubtitle">Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.</p>
+    <h1 id="heroTitle">Your NEET PG &amp; DNB 2025 Counselling Hub — AIQ MCC &amp; State</h1>
+    <p id="heroSubtitle">Cut-offs, stipend · bond &amp; penalty, and college profiles, 2025 — updated with the latest documents.</p>
     <div class="hero-stats">
         <div class="hero-stat">
             <div class="num" id="heroStatNeetpg">{{ neetpg_pdfs|length }}</div>
@@ -1410,10 +1410,10 @@
         }
     };
 
+    // Hero heading/subtitle are constant (the page is a repository of all doc
+    // types); only the sidebar "Specialty" vs "College" label switches per tab.
     function updateDocTypeLabels(dt) {
         var m = DOCTYPE_META[dt] || DOCTYPE_META['cutoff'];
-        var t = document.getElementById('heroTitle'); if (t) t.textContent = m.title;
-        var s = document.getElementById('heroSubtitle'); if (s) s.textContent = m.subtitle;
         var ct = document.getElementById('courseFilterTitle'); if (ct) ct.textContent = m.courseLabel;
         var al = document.getElementById('allCourseLabel'); if (al) al.textContent = m.allCourse;
         var cs = document.getElementById('courseSearchInput'); if (cs) cs.placeholder = m.courseSearch;
