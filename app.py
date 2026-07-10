@@ -1566,10 +1566,25 @@ def admin_packages():
             standard_services = [dict(s) for s in conn.execute(
                 "SELECT * FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
                 (std_pkg['id'],)).fetchall()]
+    # AUD-priced plans (AMC 1/AMC 2): map plan_type -> {aud, fixed_sales_revenue, live INR}
+    # so the packages screen shows the FIXED sales revenue for them (not gross-cost).
+    amc_aud = {}
+    try:
+        for _r in conn.execute("SELECT * FROM amc_aud_pricing WHERE COALESCE(is_active,1)=1").fetchall():
+            _q = amc_aud_quote(_r['plan_type'], conn=conn)
+            amc_aud[_r['plan_type']] = {
+                'aud': float(_r['aud_amount'] or 0),
+                'fixed_sales_revenue': float(_r['fixed_sales_revenue'] or 0),
+                'markup_pct': float(_r['markup_pct'] if _r['markup_pct'] is not None else 3),
+                'inr': (_q['inr'] if _q else None),
+                'effective_rate': (_q['effective_rate'] if _q else None),
+            }
+    except Exception:
+        amc_aud = {}
     conn.close()
     return render_template('admin_packages.html', user=user, products=products,
                            selected=selected, plans=plans, catalogue=catalogue,
-                           standard_services=standard_services,
+                           standard_services=standard_services, amc_aud=amc_aud,
                            stage_options=stage_options, active_section='company')
 
 
@@ -27925,16 +27940,22 @@ def sales_revenue_report():
         where += " AND c.registration_date <= ?"; params.append(d_to)
     rows = []
     try:
+        # AUD plans (AMC 1/AMC 2) credit a FIXED sales revenue (amc_aud_pricing),
+        # not package-cost-discount. aap.fixed_sales_revenue is NULL for every other
+        # plan, so the CASE falls back to the normal computation for them.
         rows = conn.execute(
             "SELECT COALESCE(NULLIF(TRIM(c.counsellor),''),'Unassigned') AS counsellor, "
             "       COUNT(*) AS clients, "
             "       COALESCE(SUM(c.package_amount),0) AS total_package, "
             "       COALESCE(SUM(COALESCE(pp.plan_cost,0)),0) AS total_cost, "
             "       COALESCE(SUM(c.discount_allowed),0) AS total_discount, "
-            "       COALESCE(SUM(c.package_amount - COALESCE(pp.plan_cost,0)),0) AS sales_revenue, "
-            "       COALESCE(SUM(c.package_amount - COALESCE(pp.plan_cost,0) - COALESCE(c.discount_allowed,0)),0) AS actual_revenue "
+            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) END),0) AS sales_revenue, "
+            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) - COALESCE(c.discount_allowed,0) END),0) AS actual_revenue "
             "FROM plab_clients c "
             "LEFT JOIN plan_packages pp ON pp.product_id = c.product_id AND pp.plan_type = c.plan_type "
+            "LEFT JOIN amc_aud_pricing aap ON aap.plan_type = c.plan_type AND COALESCE(aap.is_active,1) = 1 "
             + where +
             " GROUP BY 1 ORDER BY actual_revenue DESC", params).fetchall()
     except Exception as e:

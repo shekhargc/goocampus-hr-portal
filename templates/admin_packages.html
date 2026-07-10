@@ -156,7 +156,15 @@
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
         <div style="font-size:1rem;font-weight:700;color:#0F172A;"><i class="bi bi-box-seam" aria-hidden="true"></i> {{ plan.plan_type }}</div>
-        {% if plan.pkg %}
+        {% set _amc = amc_aud.get(plan.plan_type) if amc_aud else None %}
+        {% if _amc %}
+        {# AUD-priced plan (AMC 1/AMC 2): AUD package + live INR, and a FIXED sales revenue #}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:0.74rem;">
+          <span style="color:#1E40AF;background:#DBEAFE;padding:3px 10px;border-radius:999px;">{{ '{:,.0f}'.format(_amc.aud) }} AUD</span>
+          {% if _amc.inr %}<span style="color:#065F46;background:#D1FAE5;padding:3px 10px;border-radius:999px;">&asymp; &#8377;{{ '{:,.0f}'.format(_amc.inr) }} live (+{{ '{:g}'.format(_amc.markup_pct) }}%)</span>{% endif %}
+          <span style="color:#3730A3;background:#E0E7FF;padding:3px 10px;border-radius:999px;">Sales Revenue &#8377;{{ '{:,.0f}'.format(_amc.fixed_sales_revenue) }} (fixed)</span>
+        </div>
+        {% elif plan.pkg %}
         {% set _gross = plan.pkg.package_amount|float %}{% set _cost = plan.pkg.plan_cost|float %}
         <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:0.74rem;">
           <span style="color:#065F46;background:#D1FAE5;padding:3px 10px;border-radius:999px;">Gross ₹{{ '{:,.0f}'.format(_gross) }}</span>
