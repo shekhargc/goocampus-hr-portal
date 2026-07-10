@@ -59,6 +59,7 @@ def register_college(app):
     app.add_url_rule('/admin/neetpg-pdfs/quota-backfill', 'neetpg_quota_backfill', neetpg.neetpg_quota_backfill, methods=['GET', 'POST'])
     app.add_url_rule('/admin/neetpg-pdfs/bulk-upload', 'neetpg_bulk_upload', neetpg.neetpg_bulk_upload, methods=['POST'])
     app.add_url_rule('/admin/neetpg-pdfs/bulk-delete', 'neetpg_bulk_delete', neetpg.neetpg_bulk_delete, methods=['GET', 'POST'])
+    app.add_url_rule('/admin/neetpg-pdfs/find-missing', 'neetpg_find_missing', neetpg.neetpg_find_missing, methods=['POST'])
     app.add_url_rule('/partner/colleges', 'partner_colleges', partner.partner_colleges, methods=['GET'])
     app.add_url_rule('/partner/colleges/<slug>', 'partner_college_profile', partner.partner_college_profile, methods=['GET'])
     app.add_url_rule('/partner/medical-predictor', 'partner_medical_predictor', partner.partner_medical_predictor, methods=['GET'])

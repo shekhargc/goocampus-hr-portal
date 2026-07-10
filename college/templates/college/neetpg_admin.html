@@ -646,6 +646,15 @@
                 </button>
             </div>
         </form>
+        <!-- Find missing -->
+        <div style="flex:1;min-width:240px;">
+            <label style="display:block;font-weight:600;font-size:0.78rem;color:var(--gray-700);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;">Find Missing <span style="font-weight:400;text-transform:none;color:var(--gray-400);">— which files aren't uploaded</span></label>
+            <input type="file" id="npFMFiles" accept=".pdf" multiple webkitdirectory directory class="np-form-input" style="font-size:0.75rem;">
+            <button type="button" onclick="npFindMissing()" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;padding:0.5rem 1.1rem;font-size:0.82rem;font-weight:600;color:var(--navy);background:white;border:1.5px solid var(--gray-300);border-radius:0.5rem;cursor:pointer;">
+                <i class="fas fa-clipboard-check"></i> Check
+            </button>
+            <div id="npFMResult" style="margin-top:8px;font-size:0.82rem;"></div>
+        </div>
         <!-- Bulk delete -->
         <div style="flex:1;min-width:220px;">
             <label style="display:block;font-weight:600;font-size:0.78rem;color:var(--gray-700);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;">Bulk Delete <span style="font-weight:400;text-transform:none;color:var(--gray-400);">— clear a batch before re-uploading</span></label>
@@ -756,7 +765,6 @@
                 <tr id="pdf-row-{{ pdf.id }}">
                     <td>
                         <div style="font-weight:600;color:var(--gray-800);font-size:0.85rem;">{{ pdf.title }}</div>
-                        <div class="np-file-name">{{ pdf.file_name }}</div>
                     </td>
                     <td>
                         <span class="np-badge np-badge-orange">{{ doc_type_labels.get(pdf.doc_type or 'cutoff', 'Cut Off') }}</span>
@@ -1614,6 +1622,33 @@ function npCancelEdit() {
     var q = document.getElementById('npQuota'); if (q) q.value = '';
     npTitleManual = false;
     npRefreshTitle();
+}
+
+// ── Find missing files (which of a folder's PDFs aren't uploaded) ──
+function npFindMissing() {
+    var files = document.getElementById('npFMFiles').files;
+    var names = [];
+    for (var i = 0; i < files.length; i++) {
+        if (/\.pdf$/i.test(files[i].name)) names.push(files[i].name);
+    }
+    var el = document.getElementById('npFMResult');
+    if (!names.length) { el.textContent = 'Select a folder (or files) with PDFs first.'; return; }
+    el.textContent = 'Checking ' + names.length + ' PDFs…';
+    fetch('{{ url_for("neetpg_find_missing") }}', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({names: names})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+        if (d.error) { el.textContent = d.error; return; }
+        if (!d.missing.length) {
+            el.innerHTML = '<span style="color:#16a34a;font-weight:700;">✓ All ' + d.checked + ' PDFs are uploaded.</span>';
+            return;
+        }
+        el.innerHTML = '<strong style="color:#b91c1c;">' + d.missing.length + ' of ' + d.checked + ' NOT uploaded:</strong>' +
+            '<div style="max-height:220px;overflow:auto;margin-top:6px;border:1px solid var(--gray-200);border-radius:6px;padding:6px 8px;">' +
+            d.missing.map(function(m){ return '<div style="font-size:0.75rem;padding:2px 0;">' + npEscHtml(m) + '</div>'; }).join('') + '</div>';
+    })
+    .catch(function(){ el.textContent = 'Check failed.'; });
 }
 
 // ── Bulk upload / delete ──
