@@ -1588,6 +1588,41 @@ def admin_packages():
                            stage_options=stage_options, active_section='company')
 
 
+@app.route('/admin/amc-aud-pricing', methods=['GET', 'POST'])
+@admin_required
+def admin_amc_aud_pricing():
+    """Edit the AUD-priced AMC plans (AMC 1 / AMC 2): AUD package amount, the
+    fixed sales revenue credited to the rep, and the % markup on the live rate."""
+    conn = get_db()
+    if request.method == 'POST':
+        rid = request.form.get('id')
+        def _n(k):
+            try: return float(request.form.get(k) or 0)
+            except (TypeError, ValueError): return 0.0
+        if rid:
+            conn.execute("UPDATE amc_aud_pricing SET aud_amount=?, fixed_sales_revenue=?, markup_pct=?, "
+                         "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                         (_n('aud_amount'), _n('fixed_sales_revenue'), _n('markup_pct'), rid))
+            conn.commit()
+            flash('AMC AUD pricing updated.', 'success')
+        conn.close()
+        return redirect(url_for('admin_amc_aud_pricing'))
+    rows = []
+    try:
+        for r in conn.execute("SELECT * FROM amc_aud_pricing ORDER BY plan_type").fetchall():
+            d = dict(r)
+            q = amc_aud_quote(d['plan_type'], conn=conn)
+            d['live_rate'] = (q['live_rate'] if q else None)
+            d['effective_rate'] = (q['effective_rate'] if q else None)
+            d['live_inr'] = (q['inr'] if q else None)
+            d['rate_stale'] = (q['rate_stale'] if q else True)
+            rows.append(d)
+    except Exception:
+        rows = []
+    conn.close()
+    return render_template('admin_amc_aud_pricing.html', user=get_user(), rows=rows, active_section='company')
+
+
 @app.route('/admin/packages/plan/save', methods=['POST'])
 @admin_required
 def admin_packages_plan_save():

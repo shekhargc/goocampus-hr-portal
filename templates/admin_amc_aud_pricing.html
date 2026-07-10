@@ -1,0 +1,58 @@
+{% extends "company_sidebar_base.html" %}
+{% block title %}AMC AUD Pricing{% endblock %}
+{% block section_content %}
+<div style="max-width:900px;margin:0 auto;padding:1.5rem;">
+  <div style="margin-bottom:1rem;"><a href="/admin/packages" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Packages &amp; Services</a></div>
+  <h1 style="font-size:1.35rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem;">AMC AUD Pricing</h1>
+  <p style="color:#64748b;font-size:0.86rem;margin:0 0 1.2rem;">
+    AMC 1 &amp; AMC 2 are priced in <b>AUD</b>. The client pays INR at the live rate + markup, <b>locked</b>
+    when the lead is generated. The <b>sales revenue</b> credited to the rep is a fixed INR figure (not
+    package&minus;cost). Change these here — it applies to new leads from the moment you save.
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}{% for cat, msg in messages %}
+      <div style="padding:0.7rem 1rem;border-radius:0.5rem;margin-bottom:0.9rem;font-size:0.88rem;
+        {% if cat == 'error' %}background:#FEE2E2;color:#991B1B;{% else %}background:#D1FAE5;color:#065F46;{% endif %}">{{ msg }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  {% if rows %}
+  {% for r in rows %}
+  <form method="POST" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem 1.2rem;margin-bottom:1rem;">
+    <input type="hidden" name="id" value="{{ r.id }}">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:0.8rem;">
+      <div style="font-size:1.05rem;font-weight:700;color:#0F172A;"><i class="bi bi-box-seam"></i> {{ r.plan_type }}</div>
+      <div style="font-size:0.78rem;">
+        {% if r.live_inr %}
+        <span style="color:#065F46;background:#D1FAE5;padding:3px 10px;border-radius:999px;">Live: {{ '{:,.0f}'.format(r.aud_amount|float) }} AUD &asymp; &#8377;{{ '{:,.0f}'.format(r.live_inr) }} (&#8377;{{ '{:.2f}'.format(r.effective_rate) }}/AUD)</span>
+        {% endif %}
+        {% if r.rate_stale %}<span style="color:#B45309;background:#FEF3C7;padding:3px 10px;border-radius:999px;">&#9888; live rate unavailable (fallback)</span>{% endif %}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:0.9rem;align-items:end;">
+      <div>
+        <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:0.3rem;">Package (AUD)</label>
+        <input type="number" step="0.01" min="0" name="aud_amount" value="{{ '{:.0f}'.format(r.aud_amount|float) }}"
+               style="width:100%;padding:0.5rem 0.7rem;border:1px solid #cbd5e1;border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:0.3rem;">Fixed Sales Revenue (&#8377;)</label>
+        <input type="number" step="1" min="0" name="fixed_sales_revenue" value="{{ '{:.0f}'.format(r.fixed_sales_revenue|float) }}"
+               style="width:100%;padding:0.5rem 0.7rem;border:1px solid #cbd5e1;border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:0.3rem;">Markup on live rate (%)</label>
+        <input type="number" step="0.1" min="0" name="markup_pct" value="{{ '{:g}'.format(r.markup_pct|float) }}"
+               style="width:100%;padding:0.5rem 0.7rem;border:1px solid #cbd5e1;border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+      </div>
+      <button type="submit" style="background:var(--orange);color:#fff;border:none;padding:0.55rem 1.3rem;border-radius:0.45rem;font-weight:600;font-size:0.88rem;cursor:pointer;white-space:nowrap;">Save</button>
+    </div>
+    <p style="margin:0.6rem 0 0;font-size:0.72rem;color:#94a3b8;">Changing these only affects <b>new</b> leads. Already-closed leads keep their locked rate + revenue.</p>
+  </form>
+  {% endfor %}
+  {% else %}
+  <div style="padding:2rem;text-align:center;color:#94a3b8;">No AUD-priced plans configured.</div>
+  {% endif %}
+</div>
+{% endblock %}
