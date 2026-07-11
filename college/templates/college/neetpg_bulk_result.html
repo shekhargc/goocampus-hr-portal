@@ -1,0 +1,48 @@
+{% extends "colleges_sidebar_base.html" %}
+{% block title %}Bulk Upload Result{% endblock %}
+{% block section_content %}
+<div style="max-width:920px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:1rem;">
+        <h2 style="margin:0;font-size:1.15rem;color:#1B2A4A;font-weight:700;">
+            <i class="fas fa-clipboard-list" style="color:#f97316;margin-right:6px;"></i> Bulk Upload Result
+        </h2>
+        <a href="{{ url_for('neetpg_admin') }}" style="display:inline-flex;align-items:center;gap:6px;padding:0.5rem 1rem;border:1px solid #d1d5db;border-radius:0.5rem;text-decoration:none;color:#374151;font-weight:600;font-size:0.85rem;">
+            <i class="fas fa-arrow-left"></i> Back to NEET-PG admin
+        </a>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:1.25rem;">
+        <span style="padding:0.35rem 0.9rem;border-radius:2rem;font-weight:700;font-size:0.85rem;background:#dcfce7;color:#16a34a;">{{ counts.added }} {{ 'published' if published else 'added' }}</span>
+        <span style="padding:0.35rem 0.9rem;border-radius:2rem;font-weight:700;font-size:0.85rem;background:#fef9c3;color:#a16207;">{{ counts.exists }} already existed</span>
+        <span style="padding:0.35rem 0.9rem;border-radius:2rem;font-weight:700;font-size:0.85rem;background:#e5e7eb;color:#6b7280;">{{ counts.skipped }} skipped</span>
+        {% if counts.error %}<span style="padding:0.35rem 0.9rem;border-radius:2rem;font-weight:700;font-size:0.85rem;background:#fee2e2;color:#b91c1c;">{{ counts.error }} errors</span>{% endif %}
+    </div>
+
+    <div style="background:white;border:1px solid #e5e7eb;border-radius:0.75rem;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <thead style="background:#f9fafb;">
+                <tr>
+                    <th style="text-align:left;padding:0.6rem 0.85rem;font-size:0.7rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;">File</th>
+                    <th style="text-align:left;padding:0.6rem 0.85rem;font-size:0.7rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;white-space:nowrap;">Status</th>
+                    <th style="text-align:left;padding:0.6rem 0.85rem;font-size:0.7rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;">Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in results %}
+                {% set c = {'added':'#16a34a','published':'#16a34a','exists':'#a16207','skipped':'#6b7280','error':'#b91c1c'}.get(r.status, '#6b7280') %}
+                {% set bg = {'added':'#dcfce7','published':'#dcfce7','exists':'#fef9c3','skipped':'#e5e7eb','error':'#fee2e2'}.get(r.status, '#e5e7eb') %}
+                <tr>
+                    <td style="padding:0.5rem 0.85rem;border-top:1px solid #f3f4f6;color:#374151;">{{ r.name }}</td>
+                    <td style="padding:0.5rem 0.85rem;border-top:1px solid #f3f4f6;white-space:nowrap;">
+                        <span style="padding:0.12rem 0.55rem;border-radius:1rem;font-weight:700;font-size:0.72rem;background:{{ bg }};color:{{ c }};">
+                            {{ 'already exists' if r.status == 'exists' else r.status }}
+                        </span>
+                    </td>
+                    <td style="padding:0.5rem 0.85rem;border-top:1px solid #f3f4f6;color:#6b7280;">{{ r.detail }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
