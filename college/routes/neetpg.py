@@ -1135,15 +1135,31 @@ def neetpg_bulk_upload():
         flash('No files selected for bulk upload', 'error')
         return redirect(url_for('neetpg_admin'))
     conn = get_db()
-    inserted = 0
-    skipped = []
+    results = []
+    counts = {'added': 0, 'exists': 0, 'skipped': 0, 'error': 0}
     for f in files:
-        if not f.filename.lower().endswith('.pdf'):
-            skipped.append(f"{f.filename} (not a PDF)")
+        name = f.filename
+        if not name.lower().endswith('.pdf'):
+            results.append({'name': name, 'status': 'skipped', 'detail': 'not a PDF'})
+            counts['skipped'] += 1
             continue
-        parsed = _parse_neetpg_filename(f.filename)
+        parsed = _parse_neetpg_filename(name)
         if not parsed:
-            skipped.append(f"{f.filename} (name not recognised)")
+            results.append({'name': name, 'status': 'skipped', 'detail': 'filename not recognised'})
+            counts['skipped'] += 1
+            continue
+        # Duplicate guard — skip files already uploaded (same filename).
+        try:
+            dup = conn.execute("SELECT id FROM neetpg_pdfs WHERE LOWER(file_name) = LOWER(?)", (name,)).fetchone()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            dup = None
+        if dup:
+            results.append({'name': name, 'status': 'exists', 'detail': 'already uploaded'})
+            counts['exists'] += 1
             continue
         try:
             data = f.read()
@@ -1152,30 +1168,29 @@ def neetpg_bulk_upload():
             if publish:
                 conn.execute(
                     "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, published_at, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, 0)",
-                    (title, parsed['category'], parsed['doc_type'], parsed['specialty'], parsed['quota'], f.filename, len(data), data, parsed['state'])
+                    (title, parsed['category'], parsed['doc_type'], parsed['specialty'], parsed['quota'], name, len(data), data, parsed['state'])
                 )
             else:
                 conn.execute(
                     "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, quota_category, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
-                    (title, parsed['category'], parsed['doc_type'], parsed['specialty'], parsed['quota'], f.filename, len(data), data, parsed['state'])
+                    (title, parsed['category'], parsed['doc_type'], parsed['specialty'], parsed['quota'], name, len(data), data, parsed['state'])
                 )
             conn.commit()
-            inserted += 1
+            detail = parsed['specialty'] + (' · ' + parsed['quota'] if parsed['quota'] else '')
+            results.append({'name': name, 'status': ('published' if publish else 'added'), 'detail': detail})
+            counts['added'] += 1
         except Exception as e:
             try:
                 conn.rollback()
             except Exception:
                 pass
-            skipped.append(f"{f.filename} (error)")
-            logging.error(f"neetpg_bulk_upload {f.filename}: {e}")
+            results.append({'name': name, 'status': 'error', 'detail': 'save failed'})
+            counts['error'] += 1
+            logging.error(f"neetpg_bulk_upload {name}: {e}")
     conn.close()
-    msg = f"Bulk upload: {inserted} file(s) added" + (" & published" if publish else " as drafts")
-    if skipped:
-        shown = '; '.join(skipped[:6])
-        more = f" …and {len(skipped) - 6} more" if len(skipped) > 6 else ""
-        msg += f". {len(skipped)} skipped: {shown}{more}"
-    flash(msg, 'success' if inserted else 'error')
-    return redirect(url_for('neetpg_admin'))
+    return render_template('college/neetpg_bulk_result.html',
+                           results=results, counts=counts, published=publish,
+                           user=user, active_section='colleges')
 
 
 @login_required
@@ -1212,6 +1227,36 @@ def neetpg_bulk_delete():
     ).fetchall()
     conn.close()
     return jsonify({'total': len(rows), 'items': [dict(r) for r in rows[:150]]})
+
+
+@login_required
+def neetpg_find_missing():
+    """Given a list of filenames (from the admin's folder), report which are NOT
+    present in neetpg_pdfs (by file_name) — i.e. which files didn't get uploaded.
+    Only filenames are sent, not the files."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    data = request.get_json(silent=True) or {}
+    names = data.get('names', [])
+    if not isinstance(names, list):
+        return jsonify({'error': 'names must be a list'}), 400
+    conn = get_db()
+    rows = conn.execute("SELECT file_name FROM neetpg_pdfs").fetchall()
+    conn.close()
+    uploaded = set((r['file_name'] or '').strip() for r in rows)
+    uploaded_lc = set(n.lower() for n in uploaded)
+    missing = []
+    seen = set()
+    for n in names:
+        nm = (n or '').strip()
+        if not nm or nm.lower() in seen:
+            continue
+        seen.add(nm.lower())
+        if nm in uploaded or nm.lower() in uploaded_lc:
+            continue
+        missing.append(nm)
+    return jsonify({'checked': len(seen), 'uploaded_total': len(uploaded), 'missing': missing})
 
 
 @login_required
