@@ -37737,9 +37737,9 @@ def neetpg_auto_publish():
                 (draft['id'],)
             )
             conn.commit()
-            print(f"[AUTO_PUBLISH] Published PDF id={draft['id']} tab={draft.get('category')}/{draft.get('doc_type')} title='{draft['title']}' — triggering WA notify", flush=True)
-            # Send WhatsApp notification to all leads
-            neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
+            print(f"[AUTO_PUBLISH] Published PDF id={draft['id']} tab={draft.get('category')}/{draft.get('doc_type')} title='{draft['title']}'", flush=True)
+            # NOTE: no per-PDF WhatsApp blast — leads get ONE batched reminder every
+            # ~2 days via neetpg_reminder_digest() (Meta frequency-caps per-recipient).
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_auto_publish error: {e}")
@@ -37801,7 +37801,7 @@ def neetpg_catchup_publish():
                     (draft['id'],)
                 )
                 logging.info(f"Catchup-published NEET PG PDF id={draft['id']} tab={tab['category']}/{tab['doc_type']} title={draft['title']}")
-                neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
+                # No per-PDF blast — batched reminder handles notifications (see digest).
                 total += 1
             if drafts:
                 conn.commit()
@@ -37809,6 +37809,39 @@ def neetpg_catchup_publish():
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_catchup_publish error: {e}")
+
+
+def neetpg_reminder_digest():
+    """Send ONE batched WhatsApp reminder to all NEET PG leads when new PDFs have been
+    published — but at most once every ~2 days (Meta frequency-caps recipients, so we
+    never blast per file). Generic 'new files available' nudge, not per-file."""
+    try:
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS neetpg_reminders ("
+                     "id SERIAL PRIMARY KEY, sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, new_files INTEGER DEFAULT 0)")
+        conn.commit()
+        last = conn.execute("SELECT sent_at FROM neetpg_reminders ORDER BY id DESC LIMIT 1").fetchone()
+        last_at = last['sent_at'] if last else None
+        if last_at:
+            gap_ok = conn.execute(
+                "SELECT (CURRENT_TIMESTAMP - ?::timestamp) >= INTERVAL '2 days' AS ok", (last_at,)).fetchone()['ok']
+            new_cnt = conn.execute(
+                "SELECT COUNT(*) AS c FROM neetpg_pdfs WHERE is_published = 1 AND published_at > ?", (last_at,)).fetchone()['c']
+        else:
+            gap_ok = True
+            new_cnt = conn.execute("SELECT COUNT(*) AS c FROM neetpg_pdfs WHERE is_published = 1").fetchone()['c']
+        if gap_ok and new_cnt > 0:
+            conn.execute("INSERT INTO neetpg_reminders (new_files) VALUES (?)", (new_cnt,))
+            conn.commit()
+            conn.close()
+            # Reuse the college notify with a GENERIC title → one reminder, not per file.
+            neetpg_wa_notify_leads("new cut-offs & documents", "")
+            logging.info(f"neetpg_reminder_digest: reminder sent for {new_cnt} new file(s)")
+        else:
+            conn.close()
+            logging.info(f"neetpg_reminder_digest: skipped (gap_ok={gap_ok}, new_files={new_cnt})")
+    except Exception as e:
+        logging.error(f"neetpg_reminder_digest error: {e}")
 
 
 # ── Item F-2: 30-day check-in scheduler ─────────────────────────────
@@ -37968,6 +38001,9 @@ def start_neetpg_scheduler():
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=13, minute=0, timezone=ist), id='neetpg_publish_afternoon')
         # 5:00 PM IST daily
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=17, minute=0, timezone=ist), id='neetpg_publish_evening')
+        # Batched "new files available" WhatsApp reminder — checked daily at 6:30 PM IST,
+        # but self-gated to fire at most once every ~2 days and only when new PDFs exist.
+        scheduler.add_job(neetpg_reminder_digest, CronTrigger(hour=18, minute=30, timezone=ist), id='neetpg_reminder_digest')
         # Item F-2: 30-day check-in -- 09:00 AM IST daily. Cheap
         # query (uses thirty_day_checkin_sent_at IS NULL filter), so
         # safe to run unconditionally even if the template is
