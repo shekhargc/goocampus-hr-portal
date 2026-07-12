@@ -1137,115 +1137,9 @@ function deleteRequest(reqId) {
 // ── Specialty (Course Name) Autocomplete ──
 // ══════════════════════════════════════════
 
-var NEETPG_COURSES = [
-    "MD - Anaesthesiology",
-    "MD - Anatomy",
-    "MD - Biochemistry",
-    "MD - Community Medicine",
-    "MD - Dermatology, Venereology & Leprosy",
-    "MD - Emergency Medicine",
-    "MD - Family Medicine",
-    "MD - Forensic Medicine",
-    "MD - General Medicine",
-    "MD - Geriatrics",
-    "MD - Hospital Administration",
-    "MD - Immuno Haematology and Blood Transfusion",
-    "MD - Microbiology",
-    "MD - Nuclear Medicine",
-    "MD - Paediatrics",
-    "MD - Palliative Medicine",
-    "MD - Pathology",
-    "MD - Pharmacology",
-    "MD - Physical Medicine and Rehabilitation",
-    "MD - Physiology",
-    "MD - Psychiatry",
-    "MD - Radiation Oncology",
-    "MD - Radio-diagnosis",
-    "MD - Radio-therapy",
-    "MD - Respiratory Medicine",
-    "MD - Sports Medicine",
-    "MD - Transfusion Medicine",
-    "MD - Tropical Medicine",
-    "MS - ENT (Otorhinolaryngology)",
-    "MS - General Surgery",
-    "MS - Obstetrics and Gynaecology",
-    "MS - Ophthalmology",
-    "MS - Orthopaedics",
-    "Diploma in Anaesthesiology",
-    "Diploma in Child Health",
-    "Diploma in Clinical Pathology",
-    "Diploma in Dermatology, Venereology & Leprosy",
-    "Diploma in Forensic Medicine",
-    "Diploma in Gynaecology and Obstetrics",
-    "Diploma in Health Education",
-    "Diploma in Industrial Hygiene",
-    "Diploma in Medical Radio-diagnosis",
-    "Diploma in Medical Radio-therapy",
-    "Diploma in Oto-Rhino-Laryngology",
-    "Diploma in Ophthalmology",
-    "Diploma in Orthopaedics",
-    "Diploma in Physical Medicine and Rehabilitation",
-    "Diploma in Psychiatry",
-    "Diploma in Public Health",
-    "Diploma in Tuberculosis and Chest Diseases",
-    "MD - Aerospace Medicine",
-    "MD - Laboratory Medicine",
-    "MD - Community Health & Administration",
-    "MD - Electromyography",
-    "MS - Neuro Surgery",
-    "MS - Traumatology & Surgery"
-];
-
-var DNB_COURSES = [
-    "(NBEMS) Anaesthesiology",
-    "(NBEMS) Anatomy",
-    "(NBEMS) Biochemistry",
-    "(NBEMS) Community Medicine",
-    "(NBEMS) Dermatology, Venereology & Leprosy",
-    "(NBEMS) Emergency Medicine",
-    "(NBEMS) Family Medicine",
-    "(NBEMS) Forensic Medicine",
-    "(NBEMS) General Medicine",
-    "(NBEMS) General Surgery",
-    "(NBEMS) Geriatrics",
-    "(NBEMS) Hospital Administration",
-    "(NBEMS) Immuno Haematology and Blood Transfusion",
-    "(NBEMS) Maternal and Child Health",
-    "(NBEMS) Microbiology",
-    "(NBEMS) Neonatology",
-    "(NBEMS) Nuclear Medicine",
-    "(NBEMS) Obstetrics and Gynaecology",
-    "(NBEMS) Ophthalmology",
-    "(NBEMS) Orthopaedics",
-    "(NBEMS) Oto-Rhino-Laryngology (ENT)",
-    "(NBEMS) Paediatrics",
-    "(NBEMS) Palliative Medicine",
-    "(NBEMS) Pathology",
-    "(NBEMS) Pharmacology",
-    "(NBEMS) Physical Medicine and Rehabilitation",
-    "(NBEMS) Physiology",
-    "(NBEMS) Psychiatry",
-    "(NBEMS) Radio-diagnosis",
-    "(NBEMS) Radio-therapy",
-    "(NBEMS) Respiratory Medicine",
-    "(NBEMS) Social and Preventive Medicine",
-    "(NBEMS) Sports Medicine",
-    "(NBEMS) Transfusion Medicine",
-    "(NBEMS) Tuberculosis and Respiratory Diseases",
-    "(NBEMS) Cardio-Vascular Surgery",
-    "(NBEMS) Neuro Surgery",
-    "(NBEMS) Plastic Surgery",
-    "(NBEMS) Paediatric Surgery",
-    "(NBEMS) Radiation Oncology",
-    "(Diploma) Anaesthesiology",
-    "(Diploma) ENT",
-    "(Diploma) Family Medicine",
-    "(Diploma) OBG",
-    "(Diploma) Ophthalmology",
-    "(Diploma) Paediatrics",
-    "(Diploma) Radio-diagnosis",
-    "(Diploma) TB & Chest"
-];
+// Official course lists + alias bridge — passed from the route (source of truth: college/data/neetpg_lists.py)
+var NEETPG_COURSES = {{ neetpg_courses|tojson }};
+var DNB_COURSES = {{ dnb_courses|tojson }};
 
 var npHighlightIdx = -1;
 
@@ -1288,43 +1182,25 @@ function npRefreshTitle() {
 // Aliases for course names whose canonical entry carries extra words. Explicit
 // (not fuzzy substring) so there are NO false matches like Paediatric Surgery →
 // Paediatrics. Anything not aliased or exactly matched keeps its clean name.
-var NP_SPECIALTY_ALIAS = {
-    neetpg: {
-        'dermatology': 'MD - Dermatology, Venereology & Leprosy',
-        'gynaecology': 'MS - Obstetrics and Gynaecology',
-        'ent': 'MS - ENT (Otorhinolaryngology)',
-        'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
-        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion',
-        'transfusionmedicinemd': 'MD - Transfusion Medicine',
-        'communityhealthadmin': 'MD - Community Health & Administration'
-    },
-    dnb: {
-        'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
-        'gynaecology': '(NBEMS) Obstetrics and Gynaecology',
-        'ent': '(NBEMS) Oto-Rhino-Laryngology (ENT)',
-        'immunohaematology': '(NBEMS) Immuno Haematology and Blood Transfusion'
-    }
-};
+var NP_SPECIALTY_ALIAS = {{ specialty_alias|tojson }};
 function npSnapSpecialty(raw, category) {
     var isDnb = (category === 'dnb');
     var list = isDnb ? DNB_COURSES : NEETPG_COURSES;
     var flat = function(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
     var t = flat(raw);
     if (!t) return raw;
-    var al = NP_SPECIALTY_ALIAS[isDnb ? 'dnb' : 'neetpg'];
+    var al = NP_SPECIALTY_ALIAS[isDnb ? 'dnb' : 'neetpg'] || {};
     if (al[t]) return al[t];
     function core(e) {
-        return e.replace(/^(MD|MS)\s*-\s*/i, '').replace(/^Diploma in\s+/i, '').replace(/^\(NBEMS\)\s*/i, '');
+        return e.replace(/^\(NBEMS\)\s*(Diploma\s+)?/i, '').replace(/^(MD\/MS|MD|MS|MCh|MPH)\s*-\s*/i, '').replace(/^Diploma in\s+/i, '');
     }
-    var i;
-    for (i = 0; i < list.length; i++) { if (flat(core(list[i])) === t) return list[i]; }  // exact core
-    for (i = 0; i < list.length; i++) { if (flat(list[i]) === t) return list[i]; }          // exact full (prefix typed)
-    // Unmatched DNB names get a consistent prefix: '(Diploma) X' or '(NBEMS) X'.
-    if (isDnb) {
-        var dm = /^diploma\s+(.+)$/i.exec(raw.trim());
-        return dm ? ('(Diploma) ' + dm[1].trim()) : ('(NBEMS) ' + raw.trim());
-    }
-    return raw;   // NEET PG unmatched → keep the clean name as-is
+    function isDip(e) { var el = e.toLowerCase(); return el.indexOf('diploma') === 0 || el.indexOf('(nbems) diploma') === 0; }
+    // A bare name (no "Diploma") means the degree — match non-diploma entries first.
+    var p, i;
+    for (p = 0; p < 2; p++) { for (i = 0; i < list.length; i++) { if ((p || !isDip(list[i])) && flat(core(list[i])) === t) return list[i]; } }
+    for (p = 0; p < 2; p++) { for (i = 0; i < list.length; i++) { if ((p || !isDip(list[i])) && flat(list[i]) === t) return list[i]; } }
+    if (isDnb) return '(NBEMS) ' + raw.trim();   // unknown DNB → consistent prefix
+    return raw;                                   // NEET PG unmatched → keep as-is
 }
 
 // ── Auto-fill the form from a well-named filename ──

@@ -77,53 +77,12 @@ def _parse_quota_from_filename(file_name):
 # ── Server-side filename parse + specialty snap (mirror of the admin-form JS) ──
 _SPLIT_RE = re.compile(r'\s+-\s*|\s*-\s+')            # split only on a spaced hyphen
 
-_NEETPG_COURSES = [
-    "MD - Anaesthesiology", "MD - Anatomy", "MD - Biochemistry", "MD - Community Medicine",
-    "MD - Dermatology, Venereology & Leprosy", "MD - Emergency Medicine", "MD - Family Medicine",
-    "MD - Forensic Medicine", "MD - General Medicine", "MD - Geriatrics", "MD - Hospital Administration",
-    "MD - Immuno Haematology and Blood Transfusion", "MD - Microbiology", "MD - Nuclear Medicine",
-    "MD - Paediatrics", "MD - Palliative Medicine", "MD - Pathology", "MD - Pharmacology",
-    "MD - Physical Medicine and Rehabilitation", "MD - Physiology", "MD - Psychiatry",
-    "MD - Radiation Oncology", "MD - Radio-diagnosis", "MD - Radio-therapy", "MD - Respiratory Medicine",
-    "MD - Sports Medicine", "MD - Transfusion Medicine", "MD - Tropical Medicine",
-    "MS - ENT (Otorhinolaryngology)", "MS - General Surgery", "MS - Obstetrics and Gynaecology",
-    "MS - Ophthalmology", "MS - Orthopaedics", "Diploma in Anaesthesiology", "Diploma in Child Health",
-    "Diploma in Ophthalmology", "Diploma in Orthopaedics", "Diploma in Psychiatry",
-    # Added from SBP filenames (confirm MD/MS where noted):
-    "MD - Aerospace Medicine", "MD - Laboratory Medicine", "MD - Community Health & Administration",
-    "MD - Electromyography", "MS - Neuro Surgery", "MS - Traumatology & Surgery",
-]
-_DNB_COURSES = [
-    "(NBEMS) Anaesthesiology", "(NBEMS) Anatomy", "(NBEMS) Biochemistry", "(NBEMS) Community Medicine",
-    "(NBEMS) Dermatology, Venereology & Leprosy", "(NBEMS) Emergency Medicine", "(NBEMS) Family Medicine",
-    "(NBEMS) Forensic Medicine", "(NBEMS) General Medicine", "(NBEMS) General Surgery", "(NBEMS) Geriatrics",
-    "(NBEMS) Hospital Administration", "(NBEMS) Immuno Haematology and Blood Transfusion",
-    "(NBEMS) Maternal and Child Health", "(NBEMS) Microbiology", "(NBEMS) Neonatology",
-    "(NBEMS) Nuclear Medicine", "(NBEMS) Obstetrics and Gynaecology", "(NBEMS) Ophthalmology",
-    "(NBEMS) Orthopaedics", "(NBEMS) Oto-Rhino-Laryngology (ENT)", "(NBEMS) Paediatrics",
-    "(NBEMS) Palliative Medicine", "(NBEMS) Pathology", "(NBEMS) Pharmacology",
-    "(NBEMS) Physical Medicine and Rehabilitation", "(NBEMS) Physiology", "(NBEMS) Psychiatry",
-    "(NBEMS) Radio-diagnosis", "(NBEMS) Radio-therapy", "(NBEMS) Respiratory Medicine",
-    "(NBEMS) Social and Preventive Medicine", "(NBEMS) Sports Medicine", "(NBEMS) Transfusion Medicine",
-    "(NBEMS) Tuberculosis and Respiratory Diseases",
-]
-_SPECIALTY_ALIAS = {
-    'neetpg': {
-        'dermatology': 'MD - Dermatology, Venereology & Leprosy',
-        'gynaecology': 'MS - Obstetrics and Gynaecology',
-        'ent': 'MS - ENT (Otorhinolaryngology)',
-        'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
-        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion',
-        'transfusionmedicinemd': 'MD - Transfusion Medicine',
-        'communityhealthadmin': 'MD - Community Health & Administration',
-    },
-    'dnb': {
-        'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
-        'gynaecology': '(NBEMS) Obstetrics and Gynaecology',
-        'ent': '(NBEMS) Oto-Rhino-Laryngology (ENT)',
-        'immunohaematology': '(NBEMS) Immuno Haematology and Blood Transfusion',
-    },
-}
+# Official lists + alias bridge live in the generated data module (single source
+# of truth, shared with the admin-form JS which receives them as JSON).
+from college.data.neetpg_lists import NEETPG_COURSES as _NEETPG_COURSES
+from college.data.neetpg_lists import DNB_COURSES as _DNB_COURSES
+from college.data.neetpg_lists import SPECIALTY_ALIAS as _SPECIALTY_ALIAS
+from college.data.neetpg_lists import MCC_COLLEGES as _MCC_COLLEGES
 
 
 def _flat(s):
@@ -131,9 +90,9 @@ def _flat(s):
 
 
 def _course_core(e):
-    e = re.sub(r'^(MD|MS)\s*-\s*', '', e, flags=re.I)
+    e = re.sub(r'^\(NBEMS\)\s*(Diploma\s+)?', '', e, flags=re.I)
+    e = re.sub(r'^(MD/MS|MD|MS|MCh|MPH)\s*-\s*', '', e, flags=re.I)
     e = re.sub(r'^Diploma in\s+', '', e, flags=re.I)
-    e = re.sub(r'^\(NBEMS\)\s*', '', e, flags=re.I)
     return e
 
 
@@ -147,15 +106,22 @@ def _snap_specialty(raw, category):
     al = _SPECIALTY_ALIAS['dnb' if is_dnb else 'neetpg']
     if t in al:
         return al[t]
-    for e in lst:
-        if _flat(_course_core(e)) == t:
-            return e
-    for e in lst:
-        if _flat(e) == t:
-            return e
+
+    def _is_dip(e):
+        el = e.lower()
+        return el.startswith('diploma') or el.startswith('(nbems) diploma')
+    # A bare name (no "Diploma" prefix) means the degree, not the diploma — so
+    # match non-diploma entries first (both passes: exact core, then exact full).
+    for pref in (False, True):
+        for e in lst:
+            if (pref or not _is_dip(e)) and _flat(_course_core(e)) == t:
+                return e
+    for pref in (False, True):
+        for e in lst:
+            if (pref or not _is_dip(e)) and _flat(e) == t:
+                return e
     if is_dnb:
-        m = re.match(r'^diploma\s+(.+)$', (raw or '').strip(), flags=re.I)
-        return '(Diploma) ' + m.group(1).strip() if m else '(NBEMS) ' + (raw or '').strip()
+        return '(NBEMS) ' + (raw or '').strip()
     return raw
 
 
@@ -918,6 +884,8 @@ def neetpg_admin():
                            recent_pdfs=recent_pdfs,
                            doc_types=NEETPG_DOC_TYPES, doc_type_labels=DOC_TYPE_LABELS,
                            college_names=college_names,
+                           neetpg_courses=_NEETPG_COURSES, dnb_courses=_DNB_COURSES,
+                           specialty_alias=_SPECIALTY_ALIAS,
                            active_doc_type=active_doc_type, doctype_counts=doctype_counts,
                     active_section='colleges')
 
