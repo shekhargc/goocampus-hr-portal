@@ -23,6 +23,7 @@
             <thead style="background:#f9fafb;">
                 <tr>
                     <th style="text-align:left;padding:0.6rem 0.85rem;font-size:0.7rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;">File</th>
+                    <th style="text-align:left;padding:0.6rem 0.85rem;font-size:0.7rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;white-space:nowrap;">Type</th>
                     <th style="text-align:left;padding:0.6rem 0.85rem;font-size:0.7rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;white-space:nowrap;">Status</th>
                     <th style="text-align:left;padding:0.6rem 0.85rem;font-size:0.7rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;">Detail</th>
                 </tr>
@@ -33,6 +34,9 @@
                 {% set bg = {'added':'#dcfce7','published':'#dcfce7','exists':'#fef9c3','skipped':'#e5e7eb','error':'#fee2e2'}.get(r.status, '#e5e7eb') %}
                 <tr>
                     <td style="padding:0.5rem 0.85rem;border-top:1px solid #f3f4f6;color:#374151;">{{ r.name }}</td>
+                    <td style="padding:0.5rem 0.85rem;border-top:1px solid #f3f4f6;white-space:nowrap;">
+                        {% if r.type %}<span style="padding:0.12rem 0.55rem;border-radius:1rem;font-weight:600;font-size:0.72rem;background:#fff2e6;color:#c2410c;">{{ r.type }}</span>{% else %}<span style="color:#d1d5db;">—</span>{% endif %}
+                    </td>
                     <td style="padding:0.5rem 0.85rem;border-top:1px solid #f3f4f6;white-space:nowrap;">
                         <span style="padding:0.12rem 0.55rem;border-radius:1rem;font-weight:700;font-size:0.72rem;background:{{ bg }};color:{{ c }};">
                             {{ 'already exists' if r.status == 'exists' else r.status }}
