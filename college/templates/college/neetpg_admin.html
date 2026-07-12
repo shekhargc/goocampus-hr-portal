@@ -1325,8 +1325,35 @@ function npUpdateDocType() {
     npRefreshTitle();
 }
 
+var npCollegeTimer = null;
+function npCollegeSuggest() {
+    clearTimeout(npCollegeTimer);
+    npCollegeTimer = setTimeout(function() {
+        var q = document.getElementById('npSpecialty').value.trim();
+        var url = '{{ url_for("neetpg_college_suggest") }}'
+            + '?cat=' + encodeURIComponent(document.getElementById('npCategory').value)
+            + '&doc=' + encodeURIComponent(document.getElementById('npDocType').value)
+            + '&state=' + encodeURIComponent(document.getElementById('npState').value)
+            + '&q=' + encodeURIComponent(q);
+        fetch(url).then(function(r){ return r.json(); }).then(function(names){
+            var list = document.getElementById('npSpecialtyList');
+            list.innerHTML = ''; npHighlightIdx = -1;
+            if (!names || !names.length) { list.classList.remove('show'); return; }
+            names.forEach(function(c){
+                var div = document.createElement('div');
+                div.className = 'np-autocomplete-item';
+                div.textContent = c;
+                div.onclick = function() { npSelectSpecialty(c); };
+                list.appendChild(div);
+            });
+            list.classList.add('show');
+        }).catch(function(){});
+    }, 200);
+}
+
 function npFilterSpecialties() {
-    // MCC Profile / Bond Doc: suggest from previously-used College Names (free text still allowed).
+    // MCC Profile / Bond Doc: server-side College Name suggestions (free text still allowed).
+    if (npIsMccProfile()) { npCollegeSuggest(); return; }
     var input = document.getElementById('npSpecialty');
     var list = document.getElementById('npSpecialtyList');
     var val = input.value.trim().toLowerCase();

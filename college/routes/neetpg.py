@@ -1103,6 +1103,37 @@ def neetpg_quota_backfill():
 
 
 @login_required
+def neetpg_college_suggest():
+    """Type-ahead for the MCC Profile / Bond Doc College Name field, from the
+    official AIQ-MCC college lists (per category + doc_type, optional state)."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify([]), 403
+    cat = 'dnb' if request.args.get('cat') == 'dnb' else 'neetpg'
+    doc = request.args.get('doc', 'mcc_profile')
+    if doc not in ('mcc_profile', 'mcc_bond_doc'):
+        doc = 'mcc_profile'
+    state = (request.args.get('state', '') or '').strip().lower()
+    q = (request.args.get('q', '') or '').strip().lower()
+    rows = _MCC_COLLEGES.get(f"{cat}|{doc}", [])
+    use_state = state and state not in ('aiq mcc', 'all india/mcc')
+    out, seen = [], set()
+    for st, nm in rows:
+        if use_state and (st or '').strip().lower() != state:
+            continue
+        if q and q not in nm.lower():
+            continue
+        k = nm.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(nm)
+        if len(out) >= 60:
+            break
+    return jsonify(out)
+
+
+@login_required
 def neetpg_all_uploads():
     """Persistent, searchable listing of every uploaded PDF (all doc types)."""
     user = get_user()
