@@ -37715,23 +37715,31 @@ def russia_verify_otp():
 # don't cause skipped publishes.
 
 def neetpg_auto_publish():
-    """Publish the next draft PDF that has auto_schedule=1 (FIFO: oldest upload first)."""
+    """Publish the next draft PDF PER TAB (each category+doc_type queues independently,
+    FIFO oldest-first). So at each slot every tab rolls out one PDF in parallel, rather
+    than all tabs sharing one global 1-per-slot queue."""
     try:
         conn = get_db()
-        draft = conn.execute(
-            "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT 1"
-        ).fetchone()
-        if draft:
+        # One oldest draft per (category, doc_type) tab. Postgres DISTINCT ON keeps the
+        # first row per group given the ORDER BY, i.e. the oldest upload in each tab.
+        drafts = conn.execute(
+            "SELECT DISTINCT ON (category, doc_type) id, title, state, category, doc_type "
+            "FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 "
+            "ORDER BY category, doc_type, upload_date ASC"
+        ).fetchall()
+        if not drafts:
+            print("[AUTO_PUBLISH] No drafts to publish", flush=True)
+            conn.close()
+            return
+        for draft in drafts:
             conn.execute(
                 "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (draft['id'],)
             )
             conn.commit()
-            print(f"[AUTO_PUBLISH] Published PDF id={draft['id']} title='{draft['title']}' — triggering WA notify", flush=True)
-            # Send WhatsApp notification to all leads
-            neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
-        else:
-            print("[AUTO_PUBLISH] No drafts to publish", flush=True)
+            print(f"[AUTO_PUBLISH] Published PDF id={draft['id']} tab={draft.get('category')}/{draft.get('doc_type')} title='{draft['title']}'", flush=True)
+            # NOTE: no per-PDF WhatsApp blast — leads get ONE batched reminder every
+            # ~2 days via neetpg_reminder_digest() (Meta frequency-caps per-recipient).
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_auto_publish error: {e}")
@@ -37763,41 +37771,77 @@ def neetpg_catchup_publish():
             logging.info("Catchup: no slots passed yet today, nothing to do")
             return
 
-        # Count PDFs published today (IST date)
         today_ist_str = now_ist.strftime('%Y-%m-%d')
         conn = get_db()
-        published_today = conn.execute(
-            "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1 "
-            "AND (published_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = ?::date",
-            (today_ist_str,)
-        ).fetchone()['c']
-
-        need = slots_passed - published_today
-        if need <= 0:
-            logging.info(f"Catchup: {slots_passed} slot(s) passed, {published_today} already published today — no catchup needed")
-            conn.close()
-            return
-
-        # Cap at 3 per day max
-        need = min(need, 3)
-        drafts = conn.execute(
-            "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
-            (need,)
+        # Per-tab catchup: each (category, doc_type) queue is independent, so publish up to
+        # (slots_passed - that-tab's-publishes-today) for EVERY tab that still has drafts.
+        tabs = conn.execute(
+            "SELECT DISTINCT category, doc_type FROM neetpg_pdfs "
+            "WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1"
         ).fetchall()
-        for draft in drafts:
-            conn.execute(
-                "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (draft['id'],)
-            )
-            logging.info(f"Catchup-published NEET PG PDF id={draft['id']} title={draft['title']}")
-            # Send WhatsApp notification to all leads
-            neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
-        if drafts:
-            conn.commit()
-        logging.info(f"Catchup: {slots_passed} slot(s) passed, {published_today} published today, catchup-published {len(drafts)}")
+        total = 0
+        for tab in tabs:
+            pub_today = conn.execute(
+                "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1 "
+                "AND category = ? AND doc_type = ? "
+                "AND (published_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = ?::date",
+                (tab['category'], tab['doc_type'], today_ist_str)
+            ).fetchone()['c']
+            need = slots_passed - pub_today          # missed slots for THIS tab (<= 3)
+            if need <= 0:
+                continue
+            drafts = conn.execute(
+                "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 "
+                "AND auto_schedule = 1 AND category = ? AND doc_type = ? ORDER BY upload_date ASC LIMIT ?",
+                (tab['category'], tab['doc_type'], need)
+            ).fetchall()
+            for draft in drafts:
+                conn.execute(
+                    "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (draft['id'],)
+                )
+                logging.info(f"Catchup-published NEET PG PDF id={draft['id']} tab={tab['category']}/{tab['doc_type']} title={draft['title']}")
+                # No per-PDF blast — batched reminder handles notifications (see digest).
+                total += 1
+            if drafts:
+                conn.commit()
+        logging.info(f"Catchup: {slots_passed} slot(s) passed today; per-tab catchup-published {total}")
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_catchup_publish error: {e}")
+
+
+def neetpg_reminder_digest():
+    """Send ONE batched WhatsApp reminder to all NEET PG leads when new PDFs have been
+    published — but at most once every ~2 days (Meta frequency-caps recipients, so we
+    never blast per file). Generic 'new files available' nudge, not per-file."""
+    try:
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS neetpg_reminders ("
+                     "id SERIAL PRIMARY KEY, sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, new_files INTEGER DEFAULT 0)")
+        conn.commit()
+        last = conn.execute("SELECT sent_at FROM neetpg_reminders ORDER BY id DESC LIMIT 1").fetchone()
+        last_at = last['sent_at'] if last else None
+        if last_at:
+            gap_ok = conn.execute(
+                "SELECT (CURRENT_TIMESTAMP - ?::timestamp) >= INTERVAL '2 days' AS ok", (last_at,)).fetchone()['ok']
+            new_cnt = conn.execute(
+                "SELECT COUNT(*) AS c FROM neetpg_pdfs WHERE is_published = 1 AND published_at > ?", (last_at,)).fetchone()['c']
+        else:
+            gap_ok = True
+            new_cnt = conn.execute("SELECT COUNT(*) AS c FROM neetpg_pdfs WHERE is_published = 1").fetchone()['c']
+        if gap_ok and new_cnt > 0:
+            conn.execute("INSERT INTO neetpg_reminders (new_files) VALUES (?)", (new_cnt,))
+            conn.commit()
+            conn.close()
+            # Reuse the college notify with a GENERIC title → one reminder, not per file.
+            neetpg_wa_notify_leads("new cut-offs & documents", "")
+            logging.info(f"neetpg_reminder_digest: reminder sent for {new_cnt} new file(s)")
+        else:
+            conn.close()
+            logging.info(f"neetpg_reminder_digest: skipped (gap_ok={gap_ok}, new_files={new_cnt})")
+    except Exception as e:
+        logging.error(f"neetpg_reminder_digest error: {e}")
 
 
 # ── Item F-2: 30-day check-in scheduler ─────────────────────────────
@@ -37957,6 +38001,9 @@ def start_neetpg_scheduler():
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=13, minute=0, timezone=ist), id='neetpg_publish_afternoon')
         # 5:00 PM IST daily
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=17, minute=0, timezone=ist), id='neetpg_publish_evening')
+        # Batched "new files available" WhatsApp reminder — checked daily at 6:30 PM IST,
+        # but self-gated to fire at most once every ~2 days and only when new PDFs exist.
+        scheduler.add_job(neetpg_reminder_digest, CronTrigger(hour=18, minute=30, timezone=ist), id='neetpg_reminder_digest')
         # Item F-2: 30-day check-in -- 09:00 AM IST daily. Cheap
         # query (uses thirty_day_checkin_sent_at IS NULL filter), so
         # safe to run unconditionally even if the template is

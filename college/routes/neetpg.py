@@ -36,6 +36,49 @@ VALID_DOC_TYPES = set(DOC_TYPE_LABELS)
 COLLEGE_NAME_DOC_TYPES = {'mcc_profile', 'mcc_bond_doc'}
 
 
+def _neetpg_schedule_map(conn):
+    """pdf_id -> 'May 13, 10:00 AM IST' ETA for queued (unpublished, auto-schedule)
+    drafts. Slots are PER TAB (category, doc_type): each tab publishes at 10am / 1pm /
+    5pm IST independently, so a draft's ETA = the slot matching its 0-based rank within
+    its own tab's FIFO queue (tabs roll out in parallel, not one global queue)."""
+    schedule_map = {}
+    try:
+        import pytz
+        from datetime import timedelta
+        ist = pytz.timezone('Asia/Kolkata')
+        now_ist = datetime.now(ist)
+        queued = conn.execute(
+            "SELECT id, category, doc_type FROM neetpg_pdfs "
+            "WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+        ).fetchall()
+        if not queued:
+            return schedule_map
+        # Rank each draft within its own (category, doc_type) tab.
+        tab_seen, ranks, max_rank = {}, {}, 0
+        for d in queued:
+            key = (d['category'], d['doc_type'])
+            r = tab_seen.get(key, 0)
+            ranks[d['id']] = r
+            tab_seen[key] = r + 1
+            max_rank = max(max_rank, r + 1)
+        # Build the first `max_rank` future slots (today's remaining first, then next days).
+        slots, day = [], 0
+        while len(slots) < max_rank and day < 400:
+            base = now_ist + timedelta(days=day)
+            for h in (10, 13, 17):
+                s = base.replace(hour=h, minute=0, second=0, microsecond=0)
+                if s > now_ist:
+                    slots.append(s)
+            day += 1
+        for d in queued:
+            idx = ranks[d['id']]
+            if idx < len(slots):
+                schedule_map[d['id']] = slots[idx].strftime('%b %d, %I:%M %p') + ' IST'
+    except Exception as e:
+        logging.error(f"neetpg schedule_map build error: {e}")
+    return schedule_map
+
+
 def _build_neetpg_title(doc_type, category, state, specialty, quota=''):
     """Auto-compose a PDF title from the upload fields.
     Format: "<State> <Specialty/College> <NEET PG|DNB> <Quota?> <Doc Type> 2025".
@@ -221,36 +264,8 @@ def neetpg_landing():
         "SELECT id, title, category, doc_type, specialty, quota_category, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
     ).fetchall()
 
-    # ── Compute schedule_map for coming soon PDFs (same FIFO logic as admin) ──
-    schedule_map = {}
-    try:
-        import pytz
-        from datetime import timedelta
-        ist = pytz.timezone('Asia/Kolkata')
-        now_ist = datetime.now(ist)
-        slots_today = []
-        for h in [10, 13, 17]:
-            slot = now_ist.replace(hour=h, minute=0, second=0, microsecond=0)
-            if slot > now_ist:
-                slots_today.append(slot)
-        slot_idx = 0
-        current_day_offset = 0
-        available_slots = list(slots_today)
-        for draft in scheduled_pdfs:
-            if slot_idx >= len(available_slots):
-                current_day_offset += 1
-                next_day = now_ist + timedelta(days=current_day_offset)
-                available_slots = [
-                    next_day.replace(hour=10, minute=0, second=0, microsecond=0),
-                    next_day.replace(hour=13, minute=0, second=0, microsecond=0),
-                    next_day.replace(hour=17, minute=0, second=0, microsecond=0)
-                ]
-                slot_idx = 0
-            assigned_slot = available_slots[slot_idx]
-            schedule_map[draft['id']] = assigned_slot.strftime('%b %d, %I:%M %p') + ' IST'
-            slot_idx += 1
-    except Exception as e:
-        logging.error(f"landing schedule_map build error: {e}")
+    # ── Coming-soon ETAs, per tab (each category+doc_type publishes in parallel) ──
+    schedule_map = _neetpg_schedule_map(conn)
 
     neetpg_scheduled = [p for p in scheduled_pdfs if p['category'] == 'neetpg']
     dnb_scheduled = [p for p in scheduled_pdfs if p['category'] == 'dnb']
@@ -861,42 +876,9 @@ def neetpg_admin():
         'leads_today': leads_today
     }
 
-    # ── Compute scheduled time slots for each queued draft (FIFO) ──
-    schedule_map = {}  # pdf_id -> "May 13, 10:00 AM IST"
-    try:
-        import pytz
-        from datetime import timedelta
-        ist = pytz.timezone('Asia/Kolkata')
-        now_ist = datetime.now(ist)
-        queued_drafts = conn.execute(
-            "SELECT id FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
-        ).fetchall()
-        # Build list of future slots starting from next available
-        slots_today = []
-        for h in [10, 13, 17]:
-            slot = now_ist.replace(hour=h, minute=0, second=0, microsecond=0)
-            if slot > now_ist:
-                slots_today.append(slot)
-        # Assign each draft a slot
-        slot_idx = 0
-        current_day_offset = 0
-        available_slots = list(slots_today)  # remaining slots today
-        for draft in queued_drafts:
-            if slot_idx >= len(available_slots):
-                # Move to next day
-                current_day_offset += 1
-                next_day = now_ist + timedelta(days=current_day_offset)
-                available_slots = [
-                    next_day.replace(hour=10, minute=0, second=0, microsecond=0),
-                    next_day.replace(hour=13, minute=0, second=0, microsecond=0),
-                    next_day.replace(hour=17, minute=0, second=0, microsecond=0)
-                ]
-                slot_idx = 0
-            assigned_slot = available_slots[slot_idx]
-            schedule_map[draft['id']] = assigned_slot.strftime('%b %d, %I:%M %p') + ' IST'
-            slot_idx += 1
-    except Exception as e:
-        logging.error(f"schedule_map build error: {e}")
+    # ── Compute scheduled time slots per TAB (each category+doc_type publishes
+    #    independently at 10am/1pm/5pm IST, so a draft's slot = its rank within its tab) ──
+    schedule_map = _neetpg_schedule_map(conn)
 
     conn.close()
     return render_template('college/neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics,
