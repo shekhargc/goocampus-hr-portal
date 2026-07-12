@@ -725,8 +725,11 @@
         {% endfor %}
     </div>
 
-    <!-- Backfill quota from existing cut-off filenames -->
-    <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
+    <!-- Backfill quota + all-uploads -->
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:0.75rem;">
+        <a href="{{ url_for('neetpg_all_uploads') }}" style="display:inline-flex;align-items:center;gap:6px;padding:0.4rem 0.9rem;font-size:0.8rem;font-weight:600;color:var(--navy);background:white;border:1.5px solid var(--gray-300);border-radius:2rem;text-decoration:none;">
+            <i class="fas fa-database"></i> All Uploads
+        </a>
         <button type="button" onclick="npOpenQuotaBackfill()" style="display:inline-flex;align-items:center;gap:6px;padding:0.4rem 0.9rem;font-size:0.8rem;font-weight:600;color:var(--navy);background:white;border:1.5px solid var(--gray-300);border-radius:2rem;cursor:pointer;">
             <i class="fas fa-magic"></i> Backfill Quota from filenames
         </button>
@@ -1184,7 +1187,13 @@ var NEETPG_COURSES = [
     "Diploma in Physical Medicine and Rehabilitation",
     "Diploma in Psychiatry",
     "Diploma in Public Health",
-    "Diploma in Tuberculosis and Chest Diseases"
+    "Diploma in Tuberculosis and Chest Diseases",
+    "MD - Aerospace Medicine",
+    "MD - Laboratory Medicine",
+    "MD - Community Health & Administration",
+    "MD - Electromyography",
+    "MS - Neuro Surgery",
+    "MS - Traumatology & Surgery"
 ];
 
 var DNB_COURSES = [
@@ -1285,7 +1294,9 @@ var NP_SPECIALTY_ALIAS = {
         'gynaecology': 'MS - Obstetrics and Gynaecology',
         'ent': 'MS - ENT (Otorhinolaryngology)',
         'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
-        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion'
+        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion',
+        'transfusionmedicinemd': 'MD - Transfusion Medicine',
+        'communityhealthadmin': 'MD - Community Health & Administration'
     },
     dnb: {
         'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
@@ -1393,7 +1404,11 @@ function npSetStateByName(name) {
     // No confident match → leave the current selection untouched.
 }
 
+// College names already used (for MCC Profile / Bond Doc field suggestions).
+var NP_COLLEGE_NAMES = {{ college_names|tojson }};
+
 function npGetCurrentCourses() {
+    if (npIsMccProfile()) return NP_COLLEGE_NAMES;
     var cat = document.getElementById('npCategory').value;
     return cat === 'dnb' ? DNB_COURSES : NEETPG_COURSES;
 }
@@ -1435,11 +1450,7 @@ function npUpdateDocType() {
 }
 
 function npFilterSpecialties() {
-    // MCC College Profile: free-text college name, no course suggestions.
-    if (npIsMccProfile()) {
-        document.getElementById('npSpecialtyList').classList.remove('show');
-        return;
-    }
+    // MCC Profile / Bond Doc: suggest from previously-used College Names (free text still allowed).
     var input = document.getElementById('npSpecialty');
     var list = document.getElementById('npSpecialtyList');
     var val = input.value.trim().toLowerCase();

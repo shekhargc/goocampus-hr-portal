@@ -1,0 +1,57 @@
+{% extends "colleges_sidebar_base.html" %}
+{% block title %}All NEET-PG Uploads{% endblock %}
+{% block section_content %}
+<div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:1rem;">
+        <h2 style="margin:0;font-size:1.15rem;color:#1B2A4A;font-weight:700;">
+            <i class="fas fa-database" style="color:#f97316;margin-right:6px;"></i> All Uploads
+            <span style="font-weight:500;color:#6b7280;font-size:0.9rem;">({{ total }})</span>
+        </h2>
+        <a href="{{ url_for('neetpg_admin') }}" style="display:inline-flex;align-items:center;gap:6px;padding:0.5rem 1rem;border:1px solid #d1d5db;border-radius:0.5rem;text-decoration:none;color:#374151;font-weight:600;font-size:0.85rem;">
+            <i class="fas fa-arrow-left"></i> Back to admin
+        </a>
+    </div>
+
+    <input type="text" id="auSearch" placeholder="Search title, state, specialty, quota…" oninput="auFilter()"
+           style="width:100%;max-width:480px;padding:0.55rem 0.8rem;border:1px solid #d1d5db;border-radius:0.5rem;font-size:0.85rem;margin-bottom:1rem;">
+
+    <div style="background:white;border:1px solid #e5e7eb;border-radius:0.75rem;overflow:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+            <thead style="background:#f9fafb;">
+                <tr>
+                    {% for h in ['Type','Title','Category','State','Specialty / College','Quota','Status','DLs'] %}
+                    <th style="text-align:left;padding:0.55rem 0.75rem;font-size:0.68rem;text-transform:uppercase;color:#6b7280;letter-spacing:0.3px;white-space:nowrap;">{{ h }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody id="auRows">
+                {% for r in rows %}
+                <tr class="au-row" data-search="{{ (r.title ~ ' ' ~ (r.state or '') ~ ' ' ~ (r.specialty or '') ~ ' ' ~ (r.quota_category or ''))|lower }}">
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;white-space:nowrap;"><span style="padding:0.1rem 0.5rem;border-radius:1rem;font-size:0.68rem;font-weight:600;background:#fff2e6;color:#c2410c;">{{ doc_type_labels.get(r.doc_type or 'cutoff', 'Cut Off') }}</span></td>
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;color:#374151;">{{ r.title }}</td>
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;white-space:nowrap;">{{ 'NEET PG' if r.category == 'neetpg' else 'DNB' }}</td>
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;white-space:nowrap;">{{ r.state or 'AIQ MCC' }}</td>
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;">{{ r.specialty }}</td>
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;white-space:nowrap;">{% if r.quota_category %}<span style="color:#2563eb;">{{ r.quota_category }}</span>{% else %}—{% endif %}</td>
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;white-space:nowrap;">{% if r.is_published %}<span style="color:#16a34a;font-weight:600;">Published</span>{% else %}<span style="color:#a16207;font-weight:600;">Draft</span>{% endif %}</td>
+                    <td style="padding:0.45rem 0.75rem;border-top:1px solid #f3f4f6;color:#f97316;font-weight:600;">{{ r.download_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div id="auEmpty" style="display:none;padding:1rem;color:#6b7280;font-size:0.85rem;">No matches.</div>
+</div>
+<script>
+function auFilter() {
+    var q = document.getElementById('auSearch').value.toLowerCase().trim();
+    var rows = document.querySelectorAll('.au-row'), shown = 0;
+    rows.forEach(function(r) {
+        var ok = !q || (r.getAttribute('data-search') || '').indexOf(q) > -1;
+        r.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+    });
+    document.getElementById('auEmpty').style.display = shown ? 'none' : 'block';
+}
+</script>
+{% endblock %}

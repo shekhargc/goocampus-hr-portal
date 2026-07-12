@@ -89,6 +89,9 @@ _NEETPG_COURSES = [
     "MS - ENT (Otorhinolaryngology)", "MS - General Surgery", "MS - Obstetrics and Gynaecology",
     "MS - Ophthalmology", "MS - Orthopaedics", "Diploma in Anaesthesiology", "Diploma in Child Health",
     "Diploma in Ophthalmology", "Diploma in Orthopaedics", "Diploma in Psychiatry",
+    # Added from SBP filenames (confirm MD/MS where noted):
+    "MD - Aerospace Medicine", "MD - Laboratory Medicine", "MD - Community Health & Administration",
+    "MD - Electromyography", "MS - Neuro Surgery", "MS - Traumatology & Surgery",
 ]
 _DNB_COURSES = [
     "(NBEMS) Anaesthesiology", "(NBEMS) Anatomy", "(NBEMS) Biochemistry", "(NBEMS) Community Medicine",
@@ -111,6 +114,8 @@ _SPECIALTY_ALIAS = {
         'ent': 'MS - ENT (Otorhinolaryngology)',
         'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
         'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion',
+        'transfusionmedicinemd': 'MD - Transfusion Medicine',
+        'communityhealthadmin': 'MD - Community Health & Administration',
     },
     'dnb': {
         'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
@@ -826,6 +831,14 @@ def neetpg_admin():
         "SELECT id, title, state, category FROM neetpg_pdfs ORDER BY upload_date DESC LIMIT 10"
     ).fetchall()
 
+    # College-name suggestions for the MCC Profile / Bond Doc field (from existing data)
+    try:
+        college_names = [r['specialty'] for r in conn.execute(
+            "SELECT DISTINCT specialty FROM neetpg_pdfs WHERE doc_type IN ('mcc_profile','mcc_bond_doc') AND specialty IS NOT NULL AND specialty != '' ORDER BY specialty"
+        ).fetchall()]
+    except Exception:
+        college_names = []
+
     # Analytics
     total_visits = conn.execute("SELECT COUNT(*) as c FROM neetpg_page_visits").fetchone()['c']
     today_visits = conn.execute(
@@ -904,6 +917,7 @@ def neetpg_admin():
                            doc_requests=doc_requests, request_count=request_count, pending_requests=pending_requests,
                            recent_pdfs=recent_pdfs,
                            doc_types=NEETPG_DOC_TYPES, doc_type_labels=DOC_TYPE_LABELS,
+                           college_names=college_names,
                            active_doc_type=active_doc_type, doctype_counts=doctype_counts,
                     active_section='colleges')
 
@@ -1118,6 +1132,23 @@ def neetpg_quota_backfill():
         'to_update': sum(1 for it in items if it['will_update']),
         'items': items,
     })
+
+
+@login_required
+def neetpg_all_uploads():
+    """Persistent, searchable listing of every uploaded PDF (all doc types)."""
+    user = get_user()
+    if not user.get('is_admin'):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, title, category, doc_type, specialty, quota_category, state, is_published, download_count FROM neetpg_pdfs ORDER BY upload_date DESC"
+    ).fetchall()
+    conn.close()
+    return render_template('college/neetpg_all_uploads.html', rows=rows,
+                           doc_type_labels=DOC_TYPE_LABELS, total=len(rows),
+                           user=user, active_section='colleges')
 
 
 @login_required
