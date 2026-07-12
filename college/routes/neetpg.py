@@ -1140,14 +1140,15 @@ def neetpg_bulk_upload():
     for f in files:
         name = f.filename
         if not name.lower().endswith('.pdf'):
-            results.append({'name': name, 'status': 'skipped', 'detail': 'not a PDF'})
+            results.append({'name': name, 'type': '', 'status': 'skipped', 'detail': 'not a PDF'})
             counts['skipped'] += 1
             continue
         parsed = _parse_neetpg_filename(name)
         if not parsed:
-            results.append({'name': name, 'status': 'skipped', 'detail': 'filename not recognised'})
+            results.append({'name': name, 'type': '', 'status': 'skipped', 'detail': 'filename not recognised'})
             counts['skipped'] += 1
             continue
+        dt_label = DOC_TYPE_LABELS.get(parsed['doc_type'], parsed['doc_type'])
         # Duplicate guard — skip files already uploaded (same filename).
         try:
             dup = conn.execute("SELECT id FROM neetpg_pdfs WHERE LOWER(file_name) = LOWER(?)", (name,)).fetchone()
@@ -1158,7 +1159,7 @@ def neetpg_bulk_upload():
                 pass
             dup = None
         if dup:
-            results.append({'name': name, 'status': 'exists', 'detail': 'already uploaded'})
+            results.append({'name': name, 'type': dt_label, 'status': 'exists', 'detail': 'already uploaded'})
             counts['exists'] += 1
             continue
         try:
@@ -1177,14 +1178,14 @@ def neetpg_bulk_upload():
                 )
             conn.commit()
             detail = parsed['specialty'] + (' · ' + parsed['quota'] if parsed['quota'] else '')
-            results.append({'name': name, 'status': ('published' if publish else 'added'), 'detail': detail})
+            results.append({'name': name, 'type': dt_label, 'status': ('published' if publish else 'added'), 'detail': detail})
             counts['added'] += 1
         except Exception as e:
             try:
                 conn.rollback()
             except Exception:
                 pass
-            results.append({'name': name, 'status': 'error', 'detail': 'save failed'})
+            results.append({'name': name, 'type': dt_label, 'status': 'error', 'detail': 'save failed'})
             counts['error'] += 1
             logging.error(f"neetpg_bulk_upload {name}: {e}")
     conn.close()
