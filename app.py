@@ -37715,23 +37715,31 @@ def russia_verify_otp():
 # don't cause skipped publishes.
 
 def neetpg_auto_publish():
-    """Publish the next draft PDF that has auto_schedule=1 (FIFO: oldest upload first)."""
+    """Publish the next draft PDF PER TAB (each category+doc_type queues independently,
+    FIFO oldest-first). So at each slot every tab rolls out one PDF in parallel, rather
+    than all tabs sharing one global 1-per-slot queue."""
     try:
         conn = get_db()
-        draft = conn.execute(
-            "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT 1"
-        ).fetchone()
-        if draft:
+        # One oldest draft per (category, doc_type) tab. Postgres DISTINCT ON keeps the
+        # first row per group given the ORDER BY, i.e. the oldest upload in each tab.
+        drafts = conn.execute(
+            "SELECT DISTINCT ON (category, doc_type) id, title, state, category, doc_type "
+            "FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 "
+            "ORDER BY category, doc_type, upload_date ASC"
+        ).fetchall()
+        if not drafts:
+            print("[AUTO_PUBLISH] No drafts to publish", flush=True)
+            conn.close()
+            return
+        for draft in drafts:
             conn.execute(
                 "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (draft['id'],)
             )
             conn.commit()
-            print(f"[AUTO_PUBLISH] Published PDF id={draft['id']} title='{draft['title']}' — triggering WA notify", flush=True)
+            print(f"[AUTO_PUBLISH] Published PDF id={draft['id']} tab={draft.get('category')}/{draft.get('doc_type')} title='{draft['title']}' — triggering WA notify", flush=True)
             # Send WhatsApp notification to all leads
             neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
-        else:
-            print("[AUTO_PUBLISH] No drafts to publish", flush=True)
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_auto_publish error: {e}")
@@ -37763,38 +37771,41 @@ def neetpg_catchup_publish():
             logging.info("Catchup: no slots passed yet today, nothing to do")
             return
 
-        # Count PDFs published today (IST date)
         today_ist_str = now_ist.strftime('%Y-%m-%d')
         conn = get_db()
-        published_today = conn.execute(
-            "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1 "
-            "AND (published_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = ?::date",
-            (today_ist_str,)
-        ).fetchone()['c']
-
-        need = slots_passed - published_today
-        if need <= 0:
-            logging.info(f"Catchup: {slots_passed} slot(s) passed, {published_today} already published today — no catchup needed")
-            conn.close()
-            return
-
-        # Cap at 3 per day max
-        need = min(need, 3)
-        drafts = conn.execute(
-            "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
-            (need,)
+        # Per-tab catchup: each (category, doc_type) queue is independent, so publish up to
+        # (slots_passed - that-tab's-publishes-today) for EVERY tab that still has drafts.
+        tabs = conn.execute(
+            "SELECT DISTINCT category, doc_type FROM neetpg_pdfs "
+            "WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1"
         ).fetchall()
-        for draft in drafts:
-            conn.execute(
-                "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (draft['id'],)
-            )
-            logging.info(f"Catchup-published NEET PG PDF id={draft['id']} title={draft['title']}")
-            # Send WhatsApp notification to all leads
-            neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
-        if drafts:
-            conn.commit()
-        logging.info(f"Catchup: {slots_passed} slot(s) passed, {published_today} published today, catchup-published {len(drafts)}")
+        total = 0
+        for tab in tabs:
+            pub_today = conn.execute(
+                "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1 "
+                "AND category = ? AND doc_type = ? "
+                "AND (published_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = ?::date",
+                (tab['category'], tab['doc_type'], today_ist_str)
+            ).fetchone()['c']
+            need = slots_passed - pub_today          # missed slots for THIS tab (<= 3)
+            if need <= 0:
+                continue
+            drafts = conn.execute(
+                "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 "
+                "AND auto_schedule = 1 AND category = ? AND doc_type = ? ORDER BY upload_date ASC LIMIT ?",
+                (tab['category'], tab['doc_type'], need)
+            ).fetchall()
+            for draft in drafts:
+                conn.execute(
+                    "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (draft['id'],)
+                )
+                logging.info(f"Catchup-published NEET PG PDF id={draft['id']} tab={tab['category']}/{tab['doc_type']} title={draft['title']}")
+                neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
+                total += 1
+            if drafts:
+                conn.commit()
+        logging.info(f"Catchup: {slots_passed} slot(s) passed today; per-tab catchup-published {total}")
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_catchup_publish error: {e}")

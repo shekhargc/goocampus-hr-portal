@@ -524,7 +524,7 @@
 {% if analytics.draft_pdfs > 0 %}
 <div class="np-schedule-banner">
     <i class="fas fa-clock"></i>
-    <div><strong>Auto-Publish Active:</strong> {{ analytics.draft_pdfs }} draft{{ 's' if analytics.draft_pdfs != 1 }} queued. Publishes automatically at <strong>10:00 AM</strong>, <strong>1:00 PM</strong> &amp; <strong>5:00 PM IST</strong> daily (1 PDF per slot, oldest first). Runs on the server — no need to keep the page open.</div>
+    <div><strong>Auto-Publish Active:</strong> {{ analytics.draft_pdfs }} draft{{ 's' if analytics.draft_pdfs != 1 }} queued. Publishes automatically at <strong>10:00 AM</strong>, <strong>1:00 PM</strong> &amp; <strong>5:00 PM IST</strong> daily — <strong>1 PDF per tab per slot</strong> (each doc-type queue rolls out in parallel, oldest first). Runs on the server — no need to keep the page open.</div>
 </div>
 {% endif %}
 
