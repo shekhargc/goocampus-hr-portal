@@ -120,48 +120,12 @@ def _parse_quota_from_filename(file_name):
 # ── Server-side filename parse + specialty snap (mirror of the admin-form JS) ──
 _SPLIT_RE = re.compile(r'\s+-\s*|\s*-\s+')            # split only on a spaced hyphen
 
-_NEETPG_COURSES = [
-    "MD - Anaesthesiology", "MD - Anatomy", "MD - Biochemistry", "MD - Community Medicine",
-    "MD - Dermatology, Venereology & Leprosy", "MD - Emergency Medicine", "MD - Family Medicine",
-    "MD - Forensic Medicine", "MD - General Medicine", "MD - Geriatrics", "MD - Hospital Administration",
-    "MD - Immuno Haematology and Blood Transfusion", "MD - Microbiology", "MD - Nuclear Medicine",
-    "MD - Paediatrics", "MD - Palliative Medicine", "MD - Pathology", "MD - Pharmacology",
-    "MD - Physical Medicine and Rehabilitation", "MD - Physiology", "MD - Psychiatry",
-    "MD - Radiation Oncology", "MD - Radio-diagnosis", "MD - Radio-therapy", "MD - Respiratory Medicine",
-    "MD - Sports Medicine", "MD - Transfusion Medicine", "MD - Tropical Medicine",
-    "MS - ENT (Otorhinolaryngology)", "MS - General Surgery", "MS - Obstetrics and Gynaecology",
-    "MS - Ophthalmology", "MS - Orthopaedics", "Diploma in Anaesthesiology", "Diploma in Child Health",
-    "Diploma in Ophthalmology", "Diploma in Orthopaedics", "Diploma in Psychiatry",
-]
-_DNB_COURSES = [
-    "(NBEMS) Anaesthesiology", "(NBEMS) Anatomy", "(NBEMS) Biochemistry", "(NBEMS) Community Medicine",
-    "(NBEMS) Dermatology, Venereology & Leprosy", "(NBEMS) Emergency Medicine", "(NBEMS) Family Medicine",
-    "(NBEMS) Forensic Medicine", "(NBEMS) General Medicine", "(NBEMS) General Surgery", "(NBEMS) Geriatrics",
-    "(NBEMS) Hospital Administration", "(NBEMS) Immuno Haematology and Blood Transfusion",
-    "(NBEMS) Maternal and Child Health", "(NBEMS) Microbiology", "(NBEMS) Neonatology",
-    "(NBEMS) Nuclear Medicine", "(NBEMS) Obstetrics and Gynaecology", "(NBEMS) Ophthalmology",
-    "(NBEMS) Orthopaedics", "(NBEMS) Oto-Rhino-Laryngology (ENT)", "(NBEMS) Paediatrics",
-    "(NBEMS) Palliative Medicine", "(NBEMS) Pathology", "(NBEMS) Pharmacology",
-    "(NBEMS) Physical Medicine and Rehabilitation", "(NBEMS) Physiology", "(NBEMS) Psychiatry",
-    "(NBEMS) Radio-diagnosis", "(NBEMS) Radio-therapy", "(NBEMS) Respiratory Medicine",
-    "(NBEMS) Social and Preventive Medicine", "(NBEMS) Sports Medicine", "(NBEMS) Transfusion Medicine",
-    "(NBEMS) Tuberculosis and Respiratory Diseases",
-]
-_SPECIALTY_ALIAS = {
-    'neetpg': {
-        'dermatology': 'MD - Dermatology, Venereology & Leprosy',
-        'gynaecology': 'MS - Obstetrics and Gynaecology',
-        'ent': 'MS - ENT (Otorhinolaryngology)',
-        'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
-        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion',
-    },
-    'dnb': {
-        'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
-        'gynaecology': '(NBEMS) Obstetrics and Gynaecology',
-        'ent': '(NBEMS) Oto-Rhino-Laryngology (ENT)',
-        'immunohaematology': '(NBEMS) Immuno Haematology and Blood Transfusion',
-    },
-}
+# Official lists + alias bridge live in the generated data module (single source
+# of truth, shared with the admin-form JS which receives them as JSON).
+from college.data.neetpg_lists import NEETPG_COURSES as _NEETPG_COURSES
+from college.data.neetpg_lists import DNB_COURSES as _DNB_COURSES
+from college.data.neetpg_lists import SPECIALTY_ALIAS as _SPECIALTY_ALIAS
+from college.data.neetpg_lists import MCC_COLLEGES as _MCC_COLLEGES
 
 
 def _flat(s):
@@ -169,9 +133,9 @@ def _flat(s):
 
 
 def _course_core(e):
-    e = re.sub(r'^(MD|MS)\s*-\s*', '', e, flags=re.I)
+    e = re.sub(r'^\(NBEMS\)\s*(Diploma\s+)?', '', e, flags=re.I)
+    e = re.sub(r'^(MD/MS|MD|MS|MCh|MPH)\s*-\s*', '', e, flags=re.I)
     e = re.sub(r'^Diploma in\s+', '', e, flags=re.I)
-    e = re.sub(r'^\(NBEMS\)\s*', '', e, flags=re.I)
     return e
 
 
@@ -185,12 +149,20 @@ def _snap_specialty(raw, category):
     al = _SPECIALTY_ALIAS['dnb' if is_dnb else 'neetpg']
     if t in al:
         return al[t]
-    for e in lst:
-        if _flat(_course_core(e)) == t:
-            return e
-    for e in lst:
-        if _flat(e) == t:
-            return e
+
+    def _is_dip(e):
+        el = e.lower()
+        return el.startswith('diploma') or el.startswith('(nbems) diploma')
+    # A bare name (no "Diploma" prefix) means the degree, not the diploma — so
+    # match non-diploma entries first (both passes: exact core, then exact full).
+    for pref in (False, True):
+        for e in lst:
+            if (pref or not _is_dip(e)) and _flat(_course_core(e)) == t:
+                return e
+    for pref in (False, True):
+        for e in lst:
+            if (pref or not _is_dip(e)) and _flat(e) == t:
+                return e
     if is_dnb:
         m = re.match(r'^diploma\s+(.+)$', (raw or '').strip(), flags=re.I)
         return '(Diploma) ' + m.group(1).strip() if m else '(NBEMS) ' + (raw or '').strip()
@@ -789,26 +761,43 @@ def neetpg_admin():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
     conn = get_db()
-    # ── Document-type filter (sub-tabs): 'all' or one of the valid doc types ──
+    # ── Filters (sub-tabs): document type + NEET PG / DNB exam category ──
     active_doc_type = request.args.get('doc_type', 'all').strip()
     if active_doc_type not in VALID_DOC_TYPES:
         active_doc_type = 'all'
-    dt_where = "" if active_doc_type == 'all' else "WHERE doc_type = ?"
-    dt_params = [] if active_doc_type == 'all' else [active_doc_type]
+    active_category = request.args.get('category', 'all').strip()
+    if active_category not in ('neetpg', 'dnb'):
+        active_category = 'all'
 
-    # Per-type counts for the sub-tab badges
-    doctype_counts = {'all': conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs").fetchone()['c']}
+    def _admin_count(cnds, prms):
+        w = (" WHERE " + " AND ".join(cnds)) if cnds else ""
+        return conn.execute(f"SELECT COUNT(*) as c FROM neetpg_pdfs{w}", prms).fetchone()['c']
+
+    # Combined filter for the listing
+    conds, params = [], []
+    if active_doc_type != 'all':
+        conds.append("doc_type = ?"); params.append(active_doc_type)
+    if active_category != 'all':
+        conds.append("category = ?"); params.append(active_category)
+    flt_where = (" WHERE " + " AND ".join(conds)) if conds else ""
+
+    # Doc-type tab counts (within the active category)
+    cat_conds = [] if active_category == 'all' else ["category = ?"]
+    cat_params = [] if active_category == 'all' else [active_category]
+    doctype_counts = {'all': _admin_count(cat_conds, cat_params)}
     for key in DOC_TYPE_LABELS:
-        doctype_counts[key] = conn.execute(
-            "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE doc_type = ?", (key,)
-        ).fetchone()['c']
+        doctype_counts[key] = _admin_count(cat_conds + ["doc_type = ?"], cat_params + [key])
+    # Category tab counts (within the active doc type)
+    dtc_conds = [] if active_doc_type == 'all' else ["doc_type = ?"]
+    dtc_params = [] if active_doc_type == 'all' else [active_doc_type]
+    category_counts = {'all': _admin_count(dtc_conds, dtc_params)}
+    for c in ('neetpg', 'dnb'):
+        category_counts[c] = _admin_count(dtc_conds + ["category = ?"], dtc_params + [c])
 
-    # Pagination for PDFs (within the active doc-type filter)
+    # Pagination for PDFs (within the active filters)
     page = int(request.args.get('page', 1))
     per_page = 20
-    total_pdfs_count = conn.execute(
-        f"SELECT COUNT(*) as c FROM neetpg_pdfs {dt_where}", dt_params
-    ).fetchone()['c']
+    total_pdfs_count = _admin_count(conds, params)
     total_pages = max(1, (total_pdfs_count + per_page - 1) // per_page)
     if page < 1:
         page = 1
@@ -816,8 +805,8 @@ def neetpg_admin():
         page = total_pages
     offset = (page - 1) * per_page
     pdfs = conn.execute(
-        f"SELECT * FROM neetpg_pdfs {dt_where} ORDER BY upload_date DESC LIMIT ? OFFSET ?",
-        dt_params + [per_page, offset]
+        f"SELECT * FROM neetpg_pdfs{flt_where} ORDER BY upload_date DESC LIMIT ? OFFSET ?",
+        params + [per_page, offset]
     ).fetchall()
     leads = conn.execute("SELECT * FROM neetpg_leads ORDER BY created_at DESC").fetchall()
     lead_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_leads").fetchone()['c']
@@ -840,6 +829,14 @@ def neetpg_admin():
     recent_pdfs = conn.execute(
         "SELECT id, title, state, category FROM neetpg_pdfs ORDER BY upload_date DESC LIMIT 10"
     ).fetchall()
+
+    # College-name suggestions for the MCC Profile / Bond Doc field (from existing data)
+    try:
+        college_names = [r['specialty'] for r in conn.execute(
+            "SELECT DISTINCT specialty FROM neetpg_pdfs WHERE doc_type IN ('mcc_profile','mcc_bond_doc') AND specialty IS NOT NULL AND specialty != '' ORDER BY specialty"
+        ).fetchall()]
+    except Exception:
+        college_names = []
 
     # Analytics
     total_visits = conn.execute("SELECT COUNT(*) as c FROM neetpg_page_visits").fetchone()['c']
@@ -886,7 +883,11 @@ def neetpg_admin():
                            doc_requests=doc_requests, request_count=request_count, pending_requests=pending_requests,
                            recent_pdfs=recent_pdfs,
                            doc_types=NEETPG_DOC_TYPES, doc_type_labels=DOC_TYPE_LABELS,
+                           college_names=college_names,
+                           neetpg_courses=_NEETPG_COURSES, dnb_courses=_DNB_COURSES,
+                           specialty_alias=_SPECIALTY_ALIAS,
                            active_doc_type=active_doc_type, doctype_counts=doctype_counts,
+                           active_category=active_category, category_counts=category_counts,
                     active_section='colleges')
 
 
@@ -1100,6 +1101,54 @@ def neetpg_quota_backfill():
         'to_update': sum(1 for it in items if it['will_update']),
         'items': items,
     })
+
+
+@login_required
+def neetpg_college_suggest():
+    """Type-ahead for the MCC Profile / Bond Doc College Name field, from the
+    official AIQ-MCC college lists (per category + doc_type, optional state)."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify([]), 403
+    cat = 'dnb' if request.args.get('cat') == 'dnb' else 'neetpg'
+    doc = request.args.get('doc', 'mcc_profile')
+    if doc not in ('mcc_profile', 'mcc_bond_doc'):
+        doc = 'mcc_profile'
+    state = (request.args.get('state', '') or '').strip().lower()
+    q = (request.args.get('q', '') or '').strip().lower()
+    rows = _MCC_COLLEGES.get(f"{cat}|{doc}", [])
+    use_state = state and state not in ('aiq mcc', 'all india/mcc')
+    out, seen = [], set()
+    for st, nm in rows:
+        if use_state and (st or '').strip().lower() != state:
+            continue
+        if q and q not in nm.lower():
+            continue
+        k = nm.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(nm)
+        if len(out) >= 60:
+            break
+    return jsonify(out)
+
+
+@login_required
+def neetpg_all_uploads():
+    """Persistent, searchable listing of every uploaded PDF (all doc types)."""
+    user = get_user()
+    if not user.get('is_admin'):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, title, category, doc_type, specialty, quota_category, state, is_published, download_count FROM neetpg_pdfs ORDER BY upload_date DESC"
+    ).fetchall()
+    conn.close()
+    return render_template('college/neetpg_all_uploads.html', rows=rows,
+                           doc_type_labels=DOC_TYPE_LABELS, total=len(rows),
+                           user=user, active_section='colleges')
 
 
 @login_required

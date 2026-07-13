@@ -711,22 +711,40 @@
 
 <!-- PDFs Tab -->
 <div class="np-tab-panel active" id="panel-pdfs">
+    <!-- Exam-category filter (NEET PG / DNB) -->
+    <div class="np-doctype-tabs">
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='all') }}"
+           class="np-doctype-tab {{ 'active' if active_category == 'all' else '' }}">
+            All Exams <span class="np-doctype-count">{{ category_counts['all'] }}</span>
+        </a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='neetpg') }}"
+           class="np-doctype-tab {{ 'active' if active_category == 'neetpg' else '' }}">
+            NEET PG (MD/MS) <span class="np-doctype-count">{{ category_counts['neetpg'] }}</span>
+        </a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='dnb') }}"
+           class="np-doctype-tab {{ 'active' if active_category == 'dnb' else '' }}">
+            DNB (NBEMS) <span class="np-doctype-count">{{ category_counts['dnb'] }}</span>
+        </a>
+    </div>
     <!-- Document-type filter sub-tabs -->
     <div class="np-doctype-tabs">
-        <a href="{{ url_for('neetpg_admin', doc_type='all') }}"
+        <a href="{{ url_for('neetpg_admin', doc_type='all', category=active_category) }}"
            class="np-doctype-tab {{ 'active' if active_doc_type == 'all' else '' }}">
             All <span class="np-doctype-count">{{ doctype_counts['all'] }}</span>
         </a>
         {% for key, label in doc_types %}
-        <a href="{{ url_for('neetpg_admin', doc_type=key) }}"
+        <a href="{{ url_for('neetpg_admin', doc_type=key, category=active_category) }}"
            class="np-doctype-tab {{ 'active' if active_doc_type == key else '' }}">
             {{ label }} <span class="np-doctype-count">{{ doctype_counts.get(key, 0) }}</span>
         </a>
         {% endfor %}
     </div>
 
-    <!-- Backfill quota from existing cut-off filenames -->
-    <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
+    <!-- Backfill quota + all-uploads -->
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:0.75rem;">
+        <a href="{{ url_for('neetpg_all_uploads') }}" style="display:inline-flex;align-items:center;gap:6px;padding:0.4rem 0.9rem;font-size:0.8rem;font-weight:600;color:var(--navy);background:white;border:1.5px solid var(--gray-300);border-radius:2rem;text-decoration:none;">
+            <i class="fas fa-database"></i> All Uploads
+        </a>
         <button type="button" onclick="npOpenQuotaBackfill()" style="display:inline-flex;align-items:center;gap:6px;padding:0.4rem 0.9rem;font-size:0.8rem;font-weight:600;color:var(--navy);background:white;border:1.5px solid var(--gray-300);border-radius:2rem;cursor:pointer;">
             <i class="fas fa-magic"></i> Backfill Quota from filenames
         </button>
@@ -851,21 +869,21 @@
     <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:1.2rem 0 0.5rem;flex-wrap:wrap;">
         <span style="font-size:0.78rem;color:var(--gray-500);margin-right:8px;">Page {{ page }} of {{ total_pages }} ({{ total_pdfs_count }} PDFs)</span>
         {% if page > 1 %}
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&laquo;</a>
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=page-1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&lsaquo; Prev</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&laquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=page-1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&lsaquo; Prev</a>
         {% endif %}
         {% for p in range(1, total_pages + 1) %}
             {% if p == page %}
             <span style="padding:6px 12px;background:var(--orange);color:white;border-radius:6px;font-size:0.8rem;font-weight:700;">{{ p }}</span>
             {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
-            <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=p) }}" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">{{ p }}</a>
+            <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=p) }}" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">{{ p }}</a>
             {% elif p == 4 or p == total_pages - 2 %}
             <span style="padding:6px 4px;color:var(--gray-400);font-size:0.8rem;">...</span>
             {% endif %}
         {% endfor %}
         {% if page < total_pages %}
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=page+1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">Next &rsaquo;</a>
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=total_pages) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&raquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=page+1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">Next &rsaquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=total_pages) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&raquo;</a>
         {% endif %}
     </div>
     {% endif %}
@@ -1134,109 +1152,9 @@ function deleteRequest(reqId) {
 // ── Specialty (Course Name) Autocomplete ──
 // ══════════════════════════════════════════
 
-var NEETPG_COURSES = [
-    "MD - Anaesthesiology",
-    "MD - Anatomy",
-    "MD - Biochemistry",
-    "MD - Community Medicine",
-    "MD - Dermatology, Venereology & Leprosy",
-    "MD - Emergency Medicine",
-    "MD - Family Medicine",
-    "MD - Forensic Medicine",
-    "MD - General Medicine",
-    "MD - Geriatrics",
-    "MD - Hospital Administration",
-    "MD - Immuno Haematology and Blood Transfusion",
-    "MD - Microbiology",
-    "MD - Nuclear Medicine",
-    "MD - Paediatrics",
-    "MD - Palliative Medicine",
-    "MD - Pathology",
-    "MD - Pharmacology",
-    "MD - Physical Medicine and Rehabilitation",
-    "MD - Physiology",
-    "MD - Psychiatry",
-    "MD - Radiation Oncology",
-    "MD - Radio-diagnosis",
-    "MD - Radio-therapy",
-    "MD - Respiratory Medicine",
-    "MD - Sports Medicine",
-    "MD - Transfusion Medicine",
-    "MD - Tropical Medicine",
-    "MS - ENT (Otorhinolaryngology)",
-    "MS - General Surgery",
-    "MS - Obstetrics and Gynaecology",
-    "MS - Ophthalmology",
-    "MS - Orthopaedics",
-    "Diploma in Anaesthesiology",
-    "Diploma in Child Health",
-    "Diploma in Clinical Pathology",
-    "Diploma in Dermatology, Venereology & Leprosy",
-    "Diploma in Forensic Medicine",
-    "Diploma in Gynaecology and Obstetrics",
-    "Diploma in Health Education",
-    "Diploma in Industrial Hygiene",
-    "Diploma in Medical Radio-diagnosis",
-    "Diploma in Medical Radio-therapy",
-    "Diploma in Oto-Rhino-Laryngology",
-    "Diploma in Ophthalmology",
-    "Diploma in Orthopaedics",
-    "Diploma in Physical Medicine and Rehabilitation",
-    "Diploma in Psychiatry",
-    "Diploma in Public Health",
-    "Diploma in Tuberculosis and Chest Diseases"
-];
-
-var DNB_COURSES = [
-    "(NBEMS) Anaesthesiology",
-    "(NBEMS) Anatomy",
-    "(NBEMS) Biochemistry",
-    "(NBEMS) Community Medicine",
-    "(NBEMS) Dermatology, Venereology & Leprosy",
-    "(NBEMS) Emergency Medicine",
-    "(NBEMS) Family Medicine",
-    "(NBEMS) Forensic Medicine",
-    "(NBEMS) General Medicine",
-    "(NBEMS) General Surgery",
-    "(NBEMS) Geriatrics",
-    "(NBEMS) Hospital Administration",
-    "(NBEMS) Immuno Haematology and Blood Transfusion",
-    "(NBEMS) Maternal and Child Health",
-    "(NBEMS) Microbiology",
-    "(NBEMS) Neonatology",
-    "(NBEMS) Nuclear Medicine",
-    "(NBEMS) Obstetrics and Gynaecology",
-    "(NBEMS) Ophthalmology",
-    "(NBEMS) Orthopaedics",
-    "(NBEMS) Oto-Rhino-Laryngology (ENT)",
-    "(NBEMS) Paediatrics",
-    "(NBEMS) Palliative Medicine",
-    "(NBEMS) Pathology",
-    "(NBEMS) Pharmacology",
-    "(NBEMS) Physical Medicine and Rehabilitation",
-    "(NBEMS) Physiology",
-    "(NBEMS) Psychiatry",
-    "(NBEMS) Radio-diagnosis",
-    "(NBEMS) Radio-therapy",
-    "(NBEMS) Respiratory Medicine",
-    "(NBEMS) Social and Preventive Medicine",
-    "(NBEMS) Sports Medicine",
-    "(NBEMS) Transfusion Medicine",
-    "(NBEMS) Tuberculosis and Respiratory Diseases",
-    "(NBEMS) Cardio-Vascular Surgery",
-    "(NBEMS) Neuro Surgery",
-    "(NBEMS) Plastic Surgery",
-    "(NBEMS) Paediatric Surgery",
-    "(NBEMS) Radiation Oncology",
-    "(Diploma) Anaesthesiology",
-    "(Diploma) ENT",
-    "(Diploma) Family Medicine",
-    "(Diploma) OBG",
-    "(Diploma) Ophthalmology",
-    "(Diploma) Paediatrics",
-    "(Diploma) Radio-diagnosis",
-    "(Diploma) TB & Chest"
-];
+// Official course lists + alias bridge — passed from the route (source of truth: college/data/neetpg_lists.py)
+var NEETPG_COURSES = {{ neetpg_courses|tojson }};
+var DNB_COURSES = {{ dnb_courses|tojson }};
 
 var npHighlightIdx = -1;
 
@@ -1279,41 +1197,28 @@ function npRefreshTitle() {
 // Aliases for course names whose canonical entry carries extra words. Explicit
 // (not fuzzy substring) so there are NO false matches like Paediatric Surgery →
 // Paediatrics. Anything not aliased or exactly matched keeps its clean name.
-var NP_SPECIALTY_ALIAS = {
-    neetpg: {
-        'dermatology': 'MD - Dermatology, Venereology & Leprosy',
-        'gynaecology': 'MS - Obstetrics and Gynaecology',
-        'ent': 'MS - ENT (Otorhinolaryngology)',
-        'physicalmedicinerehab': 'MD - Physical Medicine and Rehabilitation',
-        'immunohaematology': 'MD - Immuno Haematology and Blood Transfusion'
-    },
-    dnb: {
-        'dermatology': '(NBEMS) Dermatology, Venereology & Leprosy',
-        'gynaecology': '(NBEMS) Obstetrics and Gynaecology',
-        'ent': '(NBEMS) Oto-Rhino-Laryngology (ENT)',
-        'immunohaematology': '(NBEMS) Immuno Haematology and Blood Transfusion'
-    }
-};
+var NP_SPECIALTY_ALIAS = {{ specialty_alias|tojson }};
 function npSnapSpecialty(raw, category) {
     var isDnb = (category === 'dnb');
     var list = isDnb ? DNB_COURSES : NEETPG_COURSES;
     var flat = function(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
     var t = flat(raw);
     if (!t) return raw;
-    var al = NP_SPECIALTY_ALIAS[isDnb ? 'dnb' : 'neetpg'];
+    var al = NP_SPECIALTY_ALIAS[isDnb ? 'dnb' : 'neetpg'] || {};
     if (al[t]) return al[t];
     function core(e) {
-        return e.replace(/^(MD|MS)\s*-\s*/i, '').replace(/^Diploma in\s+/i, '').replace(/^\(NBEMS\)\s*/i, '');
+        return e.replace(/^\(NBEMS\)\s*(Diploma\s+)?/i, '').replace(/^(MD\/MS|MD|MS|MCh|MPH)\s*-\s*/i, '').replace(/^Diploma in\s+/i, '');
     }
-    var i;
-    for (i = 0; i < list.length; i++) { if (flat(core(list[i])) === t) return list[i]; }  // exact core
-    for (i = 0; i < list.length; i++) { if (flat(list[i]) === t) return list[i]; }          // exact full (prefix typed)
-    // Unmatched DNB names get a consistent prefix: '(Diploma) X' or '(NBEMS) X'.
+    function isDip(e) { var el = e.toLowerCase(); return el.indexOf('diploma') === 0 || el.indexOf('(nbems) diploma') === 0; }
+    // A bare name (no "Diploma") means the degree — match non-diploma entries first.
+    var p, i;
+    for (p = 0; p < 2; p++) { for (i = 0; i < list.length; i++) { if ((p || !isDip(list[i])) && flat(core(list[i])) === t) return list[i]; } }
+    for (p = 0; p < 2; p++) { for (i = 0; i < list.length; i++) { if ((p || !isDip(list[i])) && flat(list[i]) === t) return list[i]; } }
     if (isDnb) {
         var dm = /^diploma\s+(.+)$/i.exec(raw.trim());
         return dm ? ('(Diploma) ' + dm[1].trim()) : ('(NBEMS) ' + raw.trim());
     }
-    return raw;   // NEET PG unmatched → keep the clean name as-is
+    return raw;   // NEET PG unmatched → keep as-is
 }
 
 // ── Auto-fill the form from a well-named filename ──
@@ -1393,7 +1298,11 @@ function npSetStateByName(name) {
     // No confident match → leave the current selection untouched.
 }
 
+// College names already used (for MCC Profile / Bond Doc field suggestions).
+var NP_COLLEGE_NAMES = {{ college_names|tojson }};
+
 function npGetCurrentCourses() {
+    if (npIsMccProfile()) return NP_COLLEGE_NAMES;
     var cat = document.getElementById('npCategory').value;
     return cat === 'dnb' ? DNB_COURSES : NEETPG_COURSES;
 }
@@ -1434,12 +1343,35 @@ function npUpdateDocType() {
     npRefreshTitle();
 }
 
+var npCollegeTimer = null;
+function npCollegeSuggest() {
+    clearTimeout(npCollegeTimer);
+    npCollegeTimer = setTimeout(function() {
+        var q = document.getElementById('npSpecialty').value.trim();
+        var url = '{{ url_for("neetpg_college_suggest") }}'
+            + '?cat=' + encodeURIComponent(document.getElementById('npCategory').value)
+            + '&doc=' + encodeURIComponent(document.getElementById('npDocType').value)
+            + '&state=' + encodeURIComponent(document.getElementById('npState').value)
+            + '&q=' + encodeURIComponent(q);
+        fetch(url).then(function(r){ return r.json(); }).then(function(names){
+            var list = document.getElementById('npSpecialtyList');
+            list.innerHTML = ''; npHighlightIdx = -1;
+            if (!names || !names.length) { list.classList.remove('show'); return; }
+            names.forEach(function(c){
+                var div = document.createElement('div');
+                div.className = 'np-autocomplete-item';
+                div.textContent = c;
+                div.onclick = function() { npSelectSpecialty(c); };
+                list.appendChild(div);
+            });
+            list.classList.add('show');
+        }).catch(function(){});
+    }, 200);
+}
+
 function npFilterSpecialties() {
-    // MCC College Profile: free-text college name, no course suggestions.
-    if (npIsMccProfile()) {
-        document.getElementById('npSpecialtyList').classList.remove('show');
-        return;
-    }
+    // MCC Profile / Bond Doc: server-side College Name suggestions (free text still allowed).
+    if (npIsMccProfile()) { npCollegeSuggest(); return; }
     var input = document.getElementById('npSpecialty');
     var list = document.getElementById('npSpecialtyList');
     var val = input.value.trim().toLowerCase();
