@@ -30981,6 +30981,102 @@ def seed_clean_junk_cities():
 
 seed_clean_junk_cities()
 
+
+_CANONICAL_STATES = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa',
+    'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala',
+    'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland',
+    'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands',
+    'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+]
+
+
+def seed_clean_junk_states():
+    """The /company/locations backfill inserted free-text 'state' values scraped
+    from partner/client records, so the States dropdown accumulated (a) COUNTRY
+    names typed as a state and (b) control-char / whitespace variants of real
+    states ('Gujarat\\x0e' -> a phantom second 'Gujarat'). This normalises the
+    states table to the 36 canonical Indian states + UTs: strip control chars,
+    merge duplicate variants (moving their cities onto the real row), and delete
+    anything that isn't a real state (countries/junk) with its orphan cities.
+    Client-saved state values are de-junked too. Idempotent (safe every boot)."""
+    import re as _re
+
+    def _norm(v):
+        v = _re.sub(r'[\x00-\x1f\x7f]', '', v or '')
+        return ' '.join(v.split()).strip()
+
+    canon = {_norm(s).lower(): _norm(s) for s in _CANONICAL_STATES}
+    conn = get_db()
+    try:
+        # 1) Repair client-facing saved state values (strip control chars).
+        for tbl in ('client_registrations', 'plab_clients', 'partners', 'partner_leads'):
+            try:
+                conn.execute(
+                    f"UPDATE {tbl} SET state = NULLIF(BTRIM(regexp_replace(state, '[[:cntrl:]]', '', 'g')), '') "
+                    f"WHERE state IS NOT NULL AND state ~ '[[:cntrl:]]'")
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_clean_junk_states repair {tbl}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        # 2) Group states by normalized name; merge dupes, rename, drop junk.
+        try:
+            rows = conn.execute("SELECT id, name FROM states").fetchall()
+        except Exception:
+            rows = []
+        groups = {}
+        for r in rows:
+            groups.setdefault(_norm(r['name']).lower(), []).append((r['id'], r['name']))
+        for norm_lc, members in groups.items():
+            target = canon.get(norm_lc)              # canonical display name, or None if junk
+            want = target or _norm(members[0][1])
+            keep = None
+            for mid, mname in members:
+                if _norm(mname) == want:
+                    keep = mid
+                    break
+            if keep is None:
+                keep = min(m[0] for m in members)
+            others = [m[0] for m in members if m[0] != keep]
+            try:
+                for oid in others:                   # fold variant rows into the kept one
+                    conn.execute("UPDATE cities SET state_id = ? WHERE state_id = ?", (keep, oid))
+                    conn.execute("DELETE FROM states WHERE id = ?", (oid,))
+                conn.execute("UPDATE states SET name = ? WHERE id = ? AND name <> ?", (want, keep, want))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_clean_junk_states merge {norm_lc}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+            if target is None:                       # not a real Indian state -> remove it + its cities
+                try:
+                    conn.execute("DELETE FROM cities WHERE state_id = ?", (keep,))
+                    conn.execute("DELETE FROM states WHERE id = ?", (keep,))
+                    conn.commit()
+                except Exception as e:
+                    logging.warning(f"seed_clean_junk_states drop-junk {norm_lc}: {e}")
+                    try: conn.rollback()
+                    except Exception: pass
+        # 3) De-dupe any identical city rows the state-merge may have created.
+        try:
+            conn.execute("DELETE FROM cities a USING cities b "
+                         "WHERE a.id > b.id AND a.state_id = b.state_id AND a.name = b.name")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"seed_clean_junk_states city-dedupe: {e}")
+            try: conn.rollback()
+            except Exception: pass
+        logging.info("seed_clean_junk_states: normalised states to canonical Indian set")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_clean_junk_states()
+
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
 # ═══════════════════════════════════════════════════════════════
@@ -32335,7 +32431,13 @@ def company_locations_backfill():
                 seen.add(key)
                 unique_pairs.append((s, c))
         # For each pair, check if state exists (case-insensitive), then check city
+        _canon_lc = {s.strip().lower() for s in _CANONICAL_STATES}
         for state_name, city_name in unique_pairs:
+            # Only accept real Indian states. Free-text 'state' values in partner/
+            # client data include country names + junk — never let those into the
+            # States dropdown (that pollution is exactly what we just cleaned up).
+            if state_name.strip().lower() not in _canon_lc:
+                continue
             st = conn.execute("SELECT id FROM states WHERE LOWER(name) = LOWER(?)", (state_name,)).fetchone()
             if not st:
                 # State doesn't exist — add it
