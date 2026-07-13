@@ -121,7 +121,8 @@ def _snap_specialty(raw, category):
             if (pref or not _is_dip(e)) and _flat(e) == t:
                 return e
     if is_dnb:
-        return '(NBEMS) ' + (raw or '').strip()
+        m = re.match(r'^diploma\s+(.+)$', (raw or '').strip(), flags=re.I)
+        return '(Diploma) ' + m.group(1).strip() if m else '(NBEMS) ' + (raw or '').strip()
     return raw
 
 

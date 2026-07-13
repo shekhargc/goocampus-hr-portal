@@ -1199,8 +1199,11 @@ function npSnapSpecialty(raw, category) {
     var p, i;
     for (p = 0; p < 2; p++) { for (i = 0; i < list.length; i++) { if ((p || !isDip(list[i])) && flat(core(list[i])) === t) return list[i]; } }
     for (p = 0; p < 2; p++) { for (i = 0; i < list.length; i++) { if ((p || !isDip(list[i])) && flat(list[i]) === t) return list[i]; } }
-    if (isDnb) return '(NBEMS) ' + raw.trim();   // unknown DNB → consistent prefix
-    return raw;                                   // NEET PG unmatched → keep as-is
+    if (isDnb) {
+        var dm = /^diploma\s+(.+)$/i.exec(raw.trim());
+        return dm ? ('(Diploma) ' + dm[1].trim()) : ('(NBEMS) ' + raw.trim());
+    }
+    return raw;   // NEET PG unmatched → keep as-is
 }
 
 // ── Auto-fill the form from a well-named filename ──
