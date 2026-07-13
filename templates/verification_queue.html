@@ -41,7 +41,7 @@
           <td>{{ loop.index }}</td>
           <td>{{ r.reg }}</td>
           <td><b style="color:var(--navy);">{{ r.name }}</b></td>
-          <td>{{ r.product }}</td>
+          <td>{{ r.product }}{% if r.pathway %} <span style="font-size:0.7rem;background:#eef2f7;color:#475569;padding:2px 8px;border-radius:999px;white-space:nowrap;">{{ r.pathway|title }}</span>{% endif %}</td>
           <td>{{ (r.when|string)[:10] if r.when else '—' }}</td>
           <td style="text-align:right;"><a href="{{ r.action_url }}" class="vq-btn {{ 'vq-verify' if mode=='verify' else 'vq-fill' }}">{{ 'Verify &amp; Approve →' if mode=='verify' else 'Fill Details →' }}</a></td>
         </tr>

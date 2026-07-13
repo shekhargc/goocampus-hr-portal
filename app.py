@@ -2993,10 +2993,13 @@ def ops_request_call_slot(client_id):
         flash(
             f'A pending slot request already exists. Reuse this link: {share_url}',
             'info')
-    redirect_endpoint = ('ops_au_onboarding_detail'
-                        if pathway == 'australia'
-                        else 'ops_onboarding_detail')
-    return redirect(url_for(redirect_endpoint, client_id=client_id))
+    # Route back to the right place per pathway: Australia + PLAB have dedicated
+    # onboarding-detail pages; the other pathways use their own client-profile page.
+    if pathway == 'australia':
+        return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+    if pathway == 'plab':
+        return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+    return redirect(pathway_detail_url(pathway, client_id))
 
 
 @app.route('/slot/<token>', methods=['GET'])
@@ -24155,6 +24158,25 @@ _BULK_FREETEXT_HINTS = ('note', 'remark', 'comment', 'description', 'reason', 'a
                         'detail', 'feedback', 'message', 'instruction', 'score', 'link',
                         'url', 'email', 'name')
 BULK_PATHWAYS = ['plab', 'australia', 'consulting', 'portfolio', 'training', 'uae']
+
+# Canonical pathway -> client-profile endpoint. The single place that knows which
+# ops profile a client of a given pathway lives on, so links/redirects after
+# verification route to the RIGHT pathway (not always PLAB). Pairs with the
+# master-record pathway fix.
+PATHWAY_DETAIL_ENDPOINT = {
+    'plab': 'ops_plab_dashboard',
+    'australia': 'ops_australia_client_detail',
+    'consulting': 'ops_consulting_client_detail',
+    'portfolio': 'ops_portfolio_client_detail',
+    'training': 'ops_training_client_detail',
+    'uae': 'ops_uae_client_detail',
+}
+
+
+def pathway_detail_url(pathway, client_id):
+    """URL of the ops client-profile page for this pathway (defaults to PLAB)."""
+    ep = PATHWAY_DETAIL_ENDPOINT.get((pathway or 'plab').strip().lower(), 'ops_plab_dashboard')
+    return url_for(ep, client_id=client_id)
 
 
 def _bulk_columns(conn, table, pathway=None):
