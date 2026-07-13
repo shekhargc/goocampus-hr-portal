@@ -9,7 +9,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
     <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">{{ title }} ({{ records|length }})</h3>
     <div style="display:flex;gap:10px;align-items:center;">
-      {% if add_endpoint %}<button type="button" onclick="openAddDrawer('{{ url_for(add_endpoint) }}?embed=1&reg={{ client_reg|urlencode }}&cname={{ client_display|urlencode }}','Add {{ title }}')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>{% endif %}
+      {% if add_endpoint and can_use_route(add_endpoint) %}<button type="button" onclick="openAddDrawer('{{ url_for(add_endpoint) }}?embed=1&reg={{ client_reg|urlencode }}&cname={{ client_display|urlencode }}','Add {{ title }}')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>{% endif %}
       <a href="{{ view_url }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
     </div>
   </div>
@@ -210,7 +210,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
       <div style="display:flex;gap:10px;align-items:center;">
-        <button type="button" onclick="openAddDrawer('{{ url_for('ops_australia_call_notes_add') }}?embed=1&reg={{ client.registration_number|urlencode }}&cname={{ client_display|urlencode }}','Add Call Note')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>
+        {% if can_use_route('ops_australia_call_notes_add') %}<button type="button" onclick="openAddDrawer('{{ url_for('ops_australia_call_notes_add') }}?embed=1&reg={{ client.registration_number|urlencode }}&cname={{ client_display|urlencode }}','Add Call Note')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>{% endif %}
         <a href="{{ url_for('ops_australia_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
       </div>
     </div>

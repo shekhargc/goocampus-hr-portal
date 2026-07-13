@@ -36014,6 +36014,38 @@ def rec_json(r):
 
 # Expose to every template (no per-route render_template change needed).
 app.jinja_env.globals['can_access'] = can_access
+
+
+def can_use_route(endpoint):
+    """Can the current user reach this route endpoint (per ACCESS_ROUTE_MAP)?
+
+    Gates action buttons (e.g. the + Add Record drawer) so a team member only sees
+    a control they could actually use. The check mirrors access_master_request_audit
+    exactly — same (dept, section, action) the route enforces — so the button shows
+    iff the route would let them in. Admins, log-only mode, and routes not in the
+    map -> True (consistent with the request hook, which only enforces mapped routes).
+    """
+    if not ACCESS_MASTER_ENFORCE:
+        return True
+    user = get_user()
+    if not user:
+        return False
+    try:
+        if user['is_admin']:
+            return True
+    except (KeyError, IndexError, TypeError):
+        return False
+    rule = ACCESS_ROUTE_MAP.get(endpoint)
+    if not rule:
+        return True  # route not catalogued -> not enforced -> show
+    main_section, sub_section, action = rule
+    try:
+        return has_section_permission(user, main_section, sub_section, action)
+    except Exception:
+        return True
+
+
+app.jinja_env.globals['can_use_route'] = can_use_route
 app.jinja_env.globals['client_transfer_info'] = client_transfer_info
 app.jinja_env.globals['registration_optional_fields'] = REGISTRATION_OPTIONAL_FIELDS
 app.jinja_env.globals['rec_json'] = rec_json
