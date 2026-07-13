@@ -602,7 +602,11 @@
 <!-- ── Main Content ── -->
 <div class="main-content">
 
-    {% set readonly = reg.form_status == 'submitted' %}
+    {# Client may keep editing their details after submitting, right up until
+       operations verifies (the final step that creates the master record).
+       Founder 2026-07-13: "she can edit till the verification is complete from
+       the sales and operations side." Locked read-only only once ops-verified. #}
+    {% set readonly = (reg.ops_status == 'verified') %}
 
     <!-- ═══════════════════════════════════════════ STEP 1 ═══════════════════════════════════════════ -->
     <div class="step-panel{% if reg.current_step == 1 %} active{% endif %}" id="step-1">

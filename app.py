@@ -2052,6 +2052,12 @@ def client_form(reg_id):
     states = conn.execute("SELECT DISTINCT name AS state_name FROM states ORDER BY name").fetchall()
 
     if request.method == 'POST':
+        # Editing is allowed after submit, but locks once operations has verified
+        # (the master record is created then). Guard server-side too.
+        if (reg['ops_status'] or '') == 'verified':
+            conn.close()
+            flash('Your details have been verified and can no longer be edited. Contact your counsellor for changes.', 'error')
+            return redirect(url_for('client_dashboard'))
         step = int(request.form.get('step', 1))
         action = request.form.get('action', 'save')  # save or submit
 
