@@ -19629,13 +19629,20 @@ def ops_reports_download():
         for col, label in grp['fields']:
             label_map[col] = label
 
-    # Build SQL query
+    # Build SQL query. Client Name + Registration Number are ALWAYS exported as
+    # the first two columns, whatever fields the user picked (founder rule
+    # 2026-07-13) — so fetch name/reg even when they are left unticked.
     valid_cols = [f for f in selected_fields if f in label_map]
     if not valid_cols:
         flash('No valid fields selected.', 'error')
         return redirect(url_for('ops_reports'))
 
-    sql = f"SELECT {', '.join(valid_cols)} FROM plab_clients WHERE 1=1"
+    fetch_cols = list(valid_cols)
+    for ex in ('first_name', 'last_name', 'registration_number'):
+        if ex not in fetch_cols:
+            fetch_cols.append(ex)
+
+    sql = f"SELECT {', '.join(fetch_cols)} FROM plab_clients WHERE 1=1"
     params = []
 
     if filters_data.get('account_status'):
@@ -19694,9 +19701,21 @@ def ops_reports_download():
     )
     alt_fill = PatternFill('solid', fgColor='F9FAFB')
 
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+    def _xlsafe(v):
+        # openpyxl raises on control chars Excel forbids (common in notes/addresses
+        # pasted from PDFs/Word) — strip them so a download never 500s.
+        if isinstance(v, str):
+            return ILLEGAL_CHARACTERS_RE.sub('', v)
+        return v
+
+    # Output columns: forced Client Name + Registration Number, then the chosen
+    # fields (minus registration_number to avoid a duplicate column).
+    data_cols = [c for c in valid_cols if c != 'registration_number']
+    out_headers = ['Client Name', 'Registration Number'] + [label_map[c] for c in data_cols]
+
     # Write headers
-    headers = [label_map[col] for col in valid_cols]
-    for col_idx, header in enumerate(headers, 1):
+    for col_idx, header in enumerate(out_headers, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
         cell.font = header_font
         cell.fill = header_fill
@@ -19705,20 +19724,21 @@ def ops_reports_download():
 
     # Write data
     for row_idx, row in enumerate(rows, 2):
-        for col_idx, col_name in enumerate(valid_cols, 1):
-            value = row[col_name] if row[col_name] is not None else ''
-            # Format registration number
-            if col_name == 'registration_number' and value:
-                value = format_reg_filter(str(value))
-            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+        name = ' '.join(f"{row.get('first_name') or ''} {row.get('last_name') or ''}".split())
+        reg = row.get('registration_number') or ''
+        values = [name, format_reg_filter(str(reg)) if reg else '']
+        for c in data_cols:
+            values.append(row[c] if row[c] is not None else '')
+        for col_idx, value in enumerate(values, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=_xlsafe(value))
             cell.font = data_font
             cell.border = data_border
             if row_idx % 2 == 0:
                 cell.fill = alt_fill
 
     # Auto-fit column widths
-    for col_idx, col_name in enumerate(valid_cols, 1):
-        max_len = len(label_map[col_name])
+    for col_idx, header in enumerate(out_headers, 1):
+        max_len = len(str(header))
         for row in ws.iter_rows(min_row=2, max_row=min(len(rows) + 1, 102), min_col=col_idx, max_col=col_idx):
             for cell in row:
                 if cell.value:
@@ -19729,7 +19749,7 @@ def ops_reports_download():
     ws.freeze_panes = 'A2'
 
     # Add auto-filter
-    ws.auto_filter.ref = f"A1:{ws.cell(row=1, column=len(valid_cols)).column_letter}{len(rows) + 1}"
+    ws.auto_filter.ref = f"A1:{ws.cell(row=1, column=len(out_headers)).column_letter}{len(rows) + 1}"
 
     # Add summary sheet
     ws_summary = wb.create_sheet('Summary', 0)
@@ -19807,6 +19827,8 @@ def ops_reports_export():
             (pathway,)).fetchall()
     except Exception as e:
         logging.error(f"ops_reports_export {table}/{pathway}: {e}")
+        try: conn.rollback()
+        except Exception: pass
         rows = []
     cols = list(rows[0].keys()) if rows else []
     if not cols:
@@ -19815,7 +19837,24 @@ def ops_reports_export():
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name = ? ORDER BY ordinal_position", (table,)).fetchall()]
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
             cols = []
+
+    # Client-name lookup by registration number. The ops_* section tables only
+    # store registration_number (FK), so we join plab_clients to always show the
+    # client's NAME beside it in every export (founder rule 2026-07-13).
+    name_by_reg = {}
+    try:
+        for nr in conn.execute(
+            "SELECT registration_number, "
+            "TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm "
+            "FROM plab_clients").fetchall():
+            name_by_reg[nr['registration_number']] = ' '.join((nr['nm'] or '').split())
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        name_by_reg = {}
     conn.close()
 
     # Optional field selection (from the section-wise field picker): keep only
@@ -19827,25 +19866,55 @@ def ops_reports_export():
         if picked:
             cols = picked
 
+    # Client Name + Registration Number are ALWAYS the first two columns of every
+    # export, whatever fields were chosen (founder rule 2026-07-13). We render the
+    # reg number ourselves, so drop it from the data columns to avoid a duplicate.
+    is_client_table = (table == 'plab_clients')
+    data_cols = [c for c in cols if c != 'registration_number']
+
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
     def _clean(v):
-        if v is None or isinstance(v, (str, int, float, bool, _dt, _date)):
+        if v is None:
+            return ''
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float, _dt, _date)):
             return v
         if isinstance(v, Decimal):
             return float(v)
-        return str(v)
+        s = v if isinstance(v, str) else str(v)
+        # openpyxl raises IllegalCharacterError on control chars that Excel forbids
+        # (common in notes/addresses pasted from PDFs/Word) — strip them so no
+        # export 500s. This was the "internal server error" on many quick downloads.
+        return ILLEGAL_CHARACTERS_RE.sub('', s)
 
-    wb = Workbook(); ws = wb.active
-    ws.title = (label[:28] or 'Export')
-    if cols:
-        ws.append([c.replace('_', ' ').title() for c in cols])
+    def _client_name(r):
+        if is_client_table:
+            nm = ' '.join(f"{r.get('prefix') or ''} {r.get('first_name') or ''} "
+                          f"{r.get('last_name') or ''}".split())
+            if nm:
+                return nm
+        reg = r['registration_number'] if 'registration_number' in r else ''
+        return name_by_reg.get(reg, '')
+
+    try:
+        wb = Workbook(); ws = wb.active
+        ws.title = (label[:28] or 'Export')
+        header = ['Client Name', 'Registration Number'] + [c.replace('_', ' ').title() for c in data_cols]
+        ws.append(header)
         for cell in ws[1]:
             cell.font = Font(bold=True, color='FFFFFF')
             cell.fill = PatternFill('solid', fgColor='1E3A5F')
         for r in rows:
-            ws.append([_clean(r[c]) for c in cols])
-    else:
-        ws.append(['No data for this section / pathway.'])
-    out = io.BytesIO(); wb.save(out); out.seek(0)
+            reg = r['registration_number'] if 'registration_number' in r else ''
+            ws.append([_clean(_client_name(r)), _clean(reg)] + [_clean(r[c]) for c in data_cols])
+        if not rows:
+            ws.append(['No data for this section / pathway.'])
+        out = io.BytesIO(); wb.save(out); out.seek(0)
+    except Exception as e:
+        logging.error(f"ops_reports_export build {table}/{pathway}: {e}")
+        flash('Could not generate that export. Please try again or pick fewer fields.', 'error')
+        return redirect(url_for('ops_reports', pathway=pathway))
     fname = f"{pathway}_{table.replace('ops_', '')}.xlsx"
     return send_file(out, as_attachment=True, download_name=fname,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
