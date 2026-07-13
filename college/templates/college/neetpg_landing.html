@@ -1681,10 +1681,13 @@
         });
     }
 
-    // Expand/collapse a sidebar filter card (accordion)
+    // Expand/collapse a sidebar filter card — accordion: opening one closes the rest.
     function toggleSidebarCard(titleEl) {
         var card = titleEl.closest('.sidebar-card');
-        if (card) card.classList.toggle('collapsed');
+        if (!card) return;
+        var willOpen = card.classList.contains('collapsed');
+        document.querySelectorAll('#filterSidebar .sidebar-card').forEach(function(c) { c.classList.add('collapsed'); });
+        if (willOpen) card.classList.remove('collapsed');
     }
 
     function toggleSidebar() {
