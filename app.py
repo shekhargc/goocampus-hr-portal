@@ -3578,6 +3578,12 @@ def admin_client_sales_complete(reg_id):
         fn = f['field_name']
         if fn not in _CR_SALES_COLS:
             continue
+        # Only write fields the form actually submitted. Sales verification now
+        # shows the lead-provided details (plan/package/lead source) READ-ONLY and
+        # only Joined Stage is editable — so un-submitted fields must NOT be blanked
+        # (founder 2026-07-13). A read-only field is absent from request.form.
+        if fn not in request.form:
+            continue
         v = request.form.get(fn, '')
         if f['field_type'] == 'number':
             v = float(v or 0)

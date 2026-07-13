@@ -572,6 +572,19 @@
     <!-- TAB 2: SALES SECTION -->
     <!-- ============================================================ -->
     <div class="tab-panel" id="tab-sales">
+        {# Client photo + identity at the top of sales verification (founder 2026-07-13). #}
+        {% set _ph = namespace(doc=None) %}
+        {% for d in documents %}{% if d.doc_type in ['Photograph', 'Photo'] and not _ph.doc %}{% set _ph.doc = d %}{% endif %}{% endfor %}
+        {% if _ph.doc %}
+        <div class="card" style="display:flex;align-items:center;gap:1rem;">
+            <img src="{{ _ph.doc.file_path if '://' in _ph.doc.file_path else '/' + _ph.doc.file_path }}" alt="Client photo"
+                 style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--gray-200);flex:0 0 auto;" onerror="this.style.display='none';">
+            <div>
+                <div style="font-weight:700;color:var(--navy);font-size:1.05rem;">{{ reg.prefix or '' }} {{ reg.first_name or '' }} {{ reg.last_name or '' }}</div>
+                <div style="font-size:0.82rem;color:var(--gray-500);">Reg #{{ reg.registration_number|format_reg if reg.registration_number else '-' }} · {{ reg.product_name or '-' }}</div>
+            </div>
+        </div>
+        {% endif %}
         {% if not reg.sales_completed %}
         <!-- Editable Sales Form -->
         <div class="card">
@@ -592,9 +605,33 @@
                     </div>
                 </div>
 
+                {# Lead details are entered by sales in the lead form — shown READ-ONLY
+                   here to verify. Only Joined Stage is filled at verification
+                   (founder 2026-07-13). Read-only fields aren't posted, so the
+                   handler won't overwrite them. #}
+                <div class="sales-summary" style="margin-bottom:1.25rem;">
+                    <div class="sales-item"><div class="sales-item-label">Plan Type</div><div class="sales-item-value">{{ reg.plan_type or '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Package Amount</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.package_amount) if reg.package_amount else '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Discount</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.discount_allowed) if reg.discount_allowed else '-' }}</div></div>
+                    <div class="sales-item" style="border:2px solid var(--success);background:var(--success-light);"><div class="sales-item-label">Final Package</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.final_package) if reg.final_package else '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Lead Source</div><div class="sales-item-value">{{ reg.lead_source or '-' }}</div></div>
+                </div>
+
                 <div class="form-row" style="flex-wrap:wrap;">
-                    {% for f in sales_config %}{{ sales_field(f, reg[f.field_name]) }}{% endfor %}
-                    {% if not sales_config %}<p style="color:var(--gray-500);font-size:0.85rem;">No sales fields configured for this product. Add them under Settings → Client Form Config (role: Sales).</p>{% endif %}
+                    {% set jc = namespace(f=None) %}
+                    {% for f in sales_config %}{% if f.field_name == 'joined_stage' %}{% set jc.f = f %}{% endif %}{% endfor %}
+                    {% if jc.f %}{{ sales_field(jc.f, reg['joined_stage']) }}
+                    {% else %}
+                    <div class="form-group">
+                        <label for="joined_stage">Joined Stage</label>
+                        <select name="joined_stage" id="joined_stage">
+                            <option value="">— Select —</option>
+                            {% for s in lookup_options.get('joined_stage', []) %}
+                            <option value="{{ s }}"{% if reg.joined_stage == s %} selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                 </div>
 
                 {# Installments are entered in the lead form — shown here READ-ONLY
