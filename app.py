@@ -3384,6 +3384,18 @@ def admin_client_detail(reg_id):
     doc_requests = conn.execute("SELECT * FROM client_doc_requests WHERE registration_id = ? ORDER BY requested_at DESC", (reg_id,)).fetchall()
     notifications = conn.execute("SELECT * FROM client_notifications WHERE registration_id = ? ORDER BY sent_at DESC LIMIT 20", (reg_id,)).fetchall()
     counsellors = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
+    # Resolve the staff NAMES behind the sales-completed / ops-verified ids so the
+    # detail page can show "Verified by Priya" instead of a raw employee id.
+    def _emp_name(eid):
+        if not eid:
+            return ''
+        try:
+            r = conn.execute("SELECT name FROM employees WHERE id = ?", (eid,)).fetchone()
+            return (r['name'] if r else '') or ''
+        except Exception:
+            return ''
+    sales_completed_by_name = _emp_name(reg.get('sales_completed_by'))
+    ops_verified_by_name = _emp_name(reg.get('ops_verified_by'))
     # Phase E: welcome-kit checklist for this client (rows are seeded on
     # ops-verify; an empty list means either ops hasn't verified yet or
     # the product has no welcome-kit template configured).
@@ -3427,6 +3439,7 @@ def admin_client_detail(reg_id):
         documents=documents, doc_requests=doc_requests, notifications=notifications,
         counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
         ops_config=ops_config, lookup_options=lookup_options, package_services=package_services,
+        sales_completed_by_name=sales_completed_by_name, ops_verified_by_name=ops_verified_by_name,
         user=user, active_section='clients')
 
 
@@ -3461,8 +3474,13 @@ def admin_client_sales_complete(reg_id):
             v = float(v or 0)
         dyn[fn] = v
 
+    # Counsellor auto-assigns to the sales member doing the verification (founder
+    # 2026-07-13: "sales member is the counsellor"). If the form still posts an
+    # explicit counsellor_id (e.g. assigning to a colleague) we honour it; otherwise
+    # default to the logged-in user so it's never left blank / re-asked.
+    counsellor_id = request.form.get('counsellor_id') or user['id']
     set_parts = ["counsellor_id = ?", "counsellor_name = (SELECT name FROM employees WHERE id = ?)"]
-    vals = [request.form.get('counsellor_id'), request.form.get('counsellor_id')]
+    vals = [counsellor_id, counsellor_id]
     for i in (1, 2, 3, 4):
         set_parts += [f"inst{i}_amount = ?", f"inst{i}_date = ?", f"inst{i}_note = ?"]
         vals += [float(request.form.get(f'inst{i}_amount', 0) or 0),
@@ -3527,8 +3545,11 @@ def admin_client_ops_verify(reg_id):
 
     if action == 'confirm':
         # Config-driven ops fields (role='ops'), whitelisted to real columns.
-        _CR_OPS_COLS = {'account_status', 'current_stage', 'dropped_date',
-                        'switched_program', 'upgraded_to'}
+        # Dropped Date / Switched Program / Upgraded To are intentionally NOT
+        # here (founder 2026-07-13): those are lifecycle edits done later in the
+        # client profile, not part of ops verification. Ops only sets status +
+        # current stage at verify time.
+        _CR_OPS_COLS = {'account_status', 'current_stage'}
         prod = conn.execute("SELECT product_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
         ops_cfg = conn.execute(
             "SELECT field_name FROM client_form_configs WHERE product_id = ? "
@@ -3699,6 +3720,22 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
     # Get created_by (the ops user who confirmed)
     created_by = reg.get('ops_verified_by') or reg.get('counsellor_id')
 
+    # Resolve the client's REAL pathway from their product so the master record
+    # is stamped correctly. Root fix for "everything shows PLAB": this insert
+    # previously omitted pathway/product_id, so plab_clients.pathway fell back to
+    # its 'plab' default for every pathway — hiding Australia/UAE/Consulting/
+    # Portfolio/Training clients inside the PLAB lists + links. Mirrors the
+    # internal-transfer path (_execute_internal_transfer), which does set pathway.
+    pathway = 'plab'
+    product_id = reg.get('product_id')
+    if product_id:
+        try:
+            prow = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (product_id,)).fetchone()
+            if prow and (prow['pathway'] or '').strip():
+                pathway = prow['pathway'].strip()
+        except Exception as _pw_err:
+            logging.warning(f"pathway resolve for reg {reg_id}: {_pw_err}")
+
     # INSERT into plab_clients
     conn.execute('''INSERT INTO plab_clients (
         registration_number, registration_date, prefix, first_name, last_name,
@@ -3713,7 +3750,7 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         inst2_amount, inst2_date, inst2_note,
         inst3_amount, inst3_date, inst3_note,
         inst4_amount, inst4_date, inst4_note,
-        additional_notes, created_by
+        additional_notes, created_by, pathway, product_id
     ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?,
@@ -3727,7 +3764,7 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
-        ?, ?
+        ?, ?, ?, ?
     )''', (
         reg_num, reg.get('created_at', ''), reg.get('prefix', 'Dr.'),
         reg.get('first_name', ''), reg.get('last_name', ''),
@@ -3746,7 +3783,7 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         reg.get('inst2_amount', 0), reg.get('inst2_date', ''), reg.get('inst2_note', ''),
         reg.get('inst3_amount', 0), reg.get('inst3_date', ''), reg.get('inst3_note', ''),
         reg.get('inst4_amount', 0), reg.get('inst4_date', ''), reg.get('inst4_note', ''),
-        reg.get('additional_notes', ''), created_by
+        reg.get('additional_notes', ''), created_by, pathway, product_id
     ))
 
     # INSERT into ops_academic_details (only if academics data exists)
@@ -34030,7 +34067,7 @@ def cleanup_obsolete_form_config_fields_once():
     value re-runs the cleanup with an expanded list.
     """
     MARKER_KEY = 'form_config_obsoletes_cleared'
-    MARKER_VAL = 'v2'
+    MARKER_VAL = 'v3'  # v3 (2026-07-13): also retire the 3 ops lifecycle fields
 
     # Fields that have moved out of the form into the Onboarding/
     # Welcome-Kit subsystem, plus other redundant/legacy entries.
@@ -34056,6 +34093,9 @@ def cleanup_obsolete_form_config_fields_once():
         'counsellor', 'counsellor_email', 'counsellor_number',
         # Legacy / unused
         'english_training',
+        # Ops lifecycle fields — moved OUT of ops verification (founder 2026-07-13);
+        # they're edited later in the client profile, not at verify time.
+        'dropped_date', 'switched_program', 'upgraded_to',
     )
 
     conn = None
@@ -36300,7 +36340,6 @@ def seed_client_form_configs():
             # ── Step 3: Sales Section (sales fills) ──
             (3, 'Sales Details', 'joined_stage', 'Joined Stage', 'select', 'db:joined_stage', 'sales', 0, 10, '', ''),
             (3, 'Sales Details', 'plan_type', 'Plan Type', 'select', 'db:plan_type', 'sales', 1, 20, '', ''),
-            (3, 'Sales Details', 'english_training', 'English Training', 'select', 'Yes,No', 'sales', 0, 30, '', ''),
             (3, 'Sales Details', 'counsellor', 'Counsellor', 'select', 'db:counsellor', 'sales', 1, 40, '', ''),
             (3, 'Sales Details', 'counsellor_email', 'Counsellor Email', 'email', '', 'sales', 0, 50, '', 'Auto-filled from counsellor'),
             (3, 'Sales Details', 'counsellor_number', 'Counsellor Number', 'tel', '', 'sales', 0, 60, '', 'Auto-filled from counsellor'),
@@ -36331,25 +36370,11 @@ def seed_client_form_configs():
             # ── Step 4: Operations Section (ops fills) ──
             (4, 'Operations', 'account_status', 'Account Status', 'select', 'db:account_status', 'ops', 1, 10, '', ''),
             (4, 'Operations', 'current_stage', 'Current Stage', 'select', 'db:plab_stage', 'ops', 0, 20, '', ''),
-            (4, 'Operations', 'dropped_date', 'Dropped Date', 'date', '', 'ops', 0, 30, '', 'If account status is Dropped'),
-            (4, 'Operations', 'switched_program', 'Switched Program', 'select', 'db:switched_program', 'ops', 0, 40, '', 'If account status is Switched'),
-            (4, 'Operations', 'upgraded_to', 'Upgraded To', 'text', '', 'ops', 0, 50, '', 'If client upgraded'),
-            (4, 'Operations', 'welcome_mail', 'Welcome Mail', 'select', 'Sent,Not Sent', 'ops', 0, 60, '', ''),
-            (4, 'Operations', 'welcome_call_by', 'Welcome Call By', 'text', '', 'ops', 0, 70, '', ''),
-            (4, 'Operations', 'welcome_call_date', 'Welcome Call Date', 'date', '', 'ops', 0, 80, '', ''),
-            (4, 'Operations', 'english_book', 'English Book', 'select', 'Sent,Not Sent,N/A', 'ops', 0, 90, '', ''),
-            (4, 'Operations', 'english_book_date', 'English Book Date', 'date', '', 'ops', 0, 100, '', ''),
-            (4, 'Operations', 'oxford_book', 'Oxford Book', 'select', 'Sent,Not Sent,N/A', 'ops', 0, 110, '', ''),
-            (4, 'Operations', 'oxford_book_date', 'Oxford Book Date', 'date', '', 'ops', 0, 120, '', ''),
-            (4, 'Operations', 'plab_brochure', 'PLAB Brochure', 'checkbox', '', 'ops', 0, 130, '', ''),
-            (4, 'Operations', 'ceo_letter', 'CEO Letter', 'checkbox', '', 'ops', 0, 140, '', ''),
-            (4, 'Operations', 'refund_policy', 'Refund Policy', 'checkbox', '', 'ops', 0, 150, '', ''),
-            (4, 'Operations', 'service_agreement', 'Service Agreement', 'checkbox', '', 'ops', 0, 160, '', ''),
-            (4, 'Operations', 'goodie_pen', 'Goodie - Pen', 'checkbox', '', 'ops', 0, 170, '', ''),
-            (4, 'Operations', 'goodie_diary', 'Goodie - Diary', 'checkbox', '', 'ops', 0, 180, '', ''),
-            (4, 'Operations', 'goodie_laptop_bag', 'Goodie - Laptop Bag', 'checkbox', '', 'ops', 0, 190, '', ''),
-            (4, 'Operations', 'goodie_stickers', 'Goodie - Stickers', 'checkbox', '', 'ops', 0, 200, '', ''),
             (4, 'Operations', 'additional_notes', 'Additional Notes', 'textarea', '', 'ops', 0, 210, '', ''),
+            # Ops verification collects only status + current stage (founder 2026-07-13).
+            # Dropped Date / Switched Program / Upgraded To moved to the client profile;
+            # welcome-mail / books / brochure / goodies belong to the Welcome-Kit +
+            # Onboarding subsystems, not verification. (All retired via OBSOLETE cleanup.)
         ]
 
         for pdef in product_definitions:
