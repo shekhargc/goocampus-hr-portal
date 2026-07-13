@@ -31083,6 +31083,50 @@ def seed_clean_junk_states():
 
 seed_clean_junk_states()
 
+
+def seed_countries_lookup_field():
+    """The Academic 'country of medical college' field was seeded as free text
+    with no options, so it rendered without a dropdown. Seed a 'countries' lookup
+    (common FMG study destinations) once and point the client 'country' config
+    field at db:countries so it becomes a real dropdown. Idempotent."""
+    countries = [
+        'India', 'China', 'Russia', 'Ukraine', 'Philippines', 'Georgia',
+        'Kazakhstan', 'Kyrgyzstan', 'Nepal', 'Bangladesh', 'Armenia', 'Uzbekistan',
+        'Belarus', 'Poland', 'Germany', 'United Kingdom', 'United States',
+        'Australia', 'Mauritius', 'Malaysia', 'Egypt', 'Caribbean Islands', 'Other',
+    ]
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT COUNT(*) AS c FROM lookup_options WHERE category = 'countries'").fetchone()
+        if not existing or (existing['c'] or 0) == 0:
+            for i, c in enumerate(countries):
+                try:
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                        "VALUES ('countries', ?, ?, ?, TRUE)", (c, c, i))
+                except Exception:
+                    pass
+            conn.commit()
+        # Repoint the academic country field to the dropdown (only if it's still
+        # blank/text or already pointing here — never clobber an admin override).
+        try:
+            conn.execute(
+                "UPDATE client_form_configs SET field_type = 'select', field_options = 'db:countries' "
+                "WHERE field_name = 'country' AND role = 'client' AND step_number = 2 "
+                "AND (field_options IS NULL OR field_options = '' OR field_options = 'db:countries')")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"seed_countries_lookup_field repoint: {e}")
+            try: conn.rollback()
+            except Exception: pass
+        logging.info("seed_countries_lookup_field: countries dropdown ready")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_countries_lookup_field()
+
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
 # ═══════════════════════════════════════════════════════════════
@@ -36478,7 +36522,7 @@ def seed_client_form_configs():
             (2, 'Academic Details', 'img_fmg', 'IMG / FMG', 'select', 'db:img_fmg', 'client', 1, 10, '', 'Select IMG or FMG'),
             (2, 'Academic Details', 'img_medical_college', 'IMG Medical College', 'text', '', 'client', 0, 20, 'College name (for IMG)', 'Visible if IMG selected'),
             (2, 'Academic Details', 'fmg_medical_college', 'FMG Medical College', 'text', '', 'client', 0, 30, 'College name (for FMG)', 'Visible if FMG selected'),
-            (2, 'Academic Details', 'country', 'Country', 'text', '', 'client', 0, 40, 'Country of medical college', 'For FMG only'),
+            (2, 'Academic Details', 'country', 'Country', 'select', 'db:countries', 'client', 0, 40, 'Country of medical college', 'For FMG only'),
             (2, 'Academic Details', 'mbbs_status', 'MBBS Status', 'select', 'db:mbbs_status', 'client', 1, 50, '', ''),
             (2, 'Academic Details', 'mbbs_start_date', 'MBBS Start Date', 'date', '', 'client', 0, 60, '', ''),
             (2, 'Academic Details', 'mbbs_end_date', 'MBBS End Date', 'date', '', 'client', 0, 70, '', ''),
