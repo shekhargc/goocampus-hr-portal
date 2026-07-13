@@ -2141,11 +2141,22 @@ def client_form(reg_id):
             if v not in seen:
                 seen.add(v); out.append(v)
         lookup_options[cat] = out
+    # Central country reference (single source of truth): names feed the academic
+    # 'Country' dropdown (via db:countries), and (name, dial, region) feed the
+    # phone country-code picker — one list everywhere.
+    try:
+        _crows = conn.execute(
+            "SELECT name, dial_code, region FROM countries WHERE is_active = TRUE ORDER BY name").fetchall()
+    except Exception:
+        _crows = []
+    lookup_options['countries'] = [r['name'] for r in _crows]
+    phone_countries = [{'name': r['name'], 'dial': r['dial_code'], 'region': r['region']}
+                       for r in _crows if (r['dial_code'] or '').strip()]
     conn.close()
     return render_template('client_form.html',
         reg=reg, academics=academics, documents=documents,
         form_config=form_config, doc_requests=doc_requests, states=states,
-        lookup_options=lookup_options)
+        lookup_options=lookup_options, phone_countries=phone_countries)
 
 
 @app.route('/client/upload-doc/<int:reg_id>', methods=['POST'])
@@ -31084,31 +31095,54 @@ def seed_clean_junk_states():
 seed_clean_junk_states()
 
 
-def seed_countries_lookup_field():
-    """The Academic 'country of medical college' field was seeded as free text
-    with no options, so it rendered without a dropdown. Seed a 'countries' lookup
-    (common FMG study destinations) once and point the client 'country' config
-    field at db:countries so it becomes a real dropdown. Idempotent."""
-    countries = [
-        'India', 'China', 'Russia', 'Ukraine', 'Philippines', 'Georgia',
-        'Kazakhstan', 'Kyrgyzstan', 'Nepal', 'Bangladesh', 'Armenia', 'Uzbekistan',
-        'Belarus', 'Poland', 'Germany', 'United Kingdom', 'United States',
-        'Australia', 'Mauritius', 'Malaysia', 'Egypt', 'Caribbean Islands', 'Other',
-    ]
+def ensure_countries_reference():
+    """CENTRAL countries reference table — the single source of truth for the
+    country list across the portal (client form Academic 'Country' dropdown, the
+    phone country-code picker, the College module + partner forms all read this
+    table). Created here in core so it never depends on the College module being
+    loaded. Upserts the full list from core/geo_data.py, adds dial_code + region
+    columns, points the academic 'country' field at the table, and removes the
+    earlier duplicate lookup_options rows. Idempotent (safe every boot)."""
+    try:
+        from core.geo_data import COUNTRIES
+    except Exception as e:
+        logging.error(f"ensure_countries_reference import: {e}")
+        return
     conn = get_db()
     try:
-        existing = conn.execute("SELECT COUNT(*) AS c FROM lookup_options WHERE category = 'countries'").fetchone()
-        if not existing or (existing['c'] or 0) == 0:
-            for i, c in enumerate(countries):
-                try:
-                    conn.execute(
-                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
-                        "VALUES ('countries', ?, ?, ?, TRUE)", (c, c, i))
-                except Exception:
-                    pass
-            conn.commit()
-        # Repoint the academic country field to the dropdown (only if it's still
-        # blank/text or already pointing here — never clobber an admin override).
+        conn.execute('''CREATE TABLE IF NOT EXISTS countries (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            code TEXT DEFAULT '',
+            currency_code TEXT DEFAULT 'USD',
+            dial_code TEXT DEFAULT '',
+            region TEXT DEFAULT '',
+            is_active BOOLEAN DEFAULT TRUE
+        )''')
+        conn.commit()
+        # Backfill columns the College-created table may pre-date.
+        for ddl in ("ALTER TABLE countries ADD COLUMN dial_code TEXT DEFAULT ''",
+                    "ALTER TABLE countries ADD COLUMN region TEXT DEFAULT ''",
+                    "ALTER TABLE countries ADD COLUMN is_active BOOLEAN DEFAULT TRUE"):
+            try:
+                conn.execute(ddl); conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        for (name, iso2, dial, cur, region) in COUNTRIES:
+            try:
+                conn.execute(
+                    "INSERT INTO countries (name, code, currency_code, dial_code, region, is_active) "
+                    "VALUES (?, ?, ?, ?, ?, TRUE) "
+                    "ON CONFLICT (name) DO UPDATE SET code = EXCLUDED.code, "
+                    "currency_code = EXCLUDED.currency_code, dial_code = EXCLUDED.dial_code, "
+                    "region = EXCLUDED.region, is_active = TRUE",
+                    (name, iso2, cur, dial, region))
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        # Point the academic country field at the table-backed dropdown.
         try:
             conn.execute(
                 "UPDATE client_form_configs SET field_type = 'select', field_options = 'db:countries' "
@@ -31116,16 +31150,23 @@ def seed_countries_lookup_field():
                 "AND (field_options IS NULL OR field_options = '' OR field_options = 'db:countries')")
             conn.commit()
         except Exception as e:
-            logging.warning(f"seed_countries_lookup_field repoint: {e}")
+            logging.warning(f"ensure_countries_reference repoint: {e}")
             try: conn.rollback()
             except Exception: pass
-        logging.info("seed_countries_lookup_field: countries dropdown ready")
+        # Drop the earlier duplicate lookup_options 'countries' rows (now table-backed).
+        try:
+            conn.execute("DELETE FROM lookup_options WHERE category = 'countries'")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        logging.info("ensure_countries_reference: central countries table ready")
     finally:
         try: conn.close()
         except Exception: pass
 
 
-seed_countries_lookup_field()
+ensure_countries_reference()
 
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE

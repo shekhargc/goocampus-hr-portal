@@ -1089,42 +1089,26 @@ function loadCities(){
 })();
 
 // ── Phone fields: country-code dropdown (country name shown) + number ──
-var GC_COUNTRIES = [
-  {g:'', c:[['India','+91']]},
-  {g:'Asian Countries', c:[
-     ['Bangladesh','+880'],['Bhutan','+975'],['China','+86'],['Hong Kong','+852'],
-     ['Indonesia','+62'],['Japan','+81'],['Malaysia','+60'],['Maldives','+960'],
-     ['Nepal','+977'],['Pakistan','+92'],['Philippines','+63'],['Singapore','+65'],
-     ['South Korea','+82'],['Sri Lanka','+94'],['Thailand','+66'],['Vietnam','+84']
-  ]},
-  {g:'Middle East Countries', c:[
-     ['United Arab Emirates','+971'],['Saudi Arabia','+966'],['Qatar','+974'],
-     ['Kuwait','+965'],['Oman','+968'],['Bahrain','+973'],['Jordan','+962'],
-     ['Israel','+972'],['Lebanon','+961'],['Iraq','+964'],['Iran','+98']
-  ]},
-  {g:'European Countries', c:[
-     ['United Kingdom','+44'],['Ireland','+353'],['Germany','+49'],['France','+33'],
-     ['Italy','+39'],['Spain','+34'],['Netherlands','+31'],['Belgium','+32'],
-     ['Switzerland','+41'],['Austria','+43'],['Sweden','+46'],['Norway','+47'],
-     ['Denmark','+45'],['Finland','+358'],['Poland','+48'],['Portugal','+351'],
-     ['Greece','+30'],['Czech Republic','+420'],['Hungary','+36'],['Romania','+40']
-  ]},
-  {g:'United States & Canada', c:[
-     ['United States','+1'],['Canada','+1']
-  ]},
-  {g:'Caribbean Countries', c:[
-     ['Jamaica','+1876'],['Trinidad & Tobago','+1868'],['Barbados','+1246'],
-     ['Bahamas','+1242'],['Dominican Republic','+1809'],['Grenada','+1473'],
-     ['Saint Lucia','+1758'],['Antigua & Barbuda','+1268'],['Cuba','+53'],['Haiti','+509']
-  ]},
-  {g:'Australia & New Zealand', c:[
-     ['Australia','+61'],['New Zealand','+64']
-  ]},
-  {g:'Russia & CIS', c:[
-     ['Russia','+7'],['Kazakhstan','+7'],['Ukraine','+380'],['Georgia','+995'],
-     ['Armenia','+374'],['Uzbekistan','+998']
-  ]}
-];
+// Built from the CENTRAL countries table (single source of truth), passed from
+// the server. Grouped by region with India pinned first. Falls back to India
+// only if the list is somehow empty.
+var GC_PHONE_COUNTRIES = {{ phone_countries|tojson }};
+if(!GC_PHONE_COUNTRIES || !GC_PHONE_COUNTRIES.length){
+  GC_PHONE_COUNTRIES = [{name:'India', dial:'+91', region:'South Asia'}];
+}
+var GC_COUNTRIES = (function(){
+  var byRegion = {}, order = [], india = null;
+  GC_PHONE_COUNTRIES.forEach(function(c){
+    if(!c.dial) return;
+    if(c.name === 'India'){ india = c; return; }
+    if(!byRegion[c.region]){ byRegion[c.region] = []; order.push(c.region); }
+    byRegion[c.region].push([c.name, c.dial]);
+  });
+  var groups = [];
+  if(india) groups.push({g:'', c:[[india.name, india.dial]]});
+  order.forEach(function(rg){ groups.push({g: rg || 'Other', c: byRegion[rg]}); });
+  return groups;
+})();
 var GC_CODES = [];
 GC_COUNTRIES.forEach(function(grp){ grp.c.forEach(function(x){ if(GC_CODES.indexOf(x[1])<0) GC_CODES.push(x[1]); }); });
 GC_CODES.sort(function(a,b){ return b.length - a.length; });   // longest first, for parsing
