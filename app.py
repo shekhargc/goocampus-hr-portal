@@ -2051,6 +2051,20 @@ def client_form(reg_id):
     # States for dropdown
     states = conn.execute("SELECT DISTINCT name AS state_name FROM states ORDER BY name").fetchall()
 
+    # Photo-first gate (founder 2026-07-13): the client must upload their
+    # photograph (from the dashboard) BEFORE the registration form opens, so it is
+    # never skipped. Only enforced while the form is still a draft.
+    if (reg['form_status'] or 'draft') == 'draft':
+        has_photo = conn.execute(
+            "SELECT 1 FROM client_documents cd "
+            "JOIN client_registrations cr2 ON cr2.id = cd.registration_id "
+            "WHERE cr2.account_id = ? AND cd.doc_type = 'Photograph' LIMIT 1",
+            (acct_id,)).fetchone()
+        if not has_photo:
+            conn.close()
+            flash('Please upload your photograph first — then continue your registration.', 'error')
+            return redirect(url_for('client_dashboard'))
+
     if request.method == 'POST':
         # Editing is allowed after submit, but locks once operations has verified
         # (the master record is created then). Guard server-side too.
