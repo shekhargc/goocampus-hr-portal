@@ -242,8 +242,19 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--gray-400);
-            padding: 14px 16px 8px;
+            padding: 14px 16px;
+            cursor: pointer;
+            user-select: none;
         }
+        .sidebar-title .chevron {
+            font-size: 0.7rem;
+            color: var(--gray-400);
+            transition: transform 0.2s;
+        }
+        .sidebar-card.collapsed .sidebar-title { padding-bottom: 14px; }
+        .sidebar-card.collapsed .sidebar-title .chevron { transform: rotate(-90deg); }
+        .sidebar-card.collapsed .sidebar-search,
+        .sidebar-card.collapsed .sidebar-list { display: none; }
         .sidebar-search {
             padding: 0 12px 10px;
         }
@@ -946,10 +957,16 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="filterSidebar">
         <!-- State Filter -->
-        <div class="sidebar-card">
-            <div class="sidebar-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="sidebar-card collapsed">
+            <div class="sidebar-title" onclick="toggleSidebarCard(this)" style="display:flex;align-items:center;justify-content:space-between;">
                 <span><i class="fas fa-map-marker-alt" style="margin-right:4px;color:var(--orange);"></i> State / Authority</span>
-                <button class="clear-filter-btn" id="clearStateBtn" onclick="filterByState('all', null)" style="display:none;">Clear</button>
+                <span style="display:flex;align-items:center;gap:8px;">
+                    <button class="clear-filter-btn" id="clearStateBtn" onclick="event.stopPropagation(); filterByState('all', null)" style="display:none;">Clear</button>
+                    <i class="fas fa-chevron-down chevron"></i>
+                </span>
+            </div>
+            <div class="sidebar-search">
+                <input type="text" id="stateSearchInput" placeholder="Search state / authority..." oninput="filterSidebarStates(this.value)">
             </div>
             <div class="sidebar-list" id="stateList">
                 <div class="sidebar-item active" data-state="all" onclick="filterByState('all', this)">
@@ -968,10 +985,13 @@
         </div>
 
         <!-- Course/Specialty Filter -->
-        <div class="sidebar-card">
-            <div class="sidebar-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="sidebar-card collapsed">
+            <div class="sidebar-title" onclick="toggleSidebarCard(this)" style="display:flex;align-items:center;justify-content:space-between;">
                 <span><i class="fas fa-stethoscope" style="margin-right:4px;color:var(--orange);"></i> <span id="courseFilterTitle">Specialty</span></span>
-                <button class="clear-filter-btn" id="clearCourseBtn" onclick="filterByCourse('all', null)" style="display:none;">Clear</button>
+                <span style="display:flex;align-items:center;gap:8px;">
+                    <button class="clear-filter-btn" id="clearCourseBtn" onclick="event.stopPropagation(); filterByCourse('all', null)" style="display:none;">Clear</button>
+                    <i class="fas fa-chevron-down chevron"></i>
+                </span>
             </div>
             <div class="sidebar-search">
                 <input type="text" id="courseSearchInput" placeholder="Search specialty..." oninput="filterSidebarCourses(this.value)">
@@ -993,10 +1013,16 @@
 
         <!-- Quota & Category Filter (Cut Off only) -->
         {% if quota_items %}
-        <div class="sidebar-card" id="quotaFilterCard">
-            <div class="sidebar-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="sidebar-card collapsed" id="quotaFilterCard">
+            <div class="sidebar-title" onclick="toggleSidebarCard(this)" style="display:flex;align-items:center;justify-content:space-between;">
                 <span><i class="fas fa-layer-group" style="margin-right:4px;color:var(--orange);"></i> Quota &amp; Category</span>
-                <button class="clear-filter-btn" id="clearQuotaBtn" onclick="filterByQuota('all', null)" style="display:none;">Clear</button>
+                <span style="display:flex;align-items:center;gap:8px;">
+                    <button class="clear-filter-btn" id="clearQuotaBtn" onclick="event.stopPropagation(); filterByQuota('all', null)" style="display:none;">Clear</button>
+                    <i class="fas fa-chevron-down chevron"></i>
+                </span>
+            </div>
+            <div class="sidebar-search">
+                <input type="text" id="quotaSearchInput" placeholder="Search quota / category..." oninput="filterSidebarQuota(this.value)">
             </div>
             <div class="sidebar-list" id="quotaList">
                 <div class="sidebar-item active" data-quota="all" onclick="filterByQuota('all', this)">
@@ -1630,6 +1656,35 @@
             if (cat && (cat !== activeTab || dtype !== activeDocType)) { item.style.display = 'none'; return; }
             item.style.display = course.toLowerCase().indexOf(q) > -1 ? '' : 'none';
         });
+    }
+
+    function filterSidebarStates(query) {
+        var q = query.toLowerCase();
+        document.querySelectorAll('#stateList .sidebar-item').forEach(function(item) {
+            var st = item.getAttribute('data-state') || '';
+            if (st === 'all') { item.style.display = ''; return; }
+            var cat = item.getAttribute('data-cat');
+            var dtype = item.getAttribute('data-doctype') || 'cutoff';
+            if (cat && (cat !== activeTab || dtype !== activeDocType)) { item.style.display = 'none'; return; }
+            item.style.display = st.toLowerCase().indexOf(q) > -1 ? '' : 'none';
+        });
+    }
+
+    function filterSidebarQuota(query) {
+        var q = query.toLowerCase();
+        document.querySelectorAll('#quotaList .sidebar-item').forEach(function(item) {
+            var qv = item.getAttribute('data-quota') || '';
+            if (qv === 'all') { item.style.display = ''; return; }
+            var cat = item.getAttribute('data-cat');
+            if (cat && cat !== activeTab) { item.style.display = 'none'; return; }
+            item.style.display = qv.toLowerCase().indexOf(q) > -1 ? '' : 'none';
+        });
+    }
+
+    // Expand/collapse a sidebar filter card (accordion)
+    function toggleSidebarCard(titleEl) {
+        var card = titleEl.closest('.sidebar-card');
+        if (card) card.classList.toggle('collapsed');
     }
 
     function toggleSidebar() {
