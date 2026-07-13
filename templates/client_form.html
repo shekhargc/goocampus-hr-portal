@@ -620,6 +620,53 @@
                 {% endfor %}
             </div>
 
+            {# ── Parent / Guardian (custom block, founder 2026-07-13) ── #}
+            {% macro pg_phone(name, val, ro) %}
+                <div class="gc-phone" style="display:flex;gap:8px;align-items:stretch;">
+                    <select class="gc-cc" aria-label="Country code" style="max-width:190px;flex:0 0 auto;"{% if ro %} disabled{% endif %}></select>
+                    <input type="tel" class="gc-num" inputmode="numeric" placeholder="Phone number" style="flex:1 1 auto;min-width:0;"{% if ro %} disabled{% endif %}>
+                </div>
+                <input type="hidden" name="{{ name }}" value="{{ val or '' }}">
+            {% endmacro %}
+            <div style="margin-top:6px;border-top:1px solid #e5e7eb;padding-top:16px;">
+                <h3 style="font-size:1rem;font-weight:700;color:var(--navy,#0f1b33);margin:0 0 12px;">Parent / Guardian <span class="req">*</span></h3>
+                <div class="form-group full-width">
+                    <label>Whose details are you adding? <span class="req">*</span></label>
+                    <select name="guardian_type" id="pg-type" onchange="pgToggle()" required{% if readonly %} disabled{% endif %}>
+                        <option value="">— Select —</option>
+                        <option value="parents"{% if reg.guardian_type == 'parents' %} selected{% endif %}>Parents (Father &amp; Mother)</option>
+                        <option value="guardian"{% if reg.guardian_type == 'guardian' %} selected{% endif %}>Guardian</option>
+                    </select>
+                </div>
+
+                <div id="pg-parents" style="display:none;">
+                    <div style="font-weight:700;color:var(--navy,#0f1b33);margin:10px 0 6px;">Father</div>
+                    <div class="form-grid">
+                        <div class="form-group"><label>First Name</label><input type="text" name="father_first_name" value="{{ reg.father_first_name or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group"><label>Last Name</label><input type="text" name="father_last_name" value="{{ reg.father_last_name or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group"><label>Email</label><input type="email" name="father_email" value="{{ reg.father_email or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group full-width"><label>Phone</label>{{ pg_phone('father_phone', reg.father_phone, readonly) }}</div>
+                    </div>
+                    <div style="font-weight:700;color:var(--navy,#0f1b33);margin:14px 0 6px;">Mother</div>
+                    <div class="form-grid">
+                        <div class="form-group"><label>First Name</label><input type="text" name="mother_first_name" value="{{ reg.mother_first_name or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group"><label>Last Name</label><input type="text" name="mother_last_name" value="{{ reg.mother_last_name or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group"><label>Email</label><input type="email" name="mother_email" value="{{ reg.mother_email or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group full-width"><label>Phone</label>{{ pg_phone('mother_phone', reg.mother_phone, readonly) }}</div>
+                    </div>
+                    <p style="font-size:0.8rem;color:#6b7280;margin-top:8px;">If you enter both parents' names, at least one parent's phone number is required.</p>
+                </div>
+
+                <div id="pg-guardian" style="display:none;">
+                    <div class="form-grid">
+                        <div class="form-group"><label>First Name <span class="req">*</span></label><input type="text" name="guardian_first_name" value="{{ reg.guardian_first_name or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group"><label>Last Name</label><input type="text" name="guardian_last_name" value="{{ reg.guardian_last_name or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group"><label>Email</label><input type="email" name="guardian_email" value="{{ reg.guardian_email or '' }}"{% if readonly %} disabled{% endif %}></div>
+                        <div class="form-group full-width"><label>Phone <span class="req">*</span></label>{{ pg_phone('guardian_phone', reg.guardian_phone, readonly) }}</div>
+                    </div>
+                </div>
+            </div>
+
             {% if not readonly %}
             <div class="form-actions">
                 <div class="actions-left">
@@ -1157,6 +1204,32 @@ function initPhoneFields(){
   });
 }
 document.addEventListener('DOMContentLoaded', initPhoneFields);
+
+// ── Parent / Guardian: show the chosen section + validate on Continue ──
+function pgToggle(){
+  var t = document.getElementById('pg-type'); if(!t) return;
+  var p = document.getElementById('pg-parents'), g = document.getElementById('pg-guardian');
+  if(p) p.style.display = (t.value === 'parents') ? 'block' : 'none';
+  if(g) g.style.display = (t.value === 'guardian') ? 'block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', function(){
+  pgToggle();
+  var f = document.getElementById('form-step-1'); if(!f) return;
+  f.addEventListener('submit', function(e){
+    var action = (e.submitter && e.submitter.value) || 'save';
+    if(action !== 'continue') return;                 // don't block draft "Save Progress"
+    var t = document.getElementById('pg-type'); if(!t || !t.value) return;  // HTML required covers empty
+    var val = function(n){ return (f[n] && (f[n].value||'').trim()) || ''; };
+    if(t.value === 'parents'){
+      if(val('father_first_name') && val('mother_first_name') && !val('father_phone') && !val('mother_phone')){
+        e.preventDefault(); alert("Please enter at least one parent's phone number."); return;
+      }
+    } else if(t.value === 'guardian'){
+      if(!val('guardian_first_name')){ e.preventDefault(); alert("Please enter the guardian's first name."); return; }
+      if(!val('guardian_phone')){ e.preventDefault(); alert("Please enter the guardian's phone number."); return; }
+    }
+  });
+});
 
 // ── Academic Details: progressive disclosure (each answer opens the next) ──
 function initAcademicCascade(){

@@ -2079,6 +2079,28 @@ def client_form(reg_id):
             # Personal info — config-driven (only the visible client fields).
             s1 = [f for f in form_config if (f['step_number'] or 1) == 1 and f['field_name'] in _CR_FORM_COLS]
             data = {f['field_name']: request.form.get(f['field_name'], '') for f in s1}
+
+            # Parent / Guardian block (custom, NOT config-driven). Save the granular
+            # fields + guardian_type, and compose the legacy father_name/mother_name/
+            # parents_email so existing displays + the master sync keep working.
+            gtype = (request.form.get('guardian_type', '') or '').strip()
+            for c in ('guardian_type',
+                      'father_first_name', 'father_last_name', 'father_email', 'father_phone',
+                      'mother_first_name', 'mother_last_name', 'mother_email', 'mother_phone',
+                      'guardian_first_name', 'guardian_last_name', 'guardian_email', 'guardian_phone'):
+                data[c] = (request.form.get(c, '') or '').strip()
+
+            def _full(a, b):
+                return (a + ' ' + b).strip() if (a or b) else ''
+            if gtype == 'guardian':
+                data['father_name'] = ''
+                data['mother_name'] = ''
+                data['parents_email'] = data.get('guardian_email') or ''
+            else:  # parents (or unset) — compose from the parent fields
+                data['father_name'] = _full(data['father_first_name'], data['father_last_name'])
+                data['mother_name'] = _full(data['mother_first_name'], data['mother_last_name'])
+                data['parents_email'] = data.get('father_email') or data.get('mother_email') or ''
+
             if data:
                 sets = ', '.join(f"{k} = ?" for k in data)
                 conn.execute(
@@ -3869,6 +3891,21 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         reg.get('inst4_amount', 0), reg.get('inst4_date', ''), reg.get('inst4_note', ''),
         reg.get('additional_notes', ''), created_by, pathway, product_id
     ))
+
+    # Copy the Parent/Guardian granular data onto the master record too (the flat
+    # father_name/mother_name/parents_email are already in the insert above).
+    try:
+        conn.execute(
+            "UPDATE plab_clients SET guardian_type=?, father_first_name=?, father_last_name=?, "
+            "father_email=?, mother_first_name=?, mother_last_name=?, mother_email=?, "
+            "guardian_first_name=?, guardian_last_name=?, guardian_email=?, guardian_phone=? "
+            "WHERE registration_number = ?",
+            (reg.get('guardian_type', ''), reg.get('father_first_name', ''), reg.get('father_last_name', ''),
+             reg.get('father_email', ''), reg.get('mother_first_name', ''), reg.get('mother_last_name', ''),
+             reg.get('mother_email', ''), reg.get('guardian_first_name', ''), reg.get('guardian_last_name', ''),
+             reg.get('guardian_email', ''), reg.get('guardian_phone', ''), reg_num))
+    except Exception as _g_err:
+        logging.warning(f"sync guardian fields {reg_num}: {_g_err}")
 
     # INSERT into ops_academic_details (only if academics data exists)
     if academics:
@@ -8746,6 +8783,31 @@ def ensure_crm_tables():
             ('client_registrations',     'dropped_date',           'TEXT'),
             ('client_registrations',     'switched_program',       'TEXT'),
             ('client_registrations',     'upgraded_to',            'TEXT'),
+            # Parent / Guardian block (2026-07-13): the form collects EITHER both
+            # parents OR one guardian, each with granular first/last/email/phone.
+            ('client_registrations',     'guardian_type',          'TEXT'),
+            ('client_registrations',     'father_first_name',      'TEXT'),
+            ('client_registrations',     'father_last_name',       'TEXT'),
+            ('client_registrations',     'father_email',           'TEXT'),
+            ('client_registrations',     'mother_first_name',      'TEXT'),
+            ('client_registrations',     'mother_last_name',       'TEXT'),
+            ('client_registrations',     'mother_email',           'TEXT'),
+            ('client_registrations',     'guardian_first_name',    'TEXT'),
+            ('client_registrations',     'guardian_last_name',     'TEXT'),
+            ('client_registrations',     'guardian_email',         'TEXT'),
+            ('client_registrations',     'guardian_phone',         'TEXT'),
+            # Mirror onto the master record so ops profiles show the full picture.
+            ('plab_clients',             'guardian_type',          'TEXT'),
+            ('plab_clients',             'father_first_name',      'TEXT'),
+            ('plab_clients',             'father_last_name',       'TEXT'),
+            ('plab_clients',             'father_email',           'TEXT'),
+            ('plab_clients',             'mother_first_name',      'TEXT'),
+            ('plab_clients',             'mother_last_name',       'TEXT'),
+            ('plab_clients',             'mother_email',           'TEXT'),
+            ('plab_clients',             'guardian_first_name',    'TEXT'),
+            ('plab_clients',             'guardian_last_name',     'TEXT'),
+            ('plab_clients',             'guardian_email',         'TEXT'),
+            ('plab_clients',             'guardian_phone',         'TEXT'),
             # Centralised admin payments hub: source product for internal
             # transfers ("Switched from other program").
             ('ops_payments',             'source_product',         'TEXT'),
@@ -34327,7 +34389,7 @@ def cleanup_obsolete_form_config_fields_once():
     value re-runs the cleanup with an expanded list.
     """
     MARKER_KEY = 'form_config_obsoletes_cleared'
-    MARKER_VAL = 'v3'  # v3 (2026-07-13): also retire the 3 ops lifecycle fields
+    MARKER_VAL = 'v4'  # v4 (2026-07-13): retire the flat parent fields (Parent/Guardian block replaces them)
 
     # Fields that have moved out of the form into the Onboarding/
     # Welcome-Kit subsystem, plus other redundant/legacy entries.
@@ -34356,6 +34418,9 @@ def cleanup_obsolete_form_config_fields_once():
         # Ops lifecycle fields — moved OUT of ops verification (founder 2026-07-13);
         # they're edited later in the client profile, not at verify time.
         'dropped_date', 'switched_program', 'upgraded_to',
+        # Flat parent fields — replaced by the custom Parent/Guardian block, which
+        # renders itself (not via config). Remove them so they don't double-render.
+        'father_name', 'mother_name', 'father_phone', 'mother_phone', 'parents_email',
     )
 
     conn = None
@@ -36566,12 +36631,9 @@ def seed_client_form_configs():
             (1, 'Personal Details', 'facebook', 'Facebook', 'text', '', 'client', 0, 120, 'Profile URL', ''),
             (1, 'Personal Details', 'linkedin', 'LinkedIn', 'text', '', 'client', 0, 130, 'Profile URL', ''),
 
-            # ── Step 1: Parents Info (client fills) ──
-            (1, 'Personal Details', 'father_name', 'Father Name', 'text', '', 'client', 0, 140, '', ''),
-            (1, 'Personal Details', 'father_phone', 'Father Phone', 'tel', '', 'client', 0, 150, '', ''),
-            (1, 'Personal Details', 'mother_name', 'Mother Name', 'text', '', 'client', 0, 160, '', ''),
-            (1, 'Personal Details', 'mother_phone', 'Mother Phone', 'tel', '', 'client', 0, 170, '', ''),
-            (1, 'Personal Details', 'parents_email', 'Parents Email', 'email', '', 'client', 0, 180, '', ''),
+            # ── Step 1: Parent / Guardian — rendered by a custom block in the
+            #    client form (Parents vs Guardian choice), NOT config-driven, so no
+            #    flat father/mother/parents_email rows are seeded here anymore. ──
 
             # ── Step 2: Academic Details (client fills) ──
             (2, 'Academic Details', 'img_fmg', 'IMG / FMG', 'select', 'db:img_fmg', 'client', 1, 10, '', 'Select IMG or FMG'),
