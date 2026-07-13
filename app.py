@@ -3683,13 +3683,9 @@ def admin_client_ops_verify(reg_id):
                 set_parts.append(f"{f['field_name']} = ?")
                 vals.append(request.form.get(f['field_name'], ''))
         conn.execute(f"UPDATE client_registrations SET {', '.join(set_parts)} WHERE id = ?", vals + [reg_id])
-        # 2026-06-02 (Phase E): auto-populate the welcome-kit checklist
-        # from the product's template. Skips silently if a checklist
-        # already exists or the product has no template defined.
-        try:
-            _seed_client_welcome_kit_from_template(conn, reg_id)
-        except Exception as wk_err:
-            logging.warning(f"seed client welcome kit at ops-verify: {wk_err}")
+        # Welcome-kit checklist removed from the onboarding flow (founder
+        # 2026-07-13: no welcome kit is being sent). We no longer seed it at
+        # ops-verify. The welcome EMAIL still goes out via _notify_onboarding_confirmed.
         conn.commit()
         conn.close()
         _notify_onboarding_confirmed(reg_id)

@@ -397,7 +397,12 @@
         <button class="tab-btn" data-tab="sales" type="button">Sales Section</button>
         <button class="tab-btn" data-tab="operations" type="button">Operations</button>
         <button class="tab-btn" data-tab="documents" type="button">Documents</button>
-        <button class="tab-btn" data-tab="welcome-kit" type="button">Welcome Kit{% if welcome_kit %} ({{ welcome_kit|selectattr('status', 'equalto', 'done')|list|length }}/{{ welcome_kit|length }}){% endif %}</button>
+        {# Welcome Kit tab removed from the onboarding flow (founder 2026-07-13 —
+           no welcome kit being sent). Only show it for legacy clients that still
+           have a checklist on file. #}
+        {% if welcome_kit %}
+        <button class="tab-btn" data-tab="welcome-kit" type="button">Welcome Kit ({{ welcome_kit|selectattr('status', 'equalto', 'done')|list|length }}/{{ welcome_kit|length }})</button>
+        {% endif %}
         <button class="tab-btn" data-tab="notifications" type="button">Notifications</button>
     </div>
 
