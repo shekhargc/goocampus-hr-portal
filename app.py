@@ -2093,13 +2093,22 @@ def client_form(reg_id):
             def _full(a, b):
                 return (a + ' ' + b).strip() if (a or b) else ''
             if gtype == 'guardian':
+                # one guardian only — clear the parent legacy fields
                 data['father_name'] = ''
                 data['mother_name'] = ''
                 data['parents_email'] = data.get('guardian_email') or ''
-            else:  # parents (or unset) — compose from the parent fields
-                data['father_name'] = _full(data['father_first_name'], data['father_last_name'])
-                data['mother_name'] = _full(data['mother_first_name'], data['mother_last_name'])
-                data['parents_email'] = data.get('father_email') or data.get('mother_email') or ''
+            else:  # parents (or unset) — compose the legacy names, but never blank
+                # an existing value with an empty compose (protects older records
+                # that had only the flat father_name/mother_name/parents_email).
+                _fn = _full(data['father_first_name'], data['father_last_name'])
+                _mn = _full(data['mother_first_name'], data['mother_last_name'])
+                _pe = data.get('father_email') or data.get('mother_email') or ''
+                if _fn:
+                    data['father_name'] = _fn
+                if _mn:
+                    data['mother_name'] = _mn
+                if _pe:
+                    data['parents_email'] = _pe
 
             if data:
                 sets = ', '.join(f"{k} = ?" for k in data)
