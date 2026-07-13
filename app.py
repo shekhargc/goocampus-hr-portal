@@ -2107,13 +2107,34 @@ def client_form(reg_id):
     # same value is defined once per pathway (e.g. 'Rheumatology' for plab +
     # australia + consulting), so appending every row made each option appear
     # 3-4 times in the dropdown. Keep the first occurrence only.
-    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
-    lookup_options = {}
+    # Scope dropdowns to THIS client's pathway (prefer pathway rows, fall back to
+    # the PLAB set per category) — this also naturally de-dupes the values that
+    # previously appeared 3-4× because every pathway's rows were unioned.
+    _cf_pathway = 'plab'
+    if reg.get('product_id'):
+        try:
+            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
+            if _pr and (_pr['pathway'] or '').strip():
+                _cf_pathway = _pr['pathway'].strip()
+        except Exception:
+            pass
+    lookup_rows = conn.execute(
+        "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
+        "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
+    _lk = {}
     for row in lookup_rows:
-        cat = row['category']
-        bucket = lookup_options.setdefault(cat, [])
-        if row['value'] not in bucket:
-            bucket.append(row['value'])
+        d = _lk.setdefault(row['category'], {'match': [], 'plab': []})
+        if row['pw'] == _cf_pathway:
+            d['match'].append(row['value'])
+        if row['pw'] == 'plab':
+            d['plab'].append(row['value'])
+    lookup_options = {}
+    for cat, d in _lk.items():
+        vals, seen, out = (d['match'] or d['plab']), set(), []
+        for v in vals:
+            if v not in seen:
+                seen.add(v); out.append(v)
+        lookup_options[cat] = out
     conn.close()
     return render_template('client_form.html',
         reg=reg, academics=academics, documents=documents,
@@ -3426,10 +3447,36 @@ def admin_client_detail(reg_id):
           AND field_name <> 'additional_notes'
         ORDER BY step_number, display_order
     ''', (reg['product_id'],)).fetchall()
-    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
-    lookup_options = {}
+    # Sales/ops dropdowns (Joined Stage, Plan Type, Current Stage, Account Status…)
+    # must show PATHWAY-specific values, not one global/PLAB list (founder
+    # 2026-07-13). Resolve the client's pathway from their product, then prefer
+    # that pathway's lookup values per category, falling back to the PLAB set for
+    # any category not yet seeded for the pathway (same rule as get_lookup_options).
+    detail_pathway = 'plab'
+    if reg.get('product_id'):
+        try:
+            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
+            if _pr and (_pr['pathway'] or '').strip():
+                detail_pathway = _pr['pathway'].strip()
+        except Exception:
+            pass
+    lookup_rows = conn.execute(
+        "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
+        "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
+    _lk = {}
     for row in lookup_rows:
-        lookup_options.setdefault(row['category'], []).append(row['value'])
+        d = _lk.setdefault(row['category'], {'match': [], 'plab': []})
+        if row['pw'] == detail_pathway:
+            d['match'].append(row['value'])
+        if row['pw'] == 'plab':
+            d['plab'].append(row['value'])
+    lookup_options = {}
+    for cat, d in _lk.items():
+        vals, seen, out = (d['match'] or d['plab']), set(), []
+        for v in vals:
+            if v not in seen:
+                seen.add(v); out.append(v)
+        lookup_options[cat] = out
     try:
         package_services = get_package_services(conn, reg.get('product_id'), reg.get('plan_type'))
     except Exception:
