@@ -3528,10 +3528,16 @@ def admin_client_sales_complete(reg_id):
     counsellor_id = request.form.get('counsellor_id') or user['id']
     set_parts = ["counsellor_id = ?", "counsellor_name = (SELECT name FROM employees WHERE id = ?)"]
     vals = [counsellor_id, counsellor_id]
+    # Installments are entered by the sales member in the lead form and already
+    # copied onto the registration — sales verification only DISPLAYS them (with
+    # GST) to confirm, it must not re-ask or overwrite them (founder 2026-07-13).
+    # They remain editable in the Payments hub. Only write here if the form still
+    # posts a value (backward-compatible; the new UI posts none).
     for i in (1, 2, 3, 4):
-        set_parts += [f"inst{i}_amount = ?", f"inst{i}_date = ?", f"inst{i}_note = ?"]
-        vals += [float(request.form.get(f'inst{i}_amount', 0) or 0),
-                 request.form.get(f'inst{i}_date', ''), request.form.get(f'inst{i}_note', '')]
+        if request.form.get(f'inst{i}_amount', '') != '':
+            set_parts += [f"inst{i}_amount = ?", f"inst{i}_date = ?", f"inst{i}_note = ?"]
+            vals += [float(request.form.get(f'inst{i}_amount', 0) or 0),
+                     request.form.get(f'inst{i}_date', ''), request.form.get(f'inst{i}_note', '')]
     for k, v in dyn.items():
         set_parts.append(f"{k} = ?")
         vals.append(v)

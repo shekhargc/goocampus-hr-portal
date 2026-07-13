@@ -580,15 +580,15 @@
                 Fill in the sales details for this client registration.
             </p>
             <form method="POST" action="/admin/client/{{ reg.id }}/sales-complete" id="salesForm">
+                {# Counsellor auto-assigns to you (the sales member verifying). No
+                   need to pick it — the server records the logged-in user. #}
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="counsellor_id">Assigned Counsellor *</label>
-                        <select name="counsellor_id" id="counsellor_id" required>
-                            <option value="">-- Select Counsellor --</option>
-                            {% for c in counsellors %}
-                            <option value="{{ c.id }}" {% if reg.counsellor_id == c.id %}selected{% endif %}>{{ c.name }}</option>
-                            {% endfor %}
-                        </select>
+                        <label>Assigned Counsellor</label>
+                        <div class="info-value" style="padding:0.55rem 0;font-weight:600;">
+                            {{ reg.counsellor_name or user.name or 'You (auto-assigned)' }}
+                            <span style="font-weight:500;color:var(--gray-500);font-size:0.82rem;">· auto-assigned</span>
+                        </div>
                     </div>
                 </div>
 
@@ -597,25 +597,37 @@
                     {% if not sales_config %}<p style="color:var(--gray-500);font-size:0.85rem;">No sales fields configured for this product. Add them under Settings → Client Form Config (role: Sales).</p>{% endif %}
                 </div>
 
-                <!-- Installments (structural) -->
-                <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.5rem 0 1rem;">Payment Installments</h3>
-
-                {% for i in range(1, 5) %}
-                <div class="inst-row">
-                    <div class="form-group">
-                        <label>Installment {{ i }} Amount</label>
-                        <input type="number" name="inst{{ i }}_amount" min="0" step="1" value="{{ reg['inst' ~ i ~ '_amount'] or '' }}" placeholder="Amount">
-                    </div>
-                    <div class="form-group">
-                        <label>Installment {{ i }} Date</label>
-                        <input type="date" name="inst{{ i }}_date" value="{{ reg['inst' ~ i ~ '_date'] or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Installment {{ i }} Note</label>
-                        <input type="text" name="inst{{ i }}_note" value="{{ reg['inst' ~ i ~ '_note'] or '' }}" placeholder="Optional note">
-                    </div>
+                {# Installments are entered in the lead form — shown here READ-ONLY
+                   (with GST) just to verify, not re-entered. GST = 18%, installment
+                   amounts are total incl-GST, split base + GST by ÷1.18. #}
+                <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.5rem 0 0.35rem;">Payment Installments <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— from the lead (verify only)</span></h3>
+                {% set ns = namespace(tot=0) %}
+                <div style="overflow-x:auto;">
+                    <table class="table" style="border-radius:0.6rem;overflow:hidden;">
+                        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total (incl GST)</th><th>Due Date</th><th>Note</th></tr></thead>
+                        <tbody>
+                        {% for i in range(1, 5) %}
+                        {% set amt = reg['inst' ~ i ~ '_amount'] %}
+                        {% if amt %}
+                        {% set total = amt|float %}
+                        {% set base = (total / 1.18) %}
+                        {% set gst = (total - base) %}
+                        {% set ns.tot = ns.tot + total %}
+                        <tr>
+                            <td>{{ i }}</td>
+                            <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
+                            <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(gst) }}</td>
+                            <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
+                            <td>{{ reg['inst' ~ i ~ '_date'] or '-' }}</td>
+                            <td>{{ reg['inst' ~ i ~ '_note'] or '-' }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                        {% if ns.tot == 0 %}<tr><td colspan="6" style="color:var(--gray-500);">No installments entered in the lead yet.</td></tr>{% endif %}
+                        </tbody>
+                        {% if ns.tot > 0 %}<tfoot><tr style="font-weight:700;"><td colspan="3" style="text-align:right;">Total incl GST</td><td style="text-align:right;">₹{{ '{:,.0f}'.format(ns.tot) }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
+                    </table>
                 </div>
-                {% endfor %}
 
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                     <button type="submit" class="button">
