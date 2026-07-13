@@ -746,26 +746,43 @@ def neetpg_admin():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
     conn = get_db()
-    # ── Document-type filter (sub-tabs): 'all' or one of the valid doc types ──
+    # ── Filters (sub-tabs): document type + NEET PG / DNB exam category ──
     active_doc_type = request.args.get('doc_type', 'all').strip()
     if active_doc_type not in VALID_DOC_TYPES:
         active_doc_type = 'all'
-    dt_where = "" if active_doc_type == 'all' else "WHERE doc_type = ?"
-    dt_params = [] if active_doc_type == 'all' else [active_doc_type]
+    active_category = request.args.get('category', 'all').strip()
+    if active_category not in ('neetpg', 'dnb'):
+        active_category = 'all'
 
-    # Per-type counts for the sub-tab badges
-    doctype_counts = {'all': conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs").fetchone()['c']}
+    def _admin_count(cnds, prms):
+        w = (" WHERE " + " AND ".join(cnds)) if cnds else ""
+        return conn.execute(f"SELECT COUNT(*) as c FROM neetpg_pdfs{w}", prms).fetchone()['c']
+
+    # Combined filter for the listing
+    conds, params = [], []
+    if active_doc_type != 'all':
+        conds.append("doc_type = ?"); params.append(active_doc_type)
+    if active_category != 'all':
+        conds.append("category = ?"); params.append(active_category)
+    flt_where = (" WHERE " + " AND ".join(conds)) if conds else ""
+
+    # Doc-type tab counts (within the active category)
+    cat_conds = [] if active_category == 'all' else ["category = ?"]
+    cat_params = [] if active_category == 'all' else [active_category]
+    doctype_counts = {'all': _admin_count(cat_conds, cat_params)}
     for key in DOC_TYPE_LABELS:
-        doctype_counts[key] = conn.execute(
-            "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE doc_type = ?", (key,)
-        ).fetchone()['c']
+        doctype_counts[key] = _admin_count(cat_conds + ["doc_type = ?"], cat_params + [key])
+    # Category tab counts (within the active doc type)
+    dtc_conds = [] if active_doc_type == 'all' else ["doc_type = ?"]
+    dtc_params = [] if active_doc_type == 'all' else [active_doc_type]
+    category_counts = {'all': _admin_count(dtc_conds, dtc_params)}
+    for c in ('neetpg', 'dnb'):
+        category_counts[c] = _admin_count(dtc_conds + ["category = ?"], dtc_params + [c])
 
-    # Pagination for PDFs (within the active doc-type filter)
+    # Pagination for PDFs (within the active filters)
     page = int(request.args.get('page', 1))
     per_page = 20
-    total_pdfs_count = conn.execute(
-        f"SELECT COUNT(*) as c FROM neetpg_pdfs {dt_where}", dt_params
-    ).fetchone()['c']
+    total_pdfs_count = _admin_count(conds, params)
     total_pages = max(1, (total_pdfs_count + per_page - 1) // per_page)
     if page < 1:
         page = 1
@@ -773,8 +790,8 @@ def neetpg_admin():
         page = total_pages
     offset = (page - 1) * per_page
     pdfs = conn.execute(
-        f"SELECT * FROM neetpg_pdfs {dt_where} ORDER BY upload_date DESC LIMIT ? OFFSET ?",
-        dt_params + [per_page, offset]
+        f"SELECT * FROM neetpg_pdfs{flt_where} ORDER BY upload_date DESC LIMIT ? OFFSET ?",
+        params + [per_page, offset]
     ).fetchall()
     leads = conn.execute("SELECT * FROM neetpg_leads ORDER BY created_at DESC").fetchall()
     lead_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_leads").fetchone()['c']
@@ -888,6 +905,7 @@ def neetpg_admin():
                            neetpg_courses=_NEETPG_COURSES, dnb_courses=_DNB_COURSES,
                            specialty_alias=_SPECIALTY_ALIAS,
                            active_doc_type=active_doc_type, doctype_counts=doctype_counts,
+                           active_category=active_category, category_counts=category_counts,
                     active_section='colleges')
 
 
