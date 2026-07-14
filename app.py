@@ -16551,7 +16551,7 @@ def ensure_ops_tables():
                 'gmc_english_exam': ['OET', 'IELTS'],
                 'gmc_license_status': ['Received', 'Rejected', 'Not Received', 'On Hold'],
                 # Payment
-                'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque'],
+                'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque', 'Website Link'],
                 'instalment': ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment'],
                 # Research
                 'research_status': ['Started', 'Research Completed', 'Research Published', 'Scrapped'],
@@ -16658,6 +16658,21 @@ def ensure_ops_tables():
             except Exception:
                 pass
             logging.error(f"gmc_license_status migration: {e}")
+        # Add 'Website Link' payment method to already-seeded DBs (2026-07-14):
+        # AMC 1 clients sometimes pay the AUD fee directly via a website link.
+        try:
+            _wl = conn.execute(
+                "SELECT id FROM lookup_options WHERE category = 'payment_method' AND value = 'Website Link'").fetchone()
+            if not _wl:
+                _mx = conn.execute(
+                    "SELECT COALESCE(MAX(sort_order),0) AS m FROM lookup_options WHERE category = 'payment_method'").fetchone()['m']
+                conn.execute(
+                    "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                    "VALUES ('payment_method', 'Website Link', 'Website Link', ?, TRUE)", (_mx + 1,))
+                conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # Migration: update research_status, author_position, and research_provider options
         for category, new_values in [
@@ -26640,7 +26655,7 @@ def ensure_sales_crm_tables():
         for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_currency', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
                        ('amc_fx_rate', 'NUMERIC(10,4)'), ('amc_fx_markup', 'NUMERIC(5,2)'),
                        ('amc_fx_effective', 'NUMERIC(10,4)'), ('amc_inr_amount', 'NUMERIC(14,2)'),
-                       ('amc_fx_locked_at', 'TIMESTAMP')):
+                       ('amc_fx_locked_at', 'TIMESTAMP'), ('amc_payment_route', 'TEXT')):
             try:
                 conn.execute(f"ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS {_c} {_t}")
                 conn.commit()
@@ -27406,14 +27421,24 @@ def sales_leads_add():
                 amc_lock = None
                 try:
                     _plan = (request.form.get('plan_type') or '').strip()
+                    _amc_wl = bool(request.form.get('amc_website_link'))
                     amc_lock = amc_aud_quote(_plan, conn=conn)
+                    if amc_lock and _amc_wl:
+                        # Client paid the fee directly via Website Link — record the
+                        # FLAT foreign amount, no live rate / markup / ₹ conversion.
+                        amc_lock['live_rate'] = 1
+                        amc_lock['effective_rate'] = 1
+                        amc_lock['markup_pct'] = 0
+                        amc_lock['inr'] = amc_lock['aud']
+                        amc_lock['route'] = 'website_link'
                     if new_lead_id and amc_lock:
                         conn.execute(
                             "UPDATE sales_leads SET amc_plan_type=?, amc_currency=?, amc_aud_amount=?, amc_fx_rate=?, "
-                            "amc_fx_markup=?, amc_fx_effective=?, amc_inr_amount=?, amc_fx_locked_at=CURRENT_TIMESTAMP "
-                            "WHERE id=?",
+                            "amc_fx_markup=?, amc_fx_effective=?, amc_inr_amount=?, amc_payment_route=?, "
+                            "amc_fx_locked_at=CURRENT_TIMESTAMP WHERE id=?",
                             (_plan, amc_lock.get('currency', 'AUD'), amc_lock['aud'], amc_lock['live_rate'],
-                             amc_lock['markup_pct'], amc_lock['effective_rate'], amc_lock['inr'], new_lead_id))
+                             amc_lock['markup_pct'], amc_lock['effective_rate'], amc_lock['inr'],
+                             ('website_link' if _amc_wl else 'inr'), new_lead_id))
                         conn.commit()
                 except Exception as _fxe:
                     logging.warning(f"AMC AUD lock (add): {_fxe}")

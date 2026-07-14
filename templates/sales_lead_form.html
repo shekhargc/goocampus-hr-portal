@@ -128,7 +128,12 @@
                 <div id="amcAudBox" style="display:none;margin:0.2rem 0 0.9rem;padding:0.8rem 1rem;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0.55rem;">
                     <div style="font-size:0.74rem;font-weight:700;color:#1E40AF;margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.03em;">AUD-priced plan · rate locks when you save</div>
                     <div id="amcAudBreak" style="font-size:0.9rem;color:#1E3A5F;line-height:1.6;"></div>
-                    <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">The rate + exact date/time are frozen on save; the client is billed this INR total (collected in installments).</div>
+                    <label style="display:flex;align-items:flex-start;gap:7px;font-size:0.8rem;color:#1E3A5F;margin-top:0.55rem;cursor:pointer;">
+                        <input type="checkbox" name="amc_website_link" id="amcWebsiteLink" value="1" style="margin-top:2px;"
+                               {% if lead and lead.amc_payment_route == 'website_link' %}checked{% endif %} onchange="amcAudCheck()">
+                        <span>Client paid the fee <b>directly via Website Link</b> — record the <b>flat AUD amount, no &#8377; conversion / no 3%</b>. (For our record of where the payment was made; the installment is marked &ldquo;Website Link&rdquo;.)</span>
+                    </label>
+                    <div id="amcAudNote" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">The rate + exact date/time are frozen on save; the client is billed this INR total (collected in installments).</div>
                 </div>
 
                 <div class="slf-row3">
@@ -171,6 +176,8 @@
                             <option value="">Method…</option>
                             <option value="Bank Transfer" {% if _mt == 'Bank Transfer' %}selected{% endif %}>Bank Transfer</option>
                             <option value="Cash Deposit" {% if _mt == 'Cash Deposit' %}selected{% endif %}>Cash Deposit</option>
+                            <option value="Online Payment" {% if _mt == 'Online Payment' %}selected{% endif %}>Online Payment</option>
+                            <option value="Website Link" {% if _mt == 'Website Link' %}selected{% endif %}>Website Link</option>
                         </select>
                         <select name="inst{{ i }}_status" data-touched="{{ '1' if _st else '0' }}" onchange="this.dataset.touched='1'"
                                style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
@@ -245,10 +252,13 @@
                                    style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
                             <input type="date" name="training_inst{{ i }}_date" value="{{ (closure['training_inst' ~ i ~ '_date']|string)[:10] if closure and closure['training_inst' ~ i ~ '_date'] else '' }}" oninput="updateTrInstStatus(this)"
                                    style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                            {% set _trm = closure['training_inst' ~ i ~ '_method'] if closure else None %}
                             <select name="training_inst{{ i }}_method" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
                                 <option value="">Method…</option>
-                                <option value="Bank Transfer">Bank Transfer</option>
-                                <option value="Cash Deposit">Cash Deposit</option>
+                                <option value="Bank Transfer" {% if _trm == 'Bank Transfer' %}selected{% endif %}>Bank Transfer</option>
+                                <option value="Cash Deposit" {% if _trm == 'Cash Deposit' %}selected{% endif %}>Cash Deposit</option>
+                                <option value="Online Payment" {% if _trm == 'Online Payment' %}selected{% endif %}>Online Payment</option>
+                                <option value="Website Link" {% if _trm == 'Website Link' %}selected{% endif %}>Website Link</option>
                             </select>
                             <select name="training_inst{{ i }}_status" data-touched="0" onchange="this.dataset.touched='1'" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
                                 <option value="Pending" selected>Pending</option>
@@ -368,15 +378,30 @@
                 if (!amcBox || !planSel) return;
                 var pt = planSel.value;
                 if (!pt) { amcBox.style.display = 'none'; return; }
-                // Frozen rate on an existing lead — show it, don't re-fetch live.
-                if (AMC_LOCK && AMC_LOCK.plan_type === pt && AMC_LOCK.inr > 0) {
-                    var lc = AMC_LOCK.currency || 'AUD';
-                    amcBreak.innerHTML =
-                        '<b>' + Number(AMC_LOCK.aud).toLocaleString('en-IN') + ' ' + lc + '</b> &times; &#8377;' + Number(AMC_LOCK.effective_rate).toFixed(2) +
-                        '/' + lc + ' (incl. ' + AMC_LOCK.markup + '%) = <b>&#8377;' + Math.round(AMC_LOCK.inr).toLocaleString('en-IN') + '</b>' +
-                        ' <span style="color:#166534;font-weight:700;">&#128274; locked ' + (AMC_LOCK.locked_at || '').replace('T',' ').slice(0,16) + '</span>';
+                var wlEl = document.getElementById('amcWebsiteLink');
+                var isWL = !!(wlEl && wlEl.checked);
+                var noteEl = document.getElementById('amcAudNote');
+                function afterWL() {
+                    // When "Website Link" route is chosen, default installment 1's method to it.
+                    var m1 = document.querySelector('[name="inst1_method"]');
+                    if (m1 && isWL && !m1.value) m1.value = 'Website Link';
+                    if (noteEl) noteEl.style.display = isWL ? 'none' : '';
                     amcBox.style.display = 'block';
-                    if (pkgValue) { pkgValue.value = Math.round(AMC_LOCK.inr); syncPackage(); }
+                }
+                // Frozen rate on an existing lead — show it, don't re-fetch live.
+                if (AMC_LOCK && AMC_LOCK.plan_type === pt && AMC_LOCK.aud > 0) {
+                    var lc = AMC_LOCK.currency || 'AUD';
+                    if (isWL) {
+                        amcBreak.innerHTML = '<b>' + Number(AMC_LOCK.aud).toLocaleString('en-IN') + ' ' + lc + '</b> paid directly via <b>Website Link</b> &mdash; no &#8377; conversion, no markup.';
+                        if (pkgValue) { pkgValue.value = Math.round(AMC_LOCK.aud); syncPackage(); }
+                    } else {
+                        amcBreak.innerHTML =
+                            '<b>' + Number(AMC_LOCK.aud).toLocaleString('en-IN') + ' ' + lc + '</b> &times; &#8377;' + Number(AMC_LOCK.effective_rate).toFixed(2) +
+                            '/' + lc + ' (incl. ' + AMC_LOCK.markup + '%) = <b>&#8377;' + Math.round(AMC_LOCK.inr).toLocaleString('en-IN') + '</b>' +
+                            ' <span style="color:#166534;font-weight:700;">&#128274; locked ' + (AMC_LOCK.locked_at || '').replace('T',' ').slice(0,16) + '</span>';
+                        if (pkgValue) { pkgValue.value = Math.round(AMC_LOCK.inr); syncPackage(); }
+                    }
+                    afterWL();
                     return;
                 }
                 var _pid = (productSel && productSel.value) ? ('&product_id=' + encodeURIComponent(productSel.value)) : '';
@@ -384,13 +409,18 @@
                     .then(function(r){ return r.json(); }).then(function(d){
                         if (!d || !d.aud_priced) { amcBox.style.display = 'none'; return; }
                         var cc = d.currency || 'AUD';
-                        amcBreak.innerHTML =
-                            '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
-                            ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
-                            ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/' + cc + ' on save)</span>' +
-                            (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — using fallback, check before saving</span>' : '');
-                        amcBox.style.display = 'block';
-                        if (pkgValue) { pkgValue.value = Math.round(d.inr); syncPackage(); }
+                        if (isWL) {
+                            amcBreak.innerHTML = '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> paid directly via <b>Website Link</b> &mdash; no &#8377; conversion, no markup.';
+                            if (pkgValue) { pkgValue.value = Math.round(d.aud); syncPackage(); }
+                        } else {
+                            amcBreak.innerHTML =
+                                '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
+                                ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
+                                ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/' + cc + ' on save)</span>' +
+                                (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — using fallback, check before saving</span>' : '');
+                            if (pkgValue) { pkgValue.value = Math.round(d.inr); syncPackage(); }
+                        }
+                        afterWL();
                     }).catch(function(){ amcBox.style.display = 'none'; });
             };
             if (productSel) productSel.addEventListener('change', function(){ loadPlans(false); });
