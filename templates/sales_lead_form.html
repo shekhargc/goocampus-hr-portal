@@ -357,6 +357,7 @@
             var amcBreak = document.getElementById('amcAudBreak');
             var AMC_LOCK = {% if lead and lead.amc_fx_locked_at %}{
                 plan_type: {{ (lead.amc_plan_type or '')|tojson }},
+                currency: {{ (lead.amc_currency or 'AUD')|tojson }},
                 aud: {{ '{:.2f}'.format(lead.amc_aud_amount|float) if lead.amc_aud_amount else 0 }},
                 effective_rate: {{ '{:.4f}'.format(lead.amc_fx_effective|float) if lead.amc_fx_effective else 0 }},
                 markup: {{ '{:g}'.format(lead.amc_fx_markup|float) if lead.amc_fx_markup else 3 }},
@@ -369,21 +370,24 @@
                 if (!pt) { amcBox.style.display = 'none'; return; }
                 // Frozen rate on an existing lead — show it, don't re-fetch live.
                 if (AMC_LOCK && AMC_LOCK.plan_type === pt && AMC_LOCK.inr > 0) {
+                    var lc = AMC_LOCK.currency || 'AUD';
                     amcBreak.innerHTML =
-                        '<b>' + Number(AMC_LOCK.aud).toLocaleString('en-AU') + ' AUD</b> &times; &#8377;' + Number(AMC_LOCK.effective_rate).toFixed(2) +
-                        '/AUD (incl. ' + AMC_LOCK.markup + '%) = <b>&#8377;' + Math.round(AMC_LOCK.inr).toLocaleString('en-IN') + '</b>' +
+                        '<b>' + Number(AMC_LOCK.aud).toLocaleString('en-IN') + ' ' + lc + '</b> &times; &#8377;' + Number(AMC_LOCK.effective_rate).toFixed(2) +
+                        '/' + lc + ' (incl. ' + AMC_LOCK.markup + '%) = <b>&#8377;' + Math.round(AMC_LOCK.inr).toLocaleString('en-IN') + '</b>' +
                         ' <span style="color:#166534;font-weight:700;">&#128274; locked ' + (AMC_LOCK.locked_at || '').replace('T',' ').slice(0,16) + '</span>';
                     amcBox.style.display = 'block';
                     if (pkgValue) { pkgValue.value = Math.round(AMC_LOCK.inr); syncPackage(); }
                     return;
                 }
-                fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent(pt))
+                var _pid = (productSel && productSel.value) ? ('&product_id=' + encodeURIComponent(productSel.value)) : '';
+                fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent(pt) + _pid)
                     .then(function(r){ return r.json(); }).then(function(d){
                         if (!d || !d.aud_priced) { amcBox.style.display = 'none'; return; }
+                        var cc = d.currency || 'AUD';
                         amcBreak.innerHTML =
-                            '<b>' + Number(d.aud).toLocaleString('en-AU') + ' AUD</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
+                            '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
                             ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
-                            ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/AUD on save)</span>' +
+                            ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/' + cc + ' on save)</span>' +
                             (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — using fallback, check before saving</span>' : '');
                         amcBox.style.display = 'block';
                         if (pkgValue) { pkgValue.value = Math.round(d.inr); syncPackage(); }

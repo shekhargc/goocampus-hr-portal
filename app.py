@@ -1566,61 +1566,37 @@ def admin_packages():
             standard_services = [dict(s) for s in conn.execute(
                 "SELECT * FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
                 (std_pkg['id'],)).fetchall()]
-    # AUD-priced plans (AMC 1/AMC 2): map plan_type -> {aud, fixed_sales_revenue, live INR}
-    # so the packages screen shows the FIXED sales revenue for them (not gross-cost).
+    # Foreign-currency plans: live INR preview per plan type (INR plans omitted).
+    # Keyed by plan_type; the template shows "amount CUR × rate +markup% = ₹INR" and
+    # the fixed sales revenue. Generalized from the old AMC/AUD-only map.
     amc_aud = {}
     try:
-        for _r in conn.execute("SELECT * FROM amc_aud_pricing WHERE COALESCE(is_active,1)=1").fetchall():
-            _q = amc_aud_quote(_r['plan_type'], conn=conn)
-            amc_aud[_r['plan_type']] = {
-                'aud': float(_r['aud_amount'] or 0),
-                'fixed_sales_revenue': float(_r['fixed_sales_revenue'] or 0),
-                'markup_pct': float(_r['markup_pct'] if _r['markup_pct'] is not None else 3),
-                'inr': (_q['inr'] if _q else None),
-                'effective_rate': (_q['effective_rate'] if _q else None),
-            }
+        for _pl in plans:
+            _q = amc_aud_quote(_pl['plan_type'], conn=conn, product_id=product_id)
+            if _q:
+                amc_aud[_pl['plan_type']] = {
+                    'currency': _q['currency'], 'aud': _q['amount'], 'amount': _q['amount'],
+                    'fixed_sales_revenue': _q['fixed_sales_revenue'], 'markup_pct': _q['markup_pct'],
+                    'inr': _q['inr'], 'effective_rate': _q['effective_rate'],
+                    'live_rate': _q['live_rate'], 'rate_stale': _q['rate_stale'],
+                }
     except Exception:
         amc_aud = {}
     conn.close()
     return render_template('admin_packages.html', user=user, products=products,
                            selected=selected, plans=plans, catalogue=catalogue,
                            standard_services=standard_services, amc_aud=amc_aud,
+                           currencies=SUPPORTED_CURRENCIES,
                            stage_options=stage_options, active_section='company')
 
 
 @app.route('/admin/amc-aud-pricing', methods=['GET', 'POST'])
 @admin_required
 def admin_amc_aud_pricing():
-    """Edit the AUD-priced AMC plans (AMC 1 / AMC 2): AUD package amount, the
-    fixed sales revenue credited to the rep, and the % markup on the live rate."""
-    conn = get_db()
-    if request.method == 'POST':
-        rid = request.form.get('id')
-        def _n(k):
-            try: return float(request.form.get(k) or 0)
-            except (TypeError, ValueError): return 0.0
-        if rid:
-            conn.execute("UPDATE amc_aud_pricing SET aud_amount=?, fixed_sales_revenue=?, markup_pct=?, "
-                         "updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                         (_n('aud_amount'), _n('fixed_sales_revenue'), _n('markup_pct'), rid))
-            conn.commit()
-            flash('AMC AUD pricing updated.', 'success')
-        conn.close()
-        return redirect(url_for('admin_amc_aud_pricing'))
-    rows = []
-    try:
-        for r in conn.execute("SELECT * FROM amc_aud_pricing ORDER BY plan_type").fetchall():
-            d = dict(r)
-            q = amc_aud_quote(d['plan_type'], conn=conn)
-            d['live_rate'] = (q['live_rate'] if q else None)
-            d['effective_rate'] = (q['effective_rate'] if q else None)
-            d['live_inr'] = (q['inr'] if q else None)
-            d['rate_stale'] = (q['rate_stale'] if q else True)
-            rows.append(d)
-    except Exception:
-        rows = []
-    conn.close()
-    return render_template('admin_amc_aud_pricing.html', user=get_user(), rows=rows, active_section='company')
+    """Retired — AMC 1/AMC 2 pricing now lives in Products & Services under the
+    plan type (currency = AUD). Redirect any old link/bookmark there."""
+    flash('AMC 1 / AMC 2 pricing is now managed under Products & Services (set the plan\'s currency to AUD).', 'info')
+    return redirect(url_for('admin_packages'))
 
 
 @app.route('/admin/packages/plan/save', methods=['POST'])
@@ -1631,19 +1607,33 @@ def admin_packages_plan_save():
     def _num(name):
         try: return float(request.form.get(name) or 0)
         except (TypeError, ValueError): return 0
-    amount = _num('package_amount')  # gross / sale price
+    amount = _num('package_amount')  # gross / sale price (in the plan's currency)
     cost = _num('plan_cost')
     summary = (request.form.get('summary') or '').strip()
+    # Multi-currency: currency (INR default), markup % over the live rate for
+    # foreign currencies, and an optional flat sales revenue (blank = normal calc).
+    currency = (request.form.get('currency') or 'INR').strip().upper()
+    if currency not in SUPPORTED_CURRENCIES:
+        currency = 'INR'
+    markup = _num('fx_markup_pct') if currency != 'INR' else 0
+    _fsr_raw = (request.form.get('fixed_sales_revenue') or '').strip()
+    fixed_rev = None
+    if _fsr_raw != '':
+        try: fixed_rev = float(_fsr_raw)
+        except (TypeError, ValueError): fixed_rev = None
     conn = get_db()
     existing = conn.execute(
         "SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
         (product_id, plan_type)).fetchone()
     if existing:
         conn.execute("UPDATE plan_packages SET package_amount = ?, plan_cost = ?, summary = ?, "
-                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (amount, cost, summary, existing['id']))
+                     "currency = ?, fx_markup_pct = ?, fixed_sales_revenue = ?, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     (amount, cost, summary, currency, markup, fixed_rev, existing['id']))
     else:
-        conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, plan_cost, summary) "
-                     "VALUES (?, ?, ?, ?, ?)", (product_id, plan_type, amount, cost, summary))
+        conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, plan_cost, summary, "
+                     "currency, fx_markup_pct, fixed_sales_revenue) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (product_id, plan_type, amount, cost, summary, currency, markup, fixed_rev))
     conn.commit()
     conn.close()
     flash('Package saved.', 'success')
@@ -8619,16 +8609,19 @@ def api_forex_rates():
     })
 
 
-def amc_aud_quote(plan_type, conn=None):
-    """Live pricing quote for an AUD-priced AMC plan (AMC 1 / AMC 2).
+def amc_aud_quote(plan_type, conn=None, product_id=None):
+    """Live INR pricing for a plan priced in a FOREIGN currency, read from the
+    plan's row in plan_packages (currency + package_amount + fx_markup_pct).
+    Returns None for INR plans (callers then use normal rupee pricing). The name
+    is kept for history, but it now works for ANY currency — not just AMC/AUD.
 
-    Returns a dict, or None if the plan_type isn't AUD-priced:
-      aud                – package amount in AUD
-      live_rate          – current AUD→INR from the forex feed
-      markup_pct         – % added to the live rate (approx. ICICI card rate)
+      currency           – the plan's pricing currency (e.g. 'AUD','USD','GBP')
+      amount / aud       – package amount in that currency ('aud' is a legacy alias)
+      live_rate          – current <currency>→INR from the forex feed
+      markup_pct         – % added to the live rate (AMC uses 3% ≈ card rate)
       effective_rate     – live_rate * (1 + markup_pct/100)  ← the rate we lock
-      inr                – aud * effective_rate  ← what the client pays (in INR)
-      fixed_sales_revenue– flat INR credited to the sales member for this plan
+      inr                – amount * effective_rate  ← what the client pays (in INR)
+      fixed_sales_revenue– optional flat INR sales revenue (0 = normal calc)
       rate_source/rate_stale – so a fallback (stale) rate is never used silently
     """
     if not plan_type:
@@ -8636,10 +8629,21 @@ def amc_aud_quote(plan_type, conn=None):
     _own = False
     if conn is None:
         conn = get_db(); _own = True
+    row = None
     try:
-        row = conn.execute(
-            "SELECT * FROM amc_aud_pricing WHERE plan_type = ? AND COALESCE(is_active,1)=1",
-            (plan_type,)).fetchone()
+        if product_id:
+            row = conn.execute(
+                "SELECT currency, package_amount, fx_markup_pct, fixed_sales_revenue "
+                "FROM plan_packages WHERE plan_type = ? AND product_id = ? "
+                "AND COALESCE(is_active,1)=1 LIMIT 1", (plan_type, product_id)).fetchone()
+        if not row:
+            # AMC 1/AMC 2 are priced the same wherever they sit; prefer a
+            # foreign-currency row for this plan type when no product is given.
+            row = conn.execute(
+                "SELECT currency, package_amount, fx_markup_pct, fixed_sales_revenue "
+                "FROM plan_packages WHERE plan_type = ? AND COALESCE(is_active,1)=1 "
+                "ORDER BY (COALESCE(currency,'INR') <> 'INR') DESC LIMIT 1",
+                (plan_type,)).fetchone()
     except Exception:
         row = None
     finally:
@@ -8647,18 +8651,23 @@ def amc_aud_quote(plan_type, conn=None):
             conn.close()
     if not row:
         return None
-    aud = float(row['aud_amount'] or 0)
-    markup = float(row['markup_pct'] if row['markup_pct'] is not None else 3)
+    currency = (row['currency'] or 'INR').upper()
+    if currency == 'INR':
+        return None  # rupee plans: no forex quote, callers keep normal INR pricing
+    amount = float(row['package_amount'] or 0)
+    markup = float(row['fx_markup_pct'] if row['fx_markup_pct'] is not None else 0)
     rates = get_fx_rates_inr()
-    live = float(rates.get('AUD', 0) or 0)
+    live = float(rates.get(currency, 0) or 0)
     effective = round(live * (1 + markup / 100.0), 4)
     return {
         'plan_type': plan_type,
-        'aud': aud,
+        'currency': currency,
+        'amount': amount,
+        'aud': amount,  # legacy alias so older templates/JS keep working
         'live_rate': round(live, 4),
         'markup_pct': markup,
         'effective_rate': effective,
-        'inr': round(aud * effective, 2),
+        'inr': round(amount * effective, 2),
         'fixed_sales_revenue': float(row['fixed_sales_revenue'] or 0),
         'rate_source': _fx_cache.get('source', 'fallback'),
         'rate_stale': (_fx_cache.get('source') == 'fallback'),
@@ -8667,9 +8676,15 @@ def amc_aud_quote(plan_type, conn=None):
 
 @app.route('/api/amc-aud-quote')
 def api_amc_aud_quote():
-    """Live AUD→INR quote for an AMC plan — used by the sales close form so the
-    rep sees 'Package 1550 AUD × ₹XX + 3% = ₹YY' before saving."""
-    q = amc_aud_quote(request.args.get('plan_type', ''))
+    """Live foreign-currency→INR quote for a plan — used by the sales close form so
+    the rep sees 'Package 1550 AUD × ₹XX + 3% = ₹YY' before saving. Works for any
+    currency now; the legacy 'aud_priced' flag == 'this plan is foreign-priced'."""
+    pid = request.args.get('product_id') or None
+    try:
+        pid = int(pid) if pid else None
+    except (TypeError, ValueError):
+        pid = None
+    q = amc_aud_quote(request.args.get('plan_type', ''), product_id=pid)
     if not q:
         return jsonify({'aud_priced': False})
     q['aud_priced'] = True
@@ -26622,7 +26637,7 @@ def ensure_sales_crm_tables():
         # AUD rate-lock (AMC 1 / AMC 2): frozen at lead generation, never re-floats.
         # amc_fx_rate = live AUD→INR; amc_fx_effective = live * (1+markup%); amc_inr_amount
         # = aud * effective (what the client pays, collected in INR). Date+time in locked_at.
-        for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
+        for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_currency', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
                        ('amc_fx_rate', 'NUMERIC(10,4)'), ('amc_fx_markup', 'NUMERIC(5,2)'),
                        ('amc_fx_effective', 'NUMERIC(10,4)'), ('amc_inr_amount', 'NUMERIC(14,2)'),
                        ('amc_fx_locked_at', 'TIMESTAMP')):
@@ -27394,11 +27409,11 @@ def sales_leads_add():
                     amc_lock = amc_aud_quote(_plan, conn=conn)
                     if new_lead_id and amc_lock:
                         conn.execute(
-                            "UPDATE sales_leads SET amc_plan_type=?, amc_aud_amount=?, amc_fx_rate=?, "
+                            "UPDATE sales_leads SET amc_plan_type=?, amc_currency=?, amc_aud_amount=?, amc_fx_rate=?, "
                             "amc_fx_markup=?, amc_fx_effective=?, amc_inr_amount=?, amc_fx_locked_at=CURRENT_TIMESTAMP "
                             "WHERE id=?",
-                            (_plan, amc_lock['aud'], amc_lock['live_rate'], amc_lock['markup_pct'],
-                             amc_lock['effective_rate'], amc_lock['inr'], new_lead_id))
+                            (_plan, amc_lock.get('currency', 'AUD'), amc_lock['aud'], amc_lock['live_rate'],
+                             amc_lock['markup_pct'], amc_lock['effective_rate'], amc_lock['inr'], new_lead_id))
                         conn.commit()
                 except Exception as _fxe:
                     logging.warning(f"AMC AUD lock (add): {_fxe}")
@@ -28397,22 +28412,21 @@ def sales_revenue_report():
         where += " AND c.registration_date <= ?"; params.append(d_to)
     rows = []
     try:
-        # AUD plans (AMC 1/AMC 2) credit a FIXED sales revenue (amc_aud_pricing),
-        # not package-cost-discount. aap.fixed_sales_revenue is NULL for every other
-        # plan, so the CASE falls back to the normal computation for them.
+        # Plans with a FIXED sales revenue (e.g. foreign-currency AMC 1/AMC 2) credit
+        # that flat figure, not package-cost-discount. pp.fixed_sales_revenue is NULL
+        # for normal plans, so the CASE falls back to the usual computation.
         rows = conn.execute(
             "SELECT COALESCE(NULLIF(TRIM(c.counsellor),''),'Unassigned') AS counsellor, "
             "       COUNT(*) AS clients, "
             "       COALESCE(SUM(c.package_amount),0) AS total_package, "
             "       COALESCE(SUM(COALESCE(pp.plan_cost,0)),0) AS total_cost, "
             "       COALESCE(SUM(c.discount_allowed),0) AS total_discount, "
-            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "       COALESCE(SUM(CASE WHEN pp.fixed_sales_revenue IS NOT NULL THEN pp.fixed_sales_revenue "
             "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) END),0) AS sales_revenue, "
-            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "       COALESCE(SUM(CASE WHEN pp.fixed_sales_revenue IS NOT NULL THEN pp.fixed_sales_revenue "
             "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) - COALESCE(c.discount_allowed,0) END),0) AS actual_revenue "
             "FROM plab_clients c "
             "LEFT JOIN plan_packages pp ON pp.product_id = c.product_id AND pp.plan_type = c.plan_type "
-            "LEFT JOIN amc_aud_pricing aap ON aap.plan_type = c.plan_type AND COALESCE(aap.is_active,1) = 1 "
             + where +
             " GROUP BY 1 ORDER BY actual_revenue DESC", params).fetchall()
     except Exception as e:
@@ -29983,6 +29997,14 @@ def ensure_package_tables():
         "CREATE INDEX IF NOT EXISTS idx_package_services_plan ON package_services(plan_package_id)",
         "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS plan_cost NUMERIC(14,2) DEFAULT 0",
         "ALTER TABLE package_services ADD COLUMN IF NOT EXISTS budget NUMERIC(14,2) DEFAULT 0",
+        # Multi-currency per plan type (2026-07-14): any plan can be priced in a
+        # FOREIGN currency; the client is still billed INR at the live rate + markup.
+        # currency default 'INR' (rupees, unchanged); fx_markup_pct = % over the live
+        # rate (AMC uses 3%); fixed_sales_revenue = optional flat INR sales revenue
+        # (NULL/0 = use the normal package-cost-discount calc). Replaces amc_aud_pricing.
+        "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR'",
+        "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS fx_markup_pct NUMERIC(5,2) DEFAULT 0",
+        "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS fixed_sales_revenue NUMERIC(14,2)",
         # AUD-priced plans (AMC 1 / AMC 2). Keyed by plan_type so it works whatever
         # product they sit under. aud_amount = package in AUD; fixed_sales_revenue =
         # the flat INR credited to the sales member (NOT package-cost-discount);
@@ -30013,6 +30035,26 @@ def ensure_package_tables():
         except Exception:
             try: conn.rollback()
             except Exception: pass
+    # ONE-TIME migration (marker-gated): fold amc_aud_pricing into plan_packages so
+    # AMC 1/AMC 2 are managed in Products & Services like every other plan. Runs once,
+    # then the admin owns the values (so a later edit is never overwritten).
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        _mk = conn.execute("SELECT value FROM _import_markers WHERE key = 'amc_currency_migrated'").fetchone()
+        if not _mk:
+            conn.execute(
+                "UPDATE plan_packages pp SET currency = 'AUD', package_amount = aap.aud_amount, "
+                "fx_markup_pct = aap.markup_pct, fixed_sales_revenue = aap.fixed_sales_revenue "
+                "FROM amc_aud_pricing aap "
+                "WHERE pp.plan_type = aap.plan_type AND COALESCE(aap.is_active,1) = 1 "
+                "AND COALESCE(pp.currency, 'INR') = 'INR'")
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES ('amc_currency_migrated', 'v1') "
+                         "ON CONFLICT (key) DO NOTHING")
+            conn.commit()
+    except Exception as _mig_e:
+        logging.warning(f"amc->plan_packages currency migration: {_mig_e}")
+        try: conn.rollback()
+        except Exception: pass
     conn.close()
 
 
