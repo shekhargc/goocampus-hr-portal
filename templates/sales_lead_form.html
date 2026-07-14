@@ -151,7 +151,8 @@
                     </div>
                 </div>
 
-                <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments <span style="font-weight:400;color:var(--gray-500);">· enter the total received (incl. 18% GST); the base + GST split is shown under each row</span></p>
+                {% set _wlroute = (lead and lead.amc_payment_route == 'website_link') %}
+                <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments <span style="font-weight:400;color:var(--gray-500);">{% if _wlroute %}· flat AUD paid via Website Link (no GST, no conversion){% else %}· enter the total received (incl. 18% GST); the base + GST split is shown under each row{% endif %}</span></p>
                 {% set _ords = ['', '1st', '2nd', '3rd', '4th'] %}
                 <div id="instContainer">
                 {% for i in range(1, 5) %}
@@ -165,7 +166,7 @@
                 <div class="inst-row" data-inst="{{ i }}" style="margin-bottom:0.7rem;{% if not _show %}display:none;{% endif %}">
                     <div style="font-size:0.72rem;font-weight:700;color:#9A3412;margin-bottom:0.25rem;">{{ _ords[i] }} Installment</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.7rem;">
-                        <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Total (incl GST)" value="{{ '{:.0f}'.format((_amt|float) * 1.18) if _amt else '' }}"
+                        <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="{{ 'Amount (AUD)' if _wlroute else 'Total (incl GST)' }}" value="{{ ('{:.0f}'.format(_amt|float) if _wlroute else '{:.0f}'.format((_amt|float) * 1.18)) if _amt else '' }}"
                                oninput="updateInstHint(this)"
                                style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
                         <input type="date" name="inst{{ i }}_date" value="{{ (_dt|string)[:10] if _dt else '' }}"
@@ -386,6 +387,11 @@
                     var m1 = document.querySelector('[name="inst1_method"]');
                     if (m1 && isWL && !m1.value) m1.value = 'Website Link';
                     if (noteEl) noteEl.style.display = isWL ? 'none' : '';
+                    // Refresh installment hints so they switch between the GST split and
+                    // the flat-AUD "Website Link (no GST)" wording.
+                    document.querySelectorAll('[name^="inst"][name$="_amount"]').forEach(function(inp){
+                        if (window.updateInstHint) window.updateInstHint(inp);
+                    });
                     amcBox.style.display = 'block';
                 }
                 // Frozen rate on an existing lead — show it, don't re-fetch live.
@@ -435,7 +441,12 @@
                 var row = inp.closest('.inst-row'); if (!row) return;
                 var hint = row.querySelector('.inst-hint'); if (!hint) return;
                 var total = parseFloat(inp.value) || 0;
-                if (total > 0) {
+                var wlEl = document.getElementById('amcWebsiteLink');
+                var isWL = !!(wlEl && wlEl.checked);
+                if (total > 0 && isWL) {
+                    // Website Link: flat foreign amount paid abroad — no GST, no ₹ conversion.
+                    hint.textContent = Math.round(total).toLocaleString('en-IN') + ' AUD · paid via Website Link (no GST)';
+                } else if (total > 0) {
                     var base = total / 1.18;
                     var gst = total - base;
                     hint.textContent = 'Base ₹' + Math.round(base).toLocaleString('en-IN') +

@@ -27503,6 +27503,10 @@ def sales_leads_add():
                         def _n(name):
                             try: return float(request.form.get(name) or 0)
                             except ValueError: return 0
+                        # Installments are normally entered incl. 18% GST -> stored base
+                        # (÷1.18). But a Website Link payment is a flat foreign amount paid
+                        # abroad (no Indian GST, no conversion), so store it as-is.
+                        _inst_div = 1.0 if request.form.get('amc_website_link') else 1.18
                         closure_data = {
                             'plan_type':                _f('plan_type'),
                             # AUD plans (AMC 1/AMC 2): the client pays the locked INR
@@ -27514,22 +27518,22 @@ def sales_leads_add():
                             # Installment amounts are ENTERED as the total incl. GST;
                             # store the base (÷1.18) so existing base-stored records and
                             # the base->GST->total display stay consistent.
-                            'inst1_amount':             round(_n('inst1_amount')/1.18, 2),
+                            'inst1_amount':             round(_n('inst1_amount')/_inst_div, 2),
                             'inst1_date':               _f('inst1_date'),
                             'inst1_note':               _f('inst1_note'),
                             'inst1_method':             _f('inst1_method'),
                             'inst1_status':             _f('inst1_status'),
-                            'inst2_amount':             round(_n('inst2_amount')/1.18, 2),
+                            'inst2_amount':             round(_n('inst2_amount')/_inst_div, 2),
                             'inst2_date':               _f('inst2_date'),
                             'inst2_note':               _f('inst2_note'),
                             'inst2_method':             _f('inst2_method'),
                             'inst2_status':             _f('inst2_status'),
-                            'inst3_amount':             round(_n('inst3_amount')/1.18, 2),
+                            'inst3_amount':             round(_n('inst3_amount')/_inst_div, 2),
                             'inst3_date':               _f('inst3_date'),
                             'inst3_note':               _f('inst3_note'),
                             'inst3_method':             _f('inst3_method'),
                             'inst3_status':             _f('inst3_status'),
-                            'inst4_amount':             round(_n('inst4_amount')/1.18, 2),
+                            'inst4_amount':             round(_n('inst4_amount')/_inst_div, 2),
                             'inst4_date':               _f('inst4_date'),
                             'inst4_note':               _f('inst4_note'),
                             'inst4_method':             _f('inst4_method'),
@@ -27547,19 +27551,19 @@ def sales_leads_add():
                             'training_fx_markup':       (train_lock['markup_pct'] if train_lock else 0),
                             'training_fx_effective':    (train_lock['effective_rate'] if train_lock else 0),
                             'training_fx_locked_at':    (datetime.now().strftime('%Y-%m-%d %H:%M:%S') if train_lock else ''),
-                            'training_inst1_amount':    round(_n('training_inst1_amount')/1.18, 2),
+                            'training_inst1_amount':    round(_n('training_inst1_amount')/_inst_div, 2),
                             'training_inst1_date':      _f('training_inst1_date'),
                             'training_inst1_method':    _f('training_inst1_method'),
                             'training_inst1_status':    _f('training_inst1_status'),
-                            'training_inst2_amount':    round(_n('training_inst2_amount')/1.18, 2),
+                            'training_inst2_amount':    round(_n('training_inst2_amount')/_inst_div, 2),
                             'training_inst2_date':      _f('training_inst2_date'),
                             'training_inst2_method':    _f('training_inst2_method'),
                             'training_inst2_status':    _f('training_inst2_status'),
-                            'training_inst3_amount':    round(_n('training_inst3_amount')/1.18, 2),
+                            'training_inst3_amount':    round(_n('training_inst3_amount')/_inst_div, 2),
                             'training_inst3_date':      _f('training_inst3_date'),
                             'training_inst3_method':    _f('training_inst3_method'),
                             'training_inst3_status':    _f('training_inst3_status'),
-                            'training_inst4_amount':    round(_n('training_inst4_amount')/1.18, 2),
+                            'training_inst4_amount':    round(_n('training_inst4_amount')/_inst_div, 2),
                             'training_inst4_date':      _f('training_inst4_date'),
                             'training_inst4_method':    _f('training_inst4_method'),
                             'training_inst4_status':    _f('training_inst4_status'),
@@ -27789,9 +27793,12 @@ def sales_leads_edit(lead_id):
                 'lead_source':              _ef('source') or _ef('lead_source'),
                 'additional_notes':         _ef('notes') or _ef('additional_notes'),
             }
+            # Website Link payment (flat AUD, no Indian GST) stores installments as-is;
+            # normal installments are entered incl. GST and stored base (÷1.18).
+            _inst_div = 1.0 if request.form.get('amc_website_link') else 1.18
             for i in (1, 2, 3, 4):
-                # Amount entered as total incl. GST -> store base (÷1.18).
-                edited[f'inst{i}_amount'] = round(_en(f'inst{i}_amount')/1.18, 2)
+                # Amount entered as total incl. GST -> store base (÷1.18), unless Website Link.
+                edited[f'inst{i}_amount'] = round(_en(f'inst{i}_amount')/_inst_div, 2)
                 edited[f'inst{i}_date']   = _ef(f'inst{i}_date')
                 edited[f'inst{i}_note']   = _ef(f'inst{i}_note')
                 edited[f'inst{i}_method'] = _ef(f'inst{i}_method')
@@ -27803,7 +27810,7 @@ def sales_leads_edit(lead_id):
             edited['training_discount'] = _en('training_discount')
             edited['training_final']    = _en('training_final')
             for i in (1, 2, 3, 4):
-                edited[f'training_inst{i}_amount'] = round(_en(f'training_inst{i}_amount')/1.18, 2)
+                edited[f'training_inst{i}_amount'] = round(_en(f'training_inst{i}_amount')/_inst_div, 2)
                 edited[f'training_inst{i}_date']   = _ef(f'training_inst{i}_date')
                 edited[f'training_inst{i}_method'] = _ef(f'training_inst{i}_method')
                 edited[f'training_inst{i}_status'] = _ef(f'training_inst{i}_status')
