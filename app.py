@@ -3811,6 +3811,118 @@ def _notify_onboarding_confirmed(reg_id):
         logging.error(f"_notify_onboarding_confirmed: {e}")
 
 
+# ─── Welcome Call (hybrid): client requests a preferred slot, ops confirms ───
+
+def _welcome_call_ics(summary, description, date_str, time_str, duration_min=30):
+    """Build a base64 .ics calendar invite for a welcome call. date_str
+    'YYYY-MM-DD' + time_str 'HH:MM' are IST; emitted as UTC so Google/Outlook/
+    Apple calendars all read it correctly. Returns None on bad input."""
+    from datetime import datetime as _dt, timedelta as _td
+    import base64 as _b64
+    try:
+        start_ist = _dt.strptime(f"{date_str} {(time_str or '10:00')}", "%Y-%m-%d %H:%M")
+    except Exception:
+        return None
+    start_utc = start_ist - _td(hours=5, minutes=30)
+    end_utc = start_utc + _td(minutes=duration_min)
+    _fmt = lambda d: d.strftime("%Y%m%dT%H%M%SZ")
+    now = datetime.utcnow()
+    uid = f"wc-{date_str}-{(time_str or '').replace(':', '')}-{now.strftime('%Y%m%d%H%M%S')}@goocampus.org"
+    def esc(s):
+        return (s or '').replace('\\', '\\\\').replace(';', '\\;').replace(',', '\\,').replace('\n', '\\n')
+    ics = "\r\n".join([
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GooCampus//Welcome Call//EN",
+        "CALSCALE:GREGORIAN", "METHOD:REQUEST", "BEGIN:VEVENT",
+        f"UID:{uid}", f"DTSTAMP:{_fmt(now)}", f"DTSTART:{_fmt(start_utc)}", f"DTEND:{_fmt(end_utc)}",
+        f"SUMMARY:{esc(summary)}", f"DESCRIPTION:{esc(description)}",
+        "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR", "",
+    ])
+    return _b64.b64encode(ics.encode('utf-8')).decode('ascii')
+
+
+@app.route('/client/welcome-call/request', methods=['POST'])
+@client_required
+def client_welcome_call_request():
+    """Client submits a PREFERRED welcome-call slot (after contract + refund).
+    Ops sees it and sets/confirms the final one."""
+    acct_id = session.get('user_id')
+    reg_id = request.form.get('reg_id')
+    conn = get_db()
+    reg = conn.execute("SELECT id FROM client_registrations WHERE id = ? AND account_id = ?",
+                       (reg_id, acct_id)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Registration not found.', 'error')
+        return redirect(url_for('client_dashboard'))
+    conn.execute(
+        "UPDATE client_registrations SET wc_pref_date=?, wc_pref_time=?, wc_pref_notes=?, "
+        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (request.form.get('wc_pref_date', ''), request.form.get('wc_pref_time', ''),
+         request.form.get('wc_pref_notes', ''), reg_id))
+    conn.commit()
+    conn.close()
+    flash('Thanks! Your preferred welcome-call time has been shared with our team — we will confirm shortly.', 'success')
+    return redirect(url_for('client_dashboard'))
+
+
+@app.route('/admin/client/<int:reg_id>/welcome-call/confirm', methods=['POST'])
+@login_required
+def admin_client_welcome_call_confirm(reg_id):
+    """Ops sets the FINAL welcome-call slot + caller and confirms. Emails the
+    client an .ics invite; the confirmation shows on their dashboard."""
+    conn = get_db()
+    reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('admin_clients_list'))
+    date_s = (request.form.get('wc_scheduled_date', '') or '').strip()
+    time_s = (request.form.get('wc_scheduled_time', '') or '').strip()
+    wc_by = (request.form.get('wc_by', '') or '').strip()
+    if not date_s or not time_s:
+        conn.close()
+        flash('Please set the welcome-call date and time before confirming.', 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id))
+    conn.execute(
+        "UPDATE client_registrations SET wc_scheduled_date=?, wc_scheduled_time=?, wc_by=?, "
+        "wc_confirmed=1, wc_confirmed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (date_s, time_s, wc_by, reg_id))
+    conn.commit()
+    client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+    client_email = reg['email']
+    product_name = reg['product_name'] or 'your program'
+    conn.close()
+    try:
+        from email_utils import send_email
+    except Exception:
+        send_email = None
+    if send_email and client_email:
+        summary = "GooCampus Welcome Call"
+        desc = (f"Your GooCampus welcome call for {product_name}. "
+                f"Our team member {wc_by or 'GooCampus'} will call you at the scheduled time.")
+        ics_b64 = _welcome_call_ics(summary, desc, date_s, time_s)
+        inner = (f"<h2 style='color:#0f1b33;'>Your Welcome Call is confirmed</h2>"
+                 f"<p>Dear {client_name or 'there'},</p>"
+                 f"<p>Your GooCampus welcome call is scheduled for:</p>"
+                 f"<p style='font-size:1.05rem;'><b>{date_s} at {time_s} IST</b>"
+                 f"{(' with ' + wc_by) if wc_by else ''}</p>"
+                 f"<p>A calendar invite is attached so you can add it to your calendar. "
+                 f"We look forward to speaking with you!</p><p>— Team GooCampus</p>")
+        try:
+            from email_utils import render_branded_email
+            body = render_branded_email('Welcome Call Confirmed', inner)
+        except Exception:
+            body = inner
+        atts = [{'filename': 'welcome-call.ics', 'content': ics_b64}] if ics_b64 else None
+        try:
+            send_email([client_email], "Your GooCampus Welcome Call is confirmed", body, attachments=atts)
+        except Exception as e:
+            logging.warning(f"welcome call email {reg_id}: {e}")
+    flash('Welcome call confirmed. The client has been emailed a calendar invite.', 'success')
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
 def _sync_to_plab_and_academics(conn, reg, reg_id):
     """Sync confirmed client registration data into plab_clients and ops_academic_details."""
     reg_num = reg.get('registration_number', '')
@@ -8810,6 +8922,16 @@ def ensure_crm_tables():
             ('client_registrations',     'guardian_last_name',     'TEXT'),
             ('client_registrations',     'guardian_email',         'TEXT'),
             ('client_registrations',     'guardian_phone',         'TEXT'),
+            # Welcome call (hybrid, 2026-07-13): client requests a preferred slot
+            # after contract+refund; ops sets the final slot + caller and confirms.
+            ('client_registrations',     'wc_pref_date',           'TEXT'),
+            ('client_registrations',     'wc_pref_time',           'TEXT'),
+            ('client_registrations',     'wc_pref_notes',          'TEXT'),
+            ('client_registrations',     'wc_scheduled_date',      'TEXT'),
+            ('client_registrations',     'wc_scheduled_time',      'TEXT'),
+            ('client_registrations',     'wc_by',                  'TEXT'),
+            ('client_registrations',     'wc_confirmed',           'INTEGER DEFAULT 0'),
+            ('client_registrations',     'wc_confirmed_at',        'TIMESTAMP'),
             # Mirror onto the master record so ops profiles show the full picture.
             ('plab_clients',             'guardian_type',          'TEXT'),
             ('plab_clients',             'father_first_name',      'TEXT'),

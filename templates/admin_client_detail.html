@@ -755,6 +755,41 @@
     <!-- TAB 3: OPERATIONS -->
     <!-- ============================================================ -->
     <div class="tab-panel" id="tab-operations">
+        {# ── Welcome Call (hybrid): client requests a slot, ops sets/confirms the
+             final one → emails the client a calendar invite (founder 2026-07-13). ── #}
+        <div class="card">
+            <h2 class="card-title">Welcome Call{% if reg.wc_confirmed %} <span class="badge badge-approved" style="margin-left:0.5rem;font-size:0.75rem;">Confirmed</span>{% endif %}</h2>
+            {% if reg.wc_pref_date or reg.wc_pref_time or reg.wc_pref_notes %}
+            <div class="info-grid" style="margin-bottom:1rem;">
+                <div class="info-item"><div class="info-label">Client's preferred date</div><div class="info-value">{{ reg.wc_pref_date or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Client's preferred time</div><div class="info-value">{{ reg.wc_pref_time or '-' }}</div></div>
+                <div class="info-item" style="grid-column:1 / -1;"><div class="info-label">Client's note</div><div class="info-value">{{ reg.wc_pref_notes or '-' }}</div></div>
+            </div>
+            {% else %}
+            <p style="color:var(--gray-500);font-size:0.88rem;">The client hasn't requested a slot yet — you can still schedule and confirm one below.</p>
+            {% endif %}
+            {% if reg.wc_confirmed %}
+            <div class="info-grid" style="background:var(--success-light);border-radius:0.5rem;padding:0.75rem;">
+                <div class="info-item"><div class="info-label">Scheduled</div><div class="info-value">{{ reg.wc_scheduled_date }} at {{ reg.wc_scheduled_time }} IST</div></div>
+                <div class="info-item"><div class="info-label">Call by</div><div class="info-value">{{ reg.wc_by or '-' }}</div></div>
+            </div>
+            <p style="font-size:0.8rem;color:var(--gray-500);margin:0.5rem 0 0;">Confirmed — the client was emailed a calendar invite. Re-confirm to change the slot.</p>
+            {% endif %}
+            <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/confirm" style="margin-top:1rem;">
+                <div class="form-row" style="flex-wrap:wrap;gap:1rem;">
+                    <div class="form-group"><label>Date</label><input type="date" name="wc_scheduled_date" value="{{ reg.wc_scheduled_date or reg.wc_pref_date or '' }}" required></div>
+                    <div class="form-group"><label>Time (IST)</label><input type="time" name="wc_scheduled_time" value="{{ reg.wc_scheduled_time or reg.wc_pref_time or '' }}" required></div>
+                    <div class="form-group"><label>Call by</label>
+                        <select name="wc_by">
+                            <option value="">— Select team member —</option>
+                            {% for c in counsellors %}<option value="{{ c.name }}"{% if reg.wc_by == c.name %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="button" style="margin-top:0.5rem;">{{ 'Re-confirm Welcome Call' if reg.wc_confirmed else 'Confirm Welcome Call & Email Client' }}</button>
+            </form>
+        </div>
+
         {% if reg.ops_status == 'verified' %}
         <!-- Verified State -->
         <div class="card">
