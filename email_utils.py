@@ -49,7 +49,8 @@ def send_email(
     subject: str,
     html_body: str,
     from_address: str = DEFAULT_SENDER,
-    cc_list: Optional[List[str]] = None
+    cc_list: Optional[List[str]] = None,
+    attachments: Optional[List[dict]] = None
 ) -> bool:
     """
     Send an HTML email to a list of recipients via Resend API.
@@ -85,6 +86,10 @@ def send_email(
     }
     if cc_list:
         params["cc"] = cc_list
+    if attachments:
+        # Resend attachments: [{filename, content}] where content is base64 (str)
+        # or raw bytes. Callers pass base64 strings (e.g. an .ics calendar invite).
+        params["attachments"] = attachments
 
     # Resend caps sending at 2 requests/second, so a fast batch loop loses the
     # overflow to HTTP 429. Back off and retry on rate-limit errors so no email

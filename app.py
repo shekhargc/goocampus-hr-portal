@@ -1566,61 +1566,37 @@ def admin_packages():
             standard_services = [dict(s) for s in conn.execute(
                 "SELECT * FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
                 (std_pkg['id'],)).fetchall()]
-    # AUD-priced plans (AMC 1/AMC 2): map plan_type -> {aud, fixed_sales_revenue, live INR}
-    # so the packages screen shows the FIXED sales revenue for them (not gross-cost).
+    # Foreign-currency plans: live INR preview per plan type (INR plans omitted).
+    # Keyed by plan_type; the template shows "amount CUR × rate +markup% = ₹INR" and
+    # the fixed sales revenue. Generalized from the old AMC/AUD-only map.
     amc_aud = {}
     try:
-        for _r in conn.execute("SELECT * FROM amc_aud_pricing WHERE COALESCE(is_active,1)=1").fetchall():
-            _q = amc_aud_quote(_r['plan_type'], conn=conn)
-            amc_aud[_r['plan_type']] = {
-                'aud': float(_r['aud_amount'] or 0),
-                'fixed_sales_revenue': float(_r['fixed_sales_revenue'] or 0),
-                'markup_pct': float(_r['markup_pct'] if _r['markup_pct'] is not None else 3),
-                'inr': (_q['inr'] if _q else None),
-                'effective_rate': (_q['effective_rate'] if _q else None),
-            }
+        for _pl in plans:
+            _q = amc_aud_quote(_pl['plan_type'], conn=conn, product_id=product_id)
+            if _q:
+                amc_aud[_pl['plan_type']] = {
+                    'currency': _q['currency'], 'aud': _q['amount'], 'amount': _q['amount'],
+                    'fixed_sales_revenue': _q['fixed_sales_revenue'], 'markup_pct': _q['markup_pct'],
+                    'inr': _q['inr'], 'effective_rate': _q['effective_rate'],
+                    'live_rate': _q['live_rate'], 'rate_stale': _q['rate_stale'],
+                }
     except Exception:
         amc_aud = {}
     conn.close()
     return render_template('admin_packages.html', user=user, products=products,
                            selected=selected, plans=plans, catalogue=catalogue,
                            standard_services=standard_services, amc_aud=amc_aud,
+                           currencies=SUPPORTED_CURRENCIES,
                            stage_options=stage_options, active_section='company')
 
 
 @app.route('/admin/amc-aud-pricing', methods=['GET', 'POST'])
 @admin_required
 def admin_amc_aud_pricing():
-    """Edit the AUD-priced AMC plans (AMC 1 / AMC 2): AUD package amount, the
-    fixed sales revenue credited to the rep, and the % markup on the live rate."""
-    conn = get_db()
-    if request.method == 'POST':
-        rid = request.form.get('id')
-        def _n(k):
-            try: return float(request.form.get(k) or 0)
-            except (TypeError, ValueError): return 0.0
-        if rid:
-            conn.execute("UPDATE amc_aud_pricing SET aud_amount=?, fixed_sales_revenue=?, markup_pct=?, "
-                         "updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                         (_n('aud_amount'), _n('fixed_sales_revenue'), _n('markup_pct'), rid))
-            conn.commit()
-            flash('AMC AUD pricing updated.', 'success')
-        conn.close()
-        return redirect(url_for('admin_amc_aud_pricing'))
-    rows = []
-    try:
-        for r in conn.execute("SELECT * FROM amc_aud_pricing ORDER BY plan_type").fetchall():
-            d = dict(r)
-            q = amc_aud_quote(d['plan_type'], conn=conn)
-            d['live_rate'] = (q['live_rate'] if q else None)
-            d['effective_rate'] = (q['effective_rate'] if q else None)
-            d['live_inr'] = (q['inr'] if q else None)
-            d['rate_stale'] = (q['rate_stale'] if q else True)
-            rows.append(d)
-    except Exception:
-        rows = []
-    conn.close()
-    return render_template('admin_amc_aud_pricing.html', user=get_user(), rows=rows, active_section='company')
+    """Retired — AMC 1/AMC 2 pricing now lives in Products & Services under the
+    plan type (currency = AUD). Redirect any old link/bookmark there."""
+    flash('AMC 1 / AMC 2 pricing is now managed under Products & Services (set the plan\'s currency to AUD).', 'info')
+    return redirect(url_for('admin_packages'))
 
 
 @app.route('/admin/packages/plan/save', methods=['POST'])
@@ -1631,19 +1607,33 @@ def admin_packages_plan_save():
     def _num(name):
         try: return float(request.form.get(name) or 0)
         except (TypeError, ValueError): return 0
-    amount = _num('package_amount')  # gross / sale price
+    amount = _num('package_amount')  # gross / sale price (in the plan's currency)
     cost = _num('plan_cost')
     summary = (request.form.get('summary') or '').strip()
+    # Multi-currency: currency (INR default), markup % over the live rate for
+    # foreign currencies, and an optional flat sales revenue (blank = normal calc).
+    currency = (request.form.get('currency') or 'INR').strip().upper()
+    if currency not in SUPPORTED_CURRENCIES:
+        currency = 'INR'
+    markup = _num('fx_markup_pct') if currency != 'INR' else 0
+    _fsr_raw = (request.form.get('fixed_sales_revenue') or '').strip()
+    fixed_rev = None
+    if _fsr_raw != '':
+        try: fixed_rev = float(_fsr_raw)
+        except (TypeError, ValueError): fixed_rev = None
     conn = get_db()
     existing = conn.execute(
         "SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
         (product_id, plan_type)).fetchone()
     if existing:
         conn.execute("UPDATE plan_packages SET package_amount = ?, plan_cost = ?, summary = ?, "
-                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (amount, cost, summary, existing['id']))
+                     "currency = ?, fx_markup_pct = ?, fixed_sales_revenue = ?, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     (amount, cost, summary, currency, markup, fixed_rev, existing['id']))
     else:
-        conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, plan_cost, summary) "
-                     "VALUES (?, ?, ?, ?, ?)", (product_id, plan_type, amount, cost, summary))
+        conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, plan_cost, summary, "
+                     "currency, fx_markup_pct, fixed_sales_revenue) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (product_id, plan_type, amount, cost, summary, currency, markup, fixed_rev))
     conn.commit()
     conn.close()
     flash('Package saved.', 'success')
@@ -2051,7 +2041,27 @@ def client_form(reg_id):
     # States for dropdown
     states = conn.execute("SELECT DISTINCT name AS state_name FROM states ORDER BY name").fetchall()
 
+    # Photo-first gate (founder 2026-07-13): the client must upload their
+    # photograph (from the dashboard) BEFORE the registration form opens, so it is
+    # never skipped. Only enforced while the form is still a draft.
+    if (reg['form_status'] or 'draft') == 'draft':
+        has_photo = conn.execute(
+            "SELECT 1 FROM client_documents cd "
+            "JOIN client_registrations cr2 ON cr2.id = cd.registration_id "
+            "WHERE cr2.account_id = ? AND cd.doc_type = 'Photograph' LIMIT 1",
+            (acct_id,)).fetchone()
+        if not has_photo:
+            conn.close()
+            flash('Please upload your photograph first — then continue your registration.', 'error')
+            return redirect(url_for('client_dashboard'))
+
     if request.method == 'POST':
+        # Editing is allowed after submit, but locks once operations has verified
+        # (the master record is created then). Guard server-side too.
+        if (reg['ops_status'] or '') == 'verified':
+            conn.close()
+            flash('Your details have been verified and can no longer be edited. Contact your counsellor for changes.', 'error')
+            return redirect(url_for('client_dashboard'))
         step = int(request.form.get('step', 1))
         action = request.form.get('action', 'save')  # save or submit
 
@@ -2059,6 +2069,37 @@ def client_form(reg_id):
             # Personal info — config-driven (only the visible client fields).
             s1 = [f for f in form_config if (f['step_number'] or 1) == 1 and f['field_name'] in _CR_FORM_COLS]
             data = {f['field_name']: request.form.get(f['field_name'], '') for f in s1}
+
+            # Parent / Guardian block (custom, NOT config-driven). Save the granular
+            # fields + guardian_type, and compose the legacy father_name/mother_name/
+            # parents_email so existing displays + the master sync keep working.
+            gtype = (request.form.get('guardian_type', '') or '').strip()
+            for c in ('guardian_type',
+                      'father_first_name', 'father_last_name', 'father_email', 'father_phone',
+                      'mother_first_name', 'mother_last_name', 'mother_email', 'mother_phone',
+                      'guardian_first_name', 'guardian_last_name', 'guardian_email', 'guardian_phone'):
+                data[c] = (request.form.get(c, '') or '').strip()
+
+            def _full(a, b):
+                return (a + ' ' + b).strip() if (a or b) else ''
+            if gtype == 'guardian':
+                # one guardian only — clear the parent legacy fields
+                data['father_name'] = ''
+                data['mother_name'] = ''
+                data['parents_email'] = data.get('guardian_email') or ''
+            else:  # parents (or unset) — compose the legacy names, but never blank
+                # an existing value with an empty compose (protects older records
+                # that had only the flat father_name/mother_name/parents_email).
+                _fn = _full(data['father_first_name'], data['father_last_name'])
+                _mn = _full(data['mother_first_name'], data['mother_last_name'])
+                _pe = data.get('father_email') or data.get('mother_email') or ''
+                if _fn:
+                    data['father_name'] = _fn
+                if _mn:
+                    data['mother_name'] = _mn
+                if _pe:
+                    data['parents_email'] = _pe
+
             if data:
                 sets = ', '.join(f"{k} = ?" for k in data)
                 conn.execute(
@@ -2107,18 +2148,50 @@ def client_form(reg_id):
     # same value is defined once per pathway (e.g. 'Rheumatology' for plab +
     # australia + consulting), so appending every row made each option appear
     # 3-4 times in the dropdown. Keep the first occurrence only.
-    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
-    lookup_options = {}
+    # Scope dropdowns to THIS client's pathway (prefer pathway rows, fall back to
+    # the PLAB set per category) — this also naturally de-dupes the values that
+    # previously appeared 3-4× because every pathway's rows were unioned.
+    _cf_pathway = 'plab'
+    if reg.get('product_id'):
+        try:
+            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
+            if _pr and (_pr['pathway'] or '').strip():
+                _cf_pathway = _pr['pathway'].strip()
+        except Exception:
+            pass
+    lookup_rows = conn.execute(
+        "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
+        "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
+    _lk = {}
     for row in lookup_rows:
-        cat = row['category']
-        bucket = lookup_options.setdefault(cat, [])
-        if row['value'] not in bucket:
-            bucket.append(row['value'])
+        d = _lk.setdefault(row['category'], {'match': [], 'plab': []})
+        if row['pw'] == _cf_pathway:
+            d['match'].append(row['value'])
+        if row['pw'] == 'plab':
+            d['plab'].append(row['value'])
+    lookup_options = {}
+    for cat, d in _lk.items():
+        vals, seen, out = (d['match'] or d['plab']), set(), []
+        for v in vals:
+            if v not in seen:
+                seen.add(v); out.append(v)
+        lookup_options[cat] = out
+    # Central country reference (single source of truth): names feed the academic
+    # 'Country' dropdown (via db:countries), and (name, dial, region) feed the
+    # phone country-code picker — one list everywhere.
+    try:
+        _crows = conn.execute(
+            "SELECT name, dial_code, region FROM countries WHERE is_active = TRUE ORDER BY name").fetchall()
+    except Exception:
+        _crows = []
+    lookup_options['countries'] = [r['name'] for r in _crows]
+    phone_countries = [{'name': r['name'], 'dial': r['dial_code'], 'region': r['region']}
+                       for r in _crows if (r['dial_code'] or '').strip()]
     conn.close()
     return render_template('client_form.html',
         reg=reg, academics=academics, documents=documents,
         form_config=form_config, doc_requests=doc_requests, states=states,
-        lookup_options=lookup_options)
+        lookup_options=lookup_options, phone_countries=phone_countries)
 
 
 @app.route('/client/upload-doc/<int:reg_id>', methods=['POST'])
@@ -2910,10 +2983,13 @@ def ops_request_call_slot(client_id):
         flash(
             f'A pending slot request already exists. Reuse this link: {share_url}',
             'info')
-    redirect_endpoint = ('ops_au_onboarding_detail'
-                        if pathway == 'australia'
-                        else 'ops_onboarding_detail')
-    return redirect(url_for(redirect_endpoint, client_id=client_id))
+    # Route back to the right place per pathway: Australia + PLAB have dedicated
+    # onboarding-detail pages; the other pathways use their own client-profile page.
+    if pathway == 'australia':
+        return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+    if pathway == 'plab':
+        return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+    return redirect(pathway_detail_url(pathway, client_id))
 
 
 @app.route('/slot/<token>', methods=['GET'])
@@ -3384,6 +3460,18 @@ def admin_client_detail(reg_id):
     doc_requests = conn.execute("SELECT * FROM client_doc_requests WHERE registration_id = ? ORDER BY requested_at DESC", (reg_id,)).fetchall()
     notifications = conn.execute("SELECT * FROM client_notifications WHERE registration_id = ? ORDER BY sent_at DESC LIMIT 20", (reg_id,)).fetchall()
     counsellors = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
+    # Resolve the staff NAMES behind the sales-completed / ops-verified ids so the
+    # detail page can show "Verified by Priya" instead of a raw employee id.
+    def _emp_name(eid):
+        if not eid:
+            return ''
+        try:
+            r = conn.execute("SELECT name FROM employees WHERE id = ?", (eid,)).fetchone()
+            return (r['name'] if r else '') or ''
+        except Exception:
+            return ''
+    sales_completed_by_name = _emp_name(reg.get('sales_completed_by'))
+    ops_verified_by_name = _emp_name(reg.get('ops_verified_by'))
     # Phase E: welcome-kit checklist for this client (rows are seeded on
     # ops-verify; an empty list means either ops hasn't verified yet or
     # the product has no welcome-kit template configured).
@@ -3414,10 +3502,36 @@ def admin_client_detail(reg_id):
           AND field_name <> 'additional_notes'
         ORDER BY step_number, display_order
     ''', (reg['product_id'],)).fetchall()
-    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
-    lookup_options = {}
+    # Sales/ops dropdowns (Joined Stage, Plan Type, Current Stage, Account Status…)
+    # must show PATHWAY-specific values, not one global/PLAB list (founder
+    # 2026-07-13). Resolve the client's pathway from their product, then prefer
+    # that pathway's lookup values per category, falling back to the PLAB set for
+    # any category not yet seeded for the pathway (same rule as get_lookup_options).
+    detail_pathway = 'plab'
+    if reg.get('product_id'):
+        try:
+            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
+            if _pr and (_pr['pathway'] or '').strip():
+                detail_pathway = _pr['pathway'].strip()
+        except Exception:
+            pass
+    lookup_rows = conn.execute(
+        "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
+        "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
+    _lk = {}
     for row in lookup_rows:
-        lookup_options.setdefault(row['category'], []).append(row['value'])
+        d = _lk.setdefault(row['category'], {'match': [], 'plab': []})
+        if row['pw'] == detail_pathway:
+            d['match'].append(row['value'])
+        if row['pw'] == 'plab':
+            d['plab'].append(row['value'])
+    lookup_options = {}
+    for cat, d in _lk.items():
+        vals, seen, out = (d['match'] or d['plab']), set(), []
+        for v in vals:
+            if v not in seen:
+                seen.add(v); out.append(v)
+        lookup_options[cat] = out
     try:
         package_services = get_package_services(conn, reg.get('product_id'), reg.get('plan_type'))
     except Exception:
@@ -3427,6 +3541,7 @@ def admin_client_detail(reg_id):
         documents=documents, doc_requests=doc_requests, notifications=notifications,
         counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
         ops_config=ops_config, lookup_options=lookup_options, package_services=package_services,
+        sales_completed_by_name=sales_completed_by_name, ops_verified_by_name=ops_verified_by_name,
         user=user, active_section='clients')
 
 
@@ -3456,17 +3571,34 @@ def admin_client_sales_complete(reg_id):
         fn = f['field_name']
         if fn not in _CR_SALES_COLS:
             continue
+        # Only write fields the form actually submitted. Sales verification now
+        # shows the lead-provided details (plan/package/lead source) READ-ONLY and
+        # only Joined Stage is editable — so un-submitted fields must NOT be blanked
+        # (founder 2026-07-13). A read-only field is absent from request.form.
+        if fn not in request.form:
+            continue
         v = request.form.get(fn, '')
         if f['field_type'] == 'number':
             v = float(v or 0)
         dyn[fn] = v
 
+    # Counsellor auto-assigns to the sales member doing the verification (founder
+    # 2026-07-13: "sales member is the counsellor"). If the form still posts an
+    # explicit counsellor_id (e.g. assigning to a colleague) we honour it; otherwise
+    # default to the logged-in user so it's never left blank / re-asked.
+    counsellor_id = request.form.get('counsellor_id') or user['id']
     set_parts = ["counsellor_id = ?", "counsellor_name = (SELECT name FROM employees WHERE id = ?)"]
-    vals = [request.form.get('counsellor_id'), request.form.get('counsellor_id')]
+    vals = [counsellor_id, counsellor_id]
+    # Installments are entered by the sales member in the lead form and already
+    # copied onto the registration — sales verification only DISPLAYS them (with
+    # GST) to confirm, it must not re-ask or overwrite them (founder 2026-07-13).
+    # They remain editable in the Payments hub. Only write here if the form still
+    # posts a value (backward-compatible; the new UI posts none).
     for i in (1, 2, 3, 4):
-        set_parts += [f"inst{i}_amount = ?", f"inst{i}_date = ?", f"inst{i}_note = ?"]
-        vals += [float(request.form.get(f'inst{i}_amount', 0) or 0),
-                 request.form.get(f'inst{i}_date', ''), request.form.get(f'inst{i}_note', '')]
+        if request.form.get(f'inst{i}_amount', '') != '':
+            set_parts += [f"inst{i}_amount = ?", f"inst{i}_date = ?", f"inst{i}_note = ?"]
+            vals += [float(request.form.get(f'inst{i}_amount', 0) or 0),
+                     request.form.get(f'inst{i}_date', ''), request.form.get(f'inst{i}_note', '')]
     for k, v in dyn.items():
         set_parts.append(f"{k} = ?")
         vals.append(v)
@@ -3527,8 +3659,11 @@ def admin_client_ops_verify(reg_id):
 
     if action == 'confirm':
         # Config-driven ops fields (role='ops'), whitelisted to real columns.
-        _CR_OPS_COLS = {'account_status', 'current_stage', 'dropped_date',
-                        'switched_program', 'upgraded_to'}
+        # Dropped Date / Switched Program / Upgraded To are intentionally NOT
+        # here (founder 2026-07-13): those are lifecycle edits done later in the
+        # client profile, not part of ops verification. Ops only sets status +
+        # current stage at verify time.
+        _CR_OPS_COLS = {'account_status', 'current_stage'}
         prod = conn.execute("SELECT product_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
         ops_cfg = conn.execute(
             "SELECT field_name FROM client_form_configs WHERE product_id = ? "
@@ -3541,13 +3676,9 @@ def admin_client_ops_verify(reg_id):
                 set_parts.append(f"{f['field_name']} = ?")
                 vals.append(request.form.get(f['field_name'], ''))
         conn.execute(f"UPDATE client_registrations SET {', '.join(set_parts)} WHERE id = ?", vals + [reg_id])
-        # 2026-06-02 (Phase E): auto-populate the welcome-kit checklist
-        # from the product's template. Skips silently if a checklist
-        # already exists or the product has no template defined.
-        try:
-            _seed_client_welcome_kit_from_template(conn, reg_id)
-        except Exception as wk_err:
-            logging.warning(f"seed client welcome kit at ops-verify: {wk_err}")
+        # Welcome-kit checklist removed from the onboarding flow (founder
+        # 2026-07-13: no welcome kit is being sent). We no longer seed it at
+        # ops-verify. The welcome EMAIL still goes out via _notify_onboarding_confirmed.
         conn.commit()
         conn.close()
         _notify_onboarding_confirmed(reg_id)
@@ -3670,6 +3801,118 @@ def _notify_onboarding_confirmed(reg_id):
         logging.error(f"_notify_onboarding_confirmed: {e}")
 
 
+# ─── Welcome Call (hybrid): client requests a preferred slot, ops confirms ───
+
+def _welcome_call_ics(summary, description, date_str, time_str, duration_min=30):
+    """Build a base64 .ics calendar invite for a welcome call. date_str
+    'YYYY-MM-DD' + time_str 'HH:MM' are IST; emitted as UTC so Google/Outlook/
+    Apple calendars all read it correctly. Returns None on bad input."""
+    from datetime import datetime as _dt, timedelta as _td
+    import base64 as _b64
+    try:
+        start_ist = _dt.strptime(f"{date_str} {(time_str or '10:00')}", "%Y-%m-%d %H:%M")
+    except Exception:
+        return None
+    start_utc = start_ist - _td(hours=5, minutes=30)
+    end_utc = start_utc + _td(minutes=duration_min)
+    _fmt = lambda d: d.strftime("%Y%m%dT%H%M%SZ")
+    now = datetime.utcnow()
+    uid = f"wc-{date_str}-{(time_str or '').replace(':', '')}-{now.strftime('%Y%m%d%H%M%S')}@goocampus.org"
+    def esc(s):
+        return (s or '').replace('\\', '\\\\').replace(';', '\\;').replace(',', '\\,').replace('\n', '\\n')
+    ics = "\r\n".join([
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GooCampus//Welcome Call//EN",
+        "CALSCALE:GREGORIAN", "METHOD:REQUEST", "BEGIN:VEVENT",
+        f"UID:{uid}", f"DTSTAMP:{_fmt(now)}", f"DTSTART:{_fmt(start_utc)}", f"DTEND:{_fmt(end_utc)}",
+        f"SUMMARY:{esc(summary)}", f"DESCRIPTION:{esc(description)}",
+        "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR", "",
+    ])
+    return _b64.b64encode(ics.encode('utf-8')).decode('ascii')
+
+
+@app.route('/client/welcome-call/request', methods=['POST'])
+@client_required
+def client_welcome_call_request():
+    """Client submits a PREFERRED welcome-call slot (after contract + refund).
+    Ops sees it and sets/confirms the final one."""
+    acct_id = session.get('user_id')
+    reg_id = request.form.get('reg_id')
+    conn = get_db()
+    reg = conn.execute("SELECT id FROM client_registrations WHERE id = ? AND account_id = ?",
+                       (reg_id, acct_id)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Registration not found.', 'error')
+        return redirect(url_for('client_dashboard'))
+    conn.execute(
+        "UPDATE client_registrations SET wc_pref_date=?, wc_pref_time=?, wc_pref_notes=?, "
+        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (request.form.get('wc_pref_date', ''), request.form.get('wc_pref_time', ''),
+         request.form.get('wc_pref_notes', ''), reg_id))
+    conn.commit()
+    conn.close()
+    flash('Thanks! Your preferred welcome-call time has been shared with our team — we will confirm shortly.', 'success')
+    return redirect(url_for('client_dashboard'))
+
+
+@app.route('/admin/client/<int:reg_id>/welcome-call/confirm', methods=['POST'])
+@login_required
+def admin_client_welcome_call_confirm(reg_id):
+    """Ops sets the FINAL welcome-call slot + caller and confirms. Emails the
+    client an .ics invite; the confirmation shows on their dashboard."""
+    conn = get_db()
+    reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('admin_clients_list'))
+    date_s = (request.form.get('wc_scheduled_date', '') or '').strip()
+    time_s = (request.form.get('wc_scheduled_time', '') or '').strip()
+    wc_by = (request.form.get('wc_by', '') or '').strip()
+    if not date_s or not time_s:
+        conn.close()
+        flash('Please set the welcome-call date and time before confirming.', 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id))
+    conn.execute(
+        "UPDATE client_registrations SET wc_scheduled_date=?, wc_scheduled_time=?, wc_by=?, "
+        "wc_confirmed=1, wc_confirmed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (date_s, time_s, wc_by, reg_id))
+    conn.commit()
+    client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+    client_email = reg['email']
+    product_name = reg['product_name'] or 'your program'
+    conn.close()
+    try:
+        from email_utils import send_email
+    except Exception:
+        send_email = None
+    if send_email and client_email:
+        summary = "GooCampus Welcome Call"
+        desc = (f"Your GooCampus welcome call for {product_name}. "
+                f"Our team member {wc_by or 'GooCampus'} will call you at the scheduled time.")
+        ics_b64 = _welcome_call_ics(summary, desc, date_s, time_s)
+        inner = (f"<h2 style='color:#0f1b33;'>Your Welcome Call is confirmed</h2>"
+                 f"<p>Dear {client_name or 'there'},</p>"
+                 f"<p>Your GooCampus welcome call is scheduled for:</p>"
+                 f"<p style='font-size:1.05rem;'><b>{date_s} at {time_s} IST</b>"
+                 f"{(' with ' + wc_by) if wc_by else ''}</p>"
+                 f"<p>A calendar invite is attached so you can add it to your calendar. "
+                 f"We look forward to speaking with you!</p><p>— Team GooCampus</p>")
+        try:
+            from email_utils import render_branded_email
+            body = render_branded_email('Welcome Call Confirmed', inner)
+        except Exception:
+            body = inner
+        atts = [{'filename': 'welcome-call.ics', 'content': ics_b64}] if ics_b64 else None
+        try:
+            send_email([client_email], "Your GooCampus Welcome Call is confirmed", body, attachments=atts)
+        except Exception as e:
+            logging.warning(f"welcome call email {reg_id}: {e}")
+    flash('Welcome call confirmed. The client has been emailed a calendar invite.', 'success')
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
 def _sync_to_plab_and_academics(conn, reg, reg_id):
     """Sync confirmed client registration data into plab_clients and ops_academic_details."""
     reg_num = reg.get('registration_number', '')
@@ -3699,6 +3942,22 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
     # Get created_by (the ops user who confirmed)
     created_by = reg.get('ops_verified_by') or reg.get('counsellor_id')
 
+    # Resolve the client's REAL pathway from their product so the master record
+    # is stamped correctly. Root fix for "everything shows PLAB": this insert
+    # previously omitted pathway/product_id, so plab_clients.pathway fell back to
+    # its 'plab' default for every pathway — hiding Australia/UAE/Consulting/
+    # Portfolio/Training clients inside the PLAB lists + links. Mirrors the
+    # internal-transfer path (_execute_internal_transfer), which does set pathway.
+    pathway = 'plab'
+    product_id = reg.get('product_id')
+    if product_id:
+        try:
+            prow = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (product_id,)).fetchone()
+            if prow and (prow['pathway'] or '').strip():
+                pathway = prow['pathway'].strip()
+        except Exception as _pw_err:
+            logging.warning(f"pathway resolve for reg {reg_id}: {_pw_err}")
+
     # INSERT into plab_clients
     conn.execute('''INSERT INTO plab_clients (
         registration_number, registration_date, prefix, first_name, last_name,
@@ -3713,7 +3972,7 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         inst2_amount, inst2_date, inst2_note,
         inst3_amount, inst3_date, inst3_note,
         inst4_amount, inst4_date, inst4_note,
-        additional_notes, created_by
+        additional_notes, created_by, pathway, product_id
     ) VALUES (
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?,
@@ -3727,7 +3986,7 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
-        ?, ?
+        ?, ?, ?, ?
     )''', (
         reg_num, reg.get('created_at', ''), reg.get('prefix', 'Dr.'),
         reg.get('first_name', ''), reg.get('last_name', ''),
@@ -3746,8 +4005,23 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         reg.get('inst2_amount', 0), reg.get('inst2_date', ''), reg.get('inst2_note', ''),
         reg.get('inst3_amount', 0), reg.get('inst3_date', ''), reg.get('inst3_note', ''),
         reg.get('inst4_amount', 0), reg.get('inst4_date', ''), reg.get('inst4_note', ''),
-        reg.get('additional_notes', ''), created_by
+        reg.get('additional_notes', ''), created_by, pathway, product_id
     ))
+
+    # Copy the Parent/Guardian granular data onto the master record too (the flat
+    # father_name/mother_name/parents_email are already in the insert above).
+    try:
+        conn.execute(
+            "UPDATE plab_clients SET guardian_type=?, father_first_name=?, father_last_name=?, "
+            "father_email=?, mother_first_name=?, mother_last_name=?, mother_email=?, "
+            "guardian_first_name=?, guardian_last_name=?, guardian_email=?, guardian_phone=? "
+            "WHERE registration_number = ?",
+            (reg.get('guardian_type', ''), reg.get('father_first_name', ''), reg.get('father_last_name', ''),
+             reg.get('father_email', ''), reg.get('mother_first_name', ''), reg.get('mother_last_name', ''),
+             reg.get('mother_email', ''), reg.get('guardian_first_name', ''), reg.get('guardian_last_name', ''),
+             reg.get('guardian_email', ''), reg.get('guardian_phone', ''), reg_num))
+    except Exception as _g_err:
+        logging.warning(f"sync guardian fields {reg_num}: {_g_err}")
 
     # INSERT into ops_academic_details (only if academics data exists)
     if academics:
@@ -8335,16 +8609,19 @@ def api_forex_rates():
     })
 
 
-def amc_aud_quote(plan_type, conn=None):
-    """Live pricing quote for an AUD-priced AMC plan (AMC 1 / AMC 2).
+def amc_aud_quote(plan_type, conn=None, product_id=None):
+    """Live INR pricing for a plan priced in a FOREIGN currency, read from the
+    plan's row in plan_packages (currency + package_amount + fx_markup_pct).
+    Returns None for INR plans (callers then use normal rupee pricing). The name
+    is kept for history, but it now works for ANY currency — not just AMC/AUD.
 
-    Returns a dict, or None if the plan_type isn't AUD-priced:
-      aud                – package amount in AUD
-      live_rate          – current AUD→INR from the forex feed
-      markup_pct         – % added to the live rate (approx. ICICI card rate)
+      currency           – the plan's pricing currency (e.g. 'AUD','USD','GBP')
+      amount / aud       – package amount in that currency ('aud' is a legacy alias)
+      live_rate          – current <currency>→INR from the forex feed
+      markup_pct         – % added to the live rate (AMC uses 3% ≈ card rate)
       effective_rate     – live_rate * (1 + markup_pct/100)  ← the rate we lock
-      inr                – aud * effective_rate  ← what the client pays (in INR)
-      fixed_sales_revenue– flat INR credited to the sales member for this plan
+      inr                – amount * effective_rate  ← what the client pays (in INR)
+      fixed_sales_revenue– optional flat INR sales revenue (0 = normal calc)
       rate_source/rate_stale – so a fallback (stale) rate is never used silently
     """
     if not plan_type:
@@ -8352,10 +8629,21 @@ def amc_aud_quote(plan_type, conn=None):
     _own = False
     if conn is None:
         conn = get_db(); _own = True
+    row = None
     try:
-        row = conn.execute(
-            "SELECT * FROM amc_aud_pricing WHERE plan_type = ? AND COALESCE(is_active,1)=1",
-            (plan_type,)).fetchone()
+        if product_id:
+            row = conn.execute(
+                "SELECT currency, package_amount, fx_markup_pct, fixed_sales_revenue "
+                "FROM plan_packages WHERE plan_type = ? AND product_id = ? "
+                "AND COALESCE(is_active,1)=1 LIMIT 1", (plan_type, product_id)).fetchone()
+        if not row:
+            # AMC 1/AMC 2 are priced the same wherever they sit; prefer a
+            # foreign-currency row for this plan type when no product is given.
+            row = conn.execute(
+                "SELECT currency, package_amount, fx_markup_pct, fixed_sales_revenue "
+                "FROM plan_packages WHERE plan_type = ? AND COALESCE(is_active,1)=1 "
+                "ORDER BY (COALESCE(currency,'INR') <> 'INR') DESC LIMIT 1",
+                (plan_type,)).fetchone()
     except Exception:
         row = None
     finally:
@@ -8363,18 +8651,23 @@ def amc_aud_quote(plan_type, conn=None):
             conn.close()
     if not row:
         return None
-    aud = float(row['aud_amount'] or 0)
-    markup = float(row['markup_pct'] if row['markup_pct'] is not None else 3)
+    currency = (row['currency'] or 'INR').upper()
+    if currency == 'INR':
+        return None  # rupee plans: no forex quote, callers keep normal INR pricing
+    amount = float(row['package_amount'] or 0)
+    markup = float(row['fx_markup_pct'] if row['fx_markup_pct'] is not None else 0)
     rates = get_fx_rates_inr()
-    live = float(rates.get('AUD', 0) or 0)
+    live = float(rates.get(currency, 0) or 0)
     effective = round(live * (1 + markup / 100.0), 4)
     return {
         'plan_type': plan_type,
-        'aud': aud,
+        'currency': currency,
+        'amount': amount,
+        'aud': amount,  # legacy alias so older templates/JS keep working
         'live_rate': round(live, 4),
         'markup_pct': markup,
         'effective_rate': effective,
-        'inr': round(aud * effective, 2),
+        'inr': round(amount * effective, 2),
         'fixed_sales_revenue': float(row['fixed_sales_revenue'] or 0),
         'rate_source': _fx_cache.get('source', 'fallback'),
         'rate_stale': (_fx_cache.get('source') == 'fallback'),
@@ -8383,9 +8676,15 @@ def amc_aud_quote(plan_type, conn=None):
 
 @app.route('/api/amc-aud-quote')
 def api_amc_aud_quote():
-    """Live AUD→INR quote for an AMC plan — used by the sales close form so the
-    rep sees 'Package 1550 AUD × ₹XX + 3% = ₹YY' before saving."""
-    q = amc_aud_quote(request.args.get('plan_type', ''))
+    """Live foreign-currency→INR quote for a plan — used by the sales close form so
+    the rep sees 'Package 1550 AUD × ₹XX + 3% = ₹YY' before saving. Works for any
+    currency now; the legacy 'aud_priced' flag == 'this plan is foreign-priced'."""
+    pid = request.args.get('product_id') or None
+    try:
+        pid = int(pid) if pid else None
+    except (TypeError, ValueError):
+        pid = None
+    q = amc_aud_quote(request.args.get('plan_type', ''), product_id=pid)
     if not q:
         return jsonify({'aud_priced': False})
     q['aud_priced'] = True
@@ -8625,6 +8924,41 @@ def ensure_crm_tables():
             ('client_registrations',     'dropped_date',           'TEXT'),
             ('client_registrations',     'switched_program',       'TEXT'),
             ('client_registrations',     'upgraded_to',            'TEXT'),
+            # Parent / Guardian block (2026-07-13): the form collects EITHER both
+            # parents OR one guardian, each with granular first/last/email/phone.
+            ('client_registrations',     'guardian_type',          'TEXT'),
+            ('client_registrations',     'father_first_name',      'TEXT'),
+            ('client_registrations',     'father_last_name',       'TEXT'),
+            ('client_registrations',     'father_email',           'TEXT'),
+            ('client_registrations',     'mother_first_name',      'TEXT'),
+            ('client_registrations',     'mother_last_name',       'TEXT'),
+            ('client_registrations',     'mother_email',           'TEXT'),
+            ('client_registrations',     'guardian_first_name',    'TEXT'),
+            ('client_registrations',     'guardian_last_name',     'TEXT'),
+            ('client_registrations',     'guardian_email',         'TEXT'),
+            ('client_registrations',     'guardian_phone',         'TEXT'),
+            # Welcome call (hybrid, 2026-07-13): client requests a preferred slot
+            # after contract+refund; ops sets the final slot + caller and confirms.
+            ('client_registrations',     'wc_pref_date',           'TEXT'),
+            ('client_registrations',     'wc_pref_time',           'TEXT'),
+            ('client_registrations',     'wc_pref_notes',          'TEXT'),
+            ('client_registrations',     'wc_scheduled_date',      'TEXT'),
+            ('client_registrations',     'wc_scheduled_time',      'TEXT'),
+            ('client_registrations',     'wc_by',                  'TEXT'),
+            ('client_registrations',     'wc_confirmed',           'INTEGER DEFAULT 0'),
+            ('client_registrations',     'wc_confirmed_at',        'TIMESTAMP'),
+            # Mirror onto the master record so ops profiles show the full picture.
+            ('plab_clients',             'guardian_type',          'TEXT'),
+            ('plab_clients',             'father_first_name',      'TEXT'),
+            ('plab_clients',             'father_last_name',       'TEXT'),
+            ('plab_clients',             'father_email',           'TEXT'),
+            ('plab_clients',             'mother_first_name',      'TEXT'),
+            ('plab_clients',             'mother_last_name',       'TEXT'),
+            ('plab_clients',             'mother_email',           'TEXT'),
+            ('plab_clients',             'guardian_first_name',    'TEXT'),
+            ('plab_clients',             'guardian_last_name',     'TEXT'),
+            ('plab_clients',             'guardian_email',         'TEXT'),
+            ('plab_clients',             'guardian_phone',         'TEXT'),
             # Centralised admin payments hub: source product for internal
             # transfers ("Switched from other program").
             ('ops_payments',             'source_product',         'TEXT'),
@@ -23962,6 +24296,25 @@ _BULK_FREETEXT_HINTS = ('note', 'remark', 'comment', 'description', 'reason', 'a
                         'url', 'email', 'name')
 BULK_PATHWAYS = ['plab', 'australia', 'consulting', 'portfolio', 'training', 'uae']
 
+# Canonical pathway -> client-profile endpoint. The single place that knows which
+# ops profile a client of a given pathway lives on, so links/redirects after
+# verification route to the RIGHT pathway (not always PLAB). Pairs with the
+# master-record pathway fix.
+PATHWAY_DETAIL_ENDPOINT = {
+    'plab': 'ops_plab_dashboard',
+    'australia': 'ops_australia_client_detail',
+    'consulting': 'ops_consulting_client_detail',
+    'portfolio': 'ops_portfolio_client_detail',
+    'training': 'ops_training_client_detail',
+    'uae': 'ops_uae_client_detail',
+}
+
+
+def pathway_detail_url(pathway, client_id):
+    """URL of the ops client-profile page for this pathway (defaults to PLAB)."""
+    ep = PATHWAY_DETAIL_ENDPOINT.get((pathway or 'plab').strip().lower(), 'ops_plab_dashboard')
+    return url_for(ep, client_id=client_id)
+
 
 def _bulk_columns(conn, table, pathway=None):
     """Editable columns for an ops_* table (whitelisted), with input types.
@@ -26284,7 +26637,7 @@ def ensure_sales_crm_tables():
         # AUD rate-lock (AMC 1 / AMC 2): frozen at lead generation, never re-floats.
         # amc_fx_rate = live AUD→INR; amc_fx_effective = live * (1+markup%); amc_inr_amount
         # = aud * effective (what the client pays, collected in INR). Date+time in locked_at.
-        for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
+        for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_currency', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
                        ('amc_fx_rate', 'NUMERIC(10,4)'), ('amc_fx_markup', 'NUMERIC(5,2)'),
                        ('amc_fx_effective', 'NUMERIC(10,4)'), ('amc_inr_amount', 'NUMERIC(14,2)'),
                        ('amc_fx_locked_at', 'TIMESTAMP')):
@@ -27056,11 +27409,11 @@ def sales_leads_add():
                     amc_lock = amc_aud_quote(_plan, conn=conn)
                     if new_lead_id and amc_lock:
                         conn.execute(
-                            "UPDATE sales_leads SET amc_plan_type=?, amc_aud_amount=?, amc_fx_rate=?, "
+                            "UPDATE sales_leads SET amc_plan_type=?, amc_currency=?, amc_aud_amount=?, amc_fx_rate=?, "
                             "amc_fx_markup=?, amc_fx_effective=?, amc_inr_amount=?, amc_fx_locked_at=CURRENT_TIMESTAMP "
                             "WHERE id=?",
-                            (_plan, amc_lock['aud'], amc_lock['live_rate'], amc_lock['markup_pct'],
-                             amc_lock['effective_rate'], amc_lock['inr'], new_lead_id))
+                            (_plan, amc_lock.get('currency', 'AUD'), amc_lock['aud'], amc_lock['live_rate'],
+                             amc_lock['markup_pct'], amc_lock['effective_rate'], amc_lock['inr'], new_lead_id))
                         conn.commit()
                 except Exception as _fxe:
                     logging.warning(f"AMC AUD lock (add): {_fxe}")
@@ -28059,22 +28412,21 @@ def sales_revenue_report():
         where += " AND c.registration_date <= ?"; params.append(d_to)
     rows = []
     try:
-        # AUD plans (AMC 1/AMC 2) credit a FIXED sales revenue (amc_aud_pricing),
-        # not package-cost-discount. aap.fixed_sales_revenue is NULL for every other
-        # plan, so the CASE falls back to the normal computation for them.
+        # Plans with a FIXED sales revenue (e.g. foreign-currency AMC 1/AMC 2) credit
+        # that flat figure, not package-cost-discount. pp.fixed_sales_revenue is NULL
+        # for normal plans, so the CASE falls back to the usual computation.
         rows = conn.execute(
             "SELECT COALESCE(NULLIF(TRIM(c.counsellor),''),'Unassigned') AS counsellor, "
             "       COUNT(*) AS clients, "
             "       COALESCE(SUM(c.package_amount),0) AS total_package, "
             "       COALESCE(SUM(COALESCE(pp.plan_cost,0)),0) AS total_cost, "
             "       COALESCE(SUM(c.discount_allowed),0) AS total_discount, "
-            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "       COALESCE(SUM(CASE WHEN pp.fixed_sales_revenue IS NOT NULL THEN pp.fixed_sales_revenue "
             "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) END),0) AS sales_revenue, "
-            "       COALESCE(SUM(CASE WHEN aap.fixed_sales_revenue IS NOT NULL THEN aap.fixed_sales_revenue "
+            "       COALESCE(SUM(CASE WHEN pp.fixed_sales_revenue IS NOT NULL THEN pp.fixed_sales_revenue "
             "                         ELSE c.package_amount - COALESCE(pp.plan_cost,0) - COALESCE(c.discount_allowed,0) END),0) AS actual_revenue "
             "FROM plab_clients c "
             "LEFT JOIN plan_packages pp ON pp.product_id = c.product_id AND pp.plan_type = c.plan_type "
-            "LEFT JOIN amc_aud_pricing aap ON aap.plan_type = c.plan_type AND COALESCE(aap.is_active,1) = 1 "
             + where +
             " GROUP BY 1 ORDER BY actual_revenue DESC", params).fetchall()
     except Exception as e:
@@ -29645,6 +29997,14 @@ def ensure_package_tables():
         "CREATE INDEX IF NOT EXISTS idx_package_services_plan ON package_services(plan_package_id)",
         "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS plan_cost NUMERIC(14,2) DEFAULT 0",
         "ALTER TABLE package_services ADD COLUMN IF NOT EXISTS budget NUMERIC(14,2) DEFAULT 0",
+        # Multi-currency per plan type (2026-07-14): any plan can be priced in a
+        # FOREIGN currency; the client is still billed INR at the live rate + markup.
+        # currency default 'INR' (rupees, unchanged); fx_markup_pct = % over the live
+        # rate (AMC uses 3%); fixed_sales_revenue = optional flat INR sales revenue
+        # (NULL/0 = use the normal package-cost-discount calc). Replaces amc_aud_pricing.
+        "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR'",
+        "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS fx_markup_pct NUMERIC(5,2) DEFAULT 0",
+        "ALTER TABLE plan_packages ADD COLUMN IF NOT EXISTS fixed_sales_revenue NUMERIC(14,2)",
         # AUD-priced plans (AMC 1 / AMC 2). Keyed by plan_type so it works whatever
         # product they sit under. aud_amount = package in AUD; fixed_sales_revenue =
         # the flat INR credited to the sales member (NOT package-cost-discount);
@@ -29675,6 +30035,26 @@ def ensure_package_tables():
         except Exception:
             try: conn.rollback()
             except Exception: pass
+    # ONE-TIME migration (marker-gated): fold amc_aud_pricing into plan_packages so
+    # AMC 1/AMC 2 are managed in Products & Services like every other plan. Runs once,
+    # then the admin owns the values (so a later edit is never overwritten).
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        _mk = conn.execute("SELECT value FROM _import_markers WHERE key = 'amc_currency_migrated'").fetchone()
+        if not _mk:
+            conn.execute(
+                "UPDATE plan_packages pp SET currency = 'AUD', package_amount = aap.aud_amount, "
+                "fx_markup_pct = aap.markup_pct, fixed_sales_revenue = aap.fixed_sales_revenue "
+                "FROM amc_aud_pricing aap "
+                "WHERE pp.plan_type = aap.plan_type AND COALESCE(aap.is_active,1) = 1 "
+                "AND COALESCE(pp.currency, 'INR') = 'INR'")
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES ('amc_currency_migrated', 'v1') "
+                         "ON CONFLICT (key) DO NOTHING")
+            conn.commit()
+    except Exception as _mig_e:
+        logging.warning(f"amc->plan_packages currency migration: {_mig_e}")
+        try: conn.rollback()
+        except Exception: pass
     conn.close()
 
 
@@ -30890,6 +31270,176 @@ def seed_clean_junk_cities():
 
 
 seed_clean_junk_cities()
+
+
+_CANONICAL_STATES = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa',
+    'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala',
+    'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland',
+    'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands',
+    'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+]
+
+
+def seed_clean_junk_states():
+    """The /company/locations backfill inserted free-text 'state' values scraped
+    from partner/client records, so the States dropdown accumulated (a) COUNTRY
+    names typed as a state and (b) control-char / whitespace variants of real
+    states ('Gujarat\\x0e' -> a phantom second 'Gujarat'). This normalises the
+    states table to the 36 canonical Indian states + UTs: strip control chars,
+    merge duplicate variants (moving their cities onto the real row), and delete
+    anything that isn't a real state (countries/junk) with its orphan cities.
+    Client-saved state values are de-junked too. Idempotent (safe every boot)."""
+    import re as _re
+
+    def _norm(v):
+        v = _re.sub(r'[\x00-\x1f\x7f]', '', v or '')
+        return ' '.join(v.split()).strip()
+
+    canon = {_norm(s).lower(): _norm(s) for s in _CANONICAL_STATES}
+    conn = get_db()
+    try:
+        # 1) Repair client-facing saved state values (strip control chars).
+        for tbl in ('client_registrations', 'plab_clients', 'partners', 'partner_leads'):
+            try:
+                conn.execute(
+                    f"UPDATE {tbl} SET state = NULLIF(BTRIM(regexp_replace(state, '[[:cntrl:]]', '', 'g')), '') "
+                    f"WHERE state IS NOT NULL AND state ~ '[[:cntrl:]]'")
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_clean_junk_states repair {tbl}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        # 2) Group states by normalized name; merge dupes, rename, drop junk.
+        try:
+            rows = conn.execute("SELECT id, name FROM states").fetchall()
+        except Exception:
+            rows = []
+        groups = {}
+        for r in rows:
+            groups.setdefault(_norm(r['name']).lower(), []).append((r['id'], r['name']))
+        for norm_lc, members in groups.items():
+            target = canon.get(norm_lc)              # canonical display name, or None if junk
+            want = target or _norm(members[0][1])
+            keep = None
+            for mid, mname in members:
+                if _norm(mname) == want:
+                    keep = mid
+                    break
+            if keep is None:
+                keep = min(m[0] for m in members)
+            others = [m[0] for m in members if m[0] != keep]
+            try:
+                for oid in others:                   # fold variant rows into the kept one
+                    conn.execute("UPDATE cities SET state_id = ? WHERE state_id = ?", (keep, oid))
+                    conn.execute("DELETE FROM states WHERE id = ?", (oid,))
+                conn.execute("UPDATE states SET name = ? WHERE id = ? AND name <> ?", (want, keep, want))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_clean_junk_states merge {norm_lc}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+            if target is None:                       # not a real Indian state -> remove it + its cities
+                try:
+                    conn.execute("DELETE FROM cities WHERE state_id = ?", (keep,))
+                    conn.execute("DELETE FROM states WHERE id = ?", (keep,))
+                    conn.commit()
+                except Exception as e:
+                    logging.warning(f"seed_clean_junk_states drop-junk {norm_lc}: {e}")
+                    try: conn.rollback()
+                    except Exception: pass
+        # 3) De-dupe any identical city rows the state-merge may have created.
+        try:
+            conn.execute("DELETE FROM cities a USING cities b "
+                         "WHERE a.id > b.id AND a.state_id = b.state_id AND a.name = b.name")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"seed_clean_junk_states city-dedupe: {e}")
+            try: conn.rollback()
+            except Exception: pass
+        logging.info("seed_clean_junk_states: normalised states to canonical Indian set")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_clean_junk_states()
+
+
+def ensure_countries_reference():
+    """CENTRAL countries reference table — the single source of truth for the
+    country list across the portal (client form Academic 'Country' dropdown, the
+    phone country-code picker, the College module + partner forms all read this
+    table). Created here in core so it never depends on the College module being
+    loaded. Upserts the full list from core/geo_data.py, adds dial_code + region
+    columns, points the academic 'country' field at the table, and removes the
+    earlier duplicate lookup_options rows. Idempotent (safe every boot)."""
+    try:
+        from core.geo_data import COUNTRIES
+    except Exception as e:
+        logging.error(f"ensure_countries_reference import: {e}")
+        return
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS countries (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            code TEXT DEFAULT '',
+            currency_code TEXT DEFAULT 'USD',
+            dial_code TEXT DEFAULT '',
+            region TEXT DEFAULT '',
+            is_active BOOLEAN DEFAULT TRUE
+        )''')
+        conn.commit()
+        # Backfill columns the College-created table may pre-date.
+        for ddl in ("ALTER TABLE countries ADD COLUMN dial_code TEXT DEFAULT ''",
+                    "ALTER TABLE countries ADD COLUMN region TEXT DEFAULT ''",
+                    "ALTER TABLE countries ADD COLUMN is_active BOOLEAN DEFAULT TRUE"):
+            try:
+                conn.execute(ddl); conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        for (name, iso2, dial, cur, region) in COUNTRIES:
+            try:
+                conn.execute(
+                    "INSERT INTO countries (name, code, currency_code, dial_code, region, is_active) "
+                    "VALUES (?, ?, ?, ?, ?, TRUE) "
+                    "ON CONFLICT (name) DO UPDATE SET code = EXCLUDED.code, "
+                    "currency_code = EXCLUDED.currency_code, dial_code = EXCLUDED.dial_code, "
+                    "region = EXCLUDED.region, is_active = TRUE",
+                    (name, iso2, cur, dial, region))
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        # Point the academic country field at the table-backed dropdown.
+        try:
+            conn.execute(
+                "UPDATE client_form_configs SET field_type = 'select', field_options = 'db:countries' "
+                "WHERE field_name = 'country' AND role = 'client' AND step_number = 2 "
+                "AND (field_options IS NULL OR field_options = '' OR field_options = 'db:countries')")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"ensure_countries_reference repoint: {e}")
+            try: conn.rollback()
+            except Exception: pass
+        # Drop the earlier duplicate lookup_options 'countries' rows (now table-backed).
+        try:
+            conn.execute("DELETE FROM lookup_options WHERE category = 'countries'")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        logging.info("ensure_countries_reference: central countries table ready")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+ensure_countries_reference()
 
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
@@ -32245,7 +32795,13 @@ def company_locations_backfill():
                 seen.add(key)
                 unique_pairs.append((s, c))
         # For each pair, check if state exists (case-insensitive), then check city
+        _canon_lc = {s.strip().lower() for s in _CANONICAL_STATES}
         for state_name, city_name in unique_pairs:
+            # Only accept real Indian states. Free-text 'state' values in partner/
+            # client data include country names + junk — never let those into the
+            # States dropdown (that pollution is exactly what we just cleaned up).
+            if state_name.strip().lower() not in _canon_lc:
+                continue
             st = conn.execute("SELECT id FROM states WHERE LOWER(name) = LOWER(?)", (state_name,)).fetchone()
             if not st:
                 # State doesn't exist — add it
@@ -34030,7 +34586,7 @@ def cleanup_obsolete_form_config_fields_once():
     value re-runs the cleanup with an expanded list.
     """
     MARKER_KEY = 'form_config_obsoletes_cleared'
-    MARKER_VAL = 'v2'
+    MARKER_VAL = 'v4'  # v4 (2026-07-13): retire the flat parent fields (Parent/Guardian block replaces them)
 
     # Fields that have moved out of the form into the Onboarding/
     # Welcome-Kit subsystem, plus other redundant/legacy entries.
@@ -34056,6 +34612,12 @@ def cleanup_obsolete_form_config_fields_once():
         'counsellor', 'counsellor_email', 'counsellor_number',
         # Legacy / unused
         'english_training',
+        # Ops lifecycle fields — moved OUT of ops verification (founder 2026-07-13);
+        # they're edited later in the client profile, not at verify time.
+        'dropped_date', 'switched_program', 'upgraded_to',
+        # Flat parent fields — replaced by the custom Parent/Guardian block, which
+        # renders itself (not via config). Remove them so they don't double-render.
+        'father_name', 'mother_name', 'father_phone', 'mother_phone', 'parents_email',
     )
 
     conn = None
@@ -36266,18 +36828,15 @@ def seed_client_form_configs():
             (1, 'Personal Details', 'facebook', 'Facebook', 'text', '', 'client', 0, 120, 'Profile URL', ''),
             (1, 'Personal Details', 'linkedin', 'LinkedIn', 'text', '', 'client', 0, 130, 'Profile URL', ''),
 
-            # ── Step 1: Parents Info (client fills) ──
-            (1, 'Personal Details', 'father_name', 'Father Name', 'text', '', 'client', 0, 140, '', ''),
-            (1, 'Personal Details', 'father_phone', 'Father Phone', 'tel', '', 'client', 0, 150, '', ''),
-            (1, 'Personal Details', 'mother_name', 'Mother Name', 'text', '', 'client', 0, 160, '', ''),
-            (1, 'Personal Details', 'mother_phone', 'Mother Phone', 'tel', '', 'client', 0, 170, '', ''),
-            (1, 'Personal Details', 'parents_email', 'Parents Email', 'email', '', 'client', 0, 180, '', ''),
+            # ── Step 1: Parent / Guardian — rendered by a custom block in the
+            #    client form (Parents vs Guardian choice), NOT config-driven, so no
+            #    flat father/mother/parents_email rows are seeded here anymore. ──
 
             # ── Step 2: Academic Details (client fills) ──
             (2, 'Academic Details', 'img_fmg', 'IMG / FMG', 'select', 'db:img_fmg', 'client', 1, 10, '', 'Select IMG or FMG'),
             (2, 'Academic Details', 'img_medical_college', 'IMG Medical College', 'text', '', 'client', 0, 20, 'College name (for IMG)', 'Visible if IMG selected'),
             (2, 'Academic Details', 'fmg_medical_college', 'FMG Medical College', 'text', '', 'client', 0, 30, 'College name (for FMG)', 'Visible if FMG selected'),
-            (2, 'Academic Details', 'country', 'Country', 'text', '', 'client', 0, 40, 'Country of medical college', 'For FMG only'),
+            (2, 'Academic Details', 'country', 'Country', 'select', 'db:countries', 'client', 0, 40, 'Country of medical college', 'For FMG only'),
             (2, 'Academic Details', 'mbbs_status', 'MBBS Status', 'select', 'db:mbbs_status', 'client', 1, 50, '', ''),
             (2, 'Academic Details', 'mbbs_start_date', 'MBBS Start Date', 'date', '', 'client', 0, 60, '', ''),
             (2, 'Academic Details', 'mbbs_end_date', 'MBBS End Date', 'date', '', 'client', 0, 70, '', ''),
@@ -36300,7 +36859,6 @@ def seed_client_form_configs():
             # ── Step 3: Sales Section (sales fills) ──
             (3, 'Sales Details', 'joined_stage', 'Joined Stage', 'select', 'db:joined_stage', 'sales', 0, 10, '', ''),
             (3, 'Sales Details', 'plan_type', 'Plan Type', 'select', 'db:plan_type', 'sales', 1, 20, '', ''),
-            (3, 'Sales Details', 'english_training', 'English Training', 'select', 'Yes,No', 'sales', 0, 30, '', ''),
             (3, 'Sales Details', 'counsellor', 'Counsellor', 'select', 'db:counsellor', 'sales', 1, 40, '', ''),
             (3, 'Sales Details', 'counsellor_email', 'Counsellor Email', 'email', '', 'sales', 0, 50, '', 'Auto-filled from counsellor'),
             (3, 'Sales Details', 'counsellor_number', 'Counsellor Number', 'tel', '', 'sales', 0, 60, '', 'Auto-filled from counsellor'),
@@ -36331,25 +36889,11 @@ def seed_client_form_configs():
             # ── Step 4: Operations Section (ops fills) ──
             (4, 'Operations', 'account_status', 'Account Status', 'select', 'db:account_status', 'ops', 1, 10, '', ''),
             (4, 'Operations', 'current_stage', 'Current Stage', 'select', 'db:plab_stage', 'ops', 0, 20, '', ''),
-            (4, 'Operations', 'dropped_date', 'Dropped Date', 'date', '', 'ops', 0, 30, '', 'If account status is Dropped'),
-            (4, 'Operations', 'switched_program', 'Switched Program', 'select', 'db:switched_program', 'ops', 0, 40, '', 'If account status is Switched'),
-            (4, 'Operations', 'upgraded_to', 'Upgraded To', 'text', '', 'ops', 0, 50, '', 'If client upgraded'),
-            (4, 'Operations', 'welcome_mail', 'Welcome Mail', 'select', 'Sent,Not Sent', 'ops', 0, 60, '', ''),
-            (4, 'Operations', 'welcome_call_by', 'Welcome Call By', 'text', '', 'ops', 0, 70, '', ''),
-            (4, 'Operations', 'welcome_call_date', 'Welcome Call Date', 'date', '', 'ops', 0, 80, '', ''),
-            (4, 'Operations', 'english_book', 'English Book', 'select', 'Sent,Not Sent,N/A', 'ops', 0, 90, '', ''),
-            (4, 'Operations', 'english_book_date', 'English Book Date', 'date', '', 'ops', 0, 100, '', ''),
-            (4, 'Operations', 'oxford_book', 'Oxford Book', 'select', 'Sent,Not Sent,N/A', 'ops', 0, 110, '', ''),
-            (4, 'Operations', 'oxford_book_date', 'Oxford Book Date', 'date', '', 'ops', 0, 120, '', ''),
-            (4, 'Operations', 'plab_brochure', 'PLAB Brochure', 'checkbox', '', 'ops', 0, 130, '', ''),
-            (4, 'Operations', 'ceo_letter', 'CEO Letter', 'checkbox', '', 'ops', 0, 140, '', ''),
-            (4, 'Operations', 'refund_policy', 'Refund Policy', 'checkbox', '', 'ops', 0, 150, '', ''),
-            (4, 'Operations', 'service_agreement', 'Service Agreement', 'checkbox', '', 'ops', 0, 160, '', ''),
-            (4, 'Operations', 'goodie_pen', 'Goodie - Pen', 'checkbox', '', 'ops', 0, 170, '', ''),
-            (4, 'Operations', 'goodie_diary', 'Goodie - Diary', 'checkbox', '', 'ops', 0, 180, '', ''),
-            (4, 'Operations', 'goodie_laptop_bag', 'Goodie - Laptop Bag', 'checkbox', '', 'ops', 0, 190, '', ''),
-            (4, 'Operations', 'goodie_stickers', 'Goodie - Stickers', 'checkbox', '', 'ops', 0, 200, '', ''),
             (4, 'Operations', 'additional_notes', 'Additional Notes', 'textarea', '', 'ops', 0, 210, '', ''),
+            # Ops verification collects only status + current stage (founder 2026-07-13).
+            # Dropped Date / Switched Program / Upgraded To moved to the client profile;
+            # welcome-mail / books / brochure / goodies belong to the Welcome-Kit +
+            # Onboarding subsystems, not verification. (All retired via OBSOLETE cleanup.)
         ]
 
         for pdef in product_definitions:

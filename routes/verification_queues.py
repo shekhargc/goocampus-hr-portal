@@ -85,7 +85,7 @@ def _newreg_rows(conn, stage):
     rows = conn.execute(f"""
         SELECT cr.id, cr.registration_number, cr.prefix, cr.first_name, cr.last_name,
                cr.counsellor_id, cr.counsellor_name, cr.client_submitted_at,
-               cr.sales_completed_at, ps.name AS product_name
+               cr.sales_completed_at, ps.name AS product_name, ps.pathway AS pathway
           FROM client_registrations cr
           LEFT JOIN products_services ps ON ps.id = cr.product_id
          WHERE {where}
@@ -97,6 +97,7 @@ def _newreg_rows(conn, stage):
             'id': r['id'], 'reg': r['registration_number'] or '—',
             'name': _name(r['prefix'], r['first_name'], r['last_name']),
             'product': r['product_name'] or '',
+            'pathway': (r['pathway'] or 'plab'),
             'counsellor_id': r['counsellor_id'], 'counsellor': r['counsellor_name'] or '',
             'when': r['client_submitted_at'] if stage == 'fill' else r['sales_completed_at'],
             'action_url': url_for('admin_client_detail', reg_id=r['id']),

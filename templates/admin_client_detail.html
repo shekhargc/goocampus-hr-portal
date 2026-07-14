@@ -397,7 +397,12 @@
         <button class="tab-btn" data-tab="sales" type="button">Sales Section</button>
         <button class="tab-btn" data-tab="operations" type="button">Operations</button>
         <button class="tab-btn" data-tab="documents" type="button">Documents</button>
-        <button class="tab-btn" data-tab="welcome-kit" type="button">Welcome Kit{% if welcome_kit %} ({{ welcome_kit|selectattr('status', 'equalto', 'done')|list|length }}/{{ welcome_kit|length }}){% endif %}</button>
+        {# Welcome Kit tab removed from the onboarding flow (founder 2026-07-13 —
+           no welcome kit being sent). Only show it for legacy clients that still
+           have a checklist on file. #}
+        {% if welcome_kit %}
+        <button class="tab-btn" data-tab="welcome-kit" type="button">Welcome Kit ({{ welcome_kit|selectattr('status', 'equalto', 'done')|list|length }}/{{ welcome_kit|length }})</button>
+        {% endif %}
         <button class="tab-btn" data-tab="notifications" type="button">Notifications</button>
     </div>
 
@@ -572,6 +577,19 @@
     <!-- TAB 2: SALES SECTION -->
     <!-- ============================================================ -->
     <div class="tab-panel" id="tab-sales">
+        {# Client photo + identity at the top of sales verification (founder 2026-07-13). #}
+        {% set _ph = namespace(doc=None) %}
+        {% for d in documents %}{% if d.doc_type in ['Photograph', 'Photo'] and not _ph.doc %}{% set _ph.doc = d %}{% endif %}{% endfor %}
+        {% if _ph.doc %}
+        <div class="card" style="display:flex;align-items:center;gap:1rem;">
+            <img src="{{ _ph.doc.file_path if '://' in _ph.doc.file_path else '/' + _ph.doc.file_path }}" alt="Client photo"
+                 style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--gray-200);flex:0 0 auto;" onerror="this.style.display='none';">
+            <div>
+                <div style="font-weight:700;color:var(--navy);font-size:1.05rem;">{{ reg.prefix or '' }} {{ reg.first_name or '' }} {{ reg.last_name or '' }}</div>
+                <div style="font-size:0.82rem;color:var(--gray-500);">Reg #{{ reg.registration_number|format_reg if reg.registration_number else '-' }} · {{ reg.product_name or '-' }}</div>
+            </div>
+        </div>
+        {% endif %}
         {% if not reg.sales_completed %}
         <!-- Editable Sales Form -->
         <div class="card">
@@ -580,42 +598,78 @@
                 Fill in the sales details for this client registration.
             </p>
             <form method="POST" action="/admin/client/{{ reg.id }}/sales-complete" id="salesForm">
+                {# Counsellor auto-assigns to you (the sales member verifying). No
+                   need to pick it — the server records the logged-in user. #}
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="counsellor_id">Assigned Counsellor *</label>
-                        <select name="counsellor_id" id="counsellor_id" required>
-                            <option value="">-- Select Counsellor --</option>
-                            {% for c in counsellors %}
-                            <option value="{{ c.id }}" {% if reg.counsellor_id == c.id %}selected{% endif %}>{{ c.name }}</option>
-                            {% endfor %}
-                        </select>
+                        <label>Assigned Counsellor</label>
+                        <div class="info-value" style="padding:0.55rem 0;font-weight:600;">
+                            {{ reg.counsellor_name or user.name or 'You (auto-assigned)' }}
+                            <span style="font-weight:500;color:var(--gray-500);font-size:0.82rem;">· auto-assigned</span>
+                        </div>
                     </div>
+                </div>
+
+                {# Lead details are entered by sales in the lead form — shown READ-ONLY
+                   here to verify. Only Joined Stage is filled at verification
+                   (founder 2026-07-13). Read-only fields aren't posted, so the
+                   handler won't overwrite them. #}
+                <div class="sales-summary" style="margin-bottom:1.25rem;">
+                    <div class="sales-item"><div class="sales-item-label">Plan Type</div><div class="sales-item-value">{{ reg.plan_type or '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Package Amount</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.package_amount) if reg.package_amount else '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Discount</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.discount_allowed) if reg.discount_allowed else '-' }}</div></div>
+                    <div class="sales-item" style="border:2px solid var(--success);background:var(--success-light);"><div class="sales-item-label">Final Package</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.final_package) if reg.final_package else '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Lead Source</div><div class="sales-item-value">{{ reg.lead_source or '-' }}</div></div>
                 </div>
 
                 <div class="form-row" style="flex-wrap:wrap;">
-                    {% for f in sales_config %}{{ sales_field(f, reg[f.field_name]) }}{% endfor %}
-                    {% if not sales_config %}<p style="color:var(--gray-500);font-size:0.85rem;">No sales fields configured for this product. Add them under Settings → Client Form Config (role: Sales).</p>{% endif %}
+                    {% set jc = namespace(f=None) %}
+                    {% for f in sales_config %}{% if f.field_name == 'joined_stage' %}{% set jc.f = f %}{% endif %}{% endfor %}
+                    {% if jc.f %}{{ sales_field(jc.f, reg['joined_stage']) }}
+                    {% else %}
+                    <div class="form-group">
+                        <label for="joined_stage">Joined Stage</label>
+                        <select name="joined_stage" id="joined_stage">
+                            <option value="">— Select —</option>
+                            {% for s in lookup_options.get('joined_stage', []) %}
+                            <option value="{{ s }}"{% if reg.joined_stage == s %} selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                 </div>
 
-                <!-- Installments (structural) -->
-                <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.5rem 0 1rem;">Payment Installments</h3>
-
-                {% for i in range(1, 5) %}
-                <div class="inst-row">
-                    <div class="form-group">
-                        <label>Installment {{ i }} Amount</label>
-                        <input type="number" name="inst{{ i }}_amount" min="0" step="1" value="{{ reg['inst' ~ i ~ '_amount'] or '' }}" placeholder="Amount">
-                    </div>
-                    <div class="form-group">
-                        <label>Installment {{ i }} Date</label>
-                        <input type="date" name="inst{{ i }}_date" value="{{ reg['inst' ~ i ~ '_date'] or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Installment {{ i }} Note</label>
-                        <input type="text" name="inst{{ i }}_note" value="{{ reg['inst' ~ i ~ '_note'] or '' }}" placeholder="Optional note">
-                    </div>
+                {# Installments are entered in the lead form — shown here READ-ONLY
+                   (with GST) just to verify, not re-entered. GST = 18%, installment
+                   amounts are total incl-GST, split base + GST by ÷1.18. #}
+                <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.5rem 0 0.35rem;">Payment Installments <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— from the lead (verify only)</span></h3>
+                {% set ns = namespace(tot=0) %}
+                <div style="overflow-x:auto;">
+                    <table class="table" style="border-radius:0.6rem;overflow:hidden;">
+                        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total (incl GST)</th><th>Due Date</th><th>Note</th></tr></thead>
+                        <tbody>
+                        {% for i in range(1, 5) %}
+                        {% set amt = reg['inst' ~ i ~ '_amount'] %}
+                        {% if amt %}
+                        {% set total = amt|float %}
+                        {% set base = (total / 1.18) %}
+                        {% set gst = (total - base) %}
+                        {% set ns.tot = ns.tot + total %}
+                        <tr>
+                            <td>{{ i }}</td>
+                            <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
+                            <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(gst) }}</td>
+                            <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
+                            <td>{{ reg['inst' ~ i ~ '_date'] or '-' }}</td>
+                            <td>{{ reg['inst' ~ i ~ '_note'] or '-' }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                        {% if ns.tot == 0 %}<tr><td colspan="6" style="color:var(--gray-500);">No installments entered in the lead yet.</td></tr>{% endif %}
+                        </tbody>
+                        {% if ns.tot > 0 %}<tfoot><tr style="font-weight:700;"><td colspan="3" style="text-align:right;">Total incl GST</td><td style="text-align:right;">₹{{ '{:,.0f}'.format(ns.tot) }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
+                    </table>
                 </div>
-                {% endfor %}
 
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                     <button type="submit" class="button">
@@ -701,6 +755,41 @@
     <!-- TAB 3: OPERATIONS -->
     <!-- ============================================================ -->
     <div class="tab-panel" id="tab-operations">
+        {# ── Welcome Call (hybrid): client requests a slot, ops sets/confirms the
+             final one → emails the client a calendar invite (founder 2026-07-13). ── #}
+        <div class="card">
+            <h2 class="card-title">Welcome Call{% if reg.wc_confirmed %} <span class="badge badge-approved" style="margin-left:0.5rem;font-size:0.75rem;">Confirmed</span>{% endif %}</h2>
+            {% if reg.wc_pref_date or reg.wc_pref_time or reg.wc_pref_notes %}
+            <div class="info-grid" style="margin-bottom:1rem;">
+                <div class="info-item"><div class="info-label">Client's preferred date</div><div class="info-value">{{ reg.wc_pref_date or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Client's preferred time</div><div class="info-value">{{ reg.wc_pref_time or '-' }}</div></div>
+                <div class="info-item" style="grid-column:1 / -1;"><div class="info-label">Client's note</div><div class="info-value">{{ reg.wc_pref_notes or '-' }}</div></div>
+            </div>
+            {% else %}
+            <p style="color:var(--gray-500);font-size:0.88rem;">The client hasn't requested a slot yet — you can still schedule and confirm one below.</p>
+            {% endif %}
+            {% if reg.wc_confirmed %}
+            <div class="info-grid" style="background:var(--success-light);border-radius:0.5rem;padding:0.75rem;">
+                <div class="info-item"><div class="info-label">Scheduled</div><div class="info-value">{{ reg.wc_scheduled_date }} at {{ reg.wc_scheduled_time }} IST</div></div>
+                <div class="info-item"><div class="info-label">Call by</div><div class="info-value">{{ reg.wc_by or '-' }}</div></div>
+            </div>
+            <p style="font-size:0.8rem;color:var(--gray-500);margin:0.5rem 0 0;">Confirmed — the client was emailed a calendar invite. Re-confirm to change the slot.</p>
+            {% endif %}
+            <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/confirm" style="margin-top:1rem;">
+                <div class="form-row" style="flex-wrap:wrap;gap:1rem;">
+                    <div class="form-group"><label>Date</label><input type="date" name="wc_scheduled_date" value="{{ reg.wc_scheduled_date or reg.wc_pref_date or '' }}" required></div>
+                    <div class="form-group"><label>Time (IST)</label><input type="time" name="wc_scheduled_time" value="{{ reg.wc_scheduled_time or reg.wc_pref_time or '' }}" required></div>
+                    <div class="form-group"><label>Call by</label>
+                        <select name="wc_by">
+                            <option value="">— Select team member —</option>
+                            {% for c in counsellors %}<option value="{{ c.name }}"{% if reg.wc_by == c.name %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="button" style="margin-top:0.5rem;">{{ 'Re-confirm Welcome Call' if reg.wc_confirmed else 'Confirm Welcome Call & Email Client' }}</button>
+            </form>
+        </div>
+
         {% if reg.ops_status == 'verified' %}
         <!-- Verified State -->
         <div class="card">
@@ -711,7 +800,7 @@
             <div class="info-grid">
                 <div class="info-item">
                     <div class="info-label">Verified By</div>
-                    <div class="info-value">{{ reg.ops_verified_by or '-' }}</div>
+                    <div class="info-value">{{ ops_verified_by_name or reg.ops_verified_by or '-' }}</div>
                 </div>
                 <div class="info-item">
                     <div class="info-label">Verified At</div>

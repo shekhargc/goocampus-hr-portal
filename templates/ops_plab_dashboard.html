@@ -253,7 +253,7 @@
     <!-- Tab buttons -->
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;border-bottom:2px solid var(--gray-100);padding-bottom:4px;">
       <button type="button" id="dtbtn-personal" class="dtab-btn dtab-active" onclick="showDtab('dt-personal', this)" style="background:none;border:none;border-bottom:3px solid var(--orange);color:var(--navy);font-weight:700;font-size:14px;padding:8px 14px;cursor:pointer;">Personal</button>
-      <button type="button" id="dtbtn-parents" class="dtab-btn" onclick="showDtab('dt-parents', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Parents</button>
+      <button type="button" id="dtbtn-parents" class="dtab-btn" onclick="showDtab('dt-parents', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Parent / Guardian</button>
       <button type="button" id="dtbtn-plan" class="dtab-btn" onclick="showDtab('dt-plan', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Plan &amp; Stage</button>
       <button type="button" id="dtbtn-counsellor" class="dtab-btn" onclick="showDtab('dt-counsellor', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Counsellor &amp; Lead</button>
       <button type="button" id="dtbtn-onboarding" class="dtab-btn" onclick="showDtab('dt-onboarding', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Onboarding</button>
@@ -324,15 +324,22 @@
     <!-- Panel: Parents -->
     <div id="dt-parents" class="dtab-panel" style="display:none;">
       <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_name or '—' }}</span></div>
+        {% if client.guardian_type == 'guardian' %}
+        {% set g_name = ((client.guardian_first_name or '') ~ ' ' ~ (client.guardian_last_name or '')).strip() %}
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Guardian Name:</span><span style="color:var(--navy);font-weight:600;">{{ g_name or '—' }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Guardian Email:</span>{% if client.guardian_email %}<a href="mailto:{{ client.guardian_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.guardian_email }}</a>{% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Guardian Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.guardian_phone or '—' }}</span></div>
+        {% else %}
+        {% set f_name = (((client.father_first_name or '') ~ ' ' ~ (client.father_last_name or '')).strip()) or client.father_name %}
+        {% set m_name = (((client.mother_first_name or '') ~ ' ' ~ (client.mother_last_name or '')).strip()) or client.mother_name %}
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Name:</span><span style="color:var(--navy);font-weight:600;">{{ f_name or '—' }}</span></div>
         <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_phone or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_name or '—' }}</span></div>
+        {% if client.father_email %}<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Email:</span>{% if client.father_email %}<a href="mailto:{{ client.father_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.father_email }}</a>{% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}</div>{% endif %}
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Name:</span><span style="color:var(--navy);font-weight:600;">{{ m_name or '—' }}</span></div>
         <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_phone or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="color:var(--gray-600);font-weight:500;">Parents Email:</span>
-          {% if client.parents_email %}<a href="mailto:{{ client.parents_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.parents_email }}</a>
-          {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-        </div>
+        {% if client.mother_email %}<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Email:</span>{% if client.mother_email %}<a href="mailto:{{ client.mother_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.mother_email }}</a>{% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}</div>{% endif %}
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Parents Email:</span>{% if client.parents_email %}<a href="mailto:{{ client.parents_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.parents_email }}</a>{% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}</div>
+        {% endif %}
       </div>
     </div><!-- /dt-parents -->
 

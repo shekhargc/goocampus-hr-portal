@@ -536,19 +536,58 @@
             <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
                 <div>
                     {% if reg.form_status == 'draft' %}
+                    {% if photo_doc %}
                     <a href="/client/form/{{ reg.id }}" class="btn btn-gc-primary">
                         <i class="bi bi-pencil-square me-1"></i>Continue Registration
                     </a>
+                    {% else %}
+                    {# Photo-first: the registration form only opens once a photograph
+                       is on file, so it's never skipped (founder 2026-07-13). #}
+                    <span class="btn btn-gc-primary disabled" style="opacity:.55;cursor:not-allowed;pointer-events:none;" aria-disabled="true">
+                        <i class="bi bi-camera me-1"></i>Continue Registration
+                    </span>
+                    <div class="text-muted small mt-1"><i class="bi bi-arrow-down me-1"></i>Upload your photograph first (Photograph section below) to begin.</div>
+                    {% endif %}
                     {% elif reg.form_status == 'submitted' %}
+                    {% if reg.ops_status == 'verified' %}
                     <a href="/client/form/{{ reg.id }}" class="btn btn-gc-outline">
                         <i class="bi bi-eye me-1"></i>View Details
                     </a>
+                    {% else %}
+                    <a href="/client/form/{{ reg.id }}" class="btn btn-gc-outline">
+                        <i class="bi bi-pencil-square me-1"></i>Edit / View Details
+                    </a>
+                    <span class="text-muted small ms-1">You can edit until verification is complete</span>
+                    {% endif %}
                     {% endif %}
                 </div>
                 <div class="created-date">
                     <i class="bi bi-calendar3 me-1"></i>Registered: {{ reg.created_at.strftime('%d %b %Y') if reg.created_at else 'N/A' }}
                 </div>
             </div>
+            {# ── Welcome Call: request a preferred slot; team confirms + emails an invite ── #}
+            {% if reg.form_status == 'submitted' %}
+            <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
+                {% if reg.wc_confirmed %}
+                <div style="display:flex;align-items:center;gap:8px;color:#166534;font-weight:600;font-size:0.9rem;">
+                    <span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;align-items:center;justify-content:center;font-size:0.72rem;">&#10003;</span>
+                    Welcome call confirmed: {{ reg.wc_scheduled_date }} at {{ reg.wc_scheduled_time }} IST{% if reg.wc_by %} with {{ reg.wc_by }}{% endif %}
+                </div>
+                <div style="font-size:0.78rem;color:#9ca3af;margin-top:4px;">A calendar invite was emailed to you.</div>
+                {% elif reg.wc_pref_date %}
+                <div style="font-size:0.9rem;color:#374151;"><b>Welcome call requested</b> — preferred {{ reg.wc_pref_date }}{% if reg.wc_pref_time %} at {{ reg.wc_pref_time }}{% endif %}. Our team will confirm shortly.</div>
+                {% else %}
+                <div style="font-size:0.9rem;font-weight:600;color:#1f2937;margin-bottom:8px;">Request your Welcome Call</div>
+                <form method="POST" action="/client/welcome-call/request" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+                    <input type="hidden" name="reg_id" value="{{ reg.id }}">
+                    <div><label style="display:block;font-size:0.72rem;color:#6b7280;">Preferred date</label><input type="date" name="wc_pref_date" required style="padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:0.82rem;"></div>
+                    <div><label style="display:block;font-size:0.72rem;color:#6b7280;">Preferred time</label><input type="time" name="wc_pref_time" style="padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:0.82rem;"></div>
+                    <div style="flex:1;min-width:150px;"><label style="display:block;font-size:0.72rem;color:#6b7280;">Note (optional)</label><input type="text" name="wc_pref_notes" placeholder="Anything we should know" style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:0.82rem;"></div>
+                    <button type="submit" style="background:#f97316;color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;">Request Call</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
         {% endfor %}
         {% else %}
