@@ -227,6 +227,11 @@
                     <div id="trAmcAudBox" style="display:none;margin:0 0 0.8rem;padding:0.7rem 0.9rem;background:#DBEAFE;border:1px solid #93C5FD;border-radius:0.5rem;">
                         <div style="font-size:0.72rem;font-weight:700;color:#1E40AF;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:0.3rem;">AMC 1 &middot; AUD-priced &middot; rate locks on save</div>
                         <div id="trAmcAudBreak" style="font-size:0.88rem;color:#1E3A5F;line-height:1.5;"></div>
+                        <label style="display:flex;align-items:flex-start;gap:6px;font-size:0.78rem;color:#1E3A5F;margin-top:0.5rem;cursor:pointer;">
+                            <input type="checkbox" name="training_website_link" id="trAmcWebsiteLink" value="1" style="margin-top:2px;"
+                                   {% if closure and closure.training_payment_route == 'website_link' %}checked{% endif %} onchange="trAmcAudCheck()">
+                            <span>Client paid the AMC 1 fee <b>directly via Website Link</b> — record the <b>flat AUD, no &#8377; conversion / no 3%</b>.</span>
+                        </label>
                     </div>
                     <div class="slf-row3">
                         <div>
@@ -242,14 +247,15 @@
                             <input type="number" step="1" min="0" name="training_final" id="trFinal" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
                         </div>
                     </div>
-                    <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Training Installments <span style="font-weight:400;color:var(--gray-500);">· enter the total received (incl. 18% GST)</span></p>
+                    {% set _tr_wlroute = (closure and closure.training_payment_route == 'website_link') %}
+                    <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Training Installments <span style="font-weight:400;color:var(--gray-500);">{% if _tr_wlroute %}· flat AUD paid via Website Link (no GST, no conversion){% else %}· enter the total received (incl. 18% GST){% endif %}</span></p>
                     <div id="trInstContainer">
                     {% for i in range(1, 5) %}
                     {% set _ta = closure['training_inst' ~ i ~ '_amount'] if closure else None %}
                     <div class="tr-inst-row" data-inst="{{ i }}" style="margin-bottom:0.7rem;{% if i > 1 and not (_ta and _ta|float > 0) %}display:none;{% endif %}">
                         <div style="font-size:0.72rem;font-weight:700;color:#1E40AF;margin-bottom:0.25rem;">{{ ['','1st','2nd','3rd','4th'][i] }} Installment</div>
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.7rem;">
-                            <input type="number" step="1" min="0" name="training_inst{{ i }}_amount" placeholder="Total (incl GST)" value="{{ '{:.0f}'.format((_ta|float) * 1.18) if _ta else '' }}" oninput="updateTrInstHint(this)"
+                            <input type="number" step="1" min="0" name="training_inst{{ i }}_amount" placeholder="{{ 'Amount (AUD)' if _tr_wlroute else 'Total (incl GST)' }}" value="{{ ('{:.0f}'.format(_ta|float) if _tr_wlroute else '{:.0f}'.format((_ta|float) * 1.18)) if _ta else '' }}" oninput="updateTrInstHint(this)"
                                    style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
                             <input type="date" name="training_inst{{ i }}_date" value="{{ (closure['training_inst' ~ i ~ '_date']|string)[:10] if closure and closure['training_inst' ~ i ~ '_date'] else '' }}" oninput="updateTrInstStatus(this)"
                                    style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
@@ -516,16 +522,27 @@
                 var brk = document.getElementById('trAmcAudBreak');
                 var pkg = document.getElementById('trPkg');
                 if (!box) return;
+                var wlEl = document.getElementById('trAmcWebsiteLink');
+                var isWL = !!(wlEl && wlEl.checked);
                 fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent('AMC 1'))
                     .then(function(r){ return r.json(); }).then(function(d){
                         if (!d || !d.aud_priced) { box.style.display = 'none'; return; }
-                        brk.innerHTML =
-                            '<b>' + Number(d.aud).toLocaleString('en-AU') + ' AUD</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
-                            ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
-                            ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/AUD on save)</span>' +
-                            (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — fallback</span>' : '');
+                        var cc = d.currency || 'AUD';
+                        if (isWL) {
+                            brk.innerHTML = '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> paid directly via <b>Website Link</b> &mdash; no &#8377; conversion, no markup.';
+                            if (pkg) { pkg.value = Math.round(d.aud); updateTrFinal(); }
+                        } else {
+                            brk.innerHTML =
+                                '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> &times; live &#8377;' + Number(d.live_rate).toFixed(2) +
+                                ' + ' + d.markup_pct + '% = <b>&#8377;' + Math.round(d.inr).toLocaleString('en-IN') + '</b>' +
+                                ' <span style="color:#64748B;">(locks at &#8377;' + Number(d.effective_rate).toFixed(2) + '/' + cc + ' on save)</span>' +
+                                (d.rate_stale ? ' <span style="color:#B45309;font-weight:700;">&#9888; live rate unavailable — fallback</span>' : '');
+                            if (pkg && (parseFloat(pkg.value) || 0) === 0) { pkg.value = Math.round(d.inr); updateTrFinal(); }
+                        }
                         box.style.display = 'block';
-                        if (pkg && (parseFloat(pkg.value) || 0) === 0) { pkg.value = Math.round(d.inr); updateTrFinal(); }
+                        var m1 = document.querySelector('[name="training_inst1_method"]');
+                        if (m1 && isWL && !m1.value) m1.value = 'Website Link';
+                        document.querySelectorAll('[name^="training_inst"][name$="_amount"]').forEach(function(inp){ if (window.updateTrInstHint) window.updateTrInstHint(inp); });
                     }).catch(function(){ box.style.display = 'none'; });
             };
             window.updateTrFinal = function() {
@@ -537,7 +554,11 @@
                 var row = inp.closest('.tr-inst-row'); if (!row) return;
                 var hint = row.querySelector('.tr-inst-hint'); if (!hint) return;
                 var total = parseFloat(inp.value) || 0;
-                if (total > 0) {
+                var wlEl = document.getElementById('trAmcWebsiteLink');
+                var isWL = !!(wlEl && wlEl.checked);
+                if (total > 0 && isWL) {
+                    hint.textContent = Math.round(total).toLocaleString('en-IN') + ' AUD · paid via Website Link (no GST)';
+                } else if (total > 0) {
                     var base = total / 1.18, gst = total - base;
                     hint.textContent = 'Base ₹' + Math.round(base).toLocaleString('en-IN') +
                                        ' + 18% GST ₹' + Math.round(gst).toLocaleString('en-IN') +

@@ -27447,9 +27447,17 @@ def sales_leads_add():
                 # AMC 1 training add-on (AMC Consulting + AMC 1 combo) is AUD-priced too —
                 # lock its rate so the combined deal's training portion is billed the locked INR.
                 train_lock = None
+                _tr_wl = bool(request.form.get('training_website_link'))
                 try:
                     if request.form.get('include_training') in ('on', '1', 'true', 'yes'):
                         train_lock = amc_aud_quote('AMC 1', conn=conn)
+                        if train_lock and _tr_wl:
+                            # Client paid the AMC 1 fee directly via Website Link —
+                            # record the FLAT AUD, no live rate / markup / ₹ conversion.
+                            train_lock['live_rate'] = 1
+                            train_lock['effective_rate'] = 1
+                            train_lock['markup_pct'] = 0
+                            train_lock['inr'] = train_lock['aud']
                 except Exception:
                     train_lock = None
                 if new_lead_id:
@@ -27505,8 +27513,10 @@ def sales_leads_add():
                             except ValueError: return 0
                         # Installments are normally entered incl. 18% GST -> stored base
                         # (÷1.18). But a Website Link payment is a flat foreign amount paid
-                        # abroad (no Indian GST, no conversion), so store it as-is.
+                        # abroad (no Indian GST, no conversion), so store it as-is. The main
+                        # plan and the AMC 1 training add-on have their own Website Link flags.
                         _inst_div = 1.0 if request.form.get('amc_website_link') else 1.18
+                        _tr_inst_div = 1.0 if request.form.get('training_website_link') else 1.18
                         closure_data = {
                             'plan_type':                _f('plan_type'),
                             # AUD plans (AMC 1/AMC 2): the client pays the locked INR
@@ -27551,19 +27561,20 @@ def sales_leads_add():
                             'training_fx_markup':       (train_lock['markup_pct'] if train_lock else 0),
                             'training_fx_effective':    (train_lock['effective_rate'] if train_lock else 0),
                             'training_fx_locked_at':    (datetime.now().strftime('%Y-%m-%d %H:%M:%S') if train_lock else ''),
-                            'training_inst1_amount':    round(_n('training_inst1_amount')/_inst_div, 2),
+                            'training_payment_route':   ('website_link' if _tr_wl else 'inr'),
+                            'training_inst1_amount':    round(_n('training_inst1_amount')/_tr_inst_div, 2),
                             'training_inst1_date':      _f('training_inst1_date'),
                             'training_inst1_method':    _f('training_inst1_method'),
                             'training_inst1_status':    _f('training_inst1_status'),
-                            'training_inst2_amount':    round(_n('training_inst2_amount')/_inst_div, 2),
+                            'training_inst2_amount':    round(_n('training_inst2_amount')/_tr_inst_div, 2),
                             'training_inst2_date':      _f('training_inst2_date'),
                             'training_inst2_method':    _f('training_inst2_method'),
                             'training_inst2_status':    _f('training_inst2_status'),
-                            'training_inst3_amount':    round(_n('training_inst3_amount')/_inst_div, 2),
+                            'training_inst3_amount':    round(_n('training_inst3_amount')/_tr_inst_div, 2),
                             'training_inst3_date':      _f('training_inst3_date'),
                             'training_inst3_method':    _f('training_inst3_method'),
                             'training_inst3_status':    _f('training_inst3_status'),
-                            'training_inst4_amount':    round(_n('training_inst4_amount')/_inst_div, 2),
+                            'training_inst4_amount':    round(_n('training_inst4_amount')/_tr_inst_div, 2),
                             'training_inst4_date':      _f('training_inst4_date'),
                             'training_inst4_method':    _f('training_inst4_method'),
                             'training_inst4_status':    _f('training_inst4_status'),
@@ -27794,8 +27805,10 @@ def sales_leads_edit(lead_id):
                 'additional_notes':         _ef('notes') or _ef('additional_notes'),
             }
             # Website Link payment (flat AUD, no Indian GST) stores installments as-is;
-            # normal installments are entered incl. GST and stored base (÷1.18).
+            # normal installments are entered incl. GST and stored base (÷1.18). The main
+            # plan and the AMC 1 training add-on each have their own Website Link flag.
             _inst_div = 1.0 if request.form.get('amc_website_link') else 1.18
+            _tr_inst_div = 1.0 if request.form.get('training_website_link') else 1.18
             for i in (1, 2, 3, 4):
                 # Amount entered as total incl. GST -> store base (÷1.18), unless Website Link.
                 edited[f'inst{i}_amount'] = round(_en(f'inst{i}_amount')/_inst_div, 2)
@@ -27806,11 +27819,12 @@ def sales_leads_edit(lead_id):
             # AMC Consulting + AMC 1 (Training) combo — capture it on EDIT too, else
             # saving an edit wiped the training enrolment out of closure_metadata.
             edited['include_training'] = (request.form.get('include_training') in ('on', '1', 'true', 'yes'))
+            edited['training_payment_route'] = ('website_link' if request.form.get('training_website_link') else 'inr')
             edited['training_package']  = _en('training_package')
             edited['training_discount'] = _en('training_discount')
             edited['training_final']    = _en('training_final')
             for i in (1, 2, 3, 4):
-                edited[f'training_inst{i}_amount'] = round(_en(f'training_inst{i}_amount')/_inst_div, 2)
+                edited[f'training_inst{i}_amount'] = round(_en(f'training_inst{i}_amount')/_tr_inst_div, 2)
                 edited[f'training_inst{i}_date']   = _ef(f'training_inst{i}_date')
                 edited[f'training_inst{i}_method'] = _ef(f'training_inst{i}_method')
                 edited[f'training_inst{i}_status'] = _ef(f'training_inst{i}_status')
