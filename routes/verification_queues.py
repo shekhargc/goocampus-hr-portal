@@ -76,11 +76,16 @@ def _transfer_edit_url(pathway, client_id):
 def _newreg_rows(conn, stage):
     """stage: 'fill' = submitted & not sales-completed; 'verify' = sales-completed
     & not ops-verified."""
+    # client_submitted_at IS NOT NULL excludes auto-created add-on registrations
+    # (e.g. the AMC 1 / Training sibling of a combined AMC Consulting signup) — the
+    # client never filled those; they ride along with the main reg's verification.
     if stage == 'fill':
-        where = "cr.form_status = 'submitted' AND COALESCE(cr.sales_completed,0) = 0"
+        where = ("cr.form_status = 'submitted' AND COALESCE(cr.sales_completed,0) = 0 "
+                 "AND cr.client_submitted_at IS NOT NULL")
         order = "cr.client_submitted_at"
     else:
-        where = "COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.ops_status,'') <> 'verified'"
+        where = ("COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.ops_status,'') <> 'verified' "
+                 "AND cr.client_submitted_at IS NOT NULL")
         order = "cr.sales_completed_at"
     rows = conn.execute(f"""
         SELECT cr.id, cr.registration_number, cr.prefix, cr.first_name, cr.last_name,

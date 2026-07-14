@@ -1455,8 +1455,9 @@ def client_refund_policy_agree():
     except Exception as e:
         logging.error(f"refund policy agree email: {e}")
     conn.close()
-    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you. Your onboarding is complete.', 'success')
-    return redirect(url_for('client_dashboard'))
+    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you.', 'success')
+    # Land on the polished "registration complete + schedule your welcome call" page.
+    return redirect(url_for('client_welcome_call_page'))
 
 
 @app.route('/admin/policies/refund', methods=['GET'])
@@ -2151,14 +2152,7 @@ def client_form(reg_id):
     # Scope dropdowns to THIS client's pathway (prefer pathway rows, fall back to
     # the PLAB set per category) — this also naturally de-dupes the values that
     # previously appeared 3-4× because every pathway's rows were unioned.
-    _cf_pathway = 'plab'
-    if reg.get('product_id'):
-        try:
-            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
-            if _pr and (_pr['pathway'] or '').strip():
-                _cf_pathway = _pr['pathway'].strip()
-        except Exception:
-            pass
+    _cf_pathway = resolve_ops_pathway(conn, reg.get('product_id'), reg.get('product_name'))
     lookup_rows = conn.execute(
         "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
         "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
@@ -3507,14 +3501,7 @@ def admin_client_detail(reg_id):
     # 2026-07-13). Resolve the client's pathway from their product, then prefer
     # that pathway's lookup values per category, falling back to the PLAB set for
     # any category not yet seeded for the pathway (same rule as get_lookup_options).
-    detail_pathway = 'plab'
-    if reg.get('product_id'):
-        try:
-            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
-            if _pr and (_pr['pathway'] or '').strip():
-                detail_pathway = _pr['pathway'].strip()
-        except Exception:
-            pass
+    detail_pathway = resolve_ops_pathway(conn, reg.get('product_id'), reg.get('product_name'))
     lookup_rows = conn.execute(
         "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
         "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
@@ -3536,13 +3523,30 @@ def admin_client_detail(reg_id):
         package_services = get_package_services(conn, reg.get('product_id'), reg.get('plan_type'))
     except Exception:
         package_services = []
+    # Combined signup (e.g. AMC Consulting + AMC 1): other registrations from the
+    # same invitation ride along with this one's verification. Surface them so the
+    # verifier knows this single verification covers both (payments are separate).
+    combined_siblings = []
+    if reg.get('invitation_id') and reg.get('account_id'):
+        try:
+            for _cs in conn.execute(
+                '''SELECT cr.registration_number AS reg_num, cr.plan_type,
+                          ps.name AS product_name
+                     FROM client_registrations cr
+                     LEFT JOIN products_services ps ON ps.id = cr.product_id
+                    WHERE cr.account_id = ? AND cr.invitation_id = ? AND cr.id <> ?''',
+                (reg.get('account_id'), reg.get('invitation_id'), reg_id)).fetchall():
+                combined_siblings.append({'reg': _cs['reg_num'], 'plan_type': _cs['plan_type'],
+                                          'product': _cs['product_name']})
+        except Exception:
+            combined_siblings = []
     conn.close()
     return render_template('admin_client_detail.html', reg=reg, academics=academics,
         documents=documents, doc_requests=doc_requests, notifications=notifications,
         counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
         ops_config=ops_config, lookup_options=lookup_options, package_services=package_services,
         sales_completed_by_name=sales_completed_by_name, ops_verified_by_name=ops_verified_by_name,
-        user=user, active_section='clients')
+        combined_siblings=combined_siblings, user=user, active_section='clients')
 
 
 # ── ADMIN: Sales completes their section ──
@@ -3676,13 +3680,37 @@ def admin_client_ops_verify(reg_id):
                 set_parts.append(f"{f['field_name']} = ?")
                 vals.append(request.form.get(f['field_name'], ''))
         conn.execute(f"UPDATE client_registrations SET {', '.join(set_parts)} WHERE id = ?", vals + [reg_id])
+
+        # Combined AMC Consulting + AMC 1: the AMC 1 (Training) sibling was auto-
+        # created at registration (same account + invitation, client_submitted_at
+        # NULL) and is hidden from the verify queue. Verifying the main reg verifies
+        # it too — mark it verified with the same stamp; it's synced to its own
+        # Training master below (info is common, payments are its own).
+        sibling_ids = []
+        _main = conn.execute(
+            "SELECT account_id, invitation_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+        if _main and _main['invitation_id']:
+            for _s in conn.execute(
+                "SELECT id FROM client_registrations WHERE account_id = ? AND invitation_id = ? "
+                "AND id <> ? AND client_submitted_at IS NULL AND COALESCE(ops_status,'') <> 'verified'",
+                (_main['account_id'], _main['invitation_id'], reg_id)).fetchall():
+                sibling_ids.append(_s['id'])
+                conn.execute(
+                    "UPDATE client_registrations SET ops_status='verified', ops_verified_by=?, "
+                    "ops_verified_at=CURRENT_TIMESTAMP, onboarding_status='confirmed', "
+                    "updated_at=CURRENT_TIMESTAMP WHERE id=?", (user['id'], _s['id']))
         # Welcome-kit checklist removed from the onboarding flow (founder
         # 2026-07-13: no welcome kit is being sent). We no longer seed it at
         # ops-verify. The welcome EMAIL still goes out via _notify_onboarding_confirmed.
         conn.commit()
         conn.close()
         _notify_onboarding_confirmed(reg_id)
-        flash('Client onboarding confirmed! Welcome-kit checklist created. Notifications sent.', 'success')
+        for _sid in sibling_ids:
+            _sync_combined_sibling(reg_id, _sid, user['id'])
+        if sibling_ids:
+            flash('Onboarding confirmed for both AMC Consulting and AMC 1 (Training). Notifications sent.', 'success')
+        else:
+            flash('Client onboarding confirmed! Notifications sent.', 'success')
 
     elif action == 'request_docs':
         doc_type = request.form.get('doc_type', '')
@@ -3830,6 +3858,24 @@ def _welcome_call_ics(summary, description, date_str, time_str, duration_min=30)
     return _b64.b64encode(ics.encode('utf-8')).decode('ascii')
 
 
+@app.route('/client/welcome-call', methods=['GET'])
+@client_required
+def client_welcome_call_page():
+    """Polished 'registration complete → schedule your welcome call' page, shown
+    right after the client finishes the form + contract + refund policy."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+        WHERE cr.account_id = ? AND cr.client_submitted_at IS NOT NULL
+        ORDER BY cr.created_at DESC LIMIT 1''', (acct_id,)).fetchone()
+    conn.close()
+    if not reg:
+        return redirect(url_for('client_dashboard'))
+    return render_template('client_welcome_call.html', account=account, reg=reg)
+
+
 @app.route('/client/welcome-call/request', methods=['POST'])
 @client_required
 def client_welcome_call_request():
@@ -3852,7 +3898,7 @@ def client_welcome_call_request():
     conn.commit()
     conn.close()
     flash('Thanks! Your preferred welcome-call time has been shared with our team — we will confirm shortly.', 'success')
-    return redirect(url_for('client_dashboard'))
+    return redirect(url_for('client_welcome_call_page'))
 
 
 @app.route('/admin/client/<int:reg_id>/welcome-call/confirm', methods=['POST'])
@@ -3948,15 +3994,8 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
     # its 'plab' default for every pathway — hiding Australia/UAE/Consulting/
     # Portfolio/Training clients inside the PLAB lists + links. Mirrors the
     # internal-transfer path (_execute_internal_transfer), which does set pathway.
-    pathway = 'plab'
     product_id = reg.get('product_id')
-    if product_id:
-        try:
-            prow = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (product_id,)).fetchone()
-            if prow and (prow['pathway'] or '').strip():
-                pathway = prow['pathway'].strip()
-        except Exception as _pw_err:
-            logging.warning(f"pathway resolve for reg {reg_id}: {_pw_err}")
+    pathway = resolve_ops_pathway(conn, product_id, reg.get('product_name'))
 
     # INSERT into plab_clients
     conn.execute('''INSERT INTO plab_clients (
@@ -4052,6 +4091,35 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         ))
 
     logging.info(f"Auto-synced client {reg_num} to plab_clients + ops_academic_details")
+
+
+def _sync_combined_sibling(main_reg_id, sibling_reg_id, ops_user_id):
+    """Combined AMC Consulting + AMC 1: create the AMC 1 (Training) master using the
+    SAME personal + academic info as the main reg (info is common — the client filled
+    it once), but the sibling's OWN plan, package, installments and product/pathway."""
+    try:
+        conn = get_db()
+        main = conn.execute("SELECT * FROM client_registrations WHERE id = ?", (main_reg_id,)).fetchone()
+        sib = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (sibling_reg_id,)).fetchone()
+        if not main or not sib:
+            conn.close()
+            return
+        merged = dict(main)  # personal + academics source = the main (AMC Consulting) reg
+        # The sibling's own identity + commercials override the main's.
+        for k in ('registration_number', 'product_id', 'product_name', 'plan_type',
+                  'package_amount', 'discount_allowed', 'final_package', 'additional_notes',
+                  'inst1_amount', 'inst1_date', 'inst1_note', 'inst2_amount', 'inst2_date', 'inst2_note',
+                  'inst3_amount', 'inst3_date', 'inst3_note', 'inst4_amount', 'inst4_date', 'inst4_note'):
+            if k in sib.keys():
+                merged[k] = sib[k]
+        merged['ops_verified_by'] = ops_user_id
+        # Academics are looked up by the MAIN reg id (the client filled them once).
+        _sync_to_plab_and_academics(conn, merged, main_reg_id)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"_sync_combined_sibling(main={main_reg_id}, sib={sibling_reg_id}): {e}")
 
 
 def _notify_doc_request(reg_id, doc_type, message):
@@ -24329,6 +24397,31 @@ def pathway_detail_url(pathway, client_id):
     """URL of the ops client-profile page for this pathway (defaults to PLAB)."""
     ep = PATHWAY_DETAIL_ENDPOINT.get((pathway or 'plab').strip().lower(), 'ops_plab_dashboard')
     return url_for(ep, client_id=client_id)
+
+
+def resolve_ops_pathway(conn, product_id, product_name=None):
+    """Canonical ops pathway slug for a client's product — the ONE place that
+    decides it, so pathway-scoped dropdowns (Joined Stage, Current Stage, …) and
+    links resolve consistently. products_services.pathway can be a legacy slug
+    (standard_consulting / amc_training) or unset, so we normalise it and, when it
+    isn't a real ops pathway, infer from the product NAME (keyword map:
+    'AMC Consulting' -> consulting, 'AMC MCQ' -> training, 'AUS PGCP' -> australia…).
+    """
+    from core.registration import pathway_from_product_name
+    pw = ''
+    if product_id:
+        try:
+            r = conn.execute("SELECT pathway, name FROM products_services WHERE id = ?", (product_id,)).fetchone()
+            if r:
+                pw = ((r['pathway'] or '')).strip().lower()
+                if not product_name:
+                    product_name = r['name']
+        except Exception:
+            pw = ''
+    pw = {'standard_consulting': 'consulting', 'amc_training': 'training'}.get(pw, pw)
+    if pw in ('plab', 'australia', 'consulting', 'portfolio', 'training', 'uae'):
+        return pw
+    return pathway_from_product_name(product_name or '')
 
 
 def _bulk_columns(conn, table, pathway=None):
