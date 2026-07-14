@@ -426,16 +426,16 @@
                     <div class="info-value">{{ reg.mobile or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">WhatsApp Number</div>
-                    <div class="info-value">{{ reg.whatsapp or '-' }}</div>
+                    <div class="info-label">WhatsApp 1</div>
+                    <div class="info-value">{{ reg.whatsapp or reg.whatsapp1 or '-' }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">WhatsApp 2</div>
+                    <div class="info-value">{{ reg.whatsapp2 or '-' }}</div>
                 </div>
                 <div class="info-item">
                     <div class="info-label">Email Address</div>
                     <div class="info-value">{{ reg.email or '-' }}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Address</div>
-                    <div class="info-value">{{ reg.address or '-' }}</div>
                 </div>
                 <div class="info-item">
                     <div class="info-label">City</div>
@@ -446,25 +446,35 @@
                     <div class="info-value">{{ reg.state or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Father's Name</div>
-                    <div class="info-value">{{ reg.father_name or '-' }}</div>
+                    <div class="info-label">Instagram</div>
+                    <div class="info-value">{{ reg.instagram or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Mother's Name</div>
-                    <div class="info-value">{{ reg.mother_name or '-' }}</div>
+                    <div class="info-label">Facebook</div>
+                    <div class="info-value">{{ reg.facebook or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Parent Mobile</div>
-                    <div class="info-value">{{ reg.parent_mobile or '-' }}</div>
+                    <div class="info-label">LinkedIn</div>
+                    <div class="info-value">{{ reg.linkedin or '-' }}</div>
                 </div>
-                <div class="info-item">
-                    <div class="info-label">Parent Email</div>
-                    <div class="info-value">{{ reg.parent_email or '-' }}</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Social Media</div>
-                    <div class="info-value">{{ reg.social_media or '-' }}</div>
-                </div>
+                {# Parent / Guardian: show the guardian if chosen, else father + mother
+                   (granular first/last/email/phone, falling back to the legacy names). #}
+                {% if reg.guardian_type == 'guardian' %}
+                {% set _gname = ((reg.guardian_first_name or '') ~ ' ' ~ (reg.guardian_last_name or '')).strip() %}
+                <div class="info-item"><div class="info-label">Guardian Name</div><div class="info-value">{{ _gname or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Guardian Phone</div><div class="info-value">{{ reg.guardian_phone or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Guardian Email</div><div class="info-value">{{ reg.guardian_email or '-' }}</div></div>
+                {% else %}
+                {% set _fname = (((reg.father_first_name or '') ~ ' ' ~ (reg.father_last_name or '')).strip()) or reg.father_name %}
+                {% set _mname = (((reg.mother_first_name or '') ~ ' ' ~ (reg.mother_last_name or '')).strip()) or reg.mother_name %}
+                <div class="info-item"><div class="info-label">Father's Name</div><div class="info-value">{{ _fname or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Father's Phone</div><div class="info-value">{{ reg.father_phone or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Father's Email</div><div class="info-value">{{ reg.father_email or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Mother's Name</div><div class="info-value">{{ _mname or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Mother's Phone</div><div class="info-value">{{ reg.mother_phone or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Mother's Email</div><div class="info-value">{{ reg.mother_email or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Parents Email</div><div class="info-value">{{ reg.parents_email or '-' }}</div></div>
+                {% endif %}
                 <div class="info-item">
                     <div class="info-label">Registration Date</div>
                     <div class="info-value">{{ reg.created_at or '-' }}</div>
@@ -520,6 +530,8 @@
                     <div class="info-label">Internship Location</div>
                     <div class="info-value">{{ academics.internship_location or '-' }}</div>
                 </div>
+                {% if academics.internship_hospital_2 %}<div class="info-item"><div class="info-label">Internship Hospital 2</div><div class="info-value">{{ academics.internship_hospital_2 }}</div></div>{% endif %}
+                {% if academics.internship_location_2 %}<div class="info-item"><div class="info-label">Internship Location 2</div><div class="info-value">{{ academics.internship_location_2 }}</div></div>{% endif %}
                 <div class="info-item">
                     <div class="info-label">Internship Dates</div>
                     <div class="info-value">{{ academics.internship_start_date or '' }} — {{ academics.internship_end_date or '' }}{{ '-' if not academics.internship_start_date and not academics.internship_end_date else '' }}</div>
@@ -528,6 +540,7 @@
                     <div class="info-label">Internship Gap</div>
                     <div class="info-value">{{ academics.internship_gap or '-' }}{% if academics.gap_in_months %} ({{ academics.gap_in_months }} months){% endif %}</div>
                 </div>
+                {% if academics.gap_reason %}<div class="info-item" style="grid-column: 1 / -1;"><div class="info-label">Gap Reason</div><div class="info-value">{{ academics.gap_reason }}</div></div>{% endif %}
                 <div class="info-item">
                     <div class="info-label">Working Status</div>
                     <div class="info-value">{{ academics.working_status or '-' }}</div>
@@ -651,8 +664,10 @@
                         {% for i in range(1, 5) %}
                         {% set amt = reg['inst' ~ i ~ '_amount'] %}
                         {% if amt %}
-                        {% set total = amt|float %}
-                        {% set base = (total / 1.18) %}
+                        {# Stored value is the ex-GST base (the lead form saves ÷1.18);
+                           show it exactly as the lead form does: total = base × 1.18. #}
+                        {% set base = amt|float %}
+                        {% set total = (base * 1.18) %}
                         {% set gst = (total - base) %}
                         {% set ns.tot = ns.tot + total %}
                         <tr>
