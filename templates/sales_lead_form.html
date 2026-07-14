@@ -91,7 +91,7 @@
 
             <div class="slf-row">
                 <div>
-                    <label class="slf-lbl">Package Value (₹)</label>
+                    <label class="slf-lbl">Package Value (<span id="pkgValueCur">₹</span>)</label>
                     <input type="number" step="1" min="0" name="expected_value" id="pkgValue" oninput="syncPackage()" value="{{ lead.expected_value or 0 if lead else 0 }}" class="slf-inp" />
                 </div>
                 <div>
@@ -138,7 +138,7 @@
 
                 <div class="slf-row3">
                     <div>
-                        <label class="slf-lbl">Package Amount (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                        <label class="slf-lbl">Package Amount (<span id="pkgAmountCur">₹</span>) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
                         <input type="number" step="1" min="0" name="package_amount" id="pkgAmount" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
                     </div>
                     <div>
@@ -146,7 +146,7 @@
                         <input type="number" step="1" min="0" name="discount_allowed" id="discAllowed" oninput="updateFinal()" value="{{ '{:.0f}'.format(closure.discount_allowed|float) if closure and closure.discount_allowed else 0 }}" class="slf-inp" />
                     </div>
                     <div>
-                        <label class="slf-lbl">Final Package (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                        <label class="slf-lbl">Final Package (<span id="finalPkgCur">₹</span>) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
                         <input type="number" step="1" min="0" name="final_package" id="finalPkg" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
                     </div>
                 </div>
@@ -235,7 +235,7 @@
                     </div>
                     <div class="slf-row3">
                         <div>
-                            <label class="slf-lbl">Training Package (₹)</label>
+                            <label class="slf-lbl">Training Package (<span id="trPkgCur">₹</span>)</label>
                             <input type="number" step="1" min="0" name="training_package" id="trPkg" oninput="updateTrFinal()" value="{{ '{:.0f}'.format(closure.training_package|float) if closure and closure.training_package else 0 }}" class="slf-inp" />
                         </div>
                         <div>
@@ -243,7 +243,7 @@
                             <input type="number" step="1" min="0" name="training_discount" id="trDisc" oninput="updateTrFinal()" value="{{ '{:.0f}'.format(closure.training_discount|float) if closure and closure.training_discount else 0 }}" class="slf-inp" />
                         </div>
                         <div>
-                            <label class="slf-lbl">Final (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                            <label class="slf-lbl">Final (<span id="trFinalCur">₹</span>) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
                             <input type="number" step="1" min="0" name="training_final" id="trFinal" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
                         </div>
                     </div>
@@ -381,14 +381,23 @@
                 inr: {{ '{:.2f}'.format(lead.amc_inr_amount|float) if lead.amc_inr_amount else 0 }},
                 locked_at: {{ (lead.amc_fx_locked_at|string)|tojson }}
             }{% else %}null{% endif %};
+            // Flip the package-field currency labels. On the flat-AUD Website Link
+            // route the fields literally hold the AUD amount, so show A$; otherwise
+            // they hold the INR the client is billed, so show ₹.
+            function setPkgCur(sym) {
+                ['pkgValueCur','pkgAmountCur','finalPkgCur'].forEach(function(id){
+                    var el = document.getElementById(id); if (el) el.textContent = sym;
+                });
+            }
             window.amcAudCheck = function() {
                 if (!amcBox || !planSel) return;
                 var pt = planSel.value;
-                if (!pt) { amcBox.style.display = 'none'; return; }
+                if (!pt) { amcBox.style.display = 'none'; setPkgCur('₹'); return; }
                 var wlEl = document.getElementById('amcWebsiteLink');
                 var isWL = !!(wlEl && wlEl.checked);
                 var noteEl = document.getElementById('amcAudNote');
                 function afterWL() {
+                    setPkgCur(isWL ? 'A$' : '₹');
                     // When "Website Link" route is chosen, default installment 1's method to it.
                     var m1 = document.querySelector('[name="inst1_method"]');
                     if (m1 && isWL && !m1.value) m1.value = 'Website Link';
@@ -419,7 +428,7 @@
                 var _pid = (productSel && productSel.value) ? ('&product_id=' + encodeURIComponent(productSel.value)) : '';
                 fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent(pt) + _pid)
                     .then(function(r){ return r.json(); }).then(function(d){
-                        if (!d || !d.aud_priced) { amcBox.style.display = 'none'; return; }
+                        if (!d || !d.aud_priced) { amcBox.style.display = 'none'; setPkgCur('₹'); return; }
                         var cc = d.currency || 'AUD';
                         if (isWL) {
                             amcBreak.innerHTML = '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> paid directly via <b>Website Link</b> &mdash; no &#8377; conversion, no markup.';
@@ -524,10 +533,16 @@
                 if (!box) return;
                 var wlEl = document.getElementById('trAmcWebsiteLink');
                 var isWL = !!(wlEl && wlEl.checked);
+                function setTrCur(sym) {
+                    ['trPkgCur','trFinalCur'].forEach(function(id){
+                        var el = document.getElementById(id); if (el) el.textContent = sym;
+                    });
+                }
                 fetch('/api/amc-aud-quote?plan_type=' + encodeURIComponent('AMC 1'))
                     .then(function(r){ return r.json(); }).then(function(d){
-                        if (!d || !d.aud_priced) { box.style.display = 'none'; return; }
+                        if (!d || !d.aud_priced) { box.style.display = 'none'; setTrCur('₹'); return; }
                         var cc = d.currency || 'AUD';
+                        setTrCur(isWL ? 'A$' : '₹');
                         if (isWL) {
                             brk.innerHTML = '<b>' + Number(d.aud).toLocaleString('en-IN') + ' ' + cc + '</b> paid directly via <b>Website Link</b> &mdash; no &#8377; conversion, no markup.';
                             if (pkg) { pkg.value = Math.round(d.aud); updateTrFinal(); }
