@@ -410,6 +410,16 @@
     <!-- TAB 1: OVERVIEW -->
     <!-- ============================================================ -->
     <div class="tab-panel active" id="tab-overview">
+        {% if combined_siblings %}
+        <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0.6rem;padding:0.9rem 1.1rem;margin-bottom:1rem;display:flex;gap:0.7rem;align-items:flex-start;">
+            <span style="font-size:1.15rem;line-height:1;">🔗</span>
+            <div style="font-size:0.88rem;color:#1E3A5F;">
+                <b>Combined registration.</b> This single verification covers <b>{{ reg.plan_type or reg.product_name or 'this plan' }}</b>
+                {% for s in combined_siblings %} and <b>{{ s.plan_type or s.product }}</b>{% endfor %}.
+                The personal &amp; academic details are shared; each plan keeps its own package &amp; payment installments. Verifying here confirms all of them.
+            </div>
+        </div>
+        {% endif %}
         <div class="card">
             <h2 class="card-title">Personal Information</h2>
             <div class="info-grid">
