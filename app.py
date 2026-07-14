@@ -2152,14 +2152,7 @@ def client_form(reg_id):
     # Scope dropdowns to THIS client's pathway (prefer pathway rows, fall back to
     # the PLAB set per category) — this also naturally de-dupes the values that
     # previously appeared 3-4× because every pathway's rows were unioned.
-    _cf_pathway = 'plab'
-    if reg.get('product_id'):
-        try:
-            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
-            if _pr and (_pr['pathway'] or '').strip():
-                _cf_pathway = _pr['pathway'].strip()
-        except Exception:
-            pass
+    _cf_pathway = resolve_ops_pathway(conn, reg.get('product_id'), reg.get('product_name'))
     lookup_rows = conn.execute(
         "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
         "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
@@ -3508,14 +3501,7 @@ def admin_client_detail(reg_id):
     # 2026-07-13). Resolve the client's pathway from their product, then prefer
     # that pathway's lookup values per category, falling back to the PLAB set for
     # any category not yet seeded for the pathway (same rule as get_lookup_options).
-    detail_pathway = 'plab'
-    if reg.get('product_id'):
-        try:
-            _pr = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (reg['product_id'],)).fetchone()
-            if _pr and (_pr['pathway'] or '').strip():
-                detail_pathway = _pr['pathway'].strip()
-        except Exception:
-            pass
+    detail_pathway = resolve_ops_pathway(conn, reg.get('product_id'), reg.get('product_name'))
     lookup_rows = conn.execute(
         "SELECT category, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
         "WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
@@ -3967,15 +3953,8 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
     # its 'plab' default for every pathway — hiding Australia/UAE/Consulting/
     # Portfolio/Training clients inside the PLAB lists + links. Mirrors the
     # internal-transfer path (_execute_internal_transfer), which does set pathway.
-    pathway = 'plab'
     product_id = reg.get('product_id')
-    if product_id:
-        try:
-            prow = conn.execute("SELECT pathway FROM products_services WHERE id = ?", (product_id,)).fetchone()
-            if prow and (prow['pathway'] or '').strip():
-                pathway = prow['pathway'].strip()
-        except Exception as _pw_err:
-            logging.warning(f"pathway resolve for reg {reg_id}: {_pw_err}")
+    pathway = resolve_ops_pathway(conn, product_id, reg.get('product_name'))
 
     # INSERT into plab_clients
     conn.execute('''INSERT INTO plab_clients (
@@ -24348,6 +24327,31 @@ def pathway_detail_url(pathway, client_id):
     """URL of the ops client-profile page for this pathway (defaults to PLAB)."""
     ep = PATHWAY_DETAIL_ENDPOINT.get((pathway or 'plab').strip().lower(), 'ops_plab_dashboard')
     return url_for(ep, client_id=client_id)
+
+
+def resolve_ops_pathway(conn, product_id, product_name=None):
+    """Canonical ops pathway slug for a client's product — the ONE place that
+    decides it, so pathway-scoped dropdowns (Joined Stage, Current Stage, …) and
+    links resolve consistently. products_services.pathway can be a legacy slug
+    (standard_consulting / amc_training) or unset, so we normalise it and, when it
+    isn't a real ops pathway, infer from the product NAME (keyword map:
+    'AMC Consulting' -> consulting, 'AMC MCQ' -> training, 'AUS PGCP' -> australia…).
+    """
+    from core.registration import pathway_from_product_name
+    pw = ''
+    if product_id:
+        try:
+            r = conn.execute("SELECT pathway, name FROM products_services WHERE id = ?", (product_id,)).fetchone()
+            if r:
+                pw = ((r['pathway'] or '')).strip().lower()
+                if not product_name:
+                    product_name = r['name']
+        except Exception:
+            pw = ''
+    pw = {'standard_consulting': 'consulting', 'amc_training': 'training'}.get(pw, pw)
+    if pw in ('plab', 'australia', 'consulting', 'portfolio', 'training', 'uae'):
+        return pw
+    return pathway_from_product_name(product_name or '')
 
 
 def _bulk_columns(conn, table, pathway=None):
