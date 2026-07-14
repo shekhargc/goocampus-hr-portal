@@ -1455,8 +1455,9 @@ def client_refund_policy_agree():
     except Exception as e:
         logging.error(f"refund policy agree email: {e}")
     conn.close()
-    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you. Your onboarding is complete.', 'success')
-    return redirect(url_for('client_dashboard'))
+    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you.', 'success')
+    # Land on the polished "registration complete + schedule your welcome call" page.
+    return redirect(url_for('client_welcome_call_page'))
 
 
 @app.route('/admin/policies/refund', methods=['GET'])
@@ -3830,6 +3831,24 @@ def _welcome_call_ics(summary, description, date_str, time_str, duration_min=30)
     return _b64.b64encode(ics.encode('utf-8')).decode('ascii')
 
 
+@app.route('/client/welcome-call', methods=['GET'])
+@client_required
+def client_welcome_call_page():
+    """Polished 'registration complete → schedule your welcome call' page, shown
+    right after the client finishes the form + contract + refund policy."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+        WHERE cr.account_id = ? AND cr.client_submitted_at IS NOT NULL
+        ORDER BY cr.created_at DESC LIMIT 1''', (acct_id,)).fetchone()
+    conn.close()
+    if not reg:
+        return redirect(url_for('client_dashboard'))
+    return render_template('client_welcome_call.html', account=account, reg=reg)
+
+
 @app.route('/client/welcome-call/request', methods=['POST'])
 @client_required
 def client_welcome_call_request():
@@ -3852,7 +3871,7 @@ def client_welcome_call_request():
     conn.commit()
     conn.close()
     flash('Thanks! Your preferred welcome-call time has been shared with our team — we will confirm shortly.', 'success')
-    return redirect(url_for('client_dashboard'))
+    return redirect(url_for('client_welcome_call_page'))
 
 
 @app.route('/admin/client/<int:reg_id>/welcome-call/confirm', methods=['POST'])
