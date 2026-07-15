@@ -73,15 +73,24 @@ def _transfer_edit_url(pathway, client_id):
 
 # ── data helpers ────────────────────────────────────────────────────────────
 
-def _newreg_rows(conn, stage):
+def _newreg_rows(conn, stage, uid=None, is_admin=False):
     """stage: 'fill' = submitted & not sales-completed; 'verify' = sales-completed
-    & not ops-verified."""
+    & not ops-verified.
+
+    For the 'fill' (Sales Verification) stage, a non-admin only sees THEIR OWN
+    leads (cr.counsellor_id = uid) — the sales member who generated the lead is
+    the only one who completes its sales section. The 'verify' (Ops) stage stays
+    open to the whole ops team."""
     # client_submitted_at IS NOT NULL excludes auto-created add-on registrations
     # (e.g. the AMC 1 / Training sibling of a combined AMC Consulting signup) — the
     # client never filled those; they ride along with the main reg's verification.
+    params = []
     if stage == 'fill':
         where = ("cr.form_status = 'submitted' AND COALESCE(cr.sales_completed,0) = 0 "
                  "AND cr.client_submitted_at IS NOT NULL")
+        if uid and not is_admin:
+            where += " AND cr.counsellor_id = ?"
+            params.append(uid)
         order = "cr.client_submitted_at"
     else:
         where = ("COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.ops_status,'') <> 'verified' "
@@ -95,7 +104,7 @@ def _newreg_rows(conn, stage):
           LEFT JOIN products_services ps ON ps.id = cr.product_id
          WHERE {where}
          ORDER BY {order} DESC NULLS LAST, cr.id DESC
-    """).fetchall()
+    """, params).fetchall()
     out = []
     for r in rows:
         out.append({
@@ -155,7 +164,8 @@ def verification_sales():
         return redirect('/')
     uid = session.get('user_id')
     conn = get_db()
-    newreg = _newreg_rows(conn, 'fill')
+    # Only the lead's sales member fills their own registrations (admins see all).
+    newreg = _newreg_rows(conn, 'fill', uid=uid, is_admin=session.get('is_admin'))
     transfers = [t for t in _transfer_rows(conn, 'awaiting_sales')
                  if (t['requested_by'] == uid) or session.get('is_admin')]
     names = _emp_names(conn)
