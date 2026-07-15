@@ -509,12 +509,23 @@ def ops_consulting_client_detail(client_id):
             conn, client.get('product_id'), client.get('plan_type'))
     except Exception:
         package_services = []
+    # Combined signup already created a Training record for this person, so don't
+    # offer "Add to Training" again. Match the same client by email/mobile.
+    try:
+        has_training = conn.execute(
+            "SELECT 1 FROM plab_clients WHERE COALESCE(pathway,'') = 'training' AND id <> ? "
+            "AND ((COALESCE(email,'') <> '' AND LOWER(email) = LOWER(COALESCE(?, ''))) "
+            "  OR (COALESCE(mobile,'') <> '' AND mobile = COALESCE(?, ''))) LIMIT 1",
+            (client['id'], client.get('email'), client.get('mobile'))).fetchone() is not None
+    except Exception:
+        has_training = False
     conn.close()
 
     return render_template(
         'ops_consulting_client_detail.html',
         user=user,
         client=client,
+        has_training=has_training,
         documents=documents,
         plab_doc_types=PLAB_DOC_TYPES,
         sections=sections,
