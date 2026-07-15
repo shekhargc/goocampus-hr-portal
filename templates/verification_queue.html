@@ -19,7 +19,12 @@
   .vq-sub { font-size:0.82rem; font-weight:700; color:var(--navy); margin:4px 0 8px; }
 </style>
 <div class="vq-wrap"><div class="vq-inner">
-  <h1 style="margin:0;font-size:1.4rem;font-weight:700;color:var(--navy);">{{ title }}</h1>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <h1 style="margin:0;font-size:1.4rem;font-weight:700;color:var(--navy);">{{ title }}</h1>
+    {% if session.is_admin %}
+    <a href="/admin/maintenance/purge-client" style="font-size:0.8rem;font-weight:600;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:6px 12px;border-radius:8px;text-decoration:none;white-space:nowrap;">&#129529; Purge test-client data</a>
+    {% endif %}
+  </div>
   <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">
     {% if mode == 'fill' %}Complete the balance details for clients you brought in — new registrations and internal transfers you requested.
     {% else %}Verify completed registrations and transfers, then take them live. Transfers you requested yourself appear here to fill too.{% endif %}

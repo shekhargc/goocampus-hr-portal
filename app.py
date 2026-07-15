@@ -4265,11 +4265,8 @@ def _purge_run(conn, keys, do_delete):
 
 
 @app.route('/admin/maintenance/purge-client', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def admin_purge_client():
-    if not session.get('is_admin'):
-        flash('Admin only.', 'error')
-        return redirect(url_for('client_dashboard'))
     from flask import render_template_string
     emails_raw = (request.values.get('emails') or '').strip()
     emails = [e.strip() for e in emails_raw.replace(',', '\n').splitlines() if e.strip()]
