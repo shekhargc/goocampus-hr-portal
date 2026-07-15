@@ -3656,11 +3656,19 @@ def admin_client_detail(reg_id):
 def admin_client_sales_complete(reg_id):
     user = get_user()
     conn = get_db()
-    reg = conn.execute("SELECT id, form_status, product_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    reg = conn.execute("SELECT id, form_status, product_id, counsellor_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
     if not reg:
         conn.close()
         flash('Client not found', 'error')
         return redirect(url_for('admin_clients_list'))
+
+    # Only the lead's sales member (the counsellor who generated the lead) — or an
+    # admin — may complete the sales section for this registration (founder rule
+    # 2026-07-15). Ops/other members receive the email but cannot open + complete it.
+    if not session.get('is_admin') and reg['counsellor_id'] and reg['counsellor_id'] != user['id']:
+        conn.close()
+        flash('Only the sales member who generated this lead can complete its Sales Verification.', 'error')
+        return redirect(url_for('verification_sales'))
 
     # Config-driven sales fields (non-installment): the settings page decides
     # which the sales team fills. Whitelist to real columns; coerce numbers.
@@ -7188,15 +7196,20 @@ def delete_employee(emp_id):
         conn.close()
         return redirect(url_for('manage_employees'))
 
-    # Delete all leave records for this employee
-    conn.execute('DELETE FROM leave_records WHERE employee_id = ?', (emp_id,))
-
-    # Delete employee
-    conn.execute('DELETE FROM employees WHERE id = ?', (emp_id,))
+    # Soft-deactivate — do NOT hard-delete. Permanently removing an employee
+    # orphans their leads, clients, counsellor links and sales history (and can
+    # break attribution). Deactivating keeps all history intact and just hides
+    # them from active lists/dropdowns.
+    conn.execute('UPDATE employees SET is_active = 0 WHERE id = ?', (emp_id,))
+    try:
+        conn.execute('UPDATE sales_team SET is_active = 0 WHERE employee_id = ?', (emp_id,))
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
-    flash(f'Employee {employee["name"]} and all their records deleted', 'success')
+    flash(f'Employee {employee["name"]} has been deactivated (all history kept). '
+          f'They no longer appear in active lists or dropdowns.', 'success')
     return redirect(url_for('manage_employees'))
 
 
@@ -28122,14 +28135,25 @@ def sales_leads_add():
                             'additional_notes':         _f('additional_package_notes') or _f('additional_notes'),
                             'ops_notes':                _f('notes') or _f('ops_notes'),
                         }
-                        # The selected Owner is the client's counsellor — use it
-                        # as invited_by so the registration's counsellor_id (and
-                        # the "Your counsellor" card + invite email) reflect the
-                        # chosen counsellor, not whoever happened to be logged in.
+                        # Counsellor = the sales member who GENERATED the lead
+                        # (founder rule 2026-07-15). Use the lead's creator as
+                        # invited_by so the registration's counsellor_id + "Your
+                        # counsellor" card + invite email reflect the generator,
+                        # not the Owner field (which drives revenue) or whoever is
+                        # logged in. Falls back to Owner, then the current user.
+                        _counsellor_id = None
                         try:
-                            _counsellor_id = int(request.form.get('owner_employee_id') or 0) or user['id']
-                        except (TypeError, ValueError):
-                            _counsellor_id = user['id']
+                            _gen = conn.execute("SELECT created_by FROM sales_leads WHERE id = ?",
+                                                (new_lead_id,)).fetchone()
+                            if _gen and _gen['created_by']:
+                                _counsellor_id = _gen['created_by']
+                        except Exception:
+                            _counsellor_id = None
+                        if not _counsellor_id:
+                            try:
+                                _counsellor_id = int(request.form.get('owner_employee_id') or 0) or user['id']
+                            except (TypeError, ValueError):
+                                _counsellor_id = user['id']
                         token = _auto_invite_from_closure(
                             conn,
                             product_id=product_id,
