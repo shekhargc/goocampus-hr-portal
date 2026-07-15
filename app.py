@@ -1944,7 +1944,7 @@ def client_dashboard():
         # that by returning all steps as 'upcoming'.
         d['timeline'] = _build_client_timeline(
             onboarding_by_reg.get(d.get('registration_number')),
-            holidays_set=holidays_set)
+            holidays_set=holidays_set, reg=d)
         # What's included in the client's package (standard + plan-specific).
         # Names + descriptions only for the client — NEVER budget/cost.
         d['package_services'] = get_package_services(conn, d.get('product_id'), d.get('plan_type'))
@@ -3965,9 +3965,15 @@ def _welcome_call_ics(summary, description, date_str, time_str, duration_min=30)
     Apple calendars all read it correctly. Returns None on bad input."""
     from datetime import datetime as _dt, timedelta as _td
     import base64 as _b64
-    try:
-        start_ist = _dt.strptime(f"{date_str} {(time_str or '10:00')}", "%Y-%m-%d %H:%M")
-    except Exception:
+    _t = (time_str or '10:00 AM').strip()
+    start_ist = None
+    for _fmt_in in ("%Y-%m-%d %I:%M %p", "%Y-%m-%d %H:%M"):
+        try:
+            start_ist = _dt.strptime(f"{date_str} {_t}", _fmt_in)
+            break
+        except Exception:
+            continue
+    if start_ist is None:
         return None
     start_utc = start_ist - _td(hours=5, minutes=30)
     end_utc = start_utc + _td(minutes=duration_min)
@@ -18990,8 +18996,13 @@ def _compute_onboarding_status(onb, kit_items):
     return 'Call Done'
 
 
-def _build_client_timeline(onb, holidays_set=None):
-    """Item D + F: build the 5-step client-facing onboarding timeline.
+def _build_client_timeline(onb, holidays_set=None, reg=None):
+    """Item D + F: build the client-facing onboarding timeline.
+    Stages (founder 2026-07-16): Welcome Email → Welcome Call → Onboarded →
+    30-day Check-in. Welcome Kit removed. Each step reads the AUTHORITATIVE
+    source so it lights up live: Welcome Call = the registration's confirmed
+    call (wc_confirmed); Welcome Email = sent at ops-verify; Onboarded = ops
+    verification done.
 
     Returns a list of dicts, one per milestone:
         {key, label, done, current, date, projected}
@@ -19022,9 +19033,16 @@ def _build_client_timeline(onb, holidays_set=None):
         # while preserving plain TEXT dates that already look right.
         return s[:10] if len(s) >= 10 else s
 
-    kit_date = o.get('kit_delivered_date') or o.get('welcome_kit_sent_date')
-    onboarded = (o.get('onboarding_status') or '').strip().lower() == 'completed'
-    onboarded_date_str = _d(o.get('onb_updated_at')) if onboarded else ''
+    r = reg or {}
+    # Ops verification = the client is onboarded into operations (also when the
+    # welcome email fires). Fall back to the onboarding record's status.
+    ops_verified = ((r.get('ops_status') or '').strip().lower() == 'verified')
+    onboarded = ops_verified or (o.get('onboarding_status') or '').strip().lower() in ('completed', 'confirmed')
+    onboarded_date_str = _d(r.get('ops_verified_at')) or (_d(o.get('onb_updated_at')) if onboarded else '')
+    email_done = bool(o.get('welcome_email_sent')) or ops_verified
+    email_date = _d(o.get('welcome_email_sent_at')) or (_d(r.get('ops_verified_at')) if ops_verified else '')
+    call_done = bool(r.get('wc_confirmed')) or bool(o.get('welcome_call_confirmed'))
+    call_date = _d(r.get('wc_scheduled_date')) or _d(o.get('welcome_call_date'))
 
     # Item F: project the 30-day Check-in date if the client is
     # already Onboarded. Uses 30 working days from the Onboarded
@@ -19047,22 +19065,15 @@ def _build_client_timeline(onb, holidays_set=None):
         {
             'key':   'email',
             'label': 'Welcome Email',
-            'done':  bool(o.get('welcome_email_sent')),
-            'date':  _d(o.get('welcome_email_sent_at')),
+            'done':  email_done,
+            'date':  email_date,
             'projected': False,
         },
         {
             'key':   'call',
             'label': 'Welcome Call',
-            'done':  bool(o.get('welcome_call_confirmed')),
-            'date':  _d(o.get('welcome_call_date')),
-            'projected': False,
-        },
-        {
-            'key':   'kit',
-            'label': 'Welcome Kit',
-            'done':  bool(kit_date),
-            'date':  _d(kit_date),
+            'done':  call_done,
+            'date':  call_date,
             'projected': False,
         },
         {
