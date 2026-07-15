@@ -1896,6 +1896,12 @@ def client_dashboard():
     registrations = []
     for r in registrations_raw:
         d = dict(r)
+        # Combined signup: the add-on (e.g. AMC 1 / Training) registration is
+        # auto-created from the client's ONE form — it's 'submitted' but the
+        # client never submitted it themselves (client_submitted_at is NULL). It
+        # must NOT be independently editable/fillable by the client; its details
+        # come from the main registration. (A genuine in-progress form is 'draft'.)
+        d['is_combined_addon'] = ((d.get('form_status') == 'submitted') and not d.get('client_submitted_at'))
         insts = []
         for i in (1, 2, 3, 4):
             base = float(d.get(f'inst{i}_amount') or 0)
@@ -2022,6 +2028,15 @@ def client_form(reg_id):
     if not reg:
         conn.close()
         flash('Registration not found', 'error')
+        return redirect(url_for('client_dashboard'))
+
+    # Combined-enrolment add-on (e.g. AMC 1 / Training): auto-created from the
+    # client's ONE main registration ('submitted' but client_submitted_at NULL).
+    # The client must not fill/edit it separately — its details come from the main
+    # registration. Bounce any direct access back to the dashboard.
+    if (reg['form_status'] == 'submitted') and not reg['client_submitted_at']:
+        conn.close()
+        flash('This programme is part of your combined enrolment — its details come from your main registration, so there is no separate form to fill.', 'info')
         return redirect(url_for('client_dashboard'))
 
     # Load academics
