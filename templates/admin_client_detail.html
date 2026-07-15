@@ -696,6 +696,49 @@
                     </table>
                 </div>
 
+                {# Combined signup: each add-on (e.g. AMC 1 / Training) has its OWN
+                   payment schedule — show it here too so both are verified at once.
+                   Website-Link rows are flat AUD (no ₹ conversion, no GST). #}
+                {% for s in combined_siblings %}
+                {% if s.installments %}
+                <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.75rem 0 0.35rem;">
+                    {{ s.plan_type or s.product or 'Add-on' }} Installments
+                    <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ s.reg }} · separate payment schedule</span>
+                </h3>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="border-radius:0.6rem;overflow:hidden;">
+                        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Due Date</th><th>Method / Note</th></tr></thead>
+                        <tbody>
+                        {% for it in s.installments %}
+                        {% if it.method == 'Website Link' %}
+                        <tr>
+                            <td>{{ it.n }}</td>
+                            <td style="text-align:right;">A${{ '{:,.0f}'.format(it.amount) }}</td>
+                            <td style="text-align:right;color:var(--gray-400);">—</td>
+                            <td style="text-align:right;font-weight:600;">A${{ '{:,.0f}'.format(it.amount) }}</td>
+                            <td>{{ it.date or '-' }}</td>
+                            <td>Website Link{% if it.note %} · {{ it.note }}{% endif %}</td>
+                        </tr>
+                        {% else %}
+                        {% set sbase = it.amount %}
+                        {% set stotal = (sbase * 1.18) %}
+                        {% set sgst = (stotal - sbase) %}
+                        <tr>
+                            <td>{{ it.n }}</td>
+                            <td style="text-align:right;">₹{{ '{:,.0f}'.format(sbase) }}</td>
+                            <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(sgst) }}</td>
+                            <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(stotal) }}</td>
+                            <td>{{ it.date or '-' }}</td>
+                            <td>{{ it.method or '-' }}{% if it.note %} · {{ it.note }}{% endif %}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+                {% endfor %}
+
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                     <button type="submit" class="button">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.3 4.7L6.3 11.7L2.7 8.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -765,6 +808,32 @@
                     </tbody>
                 </table>
             </div>
+
+            {# Combined signup: show each add-on's (e.g. AMC 1 / Training) own
+               installments here too, so ops verification sees both schedules. #}
+            {% for s in combined_siblings %}
+            {% if s.installments %}
+            <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.75rem 0 1rem;">
+                {{ s.plan_type or s.product or 'Add-on' }} Installments
+                <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ s.reg }} · separate schedule</span>
+            </h3>
+            <div style="overflow-x: auto;">
+                <table class="table" style="border-radius: 0.6rem; overflow: hidden;">
+                    <thead><tr><th>#</th><th>Amount</th><th>Due Date</th><th>Method / Note</th></tr></thead>
+                    <tbody>
+                        {% for it in s.installments %}
+                        <tr>
+                            <td>{{ it.n }}</td>
+                            <td style="font-weight: 600;">{% if it.method == 'Website Link' %}A${{ '{:,.0f}'.format(it.amount) }}{% else %}₹{{ '{:,.0f}'.format(it.amount) }}{% endif %}</td>
+                            <td>{{ it.date or '-' }}</td>
+                            <td>{{ it.method or '-' }}{% if it.note %} · {{ it.note }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            {% endfor %}
 
             {% if reg.additional_notes %}
             <div style="margin-top: 1.5rem; padding: 1rem; background: var(--gray-50); border-radius: 0.5rem; border: 1px solid var(--gray-200);">
