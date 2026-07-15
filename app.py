@@ -4247,7 +4247,46 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
             academics.get('additional_info', ''), created_by
         ))
 
-    logging.info(f"Auto-synced client {reg_num} to plab_clients + ops_academic_details")
+    # ── Carry the registration's documents into the ops pathway profile ──────
+    # The pathway profile reads plab_client_documents (by client_id); the client
+    # uploaded during registration to client_documents (by registration_id). Copy
+    # them across so the PHOTO, CONTRACT and every uploaded document appear in the
+    # ops profile's document section (and set the profile photo from the upload).
+    try:
+        pc = conn.execute("SELECT id, photo_path FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+        if pc:
+            pc_id = pc['id']
+            already = conn.execute(
+                "SELECT COUNT(*) AS c FROM plab_client_documents WHERE client_id = ?", (pc_id,)).fetchone()['c']
+            if not already:
+                docs = conn.execute(
+                    "SELECT doc_type, file_name, file_path, file_size FROM client_documents WHERE registration_id = ?",
+                    (reg_id,)).fetchall()
+                photo_fp = ''
+                for d in docs:
+                    conn.execute(
+                        "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, "
+                        " file_path, file_size, status, uploaded_by) "
+                        "VALUES (?, ?, 'registration', ?, ?, ?, 'uploaded', 'registration')",
+                        (pc_id, d['doc_type'] or 'Document', d['file_name'] or '',
+                         d['file_path'] or '', d['file_size'] or 0))
+                    if (d['doc_type'] or '') == 'Photograph' and d['file_path']:
+                        photo_fp = d['file_path']
+                # Set the profile photo from the uploaded Photograph if not already set.
+                if photo_fp and not (pc['photo_path'] or ''):
+                    conn.execute("UPDATE plab_clients SET photo_path = ? WHERE id = ?", (photo_fp, pc_id))
+                # Carry the signed contract in as a document too.
+                contract_fp = reg.get('contract_path') or ''
+                if contract_fp:
+                    conn.execute(
+                        "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, "
+                        " file_path, file_size, status, uploaded_by) "
+                        "VALUES (?, 'Signed Contract', 'contract', 'Signed Contract', ?, 0, 'uploaded', 'registration')",
+                        (pc_id, contract_fp))
+    except Exception as _de:
+        logging.warning(f"sync registration docs for {reg_num}: {_de}")
+
+    logging.info(f"Auto-synced client {reg_num} to plab_clients + ops_academic_details + documents")
 
 
 def _sync_combined_sibling(main_reg_id, sibling_reg_id, ops_user_id):
