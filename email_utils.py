@@ -148,6 +148,85 @@ def _get_email_footer_html() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Branded email builder (GooCampus logo + navy/orange) — used by client
+# registration, onboarding and welcome-call notifications.
+# ---------------------------------------------------------------------------
+
+BRAND_LOGO_URL = "https://goocampus.org/static/logo-white.png"
+PORTAL_URL = "https://goocampus.org"
+
+
+def render_branded_email(heading: str, inner_html: str, preheader: str = "") -> str:
+    """Wrap inner HTML in a polished, email-client-safe GooCampus layout:
+    navy header with the logo, an orange accent bar, a white body card and a
+    footer. Use with the brand_* helpers below to build the body."""
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#eef2f7;">
+<span style="display:none;max-height:0;overflow:hidden;opacity:0;color:#eef2f7;">{preheader}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(15,27,51,.08);font-family:Arial,Helvetica,sans-serif;">
+  <tr><td style="background:{BRAND_NAVY};padding:22px 28px;text-align:center;">
+    <img src="{BRAND_LOGO_URL}" alt="GooCampus" width="160" style="height:auto;max-height:42px;display:inline-block;border:0;">
+  </td></tr>
+  <tr><td style="height:4px;background:{BRAND_ORANGE};font-size:0;line-height:0;">&nbsp;</td></tr>
+  <tr><td style="padding:28px 30px 6px;">
+    <h1 style="margin:0;color:{BRAND_NAVY};font-size:20px;line-height:1.3;">{heading}</h1>
+  </td></tr>
+  <tr><td style="padding:6px 30px 28px;color:#334155;font-size:15px;line-height:1.6;">
+    {inner_html}
+  </td></tr>
+  <tr><td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:18px 30px;text-align:center;color:#94a3b8;font-size:12px;line-height:1.6;">
+    <strong style="color:#64748b;">GooCampus Edu Solutions</strong> &middot; <a href="{PORTAL_URL}" style="color:{BRAND_ORANGE};text-decoration:none;">goocampus.org</a><br>
+    Automated notification from the GooCampus portal.
+  </td></tr>
+</table>
+</td></tr></table></body></html>"""
+
+
+def brand_detail_rows(pairs) -> str:
+    """pairs: list of (label, value). Renders a clean two-column details table."""
+    cells = ""
+    for k, v in pairs:
+        cells += (
+            f'<tr><td style="padding:7px 0;color:#64748b;font-size:13px;width:170px;'
+            f'vertical-align:top;border-bottom:1px solid #f1f5f9;">{k}</td>'
+            f'<td style="padding:7px 0 7px 10px;color:#0f172a;font-size:14px;font-weight:600;'
+            f'border-bottom:1px solid #f1f5f9;">{v if (v is not None and v != "") else "&mdash;"}</td></tr>'
+        )
+    return f'<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:8px 0 4px;">{cells}</table>'
+
+
+def brand_photo_block(url: str, name: str = "") -> str:
+    """Round client-photo avatar, centred. Empty string if no photo URL."""
+    if not url:
+        return ""
+    return (
+        f'<div style="text-align:center;margin:2px 0 18px;">'
+        f'<img src="{url}" alt="{name}" width="104" height="104" '
+        f'style="width:104px;height:104px;border-radius:50%;object-fit:cover;border:3px solid {BRAND_ORANGE};">'
+        f'</div>'
+    )
+
+
+def brand_button(label: str, url: str) -> str:
+    return (
+        f'<div style="margin:22px 0 4px;text-align:center;">'
+        f'<a href="{url}" style="background:{BRAND_ORANGE};color:#ffffff;text-decoration:none;'
+        f'font-weight:700;font-size:14px;padding:12px 26px;border-radius:8px;display:inline-block;">{label}</a>'
+        f'</div>'
+    )
+
+
+def brand_callout(text: str, color: str = "#EFF6FF", border: str = "#BFDBFE", tcolor: str = "#1E3A5F") -> str:
+    return (
+        f'<div style="background:{color};border:1px solid {border};border-radius:8px;'
+        f'padding:12px 16px;margin:10px 0;color:{tcolor};font-size:14px;">{text}</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
 # Pre-built email functions
 # ---------------------------------------------------------------------------
 

@@ -2329,11 +2329,78 @@ def client_upload_plab_doc():
     return jsonify({'success': True})
 
 
+def _dept_emails(conn, departments):
+    """Active employees' emails for the given department names."""
+    try:
+        ph = ','.join(['?'] * len(departments))
+        rows = conn.execute(
+            f"SELECT DISTINCT email FROM employees WHERE is_active = 1 "
+            f"AND department IN ({ph}) AND email IS NOT NULL AND email <> ''",
+            list(departments)).fetchall()
+        return [r['email'] for r in rows if r['email']]
+    except Exception:
+        return []
+
+
+def _management_emails(conn):
+    """Management: admins + management employee codes."""
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT email FROM employees WHERE is_active = 1 "
+            "AND (is_admin = 1 OR emp_code IN ('GC001','GC002','GC003')) "
+            "AND email IS NOT NULL AND email <> ''").fetchall()
+        return [r['email'] for r in rows if r['email']]
+    except Exception:
+        return []
+
+
+def _lead_sales_member(conn, reg):
+    """The sales member whose lead this is — the reg's counsellor, else the
+    invitation's inviter. Returns (name, email)."""
+    emp = None
+    try:
+        if reg.get('counsellor_id'):
+            emp = conn.execute("SELECT name, email FROM employees WHERE id = ?", (reg['counsellor_id'],)).fetchone()
+        if (not emp or not emp['email']) and reg.get('invitation_id'):
+            inv = conn.execute("SELECT invited_by FROM client_invitations WHERE id = ?", (reg['invitation_id'],)).fetchone()
+            if inv and inv['invited_by']:
+                emp = conn.execute("SELECT name, email FROM employees WHERE id = ?", (inv['invited_by'],)).fetchone()
+    except Exception:
+        emp = None
+    if emp:
+        return (emp['name'] or '', emp['email'] or '')
+    return ('', '')
+
+
+def _client_photo_email_url(conn, reg):
+    """Absolute, email-safe URL for the client's photograph, or ''."""
+    try:
+        row = conn.execute(
+            "SELECT file_path FROM client_documents WHERE registration_id = ? "
+            "AND doc_type = 'Photograph' ORDER BY id DESC LIMIT 1", (reg['id'],)).fetchone()
+        fp = (row['file_path'] if row else '') or ''
+        if not fp:
+            return ''
+        if fp.startswith('http'):
+            return fp
+        if 'static/' in fp:
+            return 'https://goocampus.org/' + fp.lstrip('/')
+        try:
+            from core import storage
+            return storage.presigned_get_url(fp) or ''
+        except Exception:
+            return ''
+    except Exception:
+        return ''
+
+
 def _notify_client_submitted(reg_id):
-    """Send WhatsApp + email to counsellor and ops team when client submits form."""
+    """Client submitted their registration form → email the SALES member whose
+    lead it is + the whole Operations team a branded summary (client photo +
+    whose-lead + product + basic details)."""
     try:
         conn = get_db()
-        reg = conn.execute('''SELECT cr.*, ps.name as product_name
+        reg = conn.execute('''SELECT cr.*, ps.name as product_name, ps.pathway as pathway
             FROM client_registrations cr
             LEFT JOIN products_services ps ON ps.id = cr.product_id
             WHERE cr.id = ?''', (reg_id,)).fetchone()
@@ -2341,35 +2408,38 @@ def _notify_client_submitted(reg_id):
             conn.close()
             return
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        sm_name, sm_email = _lead_sales_member(conn, reg)
+        ops_emails = _dept_emails(conn, ['Operations'])
+        photo_url = _client_photo_email_url(conn, reg)
+        recipients = list(dict.fromkeys([e for e in ([sm_email] + ops_emails) if e]))
 
-        # Get counsellor info
-        counsellor = None
-        if reg['counsellor_id']:
-            counsellor = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?", (reg['counsellor_id'],)).fetchone()
-
-        # Get ops team (admin users)
-        ops_team = conn.execute("SELECT name, email FROM employees WHERE is_admin = 1 AND is_active = 1").fetchall()
-
-        # Email notifications
-        from email_utils import send_email
-        subject = f"New Client Registration Submitted — {client_name} ({reg['product_name'] or 'N/A'})"
-        body = f"""<h2>Client Registration Submitted</h2>
-        <p><strong>{client_name}</strong> has completed their registration form for <strong>{reg['product_name'] or 'N/A'}</strong>.</p>
-        <p><strong>Registration #:</strong> {reg['registration_number']}<br>
-        <strong>Mobile:</strong> {reg['mobile']}<br>
-        <strong>Email:</strong> {reg['email'] or 'N/A'}</p>
-        <p>Please log in to the portal to review and complete the sales section.</p>"""
-
-        recipients = [e['email'] for e in ops_team if e['email']]
-        if counsellor and counsellor['email']:
-            recipients.append(counsellor['email'])
+        from email_utils import (send_email, render_branded_email, brand_detail_rows,
+                                  brand_photo_block, brand_button)
+        pathway_lbl = (reg['pathway'] or '').replace('_', ' ').title() if reg['pathway'] else ''
+        inner = (
+            brand_photo_block(photo_url, client_name) +
+            f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
+            f"registration form. Please review and complete the sales section.</p>" +
+            brand_detail_rows([
+                ('Client', client_name),
+                ('Registration #', reg['registration_number']),
+                ('Product', reg['product_name']),
+                ('Pathway', pathway_lbl),
+                ('Whose lead', sm_name),
+                ('Mobile', reg['mobile']),
+                ('Email', reg['email']),
+            ]) +
+            brand_button('Open in portal', f'https://goocampus.org/admin/client/{reg_id}')
+        )
+        subject = f"New Registration Submitted — {client_name} ({reg['product_name'] or 'N/A'})"
+        body = render_branded_email('New Registration Submitted', inner,
+                                    preheader=f"{client_name} completed their registration form")
         if recipients:
-            send_email(recipients, subject, body)
+            send_email(recipients, subject, body, from_address="GooCampus <info@goocampus.in>")
 
-        # Log notification
         conn.execute(
             "INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject, message) VALUES (?, ?, ?, ?, ?, ?)",
-            (reg_id, 'client_submitted', 'email', ','.join(recipients), subject, 'Email sent to sales + ops'))
+            (reg_id, 'client_submitted', 'email', ','.join(recipients), subject, 'Sales member + Operations team notified'))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -3829,16 +3899,36 @@ def _notify_onboarding_confirmed(reg_id):
             except Exception as wa_e:
                 logging.error(f"Welcome WA: {wa_e}")
 
-        # 3. Alert all team members
-        from email_utils import send_email
-        all_team = conn.execute("SELECT email FROM employees WHERE is_active = 1 AND email IS NOT NULL AND email != ''").fetchall()
-        team_recipients = [e['email'] for e in all_team if e['email']]
+        # 3. Onboarding confirmation — a branded "client has registered with
+        # GooCampus" note to Sales + Operations + Management + Digital Marketing.
+        from email_utils import (send_email, render_branded_email, brand_detail_rows,
+                                  brand_photo_block, brand_callout)
+        sm_name, _sm_email = _lead_sales_member(conn, reg)
+        onb_photo_url = _client_photo_email_url(conn, reg)
+        team_recipients = list(dict.fromkeys(
+            _dept_emails(conn, ['Sales', 'Operations', 'Marketing', 'Digital Marketing'])
+            + _management_emails(conn)))
         if team_recipients:
             team_subject = f"New Client Onboarded — {client_name} ({reg['product_name'] or 'N/A'})"
-            team_body = f"""<h2>New Client Added</h2>
-            <p><strong>{client_name}</strong> has been onboarded for <strong>{reg['product_name'] or 'N/A'}</strong>.</p>
-            <p><strong>Registration #:</strong> {reg['registration_number']}</p>"""
-            send_email(team_recipients, team_subject, team_body)
+            team_inner = (
+                brand_photo_block(onb_photo_url, client_name) +
+                brand_callout(
+                    f"<strong>{client_name}</strong> has successfully registered with GooCampus and "
+                    f"completed both sales &amp; operations verification. The client is now onboarded.",
+                    color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
+                brand_detail_rows([
+                    ('Client', client_name),
+                    ('Registration #', reg['registration_number']),
+                    ('Product', reg['product_name']),
+                    ('Whose lead', sm_name),
+                    ('Mobile', reg['mobile']),
+                    ('Email', reg['email']),
+                ])
+            )
+            team_body = render_branded_email('Client Registered with GooCampus', team_inner,
+                                             preheader=f"{client_name} is now onboarded")
+            send_email(team_recipients, team_subject, team_body,
+                       from_address="GooCampus <info@goocampus.in>")
 
         # 4. Auto-sync to plab_clients and ops_academic_details
         try:
@@ -3985,7 +4075,44 @@ def admin_client_welcome_call_confirm(reg_id):
             send_email([client_email], "Your GooCampus Welcome Call is confirmed", body, attachments=atts)
         except Exception as e:
             logging.warning(f"welcome call email {reg_id}: {e}")
-    flash('Welcome call confirmed. The client has been emailed a calendar invite.', 'success')
+
+    # Internal notification: the sales member whose lead it is, the Operations
+    # team, and (highlighted) the ops member taking the call.
+    try:
+        from email_utils import (render_branded_email, brand_detail_rows, brand_callout)
+        conn2 = get_db()
+        sm_name, sm_email = _lead_sales_member(conn2, reg)
+        ops_emails = _dept_emails(conn2, ['Operations'])
+        caller_email = ''
+        if wc_by:
+            crow = conn2.execute("SELECT email FROM employees WHERE is_active = 1 AND name = ? LIMIT 1", (wc_by,)).fetchone()
+            caller_email = (crow['email'] if crow else '') or ''
+        conn2.close()
+        team_to = list(dict.fromkeys([e for e in ([sm_email, caller_email] + ops_emails) if e]))
+        if team_to and send_email:
+            t_inner = (
+                brand_callout(
+                    f"Welcome call scheduled for <strong>{client_name}</strong> — "
+                    f"<strong>{date_s} at {time_s} IST</strong>"
+                    + (f", to be taken by <strong>{wc_by}</strong>" if wc_by else "") + ".") +
+                brand_detail_rows([
+                    ('Client', client_name),
+                    ('Registration #', reg['registration_number']),
+                    ('Product', product_name),
+                    ('Whose lead', sm_name),
+                    ('Call date', date_s),
+                    ('Call time', f"{time_s} IST"),
+                    ('Taken by', wc_by),
+                ])
+            )
+            t_body = render_branded_email('Welcome Call Scheduled', t_inner,
+                                          preheader=f"{client_name}: {date_s} {time_s} IST")
+            send_email(team_to, f"Welcome Call Scheduled — {client_name} ({date_s} {time_s} IST)",
+                       t_body, from_address="GooCampus <info@goocampus.in>")
+    except Exception as e:
+        logging.warning(f"welcome call team notify {reg_id}: {e}")
+
+    flash('Welcome call confirmed. The client has an invite; the sales & ops team have been notified.', 'success')
     return redirect(url_for('admin_client_detail', reg_id=reg_id))
 
 
