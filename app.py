@@ -4412,6 +4412,60 @@ def admin_purge_client():
                                   report=report, deleted=deleted, total=(sum(n for _, n in report) if report else 0))
 
 
+@app.route('/admin/maintenance/reg-status', methods=['GET'])
+@admin_required
+def admin_reg_status():
+    """Diagnostic: show a client's registrations with the exact fields the
+    verification queues filter on, so we can see why a reg isn't appearing."""
+    from flask import render_template_string
+    email = (request.args.get('email') or 'miraclesofkrish@gmail.com').strip()
+    rows = []
+    if email:
+        conn = get_db()
+        try:
+            rows = conn.execute('''SELECT cr.id, cr.registration_number AS reg, cr.first_name, cr.last_name,
+                cr.email, cr.form_status, COALESCE(cr.sales_completed,0) AS sales_completed,
+                cr.client_submitted_at, COALESCE(cr.ops_status,'') AS ops_status,
+                cr.counsellor_id, cr.counsellor_name, cr.invitation_id, cr.created_at,
+                ps.name AS product_name, ps.pathway AS pathway
+                FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id
+                WHERE LOWER(cr.email) = LOWER(?) ORDER BY cr.id DESC''', (email,)).fetchall()
+        except Exception as e:
+            conn.close()
+            return f"<pre>error: {e}</pre>"
+        conn.close()
+    def why(r):
+        if r['form_status'] != 'submitted':
+            return f"NOT in queue — form_status is '{r['form_status']}' (needs 'submitted')"
+        if not r['client_submitted_at']:
+            return "NOT in queue — client_submitted_at is NULL"
+        if r['sales_completed'] == 1 and r['ops_status'] != 'verified':
+            return "in OPS-VERIFY queue (sales done)"
+        if r['sales_completed'] == 0:
+            return "should be in SALES-FILL queue ✓"
+        if r['ops_status'] == 'verified':
+            return "fully verified (not in any queue)"
+        return "?"
+    trs = "".join(
+        f"<tr><td>{r['id']}</td><td>{r['reg'] or '—'}</td><td>{(r['first_name'] or '')} {(r['last_name'] or '')}</td>"
+        f"<td>{r['product_name'] or '—'}</td><td><b>{r['form_status']}</b></td><td>{r['sales_completed']}</td>"
+        f"<td>{'set' if r['client_submitted_at'] else '<b style=color:red>NULL</b>'}</td>"
+        f"<td>{r['ops_status'] or '—'}</td><td>{r['counsellor_name'] or r['counsellor_id'] or '—'}</td>"
+        f"<td>{r['invitation_id'] or '—'}</td><td style='color:#0369a1'>{why(r)}</td></tr>"
+        for r in rows)
+    html = (f"<!doctype html><meta charset=utf-8><title>Reg status</title>"
+            f"<body style='font-family:system-ui;padding:24px;color:#1e293b'>"
+            f"<h2>Registration status &mdash; {email}</h2>"
+            f"<form><input name=email value='{email}' style='padding:8px;width:320px'> "
+            f"<button style='padding:8px 14px'>Check</button></form>"
+            f"<p>{len(rows)} registration(s) found.</p>"
+            f"<table border=1 cellpadding=6 cellspacing=0 style='border-collapse:collapse;font-size:13px'>"
+            f"<tr style='background:#f1f5f9'><th>ID</th><th>Reg</th><th>Name</th><th>Product</th>"
+            f"<th>form_status</th><th>sales_done</th><th>client_submitted_at</th><th>ops_status</th>"
+            f"<th>counsellor</th><th>inv_id</th><th>Queue status</th></tr>{trs}</table></body>")
+    return html
+
+
 _PURGE_HTML = """
 <!doctype html><html><head><meta charset=utf-8><title>Purge test client</title>
 <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f6f9;margin:0;padding:32px;color:#1e293b}
@@ -37174,6 +37228,18 @@ def has_section_permission(subject, main_section, sub_section, action='view', su
             if subject['is_admin']:
                 return True
         except (KeyError, IndexError, TypeError):
+            pass
+
+    # Operations-department staff run the Ops Verification step (and fill Sales
+    # balances), so they always get the two verification queues. These sections
+    # live under the 'sales' department in Access Master, so without this an ops
+    # member couldn't see the menu or open the page unless individually granted.
+    if subject_type == 'employee' and main_section == 'sales' \
+            and sub_section in ('sales_verification', 'ops_verification'):
+        try:
+            if (subject.get('department') or '').strip().lower() == 'operations':
+                return True
+        except Exception:
             pass
 
     if action not in ('view', 'edit', 'add'):
