@@ -548,6 +548,10 @@
                     </span>
                     <div class="text-muted small mt-1"><i class="bi bi-arrow-down me-1"></i>Upload your photograph first (Photograph section below) to begin.</div>
                     {% endif %}
+                    {% elif reg.is_combined_addon %}
+                    {# Combined enrolment add-on — no separate form; details come
+                       from the client's main registration. #}
+                    <span class="text-muted small"><i class="bi bi-link-45deg me-1"></i>Part of your combined enrolment — the details are taken from your main registration, so there's no separate form to fill here.</span>
                     {% elif reg.form_status == 'submitted' %}
                     {% if reg.ops_status == 'verified' %}
                     <a href="/client/form/{{ reg.id }}" class="btn btn-gc-outline">
@@ -566,7 +570,7 @@
                 </div>
             </div>
             {# ── Welcome Call: request a preferred slot; team confirms + emails an invite ── #}
-            {% if reg.form_status == 'submitted' %}
+            {% if reg.form_status == 'submitted' and not reg.is_combined_addon %}
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
                 {% if reg.wc_confirmed %}
                 <div style="display:flex;align-items:center;gap:8px;color:#166534;font-weight:600;font-size:0.9rem;">
