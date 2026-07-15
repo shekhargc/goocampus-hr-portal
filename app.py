@@ -4152,6 +4152,177 @@ def _sync_combined_sibling(main_reg_id, sibling_reg_id, ops_user_id):
         logging.error(f"_sync_combined_sibling(main={main_reg_id}, sib={sibling_reg_id}): {e}")
 
 
+# ── ADMIN: Test-client data cleanup (purge everything tied to an email) ──
+#
+# One-time-safe maintenance tool so a test email can be reused for a clean run.
+# Resolves the client across leads / invites / accounts / registrations / master,
+# then removes every child + parent record. PREVIEW first (counts), delete only
+# on explicit confirm. Admin-only. Shared DB — this affects live + staging.
+
+_PURGE_BY_REG_ID = ['installment_approvals', 'client_academics', 'client_documents',
+                    'client_agreements', 'client_doc_requests', 'client_notifications',
+                    'client_welcome_kit']
+_PURGE_BY_REG_NUM = ['ops_coaching', 'ops_english_logins', 'ops_test_bookings', 'ops_call_notes',
+                     'ops_self_assessment', 'ops_eligibility_letter', 'ops_data_flow', 'ops_payments',
+                     'ops_epic_registration', 'ops_gmc_registration', 'ops_amc_registration',
+                     'ops_research_publication', 'ops_job_stage', 'ops_online_subscriptions',
+                     'ops_webinars_conferences', 'ops_uk_visa_travel', 'ops_academic_details',
+                     'ops_online_courses', 'ops_uk_observerships', 'ops_ngo_activities', 'ops_mentorship',
+                     'ops_uk_cab_bookings', 'internal_transfers', 'refunds', 'client_onboarding']
+_PURGE_BY_CLIENT_ID = ['plab_client_documents', 'scheduled_slots']
+
+
+def _purge_collect_keys(conn, emails):
+    """Resolve every id/number tied to these client emails."""
+    emails = [e.strip().lower() for e in emails if e and e.strip()]
+    if not emails:
+        return None
+    eph = ','.join(['?'] * len(emails))
+    def ids(sql, params):
+        try:
+            return [r[list(r.keys())[0]] for r in conn.execute(sql, params).fetchall()]
+        except Exception:
+            return []
+    lead_ids = ids(f"SELECT id FROM sales_leads WHERE LOWER(email) IN ({eph})", emails)
+    account_ids = ids(f"SELECT id FROM client_accounts WHERE LOWER(email) IN ({eph})", emails)
+    reg_where, reg_params = f"LOWER(email) IN ({eph})", list(emails)
+    if account_ids:
+        reg_where += f" OR account_id IN ({','.join(['?']*len(account_ids))})"
+        reg_params += account_ids
+    regs = []
+    try:
+        regs = conn.execute(f"SELECT id, registration_number FROM client_registrations WHERE {reg_where}", reg_params).fetchall()
+    except Exception:
+        pass
+    reg_ids = [r['id'] for r in regs]
+    reg_nums = set(r['registration_number'] for r in regs if r['registration_number'])
+    plab_where, plab_params = f"LOWER(email) IN ({eph})", list(emails)
+    if reg_nums:
+        plab_where += f" OR registration_number IN ({','.join(['?']*len(reg_nums))})"
+        plab_params += list(reg_nums)
+    plabs = []
+    try:
+        plabs = conn.execute(f"SELECT id, registration_number FROM plab_clients WHERE {plab_where}", plab_params).fetchall()
+    except Exception:
+        pass
+    plab_ids = [r['id'] for r in plabs]
+    for r in plabs:
+        if r['registration_number']:
+            reg_nums.add(r['registration_number'])
+    return {'emails': emails, 'lead_ids': lead_ids, 'account_ids': account_ids,
+            'reg_ids': reg_ids, 'reg_nums': list(reg_nums), 'plab_ids': plab_ids}
+
+
+def _purge_run(conn, keys, do_delete):
+    """Count (and optionally delete) every record for the resolved keys.
+    Commits per table so one missing table can't undo prior deletes."""
+    report = []
+    def op(table, col, values):
+        if not values:
+            return
+        ph = ','.join(['?'] * len(values))
+        try:
+            n = conn.execute(f"SELECT COUNT(*) AS c FROM {table} WHERE {col} IN ({ph})", list(values)).fetchone()['c']
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            return
+        if n:
+            report.append((table, n))
+            if do_delete:
+                try:
+                    conn.execute(f"DELETE FROM {table} WHERE {col} IN ({ph})", list(values))
+                    conn.commit()
+                except Exception as e:
+                    logging.warning(f"purge delete {table}.{col}: {e}")
+                    try: conn.rollback()
+                    except Exception: pass
+    for t in _PURGE_BY_REG_ID:
+        op(t, 'registration_id', keys['reg_ids'])
+    for t in _PURGE_BY_REG_NUM:
+        op(t, 'registration_number', keys['reg_nums'])
+    for t in _PURGE_BY_CLIENT_ID:
+        op(t, 'client_id', keys['plab_ids'])
+    # Parents last
+    op('plab_clients', 'id', keys['plab_ids'])
+    op('client_registrations', 'id', keys['reg_ids'])
+    op('client_accounts', 'id', keys['account_ids'])
+    # client_invitations by email (case-insensitive)
+    if keys['emails']:
+        ph = ','.join(['?'] * len(keys['emails']))
+        try:
+            n = conn.execute(f"SELECT COUNT(*) AS c FROM client_invitations WHERE LOWER(client_email) IN ({ph})", keys['emails']).fetchone()['c']
+            if n:
+                report.append(('client_invitations', n))
+                if do_delete:
+                    conn.execute(f"DELETE FROM client_invitations WHERE LOWER(client_email) IN ({ph})", keys['emails']); conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    op('sales_closures', 'lead_id', keys['lead_ids'])
+    op('sales_leads', 'id', keys['lead_ids'])
+    return report
+
+
+@app.route('/admin/maintenance/purge-client', methods=['GET', 'POST'])
+@login_required
+def admin_purge_client():
+    if not session.get('is_admin'):
+        flash('Admin only.', 'error')
+        return redirect(url_for('client_dashboard'))
+    from flask import render_template_string
+    emails_raw = (request.values.get('emails') or '').strip()
+    emails = [e.strip() for e in emails_raw.replace(',', '\n').splitlines() if e.strip()]
+    action = request.form.get('action', '')
+    report, deleted = None, False
+    if emails:
+        conn = get_db()
+        keys = _purge_collect_keys(conn, emails)
+        if keys:
+            do_delete = (request.method == 'POST' and action == 'delete')
+            report = _purge_run(conn, keys, do_delete)
+            deleted = do_delete
+        conn.close()
+    return render_template_string(_PURGE_HTML, emails_raw=emails_raw, emails=emails,
+                                  report=report, deleted=deleted, total=(sum(n for _, n in report) if report else 0))
+
+
+_PURGE_HTML = """
+<!doctype html><html><head><meta charset=utf-8><title>Purge test client</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f6f9;margin:0;padding:32px;color:#1e293b}
+.card{max-width:720px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:26px 28px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+h1{font-size:1.3rem;margin:0 0 6px;color:#1e3a5f}p.sub{color:#64748b;font-size:.9rem;margin:0 0 18px}
+textarea{width:100%;min-height:90px;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:.95rem;box-sizing:border-box}
+.btn{border:none;border-radius:8px;padding:10px 18px;font-weight:600;font-size:.9rem;cursor:pointer;text-decoration:none;display:inline-block}
+.btn-prev{background:#1e3a5f;color:#fff}.btn-del{background:#dc2626;color:#fff}.btn-ghost{background:#eef2f7;color:#334155}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #f1f5f9}
+.warn{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;padding:12px 14px;font-size:.88rem;margin:14px 0}
+.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:12px 14px;font-size:.9rem;margin:14px 0}
+.empty{color:#64748b;font-style:italic}</style></head><body>
+<div class=card>
+<h1>Purge test-client data</h1>
+<p class=sub>Enter client email(s), one per line. Preview first — nothing is deleted until you click <b>Delete permanently</b>. Note: this shared database serves both live and staging.</p>
+<form method=post>
+<textarea name=emails placeholder="miraclesofkrish@gmail.com&#10;bigdaysquad@gmail.com">{{ emails_raw }}</textarea>
+<div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+<button class="btn btn-prev" name=action value=preview>Preview</button>
+{% if report and not deleted %}<button class="btn btn-del" name=action value=delete onclick="return confirm('Permanently delete ALL these records? This cannot be undone.')">Delete permanently</button>{% endif %}
+<a class="btn btn-ghost" href="/admin/maintenance/purge-client">Clear</a>
+</div>
+</form>
+{% if deleted %}<div class=ok>&#10003; Deleted {{ total }} record(s) across {{ report|length }} table(s) for: {{ emails|join(', ') }}. The email(s) are now free for a fresh test.</div>{% endif %}
+{% if report is not none and not deleted %}
+  {% if report %}
+  <div class=warn>Found <b>{{ total }}</b> record(s) across {{ report|length }} table(s) for: {{ emails|join(', ') }}. Review, then Delete permanently.</div>
+  <table><thead><tr><th>Table</th><th>Records</th></tr></thead><tbody>
+  {% for t,n in report %}<tr><td>{{ t }}</td><td>{{ n }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<div class=empty>No records found for the given email(s) — nothing to delete.</div>{% endif %}
+{% endif %}
+</div></body></html>
+"""
+
+
 def _notify_doc_request(reg_id, doc_type, message):
     """Notify client about document request via email."""
     try:
