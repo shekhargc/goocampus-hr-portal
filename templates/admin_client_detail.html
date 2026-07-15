@@ -782,54 +782,84 @@
             </div>
 
             <!-- Installment Details -->
-            <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.75rem 0 1rem;">Payment Installments</h3>
+            <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.75rem 0 1rem;">Payment Installments{% if reg.plan_type or reg.product_name %} <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ reg.plan_type or reg.product_name }}</span>{% endif %}</h3>
+            {% set mns = namespace(tot=0, cur='₹') %}
             <div style="overflow-x: auto;">
                 <table class="table" style="border-radius: 0.6rem; overflow: hidden;">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Amount</th>
-                            <th>Due Date</th>
-                            <th>Note</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Due Date</th><th>Method / Note</th></tr></thead>
                     <tbody>
                         {% for i in range(1, 5) %}
                         {% set amt = reg['inst' ~ i ~ '_amount'] %}
                         {% if amt %}
+                        {% if reg['inst' ~ i ~ '_method'] == 'Website Link' %}
+                        {% set mns.cur = 'A$' %}{% set mns.tot = mns.tot + (amt|float) %}
                         <tr>
                             <td>{{ i }}</td>
-                            <td style="font-weight: 600;">{{ '₹{:,.0f}'.format(amt) }}</td>
+                            <td style="text-align:right;">A${{ '{:,.0f}'.format(amt|float) }}</td>
+                            <td style="text-align:right;color:var(--gray-400);">—</td>
+                            <td style="text-align:right;font-weight:600;">A${{ '{:,.0f}'.format(amt|float) }}</td>
                             <td>{{ reg['inst' ~ i ~ '_date'] or '-' }}</td>
-                            <td>{{ reg['inst' ~ i ~ '_note'] or '-' }}</td>
+                            <td>Website Link{% if reg['inst' ~ i ~ '_note'] %} · {{ reg['inst' ~ i ~ '_note'] }}{% endif %}</td>
                         </tr>
+                        {% else %}
+                        {% set mbase = amt|float %}{% set mtotal = (mbase * 1.18) %}{% set mgst = (mtotal - mbase) %}
+                        {% set mns.cur = '₹' %}{% set mns.tot = mns.tot + mtotal %}
+                        <tr>
+                            <td>{{ i }}</td>
+                            <td style="text-align:right;">₹{{ '{:,.0f}'.format(mbase) }}</td>
+                            <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(mgst) }}</td>
+                            <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(mtotal) }}</td>
+                            <td>{{ reg['inst' ~ i ~ '_date'] or '-' }}</td>
+                            <td>{{ reg['inst' ~ i ~ '_method'] or '-' }}{% if reg['inst' ~ i ~ '_note'] %} · {{ reg['inst' ~ i ~ '_note'] }}{% endif %}</td>
+                        </tr>
+                        {% endif %}
                         {% endif %}
                         {% endfor %}
                     </tbody>
+                    {% if mns.tot > 0 %}<tfoot><tr style="font-weight:700;background:var(--gray-50);"><td colspan="3" style="text-align:right;">Total payable by client</td><td style="text-align:right;">{{ mns.cur }}{{ '{:,.0f}'.format(mns.tot) }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
                 </table>
             </div>
 
             {# Combined signup: show each add-on's (e.g. AMC 1 / Training) own
-               installments here too, so ops verification sees both schedules. #}
+               installments here too — with the same base/GST/total breakup + a
+               total — so ops verification sees both full schedules. #}
             {% for s in combined_siblings %}
             {% if s.installments %}
             <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.75rem 0 1rem;">
                 {{ s.plan_type or s.product or 'Add-on' }} Installments
                 <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ s.reg }} · separate schedule</span>
             </h3>
+            {% set sns = namespace(tot=0, cur='₹') %}
             <div style="overflow-x: auto;">
                 <table class="table" style="border-radius: 0.6rem; overflow: hidden;">
-                    <thead><tr><th>#</th><th>Amount</th><th>Due Date</th><th>Method / Note</th></tr></thead>
+                    <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Due Date</th><th>Method / Note</th></tr></thead>
                     <tbody>
                         {% for it in s.installments %}
+                        {% if it.method == 'Website Link' %}
+                        {% set sns.cur = 'A$' %}{% set sns.tot = sns.tot + it.amount %}
                         <tr>
                             <td>{{ it.n }}</td>
-                            <td style="font-weight: 600;">{% if it.method == 'Website Link' %}A${{ '{:,.0f}'.format(it.amount) }}{% else %}₹{{ '{:,.0f}'.format(it.amount) }}{% endif %}</td>
+                            <td style="text-align:right;">A${{ '{:,.0f}'.format(it.amount) }}</td>
+                            <td style="text-align:right;color:var(--gray-400);">—</td>
+                            <td style="text-align:right;font-weight:600;">A${{ '{:,.0f}'.format(it.amount) }}</td>
+                            <td>{{ it.date or '-' }}</td>
+                            <td>Website Link{% if it.note %} · {{ it.note }}{% endif %}</td>
+                        </tr>
+                        {% else %}
+                        {% set sbase = it.amount %}{% set stotal = (sbase * 1.18) %}{% set sgst = (stotal - sbase) %}
+                        {% set sns.cur = '₹' %}{% set sns.tot = sns.tot + stotal %}
+                        <tr>
+                            <td>{{ it.n }}</td>
+                            <td style="text-align:right;">₹{{ '{:,.0f}'.format(sbase) }}</td>
+                            <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(sgst) }}</td>
+                            <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(stotal) }}</td>
                             <td>{{ it.date or '-' }}</td>
                             <td>{{ it.method or '-' }}{% if it.note %} · {{ it.note }}{% endif %}</td>
                         </tr>
+                        {% endif %}
                         {% endfor %}
                     </tbody>
+                    {% if sns.tot > 0 %}<tfoot><tr style="font-weight:700;background:var(--gray-50);"><td colspan="3" style="text-align:right;">Total payable by client</td><td style="text-align:right;">{{ sns.cur }}{{ '{:,.0f}'.format(sns.tot) }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
                 </table>
             </div>
             {% endif %}

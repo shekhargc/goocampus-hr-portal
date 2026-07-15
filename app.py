@@ -31355,8 +31355,14 @@ def seed_fix_state_city_fields():
                      "WHERE field_name = 'state' AND role = 'client'")
         conn.execute("UPDATE client_form_configs SET field_type = 'select', field_options = 'db:cities' "
                      "WHERE field_name = 'city' AND role = 'client'")
+        # Ops 'Current Stage' must use the PATHWAY-scoped 'current_stage' lookup
+        # (like Joined Stage), NOT the PLAB-only 'plab_stage' category — otherwise
+        # every pathway's ops verification showed the UK/PLAB stages.
+        conn.execute("UPDATE client_form_configs SET field_type = 'select', field_options = 'db:current_stage' "
+                     "WHERE field_name = 'current_stage' AND role = 'ops' "
+                     "AND (field_options IN ('db:plab_stage', 'db:plab_stages') OR field_options IS NULL OR field_options = '')")
         conn.commit()
-        logging.info("seed_fix_state_city_fields: normalised state/city cascade fields")
+        logging.info("seed_fix_state_city_fields: normalised state/city + ops current_stage fields")
     except Exception as e:
         logging.warning(f"seed_fix_state_city_fields: {e}")
         try: conn.rollback()
@@ -37042,7 +37048,7 @@ def seed_client_form_configs():
 
             # ── Step 4: Operations Section (ops fills) ──
             (4, 'Operations', 'account_status', 'Account Status', 'select', 'db:account_status', 'ops', 1, 10, '', ''),
-            (4, 'Operations', 'current_stage', 'Current Stage', 'select', 'db:plab_stage', 'ops', 0, 20, '', ''),
+            (4, 'Operations', 'current_stage', 'Current Stage', 'select', 'db:current_stage', 'ops', 0, 20, '', ''),
             (4, 'Operations', 'additional_notes', 'Additional Notes', 'textarea', '', 'ops', 0, 210, '', ''),
             # Ops verification collects only status + current stage (founder 2026-07-13).
             # Dropped Date / Switched Program / Upgraded To moved to the client profile;
