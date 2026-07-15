@@ -31884,8 +31884,18 @@ def seed_fix_state_city_fields():
         conn.execute("UPDATE client_form_configs SET field_type = 'select', field_options = 'db:current_stage' "
                      "WHERE field_name = 'current_stage' AND role = 'ops' "
                      "AND (field_options IN ('db:plab_stage', 'db:plab_stages') OR field_options IS NULL OR field_options = '')")
+        # Data-consistency: an ACTIVE employee must have employment_status 'active'.
+        # A stale non-active value made the profile edit form show an exit status,
+        # so saving the profile silently deactivated them. Align the two.
+        try:
+            conn.execute("UPDATE employees SET employment_status = 'active' "
+                         "WHERE COALESCE(is_active,0) = 1 AND COALESCE(employment_status,'') <> 'active'")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         conn.commit()
-        logging.info("seed_fix_state_city_fields: normalised state/city + ops current_stage fields")
+        logging.info("seed_fix_state_city_fields: normalised state/city + ops current_stage + employee status")
     except Exception as e:
         logging.warning(f"seed_fix_state_city_fields: {e}")
         try: conn.rollback()

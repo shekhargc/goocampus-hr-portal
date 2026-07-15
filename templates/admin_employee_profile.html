@@ -135,7 +135,11 @@
 
         <!-- Employment Status & Exit (Phase B) -->
         <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Employment Status &amp; Exit</h2>
-        {% set estatus = (employee.employment_status or ('active' if employee.is_active else 'resigned')) %}
+        {# is_active is the source of truth: an ACTIVE employee always shows Active,
+           so a normal profile save never silently deactivates them from a stale
+           employment_status value. Only a genuinely inactive employee shows its
+           exit status. #}
+        {% set estatus = ('active' if employee.is_active else (employee.employment_status or 'resigned')) %}
         <div class="form-group">
             <label for="employment_status">Status</label>
             <select id="employment_status" name="employment_status" onchange="toggleExitFields()">
