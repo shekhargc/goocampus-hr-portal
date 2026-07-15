@@ -178,7 +178,7 @@ def render_branded_email(heading: str, inner_html: str, preheader: str = "") -> 
     {inner_html}
   </td></tr>
   <tr><td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:18px 30px;text-align:center;color:#94a3b8;font-size:12px;line-height:1.6;">
-    <strong style="color:#64748b;">GooCampus Edu Solutions</strong> &middot; <a href="{PORTAL_URL}" style="color:{BRAND_ORANGE};text-decoration:none;">goocampus.org</a><br>
+    <strong style="color:#64748b;">GooCampus Edu Solutions</strong><br>
     Automated notification from the GooCampus portal.
   </td></tr>
 </table>
