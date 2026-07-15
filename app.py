@@ -4523,6 +4523,77 @@ def admin_reg_status():
     return html
 
 
+@app.route('/admin/maintenance/employee-check', methods=['GET'])
+@admin_required
+def admin_employee_check():
+    """Read-only: is a (deleted?) employee still present, and what data references
+    an employee id that no longer exists (orphans we can recover)."""
+    q = (request.args.get('q') or '').strip()
+    conn = get_db()
+    emps = []
+    try:
+        if q:
+            emps = conn.execute(
+                "SELECT id, name, emp_code, email, department, COALESCE(is_active,0) AS is_active "
+                "FROM employees WHERE LOWER(name) LIKE LOWER(?) ORDER BY name", (f'%{q}%',)).fetchall()
+        else:
+            emps = conn.execute(
+                "SELECT id, name, emp_code, email, department, COALESCE(is_active,0) AS is_active "
+                "FROM employees ORDER BY COALESCE(is_active,0), name").fetchall()
+    except Exception as e:
+        conn.close(); return f"<pre>employees error: {e}</pre>"
+    # Orphaned counsellor references: an employee id used on clients but no longer
+    # present in employees — recoverable (we know the id + a name snapshot).
+    orphans = []
+    try:
+        orphans = conn.execute('''
+            SELECT emp_id, MAX(nm) AS name, COUNT(*) AS refs FROM (
+              SELECT counsellor_id AS emp_id, counsellor_name AS nm FROM client_registrations WHERE counsellor_id IS NOT NULL
+              UNION ALL
+              SELECT counsellor_id, counsellor FROM plab_clients WHERE counsellor_id IS NOT NULL
+            ) t WHERE emp_id NOT IN (SELECT id FROM employees) GROUP BY emp_id ORDER BY emp_id
+        ''').fetchall()
+    except Exception:
+        orphans = []
+    # Orphaned lead-owner / creator ids (ids only — leads keep no name snapshot).
+    lead_orphans = []
+    try:
+        lead_orphans = conn.execute('''
+            SELECT emp_id, COUNT(*) AS refs FROM (
+              SELECT owner_employee_id AS emp_id FROM sales_leads WHERE owner_employee_id IS NOT NULL
+              UNION ALL SELECT created_by FROM sales_leads WHERE created_by IS NOT NULL
+            ) t WHERE emp_id NOT IN (SELECT id FROM employees) GROUP BY emp_id ORDER BY emp_id
+        ''').fetchall()
+    except Exception:
+        lead_orphans = []
+    conn.close()
+    erows = "".join(
+        f"<tr style='{'background:#fef2f2' if not e['is_active'] else ''}'>"
+        f"<td>{e['id']}</td><td>{e['name']}</td><td>{e['emp_code'] or '—'}</td>"
+        f"<td>{e['email'] or '—'}</td><td>{e['department'] or '—'}</td>"
+        f"<td><b style='color:{'#16a34a' if e['is_active'] else '#dc2626'}'>{'Active' if e['is_active'] else 'INACTIVE'}</b></td></tr>"
+        for e in emps)
+    orows = "".join(f"<tr><td>{o['emp_id']}</td><td>{o['name'] or '(no name snapshot)'}</td><td>{o['refs']}</td></tr>" for o in orphans)
+    lrows = "".join(f"<tr><td>{o['emp_id']}</td><td>{o['refs']}</td></tr>" for o in lead_orphans)
+    html = (f"<!doctype html><meta charset=utf-8><title>Employee check</title>"
+            f"<body style='font-family:system-ui;padding:24px;color:#1e293b'>"
+            f"<h2>Employee check</h2>"
+            f"<form><input name=q value='{q}' placeholder='search name e.g. Robin' style='padding:8px;width:260px'> "
+            f"<button style='padding:8px 14px'>Search</button> <a href='?'>show all</a></form>"
+            f"<h3>Employees ({len(emps)})</h3>"
+            f"<table border=1 cellpadding=6 style='border-collapse:collapse;font-size:13px'>"
+            f"<tr style='background:#f1f5f9'><th>ID</th><th>Name</th><th>Code</th><th>Email</th><th>Dept</th><th>Status</th></tr>{erows}</table>"
+            f"<h3>Orphaned counsellor references — recoverable with name ({len(orphans)})</h3>"
+            f"<p style='color:#64748b;font-size:13px'>An employee ID that clients still point to, but which no longer exists in the employees table = a deleted employee. Name is from a saved snapshot.</p>"
+            f"<table border=1 cellpadding=6 style='border-collapse:collapse;font-size:13px'>"
+            f"<tr style='background:#f1f5f9'><th>Missing Emp ID</th><th>Name (snapshot)</th><th># clients</th></tr>{orows or '<tr><td colspan=3>None</td></tr>'}</table>"
+            f"<h3>Orphaned lead owner/creator IDs — ID only ({len(lead_orphans)})</h3>"
+            f"<table border=1 cellpadding=6 style='border-collapse:collapse;font-size:13px'>"
+            f"<tr style='background:#f1f5f9'><th>Missing Emp ID</th><th># leads</th></tr>{lrows or '<tr><td colspan=2>None</td></tr>'}</table>"
+            f"</body>")
+    return html
+
+
 _PURGE_HTML = """
 <!doctype html><html><head><meta charset=utf-8><title>Purge test client</title>
 <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#f4f6f9;margin:0;padding:32px;color:#1e293b}
