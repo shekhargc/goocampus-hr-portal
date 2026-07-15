@@ -162,8 +162,11 @@ def verification_sales():
     conn.close()
     for t in transfers:
         t['requested_by_name'] = names.get(t['requested_by'], '')
+    # Verification lives under the Sales section (its Access Master department),
+    # so render with the Sales sidebar — not Clients. (The Operations menu also
+    # links here for the ops team.)
     return render_template('verification_queue.html',
-        base_template='clients_sidebar_base.html', active_section='clients',
+        base_template='sales_sidebar_base.html', active_section='sales',
         view='sales', title='Sales Team Verification', mode='fill',
         newreg=newreg, transfers=transfers, can_verify=_can_verify(user))
 
@@ -187,7 +190,7 @@ def verification_ops():
     for t in transfer_verify:
         t['requested_by_name'] = names.get(t['requested_by'], '')
     return render_template('verification_queue.html',
-        base_template='clients_sidebar_base.html', active_section='clients',
+        base_template='sales_sidebar_base.html', active_section='sales',
         view='ops', title='Ops Team Verification', mode='verify',
         newreg=newreg_verify, transfers=transfer_verify, can_verify=True)
 
