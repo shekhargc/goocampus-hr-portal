@@ -4281,6 +4281,7 @@ def admin_purge_client():
             deleted = do_delete
         conn.close()
     return render_template_string(_PURGE_HTML, emails_raw=emails_raw, emails=emails,
+                                  default_emails="miraclesofkrish@gmail.com\nbigdaysquad@gmail.com",
                                   report=report, deleted=deleted, total=(sum(n for _, n in report) if report else 0))
 
 
@@ -4300,7 +4301,7 @@ table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem}th,td{te
 <h1>Purge test-client data</h1>
 <p class=sub>Enter client email(s), one per line. Preview first — nothing is deleted until you click <b>Delete permanently</b>. Note: this shared database serves both live and staging.</p>
 <form method=post>
-<textarea name=emails placeholder="miraclesofkrish@gmail.com&#10;bigdaysquad@gmail.com">{{ emails_raw }}</textarea>
+<textarea name=emails placeholder="one email per line">{{ emails_raw if emails_raw else default_emails }}</textarea>
 <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
 <button class="btn btn-prev" name=action value=preview>Preview</button>
 {% if report and not deleted %}<button class="btn btn-del" name=action value=delete onclick="return confirm('Permanently delete ALL these records? This cannot be undone.')">Delete permanently</button>{% endif %}
