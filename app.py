@@ -3530,14 +3530,29 @@ def admin_client_detail(reg_id):
     if reg.get('invitation_id') and reg.get('account_id'):
         try:
             for _cs in conn.execute(
-                '''SELECT cr.registration_number AS reg_num, cr.plan_type,
-                          ps.name AS product_name
+                '''SELECT cr.*, ps.name AS product_name
                      FROM client_registrations cr
                      LEFT JOIN products_services ps ON ps.id = cr.product_id
                     WHERE cr.account_id = ? AND cr.invitation_id = ? AND cr.id <> ?''',
                 (reg.get('account_id'), reg.get('invitation_id'), reg_id)).fetchall():
-                combined_siblings.append({'reg': _cs['reg_num'], 'plan_type': _cs['plan_type'],
-                                          'product': _cs['product_name']})
+                _insts = []
+                for _i in (1, 2, 3, 4):
+                    _amt = _cs['inst%d_amount' % _i]
+                    if _amt:
+                        _insts.append({
+                            'n': _i, 'amount': float(_amt or 0),
+                            'date': _cs['inst%d_date' % _i] or '',
+                            'note': _cs['inst%d_note' % _i] or '',
+                            'method': _cs['inst%d_method' % _i] or '',
+                        })
+                combined_siblings.append({
+                    'reg': _cs['registration_number'], 'plan_type': _cs['plan_type'],
+                    'product': _cs['product_name'],
+                    'package_amount': float(_cs['package_amount'] or 0),
+                    'discount_allowed': float(_cs['discount_allowed'] or 0),
+                    'final_package': float(_cs['final_package'] or 0),
+                    'installments': _insts,
+                })
         except Exception:
             combined_siblings = []
     conn.close()
