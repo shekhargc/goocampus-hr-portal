@@ -4427,8 +4427,14 @@ def admin_reg_status():
                 cr.email, cr.form_status, COALESCE(cr.sales_completed,0) AS sales_completed,
                 cr.client_submitted_at, COALESCE(cr.ops_status,'') AS ops_status,
                 cr.counsellor_id, cr.counsellor_name, cr.invitation_id, cr.created_at,
+                cr.joined_stage, sc.name AS sales_by, inv.invited_by,
+                iby.name AS invited_by_name,
                 ps.name AS product_name, ps.pathway AS pathway
-                FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id
+                FROM client_registrations cr
+                LEFT JOIN products_services ps ON ps.id = cr.product_id
+                LEFT JOIN employees sc ON sc.id = cr.sales_completed_by
+                LEFT JOIN client_invitations inv ON inv.id = cr.invitation_id
+                LEFT JOIN employees iby ON iby.id = inv.invited_by
                 WHERE LOWER(cr.email) = LOWER(?) ORDER BY cr.id DESC''', (email,)).fetchall()
         except Exception as e:
             conn.close()
@@ -4449,9 +4455,12 @@ def admin_reg_status():
     trs = "".join(
         f"<tr><td>{r['id']}</td><td>{r['reg'] or '—'}</td><td>{(r['first_name'] or '')} {(r['last_name'] or '')}</td>"
         f"<td>{r['product_name'] or '—'}</td><td><b>{r['form_status']}</b></td><td>{r['sales_completed']}</td>"
+        f"<td>{r['sales_by'] or '—'}</td>"
         f"<td>{'set' if r['client_submitted_at'] else '<b style=color:red>NULL</b>'}</td>"
-        f"<td>{r['ops_status'] or '—'}</td><td>{r['counsellor_name'] or r['counsellor_id'] or '—'}</td>"
-        f"<td>{r['invitation_id'] or '—'}</td><td style='color:#0369a1'>{why(r)}</td></tr>"
+        f"<td>{r['ops_status'] or '—'}</td><td>{r['joined_stage'] or '—'}</td>"
+        f"<td>{r['counsellor_name'] or r['counsellor_id'] or '—'}</td>"
+        f"<td>{r['invited_by_name'] or '—'}</td>"
+        f"<td style='color:#0369a1'>{why(r)}</td></tr>"
         for r in rows)
     html = (f"<!doctype html><meta charset=utf-8><title>Reg status</title>"
             f"<body style='font-family:system-ui;padding:24px;color:#1e293b'>"
@@ -4461,8 +4470,9 @@ def admin_reg_status():
             f"<p>{len(rows)} registration(s) found.</p>"
             f"<table border=1 cellpadding=6 cellspacing=0 style='border-collapse:collapse;font-size:13px'>"
             f"<tr style='background:#f1f5f9'><th>ID</th><th>Reg</th><th>Name</th><th>Product</th>"
-            f"<th>form_status</th><th>sales_done</th><th>client_submitted_at</th><th>ops_status</th>"
-            f"<th>counsellor</th><th>inv_id</th><th>Queue status</th></tr>{trs}</table></body>")
+            f"<th>form_status</th><th>sales_done</th><th>sales done by</th><th>client_submitted_at</th>"
+            f"<th>ops_status</th><th>joined_stage</th><th>counsellor</th><th>invited by</th>"
+            f"<th>Queue status</th></tr>{trs}</table></body>")
     return html
 
 
