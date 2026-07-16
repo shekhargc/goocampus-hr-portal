@@ -2456,36 +2456,49 @@ def _notify_client_submitted(reg_id):
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
         sm_name, sm_email = _lead_sales_member(conn, reg)
         ops_emails = _dept_emails(conn, ['Operations'])
+        mgmt_emails = _management_emails(conn)
         photo_url = _client_photo_email_url(conn, reg)
-        recipients = list(dict.fromkeys([e for e in ([sm_email] + ops_emails) if e]))
 
         from email_utils import (send_email, render_branded_email, brand_detail_rows,
                                   brand_photo_block, brand_button)
         pathway_lbl = (reg['pathway'] or '').replace('_', ' ').title() if reg['pathway'] else ''
-        inner = (
-            brand_photo_block(photo_url, client_name) +
-            f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
-            f"registration form. Please review and complete the sales section.</p>" +
-            brand_detail_rows([
-                ('Client', client_name),
-                ('Registration #', reg['registration_number']),
-                ('Product', reg['product_name']),
-                ('Pathway', pathway_lbl),
-                ('Whose lead', sm_name),
-                ('Mobile', reg['mobile']),
-                ('Email', reg['email']),
-            ]) +
-            brand_button('Open in portal', f'https://goocampus.org/admin/client/{reg_id}')
-        )
-        subject = f"New Registration Submitted — {client_name} ({reg['product_name'] or 'N/A'})"
-        body = render_branded_email('New Registration Submitted', inner,
-                                    preheader=f"{client_name} completed their registration form")
-        if recipients:
-            send_email(recipients, subject, body, from_address="GooCampus <info@goocampus.in>")
+        details = brand_detail_rows([
+            ('Client', client_name),
+            ('Registration #', reg['registration_number']),
+            ('Product', reg['product_name']),
+            ('Pathway', pathway_lbl),
+            ('Whose lead', sm_name),
+            ('Mobile', reg['mobile']),
+            ('Email', reg['email']),
+        ])
+        # 1) The LEAD's sales member — the ONLY one with the action button. Sales
+        #    verification must happen first, so only they can act on it.
+        if sm_email:
+            s_inner = (brand_photo_block(photo_url, client_name) +
+                f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
+                f"registration form. Please complete the <strong>Sales Verification</strong>.</p>" + details +
+                brand_button('Open Sales Verification', 'https://goocampus.org/verifications/sales'))
+            send_email([sm_email], f"Action needed — Sales Verification: {client_name}",
+                       render_branded_email('New Registration — Sales Verification needed', s_inner,
+                                            preheader=f"{client_name} completed their form"),
+                       from_address="GooCampus <info@goocampus.in>")
+        # 2) Operations + Management — PLAIN, NO button. Ops gets its action link only
+        #    AFTER sales verifies (see _notify_sales_completed). Management is always plain.
+        plain_to = list(dict.fromkeys([e for e in (ops_emails + mgmt_emails) if e and e != sm_email]))
+        if plain_to:
+            p_inner = (brand_photo_block(photo_url, client_name) +
+                f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
+                f"registration form. It is now with <strong>{sm_name or 'Sales'}</strong> for sales verification — "
+                f"the Operations team will be notified when it's ready to verify.</p>" + details)
+            send_email(plain_to, f"New Registration Submitted — {client_name}",
+                       render_branded_email('New Registration Submitted', p_inner,
+                                            preheader=f"{client_name} — awaiting sales verification"),
+                       from_address="GooCampus <info@goocampus.in>")
 
+        recipients = list(dict.fromkeys([e for e in ([sm_email] + plain_to) if e]))
         conn.execute(
             "INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject, message) VALUES (?, ?, ?, ?, ?, ?)",
-            (reg_id, 'client_submitted', 'email', ','.join(recipients), subject, 'Sales member + Operations team notified'))
+            (reg_id, 'client_submitted', 'email', ','.join(recipients), f"New Registration Submitted — {client_name}", 'Sales member (button) + Ops/Mgmt (plain) notified'))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -3785,21 +3798,34 @@ def _notify_sales_completed(reg_id):
             conn.close()
             return
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
-        ops_team = conn.execute("SELECT email FROM employees WHERE is_admin = 1 AND is_active = 1").fetchall()
-        recipients = [e['email'] for e in ops_team if e['email']]
-        if recipients:
-            from email_utils import send_email
-            subject = f"Sales Section Complete — {client_name} ({reg['product_name'] or 'N/A'})"
-            body = f"""<h2>Sales Section Completed</h2>
-            <p>The sales team has completed their section for <strong>{client_name}</strong> ({reg['product_name'] or 'N/A'}).</p>
-            <p><strong>Registration #:</strong> {reg['registration_number']}<br>
-            <strong>Plan:</strong> {reg['plan_type'] or 'N/A'}<br>
-            <strong>Package:</strong> {reg['final_package'] or 0}</p>
-            <p>Please log in to verify documents and confirm onboarding.</p>"""
-            send_email(recipients, subject, body)
+        ops_emails = _dept_emails(conn, ['Operations'])
+        mgmt_emails = _management_emails(conn)
+        from email_utils import send_email, render_branded_email, brand_detail_rows, brand_button
+        details = brand_detail_rows([
+            ('Client', client_name), ('Registration #', reg['registration_number']),
+            ('Product', reg['product_name']), ('Plan', reg['plan_type']),
+            ('Package', ('₹{:,.0f}'.format(reg['final_package']) if reg['final_package'] else '—'))])
+        # Operations team — NOW gets the action button (Ops Verification).
+        if ops_emails:
+            o_inner = (f"<p><strong>Sales verification is complete</strong> for <strong>{client_name}</strong>. "
+                       f"Please complete the <strong>Ops Verification</strong>.</p>" + details +
+                       brand_button('Open Ops Verification', 'https://goocampus.org/verifications/ops'))
+            send_email(ops_emails, f"Action needed — Ops Verification: {client_name}",
+                       render_branded_email('Sales Verification Complete — Ops Verification needed', o_inner,
+                                            preheader=f"{client_name} is ready for ops verification"),
+                       from_address="GooCampus <info@goocampus.in>")
+        # Management — plain informational note (never a button).
+        mgmt_only = list(dict.fromkeys([e for e in mgmt_emails if e and e not in ops_emails]))
+        if mgmt_only:
+            m_inner = (f"<p>Sales verification is complete for <strong>{client_name}</strong>. "
+                       f"It is now with Operations to verify.</p>" + details)
+            send_email(mgmt_only, f"Sales Verification Complete — {client_name}",
+                       render_branded_email('Sales Verification Complete', m_inner),
+                       from_address="GooCampus <info@goocampus.in>")
+        recipients = list(dict.fromkeys(ops_emails + mgmt_only))
         conn.execute(
             "INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
-            (reg_id, 'sales_completed', 'email', ','.join(recipients), 'Sales section complete'))
+            (reg_id, 'sales_completed', 'email', ','.join(recipients), 'Ops (button) + Management (plain) notified'))
         conn.commit()
         conn.close()
     except Exception as e:
