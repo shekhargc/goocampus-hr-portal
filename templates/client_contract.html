@@ -86,7 +86,7 @@
             <form method="POST" action="/client/contract/agree">
                 <div class="mb-2">
                     <label style="font-size:0.85rem;font-weight:600;color:var(--gc-navy);">Type your full name — it becomes your digital signature</label>
-                    <input type="text" name="agreed_name" id="sigName" required value="{{ session.client_name or '' }}"
+                    <input type="text" name="agreed_name" id="sigName" required value="" placeholder="Type your full name"
                            class="form-control" style="max-width:360px;" placeholder="Your full name">
                 </div>
                 <div class="mb-3">
