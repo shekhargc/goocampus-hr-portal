@@ -80,13 +80,6 @@
                 </div>
                 <div style="margin-top:0.4rem; font-size:0.94rem;">Your welcome call will be scheduled once your enrolment is confirmed by our team. We'll email you as soon as it's ready.</div>
             </div>
-            {% elif reg.ops_status != 'verified' %}
-            <div class="requested-banner">
-                <div style="display:flex; align-items:center; gap:0.6rem; font-weight:700;">
-                    <i class="bi bi-hourglass-split" style="font-size:1.1rem;"></i> Almost there
-                </div>
-                <div style="margin-top:0.4rem; font-size:0.94rem;">Your welcome call will open for scheduling once our team verifies your registration — we'll email you shortly.</div>
-            </div>
             {% elif reg.wc_confirmed %}
             <div class="confirmed-banner">
                 <div style="display:flex; align-items:center; gap:0.6rem; font-weight:700;">
@@ -126,7 +119,7 @@
             <p style="font-size:0.82rem; color:#94a3b8; margin-top:0.9rem;">Need to change it? <a href="#wcform" onclick="document.getElementById('wcform').style.display='block';this.parentNode.style.display='none';return false;">Request a different time</a></p>
             {% endif %}
 
-            {% if reg.ops_status == 'verified' and not reg.welcome_call_hold and not reg.wc_confirmed %}
+            {% if not reg.welcome_call_hold and not reg.wc_confirmed %}
             <form id="wcform" method="POST" action="/client/welcome-call/request" style="{% if reg.wc_pref_date or reg.wc_status == 'proposed' %}display:none;{% endif %} margin-top:1rem;">
                 <input type="hidden" name="reg_id" value="{{ reg.id }}">
                 <div class="row g-3">
