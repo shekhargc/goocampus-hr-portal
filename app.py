@@ -4154,6 +4154,21 @@ def _notify_welcome_call_confirmed(reg_id):
                            t_body, from_address="GooCampus <info@goocampus.in>")
             except Exception as e:
                 logging.warning(f"welcome call team email {reg_id}: {e}")
+        # Record the confirmed call on the ops onboarding record too, so the pathway
+        # Onboarding section + the client's journey status reflect it.
+        try:
+            conn3 = get_db()
+            pc = conn3.execute("SELECT id FROM plab_clients WHERE registration_number = ?",
+                               (reg['registration_number'],)).fetchone()
+            if pc:
+                _ensure_client_onboarding(conn3, pc['id'], reg['registration_number'])
+                conn3.execute("UPDATE client_onboarding SET welcome_call_confirmed = 1, "
+                              "welcome_call_date = ?, updated_at = CURRENT_TIMESTAMP WHERE client_id = ?",
+                              (date_s, pc['id']))
+                conn3.commit()
+            conn3.close()
+        except Exception as _oe:
+            logging.warning(f"welcome call onboarding sync {reg_id}: {_oe}")
     except Exception as e:
         logging.error(f"_notify_welcome_call_confirmed({reg_id}): {e}")
 
@@ -19108,9 +19123,13 @@ def _compute_onboarding_status(onb, kit_items):
         return 'Pending'
     if not onb.get('welcome_call_confirmed'):
         return 'Email Sent'
-    delivered_count = sum(1 for ki in kit_items if ki.get('delivered'))
     total_items = len(kit_items)
-    if total_items > 0 and delivered_count == total_items:
+    # No welcome kit (e.g. Standard Consulting): once the welcome call is done,
+    # onboarding is complete — there is no kit step to wait on.
+    if total_items == 0:
+        return 'Completed'
+    delivered_count = sum(1 for ki in kit_items if ki.get('delivered'))
+    if delivered_count == total_items:
         return 'Completed'
     if onb.get('kit_delivery_method'):
         return 'Kit Dispatched'
@@ -19239,6 +19258,15 @@ def _ensure_client_onboarding(conn, client_id, reg_num):
         (client_id, reg_num))
     conn.commit()
     onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (client_id,)).fetchone()
+    # Standard Consulting has NO welcome kit (founder 2026-07-16) — don't seed kit
+    # items, so its onboarding completes right after the welcome call.
+    try:
+        _pw = conn.execute("SELECT COALESCE(pathway,'') AS pw FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+        _pathway = (_pw['pw'] if _pw else '') or ''
+    except Exception:
+        _pathway = ''
+    if _pathway == 'consulting':
+        return onb
     default_items = conn.execute(
         "SELECT item_name FROM onboarding_kit_items WHERE active = 1 AND is_default = 1 ORDER BY sort_order"
     ).fetchall()
