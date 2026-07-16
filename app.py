@@ -2030,6 +2030,28 @@ def client_dashboard():
         first_login=session.get('first_login', False))
 
 
+def _parent_guardian_error(d):
+    """Validate the Parent/Guardian block. Returns an error message, or None if OK.
+    Parents: at least ONE parent's name, phone AND email. Guardian: name + phone.
+    `d` may be the posted form dict or a client_registrations row."""
+    def v(k):
+        return ((d.get(k) if hasattr(d, 'get') else None) or '').strip()
+    gtype = v('guardian_type')
+    if gtype == 'guardian':
+        if not v('guardian_first_name'):
+            return "Please enter the guardian's first name."
+        if not v('guardian_phone'):
+            return "Please enter the guardian's phone number."
+    elif gtype == 'parents':
+        if not (v('father_first_name') or v('mother_first_name')):
+            return "Please enter at least one parent's name."
+        if not (v('father_phone') or v('mother_phone')):
+            return "Please enter at least one parent's phone number."
+        if not (v('father_email') or v('mother_email')):
+            return "Please enter at least one parent's email address."
+    return None
+
+
 # Columns the dynamic client form may write to, per step. The public form is
 # rendered + saved from client_form_configs (role='client', is_visible=1); we
 # whitelist to real columns so an admin toggling fields can't write arbitrary keys.
@@ -2148,14 +2170,27 @@ def client_form(reg_id):
                 if _pe:
                     data['parents_email'] = _pe
 
+            # A contactable parent/guardian is mandatory to move on. The form's JS
+            # mirrors this; re-check here so it can't be bypassed. Draft saves are
+            # never blocked, and the typed values are always kept either way.
+            _pg_err = _parent_guardian_error(data) if action == 'continue' else None
+
             if data:
                 sets = ', '.join(f"{k} = ?" for k in data)
+                _adv = '' if _pg_err else ', current_step = GREATEST(current_step, 2)'
                 conn.execute(
-                    f"UPDATE client_registrations SET {sets}, current_step = GREATEST(current_step, 2), "
+                    f"UPDATE client_registrations SET {sets}{_adv}, "
                     f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", list(data.values()) + [reg_id])
+            elif _pg_err:
+                pass
             else:
                 conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 2), "
                              "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
+            if _pg_err:
+                conn.commit()
+                conn.close()
+                flash(_pg_err, 'error')
+                return redirect(url_for('client_form', reg_id=reg_id))
 
         elif step == 2:
             # Academic details — config-driven.
@@ -2188,6 +2223,16 @@ def client_form(reg_id):
             conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 4), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         if action == 'submit':
+            # A contactable parent/guardian is mandatory. Re-check from the saved
+            # record — the block lives on step 1, so a draft could reach submit
+            # without ever passing the step-1 gate.
+            _pg_err = _parent_guardian_error(
+                conn.execute("SELECT * FROM client_registrations WHERE id = ?", (reg_id,)).fetchone())
+            if _pg_err:
+                conn.commit()
+                conn.close()
+                flash(_pg_err + ' (Personal Details step)', 'error')
+                return redirect(url_for('client_form', reg_id=reg_id))
             # Mandatory government photo ID: at least one Passport or Aadhaar Card.
             id_ok = conn.execute(
                 "SELECT 1 FROM client_documents WHERE registration_id = ? "

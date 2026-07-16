@@ -654,7 +654,7 @@
                         <div class="form-group"><label>Email</label><input type="email" name="mother_email" value="{{ reg.mother_email or '' }}"{% if readonly %} disabled{% endif %}></div>
                         <div class="form-group full-width"><label>Phone</label>{{ pg_phone('mother_phone', reg.mother_phone, readonly) }}</div>
                     </div>
-                    <p style="font-size:0.8rem;color:#6b7280;margin-top:8px;">If you enter both parents' names, at least one parent's phone number is required.</p>
+                    <p style="font-size:0.8rem;color:#6b7280;margin-top:8px;">At least one parent's name, phone number and email address are required.</p>
                 </div>
 
                 <div id="pg-guardian" style="display:none;">
@@ -1224,8 +1224,14 @@ document.addEventListener('DOMContentLoaded', function(){
     var t = document.getElementById('pg-type'); if(!t || !t.value) return;  // HTML required covers empty
     var val = function(n){ return (f[n] && (f[n].value||'').trim()) || ''; };
     if(t.value === 'parents'){
-      if(val('father_first_name') && val('mother_first_name') && !val('father_phone') && !val('mother_phone')){
+      if(!val('father_first_name') && !val('mother_first_name')){
+        e.preventDefault(); alert("Please enter at least one parent's name."); return;
+      }
+      if(!val('father_phone') && !val('mother_phone')){
         e.preventDefault(); alert("Please enter at least one parent's phone number."); return;
+      }
+      if(!val('father_email') && !val('mother_email')){
+        e.preventDefault(); alert("Please enter at least one parent's email address."); return;
       }
     } else if(t.value === 'guardian'){
       if(!val('guardian_first_name')){ e.preventDefault(); alert("Please enter the guardian's first name."); return; }
