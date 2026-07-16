@@ -2030,6 +2030,10 @@ def client_dashboard():
         first_login=session.get('first_login', False))
 
 
+_FORM_STEP_NAMES = {1: 'Personal Details', 2: 'Academic Details',
+                    3: 'Documents', 4: 'Review & Submit'}
+
+
 def _parent_guardian_error(d):
     """Validate the Parent/Guardian block. Returns an error message, or None if OK.
     Parents: at least ONE parent's name, phone AND email. Guardian: name + phone.
@@ -2133,7 +2137,11 @@ def client_form(reg_id):
             flash('Your details have been verified and can no longer be edited. Contact your counsellor for changes.', 'error')
             return redirect(url_for('client_dashboard'))
         step = int(request.form.get('step', 1))
-        action = request.form.get('action', 'save')  # save or submit
+        action = request.form.get('action', 'save')  # save, continue or submit
+        # "Save Progress" must save WITHOUT moving the client on — current_step is
+        # the furthest step reached, so advancing it on a draft save silently ticked
+        # the step done and made the two buttons behave identically.
+        _advance = (action == 'continue')
 
         if step == 1:
             # Personal info — config-driven (only the visible client fields).
@@ -2177,13 +2185,11 @@ def client_form(reg_id):
 
             if data:
                 sets = ', '.join(f"{k} = ?" for k in data)
-                _adv = '' if _pg_err else ', current_step = GREATEST(current_step, 2)'
+                _adv = ', current_step = GREATEST(current_step, 2)' if (_advance and not _pg_err) else ''
                 conn.execute(
                     f"UPDATE client_registrations SET {sets}{_adv}, "
                     f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", list(data.values()) + [reg_id])
-            elif _pg_err:
-                pass
-            else:
+            elif _advance and not _pg_err:
                 conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 2), "
                              "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
             if _pg_err:
@@ -2206,7 +2212,8 @@ def client_form(reg_id):
                 placeholders = ', '.join(['?'] * (len(acad_fields) + 1))
                 conn.execute(f"INSERT INTO client_academics (registration_id, {cols}) VALUES ({placeholders})",
                              [reg_id] + list(acad_fields.values()))
-            conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 3), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
+            if _advance:
+                conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 3), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         elif step == 3:
             # Document uploads handled via AJAX. To move past this step, a
@@ -2220,7 +2227,8 @@ def client_form(reg_id):
                     conn.close()
                     flash('Please upload a government photo ID (Passport or Aadhaar Card) before continuing.', 'error')
                     return redirect(url_for('client_form', reg_id=reg_id))
-            conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 4), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
+            if _advance:
+                conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 4), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         if action == 'submit':
             # A contactable parent/guardian is mandatory. Re-check from the saved
@@ -2253,8 +2261,15 @@ def client_form(reg_id):
 
         conn.commit()
         conn.close()
-        flash('Progress saved!', 'success')
-        return redirect(url_for('client_form', reg_id=reg_id))
+        if _advance:
+            flash('Progress saved!', 'success')
+            return redirect(url_for('client_form', reg_id=reg_id))
+        # Draft save: stay exactly where they are. The step bar shows what is still
+        # left, so they can close the form and pick up from the same place later.
+        flash('Saved. You are still on Step %d of 4 — %s. You can close this and '
+              'continue later from where you left off.'
+              % (step, _FORM_STEP_NAMES.get(step, '')), 'success')
+        return redirect(url_for('client_form', reg_id=reg_id, step=step))
 
     # Load lookup options for academic dropdowns. DEDUPE per category — the
     # same value is defined once per pathway (e.g. 'Rheumatology' for plab +

@@ -183,6 +183,30 @@
         }
         .step-connector.done { background: var(--green); }
 
+        /* ── Resume strip: where you stopped + what is left ── */
+        .resume-strip {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 18px;
+            background: var(--white);
+            border-top: 1px solid var(--grey-light);
+            border-radius: 0 0 var(--radius) var(--radius);
+            margin-top: -8px;
+            padding: 10px 24px 12px;
+            font-size: 13px;
+            color: var(--text-muted);
+            box-shadow: var(--shadow);
+        }
+        .resume-strip b { color: var(--text); }
+        .resume-now b { color: var(--orange); }
+        .resume-left { padding-left: 18px; border-left: 1px solid var(--grey-light); }
+        .resume-when { margin-left: auto; font-size: 12px; color: var(--grey); }
+        @media (max-width: 640px) {
+            .resume-left { padding-left: 0; border-left: none; }
+            .resume-when { margin-left: 0; }
+        }
+
         /* ── Main Content ── */
         .main-content {
             max-width: 900px;
@@ -574,29 +598,33 @@
 {% endif %}
 {% endwith %}
 
-<!-- ── Step Indicator ── -->
+<!-- ── Step Indicator ──
+     _cs = furthest step reached (ticked done). view_step = the step being shown;
+     a draft save returns ?step=N so the client lands back where they stopped. -->
+{% set _cs = reg.current_step or 1 %}
+{% set _rq = request.args.get('step')|int(0) %}
+{% set view_step = _rq if (_rq >= 1 and _rq <= _cs) else _cs %}
+{% set _step_names = {1: 'Personal Details', 2: 'Academic Details', 3: 'Documents', 4: 'Review & Submit'} %}
 <div class="step-bar-wrapper">
     <div class="step-bar">
-        <div class="step-item{% if reg.current_step > 1 %} completed clickable{% elif reg.current_step == 1 %} current{% endif %}" onclick="goToStep(1, this)" data-step="1">
-            <div class="step-circle">{% if reg.current_step > 1 %}&#10003;{% else %}1{% endif %}</div>
-            <div class="step-label">Personal Info</div>
+        {% for n in [1, 2, 3, 4] %}
+        {% if n > 1 %}<div class="step-connector{% if _cs > n - 1 %} done{% endif %}"></div>{% endif %}
+        <div class="step-item{% if view_step == n %} current{% if _cs > n %} clickable{% endif %}{% elif _cs > n %} completed clickable{% endif %}"
+             {% if n < 4 %}onclick="goToStep({{ n }}, this)"{% endif %} data-step="{{ n }}">
+            <div class="step-circle">{% if _cs > n %}&#10003;{% else %}{{ n }}{% endif %}</div>
+            <div class="step-label">{{ _step_names[n] }}</div>
         </div>
-        <div class="step-connector{% if reg.current_step > 1 %} done{% endif %}"></div>
-        <div class="step-item{% if reg.current_step > 2 %} completed clickable{% elif reg.current_step == 2 %} current{% endif %}" onclick="goToStep(2, this)" data-step="2">
-            <div class="step-circle">{% if reg.current_step > 2 %}&#10003;{% else %}2{% endif %}</div>
-            <div class="step-label">Academic Details</div>
-        </div>
-        <div class="step-connector{% if reg.current_step > 2 %} done{% endif %}"></div>
-        <div class="step-item{% if reg.current_step > 3 %} completed clickable{% elif reg.current_step == 3 %} current{% endif %}" onclick="goToStep(3, this)" data-step="3">
-            <div class="step-circle">{% if reg.current_step > 3 %}&#10003;{% else %}3{% endif %}</div>
-            <div class="step-label">Documents</div>
-        </div>
-        <div class="step-connector{% if reg.current_step > 3 %} done{% endif %}"></div>
-        <div class="step-item{% if reg.current_step == 4 %} current{% endif %}" data-step="4">
-            <div class="step-circle">4</div>
-            <div class="step-label">Review &amp; Submit</div>
-        </div>
+        {% endfor %}
     </div>
+    {% if reg.form_status != 'submitted' %}
+    <div class="resume-strip">
+        <span class="resume-now">You are on <b>Step {{ view_step }} of 4 — {{ _step_names[view_step] }}</b></span>
+        {% set _left = [] %}
+        {% for n in [1, 2, 3, 4] %}{% if _cs <= n %}{% set _ = _left.append(_step_names[n]) %}{% endif %}{% endfor %}
+        {% if _left %}<span class="resume-left">Still to complete: <b>{{ _left|join(', ') }}</b></span>{% endif %}
+        {% if reg.updated_at %}<span class="resume-when">Last saved {{ reg.updated_at|format_datetime }}</span>{% endif %}
+    </div>
+    {% endif %}
 </div>
 
 <!-- ── Main Content ── -->
@@ -609,7 +637,7 @@
     {% set readonly = (reg.ops_status == 'verified') %}
 
     <!-- ═══════════════════════════════════════════ STEP 1 ═══════════════════════════════════════════ -->
-    <div class="step-panel{% if reg.current_step == 1 %} active{% endif %}" id="step-1">
+    <div class="step-panel{% if view_step == 1 %} active{% endif %}" id="step-1">
         <h2 class="panel-title">Personal Information</h2>
         <form method="POST" action="/client/form/{{ reg.id }}" id="form-step-1">
             <input type="hidden" name="step" value="1">
@@ -681,7 +709,7 @@
     </div>
 
     <!-- ═══════════════════════════════════════════ STEP 2 ═══════════════════════════════════════════ -->
-    <div class="step-panel{% if reg.current_step == 2 %} active{% endif %}" id="step-2">
+    <div class="step-panel{% if view_step == 2 %} active{% endif %}" id="step-2">
         <h2 class="panel-title">Academic Details</h2>
         <form method="POST" action="/client/form/{{ reg.id }}" id="form-step-2">
             <input type="hidden" name="step" value="2">
@@ -707,7 +735,7 @@
     </div>
 
     <!-- ═══════════════════════════════════════════ STEP 3 ═══════════════════════════════════════════ -->
-    <div class="step-panel{% if reg.current_step == 3 %} active{% endif %}" id="step-3">
+    <div class="step-panel{% if view_step == 3 %} active{% endif %}" id="step-3">
         <h2 class="panel-title">Documents</h2>
 
         <!-- Pending Document Requests -->
@@ -805,7 +833,7 @@
     </div>
 
     <!-- ═══════════════════════════════════════════ STEP 4 ═══════════════════════════════════════════ -->
-    <div class="step-panel{% if reg.current_step == 4 %} active{% endif %}" id="step-4">
+    <div class="step-panel{% if view_step == 4 %} active{% endif %}" id="step-4">
         <h2 class="panel-title">Review &amp; Submit</h2>
 
         {# Review sections are config-driven: they loop over the SAME form_config the
@@ -918,8 +946,9 @@
 <script>
 (function() {
     const IS_READONLY = {{ 'true' if reg.form_status == 'submitted' else 'false' }};
-    const SERVER_STEP = {{ reg.current_step or 1 }};
-    let displayStep = SERVER_STEP;
+    const SERVER_STEP = {{ _cs }};          // furthest step reached
+    const VIEW_STEP = {{ view_step }};      // step currently rendered
+    let displayStep = VIEW_STEP;
 
     /* ── Step navigation ── */
     window.goToStep = function(step, el) {
