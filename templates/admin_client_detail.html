@@ -617,9 +617,23 @@
         {# Welcome-call hold — SALES controls this (token / partial payment). Stays
            available on the Sales tab even after verification, and disappears once
            the welcome call is confirmed. #}
+        {# Only the sales member whose lead this is may hold/release (admins too, so
+           it can still be managed if they're away). Everyone else sees the state,
+           not the buttons — the route enforces this as well. #}
+        {% set _wc_owner = (session.is_admin or reg.counsellor_id == session.user_id) %}
         {% if not reg.wc_confirmed %}
         <div class="card">
             <h3 style="font-size:1rem;font-weight:600;color:var(--navy);margin:0 0 0.5rem;">Welcome Call Hold</h3>
+            {% if not _wc_owner %}
+            <div>
+                {% if reg.welcome_call_hold %}
+                <span style="display:inline-block;background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;font-size:0.78rem;font-weight:700;padding:3px 10px;border-radius:999px;">&#9208; On hold</span>
+                {% else %}
+                <span style="display:inline-block;background:#DCFCE7;border:1px solid #86EFAC;color:#166534;font-size:0.78rem;font-weight:700;padding:3px 10px;border-radius:999px;">Not on hold</span>
+                {% endif %}
+                <small style="display:block;color:var(--gray-500);margin-top:0.35rem;">Only {{ reg.counsellor_name or 'the sales member who generated this lead' }} can change this.</small>
+            </div>
+            {% else %}
             <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/hold">
                 {% if reg.welcome_call_hold %}
                 <input type="hidden" name="hold" value="0">
@@ -632,6 +646,7 @@
                 <small style="display:block;color:var(--gray-500);margin-top:0.35rem;">For token / partial payment &mdash; the client can't schedule and Ops can't book the call until you release it.</small>
                 {% endif %}
             </form>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -691,11 +706,17 @@
                 {% set ns = namespace(tot=0) %}
                 <div style="overflow-x:auto;">
                     <table class="table" style="border-radius:0.6rem;overflow:hidden;">
-                        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total (incl GST)</th><th>Due Date</th><th>Note</th></tr></thead>
+                        {# The date column used to be headed "Due Date" for every row,
+                           including installments already received — where that date is
+                           the payment date, not a due date. Show the status and label
+                           the date accordingly. #}
+                        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total (incl GST)</th><th>Status</th><th>Date</th><th>Note</th></tr></thead>
                         <tbody>
                         {% for i in range(1, 5) %}
                         {% set amt = reg['inst' ~ i ~ '_amount'] %}
                         {% if amt %}
+                        {% set _st = (reg['inst' ~ i ~ '_status'] or '')|lower %}
+                        {% set _received = (_st == 'received') %}
                         {# Stored value is the ex-GST base (the lead form saves ÷1.18);
                            show it exactly as the lead form does: total = base × 1.18. #}
                         {% set base = amt|float %}
@@ -707,14 +728,21 @@
                             <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
                             <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(gst) }}</td>
                             <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
-                            <td>{{ reg['inst' ~ i ~ '_date'] or '-' }}</td>
+                            <td>
+                                {% if _received %}
+                                <span style="display:inline-block;background:#DCFCE7;color:#166534;font-size:0.7rem;font-weight:700;padding:2px 9px;border-radius:999px;">Received</span>
+                                {% else %}
+                                <span style="display:inline-block;background:#FEF3C7;color:#92400E;font-size:0.7rem;font-weight:700;padding:2px 9px;border-radius:999px;">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td>{% if reg['inst' ~ i ~ '_date'] %}<span style="color:var(--gray-500);font-size:0.72rem;">{{ 'Received' if _received else 'Due' }}</span> {{ reg['inst' ~ i ~ '_date'] }}{% else %}-{% endif %}</td>
                             <td>{{ reg['inst' ~ i ~ '_note'] or '-' }}</td>
                         </tr>
                         {% endif %}
                         {% endfor %}
-                        {% if ns.tot == 0 %}<tr><td colspan="6" style="color:var(--gray-500);">No installments entered in the lead yet.</td></tr>{% endif %}
+                        {% if ns.tot == 0 %}<tr><td colspan="7" style="color:var(--gray-500);">No installments entered in the lead yet.</td></tr>{% endif %}
                         </tbody>
-                        {% if ns.tot > 0 %}<tfoot><tr style="font-weight:700;"><td colspan="3" style="text-align:right;">Total incl GST</td><td style="text-align:right;">₹{{ '{:,.0f}'.format(ns.tot) }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
+                        {% if ns.tot > 0 %}<tfoot><tr style="font-weight:700;"><td colspan="3" style="text-align:right;">Total incl GST</td><td style="text-align:right;">₹{{ '{:,.0f}'.format(ns.tot) }}</td><td colspan="3"></td></tr></tfoot>{% endif %}
                     </table>
                 </div>
 

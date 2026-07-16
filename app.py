@@ -2388,16 +2388,16 @@ def client_upload_doc(reg_id):
     # record faithfully duplicated both ("Aadhaar — 2 files").
     conn.execute("DELETE FROM client_documents WHERE registration_id = ? AND doc_type = ?",
                  (reg_id, doc_type))
-    conn.execute(
-        "INSERT INTO client_documents (registration_id, doc_type, file_name, file_path, file_size) VALUES (?, ?, ?, ?, ?)",
+    doc_id = conn.execute(
+        "INSERT INTO client_documents (registration_id, doc_type, file_name, file_path, file_size) "
+        "VALUES (?, ?, ?, ?, ?) RETURNING id",
         (reg_id, doc_type, file.filename, file_path, file_size)
-    )
+    ).fetchone()['id']
     # If this doc fulfills a doc request, mark it
     doc_req_id = request.form.get('doc_request_id')
     if doc_req_id:
         conn.execute("UPDATE client_doc_requests SET status = 'fulfilled', fulfilled_at = CURRENT_TIMESTAMP WHERE id = ?", (doc_req_id,))
     conn.commit()
-    doc_id = conn.execute("SELECT id FROM client_documents WHERE file_path = ?", (f'/static/uploads/client_docs/{fname}',)).fetchone()['id']
     conn.close()
     # Nested under 'doc' with every field the client_form.html row-builder reads,
     # so the uploaded file shows up immediately in the list below the upload box.
@@ -4492,10 +4492,23 @@ def admin_client_welcome_call_propose(reg_id):
 @app.route('/admin/client/<int:reg_id>/welcome-call/hold', methods=['POST'])
 @login_required
 def admin_client_welcome_call_hold(reg_id):
-    """Sales/ops put the welcome call ON HOLD (e.g. token payment, balance
-    pending) so the client can't schedule it yet, or clear the hold."""
-    hold = 1 if request.form.get('hold') == '1' else 0
+    """Put the welcome call ON HOLD (e.g. token payment, balance pending) so it
+    can't be booked yet, or clear the hold.
+
+    Only the sales member whose lead this is may hold/release it — they are the one
+    who knows the payment position (founder 2026-07-16). Admins are allowed too, so
+    the hold can still be managed when that person is unavailable."""
     conn = get_db()
+    reg = conn.execute("SELECT counsellor_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Registration not found.', 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id))
+    if not session.get('is_admin') and reg['counsellor_id'] != session.get('user_id'):
+        conn.close()
+        flash("Only the sales member who generated this lead can hold or release the welcome call.", 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#sales')
+    hold = 1 if request.form.get('hold') == '1' else 0
     conn.execute("UPDATE client_registrations SET welcome_call_hold=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                  (hold, reg_id))
     conn.commit()
