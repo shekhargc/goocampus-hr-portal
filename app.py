@@ -24388,6 +24388,7 @@ def _new_reg_installments(conn):
     base/gst/total (base stored; total = base+18%) and current decision state."""
     rows = conn.execute(
         "SELECT id, registration_number, product_id, first_name, last_name, "
+        "       counsellor_id, counsellor_name, "
         "       inst1_amount, inst1_date, inst1_method, inst1_status, "
         "       inst2_amount, inst2_date, inst2_method, inst2_status, "
         "       inst3_amount, inst3_date, inst3_method, inst3_status, "
@@ -24415,6 +24416,8 @@ def _new_reg_installments(conn):
                 'registration_id': r['id'],
                 'registration_number': r['registration_number'],
                 'name': (f"{r['first_name'] or ''} {r['last_name'] or ''}").strip() or '(unnamed)',
+                'counsellor_id': r['counsellor_id'],
+                'counsellor_name': r['counsellor_name'] or '',
                 'inst_no': i, 'ordinal': _INST_ORD[i],
                 'base': base, 'gst': gst, 'total': total,
                 'date': r[f'inst{i}_date'] or '',
@@ -24529,6 +24532,70 @@ def ops_payment_followup():
     conn.close()
     return render_template('ops_payment_followup.html',
         pending=pending, active_ops_page='payment-followup')
+
+
+@app.route('/sales/payment-followup')
+@login_required
+def sales_payment_followup():
+    """Sales-scoped payments: a sales member sees only THEIR OWN clients'
+    installments (admins see everyone's) — split into Received (paid) and Due
+    (pending, with due dates). Sales can update a due installment, which writes
+    to the registration (source of truth) and feeds the ops payment-approval flow."""
+    user = get_user()
+    uid = user['id'] if user else None
+    is_admin = bool(session.get('is_admin'))
+    conn = get_db()
+    items = _new_reg_installments(conn)
+    conn.close()
+    if not is_admin:
+        items = [x for x in items if x.get('counsellor_id') == uid]
+    def _is_received(x):
+        return x['status'].lower() == 'received' or x['decision'] == 'approved'
+    received = sorted([x for x in items if _is_received(x)], key=lambda x: (x['date'] == '', x['date']), reverse=True)
+    due = sorted([x for x in items if not _is_received(x)], key=lambda x: (x['date'] == '', x['date']))
+    return render_template('sales_payment_followup.html',
+        received=received, due=due, is_admin=is_admin, user=user,
+        base_template='sales_sidebar_base.html', active_section='sales')
+
+
+@app.route('/sales/payment-followup/<int:reg_id>/<int:inst_no>/update', methods=['POST'])
+@login_required
+def sales_payment_update(reg_id, inst_no):
+    """Sales updates a client's installment (amount / due date / method / status).
+    Restricted to the lead's counsellor (or admin). Writes to client_registrations
+    — the source of truth — so it reflects everywhere incl. the payment approvals."""
+    if inst_no not in (1, 2, 3, 4):
+        flash('Invalid installment.', 'error')
+        return redirect(url_for('sales_payment_followup'))
+    user = get_user()
+    conn = get_db()
+    reg = conn.execute("SELECT counsellor_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    if not reg:
+        conn.close(); flash('Client not found.', 'error'); return redirect(url_for('sales_payment_followup'))
+    if not session.get('is_admin') and reg['counsellor_id'] and reg['counsellor_id'] != user['id']:
+        conn.close(); flash('You can only update your own clients.', 'error'); return redirect(url_for('sales_payment_followup'))
+    # Stored installment amount is the ex-GST base (the form saves total ÷1.18).
+    try:
+        total = float(request.form.get('total_amount') or 0)
+    except (TypeError, ValueError):
+        total = 0
+    due_date = (request.form.get('due_date') or '').strip()
+    method = (request.form.get('method') or '').strip()
+    status = (request.form.get('status') or '').strip()
+    sets, vals = [], []
+    if total > 0:
+        sets.append(f"inst{inst_no}_amount = ?"); vals.append(round(total / 1.18, 2))
+    sets.append(f"inst{inst_no}_date = ?"); vals.append(due_date)
+    if method:
+        sets.append(f"inst{inst_no}_method = ?"); vals.append(method)
+    if status:
+        sets.append(f"inst{inst_no}_status = ?"); vals.append(status)
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    conn.execute(f"UPDATE client_registrations SET {', '.join(sets)} WHERE id = ?", vals + [reg_id])
+    conn.commit()
+    conn.close()
+    flash('Payment updated. It now reflects in the client record and payment approvals.', 'success')
+    return redirect(url_for('sales_payment_followup'))
 
 
 # ─────────────────────────────────────────────────────────

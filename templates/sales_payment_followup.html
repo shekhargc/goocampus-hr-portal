@@ -1,0 +1,85 @@
+{% extends base_template|default("sales_sidebar_base.html") %}
+{% block title %}Payment Follow-up{% endblock %}
+{% block section_content %}
+<style>
+  .pf-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  .pf-inner { max-width:1080px; margin:0 auto; }
+  .pf-card { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:18px 20px; margin-bottom:20px; }
+  .pf-h { font-size:1rem; font-weight:700; color:var(--navy); margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+  .pf-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+  .pf-table th { text-align:left; padding:8px 10px; color:var(--navy); border-bottom:2px solid var(--gray-200); font-size:0.72rem; text-transform:uppercase; letter-spacing:.3px; }
+  .pf-table td { padding:8px 10px; border-bottom:1px solid var(--gray-100); color:var(--gray-700); vertical-align:middle; }
+  .pf-inp { padding:6px 8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.82rem; }
+  .pf-btn { background:var(--navy); color:#fff; border:none; border-radius:6px; padding:6px 12px; font-weight:600; font-size:0.78rem; cursor:pointer; }
+  .pf-badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+  .pf-rec { background:#DCFCE7; color:#166534; }
+  .pf-due { background:#FEF3C7; color:#92400E; }
+  .pf-empty { color:var(--gray-500); font-size:0.9rem; padding:14px 4px; }
+</style>
+<div class="pf-wrap"><div class="pf-inner">
+  <h1 style="margin:0;font-size:1.4rem;font-weight:700;color:var(--navy);">Payment Follow-up</h1>
+  <p style="margin:6px 0 18px;font-size:0.85rem;color:var(--gray-500);">
+    {% if is_admin %}All clients' installments — Received and Due.{% else %}Your clients' installments — Received and Due. Update a due payment's amount or date; it reflects in the client record and payment approvals.{% endif %}
+  </p>
+
+  {# ── Payment Due ── #}
+  <div class="pf-card">
+    <div class="pf-h"><span class="pf-badge pf-due">Due</span> Payment Due ({{ due|length }})</div>
+    {% if due %}
+    <div style="overflow-x:auto;">
+    <table class="pf-table">
+      <thead><tr><th>Client</th><th>Reg No.</th>{% if is_admin %}<th>Counsellor</th>{% endif %}<th>Installment</th><th>Total (incl GST)</th><th>Due date</th><th>Method</th><th>Mark</th><th></th></tr></thead>
+      <tbody>
+        {% for x in due %}
+        <tr>
+          <form method="POST" action="/sales/payment-followup/{{ x.registration_id }}/{{ x.inst_no }}/update">
+          <td><b style="color:var(--navy);">{{ x.name }}</b></td>
+          <td>{{ x.registration_number }}</td>
+          {% if is_admin %}<td>{{ x.counsellor_name or '—' }}</td>{% endif %}
+          <td>{{ x.ordinal }}</td>
+          <td><input class="pf-inp" style="width:110px;" type="number" step="1" min="0" name="total_amount" value="{{ '%.0f'|format(x.total) }}"></td>
+          <td><input class="pf-inp" type="date" name="due_date" value="{{ x.date }}"></td>
+          <td><input class="pf-inp" style="width:120px;" type="text" name="method" value="{{ x.method }}" placeholder="e.g. Bank Transfer"></td>
+          <td>
+            <select class="pf-inp" name="status">
+              <option value="Pending" {% if x.status|lower != 'received' %}selected{% endif %}>Pending</option>
+              <option value="Received" {% if x.status|lower == 'received' %}selected{% endif %}>Received</option>
+            </select>
+          </td>
+          <td><button class="pf-btn" type="submit">Save</button></td>
+          </form>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<div class="pf-empty">No due payments. 🎉</div>{% endif %}
+  </div>
+
+  {# ── Payment Received ── #}
+  <div class="pf-card">
+    <div class="pf-h"><span class="pf-badge pf-rec">Received</span> Payment Received ({{ received|length }})</div>
+    {% if received %}
+    <div style="overflow-x:auto;">
+    <table class="pf-table">
+      <thead><tr><th>Client</th><th>Reg No.</th>{% if is_admin %}<th>Counsellor</th>{% endif %}<th>Installment</th><th>Total (incl GST)</th><th>Date</th><th>Method</th><th>Approval</th></tr></thead>
+      <tbody>
+        {% for x in received %}
+        <tr>
+          <td><b style="color:var(--navy);">{{ x.name }}</b></td>
+          <td>{{ x.registration_number }}</td>
+          {% if is_admin %}<td>{{ x.counsellor_name or '—' }}</td>{% endif %}
+          <td>{{ x.ordinal }}</td>
+          <td>₹{{ '{:,.0f}'.format(x.total) }}</td>
+          <td>{{ x.date or '—' }}</td>
+          <td>{{ x.method or '—' }}</td>
+          <td>{% if x.decision == 'approved' %}<span class="pf-badge pf-rec">Approved</span>{% else %}<span class="pf-badge pf-due">Awaiting admin</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<div class="pf-empty">No received payments yet.</div>{% endif %}
+  </div>
+</div></div>
+{% endblock %}
