@@ -4290,9 +4290,38 @@ def admin_client_welcome_call_hold(reg_id):
     conn.execute("UPDATE client_registrations SET welcome_call_hold=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                  (hold, reg_id))
     conn.commit()
+    # Notify the Operations team of the hold change — especially on RELEASE, so they
+    # know the welcome call is ready to book.
+    try:
+        reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
+        ops_emails = _dept_emails(conn, ['Operations'])
+        cname = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        from email_utils import send_email, render_branded_email, brand_callout, brand_detail_rows, brand_button
+        if ops_emails:
+            if hold:
+                inner = (brand_callout(f"Sales has put the welcome call for <strong>{cname}</strong> ON HOLD "
+                         f"(token / partial payment). No booking yet.", color='#FEF3C7', border='#FCD34D', tcolor='#92400E') +
+                         brand_detail_rows([('Client', cname), ('Registration #', reg['registration_number']),
+                             ('Product', reg['product_name'])]))
+                subj = f"Welcome Call On Hold — {cname}"
+                head = 'Welcome Call — On Hold by Sales'
+            else:
+                inner = (brand_callout(f"Sales has RELEASED the welcome-call hold for <strong>{cname}</strong> — "
+                         f"payment received. Please book the welcome call.", color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
+                         brand_detail_rows([('Client', cname), ('Registration #', reg['registration_number']),
+                             ('Product', reg['product_name']),
+                             ('Client requested', (reg['wc_pref_date'] or '') + (' at ' + reg['wc_pref_time'] if reg['wc_pref_time'] else ''))]) +
+                         brand_button('Book the welcome call', f"https://goocampus.org/admin/client/{reg_id}"))
+                subj = f"Welcome Call Ready to Book — {cname}"
+                head = 'Welcome Call — Ready to Book'
+            send_email(ops_emails, subj, render_branded_email(head, inner),
+                       from_address="GooCampus <info@goocampus.in>")
+    except Exception as e:
+        logging.warning(f"welcome call hold notify {reg_id}: {e}")
     conn.close()
     flash('Welcome call put on hold — the client cannot schedule it yet.' if hold
-          else 'Welcome-call hold cleared — the client can now schedule their call.', 'success')
+          else 'Hold released — the client can now schedule, and the Ops team has been notified to book the call.', 'success')
     return redirect(url_for('admin_client_detail', reg_id=reg_id))
 
 
