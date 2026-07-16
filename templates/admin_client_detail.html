@@ -957,11 +957,23 @@
         <div class="card">
             <h2 class="card-title">Operations Verification</h2>
             <p style="color: var(--gray-500); font-size: 0.88rem; margin-bottom: 1.5rem;">
-                Sales section is complete. Review the details and confirm onboarding or request additional documents.
+                Sales section is complete. If anything is missing, request it from the client first —
+                confirming onboarding is the final step and creates the client's pathway record.
             </p>
 
+            <!-- Request Documents -->
+            <div style="background: var(--warning-light); border: 1px solid var(--warning); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem;">
+                <h3 style="font-size: 1rem; font-weight: 600; color: #92400E; margin-bottom: 1rem;">Request Documents</h3>
+                <form method="POST" action="/admin/client/{{ reg.id }}/ops-verify">
+                    <input type="hidden" name="action" value="request_docs">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label style="color: #92400E;">Document Type *</label>
+                            <input type="text" name="doc_type" required placeholder="e.g., ID Proof, Marksheet, Photo">
+                
+
             <!-- Confirm Onboarding -->
-            <div style="background: var(--success-light); border: 1px solid var(--success); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem;">
+            <div style="background: var(--success-light); border: 1px solid var(--success); border-radius: 0.75rem; padding: 1.5rem;">
                 <h3 style="font-size: 1rem; font-weight: 600; color: #166534; margin-bottom: 1rem;">Confirm Onboarding</h3>
                 <form method="POST" action="/admin/client/{{ reg.id }}/ops-verify">
                     <input type="hidden" name="action" value="confirm">
@@ -979,17 +991,7 @@
                     </button>
                 </form>
             </div>
-
-            <!-- Request Documents -->
-            <div style="background: var(--warning-light); border: 1px solid var(--warning); border-radius: 0.75rem; padding: 1.5rem;">
-                <h3 style="font-size: 1rem; font-weight: 600; color: #92400E; margin-bottom: 1rem;">Request Documents</h3>
-                <form method="POST" action="/admin/client/{{ reg.id }}/ops-verify">
-                    <input type="hidden" name="action" value="request_docs">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label style="color: #92400E;">Document Type *</label>
-                            <input type="text" name="doc_type" required placeholder="e.g., ID Proof, Marksheet, Photo">
-                        </div>
+        </div>
                         <div class="form-group">
                             <label style="color: #92400E;">Urgency</label>
                             <select name="urgency">
