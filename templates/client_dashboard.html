@@ -572,12 +572,23 @@
             {# ── Welcome Call: request a preferred slot; team confirms + emails an invite ── #}
             {% if reg.form_status == 'submitted' and not reg.is_combined_addon %}
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
-                {% if reg.wc_confirmed %}
+                {% if reg.welcome_call_hold %}
+                <div style="font-size:0.9rem;color:#92400e;"><b>Welcome call — pending.</b> It will be scheduled once your enrolment is confirmed by our team.</div>
+                {% elif reg.ops_status != 'verified' %}
+                <div style="font-size:0.9rem;color:#92400e;"><b>Welcome call — almost there.</b> You'll be able to schedule it once our team verifies your registration.</div>
+                {% elif reg.wc_confirmed %}
                 <div style="display:flex;align-items:center;gap:8px;color:#166534;font-weight:600;font-size:0.9rem;">
                     <span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;align-items:center;justify-content:center;font-size:0.72rem;">&#10003;</span>
                     Welcome call confirmed: {{ reg.wc_scheduled_date }} at {{ reg.wc_scheduled_time }} IST{% if reg.wc_by %} with {{ reg.wc_by }}{% endif %}
                 </div>
                 <div style="font-size:0.78rem;color:#9ca3af;margin-top:4px;">A calendar invite was emailed to you.</div>
+                {% elif reg.wc_status == 'proposed' and reg.wc_proposed_date %}
+                <div style="font-size:0.9rem;color:#1e3a5f;"><b>GooCampus team proposed:</b> {{ reg.wc_proposed_date }}{% if reg.wc_proposed_time %} at {{ reg.wc_proposed_time }} IST{% endif %}{% if reg.wc_by %} · with {{ reg.wc_by }}{% endif %}.{% if reg.wc_proposed_note %} <span style="color:#64748b;">{{ reg.wc_proposed_note }}</span>{% endif %}</div>
+                <form method="POST" action="/client/welcome-call/confirm-proposal" style="margin-top:6px;">
+                    <input type="hidden" name="reg_id" value="{{ reg.id }}">
+                    <button type="submit" style="background:#16a34a;color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;">Confirm this time</button>
+                    <a href="/client/welcome-call" style="margin-left:10px;font-size:0.8rem;color:#f97316;">Request a different time</a>
+                </form>
                 {% elif reg.wc_pref_date %}
                 <div style="font-size:0.9rem;color:#374151;"><b>Welcome call requested</b> — preferred {{ reg.wc_pref_date }}{% if reg.wc_pref_time %} at {{ reg.wc_pref_time }}{% endif %}. Our team will confirm shortly.</div>
                 {% else %}
