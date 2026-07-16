@@ -165,70 +165,7 @@
     </div>
 </div>
 
-<!-- 2. Welcome Kit (single section matching the PLAB structure) -->
-<div class="onb-section">
-    <h3>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-        Welcome Kit
-    </h3>
-    <p style="font-size:0.78rem;color:var(--gray-500);margin:0 0 14px;">
-        All onboarding deliverables go together in one welcome kit. Capture the overall dispatch below, then tick which items were included with per-item dates / methods.
-    </p>
-    <div class="form-grid">
-        <div class="form-field">
-            <label>Overall Delivery Method</label>
-            <select name="welcome_kit_method">
-                <option value="">— Select —</option>
-                <option value="Postal from Office"  {% if onboarding.welcome_kit_method == 'Postal from Office' %}selected{% endif %}>Postal from Office</option>
-                <option value="Couriered"           {% if onboarding.welcome_kit_method == 'Couriered' %}selected{% endif %}>Couriered</option>
-                <option value="In Office Delivered" {% if onboarding.welcome_kit_method == 'In Office Delivered' %}selected{% endif %}>In Office Delivered</option>
-                <option value="Digital / Soft Copy" {% if onboarding.welcome_kit_method == 'Digital / Soft Copy' %}selected{% endif %}>Digital / Soft Copy</option>
-            </select>
-        </div>
-        <div class="form-field">
-            <label>Kit Dispatch Date</label>
-            <input type="date" name="welcome_kit_sent_date" value="{{ onboarding.welcome_kit_sent_date or '' }}">
-        </div>
-    </div>
-
-    <!-- Items checklist inside the welcome kit -->
-    <div style="margin-top:20px;">
-        <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 6px;">Items in this Welcome Kit</h4>
-        <p style="font-size:0.74rem;color:var(--gray-500);margin:0 0 12px;">
-            Items are managed in <a href="/admin/welcome-kit" style="color:var(--orange);font-weight:600;text-decoration:none;">Welcome Kit Settings</a>. Add or remove items there.
-        </p>
-        {% if kit_items %}
-        <table class="kit-table">
-            <thead>
-                <tr>
-                    <th style="width:40px;">Included</th>
-                    <th>Item</th>
-                    <th style="width:130px;">Type</th>
-                    <th style="width:140px;">Sent Date</th>
-                    <th>Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for k in kit_items %}
-                <tr>
-                    <td style="text-align:center;">
-                        <input type="checkbox" name="kit_included_{{ k.id }}" value="1" {% if k.included %}checked{% endif %}>
-                    </td>
-                    <td style="font-weight:600;">{{ k.item_name }}</td>
-                    <td><span style="display:inline-block;background:#F3F4F6;color:#374151;padding:1px 7px;border-radius:4px;font-size:0.7rem;">{{ k.item_type }}</span></td>
-                    <td><input type="date" name="kit_sent_date_{{ k.id }}" value="{{ k.sent_date }}" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;"></td>
-                    <td><input type="text" name="kit_notes_{{ k.id }}" value="{{ k.notes }}" placeholder="Optional notes" style="padding:6px 8px;border:1px solid #E5E7EB;border-radius:4px;font-size:0.78rem;width:100%;box-sizing:border-box;"></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div style="background:#F9FAFB;border:1px dashed #D1D5DB;border-radius:8px;padding:18px;text-align:center;color:var(--gray-500);font-size:0.85rem;">
-            No kit items defined for Standard Consulting yet. <a href="/admin/welcome-kit" style="color:var(--orange);font-weight:600;">Configure items →</a>
-        </div>
-        {% endif %}
-    </div>
-</div>
+<!-- Welcome Kit removed for Standard Consulting (founder 2026-07-16) — no kit in this pathway -->
 
 <div style="display:flex;gap:10px;margin-bottom:40px;">
     <button type="submit" class="btn-primary">Save Onboarding</button>
