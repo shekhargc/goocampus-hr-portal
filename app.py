@@ -2169,7 +2169,17 @@ def client_form(reg_id):
             conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 3), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         elif step == 3:
-            # Document uploads handled via AJAX, just advance step
+            # Document uploads handled via AJAX. To move past this step, a
+            # government photo ID (Passport or Aadhaar Card) must be uploaded.
+            if action == 'continue':
+                id_ok = conn.execute(
+                    "SELECT 1 FROM client_documents WHERE registration_id = ? "
+                    "AND doc_type IN ('Passport', 'Aadhaar Card') LIMIT 1", (reg_id,)).fetchone()
+                if not id_ok:
+                    conn.commit()
+                    conn.close()
+                    flash('Please upload a government photo ID (Passport or Aadhaar Card) before continuing.', 'error')
+                    return redirect(url_for('client_form', reg_id=reg_id))
             conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 4), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         if action == 'submit':
@@ -4050,6 +4060,16 @@ def client_welcome_call_page():
     right after the client finishes the form + contract + refund policy."""
     acct_id = session.get('user_id')
     conn = get_db()
+    # Gate: the client MUST digitally sign the Contract (if any) + Refund Policy
+    # before they can see the "registration complete / schedule welcome call" page.
+    # Otherwise back-to-dashboard could skip signing and land here directly.
+    _greg, _gate_step, _stages = _client_gate_status(conn, acct_id)
+    if _gate_step == 'contract':
+        conn.close()
+        return redirect(url_for('client_contract'))
+    if _gate_step == 'refund':
+        conn.close()
+        return redirect(url_for('client_refund_policy'))
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
     reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
         LEFT JOIN products_services ps ON ps.id = cr.product_id
