@@ -55,7 +55,7 @@
         {% if agreement %}
         <div class="agreed-banner mb-3">
             <div><i class="bi bi-patch-check-fill me-1"></i><strong>Agreed digitally</strong> on
-            {{ agreement.agreed_at.strftime('%d %b %Y, %H:%M') if agreement.agreed_at.strftime else agreement.agreed_at }}.</div>
+            {{ agreement.agreed_at|format_datetime }}.</div>
             <div class="sig-block mt-2">
                 <div class="sig-preview">{{ agreement.agreed_name }}</div>
                 <div class="sig-line">Digitally signed &mdash; {{ agreement.agreed_name }}</div>
