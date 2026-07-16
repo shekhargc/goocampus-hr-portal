@@ -168,7 +168,7 @@ def render_branded_email(heading: str, inner_html: str, preheader: str = "") -> 
 <tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(15,27,51,.08);font-family:Arial,Helvetica,sans-serif;">
   <tr><td style="background:{BRAND_NAVY};padding:22px 28px;text-align:center;">
-    <img src="{BRAND_LOGO_URL}" alt="GooCampus" width="80" height="68" style="width:80px;height:68px;display:inline-block;border:0;">
+    <img src="{BRAND_LOGO_URL}" alt="GooCampus" width="100" height="85" style="width:100px;height:85px;display:inline-block;border:0;">
   </td></tr>
   <tr><td style="height:4px;background:{BRAND_ORANGE};font-size:0;line-height:0;">&nbsp;</td></tr>
   <tr><td style="padding:28px 30px 6px;">
