@@ -1076,10 +1076,26 @@ def client_register(token):
             conn.close()
             return render_template('client_register.html', invitation=inv, product=product)
 
-        # Check if mobile already exists
-        existing = conn.execute("SELECT id FROM client_accounts WHERE mobile = ?", (clean,)).fetchone()
+        # Check if mobile already exists (mobile is the login id and is UNIQUE).
+        existing = conn.execute("SELECT id, email FROM client_accounts WHERE mobile = ?", (clean,)).fetchone()
         if existing:
-            # Link existing account to this invitation
+            _inv_email = (inv['client_email'] or '').strip().lower()
+            _acct_email = (existing['email'] or '').strip().lower()
+            if _acct_email and _inv_email and _acct_email != _inv_email:
+                # Someone else already owns this mobile — never let an invitation
+                # overwrite another client's password.
+                conn.close()
+                flash('This mobile number is already registered to a different email address. '
+                      'Please log in with your existing password, or contact us.', 'error')
+                return render_template('client_register.html', invitation=inv, product=product)
+            # Same client registering again (e.g. a second pathway, or after a purge
+            # that left the account behind). Honour the password + name they just
+            # typed — silently keeping the old ones locked them out of their account.
+            conn.execute(
+                "UPDATE client_accounts SET password_hash = ?, first_name = ?, last_name = ?, "
+                "is_active = 1, email = COALESCE(NULLIF(email, ''), ?) WHERE id = ?",
+                (hash_password(password), first_name, last_name, inv['client_email'] or '', existing['id']))
+            conn.commit()
             acct_id = existing['id']
         else:
             conn.execute(
@@ -4677,6 +4693,23 @@ def _purge_collect_keys(conn, emails):
             return []
     lead_ids = ids(f"SELECT id FROM sales_leads WHERE LOWER(email) IN ({eph})", emails)
     account_ids = ids(f"SELECT id FROM client_accounts WHERE LOWER(email) IN ({eph})", emails)
+    # The login account is keyed by MOBILE (unique), and its email can be blank or
+    # differ from the registration's. Matching on email alone left the account
+    # behind, and the next signup silently reused it — old password, old name, old
+    # agreements. Also resolve accounts via the mobile on this email's records.
+    _mobiles = set()
+    for _sql in (f"SELECT mobile FROM client_registrations WHERE LOWER(email) IN ({eph})",
+                 f"SELECT mobile FROM client_accounts WHERE LOWER(email) IN ({eph})"):
+        for _m in ids(_sql, emails):
+            _m = (_m or '').strip().lstrip('+').lstrip('0')
+            if _m.startswith('91') and len(_m) == 12:
+                _m = _m[2:]
+            if _m:
+                _mobiles.add(_m)
+    if _mobiles:
+        mph = ','.join(['?'] * len(_mobiles))
+        account_ids += [i for i in ids(f"SELECT id FROM client_accounts WHERE mobile IN ({mph})",
+                                       list(_mobiles)) if i not in account_ids]
     reg_where, reg_params = f"LOWER(email) IN ({eph})", list(emails)
     if account_ids:
         reg_where += f" OR account_id IN ({','.join(['?']*len(account_ids))})"
@@ -4842,6 +4875,68 @@ def admin_reg_status():
             f"<th>ops_status</th><th>joined_stage</th><th>counsellor</th><th>invited by</th>"
             f"<th>Queue status</th></tr>{trs}</table></body>")
     return html
+
+
+@app.route('/admin/maintenance/client-login-check', methods=['GET'])
+@admin_required
+def admin_client_login_check():
+    """Read-only: why can a client not log in? Shows the login account for a mobile
+    or email exactly as the login route looks it up. Never renders the password."""
+    q = (request.args.get('q') or '').strip()
+    clean = q.lstrip('+').lstrip('0')
+    if clean.startswith('91') and len(clean) == 12:
+        clean = clean[2:]
+    rows, regs, note = [], [], ''
+    if q:
+        conn = get_db()
+        try:
+            rows = conn.execute(
+                "SELECT id, mobile, email, first_name, last_name, COALESCE(is_active,0) AS is_active, "
+                "last_login, created_at, (password_hash IS NOT NULL AND password_hash <> '') AS has_pw "
+                "FROM client_accounts WHERE mobile = ? OR LOWER(email) = LOWER(?) ORDER BY id",
+                (clean, q)).fetchall()
+        except Exception as e:
+            note = f'account lookup failed: {e}'
+            conn.rollback()
+        try:
+            regs = conn.execute(
+                "SELECT id, registration_number, account_id, mobile, email, form_status, current_step "
+                "FROM client_registrations WHERE mobile = ? OR LOWER(email) = LOWER(?) ORDER BY id",
+                (clean, q)).fetchall()
+        except Exception:
+            conn.rollback()
+        conn.close()
+    def esc(v):
+        return '—' if v in (None, '') else str(v)
+    arows = "".join(
+        f"<tr><td>{r['id']}</td><td><b>{esc(r['mobile'])}</b></td><td>{esc(r['email'])}</td>"
+        f"<td>{esc(r['first_name'])} {esc(r['last_name'])}</td>"
+        f"<td>{'<b style=color:green>yes</b>' if r['is_active'] else '<b style=color:red>NO — login blocked</b>'}</td>"
+        f"<td>{'yes' if r['has_pw'] else '<b style=color:red>NO</b>'}</td>"
+        f"<td>{esc(r['last_login'])}</td><td>{esc(r['created_at'])}</td></tr>" for r in rows)
+    rrows = "".join(
+        f"<tr><td>{r['id']}</td><td>{esc(r['registration_number'])}</td><td>{esc(r['account_id'])}</td>"
+        f"<td>{esc(r['mobile'])}</td><td>{esc(r['email'])}</td><td>{esc(r['form_status'])}</td>"
+        f"<td>{esc(r['current_step'])}</td></tr>" for r in regs)
+    verdict = ('<p style="color:#b91c1c"><b>No login account exists for that mobile/email.</b> '
+               'The client must register again from their invitation link.</p>'
+               if q and not rows else '')
+    return (f"<!doctype html><meta charset=utf-8><title>Client login check</title>"
+            f"<body style='font-family:system-ui;padding:24px;color:#1e293b'>"
+            f"<h2>Client login check</h2>"
+            f"<form><input name=q value='{q}' placeholder='mobile or email' style='padding:8px;width:320px'> "
+            f"<button style='padding:8px 14px'>Check</button></form>"
+            f"<p style='color:#64748b;font-size:13px'>Login matches on the 10-digit mobile"
+            f"{(' — searching <b>' + clean + '</b>') if q else ''}. Passwords are never shown.</p>"
+            f"{('<p style=color:#b91c1c>' + note + '</p>') if note else ''}{verdict}"
+            f"<h3>Login accounts ({len(rows)})</h3>"
+            f"<table border=1 cellpadding=6 cellspacing=0 style='border-collapse:collapse;font-size:13px'>"
+            f"<tr style='background:#f1f5f9'><th>ID</th><th>mobile</th><th>email</th><th>name</th>"
+            f"<th>is_active</th><th>password set</th><th>last_login</th><th>created</th></tr>{arows}</table>"
+            f"<h3>Registrations ({len(regs)})</h3>"
+            f"<table border=1 cellpadding=6 cellspacing=0 style='border-collapse:collapse;font-size:13px'>"
+            f"<tr style='background:#f1f5f9'><th>ID</th><th>Reg</th><th>account_id</th><th>mobile</th>"
+            f"<th>email</th><th>form_status</th><th>current_step</th></tr>{rrows}</table></body>")
 
 
 @app.route('/admin/maintenance/employee-check', methods=['GET'])
