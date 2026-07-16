@@ -1422,9 +1422,13 @@ def client_refund_policy():
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
     policy = _get_refund_policy(conn)
+    # Must match the gate EXACTLY (which filters on the current policy_version).
+    # Looking up any-version agreement made the page show "already signed" (no form)
+    # while the gate still said "not done" — a dead end the client couldn't escape.
+    _pver = policy['version'] if policy else 1
     agreement = conn.execute(
         "SELECT * FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
-        "ORDER BY id DESC LIMIT 1", (acct_id,)).fetchone()
+        "AND policy_version = ? ORDER BY id DESC LIMIT 1", (acct_id, _pver)).fetchone()
     _reg, step, stages = _client_gate_status(conn, acct_id)
     conn.close()
     # Enforce contract-first: if a contract is still pending, send them there.
@@ -1463,8 +1467,9 @@ def client_refund_policy_agree():
     try:
         if account and account['email']:
             from email_utils import send_email
-            from datetime import datetime as _dt
-            stamp = _dt.now().strftime('%d %b %Y, %H:%M')
+            from datetime import datetime as _dt, timedelta as _td
+            # Server runs UTC — stamp the agreement in IST for the client.
+            stamp = (_dt.utcnow() + _td(hours=5, minutes=30)).strftime('%d %b %Y, %H:%M') + ' IST'
             html = ('<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;">'
                     '<div style="background:#1e3a5f;padding:18px 28px;color:#fff;">'
                     '<h2 style="margin:0;font-size:18px;">Refund Policy &mdash; Agreement Confirmation</h2></div>'
