@@ -4024,12 +4024,31 @@ def client_welcome_call_request():
         conn.close()
         flash('Registration not found.', 'error')
         return redirect(url_for('client_dashboard'))
+    pdate = request.form.get('wc_pref_date', '')
+    ptime = request.form.get('wc_pref_time', '')
     conn.execute(
         "UPDATE client_registrations SET wc_pref_date=?, wc_pref_time=?, wc_pref_notes=?, "
-        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (request.form.get('wc_pref_date', ''), request.form.get('wc_pref_time', ''),
-         request.form.get('wc_pref_notes', ''), reg_id))
+        "wc_status='requested', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (pdate, ptime, request.form.get('wc_pref_notes', ''), reg_id))
     conn.commit()
+    # Notify the lead's sales member + Operations team that the client asked for a slot.
+    try:
+        full = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
+        sm_name, sm_email = _lead_sales_member(conn, full)
+        team_to = list(dict.fromkeys([e for e in ([sm_email] + _dept_emails(conn, ['Operations'])) if e]))
+        cname = f"{full['prefix'] or ''} {full['first_name'] or ''} {full['last_name'] or ''}".strip()
+        from email_utils import send_email, render_branded_email, brand_detail_rows, brand_button
+        if team_to:
+            inner = (brand_detail_rows([('Client', cname), ('Registration #', full['registration_number']),
+                        ('Product', full['product_name']), ('Whose lead', sm_name),
+                        ('Preferred date', pdate), ('Preferred time', ptime)]) +
+                     brand_button('Open in portal', f"https://goocampus.org/admin/client/{reg_id}"))
+            send_email(team_to, f"Welcome Call Requested — {cname}",
+                       render_branded_email('Client requested a Welcome Call', inner),
+                       from_address="GooCampus <info@goocampus.in>")
+    except Exception as e:
+        logging.warning(f"welcome call request notify {reg_id}: {e}")
     conn.close()
     flash('Thanks! Your preferred welcome-call time has been shared with our team — we will confirm shortly.', 'success')
     return redirect(url_for('client_welcome_call_page'))
@@ -4056,78 +4075,160 @@ def admin_client_welcome_call_confirm(reg_id):
         return redirect(url_for('admin_client_detail', reg_id=reg_id))
     conn.execute(
         "UPDATE client_registrations SET wc_scheduled_date=?, wc_scheduled_time=?, wc_by=?, "
-        "wc_confirmed=1, wc_confirmed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "wc_confirmed=1, wc_status='confirmed', wc_confirmed_at=CURRENT_TIMESTAMP, "
+        "updated_at=CURRENT_TIMESTAMP WHERE id=?",
         (date_s, time_s, wc_by, reg_id))
+    conn.commit()
+    conn.close()
+    _notify_welcome_call_confirmed(reg_id)
+    flash('Welcome call confirmed. The client has an invite; the sales & ops team have been notified.', 'success')
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
+def _notify_welcome_call_confirmed(reg_id):
+    """Send the CONFIRMED welcome-call emails: the client gets a branded email +
+    .ics; the lead's sales member, the Operations team and the caller get a
+    branded internal notice. Used by both the ops direct-confirm and the client's
+    confirm-of-a-proposed-slot paths."""
+    try:
+        conn = get_db()
+        reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
+        if not reg:
+            conn.close(); return
+        date_s = reg['wc_scheduled_date'] or ''
+        time_s = reg['wc_scheduled_time'] or ''
+        wc_by = reg['wc_by'] or ''
+        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        client_email = reg['email']
+        product_name = reg['product_name'] or 'your program'
+        sm_name, sm_email = _lead_sales_member(conn, reg)
+        ops_emails = _dept_emails(conn, ['Operations'])
+        caller_email = ''
+        if wc_by:
+            crow = conn.execute("SELECT email FROM employees WHERE is_active = 1 AND name = ? LIMIT 1", (wc_by,)).fetchone()
+            caller_email = (crow['email'] if crow else '') or ''
+        conn.close()
+        from email_utils import (send_email, render_branded_email, brand_detail_rows, brand_callout)
+        # Client email + .ics
+        if client_email:
+            desc = (f"Your GooCampus welcome call for {product_name}. "
+                    f"Our team member {wc_by or 'GooCampus'} will call you at the scheduled time.")
+            ics_b64 = _welcome_call_ics("GooCampus Welcome Call", desc, date_s, time_s)
+            inner = (brand_callout(f"Your GooCampus welcome call is confirmed for "
+                     f"<strong>{date_s} at {time_s} IST</strong>{(' with ' + wc_by) if wc_by else ''}.",
+                     color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
+                     f"<p>Dear {client_name or 'there'}, a calendar invite is attached so you can add it "
+                     f"to your calendar. We look forward to speaking with you!</p><p>&mdash; Team GooCampus</p>")
+            body = render_branded_email('Welcome Call Confirmed', inner,
+                                        preheader=f"{date_s} at {time_s} IST")
+            atts = [{'filename': 'welcome-call.ics', 'content': ics_b64}] if ics_b64 else None
+            try:
+                send_email([client_email], "Your GooCampus Welcome Call is confirmed", body,
+                           attachments=atts, from_address="GooCampus <info@goocampus.in>")
+            except Exception as e:
+                logging.warning(f"welcome call client email {reg_id}: {e}")
+        # Internal notice
+        team_to = list(dict.fromkeys([e for e in ([sm_email, caller_email] + ops_emails) if e]))
+        if team_to:
+            t_inner = (brand_callout(
+                f"Welcome call confirmed for <strong>{client_name}</strong> — "
+                f"<strong>{date_s} at {time_s} IST</strong>"
+                + (f", to be taken by <strong>{wc_by}</strong>" if wc_by else "") + ".") +
+                brand_detail_rows([('Client', client_name), ('Registration #', reg['registration_number']),
+                    ('Product', product_name), ('Whose lead', sm_name),
+                    ('Call date', date_s), ('Call time', f"{time_s} IST"), ('Taken by', wc_by)]))
+            t_body = render_branded_email('Welcome Call Confirmed', t_inner,
+                                          preheader=f"{client_name}: {date_s} {time_s} IST")
+            try:
+                send_email(team_to, f"Welcome Call Confirmed — {client_name} ({date_s} {time_s} IST)",
+                           t_body, from_address="GooCampus <info@goocampus.in>")
+            except Exception as e:
+                logging.warning(f"welcome call team email {reg_id}: {e}")
+    except Exception as e:
+        logging.error(f"_notify_welcome_call_confirmed({reg_id}): {e}")
+
+
+@app.route('/admin/client/<int:reg_id>/welcome-call/propose', methods=['POST'])
+@login_required
+def admin_client_welcome_call_propose(reg_id):
+    """Ops proposes a DIFFERENT welcome-call slot back to the client, who then
+    confirms it on their dashboard. Emails the client the proposal."""
+    conn = get_db()
+    reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
+    if not reg:
+        conn.close(); flash('Client not found.', 'error'); return redirect(url_for('admin_clients_list'))
+    date_s = (request.form.get('wc_proposed_date', '') or '').strip()
+    time_s = (request.form.get('wc_proposed_time', '') or '').strip()
+    wc_by = (request.form.get('wc_by', '') or '').strip()
+    note = (request.form.get('wc_proposed_note', '') or '').strip()
+    if not date_s or not time_s:
+        conn.close(); flash('Please pick the proposed date and time.', 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id))
+    conn.execute("UPDATE client_registrations SET wc_proposed_date=?, wc_proposed_time=?, "
+                 "wc_proposed_note=?, wc_by=?, wc_status='proposed', wc_confirmed=0, "
+                 "updated_at=CURRENT_TIMESTAMP WHERE id=?", (date_s, time_s, note, wc_by, reg_id))
     conn.commit()
     client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
     client_email = reg['email']
-    product_name = reg['product_name'] or 'your program'
     conn.close()
     try:
-        from email_utils import send_email
-    except Exception:
-        send_email = None
-    if send_email and client_email:
-        summary = "GooCampus Welcome Call"
-        desc = (f"Your GooCampus welcome call for {product_name}. "
-                f"Our team member {wc_by or 'GooCampus'} will call you at the scheduled time.")
-        ics_b64 = _welcome_call_ics(summary, desc, date_s, time_s)
-        inner = (f"<h2 style='color:#0f1b33;'>Your Welcome Call is confirmed</h2>"
-                 f"<p>Dear {client_name or 'there'},</p>"
-                 f"<p>Your GooCampus welcome call is scheduled for:</p>"
-                 f"<p style='font-size:1.05rem;'><b>{date_s} at {time_s} IST</b>"
-                 f"{(' with ' + wc_by) if wc_by else ''}</p>"
-                 f"<p>A calendar invite is attached so you can add it to your calendar. "
-                 f"We look forward to speaking with you!</p><p>— Team GooCampus</p>")
-        try:
-            from email_utils import render_branded_email
-            body = render_branded_email('Welcome Call Confirmed', inner)
-        except Exception:
-            body = inner
-        atts = [{'filename': 'welcome-call.ics', 'content': ics_b64}] if ics_b64 else None
-        try:
-            send_email([client_email], "Your GooCampus Welcome Call is confirmed", body, attachments=atts)
-        except Exception as e:
-            logging.warning(f"welcome call email {reg_id}: {e}")
-
-    # Internal notification: the sales member whose lead it is, the Operations
-    # team, and (highlighted) the ops member taking the call.
-    try:
-        from email_utils import (render_branded_email, brand_detail_rows, brand_callout)
-        conn2 = get_db()
-        sm_name, sm_email = _lead_sales_member(conn2, reg)
-        ops_emails = _dept_emails(conn2, ['Operations'])
-        caller_email = ''
-        if wc_by:
-            crow = conn2.execute("SELECT email FROM employees WHERE is_active = 1 AND name = ? LIMIT 1", (wc_by,)).fetchone()
-            caller_email = (crow['email'] if crow else '') or ''
-        conn2.close()
-        team_to = list(dict.fromkeys([e for e in ([sm_email, caller_email] + ops_emails) if e]))
-        if team_to and send_email:
-            t_inner = (
-                brand_callout(
-                    f"Welcome call scheduled for <strong>{client_name}</strong> — "
-                    f"<strong>{date_s} at {time_s} IST</strong>"
-                    + (f", to be taken by <strong>{wc_by}</strong>" if wc_by else "") + ".") +
-                brand_detail_rows([
-                    ('Client', client_name),
-                    ('Registration #', reg['registration_number']),
-                    ('Product', product_name),
-                    ('Whose lead', sm_name),
-                    ('Call date', date_s),
-                    ('Call time', f"{time_s} IST"),
-                    ('Taken by', wc_by),
-                ])
-            )
-            t_body = render_branded_email('Welcome Call Scheduled', t_inner,
-                                          preheader=f"{client_name}: {date_s} {time_s} IST")
-            send_email(team_to, f"Welcome Call Scheduled — {client_name} ({date_s} {time_s} IST)",
-                       t_body, from_address="GooCampus <info@goocampus.in>")
+        from email_utils import send_email, render_branded_email, brand_callout, brand_button
+        if client_email:
+            inner = (brand_callout(
+                f"Our team has proposed a welcome-call time: <strong>{date_s} at {time_s} IST</strong>"
+                + (f", with {wc_by}" if wc_by else "") + "."
+                + (f"<br><span style='font-size:13px;'>{note}</span>" if note else "")) +
+                f"<p>Dear {client_name or 'there'}, please log in and <strong>confirm</strong> this time, "
+                f"or propose another slot that suits you.</p>" +
+                brand_button('Confirm your welcome call', 'https://goocampus.org/client/welcome-call'))
+            body = render_branded_email('Welcome Call — please confirm the proposed time', inner,
+                                        preheader=f"Proposed: {date_s} {time_s} IST")
+            send_email([client_email], "GooCampus Welcome Call — please confirm the time", body,
+                       from_address="GooCampus <info@goocampus.in>")
     except Exception as e:
-        logging.warning(f"welcome call team notify {reg_id}: {e}")
-
-    flash('Welcome call confirmed. The client has an invite; the sales & ops team have been notified.', 'success')
+        logging.warning(f"welcome call propose email {reg_id}: {e}")
+    flash('Proposed time sent to the client to confirm.', 'success')
     return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
+@app.route('/admin/client/<int:reg_id>/welcome-call/hold', methods=['POST'])
+@login_required
+def admin_client_welcome_call_hold(reg_id):
+    """Sales/ops put the welcome call ON HOLD (e.g. token payment, balance
+    pending) so the client can't schedule it yet, or clear the hold."""
+    hold = 1 if request.form.get('hold') == '1' else 0
+    conn = get_db()
+    conn.execute("UPDATE client_registrations SET welcome_call_hold=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                 (hold, reg_id))
+    conn.commit()
+    conn.close()
+    flash('Welcome call put on hold — the client cannot schedule it yet.' if hold
+          else 'Welcome-call hold cleared — the client can now schedule their call.', 'success')
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
+@app.route('/client/welcome-call/confirm-proposal', methods=['POST'])
+@client_required
+def client_welcome_call_confirm_proposal():
+    """Client confirms the slot the ops team proposed. Locks it in as confirmed
+    and fires the confirmed emails to client + team + caller."""
+    acct_id = session.get('user_id')
+    reg_id = request.form.get('reg_id')
+    conn = get_db()
+    reg = conn.execute("SELECT id, wc_proposed_date, wc_proposed_time FROM client_registrations "
+                       "WHERE id = ? AND account_id = ?", (reg_id, acct_id)).fetchone()
+    if not reg or not reg['wc_proposed_date']:
+        conn.close(); flash('No proposed time to confirm.', 'error')
+        return redirect(url_for('client_welcome_call_page'))
+    conn.execute("UPDATE client_registrations SET wc_scheduled_date=wc_proposed_date, "
+                 "wc_scheduled_time=wc_proposed_time, wc_confirmed=1, wc_status='confirmed', "
+                 "wc_confirmed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?", (reg_id,))
+    conn.commit(); conn.close()
+    _notify_welcome_call_confirmed(reg_id)
+    flash('Thank you — your welcome call is confirmed. A calendar invite has been emailed to you.', 'success')
+    return redirect(url_for('client_welcome_call_page'))
 
 
 def _sync_to_plab_and_academics(conn, reg, reg_id):
@@ -9534,6 +9635,15 @@ def ensure_crm_tables():
             ('client_registrations',     'wc_by',                  'TEXT'),
             ('client_registrations',     'wc_confirmed',           'INTEGER DEFAULT 0'),
             ('client_registrations',     'wc_confirmed_at',        'TIMESTAMP'),
+            # Welcome-call reschedule thread + token-payment hold (2026-07-16).
+            # wc_status: '' / 'requested' (client) / 'proposed' (ops proposed a new
+            # slot, awaiting client confirm) / 'confirmed'. welcome_call_hold: sales
+            # holds the welcome call for token/partial-payment clients until cleared.
+            ('client_registrations',     'wc_status',              'TEXT'),
+            ('client_registrations',     'wc_proposed_date',       'TEXT'),
+            ('client_registrations',     'wc_proposed_time',       'TEXT'),
+            ('client_registrations',     'wc_proposed_note',       'TEXT'),
+            ('client_registrations',     'welcome_call_hold',      'INTEGER DEFAULT 0'),
             # Mirror onto the master record so ops profiles show the full picture.
             ('plab_clients',             'guardian_type',          'TEXT'),
             ('plab_clients',             'father_first_name',      'TEXT'),
