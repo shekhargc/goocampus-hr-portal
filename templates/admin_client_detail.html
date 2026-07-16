@@ -394,8 +394,8 @@
     <!-- Tabs Navigation -->
     <div class="tabs-nav">
         <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
-        <button class="tab-btn" data-tab="sales" type="button">Sales Section</button>
-        <button class="tab-btn" data-tab="operations" type="button">Operations</button>
+        <button class="tab-btn" data-tab="sales" type="button">Sales Section{% if reg.sales_completed %} <span style="color:#16a34a;font-weight:800;">&#10003;</span>{% endif %}</button>
+        <button class="tab-btn" data-tab="operations" type="button">Operations{% if reg.ops_status == 'verified' %} <span style="color:#16a34a;font-weight:800;">&#10003;</span>{% endif %}</button>
         <button class="tab-btn" data-tab="documents" type="button">Documents</button>
         {# Welcome Kit tab removed from the onboarding flow (founder 2026-07-13 —
            no welcome kit being sent). Only show it for legacy clients that still
@@ -1258,7 +1258,7 @@
             <div class="notif-timeline">
                 {% for notif in notifications %}
                 <div class="notif-timeline-item">
-                    <div class="notif-timeline-date">{{ notif.sent_at or '' }}</div>
+                    <div class="notif-timeline-date">{{ notif.sent_at|format_datetime if notif.sent_at else '' }}</div>
                     <div class="notif-timeline-content">
                         <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                             <span class="notif-timeline-type">{{ notif.notification_type or 'Notification' }}</span>
