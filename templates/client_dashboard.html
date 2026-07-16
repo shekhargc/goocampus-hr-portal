@@ -514,11 +514,13 @@
             {# ── What's included in your package (service names + descriptions;
                 budgets/costs are never shown to the client) ── #}
             {% if reg.package_services %}
-            <div style="margin-top:1rem;padding:1rem 1.1rem;background:white;border:1px solid #E5E7EB;border-radius:0.75rem;">
-                <h6 style="margin:0 0 0.8rem;font-size:0.85rem;font-weight:700;color:#0F172A;">
-                    <i class="bi bi-check2-square me-1" style="color:#16A34A;"></i> What's included in your package
-                </h6>
-                <div style="display:flex;flex-direction:column;gap:0.6rem;">
+            {# Collapsible after submission — collapsed by default to keep the dashboard tidy. #}
+            <details {% if reg.form_status != 'submitted' %}open{% endif %} style="margin-top:1rem;background:white;border:1px solid #E5E7EB;border-radius:0.75rem;overflow:hidden;">
+                <summary style="padding:1rem 1.1rem;font-size:0.85rem;font-weight:700;color:#0F172A;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
+                    <span><i class="bi bi-check2-square me-1" style="color:#16A34A;"></i> What's included in your package</span>
+                    <span style="font-size:0.72rem;font-weight:500;color:#94A3B8;">{{ reg.package_services|length }} item{{ 's' if reg.package_services|length != 1 else '' }} · tap to view</span>
+                </summary>
+                <div style="display:flex;flex-direction:column;gap:0.6rem;padding:0 1.1rem 1rem;">
                     {% for sv in reg.package_services %}
                     <div style="display:flex;gap:0.6rem;align-items:flex-start;">
                         <i class="bi bi-check-circle-fill" style="color:#16A34A;font-size:0.9rem;margin-top:0.15rem;flex-shrink:0;"></i>
@@ -529,7 +531,7 @@
                     </div>
                     {% endfor %}
                 </div>
-            </div>
+            </details>
             {% endif %}
 
             <!-- Actions & Date -->
