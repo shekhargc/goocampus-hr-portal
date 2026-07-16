@@ -84,22 +84,34 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     # client_submitted_at IS NOT NULL excludes auto-created add-on registrations
     # (e.g. the AMC 1 / Training sibling of a combined AMC Consulting signup) — the
     # client never filled those; they ride along with the main reg's verification.
+    # A fully verified registration used to drop out of BOTH queues, which left the
+    # welcome-call Hold with nowhere to live — sales had no way to release it. Both
+    # queues now keep a verified registration until the welcome call is confirmed,
+    # with only the welcome-call action offered on those rows (founder 2026-07-16).
+    _WC_PENDING = ("COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.ops_status,'') = 'verified' "
+                   "AND COALESCE(cr.wc_confirmed,0) = 0")
     params = []
     if stage == 'fill':
-        where = ("cr.form_status = 'submitted' AND COALESCE(cr.sales_completed,0) = 0 "
-                 "AND cr.client_submitted_at IS NOT NULL")
+        where = ("cr.client_submitted_at IS NOT NULL AND ("
+                 "(cr.form_status = 'submitted' AND COALESCE(cr.sales_completed,0) = 0)"
+                 f" OR ({_WC_PENDING}))")
         if uid and not is_admin:
             where += " AND cr.counsellor_id = ?"
             params.append(uid)
-        order = "cr.client_submitted_at"
+        order = "COALESCE(cr.sales_completed_at, cr.client_submitted_at)"
     else:
-        where = ("COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.ops_status,'') <> 'verified' "
-                 "AND cr.client_submitted_at IS NOT NULL")
+        where = ("COALESCE(cr.sales_completed,0) = 1 AND cr.client_submitted_at IS NOT NULL AND ("
+                 "COALESCE(cr.ops_status,'') <> 'verified'"
+                 f" OR ({_WC_PENDING}))")
         order = "cr.sales_completed_at"
     rows = conn.execute(f"""
         SELECT cr.id, cr.registration_number, cr.prefix, cr.first_name, cr.last_name,
                cr.counsellor_id, cr.counsellor_name, cr.client_submitted_at,
-               cr.sales_completed_at, ps.name AS product_name, ps.pathway AS pathway
+               cr.sales_completed_at, COALESCE(cr.sales_completed,0) AS sales_completed,
+               COALESCE(cr.ops_status,'') AS ops_status,
+               COALESCE(cr.wc_confirmed,0) AS wc_confirmed,
+               COALESCE(cr.welcome_call_hold,0) AS welcome_call_hold,
+               ps.name AS product_name, ps.pathway AS pathway
           FROM client_registrations cr
           LEFT JOIN products_services ps ON ps.id = cr.product_id
          WHERE {where}
@@ -107,14 +119,31 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     """, params).fetchall()
     out = []
     for r in rows:
+        # Verified + welcome call still open → this row is only here for the call.
+        wc_row = (r['sales_completed'] == 1 and r['ops_status'] == 'verified'
+                  and not r['wc_confirmed'])
+        if wc_row:
+            row_stage = 'welcome_call'
+            when = r['sales_completed_at']
+        else:
+            row_stage = stage
+            when = r['client_submitted_at'] if stage == 'fill' else r['sales_completed_at']
+        # The Hold card lives on the Sales tab, the booking card on the Operations
+        # tab. The detail page restores the tab from the hash, matching it against
+        # the button's data-tab — so the hash is 'sales'/'operations', not the panel id.
+        anchor = ''
+        if wc_row:
+            anchor = '#sales' if stage == 'fill' else '#operations'
         out.append({
             'id': r['id'], 'reg': r['registration_number'] or '—',
             'name': _name(r['prefix'], r['first_name'], r['last_name']),
             'product': r['product_name'] or '',
             'pathway': (r['pathway'] or 'plab'),
             'counsellor_id': r['counsellor_id'], 'counsellor': r['counsellor_name'] or '',
-            'when': r['client_submitted_at'] if stage == 'fill' else r['sales_completed_at'],
-            'action_url': url_for('admin_client_detail', reg_id=r['id']),
+            'when': when,
+            'row_stage': row_stage,
+            'on_hold': bool(r['welcome_call_hold']),
+            'action_url': url_for('admin_client_detail', reg_id=r['id']) + anchor,
         })
     return out
 

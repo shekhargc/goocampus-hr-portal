@@ -634,7 +634,7 @@
                     {% if doc.status == 'verified' %}background:#d1fae5;color:#065f46;
                     {% elif doc.status == 'rejected' %}background:#fee2e2;color:#991b1b;
                     {% else %}background:#fef3c7;color:#92400e;{% endif %}">{{ doc.status|capitalize }}</span>
-                <a href="/{{ doc.file_path }}" target="_blank" style="font-size:0.8rem;color:#f97316;text-decoration:none;font-weight:600;">View</a>
+                <a href="/client/plab-doc/{{ doc.id }}/file" target="_blank" style="font-size:0.8rem;color:#f97316;text-decoration:none;font-weight:600;">View</a>
             </div>
             {% endfor %}
         </div>
