@@ -2021,21 +2021,21 @@ def client_dashboard():
     # Photograph: detect an already-uploaded photo across BOTH the post-verify
     # (plab_client_documents) and pre-verify (client_documents) stores, so the
     # dashboard can show the photo + a done tick and block re-uploading.
-    def _photo_url(fp):
-        fp = fp or ''
-        return fp if fp.startswith('/') else '/' + fp
+    # Serve through the owning route — the stored value is an R2 object key, and
+    # prepending '/' to it just produced a 404 (or a protocol-relative URL for the
+    # legacy '/static/...' rows, which the browser tried to resolve as a hostname).
     photo_doc = None
     for d in plab_documents:
         if (d.get('doc_type') or '') == 'Photograph':
-            photo_doc = {'url': _photo_url(d.get('file_path'))}
+            photo_doc = {'url': url_for('client_serve_plab_doc', doc_id=d['id'])}
             break
     if not photo_doc and reg_ids:
         _php = ','.join(['?' for _ in reg_ids])
         _prow = conn.execute(
-            f"SELECT file_path FROM client_documents WHERE registration_id IN ({_php}) "
+            f"SELECT id FROM client_documents WHERE registration_id IN ({_php}) "
             "AND doc_type = 'Photograph' ORDER BY id DESC LIMIT 1", reg_ids).fetchone()
         if _prow:
-            photo_doc = {'url': _photo_url(_prow['file_path'])}
+            photo_doc = {'url': url_for('client_serve_reg_doc', doc_id=_prow['id'])}
 
     conn.close()
     return render_template('client_dashboard.html',
@@ -2330,12 +2330,46 @@ def client_form(reg_id):
         lookup_options=lookup_options, phone_countries=phone_countries)
 
 
+def _store_client_upload(file, pathway, reg_number, doc_type):
+    """Persist a client-uploaded file and return (file_path, size, content_type).
+
+    Client uploads used to go to static/uploads/ on local disk. Render has no
+    persistent disk, so every client document was destroyed on the next deploy or
+    restart — the files simply stopped existing. Send them to R2, exactly like the
+    ops-side uploads, and store the bare R2 key in file_path (never a leading '/',
+    which is what marks a row as a dead legacy disk path).
+    """
+    from core import storage
+    body = file.read()
+    content_type = file.mimetype or 'application/octet-stream'
+    if storage.is_configured():
+        from werkzeug.utils import secure_filename
+        key = storage.make_doc_key(pathway or 'client', reg_number or 'unknown',
+                                   doc_type or 'Other',
+                                   secure_filename(file.filename) or 'file')
+        if not storage.upload_bytes(key, body, content_type):
+            return None, 0, content_type
+        return key, len(body), content_type
+    # No R2 (local dev only) — keep the old disk behaviour so dev still works.
+    import os, uuid
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
+    fname = f"client_{uuid.uuid4().hex[:10]}.{ext}"
+    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'client_docs')
+    os.makedirs(upload_dir, exist_ok=True)
+    with open(os.path.join(upload_dir, fname), 'wb') as fh:
+        fh.write(body)
+    return f'/static/uploads/client_docs/{fname}', len(body), content_type
+
+
 @app.route('/client/upload-doc/<int:reg_id>', methods=['POST'])
 @client_required
 def client_upload_doc(reg_id):
     acct_id = session.get('user_id')
     conn = get_db()
-    reg = conn.execute("SELECT id FROM client_registrations WHERE id = ? AND account_id = ?", (reg_id, acct_id)).fetchone()
+    reg = conn.execute(
+        "SELECT cr.id, cr.registration_number, ps.pathway FROM client_registrations cr "
+        "LEFT JOIN products_services ps ON ps.id = cr.product_id "
+        "WHERE cr.id = ? AND cr.account_id = ?", (reg_id, acct_id)).fetchone()
     if not reg:
         conn.close()
         return jsonify({'error': 'Not found'}), 404
@@ -2344,17 +2378,19 @@ def client_upload_doc(reg_id):
     if not file or not file.filename:
         conn.close()
         return jsonify({'error': 'No file selected'}), 400
-    import os, uuid
-    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
-    fname = f"client_{reg_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'client_docs')
-    os.makedirs(upload_dir, exist_ok=True)
-    fpath = os.path.join(upload_dir, fname)
-    file.save(fpath)
-    file_size = os.path.getsize(fpath)
+    file_path, file_size, _ct = _store_client_upload(
+        file, reg['pathway'], reg['registration_number'] or f'reg_{reg_id}', doc_type)
+    if not file_path:
+        conn.close()
+        return jsonify({'error': 'Upload failed — please try again.'}), 500
+    # Re-uploading the same doc type replaces it. Without this a client who
+    # uploaded Aadhaar twice ended up with two rows, and the copy to the master
+    # record faithfully duplicated both ("Aadhaar — 2 files").
+    conn.execute("DELETE FROM client_documents WHERE registration_id = ? AND doc_type = ?",
+                 (reg_id, doc_type))
     conn.execute(
         "INSERT INTO client_documents (registration_id, doc_type, file_name, file_path, file_size) VALUES (?, ?, ?, ?, ?)",
-        (reg_id, doc_type, file.filename, f'/static/uploads/client_docs/{fname}', file_size)
+        (reg_id, doc_type, file.filename, file_path, file_size)
     )
     # If this doc fulfills a doc request, mark it
     doc_req_id = request.form.get('doc_request_id')
@@ -2396,6 +2432,64 @@ def client_delete_doc(doc_id):
     return jsonify({'success': True})
 
 
+def _serve_doc_row(doc):
+    """Serve a doc row from R2 (presigned redirect) or the legacy BYTEA column."""
+    r2_key = _r2_object_key_or_none(doc['file_path'])
+    if r2_key:
+        try:
+            from core import storage
+            url = storage.presigned_get_url(r2_key)
+            if url:
+                return redirect(url, code=302)
+        except Exception as e:
+            logging.error(f"_serve_doc_row presign: {e}")
+        return "Document temporarily unavailable", 503
+    if doc.get('file_data'):
+        data = doc['file_data']
+        if isinstance(data, memoryview):
+            data = bytes(data)
+        return send_file(BytesIO(data), download_name=doc['file_name'],
+                         as_attachment=False,
+                         mimetype=doc.get('content_type') or 'application/octet-stream')
+    # Legacy '/static/uploads/...' row: the file lived on Render's disk, which has
+    # no persistence, so the bytes are long gone. Say so instead of a bare 404.
+    return "This file is no longer available — please upload it again.", 410
+
+
+@app.route('/client/doc/<int:doc_id>/file')
+@client_required
+def client_serve_reg_doc(doc_id):
+    """A client viewing their own registration document (client_documents)."""
+    conn = get_db()
+    doc = conn.execute(
+        "SELECT d.file_name, d.file_path, d.file_size FROM client_documents d "
+        "JOIN client_registrations cr ON cr.id = d.registration_id "
+        "WHERE d.id = ? AND cr.account_id = ?", (doc_id, session.get('user_id'))).fetchone()
+    conn.close()
+    if not doc:
+        return "Document not found", 404
+    return _serve_doc_row(dict(doc))
+
+
+@app.route('/client/plab-doc/<int:doc_id>/file')
+@client_required
+def client_serve_plab_doc(doc_id):
+    """A client viewing their own ops-side document (plab_client_documents).
+    Ownership is proved by joining back to a registration on this account."""
+    conn = get_db()
+    doc = conn.execute(
+        "SELECT d.file_name, d.file_path, d.file_data, d.content_type "
+        "  FROM plab_client_documents d "
+        "  JOIN plab_clients pc ON pc.id = d.client_id "
+        "  JOIN client_registrations cr ON cr.registration_number = pc.registration_number "
+        " WHERE d.id = ? AND cr.account_id = ? LIMIT 1",
+        (doc_id, session.get('user_id'))).fetchone()
+    conn.close()
+    if not doc:
+        return "Document not found", 404
+    return _serve_doc_row(dict(doc))
+
+
 @app.route('/client/upload-plab-doc', methods=['POST'])
 @client_required
 def client_upload_plab_doc():
@@ -2405,7 +2499,7 @@ def client_upload_plab_doc():
     # Find the client's registration. Prefer one that already has a reg number
     # (post-verify), but a pre-verify registration is fine too — the photo then
     # gets stored against the registration until ops verify creates the PLAB row.
-    reg = conn.execute("""SELECT cr.id, cr.registration_number FROM client_registrations cr
+    reg = conn.execute("""SELECT cr.id, cr.registration_number, cr.product_id FROM client_registrations cr
         WHERE cr.account_id = ?
         ORDER BY (cr.registration_number IS NOT NULL) DESC, cr.id DESC LIMIT 1""", (acct_id,)).fetchone()
     if not reg:
@@ -2421,30 +2515,28 @@ def client_upload_plab_doc():
     if not file or not file.filename:
         conn.close()
         return jsonify({'error': 'No file selected'}), 400
-    import os, uuid
-    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
     try:
+        _pathway = resolve_ops_pathway(conn, reg.get('product_id'), None)
+        file_path, file_size, content_type = _store_client_upload(
+            file, _pathway, reg['registration_number'] or f"reg_{reg['id']}", doc_type)
+        if not file_path:
+            conn.close()
+            return jsonify({'error': 'Upload failed — please try again.'}), 500
         if plab_client:
             # Verified client -> ops-side documents keyed by plab_client id.
-            fname = f"plab_{plab_client['id']}_{uuid.uuid4().hex[:8]}.{ext}"
-            upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'plab_docs')
-            os.makedirs(upload_dir, exist_ok=True)
-            file.save(os.path.join(upload_dir, fname))
-            file_size = os.path.getsize(os.path.join(upload_dir, fname))
-            conn.execute("""INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by)
-                VALUES (?, ?, ?, ?, ?, ?, 'client')""",
+            conn.execute("DELETE FROM plab_client_documents WHERE client_id = ? AND doc_type = ?",
+                         (plab_client['id'], doc_type))
+            conn.execute("""INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by, content_type)
+                VALUES (?, ?, ?, ?, ?, ?, 'client', ?)""",
                 (plab_client['id'], doc_type, doc_category, file.filename,
-                 f'static/uploads/plab_docs/{fname}', file_size))
+                 file_path, file_size, content_type))
         else:
             # Not yet verified -> store against the registration (client_documents).
-            fname = f"client_{reg['id']}_{uuid.uuid4().hex[:8]}.{ext}"
-            upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'client_docs')
-            os.makedirs(upload_dir, exist_ok=True)
-            file.save(os.path.join(upload_dir, fname))
-            file_size = os.path.getsize(os.path.join(upload_dir, fname))
+            conn.execute("DELETE FROM client_documents WHERE registration_id = ? AND doc_type = ?",
+                         (reg['id'], doc_type))
             conn.execute("""INSERT INTO client_documents (registration_id, doc_type, file_name, file_path, file_size)
                 VALUES (?, ?, ?, ?, ?)""",
-                (reg['id'], doc_type, file.filename, f'/static/uploads/client_docs/{fname}', file_size))
+                (reg['id'], doc_type, file.filename, file_path, file_size))
         conn.commit()
     except Exception as e:
         logging.error(f"client_upload_plab_doc: {e}")
@@ -4011,17 +4103,27 @@ def _notify_onboarding_confirmed(reg_id):
         # if the template is missing or disabled.
         if reg['email']:
             from email_utils import send_email
-            # Resolve the client's actual counsellor name for {{counsellor_name}}.
+            # Resolve THIS client's counsellor for {{counsellor_name/number/email}}.
+            # The template's contact table used to name a hardcoded counsellor, so
+            # every client was told to call the same person regardless of whose lead
+            # it was. Always look the phone/email up from the employee record.
             counsellor_nm = reg['counsellor_name'] or ''
-            if not counsellor_nm and reg['counsellor_id']:
-                _cr = conn.execute("SELECT name FROM employees WHERE id = ?", (reg['counsellor_id'],)).fetchone()
-                counsellor_nm = (_cr['name'] if _cr else '') or ''
+            counsellor_ph, counsellor_em = '', ''
+            if reg['counsellor_id']:
+                _cr = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?",
+                                   (reg['counsellor_id'],)).fetchone()
+                if _cr:
+                    counsellor_nm = counsellor_nm or (_cr['name'] or '')
+                    counsellor_ph = _cr['phone'] or ''
+                    counsellor_em = _cr['email'] or ''
             tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
             tpl_enabled = bool(tpl and (tpl['enabled'] if 'enabled' in tpl.keys() and tpl['enabled'] is not None else 1))
             if tpl and tpl_enabled:
                 subs = {
                     '{{client_name}}': client_name,
                     '{{counsellor_name}}': counsellor_nm or 'your counsellor',
+                    '{{counsellor_number}}': counsellor_ph or '',
+                    '{{counsellor_email}}': counsellor_em or '',
                     '{{product_name}}': reg['product_name'] or 'your programme',
                     '{{registration_number}}': reg['registration_number'] or '',
                     '{{plan_type}}': reg['plan_type'] or '',
@@ -4529,8 +4631,11 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         reg.get('instagram', ''), reg.get('facebook', ''), reg.get('linkedin', ''), reg.get('photo_path', ''),
         reg.get('father_name', ''), reg.get('father_phone', ''),
         reg.get('mother_name', ''), reg.get('mother_phone', ''), reg.get('parents_email', ''),
-        '', reg.get('plan_type', ''), '',
-        'In Process', '',
+        # joined_stage + current_stage were hardcoded to '' here, so the stage sales
+        # picked during verification and the stage ops set were both thrown away and
+        # the pathway profile always showed them blank.
+        reg.get('joined_stage', '') or '', reg.get('plan_type', ''), '',
+        'In Process', reg.get('current_stage', '') or reg.get('joined_stage', '') or '',
         counsellor_name, counsellor_email, counsellor_number,
         reg.get('lead_source', ''), '', '', '',
         reg.get('package_amount', 0), reg.get('discount_allowed', 0), '',
@@ -4594,14 +4699,23 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         pc = conn.execute("SELECT id, photo_path FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
         if pc:
             pc_id = pc['id']
-            already = conn.execute(
-                "SELECT COUNT(*) AS c FROM plab_client_documents WHERE client_id = ?", (pc_id,)).fetchone()['c']
-            if not already:
+            # De-dupe per document, not "does this client have any document at all".
+            # The coarse guard let a re-run copy nothing, while a client who uploaded
+            # the same doc type twice had BOTH rows copied ("Aadhaar — 2 files").
+            _have = set()
+            for _r in conn.execute(
+                    "SELECT doc_type, file_name FROM plab_client_documents WHERE client_id = ?",
+                    (pc_id,)).fetchall():
+                _have.add(((_r['doc_type'] or ''), (_r['file_name'] or '')))
+            if True:
                 docs = conn.execute(
-                    "SELECT doc_type, file_name, file_path, file_size FROM client_documents WHERE registration_id = ?",
+                    "SELECT DISTINCT ON (doc_type) doc_type, file_name, file_path, file_size "
+                    "  FROM client_documents WHERE registration_id = ? ORDER BY doc_type, id DESC",
                     (reg_id,)).fetchall()
                 photo_fp = ''
                 for d in docs:
+                    if ((d['doc_type'] or ''), (d['file_name'] or '')) in _have:
+                        continue
                     conn.execute(
                         "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, "
                         " file_path, file_size, status, uploaded_by) "
@@ -4613,14 +4727,22 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
                 # Set the profile photo from the uploaded Photograph if not already set.
                 if photo_fp and not (pc['photo_path'] or ''):
                     conn.execute("UPDATE plab_clients SET photo_path = ? WHERE id = ?", (photo_fp, pc_id))
-                # Carry the signed contract in as a document too.
+                # Carry the signed contract in as a document too...
                 contract_fp = reg.get('contract_path') or ''
-                if contract_fp:
+                if contract_fp and ('Signed Contract', 'Signed Contract') not in _have:
                     conn.execute(
                         "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, "
                         " file_path, file_size, status, uploaded_by) "
                         "VALUES (?, 'Signed Contract', 'contract', 'Signed Contract', ?, 0, 'uploaded', 'registration')",
                         (pc_id, contract_fp))
+                # ...and onto the master record itself. Every ops pathway profile
+                # gates the contract card on plab_clients.contract_path, which the
+                # master INSERT never sets — so the profile asked to "Upload
+                # Contract" forever even though the client had already signed one.
+                if contract_fp:
+                    conn.execute("UPDATE plab_clients SET contract_path = ? "
+                                 "WHERE id = ? AND COALESCE(contract_path,'') = ''",
+                                 (contract_fp, pc_id))
     except Exception as _de:
         logging.warning(f"sync registration docs for {reg_num}: {_de}")
 
@@ -36278,7 +36400,7 @@ EMAIL_TEMPLATE_STAGES = [
     <p>For any payment related issues, please interact only with our finance team; their contact number is mentioned below.</p>
     <p>If you have any queries, please don&rsquo;t hesitate to reach out to us at the numbers mentioned below:</p>
     <table style="border-collapse:collapse;margin:12px 0;font-size:14px;">
-      <tr><td style="padding:4px 14px 4px 0;color:#475569;">Jeswin Shaju (Counsellor-in-Charge)</td><td style="padding:4px 0;font-weight:600;">+91 63631 42837</td></tr>
+      <tr><td style="padding:4px 14px 4px 0;color:#475569;">{{counsellor_name}} (Counsellor-in-Charge)</td><td style="padding:4px 0;font-weight:600;">{{counsellor_number}}</td></tr>
       <tr><td style="padding:4px 14px 4px 0;color:#475569;">Vipin (Operations Manager)</td><td style="padding:4px 0;font-weight:600;">+91 95389 44468</td></tr>
       <tr><td style="padding:4px 14px 4px 0;color:#475569;">Finance</td><td style="padding:4px 0;font-weight:600;">+91 96119 96500</td></tr>
     </table>
@@ -36468,7 +36590,44 @@ def seed_email_templates_once():
         except Exception: pass
 
 
+def fix_welcome_email_hardcoded_counsellor_once():
+    """The welcome email's contact table named a hardcoded counsellor + number, so
+    every client was told to contact that one person no matter whose lead it was.
+    The seeder never rewrites an existing body (admins may have edited it), so swap
+    just that row in place, wherever it still exists."""
+    conn = None
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id, body_html FROM email_templates "
+            "WHERE body_html LIKE '%%(Counsellor-in-Charge)%%'").fetchall()
+        import re
+        fixed = 0
+        for r in rows:
+            body = r['body_html'] or ''
+            new = re.sub(
+                r'<td([^>]*)>[^<]*\(Counsellor-in-Charge\)</td>\s*<td([^>]*)>[^<]*</td>',
+                r'<td\1>{{counsellor_name}} (Counsellor-in-Charge)</td><td\2>{{counsellor_number}}</td>',
+                body)
+            if new != body:
+                conn.execute("UPDATE email_templates SET body_html = ? WHERE id = ?", (new, r['id']))
+                fixed += 1
+        if fixed:
+            conn.commit()
+            logging.info(f"welcome email: de-hardcoded counsellor contact in {fixed} template(s)")
+    except Exception as e:
+        logging.warning(f"fix_welcome_email_hardcoded_counsellor_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
 seed_email_templates_once()
+fix_welcome_email_hardcoded_counsellor_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from

@@ -16,6 +16,11 @@
   .vq-fill { background:#fff; color:#7c3aed; border:1px solid #7c3aed; }
   .vq-verify { background:#059669; color:#fff; }
   .vq-empty { color:var(--gray-500); font-size:0.9rem; padding:18px 4px; }
+  /* Verified rows that stay listed only until the welcome call is confirmed. */
+  .vq-wc { background:#fff; color:#b45309; border:1px solid #f59e0b; }
+  .vq-tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:0.7rem; font-weight:700; margin-right:8px; vertical-align:middle; }
+  .vq-hold { background:#FEF3C7; color:#92400E; }
+  .vq-open { background:#DCFCE7; color:#166534; }
   .vq-sub { font-size:0.82rem; font-weight:700; color:var(--navy); margin:4px 0 8px; }
 </style>
 <div class="vq-wrap"><div class="vq-inner">
@@ -48,7 +53,15 @@
           <td><b style="color:var(--navy);">{{ r.name }}</b></td>
           <td>{{ r.product }}{% if r.pathway %} <span style="font-size:0.7rem;background:#eef2f7;color:#475569;padding:2px 8px;border-radius:999px;white-space:nowrap;">{{ r.pathway|title }}</span>{% endif %}</td>
           <td>{{ (r.when|string)[:10] if r.when else '—' }}</td>
-          <td style="text-align:right;"><a href="{{ r.action_url }}" class="vq-btn {{ 'vq-verify' if mode=='verify' else 'vq-fill' }}">{{ 'Verify & Approve →' if mode=='verify' else 'Fill Details →' }}</a></td>
+          <td style="text-align:right;">
+            {# Verified already — the row is only still here for the welcome call. #}
+            {% if r.row_stage == 'welcome_call' %}
+              <span class="vq-tag {{ 'vq-hold' if r.on_hold else 'vq-open' }}">{{ 'Call on hold' if r.on_hold else 'Verified' }}</span>
+              <a href="{{ r.action_url }}" class="vq-btn vq-wc">{{ ('Release Hold →' if r.on_hold else 'Welcome Call →') if mode == 'fill' else 'Book Welcome Call →' }}</a>
+            {% else %}
+              <a href="{{ r.action_url }}" class="vq-btn {{ 'vq-verify' if mode=='verify' else 'vq-fill' }}">{{ 'Verify & Approve →' if mode=='verify' else 'Fill Details →' }}</a>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
