@@ -101,6 +101,33 @@ def format_date_filter(value):
     except (AttributeError, ValueError):
         return value
 
+@app.template_filter('format_datetime')
+def format_datetime_filter(value):
+    """A stored UTC timestamp → 'DD-Mon-YYYY, hh:mm AM/PM IST'."""
+    if not value:
+        return '—'
+    dt = value
+    if isinstance(dt, str):
+        dt = dt.strip()
+        if not dt:
+            return '—'
+        base = dt.split('.')[0].replace('T', ' ')
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+            try:
+                dt = datetime.strptime(base, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return value
+    try:
+        from datetime import timedelta as _td
+        ist = dt + _td(hours=5, minutes=30)   # stored UTC → IST
+        return ist.strftime('%d-%b-%Y, %I:%M %p') + ' IST'
+    except (AttributeError, ValueError):
+        return value
+
+
 @app.template_filter('format_reg')
 def format_reg_filter(value):
     """Normalize registration numbers to a single canonical display:
@@ -3953,6 +3980,21 @@ def _notify_onboarding_confirmed(reg_id):
         except Exception as sync_e:
             logging.error(f"Auto-sync to plab/academics: {sync_e}")
 
+        # 4b. Record onboarding-section timestamps: the welcome email was just sent,
+        # and this ops verification IS the onboarding moment. Stamp both.
+        try:
+            pcob = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?",
+                                (reg['registration_number'],)).fetchone()
+            if pcob:
+                _ensure_client_onboarding(conn, pcob['id'], reg['registration_number'])
+                conn.execute(
+                    "UPDATE client_onboarding SET welcome_email_sent = 1, "
+                    "welcome_email_sent_at = COALESCE(welcome_email_sent_at, CURRENT_TIMESTAMP), "
+                    "onboarded_at = COALESCE(onboarded_at, CURRENT_TIMESTAMP), "
+                    "updated_at = CURRENT_TIMESTAMP WHERE client_id = ?", (pcob['id'],))
+        except Exception as _obe:
+            logging.warning(f"onboarding timestamps {reg_id}: {_obe}")
+
         # Log notifications
         conn.execute("INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
             (reg_id, 'onboarding_confirmed', 'email', reg['email'] or '', 'Welcome email sent'))
@@ -4163,8 +4205,9 @@ def _notify_welcome_call_confirmed(reg_id):
             if pc:
                 _ensure_client_onboarding(conn3, pc['id'], reg['registration_number'])
                 conn3.execute("UPDATE client_onboarding SET welcome_call_confirmed = 1, "
-                              "welcome_call_date = ?, updated_at = CURRENT_TIMESTAMP WHERE client_id = ?",
-                              (date_s, pc['id']))
+                              "welcome_call_date = ?, welcome_call_time = ?, welcome_call_by = ?, "
+                              "updated_at = CURRENT_TIMESTAMP WHERE client_id = ?",
+                              (date_s, time_s, wc_by, pc['id']))
                 conn3.commit()
             conn3.close()
         except Exception as _oe:
@@ -9670,6 +9713,10 @@ def ensure_crm_tables():
             ('client_registrations',     'wc_proposed_time',       'TEXT'),
             ('client_registrations',     'wc_proposed_note',       'TEXT'),
             ('client_registrations',     'welcome_call_hold',      'INTEGER DEFAULT 0'),
+            # Onboarding-section timestamps (founder 2026-07-16): confirmed call time
+            # + when the client was onboarded (ops-verified).
+            ('client_onboarding',        'welcome_call_time',      'TEXT'),
+            ('client_onboarding',        'onboarded_at',           'TIMESTAMP'),
             # Mirror onto the master record so ops profiles show the full picture.
             ('plab_clients',             'guardian_type',          'TEXT'),
             ('plab_clients',             'father_first_name',      'TEXT'),
@@ -19487,13 +19534,13 @@ def ops_onboarding_update(client_id):
     _e3_old_state = dict(onb) if onb else {}
     f = request.form
     conn.execute("""UPDATE client_onboarding SET
-        welcome_call_date=?, welcome_call_by=?, welcome_call_confirmed=?,
+        welcome_call_date=?, welcome_call_time=?, welcome_call_by=?, welcome_call_confirmed=?,
         welcome_call_notes=?,
         kit_delivery_method=?, kit_delivered_date=?, kit_tracking_number=?,
         kit_tracking_communicated=?,
         updated_at=CURRENT_TIMESTAMP
         WHERE id=?""",
-        (f.get('welcome_call_date', ''), f.get('welcome_call_by', ''),
+        (f.get('welcome_call_date', ''), f.get('welcome_call_time', ''), f.get('welcome_call_by', ''),
          1 if f.get('welcome_call_confirmed') else 0,
          f.get('welcome_call_notes', ''),
          f.get('kit_delivery_method', ''), f.get('kit_delivered_date', ''),
