@@ -2146,6 +2146,15 @@ def client_form(reg_id):
             conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 4), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         if action == 'submit':
+            # Mandatory government photo ID: at least one Passport or Aadhaar Card.
+            id_ok = conn.execute(
+                "SELECT 1 FROM client_documents WHERE registration_id = ? "
+                "AND doc_type IN ('Passport', 'Aadhaar Card') LIMIT 1", (reg_id,)).fetchone()
+            if not id_ok:
+                conn.commit()
+                conn.close()
+                flash('Please upload a government photo ID (Passport or Aadhaar Card) in the Documents step before submitting.', 'error')
+                return redirect(url_for('client_form', reg_id=reg_id))
             conn.execute("""UPDATE client_registrations SET form_status = 'submitted',
                 client_submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?""", (reg_id,))
             conn.commit()
@@ -4743,14 +4752,16 @@ def _notify_doc_request(reg_id, doc_type, message):
         conn = get_db()
         reg = conn.execute("SELECT email, first_name, mobile FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
         if reg and reg['email']:
-            from email_utils import send_email
-            subject = "Document Required — GooCampus"
-            body = f"""<h2>Document Required</h2>
-            <p>Hi {reg['first_name'] or 'there'},</p>
-            <p>We need you to upload the following document: <strong>{doc_type}</strong></p>
-            <p>{message}</p>
-            <p>Please log in to your portal and upload the document: <a href="https://goocampus.org/client/login">Client Portal</a></p>"""
-            send_email([reg['email']], subject, body)
+            from email_utils import send_email, render_branded_email, brand_callout, brand_button
+            inner = (brand_callout(f"We need one more document from you: <strong>{doc_type}</strong>."
+                                   + (f"<br><span style='font-size:13px;'>{message}</span>" if message else "")) +
+                     f"<p>Hi {reg['first_name'] or 'there'}, please log in to your portal and upload it "
+                     f"under the Documents section. It only takes a minute.</p>" +
+                     brand_button('Upload document', 'https://goocampus.org/client/login'))
+            body = render_branded_email('Document Requested', inner,
+                                        preheader=f"Please upload: {doc_type}")
+            send_email([reg['email']], f"Document Required — {doc_type} (GooCampus)", body,
+                       from_address="GooCampus <info@goocampus.in>")
         conn.close()
     except Exception as e:
         logging.error(f"_notify_doc_request: {e}")

@@ -731,12 +731,15 @@
 
         <!-- Upload Zone -->
         {% if not readonly %}
+        <div style="background:#FFF7ED;border:1px solid #FED7AA;color:#9A3412;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600;">
+            &#128273; A government photo ID is required — please upload either your <b>Passport</b> or <b>Aadhaar Card</b> before submitting.
+        </div>
         <div class="upload-zone" id="upload-zone">
             <div class="form-group" style="min-width:200px;">
                 <label>Document Type <span class="req">*</span></label>
                 <select id="upload-doc-type" required>
                     <option value="">Select type</option>
-                    {% for dt in ['Passport', 'MBBS Degree Certificate', 'NEET Scorecard', 'Internship Completion Certificate', 'MCI/NMC Registration', 'IELTS/OET Score', 'Marksheets', 'Photo', 'Other'] %}
+                    {% for dt in ['Passport', 'Aadhaar Card', 'MBBS Degree Certificate', 'NEET Scorecard', 'Internship Completion Certificate', 'MCI/NMC Registration', 'IELTS/OET Score', 'Marksheets', 'Photo', 'Other'] %}
                     <option value="{{ dt }}">{{ dt }}</option>
                     {% endfor %}
                 </select>
