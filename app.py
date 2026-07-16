@@ -1283,7 +1283,7 @@ def _client_gate_status(conn, acct_id):
             "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
             "AND agreement_type = 'contract' LIMIT 1", (acct_id, reg['id'])).fetchone())
     policy = _get_refund_policy(conn)
-    pver = policy['version'] if policy else 1
+    pver = (policy['version'] if policy and policy['version'] else 1)
     refund_done = bool(conn.execute(
         "SELECT 1 FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
         "AND policy_version = ? LIMIT 1", (acct_id, pver)).fetchone())
@@ -1425,7 +1425,7 @@ def client_refund_policy():
     # Must match the gate EXACTLY (which filters on the current policy_version).
     # Looking up any-version agreement made the page show "already signed" (no form)
     # while the gate still said "not done" — a dead end the client couldn't escape.
-    _pver = policy['version'] if policy else 1
+    _pver = (policy['version'] if policy and policy['version'] else 1)
     agreement = conn.execute(
         "SELECT * FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
         "AND policy_version = ? ORDER BY id DESC LIMIT 1", (acct_id, _pver)).fetchone()
@@ -1450,7 +1450,7 @@ def client_refund_policy_agree():
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
     policy = _get_refund_policy(conn)
-    pver = policy['version'] if policy else 1
+    pver = (policy['version'] if policy and policy['version'] else 1)
     existing = conn.execute(
         "SELECT id FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
         "AND policy_version = ?", (acct_id, pver)).fetchone()
@@ -4598,6 +4598,10 @@ _PURGE_BY_REG_NUM = ['ops_coaching', 'ops_english_logins', 'ops_test_bookings', 
                      'ops_online_courses', 'ops_uk_observerships', 'ops_ngo_activities', 'ops_mentorship',
                      'ops_uk_cab_bookings', 'internal_transfers', 'refunds', 'client_onboarding']
 _PURGE_BY_CLIENT_ID = ['plab_client_documents', 'scheduled_slots']
+# Account-keyed rows. The refund-policy agreement is written with account_id only
+# (registration_id stays NULL), so the by-registration_id pass never matches it and
+# the signature would survive a purge. Sweep by account_id too.
+_PURGE_BY_ACCOUNT_ID = ['client_agreements']
 
 
 def _purge_collect_keys(conn, emails):
@@ -4671,6 +4675,9 @@ def _purge_run(conn, keys, do_delete):
         op(t, 'registration_number', keys['reg_nums'])
     for t in _PURGE_BY_CLIENT_ID:
         op(t, 'client_id', keys['plab_ids'])
+    # Must run before client_accounts is deleted below — otherwise these rows orphan.
+    for t in _PURGE_BY_ACCOUNT_ID:
+        op(t, 'account_id', keys['account_ids'])
     # Parents last
     op('plab_clients', 'id', keys['plab_ids'])
     op('client_registrations', 'id', keys['reg_ids'])
