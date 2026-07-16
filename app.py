@@ -2456,36 +2456,49 @@ def _notify_client_submitted(reg_id):
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
         sm_name, sm_email = _lead_sales_member(conn, reg)
         ops_emails = _dept_emails(conn, ['Operations'])
+        mgmt_emails = _management_emails(conn)
         photo_url = _client_photo_email_url(conn, reg)
-        recipients = list(dict.fromkeys([e for e in ([sm_email] + ops_emails) if e]))
 
         from email_utils import (send_email, render_branded_email, brand_detail_rows,
                                   brand_photo_block, brand_button)
         pathway_lbl = (reg['pathway'] or '').replace('_', ' ').title() if reg['pathway'] else ''
-        inner = (
-            brand_photo_block(photo_url, client_name) +
-            f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
-            f"registration form. Please review and complete the sales section.</p>" +
-            brand_detail_rows([
-                ('Client', client_name),
-                ('Registration #', reg['registration_number']),
-                ('Product', reg['product_name']),
-                ('Pathway', pathway_lbl),
-                ('Whose lead', sm_name),
-                ('Mobile', reg['mobile']),
-                ('Email', reg['email']),
-            ]) +
-            brand_button('Open in portal', f'https://goocampus.org/admin/client/{reg_id}')
-        )
-        subject = f"New Registration Submitted — {client_name} ({reg['product_name'] or 'N/A'})"
-        body = render_branded_email('New Registration Submitted', inner,
-                                    preheader=f"{client_name} completed their registration form")
-        if recipients:
-            send_email(recipients, subject, body, from_address="GooCampus <info@goocampus.in>")
+        details = brand_detail_rows([
+            ('Client', client_name),
+            ('Registration #', reg['registration_number']),
+            ('Product', reg['product_name']),
+            ('Pathway', pathway_lbl),
+            ('Whose lead', sm_name),
+            ('Mobile', reg['mobile']),
+            ('Email', reg['email']),
+        ])
+        # 1) The LEAD's sales member — the ONLY one with the action button. Sales
+        #    verification must happen first, so only they can act on it.
+        if sm_email:
+            s_inner = (brand_photo_block(photo_url, client_name) +
+                f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
+                f"registration form. Please complete the <strong>Sales Verification</strong>.</p>" + details +
+                brand_button('Open Sales Verification', 'https://goocampus.org/verifications/sales'))
+            send_email([sm_email], f"Action needed — Sales Verification: {client_name}",
+                       render_branded_email('New Registration — Sales Verification needed', s_inner,
+                                            preheader=f"{client_name} completed their form"),
+                       from_address="GooCampus <info@goocampus.in>")
+        # 2) Operations + Management — PLAIN, NO button. Ops gets its action link only
+        #    AFTER sales verifies (see _notify_sales_completed). Management is always plain.
+        plain_to = list(dict.fromkeys([e for e in (ops_emails + mgmt_emails) if e and e != sm_email]))
+        if plain_to:
+            p_inner = (brand_photo_block(photo_url, client_name) +
+                f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
+                f"registration form. It is now with <strong>{sm_name or 'Sales'}</strong> for sales verification — "
+                f"the Operations team will be notified when it's ready to verify.</p>" + details)
+            send_email(plain_to, f"New Registration Submitted — {client_name}",
+                       render_branded_email('New Registration Submitted', p_inner,
+                                            preheader=f"{client_name} — awaiting sales verification"),
+                       from_address="GooCampus <info@goocampus.in>")
 
+        recipients = list(dict.fromkeys([e for e in ([sm_email] + plain_to) if e]))
         conn.execute(
             "INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject, message) VALUES (?, ?, ?, ?, ?, ?)",
-            (reg_id, 'client_submitted', 'email', ','.join(recipients), subject, 'Sales member + Operations team notified'))
+            (reg_id, 'client_submitted', 'email', ','.join(recipients), f"New Registration Submitted — {client_name}", 'Sales member (button) + Ops/Mgmt (plain) notified'))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -3785,21 +3798,34 @@ def _notify_sales_completed(reg_id):
             conn.close()
             return
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
-        ops_team = conn.execute("SELECT email FROM employees WHERE is_admin = 1 AND is_active = 1").fetchall()
-        recipients = [e['email'] for e in ops_team if e['email']]
-        if recipients:
-            from email_utils import send_email
-            subject = f"Sales Section Complete — {client_name} ({reg['product_name'] or 'N/A'})"
-            body = f"""<h2>Sales Section Completed</h2>
-            <p>The sales team has completed their section for <strong>{client_name}</strong> ({reg['product_name'] or 'N/A'}).</p>
-            <p><strong>Registration #:</strong> {reg['registration_number']}<br>
-            <strong>Plan:</strong> {reg['plan_type'] or 'N/A'}<br>
-            <strong>Package:</strong> {reg['final_package'] or 0}</p>
-            <p>Please log in to verify documents and confirm onboarding.</p>"""
-            send_email(recipients, subject, body)
+        ops_emails = _dept_emails(conn, ['Operations'])
+        mgmt_emails = _management_emails(conn)
+        from email_utils import send_email, render_branded_email, brand_detail_rows, brand_button
+        details = brand_detail_rows([
+            ('Client', client_name), ('Registration #', reg['registration_number']),
+            ('Product', reg['product_name']), ('Plan', reg['plan_type']),
+            ('Package', ('₹{:,.0f}'.format(reg['final_package']) if reg['final_package'] else '—'))])
+        # Operations team — NOW gets the action button (Ops Verification).
+        if ops_emails:
+            o_inner = (f"<p><strong>Sales verification is complete</strong> for <strong>{client_name}</strong>. "
+                       f"Please complete the <strong>Ops Verification</strong>.</p>" + details +
+                       brand_button('Open Ops Verification', 'https://goocampus.org/verifications/ops'))
+            send_email(ops_emails, f"Action needed — Ops Verification: {client_name}",
+                       render_branded_email('Sales Verification Complete — Ops Verification needed', o_inner,
+                                            preheader=f"{client_name} is ready for ops verification"),
+                       from_address="GooCampus <info@goocampus.in>")
+        # Management — plain informational note (never a button).
+        mgmt_only = list(dict.fromkeys([e for e in mgmt_emails if e and e not in ops_emails]))
+        if mgmt_only:
+            m_inner = (f"<p>Sales verification is complete for <strong>{client_name}</strong>. "
+                       f"It is now with Operations to verify.</p>" + details)
+            send_email(mgmt_only, f"Sales Verification Complete — {client_name}",
+                       render_branded_email('Sales Verification Complete', m_inner),
+                       from_address="GooCampus <info@goocampus.in>")
+        recipients = list(dict.fromkeys(ops_emails + mgmt_only))
         conn.execute(
             "INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
-            (reg_id, 'sales_completed', 'email', ','.join(recipients), 'Sales section complete'))
+            (reg_id, 'sales_completed', 'email', ','.join(recipients), 'Ops (button) + Management (plain) notified'))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -4290,9 +4316,38 @@ def admin_client_welcome_call_hold(reg_id):
     conn.execute("UPDATE client_registrations SET welcome_call_hold=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                  (hold, reg_id))
     conn.commit()
+    # Notify the Operations team of the hold change — especially on RELEASE, so they
+    # know the welcome call is ready to book.
+    try:
+        reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
+        ops_emails = _dept_emails(conn, ['Operations'])
+        cname = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        from email_utils import send_email, render_branded_email, brand_callout, brand_detail_rows, brand_button
+        if ops_emails:
+            if hold:
+                inner = (brand_callout(f"Sales has put the welcome call for <strong>{cname}</strong> ON HOLD "
+                         f"(token / partial payment). No booking yet.", color='#FEF3C7', border='#FCD34D', tcolor='#92400E') +
+                         brand_detail_rows([('Client', cname), ('Registration #', reg['registration_number']),
+                             ('Product', reg['product_name'])]))
+                subj = f"Welcome Call On Hold — {cname}"
+                head = 'Welcome Call — On Hold by Sales'
+            else:
+                inner = (brand_callout(f"Sales has RELEASED the welcome-call hold for <strong>{cname}</strong> — "
+                         f"payment received. Please book the welcome call.", color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
+                         brand_detail_rows([('Client', cname), ('Registration #', reg['registration_number']),
+                             ('Product', reg['product_name']),
+                             ('Client requested', (reg['wc_pref_date'] or '') + (' at ' + reg['wc_pref_time'] if reg['wc_pref_time'] else ''))]) +
+                         brand_button('Book the welcome call', f"https://goocampus.org/admin/client/{reg_id}"))
+                subj = f"Welcome Call Ready to Book — {cname}"
+                head = 'Welcome Call — Ready to Book'
+            send_email(ops_emails, subj, render_branded_email(head, inner),
+                       from_address="GooCampus <info@goocampus.in>")
+    except Exception as e:
+        logging.warning(f"welcome call hold notify {reg_id}: {e}")
     conn.close()
     flash('Welcome call put on hold — the client cannot schedule it yet.' if hold
-          else 'Welcome-call hold cleared — the client can now schedule their call.', 'success')
+          else 'Hold released — the client can now schedule, and the Ops team has been notified to book the call.', 'success')
     return redirect(url_for('admin_client_detail', reg_id=reg_id))
 
 
@@ -24333,6 +24388,7 @@ def _new_reg_installments(conn):
     base/gst/total (base stored; total = base+18%) and current decision state."""
     rows = conn.execute(
         "SELECT id, registration_number, product_id, first_name, last_name, "
+        "       counsellor_id, counsellor_name, "
         "       inst1_amount, inst1_date, inst1_method, inst1_status, "
         "       inst2_amount, inst2_date, inst2_method, inst2_status, "
         "       inst3_amount, inst3_date, inst3_method, inst3_status, "
@@ -24360,6 +24416,8 @@ def _new_reg_installments(conn):
                 'registration_id': r['id'],
                 'registration_number': r['registration_number'],
                 'name': (f"{r['first_name'] or ''} {r['last_name'] or ''}").strip() or '(unnamed)',
+                'counsellor_id': r['counsellor_id'],
+                'counsellor_name': r['counsellor_name'] or '',
                 'inst_no': i, 'ordinal': _INST_ORD[i],
                 'base': base, 'gst': gst, 'total': total,
                 'date': r[f'inst{i}_date'] or '',
@@ -24474,6 +24532,70 @@ def ops_payment_followup():
     conn.close()
     return render_template('ops_payment_followup.html',
         pending=pending, active_ops_page='payment-followup')
+
+
+@app.route('/sales/payment-followup')
+@login_required
+def sales_payment_followup():
+    """Sales-scoped payments: a sales member sees only THEIR OWN clients'
+    installments (admins see everyone's) — split into Received (paid) and Due
+    (pending, with due dates). Sales can update a due installment, which writes
+    to the registration (source of truth) and feeds the ops payment-approval flow."""
+    user = get_user()
+    uid = user['id'] if user else None
+    is_admin = bool(session.get('is_admin'))
+    conn = get_db()
+    items = _new_reg_installments(conn)
+    conn.close()
+    if not is_admin:
+        items = [x for x in items if x.get('counsellor_id') == uid]
+    def _is_received(x):
+        return x['status'].lower() == 'received' or x['decision'] == 'approved'
+    received = sorted([x for x in items if _is_received(x)], key=lambda x: (x['date'] == '', x['date']), reverse=True)
+    due = sorted([x for x in items if not _is_received(x)], key=lambda x: (x['date'] == '', x['date']))
+    return render_template('sales_payment_followup.html',
+        received=received, due=due, is_admin=is_admin, user=user,
+        base_template='sales_sidebar_base.html', active_section='sales')
+
+
+@app.route('/sales/payment-followup/<int:reg_id>/<int:inst_no>/update', methods=['POST'])
+@login_required
+def sales_payment_update(reg_id, inst_no):
+    """Sales updates a client's installment (amount / due date / method / status).
+    Restricted to the lead's counsellor (or admin). Writes to client_registrations
+    — the source of truth — so it reflects everywhere incl. the payment approvals."""
+    if inst_no not in (1, 2, 3, 4):
+        flash('Invalid installment.', 'error')
+        return redirect(url_for('sales_payment_followup'))
+    user = get_user()
+    conn = get_db()
+    reg = conn.execute("SELECT counsellor_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    if not reg:
+        conn.close(); flash('Client not found.', 'error'); return redirect(url_for('sales_payment_followup'))
+    if not session.get('is_admin') and reg['counsellor_id'] and reg['counsellor_id'] != user['id']:
+        conn.close(); flash('You can only update your own clients.', 'error'); return redirect(url_for('sales_payment_followup'))
+    # Stored installment amount is the ex-GST base (the form saves total ÷1.18).
+    try:
+        total = float(request.form.get('total_amount') or 0)
+    except (TypeError, ValueError):
+        total = 0
+    due_date = (request.form.get('due_date') or '').strip()
+    method = (request.form.get('method') or '').strip()
+    status = (request.form.get('status') or '').strip()
+    sets, vals = [], []
+    if total > 0:
+        sets.append(f"inst{inst_no}_amount = ?"); vals.append(round(total / 1.18, 2))
+    sets.append(f"inst{inst_no}_date = ?"); vals.append(due_date)
+    if method:
+        sets.append(f"inst{inst_no}_method = ?"); vals.append(method)
+    if status:
+        sets.append(f"inst{inst_no}_status = ?"); vals.append(status)
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    conn.execute(f"UPDATE client_registrations SET {', '.join(sets)} WHERE id = ?", vals + [reg_id])
+    conn.commit()
+    conn.close()
+    flash('Payment updated. It now reflects in the client record and payment approvals.', 'success')
+    return redirect(url_for('sales_payment_followup'))
 
 
 # ─────────────────────────────────────────────────────────

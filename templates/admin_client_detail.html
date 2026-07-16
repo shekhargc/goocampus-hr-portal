@@ -394,8 +394,8 @@
     <!-- Tabs Navigation -->
     <div class="tabs-nav">
         <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
-        <button class="tab-btn" data-tab="sales" type="button">Sales Section</button>
-        <button class="tab-btn" data-tab="operations" type="button">Operations</button>
+        <button class="tab-btn" data-tab="sales" type="button">Sales Section{% if reg.sales_completed %} <span style="color:#16a34a;font-weight:800;">&#10003;</span>{% endif %}</button>
+        <button class="tab-btn" data-tab="operations" type="button">Operations{% if reg.ops_status == 'verified' %} <span style="color:#16a34a;font-weight:800;">&#10003;</span>{% endif %}</button>
         <button class="tab-btn" data-tab="documents" type="button">Documents</button>
         {# Welcome Kit tab removed from the onboarding flow (founder 2026-07-13 —
            no welcome kit being sent). Only show it for legacy clients that still
@@ -613,6 +613,28 @@
             </div>
         </div>
         {% endif %}
+
+        {# Welcome-call hold — SALES controls this (token / partial payment). Stays
+           available on the Sales tab even after verification, and disappears once
+           the welcome call is confirmed. #}
+        {% if not reg.wc_confirmed %}
+        <div class="card">
+            <h3 style="font-size:1rem;font-weight:600;color:var(--navy);margin:0 0 0.5rem;">Welcome Call Hold</h3>
+            <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/hold">
+                {% if reg.welcome_call_hold %}
+                <input type="hidden" name="hold" value="0">
+                <span style="display:inline-block;background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;font-size:0.78rem;font-weight:700;padding:3px 10px;border-radius:999px;margin-right:0.6rem;">&#9208; On hold</span>
+                <button type="submit" class="button" style="background:#16a34a;">Release hold (payment received)</button>
+                <small style="display:block;color:var(--gray-500);margin-top:0.35rem;">Releasing lets the client schedule and notifies the Ops team to book the welcome call.</small>
+                {% else %}
+                <input type="hidden" name="hold" value="1">
+                <button type="submit" class="button" style="background:#b45309;">Put welcome call on hold</button>
+                <small style="display:block;color:var(--gray-500);margin-top:0.35rem;">For token / partial payment &mdash; the client can't schedule and Ops can't book the call until you release it.</small>
+                {% endif %}
+            </form>
+        </div>
+        {% endif %}
+
         {% if not reg.sales_completed %}
         <!-- Editable Sales Form -->
         <div class="card">
@@ -975,43 +997,53 @@
         </div>
         {% endif %}
 
-        {# ── Welcome Call (hybrid): client requests a slot, ops sets/confirms the
-             final one → emails the client a calendar invite (founder 2026-07-13). ── #}
+        {# ── Welcome Call: read-only for Ops. Ops confirms the CLIENT's requested
+             time or proposes a different one; the Hold toggle lives on the Sales
+             tab. Booking is disabled while Sales has it on hold. ── #}
         <div class="card">
             <h2 class="card-title">Welcome Call{% if reg.wc_confirmed %} <span class="badge badge-approved" style="margin-left:0.5rem;font-size:0.75rem;">Confirmed</span>{% endif %}</h2>
+
+            {% if reg.welcome_call_hold %}
+            <div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:0.5rem;padding:0.7rem 0.9rem;margin-bottom:1rem;font-size:0.88rem;font-weight:600;">&#9208; Welcome call is ON HOLD by Sales &mdash; booking is disabled until Sales releases it (after payment is received).</div>
+            {% endif %}
+
             {% if reg.wc_pref_date or reg.wc_pref_time or reg.wc_pref_notes %}
             <div class="info-grid" style="margin-bottom:1rem;">
-                <div class="info-item"><div class="info-label">Client's preferred date</div><div class="info-value">{{ reg.wc_pref_date or '-' }}</div></div>
-                <div class="info-item"><div class="info-label">Client's preferred time</div><div class="info-value">{{ reg.wc_pref_time or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Client's requested date</div><div class="info-value">{{ reg.wc_pref_date or '-' }}</div></div>
+                <div class="info-item"><div class="info-label">Client's requested time</div><div class="info-value">{{ reg.wc_pref_time or '-' }}</div></div>
                 <div class="info-item" style="grid-column:1 / -1;"><div class="info-label">Client's note</div><div class="info-value">{{ reg.wc_pref_notes or '-' }}</div></div>
             </div>
             {% else %}
-            <p style="color:var(--gray-500);font-size:0.88rem;">The client hasn't requested a slot yet — you can still schedule and confirm one below.</p>
+            <p style="color:var(--gray-500);font-size:0.88rem;">The client hasn't requested a slot yet.</p>
             {% endif %}
+
             {% if reg.wc_confirmed %}
             <div class="info-grid" style="background:var(--success-light);border-radius:0.5rem;padding:0.75rem;">
-                <div class="info-item"><div class="info-label">Scheduled</div><div class="info-value">{{ reg.wc_scheduled_date }} at {{ reg.wc_scheduled_time }} IST</div></div>
+                <div class="info-item"><div class="info-label">Confirmed</div><div class="info-value">{{ reg.wc_scheduled_date }} at {{ reg.wc_scheduled_time }} IST</div></div>
                 <div class="info-item"><div class="info-label">Call by</div><div class="info-value">{{ reg.wc_by or '-' }}</div></div>
             </div>
-            <p style="font-size:0.8rem;color:var(--gray-500);margin:0.5rem 0 0;">Confirmed — the client was emailed a calendar invite. Re-confirm to change the slot.</p>
+            <p style="font-size:0.8rem;color:var(--gray-500);margin:0.5rem 0 0;">Confirmed &mdash; the client was emailed a calendar invite.</p>
+            {% elif reg.wc_status == 'proposed' and reg.wc_proposed_date %}
+            <div class="info-grid" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0.5rem;padding:0.75rem;">
+                <div class="info-item"><div class="info-label">You proposed</div><div class="info-value">{{ reg.wc_proposed_date }} at {{ reg.wc_proposed_time }} IST</div></div>
+                <div class="info-item"><div class="info-label">Call by</div><div class="info-value">{{ reg.wc_by or '-' }}</div></div>
+            </div>
+            <p style="font-size:0.8rem;color:#1e40af;margin:0.5rem 0 0;">Awaiting the client's confirmation of your proposed time.</p>
             {% endif %}
-            {% if reg.ops_status == 'verified' %}
-            <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/confirm" style="margin-top:1rem;">
-                <div class="form-row" style="flex-wrap:wrap;gap:1rem;">
-                    <div class="form-group"><label>Date</label><input type="date" name="wc_scheduled_date" value="{{ reg.wc_scheduled_date or reg.wc_pref_date or '' }}" required></div>
-                    <div class="form-group"><label>Time (IST)</label><select name="wc_scheduled_time" required><option value="">Select a time</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='10:00 AM' %}selected{% endif %}>10:00 AM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='10:30 AM' %}selected{% endif %}>10:30 AM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='11:00 AM' %}selected{% endif %}>11:00 AM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='11:30 AM' %}selected{% endif %}>11:30 AM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='12:00 PM' %}selected{% endif %}>12:00 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='12:30 PM' %}selected{% endif %}>12:30 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='1:00 PM' %}selected{% endif %}>1:00 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='1:30 PM' %}selected{% endif %}>1:30 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='2:00 PM' %}selected{% endif %}>2:00 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='2:30 PM' %}selected{% endif %}>2:30 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='3:00 PM' %}selected{% endif %}>3:00 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='3:30 PM' %}selected{% endif %}>3:30 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='4:00 PM' %}selected{% endif %}>4:00 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='4:30 PM' %}selected{% endif %}>4:30 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='5:00 PM' %}selected{% endif %}>5:00 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='5:30 PM' %}selected{% endif %}>5:30 PM</option><option {% if (reg.wc_scheduled_time or reg.wc_pref_time)=='6:00 PM' %}selected{% endif %}>6:00 PM</option></select></div>
-                    <div class="form-group"><label>Call by</label>
-                        <select name="wc_by">
-                            <option value="">— Select team member —</option>
-                            {% for c in counsellors %}<option value="{{ c.name }}"{% if reg.wc_by == c.name %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <button type="submit" class="button" style="margin-top:0.5rem;">{{ 'Re-confirm Welcome Call' if reg.wc_confirmed else 'Confirm Welcome Call & Email Client' }}</button>
-            </form>
 
+            {% if reg.ops_status == 'verified' and not reg.welcome_call_hold and not reg.wc_confirmed %}
+            {% if reg.wc_pref_date %}
+            <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/confirm" style="margin-top:1rem;">
+                <input type="hidden" name="wc_scheduled_date" value="{{ reg.wc_pref_date }}">
+                <input type="hidden" name="wc_scheduled_time" value="{{ reg.wc_pref_time }}">
+                <div class="form-group" style="max-width:280px;"><label>Call by</label>
+                    <select name="wc_by"><option value="">— Select team member —</option>{% for c in counsellors %}<option value="{{ c.name }}"{% if reg.wc_by == c.name %} selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+                </div>
+                <button type="submit" class="button" style="margin-top:0.5rem;">Confirm the client's time ({{ reg.wc_pref_date }} at {{ reg.wc_pref_time }})</button>
+            </form>
+            {% endif %}
             <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/propose" style="margin-top:1rem;padding-top:0.9rem;border-top:1px dashed var(--gray-200);">
-                <div style="font-size:0.85rem;font-weight:600;color:var(--navy);margin-bottom:0.5rem;">Or propose a different time &mdash; the client confirms it on their dashboard</div>
+                <div style="font-size:0.85rem;font-weight:600;color:var(--navy);margin-bottom:0.5rem;">Propose a different time &mdash; the client confirms it on their dashboard</div>
                 <div class="form-row" style="flex-wrap:wrap;gap:1rem;">
                     <div class="form-group"><label>Proposed date</label><input type="date" name="wc_proposed_date" required></div>
                     <div class="form-group"><label>Proposed time (IST)</label><select name="wc_proposed_time" required><option value="">Select a time</option><option>10:00 AM</option><option>10:30 AM</option><option>11:00 AM</option><option>11:30 AM</option><option>12:00 PM</option><option>12:30 PM</option><option>1:00 PM</option><option>1:30 PM</option><option>2:00 PM</option><option>2:30 PM</option><option>3:00 PM</option><option>3:30 PM</option><option>4:00 PM</option><option>4:30 PM</option><option>5:00 PM</option><option>5:30 PM</option><option>6:00 PM</option></select></div>
@@ -1020,22 +1052,9 @@
                 <div class="form-group"><label>Note to client (optional)</label><input type="text" name="wc_proposed_note" placeholder="e.g. this slot suits your counsellor better"></div>
                 <button type="submit" class="button" style="background:#2563eb;">Propose time to client</button>
             </form>
-
-            {% else %}
+            {% elif reg.ops_status != 'verified' %}
             <p style="color:var(--gray-500);font-size:0.9rem;">Verify this registration in the section above first &mdash; then you can confirm or propose the welcome-call time.</p>
             {% endif %}
-
-            <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/hold" style="margin-top:1rem;padding-top:0.9rem;border-top:1px dashed var(--gray-200);">
-                {% if reg.welcome_call_hold %}
-                <input type="hidden" name="hold" value="0">
-                <span style="display:inline-block;background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;font-size:0.78rem;font-weight:700;padding:3px 10px;border-radius:999px;margin-right:0.6rem;">&#9208; Welcome call on hold</span>
-                <button type="submit" class="button" style="background:#6b7280;">Clear hold (allow scheduling)</button>
-                {% else %}
-                <input type="hidden" name="hold" value="1">
-                <button type="submit" class="button" style="background:#b45309;">Put welcome call on hold</button>
-                <small style="display:block;color:var(--gray-500);margin-top:0.35rem;">For token / partial payment &mdash; the client can't schedule until you clear the hold.</small>
-                {% endif %}
-            </form>
         </div>
 
         <!-- Past Document Requests -->
@@ -1239,7 +1258,7 @@
             <div class="notif-timeline">
                 {% for notif in notifications %}
                 <div class="notif-timeline-item">
-                    <div class="notif-timeline-date">{{ notif.sent_at or '' }}</div>
+                    <div class="notif-timeline-date">{{ notif.sent_at|format_datetime if notif.sent_at else '' }}</div>
                     <div class="notif-timeline-content">
                         <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                             <span class="notif-timeline-type">{{ notif.notification_type or 'Notification' }}</span>
