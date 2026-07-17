@@ -2393,10 +2393,18 @@ def client_upload_doc(reg_id):
         "VALUES (?, ?, ?, ?, ?) RETURNING id",
         (reg_id, doc_type, file.filename, file_path, file_size)
     ).fetchone()['id']
-    # If this doc fulfills a doc request, mark it
+    # Clear the request this upload answers. By id when the client uploaded straight
+    # from the request on their dashboard, and ALSO by matching doc_type — so a
+    # request is never left hanging just because the file arrived by another route.
+    # Ops now picks doc_type from CLIENT_DOC_TYPES, the same list the client uploads
+    # against, so these actually match (they never did when it was a free-text box).
     doc_req_id = request.form.get('doc_request_id')
     if doc_req_id:
-        conn.execute("UPDATE client_doc_requests SET status = 'fulfilled', fulfilled_at = CURRENT_TIMESTAMP WHERE id = ?", (doc_req_id,))
+        conn.execute("UPDATE client_doc_requests SET status = 'fulfilled', fulfilled_at = CURRENT_TIMESTAMP "
+                     "WHERE id = ?", (doc_req_id,))
+    conn.execute("UPDATE client_doc_requests SET status = 'fulfilled', fulfilled_at = CURRENT_TIMESTAMP "
+                 "WHERE registration_id = ? AND LOWER(TRIM(doc_type)) = LOWER(TRIM(?)) "
+                 "AND COALESCE(status,'pending') <> 'fulfilled'", (reg_id, doc_type))
     conn.commit()
     conn.close()
     # Nested under 'doc' with every field the client_form.html row-builder reads,
@@ -2484,6 +2492,27 @@ def client_serve_plab_doc(doc_id):
         "  JOIN client_registrations cr ON cr.registration_number = pc.registration_number "
         " WHERE d.id = ? AND cr.account_id = ? LIMIT 1",
         (doc_id, session.get('user_id'))).fetchone()
+    conn.close()
+    if not doc:
+        return "Document not found", 404
+    return _serve_doc_row(dict(doc))
+
+
+@app.route('/admin/client-doc/<int:doc_id>/file')
+@login_required
+def admin_serve_client_doc(doc_id):
+    """Staff viewing a registration document (client_documents).
+
+    The client detail page linked file_path directly, which is an R2 object key —
+    the browser asked the portal for '/consulting/REG/Passport/x.pdf' and got a 404,
+    so ops could neither view nor download anything (founder 2026-07-17). Serve it
+    through R2 with a presigned URL; PDFs and images then open inline in the
+    browser's own viewer, which is the preview ops actually wants.
+    """
+    conn = get_db()
+    doc = conn.execute(
+        "SELECT file_name, file_path, file_size FROM client_documents WHERE id = ?",
+        (doc_id,)).fetchone()
     conn.close()
     if not doc:
         return "Document not found", 404
@@ -3861,6 +3890,10 @@ def admin_client_detail(reg_id):
                             'date': _cs['inst%d_date' % _i] or '',
                             'note': _cs['inst%d_note' % _i] or '',
                             'method': _cs['inst%d_method' % _i] or '',
+                            # Carried so the add-on's table can show Received/Pending
+                            # like the main one, instead of calling every date a due
+                            # date (founder 2026-07-17).
+                            'status': _cs['inst%d_status' % _i] or '',
                         })
                 combined_siblings.append({
                     'reg': _cs['registration_number'], 'plan_type': _cs['plan_type'],
@@ -3878,7 +3911,10 @@ def admin_client_detail(reg_id):
         counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
         ops_config=ops_config, lookup_options=lookup_options, package_services=package_services,
         sales_completed_by_name=sales_completed_by_name, ops_verified_by_name=ops_verified_by_name,
-        combined_siblings=combined_siblings, user=user, active_section='clients')
+        combined_siblings=combined_siblings, user=user, active_section='clients',
+        client_doc_types=CLIENT_DOC_TYPES,
+        open_doc_requests=[d for d in (doc_requests or [])
+                           if (d['status'] or 'pending') != 'fulfilled'])
 
 
 # ── ADMIN: Sales completes their section ──
@@ -21937,6 +21973,17 @@ def ops_plab_delete(client_id):
 
 
 # ── PLAB Client Document Upload/Delete/Verify ──
+# The document types a CLIENT can upload during registration. Ops must request
+# from exactly this list — it used to be a free-text box, so a request for
+# "Aadhar card" never matched the client's "Aadhaar Card" upload and the request
+# stayed pending forever (founder 2026-07-17). Single source of truth: the client
+# form's upload dropdown and the ops request dropdown both render from this.
+CLIENT_DOC_TYPES = [
+    'Passport', 'Aadhaar Card', 'MBBS Degree Certificate', 'NEET Scorecard',
+    'Internship Completion Certificate', 'MCI/NMC Registration',
+    'IELTS/OET Score', 'Marksheets', 'Photo', 'Other',
+]
+
 PLAB_DOC_TYPES = {
     'personal': [
         'Photograph', 'Passport size Photograph',

@@ -3,6 +3,12 @@
 {% block title %}Client Detail{% endblock %}
 
 {% block section_content %}
+{# Received/Pending pill + a date labelled for what it actually is. The tables
+   used to head this column "Due Date" for every row, including money already
+   received — where that date is the payment date (founder 2026-07-17). #}
+{% macro inst_status(st) %}{% set r = (st or '')|lower == 'received' %}<span style="display:inline-block;background:{{ '#DCFCE7' if r else '#FEF3C7' }};color:{{ '#166534' if r else '#92400E' }};font-size:0.7rem;font-weight:700;padding:2px 9px;border-radius:999px;">{{ 'Received' if r else 'Pending' }}</span>{% endmacro %}
+{% macro inst_date(st, d) %}{% if d %}<span style="color:var(--gray-500);font-size:0.72rem;">{{ 'Received' if (st or '')|lower == 'received' else 'Due' }}</span> {{ d }}{% else %}-{% endif %}{% endmacro %}
+
 {# config-driven field renderer — shared by the Sales and Operations sections.
    Defined at block top so it's available regardless of which branch renders.
    The /admin/client-form-config settings page (role sales/ops) controls fields. #}
@@ -757,7 +763,7 @@
                 </h3>
                 <div style="overflow-x:auto;">
                     <table class="table" style="border-radius:0.6rem;overflow:hidden;">
-                        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Due Date</th><th>Method / Note</th></tr></thead>
+                        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Status</th><th>Date</th><th>Method / Note</th></tr></thead>
                         <tbody>
                         {% for it in s.installments %}
                         {% if it.method == 'Website Link' %}
@@ -766,7 +772,7 @@
                             <td style="text-align:right;">A${{ '{:,.0f}'.format(it.amount) }}</td>
                             <td style="text-align:right;color:var(--gray-400);">—</td>
                             <td style="text-align:right;font-weight:600;">A${{ '{:,.0f}'.format(it.amount) }}</td>
-                            <td>{{ it.date or '-' }}</td>
+                            <td>{{ inst_status(it.status) }}</td><td>{{ inst_date(it.status, it.date) }}</td>
                             <td>Website Link{% if it.note %} · {{ it.note }}{% endif %}</td>
                         </tr>
                         {% else %}
@@ -778,7 +784,7 @@
                             <td style="text-align:right;">₹{{ '{:,.0f}'.format(sbase) }}</td>
                             <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(sgst) }}</td>
                             <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(stotal) }}</td>
-                            <td>{{ it.date or '-' }}</td>
+                            <td>{{ inst_status(it.status) }}</td><td>{{ inst_date(it.status, it.date) }}</td>
                             <td>{{ it.method or '-' }}{% if it.note %} · {{ it.note }}{% endif %}</td>
                         </tr>
                         {% endif %}
@@ -836,7 +842,7 @@
             {% set mns = namespace(tot=0, cur='₹') %}
             <div style="overflow-x: auto;">
                 <table class="table" style="border-radius: 0.6rem; overflow: hidden;">
-                    <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Due Date</th><th>Method / Note</th></tr></thead>
+                    <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Status</th><th>Date</th><th>Method / Note</th></tr></thead>
                     <tbody>
                         {% for i in range(1, 5) %}
                         {% set amt = reg['inst' ~ i ~ '_amount'] %}
@@ -848,7 +854,7 @@
                             <td style="text-align:right;">A${{ '{:,.0f}'.format(amt|float) }}</td>
                             <td style="text-align:right;color:var(--gray-400);">—</td>
                             <td style="text-align:right;font-weight:600;">A${{ '{:,.0f}'.format(amt|float) }}</td>
-                            <td>{{ reg['inst' ~ i ~ '_date'] or '-' }}</td>
+                            <td>{{ inst_status(reg['inst' ~ i ~ '_status']) }}</td><td>{{ inst_date(reg['inst' ~ i ~ '_status'], reg['inst' ~ i ~ '_date']) }}</td>
                             <td>Website Link{% if reg['inst' ~ i ~ '_note'] %} · {{ reg['inst' ~ i ~ '_note'] }}{% endif %}</td>
                         </tr>
                         {% else %}
@@ -859,14 +865,14 @@
                             <td style="text-align:right;">₹{{ '{:,.0f}'.format(mbase) }}</td>
                             <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(mgst) }}</td>
                             <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(mtotal) }}</td>
-                            <td>{{ reg['inst' ~ i ~ '_date'] or '-' }}</td>
+                            <td>{{ inst_status(reg['inst' ~ i ~ '_status']) }}</td><td>{{ inst_date(reg['inst' ~ i ~ '_status'], reg['inst' ~ i ~ '_date']) }}</td>
                             <td>{{ reg['inst' ~ i ~ '_method'] or '-' }}{% if reg['inst' ~ i ~ '_note'] %} · {{ reg['inst' ~ i ~ '_note'] }}{% endif %}</td>
                         </tr>
                         {% endif %}
                         {% endif %}
                         {% endfor %}
                     </tbody>
-                    {% if mns.tot > 0 %}<tfoot><tr style="font-weight:700;background:var(--gray-50);"><td colspan="3" style="text-align:right;">Total payable by client</td><td style="text-align:right;">{{ mns.cur }}{{ '{:,.0f}'.format(mns.tot) }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
+                    {% if mns.tot > 0 %}<tfoot><tr style="font-weight:700;background:var(--gray-50);"><td colspan="3" style="text-align:right;">Total payable by client</td><td style="text-align:right;">{{ mns.cur }}{{ '{:,.0f}'.format(mns.tot) }}</td><td colspan="3"></td></tr></tfoot>{% endif %}
                 </table>
             </div>
 
@@ -882,7 +888,7 @@
             {% set sns = namespace(tot=0, cur='₹') %}
             <div style="overflow-x: auto;">
                 <table class="table" style="border-radius: 0.6rem; overflow: hidden;">
-                    <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Due Date</th><th>Method / Note</th></tr></thead>
+                    <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Status</th><th>Date</th><th>Method / Note</th></tr></thead>
                     <tbody>
                         {% for it in s.installments %}
                         {% if it.method == 'Website Link' %}
@@ -892,7 +898,7 @@
                             <td style="text-align:right;">A${{ '{:,.0f}'.format(it.amount) }}</td>
                             <td style="text-align:right;color:var(--gray-400);">—</td>
                             <td style="text-align:right;font-weight:600;">A${{ '{:,.0f}'.format(it.amount) }}</td>
-                            <td>{{ it.date or '-' }}</td>
+                            <td>{{ inst_status(it.status) }}</td><td>{{ inst_date(it.status, it.date) }}</td>
                             <td>Website Link{% if it.note %} · {{ it.note }}{% endif %}</td>
                         </tr>
                         {% else %}
@@ -903,13 +909,13 @@
                             <td style="text-align:right;">₹{{ '{:,.0f}'.format(sbase) }}</td>
                             <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(sgst) }}</td>
                             <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(stotal) }}</td>
-                            <td>{{ it.date or '-' }}</td>
+                            <td>{{ inst_status(it.status) }}</td><td>{{ inst_date(it.status, it.date) }}</td>
                             <td>{{ it.method or '-' }}{% if it.note %} · {{ it.note }}{% endif %}</td>
                         </tr>
                         {% endif %}
                         {% endfor %}
                     </tbody>
-                    {% if sns.tot > 0 %}<tfoot><tr style="font-weight:700;background:var(--gray-50);"><td colspan="3" style="text-align:right;">Total payable by client</td><td style="text-align:right;">{{ sns.cur }}{{ '{:,.0f}'.format(sns.tot) }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
+                    {% if sns.tot > 0 %}<tfoot><tr style="font-weight:700;background:var(--gray-50);"><td colspan="3" style="text-align:right;">Total payable by client</td><td style="text-align:right;">{{ sns.cur }}{{ '{:,.0f}'.format(sns.tot) }}</td><td colspan="3"></td></tr></tfoot>{% endif %}
                 </table>
             </div>
             {% endif %}
@@ -961,37 +967,60 @@
                 confirming onboarding is the final step and creates the client's pathway record.
             </p>
 
+            {# Ops has to READ the documents to verify — don't make them hunt in another
+               tab for it. Same signed-link route as the Documents tab. #}
+            <div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.75rem;padding:1rem 1.25rem;margin-bottom:1.25rem;">
+                <h3 style="font-size:0.95rem;font-weight:600;color:var(--navy);margin:0 0 0.6rem;">
+                    Documents to verify
+                    <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ documents|length }} uploaded</span>
+                </h3>
+                {% if documents %}
+                <div style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+                    {% for doc in documents %}
+                    <a href="/admin/client-doc/{{ doc.id }}/file" target="_blank" rel="noopener"
+                       style="display:inline-flex;align-items:center;gap:0.45rem;border:1px solid var(--gray-200);border-radius:999px;padding:5px 12px;text-decoration:none;background:var(--gray-50);">
+                        <span style="font-size:0.8rem;font-weight:600;color:var(--navy);">{{ doc.doc_type or 'Document' }}</span>
+                        <span style="font-size:0.72rem;color:var(--gray-500);">View &#8599;</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                <small style="display:block;color:var(--gray-500);margin-top:0.5rem;">Opens the file in a new tab — PDFs and images open in the browser's viewer.</small>
+                {% else %}
+                <div style="color:var(--gray-500);font-size:0.85rem;">The client hasn't uploaded any documents yet.</div>
+                {% endif %}
+            </div>
+
+            {# Ops verification: two DIFFERENT actions, not two ways to submit one form.
+               A toggle picks which one is live, so there is never an inert button on
+               screen (founder 2026-07-17). Requesting a document does NOT verify, and
+               can be repeated; confirming onboarding is final and creates the master. #}
+            <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:0.75rem;padding:1rem 1.25rem;margin-bottom:1.25rem;">
+                <label style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;margin:0;">
+                    <input type="checkbox" id="needDocToggle" onchange="opsToggleNeedDoc()" style="width:16px;height:16px;">
+                    <span style="font-weight:600;color:var(--navy);">I need a document from the client before I can verify</span>
+                </label>
+                <small style="display:block;color:var(--gray-500);margin-top:0.35rem;">
+                    Tick this to request a document. Leave it unticked to confirm onboarding.
+                </small>
+            </div>
+
             <!-- Request Documents -->
-            <div style="background: var(--warning-light); border: 1px solid var(--warning); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem;">
-                <h3 style="font-size: 1rem; font-weight: 600; color: #92400E; margin-bottom: 1rem;">Request Documents</h3>
+            <div id="opsRequestDocs" style="display:none;background: var(--warning-light); border: 1px solid var(--warning); border-radius: 0.75rem; padding: 1.5rem;">
+                <h3 style="font-size: 1rem; font-weight: 600; color: #92400E; margin-bottom: 1rem;">Request a Document</h3>
                 <form method="POST" action="/admin/client/{{ reg.id }}/ops-verify">
                     <input type="hidden" name="action" value="request_docs">
                     <div class="form-row">
                         <div class="form-group">
                             <label style="color: #92400E;">Document Type *</label>
-                            <input type="text" name="doc_type" required placeholder="e.g., ID Proof, Marksheet, Photo">
-                
-
-            <!-- Confirm Onboarding -->
-            <div style="background: var(--success-light); border: 1px solid var(--success); border-radius: 0.75rem; padding: 1.5rem;">
-                <h3 style="font-size: 1rem; font-weight: 600; color: #166534; margin-bottom: 1rem;">Confirm Onboarding</h3>
-                <form method="POST" action="/admin/client/{{ reg.id }}/ops-verify">
-                    <input type="hidden" name="action" value="confirm">
-                    {# config-driven ops fields — /admin/client-form-config (role=ops) controls these #}
-                    <div class="form-row" style="flex-wrap:wrap;">
-                        {% for f in ops_config %}{{ sales_field(f, reg[f.field_name]) }}{% endfor %}
-                    </div>
-                    <div class="form-group">
-                        <label for="ops_notes" style="color: #166534;">Operations Notes</label>
-                        <textarea name="ops_notes" id="ops_notes" rows="3" placeholder="Add any verification notes..."></textarea>
-                    </div>
-                    <button type="submit" class="button button-success">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.3 4.7L6.3 11.7L2.7 8.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        Confirm Onboarding
-                    </button>
-                </form>
-            </div>
-        </div>
+                            {# Must match the client's upload list exactly, or the request can
+                               never be auto-cleared. Both render from CLIENT_DOC_TYPES. #}
+                            <select name="doc_type" required>
+                                <option value="">Select a document…</option>
+                                {% for dt in client_doc_types %}
+                                <option value="{{ dt }}">{{ dt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                         <div class="form-group">
                             <label style="color: #92400E;">Urgency</label>
                             <select name="urgency">
@@ -1009,8 +1038,48 @@
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 10v2.67A1.33 1.33 0 0112.67 14H3.33A1.33 1.33 0 012 12.67V10M12 5.33L8 1.33M8 1.33L4 5.33M8 1.33V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Request Document
                     </button>
+                    <small style="display:block;color:#92400E;margin-top:0.5rem;">
+                        The client is emailed and can upload it straight from their dashboard —
+                        they do <b>not</b> re-submit the registration. The request clears itself
+                        once the file arrives. Onboarding stays pending.
+                    </small>
                 </form>
             </div>
+
+            <!-- Confirm Onboarding -->
+            <div id="opsConfirmOnboarding" style="background: var(--success-light); border: 1px solid var(--success); border-radius: 0.75rem; padding: 1.5rem;">
+                <h3 style="font-size: 1rem; font-weight: 600; color: #166534; margin-bottom: 1rem;">Confirm Onboarding</h3>
+                {% if open_doc_requests %}
+                <div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:0.5rem;padding:0.7rem 0.9rem;margin-bottom:1rem;font-size:0.85rem;">
+                    <b>&#9888; {{ open_doc_requests|length }} document request(s) still pending:</b>
+                    {{ open_doc_requests|map(attribute='doc_type')|join(', ') }}.
+                    You can still confirm — but check you have what you need.
+                </div>
+                {% endif %}
+                <form method="POST" action="/admin/client/{{ reg.id }}/ops-verify">
+                    <input type="hidden" name="action" value="confirm">
+                    {# config-driven ops fields — /admin/client-form-config (role=ops) controls these #}
+                    <div class="form-row" style="flex-wrap:wrap;">
+                        {% for f in ops_config %}{{ sales_field(f, reg[f.field_name]) }}{% endfor %}
+                    </div>
+                    <div class="form-group">
+                        <label for="ops_notes" style="color: #166534;">Operations Notes</label>
+                        <textarea name="ops_notes" id="ops_notes" rows="3" placeholder="Add any verification notes..."></textarea>
+                    </div>
+                    <button type="submit" class="button button-success">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.3 4.7L6.3 11.7L2.7 8.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Confirm Onboarding
+                    </button>
+                    <small style="display:block;color:#166534;margin-top:0.5rem;">Final step &mdash; creates the client's pathway record.</small>
+                </form>
+            </div>
+            <script>
+            function opsToggleNeedDoc() {
+                var need = document.getElementById('needDocToggle').checked;
+                document.getElementById('opsRequestDocs').style.display = need ? 'block' : 'none';
+                document.getElementById('opsConfirmOnboarding').style.display = need ? 'none' : 'block';
+            }
+            </script>
         </div>
 
         {% else %}
@@ -1192,9 +1261,15 @@
                             {% endif %}
                         </div>
                     </div>
+                    {# Ops needs to READ the document to verify it, not file it away.
+                       This used to link file_path straight — an R2 object key, which
+                       the browser asked the portal for and got a 404, so neither view
+                       nor download worked. Go through the serve route: it hands back a
+                       signed link and the PDF/image opens in the browser's own viewer. #}
                     {% if doc.file_path %}
-                    <a href="{{ doc.file_path }}" class="button button-secondary button-small" style="flex-shrink: 0;" target="_blank" title="Download">
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 10v2.67A1.33 1.33 0 0112.67 14H3.33A1.33 1.33 0 012 12.67V10M8 2v8M8 10l3-3M8 10L5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <a href="/admin/client-doc/{{ doc.id }}/file" class="button button-small" style="flex-shrink:0;background:var(--navy);color:#fff;" target="_blank" rel="noopener" title="Open {{ doc.file_name }}">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
+                        View
                     </a>
                     {% endif %}
                 </div>

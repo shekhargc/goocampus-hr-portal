@@ -288,14 +288,69 @@
         {% endif %}
 
         <!-- Document Requests Alert -->
+        {# A document request used to be a dead end: an alert with nowhere to act, so
+           clients went back into the registration form and re-submitted the whole
+           thing — which restarted verification and re-sent every notification. Upload
+           it right here instead; the registration is never touched. #}
         {% if doc_requests %}
         <div class="doc-alert">
             <i class="bi bi-exclamation-triangle-fill"></i>
             <div>
-                <span class="doc-alert-text">You have pending document requests</span>
+                <span class="doc-alert-text">{{ 'Document requested' if doc_requests|length == 1 else 'Documents requested' }}</span>
                 <span class="doc-alert-count">{{ doc_requests|length }}</span>
             </div>
         </div>
+        <div style="background:#fff;border:1px solid #FCD34D;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+            {% for dr in doc_requests %}
+            <div style="{% if not loop.last %}border-bottom:1px solid #f3f4f6;padding-bottom:12px;margin-bottom:12px;{% endif %}">
+                <div style="font-size:0.9rem;font-weight:700;color:#92400E;">
+                    {{ dr.doc_type }}
+                    {% if dr.urgency and dr.urgency != 'normal' %}
+                    <span style="background:#FEE2E2;color:#991B1B;font-size:0.68rem;padding:1px 7px;border-radius:999px;margin-left:6px;text-transform:uppercase;">{{ dr.urgency }}</span>
+                    {% endif %}
+                </div>
+                {% if dr.message %}<div style="font-size:0.82rem;color:#6b7280;margin-top:3px;">{{ dr.message }}</div>{% endif %}
+                <form class="dr-form" data-reg="{{ dr.registration_id }}" data-req="{{ dr.id }}" data-type="{{ dr.doc_type }}"
+                      style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:9px;">
+                    <input type="file" name="file" required accept=".pdf,.jpg,.jpeg,.png"
+                           style="font-size:0.8rem;flex:1;min-width:180px;">
+                    <button type="submit" style="background:#f97316;color:#fff;border:none;border-radius:7px;padding:7px 15px;font-weight:600;font-size:0.82rem;cursor:pointer;">
+                        Upload
+                    </button>
+                    <span class="dr-msg" style="font-size:0.8rem;"></span>
+                </form>
+            </div>
+            {% endfor %}
+            <div style="font-size:0.75rem;color:#9ca3af;margin-top:10px;">
+                Uploading here does <b>not</b> change your registration — it just sends us the file.
+            </div>
+        </div>
+        <script>
+        document.querySelectorAll('.dr-form').forEach(function (f) {
+            f.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var msg = f.querySelector('.dr-msg');
+                var file = f.querySelector('input[type=file]');
+                if (!file.files.length) { return; }
+                var fd = new FormData();
+                fd.append('file', file.files[0]);
+                fd.append('doc_type', f.dataset.type);
+                fd.append('doc_request_id', f.dataset.req);
+                msg.textContent = 'Uploading…'; msg.style.color = '#6b7280';
+                fetch('/client/upload-doc/' + f.dataset.reg, { method: 'POST', body: fd })
+                    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                    .then(function (res) {
+                        if (res.ok && res.d.success) {
+                            msg.textContent = '✓ Uploaded'; msg.style.color = '#16a34a';
+                            setTimeout(function () { window.location.reload(); }, 900);
+                        } else {
+                            msg.textContent = (res.d && res.d.error) || 'Upload failed'; msg.style.color = '#dc2626';
+                        }
+                    })
+                    .catch(function () { msg.textContent = 'Upload failed — please try again.'; msg.style.color = '#dc2626'; });
+            });
+        });
+        </script>
         {% endif %}
 
         <!-- Registrations -->
