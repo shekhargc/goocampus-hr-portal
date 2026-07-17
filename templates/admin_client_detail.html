@@ -1,4 +1,8 @@
-{% extends "clients_sidebar_base.html" %}
+{# Opened from a verification queue, this page must stay in THAT section — a sales
+   member clicking their own Sales Verification was being dropped into Clients, with
+   the Sales menu gone from under them (founder 2026-07-17). The route passes
+   base_template; both bases fill {% block section_content %}, so they interchange. #}
+{% extends base_template|default("clients_sidebar_base.html") %}
 
 {% block title %}Client Detail{% endblock %}
 

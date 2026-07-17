@@ -3918,7 +3918,15 @@ def admin_client_detail(reg_id):
         counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
         ops_config=ops_config, lookup_options=lookup_options, package_services=package_services,
         sales_completed_by_name=sales_completed_by_name, ops_verified_by_name=ops_verified_by_name,
-        combined_siblings=combined_siblings, user=user, active_section='clients',
+        combined_siblings=combined_siblings, user=user,
+        # Stay in the section the queue sent us from. Verification lives under Sales
+        # (its Access Master department) for both teams, so a row opened from either
+        # queue keeps the Sales sidebar instead of dumping the user into Clients.
+        # Both bases fill {% block section_content %}, so they interchange safely —
+        # ops_sidebar_base does NOT (it uses content/ops_content) and would render blank.
+        **({'base_template': 'sales_sidebar_base.html', 'active_section': 'sales'}
+           if request.args.get('from') in ('sales', 'ops')
+           else {'active_section': 'clients'}),
         client_doc_types=CLIENT_DOC_TYPES,
         open_doc_requests=[d for d in (doc_requests or [])
                            if (d['status'] or 'pending') != 'fulfilled'])
@@ -4366,7 +4374,7 @@ def client_welcome_call_request():
             inner = (brand_detail_rows([('Client', cname), ('Registration #', full['registration_number']),
                         ('Product', full['product_name']), ('Whose lead', sm_name),
                         ('Preferred date', pdate), ('Preferred time', ptime)]) +
-                     brand_button('Open in portal', f"https://goocampus.org/admin/client/{reg_id}"))
+                     brand_button('Open in portal', f"https://goocampus.org/admin/client/{reg_id}?from=ops"))
             send_email(team_to, f"Welcome Call Requested — {cname}",
                        render_branded_email('Client requested a Welcome Call', inner),
                        from_address="GooCampus <info@goocampus.in>")
@@ -4577,7 +4585,7 @@ def admin_client_welcome_call_hold(reg_id):
                          brand_detail_rows([('Client', cname), ('Registration #', reg['registration_number']),
                              ('Product', reg['product_name']),
                              ('Client requested', (reg['wc_pref_date'] or '') + (' at ' + reg['wc_pref_time'] if reg['wc_pref_time'] else ''))]) +
-                         brand_button('Book the welcome call', f"https://goocampus.org/admin/client/{reg_id}"))
+                         brand_button('Book the welcome call', f"https://goocampus.org/admin/client/{reg_id}?from=ops#operations"))
                 subj = f"Welcome Call Ready to Book — {cname}"
                 head = 'Welcome Call — Ready to Book'
             send_email(ops_emails, subj, render_branded_email(head, inner),

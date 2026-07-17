@@ -152,7 +152,10 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
             'when': when,
             'row_stage': row_stage,
             'on_hold': bool(r['welcome_call_hold']),
-            'action_url': url_for('admin_client_detail', reg_id=r['id']) + anchor,
+            # ?from= keeps the client page in this section's sidebar instead of
+            # dropping the user into Clients (founder 2026-07-17).
+            'action_url': (url_for('admin_client_detail', reg_id=r['id'])
+                           + ('?from=sales' if stage == 'fill' else '?from=ops') + anchor),
         })
     return out
 
