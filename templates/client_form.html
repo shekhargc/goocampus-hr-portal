@@ -803,7 +803,7 @@
                     <td>{{ doc.file_name }}</td>
                     <td>{{ doc.doc_type }}</td>
                     <td>{{ doc.file_size }}</td>
-                    <td>{{ doc.uploaded_at }}</td>
+                    <td>{{ doc.uploaded_at|format_datetime }}</td>
                     <td><span style="color:var(--green);font-weight:600;font-size:13px;">{{ doc.status or 'Uploaded' }}</span></td>
                     {% if not readonly %}
                     <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteDocument({{ doc.id }})">Delete</button></td>

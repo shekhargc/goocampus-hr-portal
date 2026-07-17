@@ -126,7 +126,7 @@
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Record ID:</span><span style="color:var(--navy);font-weight:600;">#{{ record.id }}</span></div>
           {% if record.created_at %}
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Created:</span><span style="color:var(--navy);font-weight:600;">{{ record.created_at }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Created:</span><span style="color:var(--navy);font-weight:600;">{{ record.created_at|format_datetime }}</span></div>
           {% endif %}
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Pathway:</span><span style="color:var(--navy);font-weight:600;">Portfolio Pathway</span></div>
         </div>

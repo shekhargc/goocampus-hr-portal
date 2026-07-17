@@ -94,7 +94,7 @@
       <tr style="border-top:1px solid #f1f5f9;cursor:pointer;" onclick="openResp({{ s.id }})">
         <td style="padding:9px 8px;font-weight:600;color:var(--blue-dark);">{{ s.client_name or '—' }}</td>
         <td style="padding:9px 8px;color:var(--gray-500);">{{ s.registration_number }}</td>
-        <td style="padding:9px 8px;color:var(--gray-500);">{{ s.submitted_at }}</td>
+        <td style="padding:9px 8px;color:var(--gray-500);">{{ s.submitted_at|format_datetime }}</td>
         <td style="padding:9px 8px;text-align:right;color:var(--orange);font-weight:600;">View &rsaquo;</td>
       </tr>
       {% endfor %}

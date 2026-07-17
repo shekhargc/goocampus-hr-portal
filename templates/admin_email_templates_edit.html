@@ -109,7 +109,7 @@
 
   {% if tpl.updated_at %}
   <p style="margin:14px 0 0;font-size:0.74rem;color:#9CA3AF;text-align:right;">
-    Last saved {{ tpl.updated_at }}
+    Last saved {{ tpl.updated_at|format_datetime }}
   </p>
   {% endif %}
 
