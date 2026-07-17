@@ -125,7 +125,7 @@
                 {% for note in notes %}
                 <div style="margin-bottom: 1rem; padding: 1rem; background: white; border-radius: 0.5rem; border-left: 3px solid var(--blue);">
                     <div style="font-size: 0.8rem; color: var(--gray-600); margin-bottom: 0.35rem;">
-                        <strong>From:</strong> {{ note.created_by or 'Manager' }} | <strong>Date:</strong> {{ note.created_at }}
+                        <strong>From:</strong> {{ note.created_by or 'Manager' }} | <strong>Date:</strong> {{ note.created_at|format_datetime }}
                     </div>
                     <div style="font-size: 0.95rem; color: var(--gray-800);">{{ note.notes }}</div>
                 </div>

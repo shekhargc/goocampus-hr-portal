@@ -29,7 +29,7 @@
   <div style="min-width:240px;flex:1;">
     <div style="font-weight:700;color:#1E40AF;font-size:0.9rem;">{% if can_verify_transfer %}Verify this transferred client{% else %}Awaiting ops verification{% endif %}</div>
     <div style="color:#1E40AF;font-size:0.82rem;margin-top:3px;">
-      Sales submitted the details{% if transfer.sales_submitted_at %} on {{ transfer.sales_submitted_at }}{% endif %}.
+      Sales submitted the details{% if transfer.sales_submitted_at %} on {{ transfer.sales_submitted_at|format_datetime }}{% endif %}.
       {% if can_verify_transfer %}Review all the details below — they're locked — then confirm to take the client live (In Process).{% else %}Operations will verify and take this client live (In Process).{% endif %}
     </div>
   </div>

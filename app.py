@@ -3797,7 +3797,14 @@ def admin_client_detail(reg_id):
         return redirect(url_for('admin_clients_list'))
     academics = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
     documents = conn.execute("SELECT * FROM client_documents WHERE registration_id = ? ORDER BY uploaded_at", (reg_id,)).fetchall()
-    doc_requests = conn.execute("SELECT * FROM client_doc_requests WHERE registration_id = ? ORDER BY requested_at DESC", (reg_id,)).fetchall()
+    # Resolve the ops member who raised each request — the page showed the raw
+    # employees.id ("6"), which tells nobody anything. We already name who verified;
+    # name who asked too (founder 2026-07-17).
+    doc_requests = conn.execute(
+        "SELECT dr.*, e.name AS requested_by_name "
+        "  FROM client_doc_requests dr "
+        "  LEFT JOIN employees e ON e.id = dr.requested_by "
+        " WHERE dr.registration_id = ? ORDER BY dr.requested_at DESC", (reg_id,)).fetchall()
     notifications = conn.execute("SELECT * FROM client_notifications WHERE registration_id = ? ORDER BY sent_at DESC LIMIT 20", (reg_id,)).fetchall()
     counsellors = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
     # Resolve the staff NAMES behind the sales-completed / ops-verified ids so the

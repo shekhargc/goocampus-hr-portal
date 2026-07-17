@@ -64,7 +64,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Contact Type:</span><span style="color:var(--navy);font-weight:600;">{{ record.contact_type or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Contacted Status:</span><span style="color:var(--navy);font-weight:600;">{{ record.contacted_status or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Added By:</span><span style="color:var(--navy);font-weight:600;">{{ record.added_by or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Created At:</span><span style="color:var(--navy);font-weight:600;">{{ record.created_at or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Created At:</span><span style="color:var(--navy);font-weight:600;">{{ record.created_at|format_datetime if record.created_at else '—' }}</span></div>
         </div>
       </div>
 

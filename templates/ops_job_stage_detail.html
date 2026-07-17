@@ -138,7 +138,7 @@
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Created At:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ record.created_at or '—' }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ record.created_at|format_datetime if record.created_at else '—' }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Pathway:</span>

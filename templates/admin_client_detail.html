@@ -401,8 +401,8 @@
     <div class="tabs-nav">
         <button class="tab-btn active" data-tab="overview" type="button">Overview</button>
         <button class="tab-btn" data-tab="sales" type="button">Sales Section{% if reg.sales_completed %} <span style="color:#16a34a;font-weight:800;">&#10003;</span>{% endif %}</button>
-        <button class="tab-btn" data-tab="operations" type="button">Operations{% if reg.ops_status == 'verified' %} <span style="color:#16a34a;font-weight:800;">&#10003;</span>{% endif %}</button>
         <button class="tab-btn" data-tab="documents" type="button">Documents</button>
+        <button class="tab-btn" data-tab="operations" type="button">Operations{% if reg.ops_status == 'verified' %} <span style="color:#16a34a;font-weight:800;">&#10003;</span>{% endif %}</button>
         {# Welcome Kit tab removed from the onboarding flow (founder 2026-07-13 —
            no welcome kit being sent). Only show it for legacy clients that still
            have a checklist on file. #}
@@ -493,7 +493,7 @@
                 {% endif %}
                 <div class="info-item">
                     <div class="info-label">Registration Date</div>
-                    <div class="info-value">{{ reg.created_at or '-' }}</div>
+                    <div class="info-value">{{ reg.created_at|format_datetime if reg.created_at else '-' }}</div>
                 </div>
             </div>
         </div>
@@ -600,7 +600,14 @@
             </div>
         </div>
         {% endif %}
-    </div>
+    
+        {# Step through the client in order — ops must review the details and the
+           documents before confirming, without hunting for the right tab. #}
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:0.9rem;margin:1.25rem 0 0.25rem;">
+            <span style="color:var(--gray-500);font-size:0.82rem;">Client details checked?</span>
+            <button type="button" class="button" onclick="gcGoToTab('sales')">Next: Sales Section &rarr;</button>
+        </div>
+</div>
 
     <!-- ============================================================ -->
     <!-- TAB 2: SALES SECTION -->
@@ -929,7 +936,14 @@
             {% endif %}
         </div>
         {% endif %}
-    </div>
+    
+        {# Step through the client in order — ops must review the details and the
+           documents before confirming, without hunting for the right tab. #}
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:0.9rem;margin:1.25rem 0 0.25rem;">
+            <span style="color:var(--gray-500);font-size:0.82rem;">Sales details checked?</span>
+            <button type="button" class="button" onclick="gcGoToTab('documents')">Next: Documents &rarr;</button>
+        </div>
+</div>
 
     <!-- ============================================================ -->
     <!-- TAB 3: OPERATIONS -->
@@ -949,7 +963,7 @@
                 </div>
                 <div class="info-item">
                     <div class="info-label">Verified At</div>
-                    <div class="info-value">{{ reg.ops_verified_at or '-' }}</div>
+                    <div class="info-value">{{ reg.ops_verified_at|format_datetime if reg.ops_verified_at else '-' }}</div>
                 </div>
                 <div class="info-item" style="grid-column: 1 / -1;">
                     <div class="info-label">Operations Notes</div>
@@ -1190,9 +1204,11 @@
                                 <span class="badge" style="background: var(--gray-100); color: var(--gray-600);">{{ req.status|capitalize }}</span>
                                 {% endif %}
                             </td>
-                            <td style="white-space: nowrap; font-size: 0.85rem;">{{ req.requested_at or '-' }}</td>
-                            <td style="white-space: nowrap; font-size: 0.85rem;">{{ req.fulfilled_at or '-' }}</td>
-                            <td>{{ req.requested_by or '-' }}</td>
+                            {# Was raw UTC out of the DB, and requested_by printed the bare
+                               employees.id. Show IST and the ops member's name. #}
+                            <td style="white-space: nowrap; font-size: 0.85rem;">{{ req.requested_at|format_datetime if req.requested_at else '-' }}</td>
+                            <td style="white-space: nowrap; font-size: 0.85rem;">{{ req.fulfilled_at|format_datetime if req.fulfilled_at else '-' }}</td>
+                            <td>{{ req.requested_by_name or ('#' ~ req.requested_by if req.requested_by else '-') }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -1216,7 +1232,7 @@
                 <span class="badge urgency-{{ req.urgency or 'normal' }}" style="font-size: 0.75rem;">{{ (req.urgency or 'normal')|upper }}</span>
                 <span style="font-weight: 600; color: #92400E;">{{ req.doc_type }}</span>
                 <span style="color: #B45309; font-size: 0.85rem;">{{ req.message or '' }}</span>
-                <span style="margin-left: auto; font-size: 0.78rem; color: #B45309;">{{ req.requested_at or '' }}</span>
+                <span style="margin-left: auto; font-size: 0.78rem; color: #B45309;">{{ req.requested_at|format_datetime if req.requested_at else '' }}</span>
             </div>
             {% endfor %}
         </div>
@@ -1246,7 +1262,7 @@
                             {% if doc.file_size %}
                             &middot; {{ (doc.file_size / 1024)|round(1) }} KB
                             {% endif %}
-                            &middot; {{ doc.uploaded_at or '' }}
+                            &middot; {{ doc.uploaded_at|format_datetime if doc.uploaded_at else '' }}
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.5rem;">
                             {% if doc.status == 'verified' %}
@@ -1282,7 +1298,14 @@
             <p style="color: var(--gray-400); font-size: 1rem; font-weight: 500;">No documents uploaded yet.</p>
         </div>
         {% endif %}
-    </div>
+    
+        {# Step through the client in order — ops must review the details and the
+           documents before confirming, without hunting for the right tab. #}
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:0.9rem;margin:1.25rem 0 0.25rem;">
+            <span style="color:var(--gray-500);font-size:0.82rem;">Documents reviewed?</span>
+            <button type="button" class="button" onclick="gcGoToTab('operations')">Next: Operations &rarr;</button>
+        </div>
+</div>
 
     <!-- ============================================================ -->
     <!-- TAB 5: WELCOME KIT (Phase E, 2026-06-02) -->
@@ -1409,6 +1432,14 @@
             if (panel) panel.classList.add('active');
         });
     });
+
+    // Walk ops through the client in order: Overview -> Sales -> Documents ->
+    // Operations. Exposed so the "Next" buttons at the foot of each panel can
+    // drive the same tabs (founder 2026-07-17).
+    window.gcGoToTab = function (tabId) {
+        var btn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+        if (btn) { btn.click(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    };
 
     // ===== AUTO-CALCULATE FINAL PACKAGE =====
     var packageInput = document.getElementById('package_amount');
