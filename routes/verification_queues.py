@@ -88,13 +88,18 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     # welcome-call Hold with nowhere to live — sales had no way to release it. Both
     # queues now keep a verified registration until the welcome call is confirmed,
     # with only the welcome-call action offered on those rows (founder 2026-07-16).
-    _WC_PENDING = ("COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.ops_status,'') = 'verified' "
-                   "AND COALESCE(cr.wc_confirmed,0) = 0")
+    # The welcome call is open until OPS confirms it. Until then the row stays in
+    # BOTH queues: sales needs it to hold/release, ops needs it to book the call.
+    # It previously required ops_status='verified' on the sales side too, so a
+    # registration vanished from Sales the moment sales verified it — before ops
+    # had even looked — and sales could no longer reach their own Hold toggle
+    # (founder 2026-07-17).
+    _WC_OPEN = "COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.wc_confirmed,0) = 0"
     params = []
     if stage == 'fill':
         where = ("cr.client_submitted_at IS NOT NULL AND ("
                  "(cr.form_status = 'submitted' AND COALESCE(cr.sales_completed,0) = 0)"
-                 f" OR ({_WC_PENDING}))")
+                 f" OR ({_WC_OPEN}))")
         if uid and not is_admin:
             where += " AND cr.counsellor_id = ?"
             params.append(uid)
@@ -102,7 +107,7 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     else:
         where = ("COALESCE(cr.sales_completed,0) = 1 AND cr.client_submitted_at IS NOT NULL AND ("
                  "COALESCE(cr.ops_status,'') <> 'verified'"
-                 f" OR ({_WC_PENDING}))")
+                 f" OR COALESCE(cr.wc_confirmed,0) = 0)")
         order = "cr.sales_completed_at"
     rows = conn.execute(f"""
         SELECT cr.id, cr.registration_number, cr.prefix, cr.first_name, cr.last_name,
@@ -119,9 +124,13 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     """, params).fetchall()
     out = []
     for r in rows:
-        # Verified + welcome call still open → this row is only here for the call.
-        wc_row = (r['sales_completed'] == 1 and r['ops_status'] == 'verified'
-                  and not r['wc_confirmed'])
+        # Is this row still here only because the welcome call is open? That's
+        # per-queue: Sales is done once it has verified (its remaining job is the
+        # Hold), Ops is done once it has verified (its remaining job is booking).
+        if stage == 'fill':
+            wc_row = (r['sales_completed'] == 1 and not r['wc_confirmed'])
+        else:
+            wc_row = (r['ops_status'] == 'verified' and not r['wc_confirmed'])
         if wc_row:
             row_stage = 'welcome_call'
             when = r['sales_completed_at']
