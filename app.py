@@ -2009,14 +2009,28 @@ def client_dashboard():
             ORDER BY requested_at DESC
         """, reg_ids).fetchall()
 
-    # Get PLAB documents for this client (via registration_number → plab_clients)
+    # Get PLAB documents for this client (via registration_number → plab_clients).
+    # Resolve DISTINCT plab_client ids first: the client can have several
+    # registrations pointing at the same master (same registration_number), and
+    # fetching per-registration listed every document twice or thrice — the
+    # "double / triple" the founder saw (2026-07-17). Then de-dupe the rows
+    # themselves by (doc_type, file_name) as a belt so a stray duplicate row in the
+    # table can't surface either.
     plab_documents = []
+    _seen_pc, _seen_doc = set(), set()
     for reg in registrations:
-        if reg.get('registration_number'):
-            plab_client = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg['registration_number'],)).fetchone()
-            if plab_client:
-                docs = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (plab_client['id'],)).fetchall()
-                plab_documents.extend(docs)
+        if not reg.get('registration_number'):
+            continue
+        plab_client = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg['registration_number'],)).fetchone()
+        if not plab_client or plab_client['id'] in _seen_pc:
+            continue
+        _seen_pc.add(plab_client['id'])
+        for d in conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type, id DESC", (plab_client['id'],)).fetchall():
+            key = ((d['doc_type'] or ''), (d['file_name'] or ''))
+            if key in _seen_doc:
+                continue
+            _seen_doc.add(key)
+            plab_documents.append(d)
 
     # Photograph: detect an already-uploaded photo across BOTH the post-verify
     # (plab_client_documents) and pre-verify (client_documents) stores, so the
@@ -4407,6 +4421,10 @@ def admin_client_welcome_call_confirm(reg_id):
     conn.execute(
         "UPDATE client_registrations SET wc_scheduled_date=?, wc_scheduled_time=?, wc_by=?, "
         "wc_confirmed=1, wc_status='confirmed', wc_confirmed_at=CURRENT_TIMESTAMP, "
+        # Confirming the call means it is no longer on hold. A stale hold flag left
+        # by sales was making the client's dashboard show "pending" even after the
+        # call was confirmed (founder 2026-07-17).
+        "welcome_call_hold=0, "
         "updated_at=CURRENT_TIMESTAMP WHERE id=?",
         (date_s, time_s, wc_by, reg_id))
     conn.commit()
@@ -4613,7 +4631,8 @@ def client_welcome_call_confirm_proposal():
         return redirect(url_for('client_welcome_call_page'))
     conn.execute("UPDATE client_registrations SET wc_scheduled_date=wc_proposed_date, "
                  "wc_scheduled_time=wc_proposed_time, wc_confirmed=1, wc_status='confirmed', "
-                 "wc_confirmed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?", (reg_id,))
+                 "wc_confirmed_at=CURRENT_TIMESTAMP, welcome_call_hold=0, "
+                 "updated_at=CURRENT_TIMESTAMP WHERE id=?", (reg_id,))
     conn.commit(); conn.close()
     _notify_welcome_call_confirmed(reg_id)
     flash('Thank you — your welcome call is confirmed. A calendar invite has been emailed to you.', 'success')
