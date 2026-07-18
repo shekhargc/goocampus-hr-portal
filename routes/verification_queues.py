@@ -94,12 +94,18 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     # registration vanished from Sales the moment sales verified it — before ops
     # had even looked — and sales could no longer reach their own Hold toggle
     # (founder 2026-07-17).
-    _WC_OPEN = "COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.wc_confirmed,0) = 0"
+    # SALES keeps a verified record only while the welcome call is still in their
+    # court — so they can hold/release it. The moment OPS takes it over (confirms,
+    # or proposes a reschedule) sales loses it and can no longer re-hold and
+    # interrupt the flow (founder 2026-07-17). OPS keeps it right through until the
+    # call is confirmed.
+    _WC_SALES = ("COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.wc_confirmed,0) = 0 "
+                 "AND COALESCE(cr.wc_status,'') <> 'proposed'")
     params = []
     if stage == 'fill':
         where = ("cr.client_submitted_at IS NOT NULL AND ("
                  "(cr.form_status = 'submitted' AND COALESCE(cr.sales_completed,0) = 0)"
-                 f" OR ({_WC_OPEN}))")
+                 f" OR ({_WC_SALES}))")
         if uid and not is_admin:
             where += " AND cr.counsellor_id = ?"
             params.append(uid)

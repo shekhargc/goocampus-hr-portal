@@ -4411,6 +4411,12 @@ def admin_client_welcome_call_confirm(reg_id):
         conn.close()
         flash('Client not found.', 'error')
         return redirect(url_for('admin_clients_list'))
+    # Sales still has the call on hold — ops may confirm the onboarding, but not
+    # the welcome call, until sales releases it (founder 2026-07-17).
+    if reg['welcome_call_hold']:
+        conn.close()
+        flash("Sales has this welcome call on hold. It must be released before you can confirm or reschedule it.", 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#operations')
     date_s = (request.form.get('wc_scheduled_date', '') or '').strip()
     time_s = (request.form.get('wc_scheduled_time', '') or '').strip()
     wc_by = (request.form.get('wc_by', '') or '').strip()
@@ -4524,6 +4530,10 @@ def admin_client_welcome_call_propose(reg_id):
         LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
     if not reg:
         conn.close(); flash('Client not found.', 'error'); return redirect(url_for('admin_clients_list'))
+    if reg['welcome_call_hold']:
+        conn.close()
+        flash("Sales has this welcome call on hold. It must be released before you can reschedule or confirm it.", 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#operations')
     date_s = (request.form.get('wc_proposed_date', '') or '').strip()
     time_s = (request.form.get('wc_proposed_time', '') or '').strip()
     wc_by = (request.form.get('wc_by', '') or '').strip()
@@ -4568,7 +4578,7 @@ def admin_client_welcome_call_hold(reg_id):
     who knows the payment position (founder 2026-07-16). Admins are allowed too, so
     the hold can still be managed when that person is unavailable."""
     conn = get_db()
-    reg = conn.execute("SELECT counsellor_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    reg = conn.execute("SELECT counsellor_id, wc_confirmed, wc_status FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
     if not reg:
         conn.close()
         flash('Registration not found.', 'error')
@@ -4576,6 +4586,14 @@ def admin_client_welcome_call_hold(reg_id):
     if not session.get('is_admin') and reg['counsellor_id'] != session.get('user_id'):
         conn.close()
         flash("Only the sales member who generated this lead can hold or release the welcome call.", 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#sales')
+    # Once Operations has taken the welcome call over — confirmed it, or proposed a
+    # reschedule — sales can no longer touch the hold, even via a direct/stale POST.
+    # Re-holding after ops moved forward was flipping the client back to "pending"
+    # and interrupting the flow (founder 2026-07-17).
+    if reg['wc_confirmed'] or (reg['wc_status'] or '') == 'proposed':
+        conn.close()
+        flash("The welcome call is now with Operations and can no longer be put on hold.", 'error')
         return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#sales')
     hold = 1 if request.form.get('hold') == '1' else 0
     conn.execute("UPDATE client_registrations SET welcome_call_hold=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
