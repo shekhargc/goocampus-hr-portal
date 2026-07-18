@@ -1,0 +1,152 @@
+{% extends base_template|default("sales_sidebar_base.html") %}
+{% block title %}Lead Profile{% endblock %}
+{% block section_content %}
+<style>
+  .lv-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  .lv-inner { max-width:920px; margin:0 auto; }
+  .lv-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .lv-back { color:var(--navy); font-size:0.86rem; text-decoration:none; font-weight:600; }
+  .lv-back:hover { text-decoration:underline; }
+  .lv-actions a, .lv-actions button { font-size:0.82rem; font-weight:600; border-radius:7px; padding:7px 14px; text-decoration:none; cursor:pointer; border:none; }
+  .lv-edit { background:var(--navy); color:#fff; }
+  .lv-resend { background:#F58220; color:#fff; }
+  .lv-del { background:#fff; color:#b91c1c; border:1px solid #fecaca !important; }
+  .lv-card { background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+  .lv-h { font-size:0.78rem; font-weight:700; color:var(--gray-500); text-transform:uppercase; letter-spacing:.4px; margin:0 0 14px; }
+  .lv-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px 28px; }
+  .lv-grid.one { grid-template-columns:1fr; }
+  .lv-f label { display:block; font-size:0.72rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:.3px; margin-bottom:3px; }
+  .lv-f .v { font-size:0.92rem; color:var(--navy); font-weight:600; word-break:break-word; }
+  .lv-name { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
+  .lv-pill { display:inline-block; font-size:0.72rem; font-weight:700; padding:3px 11px; border-radius:999px; }
+  .lv-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+  .lv-table th { text-align:left; padding:7px 10px; color:var(--navy); border-bottom:2px solid var(--gray-200); font-size:0.7rem; text-transform:uppercase; letter-spacing:.3px; }
+  .lv-table td { padding:7px 10px; border-bottom:1px solid var(--gray-100); color:var(--gray-700); }
+  .lv-rec { background:#DCFCE7; color:#166534; }
+  .lv-due { background:#FEF3C7; color:#92400E; }
+  @media (max-width:640px){ .lv-grid { grid-template-columns:1fr; } }
+</style>
+{% set _money = closure.get('final_package') or closure.get('package_amount') or lead.expected_value %}
+{% macro field(label, value) %}
+  <div class="lv-f"><label>{{ label }}</label><div class="v">{{ value if (value not in (None, '', 0)) or value == 0 else '—' }}</div></div>
+{% endmacro %}
+<div class="lv-wrap"><div class="lv-inner">
+
+  <div class="lv-top">
+    <a href="/sales/leads" class="lv-back">&larr; Back to Leads</a>
+    <div class="lv-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+      {% if role != 'viewer' %}
+      <a href="/sales/leads/{{ lead.id }}/edit" class="lv-edit">Edit</a>
+      <form method="POST" action="/sales/leads/{{ lead.id }}/resend-invite" style="display:inline;" onsubmit="return confirm('Resend the registration link to this client?');">
+        <button type="submit" class="lv-resend">Resend invite</button>
+      </form>
+      {% endif %}
+      {% if role == 'admin' %}
+      <form method="POST" action="/sales/leads/{{ lead.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this lead? This cannot be undone.');">
+        <button type="submit" class="lv-del">Delete</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Header ── #}
+  <div class="lv-card">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;">
+      <div>
+        <h1 class="lv-name">{{ lead.lead_name }}</h1>
+        {% if lead.company %}<div style="color:var(--gray-500);font-size:0.9rem;margin-top:2px;">{{ lead.company }}</div>{% endif %}
+      </div>
+      <div style="text-align:right;">
+        {% if lead.stage_name %}<span class="lv-pill" style="background:{{ lead.stage_color or '#e5e7eb' }}22;color:{{ lead.stage_color or '#374151' }};border:1px solid {{ lead.stage_color or '#d1d5db' }};">{{ lead.stage_name }}</span>{% endif %}
+        {% if lead.is_hot %}<span class="lv-pill" style="background:#FEE2E2;color:#b91c1c;margin-left:6px;">&#128293; Hot</span>{% endif %}
+      </div>
+    </div>
+    {% if reg_status %}
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);font-size:0.82rem;color:var(--gray-600);">
+      <b>Registration:</b> {{ reg_status.registration_number or 'not yet assigned' }} ·
+      Form {{ reg_status.form_status or 'not started' }} ·
+      Sales {{ 'verified' if reg_status.sales_completed else 'pending' }} ·
+      Ops {{ reg_status.ops_status or 'pending' }}
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Contact & ownership ── #}
+  <div class="lv-card">
+    <div class="lv-h">Contact &amp; Ownership</div>
+    <div class="lv-grid">
+      {{ field('Phone', lead.phone) }}
+      {{ field('Email', lead.email) }}
+      {{ field('Source', lead.source) }}
+      {{ field('Lead Owner', lead.owner_name) }}
+      {{ field('Product / Service', lead.product_name) }}
+      {{ field('Stream', lead.stream_name) }}
+      {{ field('Project', lead.project_name) }}
+      {{ field('Created by', lead.created_by_name) }}
+      {{ field('Created', lead.created_at|format_datetime) }}
+      {{ field('Expected close', lead.expected_close_date) }}
+    </div>
+  </div>
+
+  {# ── Closure / package details ── #}
+  {% if closure and (closure.get('plan_type') or _money or closure.get('inst1_amount')) %}
+  <div class="lv-card">
+    <div class="lv-h">Package &amp; Closure</div>
+    <div class="lv-grid">
+      {{ field('Plan Type', closure.get('plan_type')) }}
+      {{ field('Package Amount', '₹{:,.0f}'.format(closure.get('package_amount')|float) if closure.get('package_amount') else None) }}
+      {{ field('Discount', '₹{:,.0f}'.format(closure.get('discount_allowed')|float) if closure.get('discount_allowed') else None) }}
+      {{ field('Final Package', '₹{:,.0f}'.format(closure.get('final_package')|float) if closure.get('final_package') else None) }}
+    </div>
+    {% if closure.get('additional_notes') %}
+    <div style="margin-top:14px;"><div class="lv-h" style="margin-bottom:6px;">Notes</div>
+      <div style="font-size:0.88rem;color:var(--gray-700);white-space:pre-wrap;">{{ closure.get('additional_notes') }}</div></div>
+    {% endif %}
+
+    {% set _has_inst = closure.get('inst1_amount') or closure.get('inst2_amount') or closure.get('inst3_amount') or closure.get('inst4_amount') %}
+    {% if _has_inst %}
+    <div style="margin-top:16px;overflow-x:auto;">
+      <table class="lv-table">
+        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Status</th><th>Date</th><th>Note</th></tr></thead>
+        <tbody>
+        {% for i in [1,2,3,4] %}
+        {% set amt = closure.get('inst' ~ i ~ '_amount') %}
+        {% if amt %}
+        {% set base = amt|float %}{% set total = base * 1.18 %}
+        {% set rec = (closure.get('inst' ~ i ~ '_status') or '')|lower == 'received' %}
+        <tr>
+          <td>{{ i }}</td>
+          <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
+          <td style="text-align:right;color:var(--gray-400);">₹{{ '{:,.0f}'.format(total - base) }}</td>
+          <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
+          <td><span class="lv-pill {{ 'lv-rec' if rec else 'lv-due' }}">{{ 'Received' if rec else 'Pending' }}</span></td>
+          <td>{% if closure.get('inst' ~ i ~ '_date') %}<span style="color:var(--gray-400);font-size:0.72rem;">{{ 'Received' if rec else 'Due' }}</span> {{ closure.get('inst' ~ i ~ '_date') }}{% else %}—{% endif %}</td>
+          <td>{{ closure.get('inst' ~ i ~ '_note') or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <div style="margin-top:14px;">
+      <div class="lv-h" style="margin-bottom:6px;">Signed Contract</div>
+      {% if closure.get('contract_path') %}
+      <span class="lv-pill lv-rec">&#10003; On file</span>
+      {% else %}
+      <span class="lv-pill lv-due">Not uploaded</span>
+      <span style="font-size:0.8rem;color:var(--gray-500);margin-left:8px;">Use <b>Edit</b> to upload it — the client will then read &amp; sign it.</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Lead notes ── #}
+  <div class="lv-card">
+    <div class="lv-h">Lead Notes</div>
+    <div style="font-size:0.88rem;color:var(--gray-700);white-space:pre-wrap;">{{ lead.notes or '—' }}</div>
+  </div>
+
+</div></div>
+{% endblock %}

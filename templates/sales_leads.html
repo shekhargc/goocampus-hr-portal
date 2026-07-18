@@ -131,6 +131,7 @@
         </div>
     </div>
     <div class="lead-drawer-foot">
+        <a href="#" id="ldViewBtn" style="background:#fff;color:var(--navy);border:1px solid var(--navy);padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">View profile</a>
         {% if role != 'viewer' %}
         <a href="#" id="ldEditBtn" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Edit</a>
         <form method="POST" id="ldResendForm" style="display:inline;" onsubmit="return confirm('Resend the registration link to this client?');">
@@ -185,6 +186,8 @@ function openLeadDrawer(id, evt) {
     document.getElementById('ldValue').textContent = fmtMoney(l.expected_value);
     document.getElementById('ldClose').textContent = fmtDate(l.expected_close_date);
     document.getElementById('ldNotes').textContent = l.notes || '—';
+    const ldViewBtn = document.getElementById('ldViewBtn');
+    if (ldViewBtn) ldViewBtn.href = '/sales/leads/' + id + '/view';
     const ldEditBtn = document.getElementById('ldEditBtn');
     if (ldEditBtn) ldEditBtn.href = '/sales/leads/' + id + '/edit';
     const delForm = document.getElementById('ldDelForm');
