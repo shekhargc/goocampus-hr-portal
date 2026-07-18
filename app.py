@@ -29361,6 +29361,86 @@ def sales_leads_edit(lead_id):
                     active_section='sales')
 
 
+@app.route('/sales/leads/<int:lead_id>/view')
+@login_required
+def sales_leads_view(lead_id):
+    """Read-only profile of a lead — everything the sales member filled, including
+    the closure details (plan, package, installments, contract). Lives in the Sales
+    section and links back to the leads list (founder 2026-07-18)."""
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user) or []
+    conn = get_db()
+    lead = conn.execute(
+        '''SELECT sl.*, s.name AS stage_name, s.color AS stage_color, s.is_won AS stage_won,
+                  s.is_lost AS stage_lost, e.name AS owner_name, cb.name AS created_by_name,
+                  ps.name AS product_name, p.name AS project_name, st.name AS stream_name
+             FROM sales_leads sl
+             LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id
+             LEFT JOIN employees e ON sl.owner_employee_id = e.id
+             LEFT JOIN employees cb ON sl.created_by = cb.id
+             LEFT JOIN products_services ps ON sl.product_id = ps.id
+             LEFT JOIN projects p ON ps.project_id = p.id
+             LEFT JOIN revenue_streams st ON sl.stream_id = st.id
+            WHERE sl.id = ?''', (lead_id,)).fetchone()
+    if not lead:
+        conn.close()
+        flash('Lead not found.', 'error')
+        return redirect(url_for('sales_leads_list'))
+    # Same visibility rule as the list: you see your own leads; admins see all.
+    if role != 'admin' and lead['owner_employee_id'] not in visible_ids:
+        conn.close()
+        flash('You can only view your own leads.', 'error')
+        return redirect(url_for('sales_leads_list'))
+
+    # The rich closure fields live on the auto-created invitation (closure_metadata
+    # JSON) and, once the client registers, on client_registrations. Read invitation
+    # as the base, then overlay the registration (source of truth once registered) —
+    # the exact merge the edit form uses.
+    closure, reg_status = {}, None
+    try:
+        import json as _json
+        _ph = (lead['phone'] or '').lstrip('+').lstrip('0')
+        if _ph.startswith('91') and len(_ph) == 12:
+            _ph = _ph[2:]
+        if _ph and lead['product_id']:
+            inv = conn.execute(
+                "SELECT * FROM client_invitations WHERE client_mobile = ? AND product_id = ? "
+                "AND COALESCE(status,'pending') <> 'cancelled' ORDER BY id DESC LIMIT 1",
+                (_ph, lead['product_id'])).fetchone()
+            if inv and inv.get('closure_metadata'):
+                try: closure = _json.loads(inv['closure_metadata']) or {}
+                except Exception: closure = {}
+            if inv and inv.get('contract_path'):
+                closure['contract_path'] = inv['contract_path']
+            reg = conn.execute(
+                "SELECT * FROM client_registrations "
+                "WHERE regexp_replace(mobile, '[^0-9]', '', 'g') LIKE ? AND product_id = ? "
+                "ORDER BY id DESC LIMIT 1", ('%' + _ph, lead['product_id'])).fetchone()
+            if reg:
+                reg_status = {'registration_number': reg['registration_number'],
+                              'form_status': reg['form_status'],
+                              'sales_completed': reg['sales_completed'],
+                              'ops_status': reg['ops_status']}
+                closure['plan_type']        = reg['plan_type'] or closure.get('plan_type', '')
+                closure['package_amount']   = reg['package_amount'] if reg['package_amount'] is not None else closure.get('package_amount', 0)
+                closure['discount_allowed'] = reg['discount_allowed'] if reg['discount_allowed'] is not None else closure.get('discount_allowed', 0)
+                closure['final_package']    = reg['final_package'] if reg['final_package'] is not None else closure.get('final_package', 0)
+                closure['additional_notes'] = reg['additional_notes'] or closure.get('additional_notes', '')
+                if reg.get('contract_path'):
+                    closure['contract_path'] = reg['contract_path']
+                for i in (1, 2, 3, 4):
+                    closure[f'inst{i}_amount'] = reg[f'inst{i}_amount'] if reg[f'inst{i}_amount'] is not None else closure.get(f'inst{i}_amount', 0)
+                    closure[f'inst{i}_date']   = reg[f'inst{i}_date'] or closure.get(f'inst{i}_date', '')
+                    closure[f'inst{i}_note']   = reg[f'inst{i}_note'] or closure.get(f'inst{i}_note', '')
+                    closure[f'inst{i}_status'] = reg[f'inst{i}_status'] or closure.get(f'inst{i}_status', '')
+    except Exception as _ce:
+        logging.warning(f"sales_leads_view closure load: {_ce}")
+    conn.close()
+    return render_template('sales_lead_view.html', user=user, lead=lead, closure=closure,
+                           reg_status=reg_status, role=role, active_section='sales')
+
+
 @app.route('/sales/leads/<int:lead_id>/delete', methods=['POST'])
 @login_required
 @sales_write_required
