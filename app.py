@@ -18625,7 +18625,7 @@ def ops_main_dashboard():
             d['recent'] = [dict(r) for r in conn.execute(
                 "SELECT registration_number, prefix, first_name, last_name, account_status, current_stage, registration_date "
                 "FROM plab_clients WHERE COALESCE(pathway,'plab')=? "
-                "ORDER BY registration_date DESC NULLS LAST, id DESC LIMIT 5", (pw,)).fetchall()]
+                "ORDER BY id DESC LIMIT 5", (pw,)).fetchall()]
         except Exception:
             d['recent'] = []
         return d
@@ -19903,11 +19903,11 @@ def ops_onboarding_list():
     total_pages = max(1, (total + per_page - 1) // per_page)
 
     # Full set for Kanban (all matching clients, no pagination)
-    kanban_sql = sql + " ORDER BY p.registration_date DESC NULLS LAST"
+    kanban_sql = sql + " ORDER BY p.id DESC"
     kanban_clients = conn.execute(kanban_sql, params).fetchall()
 
     # Paginated set for Table view
-    table_sql = sql + " ORDER BY p.registration_date DESC NULLS LAST LIMIT ? OFFSET ?"
+    table_sql = sql + " ORDER BY p.id DESC LIMIT ? OFFSET ?"
     table_params = params + [per_page, (page - 1) * per_page]
     table_clients = conn.execute(table_sql, table_params).fetchall()
 
@@ -20141,7 +20141,7 @@ def ops_au_onboarding_list():
     ).fetchone()['cnt']
     total_pages = max(1, (total + per_page - 1) // per_page)
 
-    kanban_sql = base_select + base_from + where_sql + " ORDER BY p.registration_date DESC NULLS LAST"
+    kanban_sql = base_select + base_from + where_sql + " ORDER BY p.id DESC"
     kanban_clients = conn.execute(kanban_sql, params).fetchall()
     table_sql = kanban_sql + " LIMIT ? OFFSET ?"
     table_clients = conn.execute(table_sql, params + [per_page, (page - 1) * per_page]).fetchall()
@@ -21552,7 +21552,7 @@ def ops_plab_list():
             params.append(stage_filter)
         # Recent registrations on top (user request 2026-06-01). Fall back to
         # id DESC for rows missing a registration_date — keeps order stable.
-        sql += " ORDER BY registration_date DESC NULLS LAST, id DESC"
+        sql += " ORDER BY id DESC"
         clients_raw = conn.execute(sql, tuple(params)).fetchall()
 
         # Payment totals scoped to PLAB too so the Total Paid card on this
@@ -21641,7 +21641,7 @@ def ops_plab_dashboard(client_id):
     # Linked sections
     coaching = conn.execute("SELECT * FROM ops_coaching WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     english_logins = conn.execute("SELECT * FROM ops_english_logins WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
-    test_bookings = conn.execute("SELECT * FROM ops_test_bookings WHERE registration_number = ? ORDER BY exam_date DESC NULLS LAST", (reg,)).fetchall()
+    test_bookings = conn.execute("SELECT * FROM ops_test_bookings WHERE registration_number = ? ORDER BY (NULLIF(exam_date,'') >= to_char(CURRENT_DATE,'YYYY-MM-DD')) DESC NULLS LAST, CASE WHEN NULLIF(exam_date,'') >= to_char(CURRENT_DATE,'YYYY-MM-DD') THEN exam_date END ASC NULLS LAST, NULLIF(exam_date,'') DESC NULLS LAST", (reg,)).fetchall()
     call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY created_at DESC, id DESC", (reg,)).fetchall()
     call_notes_count = conn.execute("SELECT COUNT(*) as cnt FROM ops_call_notes WHERE registration_number = ?", (reg,)).fetchone()['cnt']
     payments = conn.execute("SELECT * FROM ops_payments WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
@@ -21664,7 +21664,7 @@ def ops_plab_dashboard(client_id):
             return []
 
     sections = {
-        'test_bookings':       _plab_section('ops_test_bookings', 'exam_date DESC NULLS LAST'),
+        'test_bookings':       _plab_section('ops_test_bookings', "(NULLIF(exam_date,'') >= to_char(CURRENT_DATE,'YYYY-MM-DD')) DESC NULLS LAST, CASE WHEN NULLIF(exam_date,'') >= to_char(CURRENT_DATE,'YYYY-MM-DD') THEN exam_date END ASC NULLS LAST, NULLIF(exam_date,'') DESC NULLS LAST"),
         'coaching':            _plab_section('ops_coaching', 'created_at DESC'),
         'english_logins':      _plab_section('ops_english_logins', 'created_at DESC'),
         'epic_registration':   _plab_section('ops_epic_registration', 'created_at DESC'),
@@ -23460,7 +23460,7 @@ def ops_test_bookings_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY t.exam_date DESC NULLS LAST, t.id DESC'
+        sql += " ORDER BY (NULLIF(t.exam_date,'') >= to_char(CURRENT_DATE,'YYYY-MM-DD')) DESC NULLS LAST, CASE WHEN NULLIF(t.exam_date,'') >= to_char(CURRENT_DATE,'YYYY-MM-DD') THEN t.exam_date END ASC NULLS LAST, NULLIF(t.exam_date,'') DESC NULLS LAST, t.id DESC"
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_test_bookings_list: {e}")
