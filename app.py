@@ -1956,12 +1956,10 @@ def client_dashboard():
             draw = d.get(f'inst{i}_date') or ''
             dparsed = _parse_inst_date(draw)
             status = (d.get(f'inst{i}_status') or '').strip()
-            # Explicit Received/Pending status wins; otherwise fall back to the
-            # date (a scheduled installment whose date has passed shows Received).
-            if status:
-                received = (status.lower() == 'received')
-            else:
-                received = bool(base > 0 and dparsed is not None and dparsed <= _today)
+            # Received ONLY when explicitly marked so. The date is a due date — a
+            # past due date does not mean the money arrived, and inferring "received"
+            # from it showed clients unpaid installments as paid (founder 2026-07-18).
+            received = (status.lower() == 'received')
             # Amounts are stored as the BASE; 18% GST is added on top so the
             # client sees Amount + GST = Total (the total is what was received).
             gst = round(base * 0.18)

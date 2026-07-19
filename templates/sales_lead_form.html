@@ -469,16 +469,11 @@
                                        ' (of ₹' + Math.round(total).toLocaleString('en-IN') + ' incl. GST)';
                 } else { hint.textContent = ''; }
             };
-            // Auto-set Received/Pending from the date, unless the user picked one.
-            window.updateInstStatus = function(dateInp) {
-                var row = dateInp.closest('.inst-row'); if (!row) return;
-                var sel = row.querySelector('select[name$="_status"]'); if (!sel) return;
-                if (sel.dataset.touched === '1') return;
-                if (!dateInp.value) return;
-                var today = new Date(); today.setHours(0,0,0,0);
-                var d = new Date(dateInp.value + 'T00:00:00');
-                sel.value = (d <= today) ? 'Received' : 'Pending';
-            };
+            // The date is a DUE date — it must NOT change the payment status. A past
+            // due date was auto-flipping the status to "Received", so a new lead with
+            // an old installment date saved as already paid (founder 2026-07-18).
+            // Status is only ever what the sales member explicitly picks.
+            window.updateInstStatus = function(dateInp) {};
             window.addInstallment = function() {
                 var rows = document.querySelectorAll('#instContainer .inst-row');
                 for (var i = 0; i < rows.length; i++) {
@@ -580,15 +575,8 @@
                                        ' (of ₹' + Math.round(total).toLocaleString('en-IN') + ' incl. GST)';
                 } else { hint.textContent = ''; }
             };
-            window.updateTrInstStatus = function(dateInp) {
-                var row = dateInp.closest('.tr-inst-row'); if (!row) return;
-                var sel = row.querySelector('select[name$="_status"]'); if (!sel) return;
-                if (sel.dataset.touched === '1') return;
-                if (!dateInp.value) return;
-                var today = new Date(); today.setHours(0,0,0,0);
-                var d = new Date(dateInp.value + 'T00:00:00');
-                sel.value = (d <= today) ? 'Received' : 'Pending';
-            };
+            // Same as above — a due date must never auto-set the payment status.
+            window.updateTrInstStatus = function(dateInp) {};
             window.addTrInstallment = function() {
                 var rows = document.querySelectorAll('#trInstContainer .tr-inst-row');
                 for (var i = 0; i < rows.length; i++) {
