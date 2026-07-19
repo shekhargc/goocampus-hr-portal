@@ -6,7 +6,11 @@
 {% set client_display = (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip()) %}
 {# Generic section card: header (count + Add Record drawer button + View all) and
    a compact list of each record's filled fields. Works for any section table. #}
-{% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display) %}
+{% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display, table=None) %}
+{# `table` (an ops_* table name) enables an in-place Edit drawer per row — the
+   generic /operations/record/<table>/<id>/edit form, prefilled, saved back to the
+   section, tracking who edited & when (founder 2026-07-18). #}
+{% set _can_edit = table and add_endpoint and can_use_route(add_endpoint) %}
 <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
     <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">{{ title }} ({{ records|length }})</h3>
@@ -16,7 +20,7 @@
     </div>
   </div>
   {% if records %}
-  {% set skip = ['id','registration_number','pathway','created_at','created_by','updated_at','first_name','last_name','prefix'] %}
+  {% set skip = ['id','registration_number','pathway','created_at','created_by','updated_at','updated_by','updated_by_name','first_name','last_name','prefix'] %}
   {% set cols = [] %}
   {% for col in records[0].keys() %}{% if col not in skip %}{% set _ = cols.append(col) %}{% endif %}{% endfor %}
   <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
@@ -25,6 +29,7 @@
         <tr style="border-bottom:2px solid var(--gray-200);">
           <th style="width:44px;text-align:center;padding:10px;color:var(--navy);position:sticky;top:0;background:#fff;">#</th>
           {% for col in cols %}<th style="text-align:left;padding:10px;color:var(--navy);white-space:nowrap;position:sticky;top:0;background:#fff;">{{ col.replace('_',' ').title() }}</th>{% endfor %}
+          {% if _can_edit %}<th style="width:56px;text-align:center;padding:10px;color:var(--navy);position:sticky;top:0;background:#fff;"></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -32,6 +37,7 @@
         <tr style="border-bottom:1px solid var(--gray-100);">
           <td style="text-align:center;padding:10px;color:var(--gray-400);">{{ loop.index }}</td>
           {% for col in cols %}<td style="padding:10px;color:var(--gray-700);white-space:nowrap;">{% if r[col] not in [none, ''] %}{{ r[col] }}{% else %}<span style="color:var(--gray-300);">&mdash;</span>{% endif %}</td>{% endfor %}
+          {% if _can_edit %}<td style="padding:6px 10px;text-align:center;white-space:nowrap;"><button type="button" onclick="openAddDrawer('/operations/record/{{ table }}/{{ r.id }}/edit?embed=1','Edit {{ title }}')" style="background:#fff;color:var(--navy);border:1px solid var(--navy);border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">Edit</button></td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -202,17 +208,17 @@
   <!-- ═══════════ LINKED SECTIONS (service) — moved up for Operations ═══════════ -->
 
   <!-- Consulting service sections -->
-  {{ section_block('Academic Details', sections.academic, url_for('ops_consulting_academic_list'), 'ops_consulting_academic_add_page', client.registration_number, client_display) }}
-  {{ section_block('EPIC Registration', sections.epic, url_for('ops_consulting_epic_list'), 'ops_consulting_epic_add_page', client.registration_number, client_display) }}
-  {{ section_block('GMC Registration', sections.gmc, url_for('ops_consulting_gmc_list'), 'ops_consulting_gmc_add', client.registration_number, client_display) }}
-  {{ section_block('AMC Registration', sections.amc_registration, url_for('ops_consulting_amc_list'), 'ops_consulting_amc_add', client.registration_number, client_display) }}
-  {{ section_block('Mentorship', sections.mentorship, url_for('ops_consulting_mentorship_list'), 'ops_consulting_mentorship_add', client.registration_number, client_display) }}
-  {{ section_block('Training', sections.training, url_for('ops_consulting_training_list'), 'ops_consulting_training_add_page', client.registration_number, client_display) }}
-  {{ section_block('Test Bookings', sections.test_bookings, url_for('ops_consulting_test_bookings_list'), 'ops_consulting_test_bookings_add_page', client.registration_number, client_display) }}
-  {{ section_block('Online Courses', sections.online_courses, url_for('ops_consulting_online_courses_list'), 'ops_consulting_online_courses_add_page', client.registration_number, client_display) }}
-  {{ section_block('Online Subscriptions', sections.online_subscriptions, url_for('ops_consulting_online_subscriptions_list'), 'ops_consulting_online_subscriptions_add_page', client.registration_number, client_display) }}
-  {{ section_block('Research & Publications', sections.research, url_for('ops_consulting_research_list'), 'ops_consulting_research_add_page', client.registration_number, client_display) }}
-  {{ section_block('Webinars & Conferences', sections.webinars, url_for('ops_consulting_webinars_list'), 'ops_consulting_webinars_add_page', client.registration_number, client_display) }}
+  {{ section_block('Academic Details', sections.academic, url_for('ops_consulting_academic_list'), 'ops_consulting_academic_add_page', client.registration_number, client_display, 'ops_academic_details') }}
+  {{ section_block('EPIC Registration', sections.epic, url_for('ops_consulting_epic_list'), 'ops_consulting_epic_add_page', client.registration_number, client_display, 'ops_epic_registration') }}
+  {{ section_block('GMC Registration', sections.gmc, url_for('ops_consulting_gmc_list'), 'ops_consulting_gmc_add', client.registration_number, client_display, 'ops_gmc_registration') }}
+  {{ section_block('AMC Registration', sections.amc_registration, url_for('ops_consulting_amc_list'), 'ops_consulting_amc_add', client.registration_number, client_display, 'ops_amc_registration') }}
+  {{ section_block('Mentorship', sections.mentorship, url_for('ops_consulting_mentorship_list'), 'ops_consulting_mentorship_add', client.registration_number, client_display, 'ops_mentorship') }}
+  {{ section_block('Training', sections.training, url_for('ops_consulting_training_list'), 'ops_consulting_training_add_page', client.registration_number, client_display, 'ops_coaching') }}
+  {{ section_block('Test Bookings', sections.test_bookings, url_for('ops_consulting_test_bookings_list'), 'ops_consulting_test_bookings_add_page', client.registration_number, client_display, 'ops_test_bookings') }}
+  {{ section_block('Online Courses', sections.online_courses, url_for('ops_consulting_online_courses_list'), 'ops_consulting_online_courses_add_page', client.registration_number, client_display, 'ops_online_courses') }}
+  {{ section_block('Online Subscriptions', sections.online_subscriptions, url_for('ops_consulting_online_subscriptions_list'), 'ops_consulting_online_subscriptions_add_page', client.registration_number, client_display, 'ops_online_subscriptions') }}
+  {{ section_block('Research & Publications', sections.research, url_for('ops_consulting_research_list'), 'ops_consulting_research_add_page', client.registration_number, client_display, 'ops_research_publication') }}
+  {{ section_block('Webinars & Conferences', sections.webinars, url_for('ops_consulting_webinars_list'), 'ops_consulting_webinars_add_page', client.registration_number, client_display, 'ops_webinars_conferences') }}
 
   <!-- Call Notes -->
   <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">

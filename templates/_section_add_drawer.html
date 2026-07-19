@@ -40,9 +40,10 @@
       var path = '';
       try { path = f.contentWindow.location.pathname; } catch(e){ return; }
       if (!path || path === 'blank' || path === '/blank') return;  // about:blank
-      // After submit the add route redirects: a validation error returns to an
-      // /add page (stay open); success lands on a detail/list page (saved).
-      if (path.indexOf('/add') === -1){
+      // After submit: a validation error returns to an /add or /edit page (stay
+      // open); success lands elsewhere (add → detail/list, edit → /record/saved).
+      // Close + refresh only on success.
+      if (path.indexOf('/add') === -1 && path.indexOf('/edit') === -1){
         closeAddDrawer();
         window.location.reload();
       }

@@ -25646,7 +25646,8 @@ OPS_SECTION_LABELS = {
     'ops_uk_cab_bookings': 'Cab Bookings', 'ops_uk_observerships': 'Observerships',
     'ops_uk_visa_travel': 'Visa & Travel', 'ops_webinars_conferences': 'Webinars & Conferences',
 }
-_BULK_SYS_COLS = {'id', 'registration_number', 'pathway', 'created_at', 'created_by', 'updated_at'}
+_BULK_SYS_COLS = {'id', 'registration_number', 'pathway', 'created_at', 'created_by',
+                  'updated_at', 'updated_by', 'updated_by_name'}
 # Columns that are inherently free text — never coerce into a dropdown even if
 # they happen to have few distinct values (e.g. notes that are full sentences).
 _BULK_FREETEXT_HINTS = ('note', 'remark', 'comment', 'description', 'reason', 'address',
@@ -25866,6 +25867,80 @@ def ops_bulk_edit():
         flash('Error applying bulk edit', 'error')
     conn.close()
     return redirect(url_for('ops_bulk', pathway=pathway, table=table))
+
+
+@app.route('/operations/record/<table>/<int:rec_id>/edit', methods=['GET', 'POST'])
+@login_required
+def ops_record_edit(table, rec_id):
+    """Edit a single ops section record in place — from the client profile drawer,
+    no hunting for it in the section (founder 2026-07-18). Generic + whitelisted:
+    reuses _bulk_columns so every field renders with the right type + dropdowns,
+    prefilled from the record. Tracks who edited it and when. Works for every
+    section in every pathway from one route."""
+    if table not in OPS_PATHWAY_TABLES:
+        return "Unknown section", 404
+    conn = get_db()
+    rec = conn.execute("SELECT * FROM {} WHERE id = ?".format(table), (rec_id,)).fetchone()
+    if not rec:
+        conn.close()
+        return "Record not found", 404
+    rec = dict(rec)
+    pathway = (rec.get('pathway') or 'plab')
+    cols = _bulk_columns(conn, table, pathway)
+
+    if request.method == 'POST':
+        sets, vals = [], []
+        for c in cols:
+            key = 'f_' + c['name']
+            if key not in request.form:
+                continue
+            v = request.form.get(key, '')
+            if c['numeric']:
+                try: v = float(v) if v != '' else None
+                except (TypeError, ValueError): v = None
+            sets.append("{} = ?".format(c['name']))
+            vals.append(v)
+        # Edit tracking — WHO changed it and WHEN.
+        uid = session.get('user_id')
+        uname = ''
+        try:
+            _e = conn.execute("SELECT name FROM employees WHERE id = ?", (uid,)).fetchone()
+            uname = (_e['name'] if _e else '') or ''
+        except Exception:
+            pass
+        sets += ["updated_at = CURRENT_TIMESTAMP", "updated_by = ?", "updated_by_name = ?"]
+        vals += [uid, uname]
+        try:
+            conn.execute("UPDATE {} SET {} WHERE id = ?".format(table, ', '.join(sets)), vals + [rec_id])
+            conn.commit()
+        except Exception as e:
+            logging.error("ops_record_edit %s#%s: %s", table, rec_id, e)
+            conn.rollback()
+            conn.close()
+            flash('Could not save the change — please try again.', 'error')
+            return redirect(url_for('ops_record_edit', table=table, rec_id=rec_id,
+                                    embed=request.args.get('embed')))
+        conn.close()
+        # Land on a NON-/edit URL so the drawer detects the save and closes+refreshes.
+        return redirect(url_for('ops_record_saved'))
+
+    conn.close()
+    label = OPS_SECTION_LABELS.get(table, table.replace('ops_', '').replace('_', ' ').title())
+    client_name = (("{} {} {}".format(rec.get('prefix') or '', rec.get('first_name') or '',
+                                      rec.get('last_name') or '')).strip()) or (rec.get('registration_number') or '')
+    return render_template('ops_record_edit.html', table=table, rec=rec, cols=cols,
+                           section_label=label, client_name=client_name,
+                           embed=request.args.get('embed'))
+
+
+@app.route('/operations/record/saved')
+@login_required
+def ops_record_saved():
+    """Tiny landing page after a drawer edit — its URL has no /edit, so the parent
+    drawer script closes the drawer and reloads the profile."""
+    return ("<!doctype html><meta charset=utf-8>"
+            "<body style='font-family:system-ui;padding:24px;color:#166534;'>"
+            "✓ Saved. Closing…</body>")
 
 
 # ─────────────────────────────────────────────────────────
@@ -31711,6 +31786,39 @@ OPS_PATHWAY_TABLES = [
     'ops_uk_visa_travel',
     'ops_webinars_conferences',
 ]
+
+
+def ensure_ops_edit_tracking():
+    """Every ops section table gets updated_at + updated_by so an in-profile edit
+    records WHO changed it and WHEN (founder 2026-07-18). Safe to run every boot."""
+    conn = None
+    try:
+        conn = get_db()
+        for t in OPS_PATHWAY_TABLES:
+            for ddl in (
+                "ALTER TABLE {} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP".format(t),
+                "ALTER TABLE {} ADD COLUMN IF NOT EXISTS updated_by INTEGER".format(t),
+                "ALTER TABLE {} ADD COLUMN IF NOT EXISTS updated_by_name TEXT".format(t),
+            ):
+                try:
+                    conn.execute(ddl)
+                except Exception:
+                    conn.rollback()
+        conn.commit()
+    except Exception as e:
+        logging.warning("ensure_ops_edit_tracking: %s", e)
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
+ensure_ops_edit_tracking()
 
 
 def ensure_pathway_column_on_plab_clients():

@@ -1,0 +1,56 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Edit {{ section_label }}{% endblock %}
+{% block ops_content %}
+<div style="padding:{% if embed %}6px 4px{% else %}24px{% endif %};max-width:720px;margin:0 auto;">
+  {% if not embed %}
+  <a href="javascript:history.back()" style="color:var(--orange);text-decoration:none;font-size:0.85rem;font-weight:600;">&larr; Back</a>
+  {% endif %}
+  <h2 style="font-size:1.15rem;font-weight:700;color:var(--navy);margin:10px 0 4px;">Edit {{ section_label }}</h2>
+  <p style="color:var(--gray-500);font-size:0.85rem;margin:0 0 16px;">
+    {{ client_name }}{% if rec.registration_number %} &middot; {{ rec.registration_number }}{% endif %}
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}{% for cat, m in messages %}
+      <div style="background:{{ '#FEE2E2' if cat=='error' else '#DCFCE7' }};color:{{ '#991B1B' if cat=='error' else '#166534' }};border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:0.85rem;">{{ m }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <form method="POST" action="/operations/record/{{ table }}/{{ rec.id }}/edit{% if embed %}?embed=1{% endif %}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;">
+      {% for c in cols %}
+      {% set val = rec[c.name] if rec[c.name] is not none else '' %}
+      <div style="{% if c.type == 'text' and c.options|length == 0 %}grid-column:1 / -1;{% endif %}display:flex;flex-direction:column;gap:4px;">
+        <label style="font-size:0.72rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px;">{{ c.label }}</label>
+        {% if c.type == 'number' %}
+          <input type="number" step="any" name="f_{{ c.name }}" value="{{ val }}" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+        {% elif c.type == 'date' %}
+          <input type="date" name="f_{{ c.name }}" value="{{ (val|string)[:10] if val else '' }}" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+        {% elif c.options|length > 0 %}
+          <select name="f_{{ c.name }}" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:#fff;">
+            <option value="">—</option>
+            {% for o in c.options %}<option value="{{ o }}" {% if (val|string) == (o|string) %}selected{% endif %}>{{ o }}</option>{% endfor %}
+            {% if val and (val|string) not in (c.options|map('string')|list) %}<option value="{{ val }}" selected>{{ val }} (current)</option>{% endif %}
+          </select>
+        {% elif 'note' in c.name.lower() or 'remark' in c.name.lower() or 'comment' in c.name.lower() or 'address' in c.name.lower() or 'description' in c.name.lower() %}
+          <textarea name="f_{{ c.name }}" rows="2" style="grid-column:1 / -1;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">{{ val }}</textarea>
+        {% else %}
+          <input type="text" name="f_{{ c.name }}" value="{{ val }}" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if rec.updated_by_name or rec.updated_at %}
+    <p style="font-size:0.76rem;color:var(--gray-400);margin:14px 0 0;">
+      Last edited{% if rec.updated_by_name %} by <b>{{ rec.updated_by_name }}</b>{% endif %}{% if rec.updated_at %} on {{ rec.updated_at|format_datetime }}{% endif %}.
+    </p>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button type="submit" style="background:var(--orange);color:#fff;border:none;border-radius:8px;padding:0.6rem 1.4rem;font-weight:600;font-size:0.9rem;cursor:pointer;">Save changes</button>
+      {% if not embed %}<a href="javascript:history.back()" style="padding:0.6rem 1.2rem;color:var(--gray-500);text-decoration:none;font-size:0.9rem;">Cancel</a>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}
