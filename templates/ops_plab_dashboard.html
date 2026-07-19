@@ -4,7 +4,8 @@
 
 {% block ops_content %}
 {% set client_display = (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip()) %}
-{% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display) %}
+{% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display, table=None) %}
+{% set _can_edit = table and add_endpoint and can_use_route(add_endpoint) %}
 <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
     <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">{{ title }} ({{ records|length }})</h3>
@@ -14,7 +15,7 @@
     </div>
   </div>
   {% if records %}
-  {% set skip = ['id','registration_number','pathway','created_at','created_by','updated_at','first_name','last_name','prefix'] %}
+  {% set skip = ['id','registration_number','pathway','created_at','created_by','updated_at','updated_by','updated_by_name','first_name','last_name','prefix'] %}
   {% set cols = [] %}
   {% for col in records[0].keys() %}{% if col not in skip %}{% set _ = cols.append(col) %}{% endif %}{% endfor %}
   <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
@@ -23,6 +24,7 @@
         <tr style="border-bottom:2px solid var(--gray-200);">
           <th style="width:44px;text-align:center;padding:10px;color:var(--navy);position:sticky;top:0;background:#fff;">#</th>
           {% for col in cols %}<th style="text-align:left;padding:10px;color:var(--navy);white-space:nowrap;position:sticky;top:0;background:#fff;">{{ col.replace('_',' ').title() }}</th>{% endfor %}
+          {% if _can_edit %}<th style="width:56px;text-align:center;padding:10px;color:var(--navy);position:sticky;top:0;background:#fff;"></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -30,6 +32,7 @@
         <tr style="border-bottom:1px solid var(--gray-100);">
           <td style="text-align:center;padding:10px;color:var(--gray-400);">{{ loop.index }}</td>
           {% for col in cols %}<td style="padding:10px;color:var(--gray-700);white-space:nowrap;">{% if r[col] not in [none, ''] %}{{ r[col] }}{% else %}<span style="color:var(--gray-300);">&mdash;</span>{% endif %}</td>{% endfor %}
+          {% if _can_edit %}<td style="padding:6px 10px;text-align:center;white-space:nowrap;"><button type="button" onclick="openAddDrawer('/operations/record/{{ table }}/{{ r.id }}/edit?embed=1','Edit {{ title }}')" style="background:#fff;color:var(--navy);border:1px solid var(--navy);border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">Edit</button></td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -178,21 +181,21 @@
 
   <!-- ═══════════ LINKED SECTIONS (service) — moved up for Operations ═══════════ -->
 
-  {{ section_block('Test Bookings', sections.test_bookings, url_for('ops_test_bookings_list'), 'ops_test_bookings_add', client.registration_number, client_display) }}
-  {{ section_block('Coaching & Training', sections.coaching, url_for('ops_coaching_list'), 'ops_coaching_add', client.registration_number, client_display) }}
-  {{ section_block('English Logins', sections.english_logins, url_for('ops_english_logins_list'), 'ops_english_logins_add', client.registration_number, client_display) }}
-  {{ section_block('EPIC Registration', sections.epic_registration, url_for('ops_epic_list'), 'ops_epic_add', client.registration_number, client_display) }}
-  {{ section_block('GMC Registration', sections.gmc_registration, url_for('ops_gmc_list'), 'ops_gmc_add', client.registration_number, client_display) }}
+  {{ section_block('Test Bookings', sections.test_bookings, url_for('ops_test_bookings_list'), 'ops_test_bookings_add', client.registration_number, client_display, 'ops_test_bookings') }}
+  {{ section_block('Coaching & Training', sections.coaching, url_for('ops_coaching_list'), 'ops_coaching_add', client.registration_number, client_display, 'ops_coaching') }}
+  {{ section_block('English Logins', sections.english_logins, url_for('ops_english_logins_list'), 'ops_english_logins_add', client.registration_number, client_display, 'ops_english_logins') }}
+  {{ section_block('EPIC Registration', sections.epic_registration, url_for('ops_epic_list'), 'ops_epic_add', client.registration_number, client_display, 'ops_epic_registration') }}
+  {{ section_block('GMC Registration', sections.gmc_registration, url_for('ops_gmc_list'), 'ops_gmc_add', client.registration_number, client_display, 'ops_gmc_registration') }}
   {{ section_block('Job Stage', sections.job_stage, url_for('ops_job_stage_list'), 'ops_job_stage_add_page', client.registration_number, client_display) }}
-  {{ section_block('Academic Details', sections.academic_details, url_for('ops_academic_list'), 'ops_academic_add', client.registration_number, client_display) }}
-  {{ section_block('Research & Publications', sections.research_publication, url_for('ops_research_list'), 'ops_research_add', client.registration_number, client_display) }}
-  {{ section_block('Online Subscriptions', sections.online_subscriptions, url_for('ops_subscriptions_list'), 'ops_subscriptions_add', client.registration_number, client_display) }}
-  {{ section_block('Webinars & Conferences', sections.webinars_conferences, url_for('ops_webinars_list'), 'ops_webinars_add', client.registration_number, client_display) }}
-  {{ section_block('NGO Activities', sections.ngo_activities, url_for('ops_ngo_list'), 'ops_ngo_add', client.registration_number, client_display) }}
-  {{ section_block('Mentorship', sections.mentorship, url_for('ops_mentorship_list'), 'ops_mentorship_add', client.registration_number, client_display) }}
-  {{ section_block('UK Visa & Travel', sections.uk_visa_travel, url_for('ops_visa_list'), 'ops_visa_add', client.registration_number, client_display) }}
-  {{ section_block('UK Cab Bookings', sections.uk_cab_bookings, url_for('ops_cab_list'), 'ops_cab_add', client.registration_number, client_display) }}
-  {{ section_block('UK Observerships', sections.uk_observerships, url_for('ops_observerships_list'), 'ops_observerships_add', client.registration_number, client_display) }}
+  {{ section_block('Academic Details', sections.academic_details, url_for('ops_academic_list'), 'ops_academic_add', client.registration_number, client_display, 'ops_academic_details') }}
+  {{ section_block('Research & Publications', sections.research_publication, url_for('ops_research_list'), 'ops_research_add', client.registration_number, client_display, 'ops_research_publication') }}
+  {{ section_block('Online Subscriptions', sections.online_subscriptions, url_for('ops_subscriptions_list'), 'ops_subscriptions_add', client.registration_number, client_display, 'ops_online_subscriptions') }}
+  {{ section_block('Webinars & Conferences', sections.webinars_conferences, url_for('ops_webinars_list'), 'ops_webinars_add', client.registration_number, client_display, 'ops_webinars_conferences') }}
+  {{ section_block('NGO Activities', sections.ngo_activities, url_for('ops_ngo_list'), 'ops_ngo_add', client.registration_number, client_display, 'ops_ngo_activities') }}
+  {{ section_block('Mentorship', sections.mentorship, url_for('ops_mentorship_list'), 'ops_mentorship_add', client.registration_number, client_display, 'ops_mentorship') }}
+  {{ section_block('UK Visa & Travel', sections.uk_visa_travel, url_for('ops_visa_list'), 'ops_visa_add', client.registration_number, client_display, 'ops_uk_visa_travel') }}
+  {{ section_block('UK Cab Bookings', sections.uk_cab_bookings, url_for('ops_cab_list'), 'ops_cab_add', client.registration_number, client_display, 'ops_uk_cab_bookings') }}
+  {{ section_block('UK Observerships', sections.uk_observerships, url_for('ops_observerships_list'), 'ops_observerships_add', client.registration_number, client_display, 'ops_uk_observerships') }}
 
   <!-- Call Notes -->
   <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
