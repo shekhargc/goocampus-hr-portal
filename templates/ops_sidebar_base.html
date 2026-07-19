@@ -1210,4 +1210,7 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape') window.ccC
 (function(){ var m=document.getElementById('ccModal'); if(m) m.addEventListener('click',function(e){ if(e.target===this) window.ccClose(); }); })();
 </script>
 {% block ops_extra_js %}{% endblock %}
+{# Clickable column sorting (A→Z / Z→A) on every ops data table — founder 2026-07-18.
+   Safe: only tables with a <thead> + 2+ body rows; never reorders until clicked. #}
+<script src="/static/js/ops-table-sort.js?v=1"></script>
 {% endblock %}
