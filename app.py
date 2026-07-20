@@ -3120,11 +3120,12 @@ def admin_email_templates_list():
     conn = get_db()
     try:
         rows = conn.execute("""
-            SELECT id, template_key, stage, label, subject, enabled,
+            SELECT id, template_key, stage, label, subject, enabled, category,
                    recipients_client, recipients_counsellor,
-                   recipients_ops, recipients_parents, updated_at
+                   recipients_ops, recipients_parents, recipient_employee_ids, updated_at
               FROM email_templates
-             ORDER BY CASE stage
+             ORDER BY (category IS NULL), category,
+                      CASE stage
                         WHEN 'welcome_email' THEN 1
                         WHEN 'welcome_call_scheduled' THEN 2
                         WHEN 'kit_dispatched' THEN 3
@@ -3140,15 +3141,58 @@ def admin_email_templates_list():
         d = dict(r)
         d['recipient_summary'] = ', '.join(
             label for col, label, _ in EMAIL_RECIPIENT_KEYS if d.get(col))
+        if d.get('recipient_employee_ids'):
+            n = len([i for i in d['recipient_employee_ids'].split(',') if i.strip()])
+            if n:
+                d['recipient_summary'] = (d['recipient_summary'] + ', ' if d['recipient_summary'] else '') + f'+{n} team member' + ('s' if n != 1 else '')
         if not d['recipient_summary']:
             d['recipient_summary'] = '(no recipients selected)'
         templates.append(d)
     conn.close()
+    # Group by category for the list heading ("Standard Consulting" first, then the rest).
+    from collections import OrderedDict
+    grouped = OrderedDict()
+    for t in templates:
+        grouped.setdefault(t.get('category') or 'Other Templates', []).append(t)
     return render_template(
         'admin_email_templates_list.html',
-        user=user, templates=templates,
+        user=user, templates=templates, grouped_templates=grouped,
         active_section='company',
     )
+
+
+def _send_sc_template(conn, key, subs, base_to=None):
+    """Send an editable Standard Consulting template. Renders it with `subs`,
+    resolves recipients (the base_to the caller wants + any active employees picked
+    on the template), substitutes placeholders, and sends. Returns True if it sent
+    via the template; False if the template is missing/disabled so the caller can
+    fall back to its built-in email — nothing ever silently drops (founder 2026-07-20)."""
+    try:
+        tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = ?", (key,)).fetchone()
+    except Exception:
+        return False
+    if not tpl:
+        return False
+    tpl = dict(tpl)
+    if tpl.get('enabled') is not None and not tpl.get('enabled'):
+        return False
+    subject = tpl.get('subject') or ''
+    body = tpl.get('body_html') or ''
+    for k, v in (subs or {}).items():
+        subject = subject.replace(k, str(v if v is not None else ''))
+        body = body.replace(k, str(v if v is not None else ''))
+    to = list(base_to or [])
+    to += [e for e in _template_staff_emails(conn, tpl) if e]
+    to = [e for e in dict.fromkeys(to) if e]
+    if not to:
+        return False
+    try:
+        from email_utils import send_email
+        send_email(to, subject, body)
+        return True
+    except Exception as e:
+        logging.error("_send_sc_template %s: %s", key, e)
+        return False
 
 
 def _template_staff_emails(conn, tpl):
@@ -17194,6 +17238,8 @@ def ensure_ops_tables():
             # a comma-separated list of employee ids picked in the editor
             # (founder 2026-07-20).
             "ALTER TABLE email_templates ADD COLUMN recipient_employee_ids TEXT",
+            # Grouping heading on the templates list (e.g. "Standard Consulting").
+            "ALTER TABLE email_templates ADD COLUMN category TEXT",
         ):
             try:
                 conn.execute(ddl)
@@ -37111,9 +37157,125 @@ def set_welcome_email_format_v2_once():
             pass
 
 
+def _sc_body(inner):
+    """Wrap inner HTML in the branded email shell (navy header + logo + card)."""
+    try:
+        from email_utils import render_branded_email
+        return render_branded_email('', inner, '')
+    except Exception:
+        return ('<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;">' + inner + '</div>')
+
+
+# The Standard Consulting client-lifecycle emails, grouped under one heading in the
+# admin. Each is editable + recipient-pickable; the senders fall back to the current
+# built-in email if a template is missing or disabled (founder 2026-07-20).
+_SC_EMAIL_TEMPLATES = [
+    {'key': 'welcome_email', 'label': 'Welcome Email', 'recip': (1, 0, 0, 0)},  # body/subject already set by v2
+    {'key': 'sc_registration_submitted', 'label': 'Registration Submitted (to team)',
+     'subject': 'New Registration Submitted — {{client_name}}', 'recip': (0, 1, 1, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">A new client has completed their registration form. '
+        'It is now ready for verification by the concerned team.</p>'
+        '<p style="margin:0 0 6px;"><strong>Client:</strong> {{client_name}}<br>'
+        '<strong>Product:</strong> {{product_name}}<br>'
+        '<strong>Registration No.:</strong> {{registration_number}}<br>'
+        '<strong>Counsellor:</strong> {{counsellor_name}}</p>'
+        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/verifications/sales" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Open Verification</a></p>')},
+    {'key': 'sc_welcome_call_confirmed', 'label': 'Welcome Call — Confirmed (to client)',
+     'subject': 'Your Welcome Call is Confirmed — GooCampus', 'recip': (1, 0, 0, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">Dear {{client_name}},</p>'
+        '<p style="margin:0 0 12px;">We are pleased to confirm your welcome call. Our team looks '
+        'forward to speaking with you and guiding you through the next steps of your journey.</p>'
+        '<p style="margin:0 0 6px;"><strong>Date:</strong> {{wc_date}}<br>'
+        '<strong>Time:</strong> {{wc_time}} (IST)</p>'
+        '<p style="margin:16px 0 0;">If you are unable to attend at this time, please let us know '
+        'and we will be happy to reschedule.</p>'
+        '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
+    {'key': 'sc_welcome_call_reschedule', 'label': 'Welcome Call — Reschedule (to client)',
+     'subject': 'A New Time for Your Welcome Call — GooCampus', 'recip': (1, 0, 0, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">Dear {{client_name}},</p>'
+        '<p style="margin:0 0 12px;">We would like to propose a new time for your welcome call. '
+        'Kindly review the details below and confirm whether this works for you.</p>'
+        '<p style="margin:0 0 6px;"><strong>Proposed Date:</strong> {{wc_date}}<br>'
+        '<strong>Proposed Time:</strong> {{wc_time}} (IST)</p>'
+        '<p style="margin:12px 0 0;">{{wc_note}}</p>'
+        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/client/login" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Confirm in your portal</a></p>'
+        '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
+    {'key': 'sc_onboarding_confirmed', 'label': 'Onboarding Confirmed (to client)',
+     'subject': 'Your Onboarding is Complete — GooCampus', 'recip': (1, 0, 0, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">Dear {{client_name}},</p>'
+        '<p style="margin:0 0 12px;">We are delighted to inform you that your onboarding for '
+        '<strong>{{product_name}}</strong> is now complete. Our team will begin working with you '
+        'on the next steps right away.</p>'
+        '<p style="margin:0 0 12px;">You can log in to your client portal at any time to track your '
+        'progress, upload documents, and stay updated.</p>'
+        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/client/login" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Log in to your portal</a></p>'
+        '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
+    {'key': 'sc_document_request', 'label': 'Document Request (to client)',
+     'subject': 'Document Required — {{doc_type}}', 'recip': (1, 0, 0, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">Dear {{client_name}},</p>'
+        '<p style="margin:0 0 12px;">To proceed with your application, we require the following '
+        'document from you:</p>'
+        '<p style="margin:0 0 6px;"><strong>{{doc_type}}</strong></p>'
+        '<p style="margin:0 0 12px;">{{message}}</p>'
+        '<p style="margin:0 0 12px;">You can upload it directly from your dashboard — it only takes '
+        'a minute, and you do not need to fill in the registration form again.</p>'
+        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/client/dashboard" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Upload the document</a></p>'
+        '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
+    {'key': 'sc_document_submitted', 'label': 'Document Submitted (to team)',
+     'subject': 'Document Uploaded — {{client_name}}', 'recip': (0, 1, 1, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">{{client_name}} has uploaded a requested document.</p>'
+        '<p style="margin:0 0 6px;"><strong>Document:</strong> {{doc_type}}<br>'
+        '<strong>Registration No.:</strong> {{registration_number}}</p>'
+        '<p style="margin:16px 0 0;">Please review it in the client\'s profile.</p>')},
+]
+
+
+def seed_sc_email_group_once():
+    """Seed the Standard Consulting email group (grouping + the 6 lifecycle
+    templates). Inserts a template only if it does not already exist, so any manual
+    edit is preserved; always (re)sets the category so they group together."""
+    conn = None
+    try:
+        conn = get_db()
+        for t in _SC_EMAIL_TEMPLATES:
+            exists = conn.execute("SELECT id FROM email_templates WHERE template_key = ?", (t['key'],)).fetchone()
+            if exists:
+                conn.execute("UPDATE email_templates SET category = 'Standard Consulting' WHERE template_key = ?", (t['key'],))
+            else:
+                rc, rco, ro, rp = t['recip']
+                conn.execute(
+                    "INSERT INTO email_templates (template_key, label, subject, body_html, enabled, "
+                    " recipients_client, recipients_counsellor, recipients_ops, recipients_parents, category) "
+                    "VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'Standard Consulting')",
+                    (t['key'], t['label'], t['subject'], _sc_body(t['inner']), rc, rco, ro, rp))
+        conn.commit()
+    except Exception as e:
+        logging.warning("seed_sc_email_group_once: %s", e)
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
 seed_email_templates_once()
 fix_welcome_email_hardcoded_counsellor_once()
 set_welcome_email_format_v2_once()
+seed_sc_email_group_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from

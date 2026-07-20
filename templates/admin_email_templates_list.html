@@ -40,7 +40,14 @@
         </tr>
       </thead>
       <tbody>
-        {% for t in templates %}
+        {% for category, group in (grouped_templates or {'': templates}).items() %}
+        {% if grouped_templates %}
+        <tr><td colspan="5" style="padding:14px 14px 8px;background:#F9FAFB;">
+          <span style="font-size:0.8rem;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;">{{ category }}</span>
+          <span style="font-size:0.72rem;color:#9CA3AF;margin-left:8px;">{{ group|length }} template{{ 's' if group|length != 1 else '' }}</span>
+        </td></tr>
+        {% endif %}
+        {% for t in group %}
         <tr style="border-bottom:1px solid #F3F4F6;">
           <td style="padding:14px;">
             <div style="font-weight:700;color:var(--navy);font-size:0.92rem;">{{ t.label or t.template_key }}</div>
@@ -63,6 +70,7 @@
             </a>
           </td>
         </tr>
+        {% endfor %}
         {% endfor %}
       </tbody>
     </table>
