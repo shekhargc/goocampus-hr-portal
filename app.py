@@ -31983,13 +31983,36 @@ ensure_ops_edit_tracking()
 
 
 def ensure_installment_approvals_unique():
-    """Back-fill the UNIQUE(registration_id, inst_no) on installment_approvals for
-    tables created before that constraint existed — so one client+installment can't
-    hold two approval rows. Dedupe (keep the newest) before creating the index, or
-    it would fail on existing duplicates (founder 2026-07-20)."""
+    """Make sure installment_approvals EXISTS (it was missing on live — its
+    original CREATE block never ran, so approving a payment 500'd with 'relation
+    does not exist', founder 2026-07-20), then back-fill the UNIQUE(registration_id,
+    inst_no): dedupe (keep the newest) before creating the index or it fails on
+    existing duplicates."""
     conn = None
     try:
         conn = get_db()
+        try:
+            conn.execute('''CREATE TABLE IF NOT EXISTS installment_approvals (
+                id SERIAL PRIMARY KEY,
+                registration_id INTEGER,
+                registration_number TEXT,
+                inst_no INTEGER,
+                base_amount NUMERIC(14,2) DEFAULT 0,
+                gst_amount NUMERIC(14,2) DEFAULT 0,
+                total_amount NUMERIC(14,2) DEFAULT 0,
+                payment_method TEXT,
+                payment_date TEXT,
+                pathway TEXT,
+                status TEXT DEFAULT 'pending',
+                ops_payment_id INTEGER,
+                reviewed_by INTEGER,
+                reviewed_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(registration_id, inst_no)
+            )''')
+            conn.commit()
+        except Exception:
+            conn.rollback()
         try:
             conn.execute(
                 "DELETE FROM installment_approvals a USING installment_approvals b "
