@@ -29787,6 +29787,70 @@ def sales_leads_resend_invite(lead_id):
     return redirect(url_for('sales_leads_list'))
 
 
+@app.route('/api/pg/lead', methods=['POST'])
+def api_pg_lead():
+    """Inbound lead from the goocampus.in public site → the sales CRM.
+
+    Service-to-service: no user login, guarded by a shared secret in the X-PG-Key
+    header (must equal env PG_API_KEY). The goocampus.in Next.js server action posts
+    here so a "Book Free Counselling Call" reaches sales — a lead written anywhere
+    else would skip the CRM's follow-up. Contract owned jointly; see the PG repo's
+    INTEGRATION.md. Founder 2026-07-20."""
+    expected = os.environ.get('PG_API_KEY') or ''
+    got = request.headers.get('X-PG-Key') or ''
+    if not expected or got != expected:
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    phone = (data.get('phone') or '').strip()
+    email = (data.get('email') or '').strip()
+    year = (data.get('neet_pg_year') or '').strip()
+    speciality = (data.get('target_speciality') or '').strip()
+    src_page = (data.get('source_page') or '').strip()
+    if not name or not phone:
+        return jsonify({'ok': False, 'error': 'name and phone are required'}), 400
+    note_bits = []
+    if year:
+        note_bits.append(f"NEET PG {year}")
+    if speciality:
+        note_bits.append(f"Target speciality: {speciality}")
+    if src_page:
+        note_bits.append(f"From page: {src_page}")
+    notes = ' · '.join(note_bits) or 'Website enquiry'
+    conn = get_db()
+    try:
+        stage = conn.execute(
+            "SELECT id FROM sales_lead_stages WHERE COALESCE(is_active,1)=1 "
+            "ORDER BY sort_order, id LIMIT 1").fetchone()
+        stage_id = stage['id'] if stage else None
+        conn.execute(
+            "INSERT INTO sales_leads (lead_name, phone, email, source, stage_id, is_hot, notes, created_at) "
+            "VALUES (?, ?, ?, 'NEET PG Website (goocampus.in)', ?, 1, ?, CURRENT_TIMESTAMP)",
+            (name, phone, email, stage_id, notes))
+        conn.commit()
+        try:
+            sales_emails = _dept_emails(conn, ['Sales'])
+        except Exception:
+            sales_emails = []
+        conn.close()
+        # Alert the sales team that a website lead came in.
+        if sales_emails:
+            try:
+                from email_utils import send_email
+                send_email(sales_emails, f"New website lead — {name}",
+                           f"<p>A new lead came in from goocampus.in.</p>"
+                           f"<p><strong>{name}</strong><br>{phone}{(' · ' + email) if email else ''}<br>{notes}</p>"
+                           f"<p>Open the Sales Leads board to action it.</p>")
+            except Exception:
+                pass
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        try: conn.rollback(); conn.close()
+        except Exception: pass
+        logging.error("api_pg_lead: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+
+
 # ---- Product lookup API (for lead form auto-fill) ----------------------
 @app.route('/sales/api/product/<int:pid>')
 @login_required
