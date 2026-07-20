@@ -36977,8 +36977,103 @@ def fix_welcome_email_hardcoded_counsellor_once():
         except Exception: pass
 
 
+_WELCOME_EMAIL_V2_HTML = '''<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #eef1f5;">
+  <div style="background:#1e3a5f;padding:22px 28px;text-align:center;">
+    <img src="https://goocampus.org/static/logo-white.png" alt="GooCampus" width="100" height="85" style="width:100px;height:85px;display:inline-block;border:0;">
+  </div>
+  <div style="height:4px;background:#f97316;font-size:0;line-height:0;">&nbsp;</div>
+  <div style="padding:28px 32px;color:#333333;line-height:1.7;font-size:15px;">
+    <p style="margin:0 0 14px;">Dear <strong>{{client_name}}</strong>,</p>
+    <p style="margin:0 0 14px;">We would like to officially welcome you to <strong>{{product_name}}</strong> and assure you that our team will support you at every step of your journey.</p>
+    <p style="margin:0 0 14px;"><strong>Mr. {{counsellor_name}}</strong> will be your designated counsellor, and you may reach out to him at any time to clarify your queries and receive guidance throughout the process.</p>
+    <p style="margin:0 0 14px;">Our Operations Team, headed by <strong>Mr. Vipin Vijaraghavan</strong>, Operations Manager, will assist you with all operational processes, including scheduling classes, webinars, tests, and other related activities.</p>
+    <p style="margin:0 0 8px;">The Operations Team will be your first point of contact for any operational assistance. They will reach out to you with an introductory call within 24 hours of your registration. During this process, they will also collect certain documents, including:</p>
+    <ul style="margin:0 0 14px;padding-left:22px;">
+      <li>Current residential address</li>
+      <li>Copy of passport</li>
+      <li>Academic certificates</li>
+      <li>Work experience documents (if applicable)</li>
+    </ul>
+    <p style="margin:0 0 14px;">This information will help our team manage your applications and registrations smoothly and efficiently.</p>
+    <p style="margin:0 0 14px;">For any payment-related queries or concerns, kindly communicate directly with our Finance Team using the contact details provided below.</p>
+    <p style="margin:0 0 16px;">Should you have any questions, please feel free to reach out to us.</p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 20px;font-size:14px;">
+      <thead>
+        <tr style="background:#f3f6fb;">
+          <th align="left" style="padding:9px 12px;border:1px solid #e2e8f0;color:#1e3a5f;">Contact Person</th>
+          <th align="left" style="padding:9px 12px;border:1px solid #e2e8f0;color:#1e3a5f;">Designation</th>
+          <th align="left" style="padding:9px 12px;border:1px solid #e2e8f0;color:#1e3a5f;">Contact Number</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;">{{counsellor_name}}</td>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;">Counsellor-in-Charge</td>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:600;">{{counsellor_number}}</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;">Vipin Vijaraghavan</td>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;">Operations Manager</td>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:600;">+91 95389 44468</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;">Finance Team</td>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;">Accounts &amp; Finance</td>
+          <td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:600;">+91 96119 96500</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="margin:0 0 18px;"><a href="{{portal_login_link}}" style="background:#f97316;color:#ffffff;padding:11px 26px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">Log in to your portal</a></p>
+
+    <p style="margin:0 0 14px;">We look forward to supporting you in your journey and wish you the very best in achieving your goals.</p>
+    <p style="margin:0 0 2px;">Warm Regards,</p>
+    <p style="margin:0 0 2px;font-weight:700;color:#1e3a5f;">Team GooCampus</p>
+    <p style="margin:0 0 2px;">{{product_name}} Division</p>
+    <p style="margin:0;color:#64748b;font-size:13px;">GooCampus Edu Solutions Pvt. Ltd.</p>
+    <p style="margin:16px 0 0;font-size:13px;">To review our refund policy, click <a href="{{refund_policy_link}}" style="color:#f97316;font-weight:600;">Refund Policy</a>.</p>
+  </div>
+</div>'''
+
+
+def set_welcome_email_format_v2_once():
+    """Apply the founder's welcome-email format (2026-07-20): polished copy + a
+    Contact Person / Designation / Contact Number table, with the counsellor row
+    and product name dynamic. One-time (marker-guarded) so a later manual edit in
+    /admin/email-templates is never overwritten."""
+    MARKER = 'welcome_email_format_v2'
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        seen = conn.execute("SELECT value FROM _import_markers WHERE key = ?", (MARKER,)).fetchone()
+        if seen and seen['value'] == 'done':
+            conn.close(); return
+        conn.execute(
+            "UPDATE email_templates SET subject = ?, body_html = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE template_key = 'welcome_email'",
+            ('Welcome to {{product_name}} — GooCampus', _WELCOME_EMAIL_V2_HTML))
+        conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, 'done') "
+                     "ON CONFLICT(key) DO UPDATE SET value = 'done'", (MARKER,))
+        conn.commit()
+        logging.info("welcome_email format v2 applied")
+    except Exception as e:
+        logging.warning("set_welcome_email_format_v2_once: %s", e)
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
 seed_email_templates_once()
 fix_welcome_email_hardcoded_counsellor_once()
+set_welcome_email_format_v2_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from
