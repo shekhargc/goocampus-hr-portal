@@ -3174,6 +3174,59 @@ def admin_email_template_edit(template_key):
     )
 
 
+@app.route('/admin/email-templates/<template_key>/send-test', methods=['POST'])
+@login_required
+def admin_email_template_send_test(template_key):
+    """Send a real copy of a template to an admin's own inbox to preview how it
+    looks in an email client. Rendered with representative sample data — same
+    template + placeholder substitution the client actually receives, so it's a
+    faithful preview without pulling any real client's details (founder 2026-07-20)."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    to = (request.form.get('to') or '').strip()
+    if '@' not in to:
+        flash('Enter a valid email address to send the test to.', 'error')
+        return redirect(url_for('admin_email_template_edit', template_key=template_key))
+    conn = get_db()
+    tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = ?", (template_key,)).fetchone()
+    # A real counsellor so the footer contact reads naturally in the preview.
+    cns = conn.execute("SELECT name, email, phone FROM employees WHERE COALESCE(is_active,1)=1 "
+                       "AND phone IS NOT NULL AND phone <> '' ORDER BY id LIMIT 1").fetchone()
+    conn.close()
+    if not tpl:
+        flash('Template not found.', 'error')
+        return redirect(url_for('admin_email_templates_list'))
+    cn_name = (cns['name'] if cns else '') or 'Your Counsellor'
+    subs = {
+        '{{client_name}}': 'Dr. Sample Client',
+        '{{counsellor_name}}': cn_name,
+        '{{counsellor_number}}': (cns['phone'] if cns else '') or '',
+        '{{counsellor_email}}': (cns['email'] if cns else '') or '',
+        '{{product_name}}': 'AMC Standard Consulting',
+        '{{registration_number}}': 'GCCSS/26-27/000 (sample)',
+        '{{plan_type}}': 'Standard Consulting',
+        '{{registration_date}}': ((datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime('%d %b %Y')),
+        '{{portal_login_link}}': 'https://goocampus.org/client/login',
+        '{{refund_policy_link}}': 'https://goocampus.org/client/refund-policy',
+    }
+    subject = '[TEST] ' + (tpl['subject'] or 'GooCampus')
+    body = tpl['body_html'] or ''
+    for k, v in subs.items():
+        subject = subject.replace(k, str(v))
+        body = body.replace(k, str(v))
+    try:
+        from email_utils import send_email
+        ok = send_email([to], subject, body)
+        flash(('Test email sent to ' + to + ' — check the inbox (and spam).') if ok
+              else 'Could not send the test email — check the email service.', 'success' if ok else 'error')
+    except Exception as e:
+        logging.error("send-test %s: %s", template_key, e)
+        flash('Could not send the test email — please try again.', 'error')
+    return redirect(url_for('admin_email_template_edit', template_key=template_key))
+
+
 @app.route('/admin/email-templates/<template_key>/save', methods=['POST'])
 @login_required
 def admin_email_template_save(template_key):

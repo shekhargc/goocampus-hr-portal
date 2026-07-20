@@ -107,6 +107,24 @@
 
   </form>
 
+  {# Preview in a real inbox: sends this template with sample data (founder 2026-07-20). #}
+  <div style="margin-top:18px;padding:14px 16px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;">
+    <div style="font-weight:700;font-size:0.82rem;color:#374151;margin-bottom:8px;">
+      <i class="bi bi-envelope-paper me-1"></i>Send yourself a test
+    </div>
+    <p style="margin:0 0 10px;font-size:0.78rem;color:#6B7280;">
+      Save your changes first, then send a copy here to see exactly how it looks in an email client.
+      Rendered with sample data (Dr. Sample Client &middot; Standard Consulting).
+    </p>
+    <form method="POST" action="/admin/email-templates/{{ tpl.template_key }}/send-test" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="email" name="to" value="shekhar@goocampus.in" required placeholder="you@goocampus.in"
+             style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.85rem;">
+      <button type="submit" style="padding:9px 18px;background:var(--navy,#1e3a5f);color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:700;cursor:pointer;">
+        Send test email
+      </button>
+    </form>
+  </div>
+
   {% if tpl.updated_at %}
   <p style="margin:14px 0 0;font-size:0.74rem;color:#9CA3AF;text-align:right;">
     Last saved {{ tpl.updated_at|format_datetime }}
