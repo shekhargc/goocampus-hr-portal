@@ -57,6 +57,26 @@
         </label>
         {% endfor %}
       </div>
+
+      {# Pick specific active team members to also copy on this email (founder 2026-07-20). #}
+      <div style="font-weight:600;font-size:0.78rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;margin:18px 0 8px;">
+        Also send to these team members
+      </div>
+      <p style="font-size:0.74rem;color:#9CA3AF;margin:0 0 8px;">Tick any active employees who should also receive this email. Only active employees with an email address are shown.</p>
+      <div style="max-height:220px;overflow-y:auto;border:1px solid #E5E7EB;border-radius:8px;padding:8px 10px;background:#FAFAFA;">
+        {% if active_employees %}
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 14px;">
+          {% for e in active_employees %}
+          <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:#374151;cursor:pointer;padding:3px 0;">
+            <input type="checkbox" name="recipient_employee_ids" value="{{ e.id }}" {% if (e.id|string) in selected_employee_ids %}checked{% endif %} style="width:15px;height:15px;accent-color:var(--orange);">
+            <span>{{ e.name }}{% if e.department %} <span style="color:#9CA3AF;">· {{ e.department }}</span>{% endif %}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="font-size:0.82rem;color:#9CA3AF;">No active employees with email addresses found.</div>
+        {% endif %}
+      </div>
     </div>
 
     <!-- Subject + body card -->

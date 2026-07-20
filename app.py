@@ -3151,6 +3151,27 @@ def admin_email_templates_list():
     )
 
 
+def _template_staff_emails(conn, tpl):
+    """Emails of the ACTIVE employees picked as extra recipients on a template
+    (recipient_employee_ids = comma-separated ids). Skips inactive/missing."""
+    raw = ''
+    try:
+        raw = (tpl.get('recipient_employee_ids') if hasattr(tpl, 'get') else tpl['recipient_employee_ids']) or ''
+    except Exception:
+        raw = ''
+    ids = [i for i in (raw or '').split(',') if i.strip().isdigit()]
+    if not ids:
+        return []
+    ph = ','.join(['?'] * len(ids))
+    try:
+        rows = conn.execute(
+            f"SELECT email FROM employees WHERE id IN ({ph}) AND COALESCE(is_active,1)=1 "
+            f"AND email IS NOT NULL AND email <> ''", [int(i) for i in ids]).fetchall()
+        return [r['email'] for r in rows]
+    except Exception:
+        return []
+
+
 @app.route('/admin/email-templates/<template_key>', methods=['GET'])
 @login_required
 def admin_email_template_edit(template_key):
@@ -3162,14 +3183,23 @@ def admin_email_template_edit(template_key):
     tpl = conn.execute(
         "SELECT * FROM email_templates WHERE template_key = ?", (template_key,)
     ).fetchone()
+    # Active employees for the "also send to these team members" picker.
+    active_employees = conn.execute(
+        "SELECT id, name, email, COALESCE(department,'') AS department FROM employees "
+        "WHERE COALESCE(is_active,1)=1 AND email IS NOT NULL AND email <> '' ORDER BY name"
+    ).fetchall()
     conn.close()
     if not tpl:
         flash('Template not found.', 'error')
         return redirect(url_for('admin_email_templates_list'))
+    tpl = dict(tpl)
+    selected_ids = set(i.strip() for i in (tpl.get('recipient_employee_ids') or '').split(',') if i.strip())
     return render_template(
         'admin_email_templates_edit.html',
-        user=user, tpl=dict(tpl),
+        user=user, tpl=tpl,
         recipient_keys=EMAIL_RECIPIENT_KEYS,
+        active_employees=[dict(e) for e in active_employees],
+        selected_employee_ids=selected_ids,
         active_section='company',
     )
 
@@ -3247,6 +3277,8 @@ def admin_email_template_save(template_key):
     r_couns  = 1 if f.get('recipients_counsellor') else 0
     r_ops    = 1 if f.get('recipients_ops') else 0
     r_parent = 1 if f.get('recipients_parents') else 0
+    # Active-employee recipients picked in the editor (checkbox list).
+    emp_ids = ','.join([i for i in f.getlist('recipient_employee_ids') if i.strip().isdigit()])
     conn = get_db()
     try:
         conn.execute("""
@@ -3254,10 +3286,11 @@ def admin_email_template_save(template_key):
               subject = ?, body_html = ?, label = ?, notes = ?, enabled = ?,
               recipients_client = ?, recipients_counsellor = ?,
               recipients_ops = ?, recipients_parents = ?,
+              recipient_employee_ids = ?,
               updated_at = CURRENT_TIMESTAMP
             WHERE template_key = ?
         """, (subject, body_html, label, notes, enabled,
-              r_client, r_couns, r_ops, r_parent, template_key))
+              r_client, r_couns, r_ops, r_parent, emp_ids, template_key))
         conn.commit()
         flash('Email template saved.', 'success')
     except Exception as e:
@@ -4260,7 +4293,10 @@ def _notify_onboarding_confirmed(reg_id):
                 <p>You can log in to your client portal anytime to track your progress, upload documents, and stay updated.</p>
                 <p><a href="https://goocampus.org/client/login">Log in to your portal</a></p>
                 <p>Thank you for choosing GooCampus!</p>"""
-            send_email([reg['email']], client_subject, client_body)
+            # Client + any active team members picked on the template (founder 2026-07-20).
+            _to = [reg['email']] + [e for e in _template_staff_emails(conn, dict(tpl) if tpl else {})
+                                    if e and e != reg['email']]
+            send_email(list(dict.fromkeys(_to)), client_subject, client_body)
 
         # 2. Welcome WhatsApp to client
         if reg['mobile']:
@@ -17154,6 +17190,10 @@ def ensure_ops_tables():
             "ALTER TABLE email_templates ADD COLUMN recipients_ops INTEGER DEFAULT 0",
             "ALTER TABLE email_templates ADD COLUMN recipients_parents INTEGER DEFAULT 0",
             "ALTER TABLE email_templates ADD COLUMN notes TEXT",
+            # Named team members (active employees) to also copy on this email —
+            # a comma-separated list of employee ids picked in the editor
+            # (founder 2026-07-20).
+            "ALTER TABLE email_templates ADD COLUMN recipient_employee_ids TEXT",
         ):
             try:
                 conn.execute(ddl)
