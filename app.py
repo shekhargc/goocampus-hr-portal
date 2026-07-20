@@ -25026,13 +25026,22 @@ def ops_payment_approve(reg_id, inst_no):
             "SELECT id FROM ops_payments WHERE registration_number = ? AND source = 'installment' "
             "AND instalment = ? ORDER BY id DESC LIMIT 1", (reg_no, _INST_ORD[inst_no])).fetchone()
         pay_id = pay['id'] if pay else None
-        conn.execute(
-            "INSERT INTO installment_approvals (registration_id, registration_number, inst_no, base_amount, "
-            " gst_amount, total_amount, payment_method, payment_date, pathway, status, ops_payment_id, reviewed_by, reviewed_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP) "
-            "ON CONFLICT (registration_id, inst_no) DO UPDATE SET status = 'approved', "
-            " ops_payment_id = EXCLUDED.ops_payment_id, reviewed_by = EXCLUDED.reviewed_by, reviewed_at = CURRENT_TIMESTAMP",
-            (reg_id, reg_no, inst_no, amount, gst, total, method, pdate, pathway, pay_id, session.get('user_id')))
+        # Explicit upsert instead of ON CONFLICT — the live table may predate the
+        # UNIQUE(registration_id, inst_no) constraint (CREATE TABLE IF NOT EXISTS
+        # never adds a constraint to an existing table), which made ON CONFLICT 500
+        # (founder 2026-07-20). This works regardless of the constraint.
+        if existing:
+            conn.execute(
+                "UPDATE installment_approvals SET status = 'approved', base_amount = ?, gst_amount = ?, "
+                " total_amount = ?, payment_method = ?, payment_date = ?, pathway = ?, ops_payment_id = ?, "
+                " reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE registration_id = ? AND inst_no = ?",
+                (amount, gst, total, method, pdate, pathway, pay_id, session.get('user_id'), reg_id, inst_no))
+        else:
+            conn.execute(
+                "INSERT INTO installment_approvals (registration_id, registration_number, inst_no, base_amount, "
+                " gst_amount, total_amount, payment_method, payment_date, pathway, status, ops_payment_id, reviewed_by, reviewed_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP)",
+                (reg_id, reg_no, inst_no, amount, gst, total, method, pdate, pathway, pay_id, session.get('user_id')))
         conn.commit(); conn.close()
         flash(f'{_INST_ORD[inst_no]} installment approved and posted to {pathway.title()} Payments', 'success')
     except Exception as e:
@@ -25047,16 +25056,29 @@ def ops_payment_approve(reg_id, inst_no):
 @admin_required
 def ops_payment_reject(reg_id, inst_no):
     conn = get_db()
-    r = conn.execute("SELECT registration_number FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
-    reg_no = r['registration_number'] if r else None
-    conn.execute(
-        "INSERT INTO installment_approvals (registration_id, registration_number, inst_no, status, reviewed_by, reviewed_at) "
-        "VALUES (?, ?, ?, 'rejected', ?, CURRENT_TIMESTAMP) "
-        "ON CONFLICT (registration_id, inst_no) DO UPDATE SET status = 'rejected', "
-        " reviewed_by = EXCLUDED.reviewed_by, reviewed_at = CURRENT_TIMESTAMP",
-        (reg_id, reg_no, inst_no, session.get('user_id')))
-    conn.commit(); conn.close()
-    flash('Installment rejected', 'success')
+    try:
+        r = conn.execute("SELECT registration_number FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+        reg_no = r['registration_number'] if r else None
+        # Explicit upsert (the live table may predate the UNIQUE constraint, which
+        # broke ON CONFLICT — founder 2026-07-20).
+        existing = conn.execute("SELECT id FROM installment_approvals WHERE registration_id = ? AND inst_no = ?",
+                                (reg_id, inst_no)).fetchone()
+        if existing:
+            conn.execute("UPDATE installment_approvals SET status = 'rejected', reviewed_by = ?, "
+                         "reviewed_at = CURRENT_TIMESTAMP WHERE registration_id = ? AND inst_no = ?",
+                         (session.get('user_id'), reg_id, inst_no))
+        else:
+            conn.execute(
+                "INSERT INTO installment_approvals (registration_id, registration_number, inst_no, status, reviewed_by, reviewed_at) "
+                "VALUES (?, ?, ?, 'rejected', ?, CURRENT_TIMESTAMP)",
+                (reg_id, reg_no, inst_no, session.get('user_id')))
+        conn.commit(); conn.close()
+        flash('Installment rejected', 'success')
+    except Exception as e:
+        try: conn.rollback(); conn.close()
+        except Exception: pass
+        logging.error(f"ops_payment_reject {reg_id}/{inst_no}: {e}")
+        flash('Could not reject the installment. Details: ' + str(e)[:180], 'error')
     return redirect(url_for('ops_payment_approvals'))
 
 
@@ -31958,6 +31980,43 @@ def ensure_ops_edit_tracking():
 
 
 ensure_ops_edit_tracking()
+
+
+def ensure_installment_approvals_unique():
+    """Back-fill the UNIQUE(registration_id, inst_no) on installment_approvals for
+    tables created before that constraint existed — so one client+installment can't
+    hold two approval rows. Dedupe (keep the newest) before creating the index, or
+    it would fail on existing duplicates (founder 2026-07-20)."""
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute(
+                "DELETE FROM installment_approvals a USING installment_approvals b "
+                "WHERE a.registration_id = b.registration_id AND a.inst_no = b.inst_no AND a.id < b.id")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_inst_appr_reg_inst "
+                         "ON installment_approvals(registration_id, inst_no)")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+    except Exception as e:
+        logging.warning("ensure_installment_approvals_unique: %s", e)
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
+ensure_installment_approvals_unique()
 
 
 def ensure_pathway_column_on_plab_clients():
