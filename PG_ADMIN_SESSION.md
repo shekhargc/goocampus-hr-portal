@@ -49,3 +49,35 @@ Both share ONE DB. Auto-deploy is flaky — the integrator curls the Render hook
 2. Read `goocampus-pg/API_CONTRACT.md` (the other repo) — the live contract with session 3.
 3. Ask the user what the first admin-panel screen should be, or which `/api/pg/*` endpoint
    session 3 needs next.
+
+---
+
+## Reference: the already-built admin dashboard (replicate these)
+
+An earlier, working admin dashboard exists (React + Material-UI) in the OTHER repo:
+`goocampus-pg/goocampus-rank-predictor-main/frontend/src/pages/Admin/` (backend in
+`.../backend/modules/admin/`). **Get read access with** `/add-dir ~/Desktop/Claude Code/goocampus-pg`.
+**Reference ONLY** — study the screens (fields, filters, actions) and rebuild them as
+Flask/Jinja pages here. Do NOT connect to, deploy, or modify the old system.
+
+### Build first — new + core to goocampus.in (in this order)
+1. **DoctorManagement** — list/search/manage doctor (user) accounts.
+2. **BookingManagement** — manage counselling-call bookings (status + admin notes).
+3. **UserManagement** — users + roles (pairs with DoctorManagement).
+
+### Build when paid plans go live (Razorpay phase) — replicate as a set
+**PlanManagement · SubscriptionManagement · PaymentConfiguration · CouponManagement.**
+
+### Reuse the LAYOUT but wire to what already exists (don't build a 2nd data layer)
+- **CollegeManagement** → the existing `college/` module (college directory).
+- **ExamManagement** → existing NEET-PG PDFs + Medical Predictor (`college/routes/neetpg.py`, predictor).
+- **InstitutionInquiries** → existing partner / B2B leads in the portal.
+
+### SKIP — old 12thplus/UG platform, out of scope for goocampus.in
+EducationLoan, IncomingNews, NewsSources, RejectedItems, AIUsage, CareerManagement,
+CollegeApplication, InternationalPathways.
+
+### Decide early with the founder
+**Where do doctor accounts + bookings live?** goocampus.org is now the backend, so they'd
+be NEW tables in the portal DB, exposed to goocampus.in via `/api/pg/*`. Propose the data
+model (tables + endpoints) and confirm with the founder before building.
