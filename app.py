@@ -3167,77 +3167,125 @@ def admin_diag_academics():
         conn.close()
 
 
-@app.route('/admin/diag/academic-pathways', methods=['GET'])
+def _pathway_audit_tables(conn):
+    """Which OPS_PATHWAY_TABLES have BOTH a registration_number and a pathway column
+    (so a row can be checked against its client's master pathway)."""
+    out = []
+    for t in OPS_PATHWAY_TABLES:
+        try:
+            cols = {c['column_name'] for c in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ?", (t,)).fetchall()}
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            cols = set()
+        if 'registration_number' in cols and 'pathway' in cols:
+            out.append(t)
+    return out
+
+
+@app.route('/admin/diag/pathway-audit', methods=['GET'])
+@app.route('/admin/diag/academic-pathways', methods=['GET'])  # legacy link → same page
 @login_required
-def admin_fix_academic_pathways_preview():
-    """Preview (read-only): ops_academic_details rows whose `pathway` doesn't match
-    their client's real pathway on plab_clients — i.e. academics filed under the
-    wrong pathway's Academic Details page. Shows the list + a Fix button that POSTs
-    to the apply route. (founder 2026-07-21)"""
+def admin_pathway_audit_preview():
+    """Preview (read-only): across EVERY ops pathway section, find records whose
+    `pathway` doesn't match their client's real pathway on plab_clients — i.e. a
+    client's data filed under the wrong pathway's page (so it's invisible there).
+    Shows a per-section count + sample, plus one Fix-all button. (founder 2026-07-21)"""
     user = get_user()
     if not (user and user['is_admin']):
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
+    sections = []
+    total = 0
     try:
-        rows = conn.execute(
-            "SELECT a.id, a.registration_number, a.pathway AS current_pathway, "
-            "       p.pathway AS correct_pathway, p.prefix, p.first_name, p.last_name "
-            "  FROM ops_academic_details a "
-            "  JOIN plab_clients p ON a.registration_number = p.registration_number "
-            " WHERE COALESCE(p.pathway,'') <> '' "
-            "   AND COALESCE(a.pathway,'') <> COALESCE(p.pathway,'') "
-            " ORDER BY a.id DESC").fetchall()
+        for t in _pathway_audit_tables(conn):
+            try:
+                rows = conn.execute(
+                    f"SELECT a.id, a.registration_number, a.pathway AS current_pathway, "
+                    f"       p.pathway AS correct_pathway, p.prefix, p.first_name, p.last_name "
+                    f"  FROM {t} a JOIN plab_clients p "
+                    f"    ON a.registration_number = p.registration_number "
+                    f" WHERE COALESCE(p.pathway,'') <> '' "
+                    f"   AND COALESCE(a.pathway,'') <> COALESCE(p.pathway,'') "
+                    f" ORDER BY a.id DESC").fetchall()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+                rows = []
+            if rows:
+                total += len(rows)
+                sections.append((t, OPS_SECTION_LABELS.get(t, t), rows))
     finally:
         conn.close()
-    items = "".join(
-        f"<tr><td>{r['id']}</td><td>{r['registration_number']}</td>"
-        f"<td>{(r['prefix'] or '')} {(r['first_name'] or '')} {(r['last_name'] or '')}</td>"
-        f"<td style='color:#b91c1c'>{r['current_pathway']}</td>"
-        f"<td style='color:#065f46;font-weight:700'>{r['correct_pathway']}</td></tr>"
-        for r in rows)
-    btn = ("<form method='POST' action='/admin/diag/academic-pathways/apply' style='margin-top:16px'>"
-           "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:6px;"
-           "font-weight:700;cursor:pointer'>Fix these " + str(len(rows)) + " record(s) — re-file each under the correct pathway</button></form>"
-           ) if rows else "<p style='color:#065f46;font-weight:700'>Nothing to fix — every academic record is already filed under the correct pathway. ✅</p>"
-    return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
-            "<h2>Academic records filed under the wrong pathway</h2>"
-            "<p>These clients' academic details were saved but tagged with the wrong pathway, so they don't "
-            "appear on their pathway's Academic Details page. Clicking Fix re-files each under the pathway on "
-            "their master profile. Nothing else changes.</p>"
-            "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
-            "<tr style='background:#f3f4f6'><th>Row</th><th>Reg #</th><th>Client</th><th>Currently filed as</th>"
-            "<th>Should be</th></tr>" + items + "</table>" + btn + "</div>")
+
+    blocks = ""
+    for t, label, rows in sections:
+        items = "".join(
+            f"<tr><td>{r['registration_number']}</td>"
+            f"<td>{(r['prefix'] or '')} {(r['first_name'] or '')} {(r['last_name'] or '')}</td>"
+            f"<td style='color:#b91c1c'>{r['current_pathway']}</td>"
+            f"<td style='color:#065f46;font-weight:700'>{r['correct_pathway']}</td></tr>"
+            for r in rows)
+        blocks += (f"<h3 style='margin:22px 0 6px'>{label} "
+                   f"<span style='color:#9ca3af;font-weight:400'>({len(rows)} mis-filed)</span></h3>"
+                   "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
+                   "<tr style='background:#f3f4f6'><th>Reg #</th><th>Client</th><th>Filed as</th><th>Should be</th></tr>"
+                   + items + "</table>")
+
+    if total:
+        btn = ("<form method='POST' action='/admin/diag/pathway-audit/apply' style='margin:20px 0'>"
+               "<button style='padding:12px 22px;background:#F57C1F;color:#fff;border:none;border-radius:6px;"
+               f"font-weight:700;cursor:pointer;font-size:1rem'>Fix all {total} record(s) across every section — "
+               "re-file each under the correct pathway</button></form>")
+        head = (f"<p><b>{total}</b> record(s) across <b>{len(sections)}</b> section(s) are filed under the wrong "
+                "pathway, so they don't show on the client's pathway page. Fix re-files each under the pathway on "
+                "their master profile. Nothing else changes.</p>")
+    else:
+        btn = ""
+        head = "<p style='color:#065f46;font-weight:700'>Every record across every section is filed under the correct pathway. ✅</p>"
+
+    return ("<div style='font-family:system-ui;max-width:920px;margin:30px auto'>"
+            "<h2>Pathway-linking audit — all sections</h2>" + head + btn + blocks + "</div>")
 
 
-@app.route('/admin/diag/academic-pathways/apply', methods=['POST'])
+@app.route('/admin/diag/pathway-audit/apply', methods=['POST'])
+@app.route('/admin/diag/academic-pathways/apply', methods=['POST'])  # legacy
 @login_required
-def admin_fix_academic_pathways_apply():
-    """Align each ops_academic_details.pathway to its client's master pathway. Only
-    touches rows that are genuinely mis-tagged; a correctly-filed row is untouched."""
+def admin_pathway_audit_apply():
+    """Across every ops pathway section, align each row's pathway to its client's
+    master pathway. Only touches genuinely mis-filed rows; correct rows untouched."""
     user = get_user()
     if not (user and user['is_admin']):
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
+    fixed = {}
     try:
-        cur = conn.execute(
-            "UPDATE ops_academic_details a "
-            "   SET pathway = p.pathway "
-            "  FROM plab_clients p "
-            " WHERE a.registration_number = p.registration_number "
-            "   AND COALESCE(p.pathway,'') <> '' "
-            "   AND COALESCE(a.pathway,'') <> COALESCE(p.pathway,'')")
-        n = cur.rowcount if hasattr(cur, 'rowcount') else None
-        conn.commit()
-    except Exception as e:
-        conn.rollback(); conn.close()
-        return f"<pre>Error: {e}</pre>", 500
+        for t in _pathway_audit_tables(conn):
+            try:
+                cur = conn.execute(
+                    f"UPDATE {t} a SET pathway = p.pathway "
+                    f"  FROM plab_clients p "
+                    f" WHERE a.registration_number = p.registration_number "
+                    f"   AND COALESCE(p.pathway,'') <> '' "
+                    f"   AND COALESCE(a.pathway,'') <> COALESCE(p.pathway,'')")
+                n = cur.rowcount if hasattr(cur, 'rowcount') else 0
+                if n:
+                    fixed[OPS_SECTION_LABELS.get(t, t)] = n
+                conn.commit()
+            except Exception as e:
+                try: conn.rollback()
+                except Exception: pass
+                logging.error(f"pathway-audit apply {t}: {e}")
     finally:
-        try: conn.close()
-        except Exception: pass
+        conn.close()
+    total = sum(fixed.values())
+    lines = "".join(f"<li>{k}: <b>{v}</b></li>" for k, v in fixed.items()) or "<li>Nothing needed fixing.</li>"
     return ("<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
-            f"<h2>Done ✅</h2><p>Re-filed <b>{n}</b> academic record(s) under the correct pathway. "
-            "Open each pathway's Academic Details page to confirm the clients now appear.</p>"
-            "<a href='/admin/diag/academic-pathways'>Re-check</a></div>")
+            f"<h2>Done ✅</h2><p>Re-filed <b>{total}</b> record(s) under the correct pathway:</p>"
+            f"<ul>{lines}</ul>"
+            "<p>Open each pathway's pages to confirm the clients now appear.</p>"
+            "<a href='/admin/diag/pathway-audit'>Re-check</a></div>")
 
 
 @app.route('/admin/email-templates', methods=['GET'])
@@ -24941,12 +24989,18 @@ def ops_payments_add():
             amount_paid = round(total_amount_paid / 1.18, 2)
             gst_paid = round(total_amount_paid - amount_paid, 2)
 
+            # Stamp the client's real pathway (from their master record) so the
+            # payment shows on THEIR pathway's Payments page, not filed under the
+            # 'plab' column default. (founder 2026-07-21: pathway-linking audit)
+            _pw_row = conn.execute("SELECT pathway FROM plab_clients WHERE registration_number = ?",
+                                   (registration_number,)).fetchone()
+            _pw = (_pw_row['pathway'] if _pw_row and _pw_row['pathway'] else 'plab')
             conn.execute('''INSERT INTO ops_payments
                 (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
-                 instalment, payment_method, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                 instalment, payment_method, notes, pathway, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
-                 instalment, payment_method, notes, session.get('user_id')))
+                 instalment, payment_method, notes, _pw, session.get('user_id')))
             conn.commit()
             flash('Payment added successfully', 'success')
             next_url = request.args.get('next')
