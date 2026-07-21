@@ -234,7 +234,7 @@
 
     <div class="am-card" id="bs-step-3" style="display:none;">
         <h2><span class="am-step-num">3</span>Pick {{ 'partners' if subject_type == 'partner' else 'team members' }}</h2>
-        <p style="font-size:0.78rem;color:var(--gray-500);margin:0 0 0.6rem;">A green <b>Has</b> badge marks {{ 'partners' if subject_type == 'partner' else 'members' }} who already have this section (V/E/A = current View/Edit/Add) and they're pre-ticked. Clicking <b>Grant Access</b> re-applies the toggles above to everyone ticked.</p>
+        <p style="font-size:0.78rem;color:var(--gray-500);margin:0 0 0.6rem;">A green <b>Currently has</b> badge shows each {{ 'partner' if subject_type == 'partner' else 'member' }}'s exact access for this section (the same detail as the By&nbsp;Person view). Nobody is pre-ticked — tick only the {{ 'partners' if subject_type == 'partner' else 'people' }} you want to change now. <b>Grant</b> adds the sub-sections you selected above; <b>Revoke</b> removes them. Untouched sub-sections are never affected.</p>
         <input type="text" id="bs-emp-search" placeholder="Search by name {% if subject_type != 'partner' %}or department{% endif %}..."
                oninput="bsFilterEmployees()"
                style="width:100%;padding:0.5rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;margin-bottom:0.75rem;">
@@ -276,27 +276,33 @@
         const BS_SECTION_MEMBERS = {{ section_members|tojson }};
 
         function bsMarkExistingMembers(mainKey) {
-            // Reflect who already has access to this section: tick them + badge.
+            // Show each member's EXACT current access for this section (sub-section
+            // by sub-section) — the same detail the By-Person view shows. We do NOT
+            // auto-tick anyone: ticking is only for who you intend to change now, so
+            // "Grant Access" can never silently over-grant someone who had one piece.
             const granted = BS_SECTION_MEMBERS[mainKey] || {};
+            const subs = BS_CATALOG[mainKey] || [];
+            const labelOf = {};
+            subs.forEach(function(s){ labelOf[s[0]] = s[1]; });
             document.querySelectorAll('.bs-emp-cb').forEach(cb => {
                 const id = cb.getAttribute('data-emp-id');
                 const label = cb.closest('.bs-emp-item');
                 const old = label.querySelector('.bs-has-access');
                 if (old) old.remove();
+                cb.checked = false;  // never auto-tick
                 const g = granted[id];
-                if (g) {
-                    cb.checked = true;
-                    const parts = [];
-                    if (g.view) parts.push('V');
-                    if (g.edit) parts.push('E');
-                    if (g.add) parts.push('A');
+                if (g && Object.keys(g).length) {
+                    const parts = Object.keys(g).map(function(sk){
+                        const lv = g[sk];
+                        const lvl = [lv.view?'V':'', lv.edit?'E':'', lv.add?'A':''].filter(Boolean).join('/');
+                        return (labelOf[sk] || sk) + (lvl ? ' ('+lvl+')' : '');
+                    });
                     const b = document.createElement('span');
                     b.className = 'bs-has-access';
-                    b.style.cssText = 'margin-left:auto;font-size:0.6rem;font-weight:700;background:#ECFDF5;color:#065F46;padding:2px 7px;border-radius:999px;white-space:nowrap;';
-                    b.textContent = 'Has ' + (parts.join('/') || 'access');
+                    b.style.cssText = 'flex-basis:100%;margin-top:4px;font-size:0.66rem;font-weight:600;color:#065F46;background:#ECFDF5;padding:3px 8px;border-radius:8px;line-height:1.35;';
+                    b.textContent = 'Currently has: ' + parts.join(', ');
                     label.appendChild(b);
-                } else {
-                    cb.checked = false;
+                    label.style.flexWrap = 'wrap';
                 }
             });
             if (typeof bsOnEmployeeChange === 'function') bsOnEmployeeChange();

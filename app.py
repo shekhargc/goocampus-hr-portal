@@ -39703,21 +39703,25 @@ def access_master():
                             'add':  bool(r['can_add']),
                         }
         elif mode == 'by-section':
-            # Load every existing grant for this subject_type so the by-section
-            # page can show WHICH members already have each section (the missing
-            # piece that made dept/section grants look like they didn't save).
+            # Load every existing grant for this subject_type, keeping SUB-SECTION
+            # detail so the by-section page can show each member's exact access for
+            # the chosen section (mirrors the by-person view) instead of a coarse
+            # whole-section "Has" flag. Shape: {main: {subject_id: {sub: {v,e,a}}}}.
+            # (founder 2026-07-21 — dept view must match individual view.)
             for r in conn.execute(
-                "SELECT subject_id, main_section, can_view, can_edit, can_add "
+                "SELECT subject_id, main_section, sub_section, can_view, can_edit, can_add "
                 "FROM user_section_permissions "
                 "WHERE subject_type = ? AND subject_id IS NOT NULL "
                 "  AND (can_view = 1 OR can_edit = 1 OR can_add = 1)",
                 (subject_type,),
             ).fetchall():
                 m = section_members.setdefault(r['main_section'], {})
-                cur = m.setdefault(str(r['subject_id']), {'view': False, 'edit': False, 'add': False})
-                if r['can_view']: cur['view'] = True
-                if r['can_edit']: cur['edit'] = True
-                if r['can_add']: cur['add'] = True
+                subs = m.setdefault(str(r['subject_id']), {})
+                subs[r['sub_section']] = {
+                    'view': bool(r['can_view']),
+                    'edit': bool(r['can_edit']),
+                    'add':  bool(r['can_add']),
+                }
     finally:
         try: conn.close()
         except Exception: pass
