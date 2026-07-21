@@ -28915,7 +28915,10 @@ def sales_leads_list():
     f_owner = request.args.get('owner')
     f_hot = request.args.get('hot')
 
-    where = [f'sl.owner_employee_id IN ({placeholders})']
+    # Show the team's own leads AND unassigned inbound leads (website leads land
+    # with no owner — they must be visible so someone claims them, else they were
+    # invisible on the board, founder 2026-07-20).
+    where = [f'(sl.owner_employee_id IN ({placeholders}) OR sl.owner_employee_id IS NULL)']
     params = list(visible_ids)
     if f_stage and f_stage.isdigit():
         where.append('sl.stage_id = ?'); params.append(int(f_stage))
