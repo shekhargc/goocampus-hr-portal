@@ -24970,6 +24970,7 @@ def _new_reg_installments(conn):
 @admin_required
 def ops_payment_approvals():
     conn = get_db()
+    _ensure_installment_approvals(conn)
     items = _new_reg_installments(conn)
     pending = [x for x in items if x['status'].lower() == 'received' and not x['decision']]
     approved = [x for x in items if x['decision'] == 'approved']
@@ -24978,10 +24979,40 @@ def ops_payment_approvals():
         pending=pending, approved=approved, active_ops_page='payment-approvals')
 
 
+def _ensure_installment_approvals(conn):
+    """Guarantee the installment_approvals table exists at request time — the boot
+    migration can miss it on a Render cold start (DB not ready at import), which
+    made approve 500 with 'relation does not exist' (founder 2026-07-20)."""
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS installment_approvals (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER,
+            registration_number TEXT,
+            inst_no INTEGER,
+            base_amount NUMERIC(14,2) DEFAULT 0,
+            gst_amount NUMERIC(14,2) DEFAULT 0,
+            total_amount NUMERIC(14,2) DEFAULT 0,
+            payment_method TEXT,
+            payment_date TEXT,
+            pathway TEXT,
+            status TEXT DEFAULT \'pending\',
+            ops_payment_id INTEGER,
+            reviewed_by INTEGER,
+            reviewed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(registration_id, inst_no)
+        )''')
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
 @app.route('/operations/payment-approvals/<int:reg_id>/<int:inst_no>/approve', methods=['POST'])
 @admin_required
 def ops_payment_approve(reg_id, inst_no):
     conn = get_db()
+    _ensure_installment_approvals(conn)
     try:
         if inst_no not in (1, 2, 3, 4):
             conn.close(); flash('Invalid installment', 'error'); return redirect(url_for('ops_payment_approvals'))
@@ -25056,6 +25087,7 @@ def ops_payment_approve(reg_id, inst_no):
 @admin_required
 def ops_payment_reject(reg_id, inst_no):
     conn = get_db()
+    _ensure_installment_approvals(conn)
     try:
         r = conn.execute("SELECT registration_number FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
         reg_no = r['registration_number'] if r else None
