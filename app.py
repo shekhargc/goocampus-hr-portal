@@ -389,9 +389,22 @@ def inject_manager_status():
                         college_landing = _url
                     college_access = True
 
-        # has_partners_access — Sales > Partners grant lets a team member view the
-        # internal Partners section (partner details + their leads). (founder 2026-07-21)
-        partners_access = bool(user and has_section_permission(user, 'sales', 'partners', 'view'))
+        # has_partners_access — any of the Partners sub-sections (Directory /
+        # Invitations / Leads) shows the Partners menu, landing on the first page
+        # the member actually holds. (founder 2026-07-21)
+        _partner_subs = [
+            ('partners',            '/partners'),
+            ('partner_leads',       '/partners/leads'),
+            ('partner_invitations', '/partners/invitations'),
+        ]
+        partners_access = False
+        partners_landing = '/partners'
+        if user:
+            for _sub, _url in _partner_subs:
+                if has_section_permission(user, 'sales', _sub, 'view'):
+                    if not partners_access:
+                        partners_landing = _url
+                    partners_access = True
         return {
             'is_manager': mgr,
             'pending_team_count': pending_team,
@@ -403,6 +416,7 @@ def inject_manager_status():
             'has_college_access': college_access,
             'colleges_landing_url': college_landing,
             'has_partners_access': partners_access,
+            'partners_landing_url': partners_landing,
             'current_user_name': (user['name'] if user else ''),
             'can_request_transfer': can_xfer,
             'can_verify_transfer': can_verify_xfer,
@@ -412,7 +426,7 @@ def inject_manager_status():
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
         'has_clients_access': False, 'clients_landing_url': '/admin/clients',
         'has_college_access': False, 'colleges_landing_url': '/colleges',
-        'has_partners_access': False,
+        'has_partners_access': False, 'partners_landing_url': '/partners',
         'current_user_name': '', 'can_request_transfer': False, 'can_verify_transfer': False,
     }
 
@@ -35565,7 +35579,9 @@ ACCESS_SECTION_CATALOG = [
             ('meetings',             'Meetings',             'Sales meeting log'),
             ('projects',             'Projects',             'Sales projects'),
             ('products',             'Products & Services',  'Product / service catalog'),
-            ('partners',             'Partners',             'Channel / referral partners'),
+            ('partners',             'Partners — Directory', 'View partner list + profiles (Edit = add / edit / delete partners)'),
+            ('partner_invitations',  'Partner Invitations',  'View + send partner onboarding invitations'),
+            ('partner_leads',        'Partner Leads',        'View the student + B2B leads partners referred'),
             ('news',                 'Sales News',           'Internal sales news feed'),
             ('clients_pipeline',     'Clients Pipeline',     'Client deal pipeline'),
             ('sales_verification',   'Sales Verification',   'Fill balance details for submitted registrations (queue)'),
@@ -38705,16 +38721,19 @@ ACCESS_ROUTE_MAP = {
     'partners_list':                                _ap('sales', 'partners', 'view'),
     'partners_dashboard':                           _ap('sales', 'partners', 'view'),
     'partners_api':                                 _ap('sales', 'partners', 'view'),
-    'admin_partner_leads':                          _ap('sales', 'partners', 'view'),
-    'admin_partner_b2b_leads':                      _ap('sales', 'partners', 'view'),
-    'admin_partner_lead_detail':                    _ap('sales', 'partners', 'view'),
     'partners_add':                                 _ap('sales', 'partners', 'edit'),
     'partners_edit':                                _ap('sales', 'partners', 'edit'),
     'partners_delete':                              _ap('sales', 'partners', 'edit'),
     'partners_products':                            _ap('sales', 'partners', 'edit'),
-    'partner_invitations_list':                     _ap('sales', 'partners', 'edit'),
-    'partner_invitations_create':                   _ap('sales', 'partners', 'edit'),
-    'partner_invitation_delete':                    _ap('sales', 'partners', 'edit'),
+    # Partner Invitations — its own sub-section so it can be granted separately
+    # (viewing the invitations page = view; sending / deleting = edit). (founder 2026-07-21)
+    'partner_invitations_list':                     _ap('sales', 'partner_invitations', 'view'),
+    'partner_invitations_create':                   _ap('sales', 'partner_invitations', 'edit'),
+    'partner_invitation_delete':                    _ap('sales', 'partner_invitations', 'edit'),
+    # Partner Leads — its own sub-section (student + B2B leads partners referred).
+    'admin_partner_leads':                          _ap('sales', 'partner_leads', 'view'),
+    'admin_partner_b2b_leads':                      _ap('sales', 'partner_leads', 'view'),
+    'admin_partner_lead_detail':                    _ap('sales', 'partner_leads', 'view'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),
