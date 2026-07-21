@@ -3110,6 +3110,63 @@ EMAIL_RECIPIENT_KEYS = [
 ]
 
 
+@app.route('/admin/diag/academics', methods=['GET'])
+@login_required
+def admin_diag_academics():
+    """READ-ONLY diagnostic: for a client (by name or registration number), show
+    where their academic details live across the 3 tables — the registration-side
+    client_academics, the ops-side ops_academic_details, and whether a plab_clients
+    master exists. Writes nothing. Used to trace 'academics not showing in the ops
+    academic section' (founder 2026-07-21). Safe to leave in; admin-only."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    q = (request.args.get('q') or '').strip()
+    conn = get_db()
+    out = []
+    try:
+        if not q:
+            conn.close()
+            return "<pre>Pass ?q=Name or ?q=REGNUMBER</pre>"
+        like = f"%{q}%"
+        regs = conn.execute(
+            "SELECT id, registration_number, first_name, last_name, product_id, "
+            "       current_step, sales_completed, ops_status, ops_verified_at, created_at "
+            "  FROM client_registrations "
+            " WHERE first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+            "    OR (COALESCE(first_name,'')||' '||COALESCE(last_name,'')) ILIKE ? "
+            " ORDER BY id DESC LIMIT 20",
+            (like, like, like, like)).fetchall()
+        for r in regs:
+            rid = r['id']; rnum = r['registration_number']
+            ca = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (rid,)).fetchone()
+            pc = conn.execute("SELECT id, created_at, pathway FROM plab_clients WHERE registration_number = ?", (rnum,)).fetchone()
+            oad = conn.execute("SELECT * FROM ops_academic_details WHERE registration_number = ?", (rnum,)).fetchall()
+            def _filled(row):
+                if not row:
+                    return None
+                return {k: v for k, v in dict(row).items()
+                        if k not in ('id', 'registration_id', 'registration_number', 'created_at', 'created_by')
+                        and v not in (None, '', 0)}
+            out.append({
+                'reg_id': rid, 'reg_number': rnum,
+                'name': f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),
+                'product_id': r['product_id'], 'current_step': r['current_step'],
+                'sales_completed': r['sales_completed'], 'ops_status': r['ops_status'],
+                'ops_verified_at': r['ops_verified_at'],
+                'plab_master': ('YES id=%s pathway=%s' % (pc['id'], pc['pathway'])) if pc else 'NO',
+                'client_academics_row': 'PRESENT' if ca else 'MISSING',
+                'client_academics_filled_fields': _filled(ca),
+                'ops_academic_details_rows': len(oad),
+                'ops_academic_details_filled_fields': [_filled(x) for x in oad] if oad else None,
+            })
+        import json as _json
+        return "<pre>" + _json.dumps(out, indent=2, default=str) + "</pre>"
+    finally:
+        conn.close()
+
+
 @app.route('/admin/email-templates', methods=['GET'])
 @login_required
 def admin_email_templates_list():
