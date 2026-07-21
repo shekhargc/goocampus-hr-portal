@@ -431,6 +431,9 @@
                     {% if has_clients_access %}
                     <li><a href="{{ clients_landing_url }}" class="{% if active_section == 'clients' %}active{% endif %}">Clients</a></li>
                     {% endif %}
+                    {% if has_college_access %}
+                    <li><a href="{{ colleges_landing_url }}" class="{% if active_section == 'colleges' %}active{% endif %}">Colleges</a></li>
+                    {% endif %}
                     <li><a href="/holidays" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
                 {% endif %}
 

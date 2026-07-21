@@ -12,7 +12,7 @@
             </h1>
             <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Browse Indian &amp; International medical colleges for MBBS</p>
         </div>
-        {% if not is_partner %}
+        {% if not is_partner and can_access('colleges','college_portal','edit') %}
         <a href="/colleges/admin/add" style="background:var(--orange);color:white;text-decoration:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;display:inline-flex;align-items:center;gap:0.4rem;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add College
@@ -161,7 +161,7 @@
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:3rem;text-align:center;color:var(--gray-500);">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--gray-300)" stroke-width="1.5" style="margin-bottom:1rem;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
         <p style="margin:0 0 0.5rem 0;font-weight:600;">No colleges found</p>
-        <p style="margin:0;font-size:0.85rem;">Try adjusting your search or filters{% if not is_partner %}, or <a href="/colleges/admin/add" style="color:var(--orange);font-weight:600;">add a new college</a>{% endif %}.</p>
+        <p style="margin:0;font-size:0.85rem;">Try adjusting your search or filters{% if not is_partner and can_access('colleges','college_portal','edit') %}, or <a href="/colleges/admin/add" style="color:var(--orange);font-weight:600;">add a new college</a>{% endif %}.</p>
     </div>
     {% endif %}
 </div>

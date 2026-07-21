@@ -370,6 +370,24 @@ def inject_manager_status():
                     if not clients_access:
                         clients_landing = _url
                     clients_access = True
+
+        # has_college_access — the College section (College directory, Medical
+        # Predictor, NEET PG PDF library) was admin-only: no top-level menu for a
+        # granted team member. Land them on the FIRST College page they hold a
+        # grant for. (founder 2026-07-21)
+        _college_subs = [
+            ('college_portal',  '/colleges'),
+            ('mbbs_predictor',  '/medical-predictor'),
+            ('fees',            '/admin/neetpg-pdfs'),
+        ]
+        college_access = False
+        college_landing = '/colleges'
+        if user:
+            for _sub, _url in _college_subs:
+                if has_section_permission(user, 'colleges', _sub, 'view'):
+                    if not college_access:
+                        college_landing = _url
+                    college_access = True
         return {
             'is_manager': mgr,
             'pending_team_count': pending_team,
@@ -378,6 +396,8 @@ def inject_manager_status():
             'operations_landing_url': ops_landing,
             'has_clients_access': clients_access,
             'clients_landing_url': clients_landing,
+            'has_college_access': college_access,
+            'colleges_landing_url': college_landing,
             'current_user_name': (user['name'] if user else ''),
             'can_request_transfer': can_xfer,
             'can_verify_transfer': can_verify_xfer,
@@ -386,6 +406,7 @@ def inject_manager_status():
         'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
         'has_clients_access': False, 'clients_landing_url': '/admin/clients',
+        'has_college_access': False, 'colleges_landing_url': '/colleges',
         'current_user_name': '', 'can_request_transfer': False, 'can_verify_transfer': False,
     }
 
@@ -35482,6 +35503,20 @@ ACCESS_SECTION_CATALOG = [
             ('admin',    'Admin Dashboard',    'Admin landing page'),
         ],
     },
+    # ── College (directory + Medical Predictor + NEET PG PDFs) ─────────────
+    # Grant these to team members who need to look up colleges, run the
+    # predictor, or view/download NEET PG PDFs. View = use only; the add/edit/
+    # import/upload actions stay admin-only via the 'edit' action. (founder 2026-07-21)
+    {
+        'key': 'colleges',
+        'label': 'College',
+        'description': 'College directory, Medical Predictor and the NEET PG PDF library. View lets a team member look things up and download; editing/importing stays admin-only.',
+        'sub_sections': [
+            ('college_portal',  'College Directory',   'Browse colleges, courses and fees'),
+            ('mbbs_predictor',  'Medical Predictor',   'MBBS / rank predictor tool — filters + search'),
+            ('fees',            'NEET PG PDF Library',  'View + download the NEET PG cut-off / allotment PDFs'),
+        ],
+    },
     # ── Partner Portal (for partners — subject_type='partner') ─────────────
     # Aligned with the real partner portal sections (was a placeholder).
     {
@@ -38457,6 +38492,40 @@ def _ap(main, sub, action='view'):
 
 
 ACCESS_ROUTE_MAP = {
+    # ── College (directory + Medical Predictor + NEET PG PDFs) ──
+    # VIEW = the page; a granted team member can look up + download. The
+    # management actions (add/edit/import/upload/publish/delete/blast) require
+    # 'edit', which only admins hold — so view-only staff can't change data.
+    # NOT mapped on purpose (must stay reachable): the PUBLIC neet-pg-2025 landing
+    # + OTP + lead flow, the public PDF download/view, and the shared predictor
+    # data APIs (also used by the partner predictor). (founder 2026-07-21)
+    'colleges_list':                                _ap('colleges', 'college_portal', 'view'),
+    'college_profile':                              _ap('colleges', 'college_portal', 'view'),
+    'college_add':                                  _ap('colleges', 'college_portal', 'edit'),
+    'college_edit':                                 _ap('colleges', 'college_portal', 'edit'),
+    'college_delete':                               _ap('colleges', 'college_portal', 'edit'),
+    'college_course_add':                           _ap('colleges', 'college_portal', 'edit'),
+    'college_fee_add':                              _ap('colleges', 'college_portal', 'edit'),
+    'college_fee_delete':                           _ap('colleges', 'college_portal', 'edit'),
+    'college_seed':                                 _ap('colleges', 'college_portal', 'edit'),
+    'college_debug_import':                         _ap('colleges', 'college_portal', 'edit'),
+    'college_import_all':                           _ap('colleges', 'college_portal', 'edit'),
+    'medical_predictor':                            _ap('colleges', 'mbbs_predictor', 'view'),
+    'predictor_import':                             _ap('colleges', 'mbbs_predictor', 'edit'),
+    'neetpg_admin':                                 _ap('colleges', 'fees', 'view'),
+    'neetpg_upload':                                _ap('colleges', 'fees', 'edit'),
+    'neetpg_toggle':                                _ap('colleges', 'fees', 'edit'),
+    'neetpg_publish':                               _ap('colleges', 'fees', 'edit'),
+    'neetpg_toggle_schedule':                       _ap('colleges', 'fees', 'edit'),
+    'neetpg_wa_blast':                              _ap('colleges', 'fees', 'edit'),
+    'neetpg_delete':                                _ap('colleges', 'fees', 'edit'),
+    'neetpg_delete_lead':                           _ap('colleges', 'fees', 'edit'),
+    'neetpg_delete_request':                        _ap('colleges', 'fees', 'edit'),
+    'neetpg_complete_request':                      _ap('colleges', 'fees', 'edit'),
+    'neetpg_export_leads':                          _ap('colleges', 'fees', 'edit'),
+    'neetpg_quota_backfill':                        _ap('colleges', 'fees', 'edit'),
+    'neetpg_bulk_upload':                           _ap('colleges', 'fees', 'edit'),
+    'neetpg_bulk_delete':                           _ap('colleges', 'fees', 'edit'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),
