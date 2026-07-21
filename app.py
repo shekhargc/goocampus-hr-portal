@@ -3167,6 +3167,79 @@ def admin_diag_academics():
         conn.close()
 
 
+@app.route('/admin/diag/academic-pathways', methods=['GET'])
+@login_required
+def admin_fix_academic_pathways_preview():
+    """Preview (read-only): ops_academic_details rows whose `pathway` doesn't match
+    their client's real pathway on plab_clients — i.e. academics filed under the
+    wrong pathway's Academic Details page. Shows the list + a Fix button that POSTs
+    to the apply route. (founder 2026-07-21)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT a.id, a.registration_number, a.pathway AS current_pathway, "
+            "       p.pathway AS correct_pathway, p.prefix, p.first_name, p.last_name "
+            "  FROM ops_academic_details a "
+            "  JOIN plab_clients p ON a.registration_number = p.registration_number "
+            " WHERE COALESCE(p.pathway,'') <> '' "
+            "   AND COALESCE(a.pathway,'') <> COALESCE(p.pathway,'') "
+            " ORDER BY a.id DESC").fetchall()
+    finally:
+        conn.close()
+    items = "".join(
+        f"<tr><td>{r['id']}</td><td>{r['registration_number']}</td>"
+        f"<td>{(r['prefix'] or '')} {(r['first_name'] or '')} {(r['last_name'] or '')}</td>"
+        f"<td style='color:#b91c1c'>{r['current_pathway']}</td>"
+        f"<td style='color:#065f46;font-weight:700'>{r['correct_pathway']}</td></tr>"
+        for r in rows)
+    btn = ("<form method='POST' action='/admin/diag/academic-pathways/apply' style='margin-top:16px'>"
+           "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:6px;"
+           "font-weight:700;cursor:pointer'>Fix these " + str(len(rows)) + " record(s) — re-file each under the correct pathway</button></form>"
+           ) if rows else "<p style='color:#065f46;font-weight:700'>Nothing to fix — every academic record is already filed under the correct pathway. ✅</p>"
+    return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+            "<h2>Academic records filed under the wrong pathway</h2>"
+            "<p>These clients' academic details were saved but tagged with the wrong pathway, so they don't "
+            "appear on their pathway's Academic Details page. Clicking Fix re-files each under the pathway on "
+            "their master profile. Nothing else changes.</p>"
+            "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
+            "<tr style='background:#f3f4f6'><th>Row</th><th>Reg #</th><th>Client</th><th>Currently filed as</th>"
+            "<th>Should be</th></tr>" + items + "</table>" + btn + "</div>")
+
+
+@app.route('/admin/diag/academic-pathways/apply', methods=['POST'])
+@login_required
+def admin_fix_academic_pathways_apply():
+    """Align each ops_academic_details.pathway to its client's master pathway. Only
+    touches rows that are genuinely mis-tagged; a correctly-filed row is untouched."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "UPDATE ops_academic_details a "
+            "   SET pathway = p.pathway "
+            "  FROM plab_clients p "
+            " WHERE a.registration_number = p.registration_number "
+            "   AND COALESCE(p.pathway,'') <> '' "
+            "   AND COALESCE(a.pathway,'') <> COALESCE(p.pathway,'')")
+        n = cur.rowcount if hasattr(cur, 'rowcount') else None
+        conn.commit()
+    except Exception as e:
+        conn.rollback(); conn.close()
+        return f"<pre>Error: {e}</pre>", 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return ("<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+            f"<h2>Done ✅</h2><p>Re-filed <b>{n}</b> academic record(s) under the correct pathway. "
+            "Open each pathway's Academic Details page to confirm the clients now appear.</p>"
+            "<a href='/admin/diag/academic-pathways'>Re-check</a></div>")
+
+
 @app.route('/admin/email-templates', methods=['GET'])
 @login_required
 def admin_email_templates_list():
@@ -4951,7 +5024,12 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
     except Exception as _g_err:
         logging.warning(f"sync guardian fields {reg_num}: {_g_err}")
 
-    # INSERT into ops_academic_details (only if academics data exists)
+    # INSERT into ops_academic_details (only if academics data exists).
+    # CRITICAL: stamp the client's real `pathway`. Omitting it let the column fall
+    # to its 'plab' default, so a Consulting/Australia/UAE/Portfolio/Training
+    # client's academics were filed under PLAB and hidden from their own pathway's
+    # Academic Details page (which filters `WHERE pathway = '<pathway>'`).
+    # (founder 2026-07-21: "academic details we don't have what she filled")
     if academics:
         conn.execute('''INSERT INTO ops_academic_details (
             registration_number, img_fmg, img_medical_college, fmg_medical_college,
@@ -4961,8 +5039,8 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
             internship_hospital_2, internship_location_2,
             internship_start_date, internship_end_date,
             internship_gap, gap_in_months, gap_reason,
-            working_status, working_hospital_name, additional_info, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+            working_status, working_hospital_name, additional_info, created_by, pathway
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
             reg_num,
             academics.get('img_fmg', ''), academics.get('img_medical_college', ''),
             academics.get('fmg_medical_college', ''),
@@ -4976,7 +5054,7 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
             academics.get('internship_gap', ''), academics.get('gap_in_months', ''),
             academics.get('gap_reason', ''),
             academics.get('working_status', ''), academics.get('working_hospital_name', ''),
-            academics.get('additional_info', ''), created_by
+            academics.get('additional_info', ''), created_by, (pathway or 'plab')
         ))
 
     # ── Carry the registration's documents into the ops pathway profile ──────
