@@ -35635,17 +35635,19 @@ ACCESS_SECTION_CATALOG = [
             ('access_master',     'Access Master',       'Manage section permissions (this page)'),
         ],
     },
-    # ── Colleges ───────────────────────────────────────────────────────────
+    # ── Colleges (directory + Medical Predictor + NEET PG PDFs) ────────────
+    # Grant to team members who need to look up colleges, run the predictor, or
+    # view/download NEET PG PDFs. View = use only; add/edit/import/upload stay
+    # admin-only via the 'edit' action. Keys match the sidebar + route map
+    # (college_portal / mbbs_predictor / fees). (founder 2026-07-21)
     {
         'key': 'colleges',
         'label': 'Colleges',
-        'description': 'College portal + predictor tools.',
+        'description': 'College directory, Medical Predictor and the NEET PG PDF library. View lets a team member look things up and download; editing/importing stays admin-only.',
         'sub_sections': [
-            ('college_portal',  'College Portal',   'College directory + details'),
-            ('mbbs_predictor',  'MBBS Predictor',   'Indian MBBS rank/college predictor'),
-            ('russian',         'Russian Colleges', 'Russian college seed + admin'),
-            ('country_list',    'Country List',     'Country / pathway list'),
-            ('fees',            'Fee Structures',   'Fee structure admin'),
+            ('college_portal',  'College Directory',   'Browse colleges, courses and fees'),
+            ('mbbs_predictor',  'Medical Predictor',   'MBBS / rank predictor tool — filters + search'),
+            ('fees',            'NEET PG PDF Library',  'View + download the NEET PG cut-off / allotment PDFs'),
         ],
     },
     # ── WhatsApp ───────────────────────────────────────────────────────────
@@ -35686,20 +35688,6 @@ ACCESS_SECTION_CATALOG = [
         'sub_sections': [
             ('personal', 'Personal Dashboard', 'Employee landing page'),
             ('admin',    'Admin Dashboard',    'Admin landing page'),
-        ],
-    },
-    # ── College (directory + Medical Predictor + NEET PG PDFs) ─────────────
-    # Grant these to team members who need to look up colleges, run the
-    # predictor, or view/download NEET PG PDFs. View = use only; the add/edit/
-    # import/upload actions stay admin-only via the 'edit' action. (founder 2026-07-21)
-    {
-        'key': 'colleges',
-        'label': 'College',
-        'description': 'College directory, Medical Predictor and the NEET PG PDF library. View lets a team member look things up and download; editing/importing stays admin-only.',
-        'sub_sections': [
-            ('college_portal',  'College Directory',   'Browse colleges, courses and fees'),
-            ('mbbs_predictor',  'Medical Predictor',   'MBBS / rank predictor tool — filters + search'),
-            ('fees',            'NEET PG PDF Library',  'View + download the NEET PG cut-off / allotment PDFs'),
         ],
     },
     # ── Partner Portal (for partners — subject_type='partner') ─────────────
