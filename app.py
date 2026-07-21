@@ -25006,6 +25006,15 @@ def _ensure_installment_approvals(conn):
     except Exception:
         try: conn.rollback()
         except Exception: pass
+    # The approve route also posts an ops_payments row tagged with a `source`
+    # column. Its ADD COLUMN lives in the same boot block that can miss on a
+    # cold start, so ensure it here too (founder 2026-07-21).
+    try:
+        conn.execute("ALTER TABLE ops_payments ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual'")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
 
 
 @app.route('/operations/payment-approvals/<int:reg_id>/<int:inst_no>/approve', methods=['POST'])
