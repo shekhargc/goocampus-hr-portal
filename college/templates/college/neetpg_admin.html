@@ -480,9 +480,11 @@
         <a href="{{ url_for('neetpg_landing') }}" target="_blank" class="np-btn np-btn-outline">
             <i class="fas fa-external-link-alt"></i> View Public Page
         </a>
+        {% if can_access('colleges','fees','edit') %}
         <a href="{{ url_for('neetpg_export_leads') }}" class="np-btn np-btn-success">
             <i class="fas fa-file-excel"></i> Export Leads ({{ lead_count }})
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -528,6 +530,9 @@
 </div>
 {% endif %}
 
+{# Management controls (upload / bulk tools / bulk-delete) — editors + admins only.
+   View-only team members still see the PDF list + download links below. #}
+{% if can_access('colleges','fees','edit') %}
 <!-- Upload Form -->
 <div class="np-upload-card">
     <div class="np-upload-title" id="npUploadCardTitle"><i class="fas fa-cloud-upload-alt"></i> Upload New PDF (saves as Draft)</div>
@@ -693,6 +698,7 @@
     </div>
 </div>
 
+{% endif %}
 <!-- Tabs: PDFs / Leads -->
 <div class="np-tabs">
     <button class="np-tab active" onclick="npSwitchTab('pdfs', this)">
@@ -814,7 +820,7 @@
                         {% endif %}
                     </td>
                     <td style="text-align:center;">
-                        {% if not pdf.is_published %}
+                        {% if not pdf.is_published and can_access('colleges','fees','edit') %}
                         <button class="np-action-btn" onclick="toggleSchedule({{ pdf.id }})" title="{{ 'Auto-publish ON — click to disable' if pdf.auto_schedule else 'Auto-publish OFF — click to enable' }}" style="{{ 'color:#16a34a;border-color:#bbf7d0;' if pdf.auto_schedule else '' }}">
                             <i class="fas fa-calendar-{{ 'check' if pdf.auto_schedule else 'times' }}"></i>
                         </button>
@@ -824,6 +830,7 @@
                     </td>
                     <td>
                         <div class="np-actions">
+                            {% if can_access('colleges','fees','edit') %}
                             <button class="np-action-btn" title="Edit"
                                 data-id="{{ pdf.id }}"
                                 data-title="{{ pdf.title }}"
@@ -844,12 +851,15 @@
                                 <i class="fas fa-rocket"></i>
                             </button>
                             {% endif %}
+                            {% endif %}
                             <a href="{{ url_for('neetpg_download', pdf_id=pdf.id) }}" class="np-action-btn" title="Download">
                                 <i class="fas fa-download"></i>
                             </a>
+                            {% if can_access('colleges','fees','edit') %}
                             <button class="np-action-btn danger" onclick="deletePdf({{ pdf.id }})" title="Delete">
                                 <i class="fas fa-trash"></i>
                             </button>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
