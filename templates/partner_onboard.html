@@ -861,12 +861,39 @@
                         <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
                     </div>
                     <div class="form-group">
-                        <label for="phone">Phone <span class="required">*</span></label>
+                        <label for="phone">Mobile (WhatsApp) <span class="required">*</span></label>
                         <div class="input-wrapper">
-                            <input type="tel" id="phone" name="phone" pattern="[0-9\s\-\+\(\)]{10,}" required placeholder="10-digit phone number">
+                            <input type="tel" id="phone" name="phone" pattern="[0-9\s\-\+\(\)]{10,}" required placeholder="10-digit mobile number" oninput="onPhoneChanged()">
                             <i class="fas fa-phone"></i>
                         </div>
                         <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                </div>
+
+                <!-- WhatsApp OTP verification for the mobile number (founder 2026-07-21).
+                     The verified mobile becomes the partner's password-less login. -->
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label>Verify your mobile on WhatsApp <span class="required">*</span></label>
+                        <input type="hidden" id="phoneVerifiedFlag" value="0">
+                        <div id="phoneOtpUnverified">
+                            <button type="button" id="sendPhoneOtpBtn" onclick="sendPhoneOtp()"
+                                style="background:#25D366;color:#fff;border:none;padding:0.65rem 1.1rem;border-radius:8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+                                <i class="fab fa-whatsapp"></i> Send WhatsApp OTP
+                            </button>
+                            <div id="phoneOtpBox" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <input type="text" id="phoneOtpInput" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+                                    placeholder="6-digit OTP"
+                                    style="width:150px;letter-spacing:4px;text-align:center;padding:0.6rem;border:1px solid #cbd5e1;border-radius:8px;font-size:1rem;">
+                                <button type="button" onclick="verifyPhoneOtp()"
+                                    style="background:var(--navy,#1e3a5f);color:#fff;border:none;padding:0.6rem 1.1rem;border-radius:8px;font-weight:600;cursor:pointer;">Verify</button>
+                                <button type="button" onclick="sendPhoneOtp()" style="background:none;border:none;color:var(--navy,#1e3a5f);text-decoration:underline;cursor:pointer;font-size:0.85rem;">Resend</button>
+                            </div>
+                            <div id="phoneOtpMsg" style="font-size:0.85rem;margin-top:8px;"></div>
+                        </div>
+                        <div id="phoneOtpVerified" style="display:none;color:#16a34a;font-weight:700;">
+                            <i class="fas fa-check-circle"></i> Mobile number verified
+                        </div>
                     </div>
                 </div>
 
@@ -979,22 +1006,22 @@
                 </div>
             </div>
 
-            <!-- Step 4: Create Password -->
+            <!-- Step 4: Password (optional — partners log in with mobile + OTP) -->
             <div class="section-card" data-section="4">
                 <div class="section-header">
                     <div class="section-icon password"><i class="fas fa-lock"></i></div>
                     <div class="section-header-text">
-                        <h2>Create Password</h2>
-                        <p>Secure your account with a strong password</p>
+                        <h2>Set a Password <span style="font-weight:400;color:#94a3b8;">(optional)</span></h2>
+                        <p>You don't need a password — you'll log in with your mobile number and a WhatsApp OTP. Set one only if you'd like a second way to sign in.</p>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="password">Password <span class="required">*</span></label>
+                        <label for="password">Password <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
                         <div class="input-wrapper">
-                            <input type="password" id="password" name="password" minlength="6" required
-                                   placeholder="Min. 6 characters">
+                            <input type="password" id="password" name="password" minlength="6"
+                                   placeholder="Leave blank to use mobile + OTP only">
                             <i class="fas fa-lock"></i>
                             <span class="password-toggle" onclick="togglePassword('password', this)">
                                 <i class="fas fa-eye"></i>
@@ -1010,9 +1037,9 @@
                         <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
                     </div>
                     <div class="form-group">
-                        <label for="confirmPassword">Confirm Password <span class="required">*</span></label>
+                        <label for="confirmPassword">Confirm Password</label>
                         <div class="input-wrapper">
-                            <input type="password" id="confirmPassword" name="confirm_password" minlength="6" required
+                            <input type="password" id="confirmPassword" name="confirm_password" minlength="6"
                                    placeholder="Re-enter password">
                             <i class="fas fa-lock"></i>
                             <span class="password-toggle" onclick="togglePassword('confirmPassword', this)">
@@ -1095,11 +1122,16 @@
                 }
             });
 
-            // Email validation on step 1
+            // Phone + WhatsApp-OTP validation on step 1
             if (currentStep === 1) {
                 const phone = section.querySelector('#phone');
                 if (phone && phone.value && !/^[\d\s\-\+\(\)]{10,}$/.test(phone.value)) {
-                    showFieldError(phone, 'Enter a valid phone number');
+                    showFieldError(phone, 'Enter a valid mobile number');
+                    isValid = false;
+                }
+                if (document.getElementById('phoneVerifiedFlag').value !== '1') {
+                    const msg = document.getElementById('phoneOtpMsg');
+                    if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Please verify your mobile number with the WhatsApp OTP first.'; }
                     isValid = false;
                 }
             }
@@ -1139,6 +1171,55 @@
             if (span) span.textContent = msg;
             else errEl.textContent = msg;
             errEl.classList.add('show');
+        }
+
+        // ── Mobile WhatsApp OTP verification (founder 2026-07-21) ──
+        const ONBOARD_TOKEN = "{{ invitation.token }}";
+        function onPhoneChanged() {
+            // Any edit to the number invalidates a prior verification.
+            document.getElementById('phoneVerifiedFlag').value = '0';
+            document.getElementById('phoneOtpVerified').style.display = 'none';
+            document.getElementById('phoneOtpUnverified').style.display = '';
+        }
+        function _phoneOtpMsg(text, ok) {
+            const m = document.getElementById('phoneOtpMsg');
+            m.style.color = ok ? '#16a34a' : '#b91c1c';
+            m.textContent = text || '';
+        }
+        async function sendPhoneOtp() {
+            const phone = document.getElementById('phone').value.trim();
+            if (!/^[\d\s\-\+\(\)]{10,}$/.test(phone)) { _phoneOtpMsg('Enter a valid 10-digit mobile number first.', false); return; }
+            const btn = document.getElementById('sendPhoneOtpBtn');
+            btn.disabled = true; _phoneOtpMsg('Sending OTP…', true);
+            try {
+                const r = await fetch('/partner/onboard/send-phone-otp', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ token: ONBOARD_TOKEN, phone: phone })
+                });
+                const d = await r.json();
+                if (r.ok && d.success) {
+                    document.getElementById('phoneOtpBox').style.display = 'flex';
+                    _phoneOtpMsg('OTP sent to your WhatsApp. Enter it below.', true);
+                } else { _phoneOtpMsg(d.error || 'Could not send OTP.', false); }
+            } catch (e) { _phoneOtpMsg('Network error. Please try again.', false); }
+            btn.disabled = false;
+        }
+        async function verifyPhoneOtp() {
+            const phone = document.getElementById('phone').value.trim();
+            const otp = document.getElementById('phoneOtpInput').value.trim();
+            if (!otp) { _phoneOtpMsg('Enter the 6-digit OTP.', false); return; }
+            try {
+                const r = await fetch('/partner/onboard/verify-phone-otp', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ phone: phone, otp: otp })
+                });
+                const d = await r.json();
+                if (r.ok && d.success) {
+                    document.getElementById('phoneVerifiedFlag').value = '1';
+                    document.getElementById('phoneOtpUnverified').style.display = 'none';
+                    document.getElementById('phoneOtpVerified').style.display = '';
+                } else { _phoneOtpMsg(d.error || 'Invalid OTP.', false); }
+            } catch (e) { _phoneOtpMsg('Network error. Please try again.', false); }
         }
 
         function nextStep() {

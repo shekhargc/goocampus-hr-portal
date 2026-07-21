@@ -388,6 +388,10 @@ def inject_manager_status():
                     if not college_access:
                         college_landing = _url
                     college_access = True
+
+        # has_partners_access — Sales > Partners grant lets a team member view the
+        # internal Partners section (partner details + their leads). (founder 2026-07-21)
+        partners_access = bool(user and has_section_permission(user, 'sales', 'partners', 'view'))
         return {
             'is_manager': mgr,
             'pending_team_count': pending_team,
@@ -398,6 +402,7 @@ def inject_manager_status():
             'clients_landing_url': clients_landing,
             'has_college_access': college_access,
             'colleges_landing_url': college_landing,
+            'has_partners_access': partners_access,
             'current_user_name': (user['name'] if user else ''),
             'can_request_transfer': can_xfer,
             'can_verify_transfer': can_verify_xfer,
@@ -407,6 +412,7 @@ def inject_manager_status():
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
         'has_clients_access': False, 'clients_landing_url': '/admin/clients',
         'has_college_access': False, 'colleges_landing_url': '/colleges',
+        'has_partners_access': False,
         'current_user_name': '', 'can_request_transfer': False, 'can_verify_transfer': False,
     }
 
@@ -31391,6 +31397,171 @@ def partner_verify_otp():
         return jsonify({'error': str(e)}), 500
 
 
+# ─────────────────────────────────────────────────────────────────────────
+#  Partner WhatsApp OTP — reused for (a) verifying the mobile number during
+#  onboarding and (b) password-less login by mobile + OTP (founder 2026-07-21).
+#  Same Infobip WhatsApp channel the NEET PG flow already uses in production.
+# ─────────────────────────────────────────────────────────────────────────
+def _normalise_in_mobile(raw):
+    """Indian mobile → bare 10 digits (strip +91/91/spaces/dashes). '' if invalid."""
+    digits = re.sub(r'[^0-9]', '', raw or '')
+    if len(digits) >= 10:
+        return digits[-10:]
+    return ''
+
+
+def _send_whatsapp_otp(mobile_10, otp_code):
+    """Send a 6-digit OTP to an Indian mobile over WhatsApp (Infobip).
+    Returns (ok: bool, error: str|None). Mirrors the live NEET PG OTP sender."""
+    infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+    infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+    if not infobip_key or not infobip_base:
+        logging.error("Partner WA OTP: Infobip credentials not configured")
+        return False, 'OTP service is not configured. Please contact GooCampus.'
+    try:
+        import requests as http_requests
+        url = f"https://{infobip_base}/whatsapp/1/message/template"
+        headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
+        payload = {"messages": [{
+            "from": "15558246314",
+            "to": f"91{mobile_10}",
+            "content": {
+                "templateName": "goocampus_otp_verify",
+                "templateData": {"body": {"placeholders": [otp_code]},
+                                 "buttons": [{"type": "URL", "parameter": otp_code}]},
+                "language": "en",
+            },
+        }]}
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+        logging.info(f"Partner WA OTP to {mobile_10}: status={resp.status_code}")
+        if resp.status_code >= 400:
+            payload["messages"][0]["content"]["templateName"] = "otp_verify"
+            payload["messages"][0]["content"]["language"] = "en_GB"
+            resp2 = http_requests.post(url, json=payload, headers=headers, timeout=15)
+            if resp2.status_code >= 400:
+                return False, 'Could not send the WhatsApp OTP. Check the number and try again.'
+        return True, None
+    except Exception as e:
+        logging.error(f"Partner WA OTP send error: {e}")
+        return False, 'Failed to send OTP. Please try again.'
+
+
+@app.route('/partner/onboard/send-phone-otp', methods=['POST'])
+def partner_onboard_send_phone_otp():
+    """Onboarding: send a WhatsApp OTP to the partner's mobile so we verify it
+    before creating the account. Gated by the same session token as the form."""
+    data = request.get_json() or {}
+    token = (data.get('token') or '').strip()
+    if not session.get('partner_register_token') or session.get('partner_register_token') != token:
+        return jsonify({'error': 'Please verify your email first.'}), 401
+    mobile = _normalise_in_mobile(data.get('phone', ''))
+    if not mobile:
+        return jsonify({'error': 'Please enter a valid 10-digit mobile number.'}), 400
+    otp_code = str(random.randint(100000, 999999))
+    session['partner_onb_phone_otp'] = otp_code
+    session['partner_onb_phone_num'] = mobile
+    session['partner_onb_phone_time'] = datetime.now().isoformat()
+    session.pop('partner_onb_phone_ok', None)
+    ok, err = _send_whatsapp_otp(mobile, otp_code)
+    if not ok:
+        return jsonify({'error': err}), 500
+    return jsonify({'success': True, 'message': 'OTP sent to your WhatsApp.'})
+
+
+@app.route('/partner/onboard/verify-phone-otp', methods=['POST'])
+def partner_onboard_verify_phone_otp():
+    """Onboarding: confirm the WhatsApp OTP for the mobile number."""
+    data = request.get_json() or {}
+    otp = (data.get('otp') or '').strip()
+    mobile = _normalise_in_mobile(data.get('phone', ''))
+    stored = session.get('partner_onb_phone_otp')
+    stored_num = session.get('partner_onb_phone_num')
+    t = session.get('partner_onb_phone_time')
+    if not stored or not t:
+        return jsonify({'error': 'Please request an OTP first.'}), 400
+    try:
+        if (datetime.now() - datetime.fromisoformat(t)).total_seconds() > 600:
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+    if mobile != stored_num or otp != stored:
+        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    session['partner_onb_phone_ok'] = stored_num
+    return jsonify({'success': True, 'message': 'Mobile number verified.'})
+
+
+@app.route('/partner/login/send-otp', methods=['POST'])
+def partner_login_send_otp():
+    """Password-less login: send a WhatsApp OTP if an ACTIVE partner exists with
+    this mobile. Vague on failure so we don't leak which numbers are registered."""
+    data = request.get_json() or {}
+    mobile = _normalise_in_mobile(data.get('phone', ''))
+    if not mobile:
+        return jsonify({'error': 'Please enter a valid 10-digit mobile number.'}), 400
+    conn = get_db()
+    try:
+        # Match on the last 10 digits of the stored phone (numbers were entered
+        # in mixed formats). Must be exactly one active partner.
+        rows = conn.execute(
+            "SELECT id FROM partners WHERE status = 'Active' "
+            "AND RIGHT(regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g'), 10) = ?",
+            (mobile,)).fetchall()
+    except Exception as e:
+        logging.error(f"partner_login_send_otp lookup: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        rows = []
+    finally:
+        conn.close()
+    if len(rows) != 1:
+        # 0 = not found, >1 = ambiguous; same message either way.
+        return jsonify({'error': 'No partner account found for this mobile number. Try email + password, or contact GooCampus.'}), 404
+    otp_code = str(random.randint(100000, 999999))
+    session['partner_login_otp'] = otp_code
+    session['partner_login_num'] = mobile
+    session['partner_login_pid'] = rows[0]['id']
+    session['partner_login_time'] = datetime.now().isoformat()
+    ok, err = _send_whatsapp_otp(mobile, otp_code)
+    if not ok:
+        return jsonify({'error': err}), 500
+    return jsonify({'success': True, 'message': 'OTP sent to your WhatsApp.'})
+
+
+@app.route('/partner/login/verify-otp', methods=['POST'])
+def partner_login_verify_otp():
+    """Password-less login: verify the WhatsApp OTP and start the partner session."""
+    data = request.get_json() or {}
+    otp = (data.get('otp') or '').strip()
+    mobile = _normalise_in_mobile(data.get('phone', ''))
+    stored = session.get('partner_login_otp')
+    stored_num = session.get('partner_login_num')
+    pid = session.get('partner_login_pid')
+    t = session.get('partner_login_time')
+    if not stored or not pid or not t:
+        return jsonify({'error': 'Please request an OTP first.'}), 400
+    try:
+        if (datetime.now() - datetime.fromisoformat(t)).total_seconds() > 600:
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+    if mobile != stored_num or otp != stored:
+        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    conn = get_db()
+    partner = conn.execute("SELECT * FROM partners WHERE id = ? AND status = 'Active'", (pid,)).fetchone()
+    conn.close()
+    if not partner:
+        return jsonify({'error': 'Account not found or inactive.'}), 404
+    # Clear one-time OTP state, then start the session (same shape as password login).
+    for k in ('partner_login_otp', 'partner_login_num', 'partner_login_pid', 'partner_login_time'):
+        session.pop(k, None)
+    session.permanent = True
+    session['user_id'] = partner['id']
+    session['is_partner'] = True
+    session['partner_name'] = partner['company_name']
+    session['partner_email'] = partner['email']
+    return jsonify({'success': True, 'redirect': url_for('partner_dashboard_view')})
+
+
 @app.route('/partner/api/states')
 def partner_api_states():
     """Return all active states as JSON (no login required, for partner onboarding)."""
@@ -31503,19 +31674,33 @@ def partner_onboard_submit(token):
             flash('Required fields: company name, contact person', 'error')
             return redirect(url_for('partner_onboard_form', token=token))
 
-        if not password or len(password) < 6:
+        # The mobile number must be verified by WhatsApp OTP before the account is
+        # created — that number becomes the partner's password-less login. (2026-07-21)
+        _phone10 = _normalise_in_mobile(phone)
+        if not _phone10 or session.get('partner_onb_phone_ok') != _phone10:
             conn.close()
             if is_ajax:
-                return jsonify({'error': 'Password must be at least 6 characters'}), 400
-            flash('Password must be at least 6 characters', 'error')
+                return jsonify({'error': 'Please verify your mobile number with the WhatsApp OTP first.'}), 400
+            flash('Please verify your mobile number with the WhatsApp OTP first.', 'error')
             return redirect(url_for('partner_onboard_form', token=token))
 
-        if password != confirm_password:
-            conn.close()
-            if is_ajax:
-                return jsonify({'error': 'Passwords do not match'}), 400
-            flash('Passwords do not match', 'error')
-            return redirect(url_for('partner_onboard_form', token=token))
+        # Password is now OPTIONAL — partners log in with mobile + OTP. If they
+        # chose to set one, keep the old rules (>= 6 chars, must match).
+        password_hash_val = None
+        if password:
+            if len(password) < 6:
+                conn.close()
+                if is_ajax:
+                    return jsonify({'error': 'Password must be at least 6 characters'}), 400
+                flash('Password must be at least 6 characters', 'error')
+                return redirect(url_for('partner_onboard_form', token=token))
+            if password != confirm_password:
+                conn.close()
+                if is_ajax:
+                    return jsonify({'error': 'Passwords do not match'}), 400
+                flash('Passwords do not match', 'error')
+                return redirect(url_for('partner_onboard_form', token=token))
+            password_hash_val = hash_password(password)
 
         # Create partner
         cursor = conn.execute('''
@@ -31525,7 +31710,7 @@ def partner_onboard_submit(token):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, 'completed', CURRENT_TIMESTAMP)
         ''', (
             company_name, contact_person, invitation['email'], phone, website, address, city, state, country,
-            partner_type, hash_password(password), invitation['id']
+            partner_type, password_hash_val, invitation['id']
         ))
 
         # Get the new partner ID
@@ -38526,6 +38711,22 @@ ACCESS_ROUTE_MAP = {
     'neetpg_quota_backfill':                        _ap('colleges', 'fees', 'edit'),
     'neetpg_bulk_upload':                           _ap('colleges', 'fees', 'edit'),
     'neetpg_bulk_delete':                           _ap('colleges', 'fees', 'edit'),
+    # ── Partners (internal admin view) — grant a team member Sales > Partners to
+    #    let them see partner details + the partners' leads. Managing partners
+    #    (add/edit/delete/invite) needs the 'edit' action = admins only. (founder 2026-07-21)
+    'partners_list':                                _ap('sales', 'partners', 'view'),
+    'partners_dashboard':                           _ap('sales', 'partners', 'view'),
+    'partners_api':                                 _ap('sales', 'partners', 'view'),
+    'admin_partner_leads':                          _ap('sales', 'partners', 'view'),
+    'admin_partner_b2b_leads':                      _ap('sales', 'partners', 'view'),
+    'admin_partner_lead_detail':                    _ap('sales', 'partners', 'view'),
+    'partners_add':                                 _ap('sales', 'partners', 'edit'),
+    'partners_edit':                                _ap('sales', 'partners', 'edit'),
+    'partners_delete':                              _ap('sales', 'partners', 'edit'),
+    'partners_products':                            _ap('sales', 'partners', 'edit'),
+    'partner_invitations_list':                     _ap('sales', 'partners', 'edit'),
+    'partner_invitations_create':                   _ap('sales', 'partners', 'edit'),
+    'partner_invitation_delete':                    _ap('sales', 'partners', 'edit'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),

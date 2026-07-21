@@ -750,18 +750,87 @@
 
                 <!-- Partner Login -->
                 <div id="panel-partner" class="login-form-panel {% if active_tab == 'partner' %}active{% endif %}">
-                    <form method="POST" action="/partner-login">
+
+                    <!-- Primary: Mobile + WhatsApp OTP (no password needed) -->
+                    <div id="partnerOtpMode">
                         <div class="form-group">
-                            <label for="partner_email">Email Address</label>
-                            <input type="email" id="partner_email" name="partner_email" class="form-input" placeholder="Enter your partner email" required>
+                            <label for="partnerLoginPhone">Mobile Number</label>
+                            <input type="tel" id="partnerLoginPhone" class="form-input" placeholder="10-digit mobile number" autocomplete="tel">
                         </div>
-                        <div class="form-group">
-                            <label for="partner_password">Password</label>
-                            <input type="password" id="partner_password" name="partner_password" class="form-input" placeholder="Enter your password" required>
+                        <div class="form-group" id="partnerOtpEntry" style="display:none;">
+                            <label for="partnerLoginOtp">WhatsApp OTP</label>
+                            <input type="text" id="partnerLoginOtp" class="form-input" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
                         </div>
-                        <button type="submit" class="login-btn">Partner Sign In</button>
-                    </form>
-                    <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                        <button type="button" class="login-btn" id="partnerOtpBtn" onclick="partnerOtpAction()">
+                            <i class="fab fa-whatsapp"></i> Send WhatsApp OTP
+                        </button>
+                        <div id="partnerOtpMsg" style="font-size:0.85rem;margin-top:10px;text-align:center;"></div>
+                        <a href="#" class="forgot-link" onclick="togglePartnerMode('pw');return false;">Sign in with email &amp; password instead</a>
+                    </div>
+
+                    <!-- Fallback: Email + Password -->
+                    <div id="partnerPwMode" style="display:none;">
+                        <form method="POST" action="/partner-login">
+                            <div class="form-group">
+                                <label for="partner_email">Email Address</label>
+                                <input type="email" id="partner_email" name="partner_email" class="form-input" placeholder="Enter your partner email">
+                            </div>
+                            <div class="form-group">
+                                <label for="partner_password">Password</label>
+                                <input type="password" id="partner_password" name="partner_password" class="form-input" placeholder="Enter your password">
+                            </div>
+                            <button type="submit" class="login-btn">Partner Sign In</button>
+                        </form>
+                        <a href="#" class="forgot-link" onclick="togglePartnerMode('otp');return false;">Sign in with mobile &amp; OTP instead</a>
+                        <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                    </div>
+
+                    <script>
+                        function togglePartnerMode(mode) {
+                            document.getElementById('partnerOtpMode').style.display = (mode === 'otp') ? '' : 'none';
+                            document.getElementById('partnerPwMode').style.display  = (mode === 'pw')  ? '' : 'none';
+                        }
+                        let _partnerOtpSent = false;
+                        function _pMsg(t, ok) {
+                            const m = document.getElementById('partnerOtpMsg');
+                            m.style.color = ok ? '#16a34a' : '#b91c1c'; m.textContent = t || '';
+                        }
+                        async function partnerOtpAction() {
+                            const phone = document.getElementById('partnerLoginPhone').value.trim();
+                            const btn = document.getElementById('partnerOtpBtn');
+                            if (!_partnerOtpSent) {
+                                if (!/^[\d\s\-\+\(\)]{10,}$/.test(phone)) { _pMsg('Enter a valid 10-digit mobile number.', false); return; }
+                                btn.disabled = true; _pMsg('Sending OTP…', true);
+                                try {
+                                    const r = await fetch('/partner/login/send-otp', {
+                                        method:'POST', headers:{'Content-Type':'application/json'},
+                                        body: JSON.stringify({ phone })
+                                    });
+                                    const d = await r.json();
+                                    if (r.ok && d.success) {
+                                        _partnerOtpSent = true;
+                                        document.getElementById('partnerOtpEntry').style.display = '';
+                                        btn.innerHTML = 'Verify &amp; Sign In';
+                                        _pMsg('OTP sent to your WhatsApp.', true);
+                                    } else { _pMsg(d.error || 'Could not send OTP.', false); }
+                                } catch (e) { _pMsg('Network error. Please try again.', false); }
+                                btn.disabled = false;
+                            } else {
+                                const otp = document.getElementById('partnerLoginOtp').value.trim();
+                                if (!otp) { _pMsg('Enter the 6-digit OTP.', false); return; }
+                                btn.disabled = true; _pMsg('Verifying…', true);
+                                try {
+                                    const r = await fetch('/partner/login/verify-otp', {
+                                        method:'POST', headers:{'Content-Type':'application/json'},
+                                        body: JSON.stringify({ phone, otp })
+                                    });
+                                    const d = await r.json();
+                                    if (r.ok && d.success) { _pMsg('Success! Redirecting…', true); window.location.href = d.redirect || '/partner/dashboard'; }
+                                    else { _pMsg(d.error || 'Invalid OTP.', false); btn.disabled = false; }
+                                } catch (e) { _pMsg('Network error. Please try again.', false); btn.disabled = false; }
+                            }
+                        }
+                    </script>
                 </div>
             </div>
         </div>
