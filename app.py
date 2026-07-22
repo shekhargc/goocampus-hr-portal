@@ -5150,28 +5150,45 @@ def _notify_onboarding_confirmed(reg_id):
                                   brand_photo_block, brand_callout)
         sm_name, _sm_email = _lead_sales_member(conn, reg)
         onb_photo_url = _client_photo_email_url(conn, reg)
-        team_recipients = list(dict.fromkeys(
-            _dept_emails(conn, ['Sales', 'Operations', 'Marketing', 'Digital Marketing'])
-            + _management_emails(conn)))
+        # Editable + recipient-controlled via the 'client_onboarded_team' template:
+        # edit the wording, tick exactly who gets it, or disable to switch it off.
+        # Defaults to the historical broad recipient list + wording. (2026-07-22)
+        _ob_row = conn.execute("SELECT * FROM email_templates WHERE template_key = 'client_onboarded_team'").fetchone()
+        _ob_tpl = dict(_ob_row) if _ob_row else {}
+        _ob_enabled = (_ob_tpl.get('enabled', 1) if _ob_tpl else 1)
+        if _ob_enabled:
+            team_recipients = _onboarded_team_recipients(conn, _ob_tpl, reg, _sm_email)
+        else:
+            team_recipients = []
         if team_recipients:
-            team_subject = f"New Client Onboarded — {client_name} ({reg['product_name'] or 'N/A'})"
-            team_inner = (
-                brand_photo_block(onb_photo_url, client_name) +
-                brand_callout(
-                    f"<strong>{client_name}</strong> has successfully registered with GooCampus and "
-                    f"completed both sales &amp; operations verification. The client is now onboarded.",
-                    color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
-                brand_detail_rows([
-                    ('Client', client_name),
-                    ('Registration #', reg['registration_number']),
-                    ('Product', reg['product_name']),
-                    ('Whose lead', sm_name),
-                    ('Mobile', reg['mobile']),
-                    ('Email', reg['email']),
-                ])
-            )
-            team_body = render_branded_email('Client Registered with GooCampus', team_inner,
-                                             preheader=f"{client_name} is now onboarded")
+            _ob_r = _sc_render(conn, 'client_onboarded_team', {
+                'client_name': client_name,
+                'registration_number': (reg['registration_number'] or ''),
+                'product_name': (reg['product_name'] or 'N/A'),
+                'sales_member': (sm_name or ''),
+                'mobile': (reg['mobile'] or ''),
+                'email': (reg['email'] or '')})
+            if _ob_r:
+                team_subject, team_body = _ob_r
+            else:
+                team_subject = f"New Client Onboarded — {client_name} ({reg['product_name'] or 'N/A'})"
+                team_inner = (
+                    brand_photo_block(onb_photo_url, client_name) +
+                    brand_callout(
+                        f"<strong>{client_name}</strong> has successfully registered with GooCampus and "
+                        f"completed both sales &amp; operations verification. The client is now onboarded.",
+                        color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
+                    brand_detail_rows([
+                        ('Client', client_name),
+                        ('Registration #', reg['registration_number']),
+                        ('Product', reg['product_name']),
+                        ('Whose lead', sm_name),
+                        ('Mobile', reg['mobile']),
+                        ('Email', reg['email']),
+                    ])
+                )
+                team_body = render_branded_email('Client Registered with GooCampus', team_inner,
+                                                 preheader=f"{client_name} is now onboarded")
             send_email(team_recipients, team_subject, team_body,
                        from_address="GooCampus <info@goocampus.in>")
 
@@ -38615,10 +38632,93 @@ def seed_sc_email_group_once():
             pass
 
 
+_ONBOARDED_TEAM_TEMPLATE = {
+    'key': 'client_onboarded_team',
+    'label': 'Client Onboarded (to team)',
+    'subject': 'New Client Onboarded — {{client_name}} ({{product_name}})',
+    'recip': (0, 0, 0, 0),  # none pre-set -> keeps the historical broad default until edited
+    'inner': (
+        '<div style="background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;padding:12px 16px;'
+        'border-radius:8px;margin:0 0 14px;"><strong>{{client_name}}</strong> has successfully '
+        'registered with GooCampus and completed both sales &amp; operations verification. '
+        'The client is now onboarded.</div>'
+        '<table style="border-collapse:collapse;font-size:0.9rem;">'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Client</td><td style="padding:4px 0;"><strong>{{client_name}}</strong></td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Registration #</td><td style="padding:4px 0;">{{registration_number}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Product</td><td style="padding:4px 0;">{{product_name}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Whose lead</td><td style="padding:4px 0;">{{sales_member}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Mobile</td><td style="padding:4px 0;">{{mobile}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Email</td><td style="padding:4px 0;">{{email}}</td></tr>'
+        '</table>')
+}
+
+
+def seed_onboarded_team_template_once():
+    """Seed the editable 'Client Onboarded (to team)' template so its wording +
+    recipients are managed in /admin/email-templates instead of being hardcoded and
+    blasted to every department. Inserts only if missing (preserves edits).
+    (founder 2026-07-22)"""
+    conn = None
+    try:
+        conn = get_db()
+        t = _ONBOARDED_TEAM_TEMPLATE
+        exists = conn.execute("SELECT id FROM email_templates WHERE template_key = ?", (t['key'],)).fetchone()
+        if not exists:
+            rc, rco, ro, rp = t['recip']
+            conn.execute(
+                "INSERT INTO email_templates (template_key, label, subject, body_html, enabled, "
+                " recipients_client, recipients_counsellor, recipients_ops, recipients_parents, category) "
+                "VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'Onboarding')",
+                (t['key'], t['label'], t['subject'], _sc_body(t['inner']), rc, rco, ro, rp))
+        else:
+            conn.execute("UPDATE email_templates SET category = 'Onboarding' WHERE template_key = ?", (t['key'],))
+        conn.commit()
+    except Exception as e:
+        logging.warning("seed_onboarded_team_template_once: %s", e)
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
+def _onboarded_team_recipients(conn, tpl, reg, sm_email):
+    """Recipients for the 'client onboarded' team note. If the template has ANY
+    explicit recipient set (a role toggle or a picked staff member) send to exactly
+    that set; otherwise fall back to the historical broad default so it never
+    silently goes dark. (founder 2026-07-22)"""
+    def _on(col):
+        try:
+            return bool(tpl.get(col))
+        except Exception:
+            return False
+    try:
+        picked = _template_staff_emails(conn, tpl)
+    except Exception:
+        picked = []
+    if not picked and not any(_on(c) for c in ('recipients_client', 'recipients_counsellor', 'recipients_ops')):
+        return list(dict.fromkeys(
+            _dept_emails(conn, ['Sales', 'Operations', 'Marketing', 'Digital Marketing'])
+            + _management_emails(conn)))
+    out = list(picked)
+    if _on('recipients_ops'):
+        out += _dept_emails(conn, ['Operations'])
+    if _on('recipients_counsellor') and sm_email:
+        out.append(sm_email)
+    if _on('recipients_client') and reg['email']:
+        out.append(reg['email'])
+    return list(dict.fromkeys([e for e in out if e]))
+
+
 seed_email_templates_once()
 fix_welcome_email_hardcoded_counsellor_once()
 set_welcome_email_format_v2_once()
 seed_sc_email_group_once()
+seed_onboarded_team_template_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from
