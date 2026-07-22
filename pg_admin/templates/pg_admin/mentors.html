@@ -1,0 +1,347 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mentor Management{% endblock %}
+
+{% block section_extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    .pgm-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
+    .pgm-header h1 { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
+    .pgm-header p { color:var(--gray-500); font-size:0.9rem; margin:0.15rem 0 0; }
+
+    .pgm-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+    .pgm-stat { background:white; border:1px solid var(--gray-200); border-radius:0.6rem; padding:1rem 1.25rem; }
+    .pgm-stat .lbl { font-size:0.78rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
+    .pgm-stat .val { font-size:1.75rem; font-weight:700; color:var(--navy); margin-top:0.2rem; }
+    .pgm-stat.pub .val { color:#16a34a; } .pgm-stat.avl .val { color:#2563eb; } .pgm-stat.ver .val { color:#d97706; }
+    @media (max-width:900px){ .pgm-stats{ grid-template-columns:repeat(2,1fr);} }
+
+    .pgm-controls { display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
+    .pgm-controls input[type=text], .pgm-controls select {
+        padding:0.5rem 0.7rem; border:1px solid var(--gray-300); border-radius:0.45rem; font-size:0.87rem; background:white;
+    }
+    .pgm-controls input[type=text]{ min-width:240px; }
+    .pgm-btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.9rem; border-radius:0.45rem;
+        border:none; font-size:0.87rem; font-weight:600; cursor:pointer; text-decoration:none; }
+    .pgm-btn-primary { background:var(--orange); color:white; }
+    .pgm-btn-ghost { background:var(--gray-100); color:var(--navy); border:1px solid var(--gray-300); }
+    .pgm-btn-sm { padding:0.35rem 0.55rem; font-size:0.8rem; }
+
+    .pgm-table { width:100%; border-collapse:collapse; background:white; border-radius:0.6rem; overflow:hidden;
+        border:1px solid var(--gray-200); }
+    .pgm-table th { background:var(--navy); color:white; text-align:left; padding:0.7rem 0.85rem; font-size:0.78rem;
+        text-transform:uppercase; letter-spacing:0.4px; }
+    .pgm-table td { padding:0.7rem 0.85rem; border-top:1px solid var(--gray-100); font-size:0.87rem; vertical-align:middle; }
+    .pgm-avatar { width:42px; height:42px; border-radius:50%; object-fit:cover; background:var(--gray-200);
+        display:inline-flex; align-items:center; justify-content:center; font-weight:700; color:var(--navy); }
+    .pgm-name { display:flex; align-items:center; gap:0.65rem; }
+    .pgm-name .sub { color:var(--gray-500); font-size:0.78rem; }
+
+    .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
+    .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-500); }
+    .chip-blue { background:#dbeafe; color:#1e40af; } .chip-amber { background:#fef3c7; color:#92400e; }
+
+    .pgm-actions { display:flex; gap:0.3rem; flex-wrap:wrap; }
+    .icon-btn { border:1px solid var(--gray-300); background:white; border-radius:0.4rem; width:30px; height:30px;
+        display:inline-flex; align-items:center; justify-content:center; cursor:pointer; color:var(--gray-600); }
+    .icon-btn:hover { background:var(--gray-100); color:var(--navy); }
+    .icon-btn.danger:hover { background:#fee2e2; color:#b91c1c; border-color:#fca5a5; }
+
+    /* Modal */
+    .pgm-modal-overlay { position:fixed; inset:0; background:rgba(15,27,51,0.55); z-index:1000; display:none;
+        align-items:flex-start; justify-content:center; overflow-y:auto; padding:2.5rem 1rem; }
+    .pgm-modal-overlay.open { display:flex; }
+    .pgm-modal { background:white; border-radius:0.7rem; width:min(880px,100%); box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+    .pgm-modal-head { display:flex; justify-content:space-between; align-items:center; padding:1.1rem 1.4rem;
+        border-bottom:1px solid var(--gray-200); }
+    .pgm-modal-head h2 { font-size:1.15rem; font-weight:700; color:var(--navy); margin:0; }
+    .pgm-modal-body { padding:1.2rem 1.4rem; }
+    .pgm-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.9rem 1.1rem; }
+    .pgm-grid .full { grid-column:1 / -1; }
+    @media (max-width:700px){ .pgm-grid{ grid-template-columns:1fr;} }
+    .pgm-field label { display:block; font-size:0.8rem; font-weight:600; color:var(--navy); margin-bottom:0.25rem; }
+    .pgm-field input, .pgm-field select, .pgm-field textarea {
+        width:100%; padding:0.5rem 0.65rem; border:1px solid var(--gray-300); border-radius:0.45rem; font-size:0.87rem; font-family:inherit; }
+    .pgm-field .hint { font-size:0.73rem; color:var(--gray-500); margin-top:0.2rem; }
+    .pgm-toggles { display:flex; gap:1.5rem; flex-wrap:wrap; }
+    .pgm-toggle { display:flex; align-items:center; gap:0.45rem; font-size:0.87rem; font-weight:600; color:var(--navy); }
+    .pgm-avail { border:1px solid var(--gray-200); border-radius:0.5rem; padding:0.6rem 0.8rem; }
+    .pgm-avail-row { display:grid; grid-template-columns:110px 1fr 1fr; gap:0.6rem; align-items:center; margin-bottom:0.4rem; }
+    .pgm-avail-row label { text-transform:capitalize; font-size:0.83rem; color:var(--gray-600); margin:0; }
+    .pgm-modal-foot { display:flex; justify-content:flex-end; gap:0.6rem; padding:1rem 1.4rem; border-top:1px solid var(--gray-200); }
+    .pgm-empty { text-align:center; padding:2.5rem; color:var(--gray-500); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="pgm-header">
+    <div>
+        <h1>Mentor Management</h1>
+        <p>The expert doctors aspirants browse &amp; book on goocampus.in. Only <strong>Published</strong> mentors appear publicly.</p>
+    </div>
+    <button class="pgm-btn pgm-btn-primary" onclick="pgmOpenAdd()"><i class="fas fa-plus"></i> Add Mentor</button>
+</div>
+
+<div class="pgm-stats">
+    <div class="pgm-stat"><div class="lbl">Total</div><div class="val">{{ stats.total }}</div></div>
+    <div class="pgm-stat pub"><div class="lbl">Published</div><div class="val">{{ stats.published }}</div></div>
+    <div class="pgm-stat avl"><div class="lbl">Available</div><div class="val">{{ stats.available }}</div></div>
+    <div class="pgm-stat ver"><div class="lbl">Verified</div><div class="val">{{ stats.verified }}</div></div>
+</div>
+
+<form method="GET" action="/admin/pg/mentors" class="pgm-controls">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search name, specialization, qualification…">
+    <select name="specialization">
+        <option value="">All specializations</option>
+        {% for s in specializations %}
+        <option value="{{ s }}" {% if s == f_spec %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+    <select name="published">
+        <option value="">Any status</option>
+        <option value="true" {% if f_pub == 'true' %}selected{% endif %}>Published</option>
+        <option value="false" {% if f_pub == 'false' %}selected{% endif %}>Draft</option>
+    </select>
+    <select name="available">
+        <option value="">Any availability</option>
+        <option value="true" {% if f_avail == 'true' %}selected{% endif %}>Available</option>
+        <option value="false" {% if f_avail == 'false' %}selected{% endif %}>Unavailable</option>
+    </select>
+    <button type="submit" class="pgm-btn pgm-btn-ghost"><i class="fas fa-filter"></i> Filter</button>
+    {% if q or f_spec or f_pub or f_avail %}<a href="/admin/pg/mentors" class="pgm-btn pgm-btn-ghost">Clear</a>{% endif %}
+</form>
+
+<div class="table-wrapper">
+<table class="pgm-table">
+    <thead>
+        <tr><th>Mentor</th><th>Specialization</th><th>Exp.</th><th>Fees (₹)</th><th>Status</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    {% if not mentors %}
+        <tr><td colspan="6"><div class="pgm-empty">No mentors yet. Click <strong>Add Mentor</strong> to create one.</div></td></tr>
+    {% endif %}
+    {% for m in mentors %}
+        <tr>
+            <td>
+                <div class="pgm-name">
+                    {% if m.photo_url %}
+                        <img class="pgm-avatar" src="/admin/pg/mentors/{{ m.id }}/photo" alt="{{ m.name }}">
+                    {% else %}
+                        <span class="pgm-avatar">{{ m.name[:1]|upper }}</span>
+                    {% endif %}
+                    <div>
+                        <div><strong>Dr. {{ m.name }}</strong></div>
+                        <div class="sub">{{ m.qualification }}</div>
+                    </div>
+                </div>
+            </td>
+            <td>{{ m.specialization }}{% if m.designation %}<div class="sub">{{ m.designation }}</div>{% endif %}</td>
+            <td>{% if m.experience_years is not none %}{{ m.experience_years }} yr{% else %}—{% endif %}</td>
+            <td>
+                <div>Counselling: {{ m.counselling_fee or 0 }}</div>
+                <div class="sub">Mentorship: {{ m.consultation_fee or 0 }}</div>
+            </td>
+            <td>
+                {% if m.is_published %}<span class="chip chip-green">Published</span>{% else %}<span class="chip chip-gray">Draft</span>{% endif %}
+                {% if m.is_available %}<span class="chip chip-blue">Available</span>{% endif %}
+                {% if m.is_verified %}<span class="chip chip-amber">Verified</span>{% endif %}
+            </td>
+            <td>
+                <div class="pgm-actions">
+                    <button class="icon-btn" title="Edit"
+                        data-id="{{ m.id }}"
+                        data-name="{{ m.name }}"
+                        data-email="{{ m.email }}"
+                        data-phone="{{ m.phone }}"
+                        data-specialization="{{ m.specialization }}"
+                        data-qualification="{{ m.qualification }}"
+                        data-designation="{{ m.designation }}"
+                        data-experience="{{ m.experience_years if m.experience_years is not none else '' }}"
+                        data-counselling-fee="{{ m.counselling_fee|string if m.counselling_fee is not none else '' }}"
+                        data-consultation-fee="{{ m.consultation_fee|string if m.consultation_fee is not none else '' }}"
+                        data-service-type="{{ m.service_type }}"
+                        data-specialties="{{ m.specialties_list|join(', ') }}"
+                        data-languages="{{ m.languages_list|join(', ') }}"
+                        data-bio="{{ m.bio }}"
+                        data-council-number="{{ m.medical_council_number }}"
+                        data-council-state="{{ m.medical_council_state }}"
+                        data-hospital-name="{{ m.hospital_name }}"
+                        data-hospital-address="{{ m.hospital_address }}"
+                        data-admin-notes="{{ m.admin_notes }}"
+                        data-is-available="{{ '1' if m.is_available else '0' }}"
+                        data-is-verified="{{ '1' if m.is_verified else '0' }}"
+                        data-is-published="{{ '1' if m.is_published else '0' }}"
+                        data-has-photo="{{ '1' if m.photo_url else '0' }}"
+                        data-availability='{{ m.availability_map|tojson }}'
+                        onclick="pgmOpenEdit(this)"><i class="fas fa-pen"></i></button>
+
+                    <form method="POST" action="/admin/pg/mentors/{{ m.id }}/toggle?flag=is_published" style="display:inline">
+                        <button class="icon-btn" title="{{ 'Unpublish' if m.is_published else 'Publish' }}">
+                            <i class="fas {{ 'fa-eye-slash' if m.is_published else 'fa-eye' }}"></i></button>
+                    </form>
+                    <form method="POST" action="/admin/pg/mentors/{{ m.id }}/toggle?flag=is_verified" style="display:inline">
+                        <button class="icon-btn" title="{{ 'Unverify' if m.is_verified else 'Verify' }}">
+                            <i class="fas {{ 'fa-certificate' if m.is_verified else 'far fa-circle-check' }}"></i></button>
+                    </form>
+                    <form method="POST" action="/admin/pg/mentors/{{ m.id }}/toggle?flag=is_available" style="display:inline">
+                        <button class="icon-btn" title="{{ 'Mark unavailable' if m.is_available else 'Mark available' }}">
+                            <i class="fas {{ 'fa-toggle-on' if m.is_available else 'fa-toggle-off' }}"></i></button>
+                    </form>
+                    <form method="POST" action="/admin/pg/mentors/{{ m.id }}/delete" style="display:inline"
+                          onsubmit="return confirm('Remove Dr. {{ m.name }}? This hides them from the site (soft delete).');">
+                        <button class="icon-btn danger" title="Remove"><i class="fas fa-trash"></i></button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<!-- Add / Edit modal -->
+<div class="pgm-modal-overlay" id="pgmModal">
+  <div class="pgm-modal">
+    <form method="POST" action="/admin/pg/mentors/save" enctype="multipart/form-data">
+      <div class="pgm-modal-head">
+        <h2 id="pgmModalTitle">Add Mentor</h2>
+        <button type="button" class="icon-btn" onclick="pgmClose()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="pgm-modal-body">
+        <input type="hidden" name="edit_id" id="f_edit_id" value="">
+        <div class="pgm-grid">
+          <div class="pgm-field"><label>Name *</label><input name="name" id="f_name" required></div>
+          <div class="pgm-field"><label>Specialization *</label><input name="specialization" id="f_specialization" required placeholder="e.g. Radiology"></div>
+          <div class="pgm-field"><label>Qualification *</label><input name="qualification" id="f_qualification" required placeholder="MD / MS / DNB"></div>
+          <div class="pgm-field"><label>Designation</label><input name="designation" id="f_designation" placeholder="e.g. Senior Consultant"></div>
+          <div class="pgm-field"><label>Experience (years)</label><input type="number" min="0" name="experience_years" id="f_experience_years"></div>
+          <div class="pgm-field"><label>Service type</label>
+            <select name="service_type" id="f_service_type">
+              {% for st in service_types %}<option value="{{ st }}">{{ st|capitalize }}</option>{% endfor %}
+            </select></div>
+          <div class="pgm-field"><label>Counselling fee (₹)</label><input type="number" step="0.01" min="0" name="counselling_fee" id="f_counselling_fee"><div class="hint">The price shown on the site (v1).</div></div>
+          <div class="pgm-field"><label>Mentorship fee (₹)</label><input type="number" step="0.01" min="0" name="consultation_fee" id="f_consultation_fee"><div class="hint">Kept for later; optional now.</div></div>
+          <div class="pgm-field full"><label>Specialties</label><input name="specialties" id="f_specialties" placeholder="Comma separated — e.g. Emergency Care, Trauma, Critical Care"></div>
+          <div class="pgm-field full"><label>Languages</label><input name="languages" id="f_languages" placeholder="Comma separated — e.g. English, Hindi, Kannada"></div>
+          <div class="pgm-field full"><label>Bio</label><textarea name="bio" id="f_bio" rows="3"></textarea></div>
+
+          <div class="pgm-field"><label>Email <span class="hint">(admin-only)</span></label><input type="email" name="email" id="f_email"></div>
+          <div class="pgm-field"><label>Phone <span class="hint">(admin-only)</span></label><input name="phone" id="f_phone"></div>
+          <div class="pgm-field"><label>Medical council no. <span class="hint">(admin-only)</span></label><input name="medical_council_number" id="f_council_number"></div>
+          <div class="pgm-field"><label>Medical council state <span class="hint">(admin-only)</span></label><input name="medical_council_state" id="f_council_state"></div>
+          <div class="pgm-field"><label>Hospital name</label><input name="hospital_name" id="f_hospital_name"></div>
+          <div class="pgm-field"><label>Hospital address</label><input name="hospital_address" id="f_hospital_address"></div>
+          <div class="pgm-field full"><label>Admin notes <span class="hint">(admin-only, never public)</span></label><textarea name="admin_notes" id="f_admin_notes" rows="2"></textarea></div>
+
+          <div class="pgm-field full">
+            <label>Weekly availability</label>
+            <div class="pgm-avail">
+              {% for day in weekdays %}
+              <div class="pgm-avail-row">
+                <label>{{ day }}</label>
+                <input type="time" name="avail_{{ day }}_start" id="f_avail_{{ day }}_start">
+                <input type="time" name="avail_{{ day }}_end" id="f_avail_{{ day }}_end">
+              </div>
+              {% endfor %}
+              <div class="hint">Leave a day blank to mean "not available". Times are IST.</div>
+            </div>
+          </div>
+
+          <div class="pgm-field full">
+            <label>Photo</label>
+            <input type="file" name="photo" id="f_photo" accept="image/*">
+            <div class="hint" id="f_photo_hint">JPG / PNG / WebP / GIF → uploaded to R2.</div>
+          </div>
+
+          <div class="pgm-field full">
+            <div class="pgm-toggles">
+              <label class="pgm-toggle"><input type="checkbox" name="is_available" id="f_is_available"> Available for bookings</label>
+              <label class="pgm-toggle"><input type="checkbox" name="is_verified" id="f_is_verified"> Verified badge</label>
+              <label class="pgm-toggle"><input type="checkbox" name="is_published" id="f_is_published"> Publish to public</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pgm-modal-foot">
+        <button type="button" class="pgm-btn pgm-btn-ghost" onclick="pgmClose()">Cancel</button>
+        <button type="submit" class="pgm-btn pgm-btn-primary"><i class="fas fa-save"></i> Save Mentor</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block section_extra_js %}
+<script>
+const PGM_DAYS = {{ weekdays|tojson }};
+
+function pgmSetVal(id, v){ var el=document.getElementById(id); if(el) el.value = (v==null?'':v); }
+function pgmSetChk(id, on){ var el=document.getElementById(id); if(el) el.checked = !!on; }
+
+function pgmClearAvail(){
+    PGM_DAYS.forEach(function(d){ pgmSetVal('f_avail_'+d+'_start',''); pgmSetVal('f_avail_'+d+'_end',''); });
+}
+
+function pgmReset(){
+    ['f_edit_id','f_name','f_specialization','f_qualification','f_designation','f_experience_years',
+     'f_counselling_fee','f_consultation_fee','f_specialties','f_languages','f_bio','f_email','f_phone',
+     'f_council_number','f_council_state','f_hospital_name','f_hospital_address','f_admin_notes'
+    ].forEach(function(id){ pgmSetVal(id,''); });
+    pgmSetVal('f_service_type','counselling');
+    pgmSetChk('f_is_available',false); pgmSetChk('f_is_verified',false); pgmSetChk('f_is_published',false);
+    pgmClearAvail();
+    var ph=document.getElementById('f_photo'); if(ph) ph.value='';
+    document.getElementById('f_photo_hint').textContent = 'JPG / PNG / WebP / GIF → uploaded to R2.';
+}
+
+function pgmOpenAdd(){
+    pgmReset();
+    document.getElementById('pgmModalTitle').textContent = 'Add Mentor';
+    document.getElementById('pgmModal').classList.add('open');
+}
+
+function pgmOpenEdit(btn){
+    pgmReset();
+    var d = btn.dataset;
+    document.getElementById('pgmModalTitle').textContent = 'Edit Mentor';
+    pgmSetVal('f_edit_id', d.id);
+    pgmSetVal('f_name', d.name);
+    pgmSetVal('f_specialization', d.specialization);
+    pgmSetVal('f_qualification', d.qualification);
+    pgmSetVal('f_designation', d.designation);
+    pgmSetVal('f_experience_years', d.experience);
+    pgmSetVal('f_counselling_fee', d.counsellingFee);
+    pgmSetVal('f_consultation_fee', d.consultationFee);
+    pgmSetVal('f_service_type', d.serviceType || 'counselling');
+    pgmSetVal('f_specialties', d.specialties);
+    pgmSetVal('f_languages', d.languages);
+    pgmSetVal('f_bio', d.bio);
+    pgmSetVal('f_email', d.email);
+    pgmSetVal('f_phone', d.phone);
+    pgmSetVal('f_council_number', d.councilNumber);
+    pgmSetVal('f_council_state', d.councilState);
+    pgmSetVal('f_hospital_name', d.hospitalName);
+    pgmSetVal('f_hospital_address', d.hospitalAddress);
+    pgmSetVal('f_admin_notes', d.adminNotes);
+    pgmSetChk('f_is_available', d.isAvailable === '1');
+    pgmSetChk('f_is_verified', d.isVerified === '1');
+    pgmSetChk('f_is_published', d.isPublished === '1');
+    // Availability
+    try {
+        var av = JSON.parse(d.availability || '{}');
+        PGM_DAYS.forEach(function(day){
+            if (av[day] && av[day].length){
+                pgmSetVal('f_avail_'+day+'_start', av[day][0].start || '');
+                pgmSetVal('f_avail_'+day+'_end', av[day][0].end || '');
+            }
+        });
+    } catch(e) {}
+    document.getElementById('f_photo_hint').textContent =
+        (d.hasPhoto === '1') ? 'A photo is already set — choose a new file to replace it.' : 'JPG / PNG / WebP / GIF → uploaded to R2.';
+    document.getElementById('pgmModal').classList.add('open');
+}
+
+function pgmClose(){ document.getElementById('pgmModal').classList.remove('open'); }
+document.getElementById('pgmModal').addEventListener('click', function(e){ if(e.target === this) pgmClose(); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') pgmClose(); });
+</script>
+{% endblock %}
