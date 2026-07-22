@@ -31336,6 +31336,66 @@ def partner_invitations_create():
     return redirect(url_for('partner_invitations_list'))
 
 
+@app.route('/partners/invitations/<int:inv_id>/resend', methods=['POST'])
+@login_required
+def partner_invitation_resend(inv_id):
+    """Re-send an existing PENDING partner invitation email (same link/token).
+    The Resend button called this endpoint but it never existed → 404 'Failed to
+    resend' (founder 2026-07-22). Honors the Partners > Invitations edit grant."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'invitations', 'edit'))):
+        conn.close()
+        return jsonify({'error': 'You do not have edit access to Partner Invitations.'}), 403
+    inv = conn.execute("SELECT id, name, email, token, status FROM partner_invitations WHERE id = ?",
+                       (inv_id,)).fetchone()
+    conn.close()
+    if not inv:
+        return jsonify({'error': 'Invitation not found'}), 404
+    if (inv['status'] or '') != 'pending':
+        return jsonify({'error': f"This partner has already {inv['status']}; nothing to resend."}), 400
+    try:
+        from email_utils import send_email
+        name = inv['name']; email = inv['email']
+        registration_link = f"{request.host_url}partner/register/{inv['token']}"
+        email_sent = send_email(
+            [email],
+            'Partner Registration Invitation - GooCampus',
+            f'''
+            <html>
+                <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; margin: 0; padding: 0;">
+                    <div style="background-color: #1e3a5f; padding: 20px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px;">GooCampus Partner Portal</h1>
+                    </div>
+                    <div style="padding: 30px; background-color: white;">
+                        <h2 style="color: #1e3a5f; margin-top: 0;">Welcome to GooCampus!</h2>
+                        <p style="font-size: 16px;">Hello {name},</p>
+                        <p>You have been invited to join the GooCampus Partner Network. Click the button below to verify your email and complete your registration.</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{registration_link}" style="background-color: #F58220; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">
+                                Register as Partner
+                            </a>
+                        </div>
+                        <p style="font-size: 13px; color: #666;">Or copy this link into your browser:<br>
+                        <a href="{registration_link}" style="color: #F58220; word-break: break-all;">{registration_link}</a></p>
+                        <p style="font-size: 13px; color: #999;">This invitation link will expire in 30 days.</p>
+                        <p style="margin-top: 30px;">Best regards,<br><strong style="color: #1e3a5f;">GooCampus Team</strong></p>
+                    </div>
+                    <div style="background-color: #f5f5f5; padding: 15px; text-align: center; border-top: 3px solid #F58220;">
+                        <p style="color: #999; font-size: 11px; margin: 0;">GooCampus Edu Solutions Pvt Ltd</p>
+                    </div>
+                </body>
+            </html>
+            '''
+        )
+        if email_sent:
+            return jsonify({'success': True, 'message': 'Invitation re-sent'}), 200
+        return jsonify({'error': 'Email could not be sent — check the email service.'}), 500
+    except Exception as e:
+        logging.error(f"partner_invitation_resend: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/partners/invitations/<int:inv_id>/delete', methods=['POST'])
 @login_required
 def partner_invitation_delete(inv_id):
@@ -38896,6 +38956,7 @@ ACCESS_ROUTE_MAP = {
     'partners_products':                            _ap('partners', 'directory', 'edit'),
     'partner_invitations_list':                     _ap('partners', 'invitations', 'view'),
     'partner_invitations_create':                   _ap('partners', 'invitations', 'edit'),
+    'partner_invitation_resend':                    _ap('partners', 'invitations', 'edit'),
     'partner_invitation_delete':                    _ap('partners', 'invitations', 'edit'),
     'admin_partner_leads':                          _ap('partners', 'leads', 'view'),
     'admin_partner_b2b_leads':                      _ap('partners', 'leads', 'view'),
