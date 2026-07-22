@@ -43205,4 +43205,9 @@ if __name__ == '__main__':
 from college import register_college
 register_college(app)
 
+# ── goocampus.in Admin module (Mentors + /api/pg/* for the Next.js user panel) ──
+# Added by the "College + goocampus.in Admin" session — self-contained in pg_admin/.
+from pg_admin import register_pg_admin
+register_pg_admin(app)
+
 # redeploy trigger 2026-07-02 (ensure sales-verification sidebar commit is deployed)
