@@ -31113,7 +31113,7 @@ def partner_invitations_list():
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or user['is_admin'] != 1:
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'invitations', 'view'))):
         conn.close()
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -31136,7 +31136,7 @@ def partner_invitations_create():
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or user['is_admin'] != 1:
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'invitations', 'edit'))):
         conn.close()
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -31217,7 +31217,7 @@ def partner_invitation_delete(inv_id):
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or not user.get('is_admin'):
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'invitations', 'edit'))):
         conn.close()
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'error': 'Only admins can delete invitations'}), 403
@@ -31812,7 +31812,7 @@ def admin_partner_leads():
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or user['is_admin'] != 1:
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'leads', 'view'))):
         conn.close()
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -31865,7 +31865,7 @@ def admin_partner_b2b_leads():
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or user['is_admin'] != 1:
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'leads', 'view'))):
         conn.close()
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -31918,7 +31918,7 @@ def admin_partner_lead_detail(lead_id):
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or user['is_admin'] != 1:
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'leads', 'view'))):
         conn.close()
         return jsonify({'error': 'Admin access required'}), 403
 
@@ -31958,9 +31958,9 @@ def api_update_student_lead(lead_id):
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or user['is_admin'] != 1:
+    if not (user and (user['is_admin'] or has_section_permission(user, 'partners', 'leads', 'edit'))):
         conn.close()
-        return jsonify({'error': 'Admin access required'}), 403
+        return jsonify({'error': 'You do not have edit access to Partner Leads.'}), 403
 
     try:
         data = request.get_json()
@@ -38774,6 +38774,7 @@ ACCESS_ROUTE_MAP = {
     'admin_partner_leads':                          _ap('partners', 'leads', 'view'),
     'admin_partner_b2b_leads':                      _ap('partners', 'leads', 'view'),
     'admin_partner_lead_detail':                    _ap('partners', 'leads', 'view'),
+    'api_update_student_lead':                      _ap('partners', 'leads', 'edit'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),
