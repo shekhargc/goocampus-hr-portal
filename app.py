@@ -1371,10 +1371,18 @@ def _client_gate_status(conn, acct_id):
     refund_done = bool(conn.execute(
         "SELECT 1 FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
         "AND policy_version = ? LIMIT 1", (acct_id, pver)).fetchone())
+    # Welcome call is MANDATORY in the standard flow (founder 2026-07-22): once the
+    # refund policy is signed, the client must request a welcome-call slot before the
+    # dashboard fully unlocks. Skipped when Sales put it on hold (hidden) or already
+    # marked it completed (nothing to book).
+    wc_needed = (not reg['welcome_call_hold']) and (not reg['wc_confirmed'])
+    wc_requested = bool(reg['wc_pref_date']) or ((reg['wc_status'] or '') in ('requested', 'proposed', 'confirmed'))
     if has_contract and not contract_done:
         step = 'contract'
     elif not refund_done:
         step = 'refund'
+    elif wc_needed and not wc_requested:
+        step = 'welcome_call'
     else:
         step = None
 
@@ -1389,6 +1397,9 @@ def _client_gate_status(conn, acct_id):
                        'state': _st(contract_done, step == 'contract')})
     stages.append({'key': 'refund', 'label': 'Refund Policy',
                    'state': _st(refund_done, step == 'refund')})
+    if wc_needed:
+        stages.append({'key': 'welcome_call', 'label': 'Welcome Call',
+                       'state': _st(wc_requested, step == 'welcome_call')})
     stages.append({'key': 'done', 'label': 'Completed',
                    'state': 'done' if step is None else 'upcoming'})
     return reg, step, stages
@@ -1944,6 +1955,11 @@ def client_dashboard():
     if _gate_step == 'refund':
         conn.close()
         return redirect(url_for('client_refund_policy'))
+    if _gate_step == 'welcome_call':
+        # Mandatory welcome-call scheduling (standard flow) — keep the client on the
+        # schedule page until they request a slot. (founder 2026-07-22)
+        conn.close()
+        return redirect(url_for('client_welcome_call_page'))
     # Item C-2: fetch counsellor contact for "Your counsellor" card.
     registrations_raw = conn.execute('''
         SELECT cr.*, ps.name as product_name,
