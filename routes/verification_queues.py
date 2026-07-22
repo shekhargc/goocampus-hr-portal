@@ -246,8 +246,10 @@ def verification_ops():
     conn.close()
     for t in transfer_verify:
         t['requested_by_name'] = names.get(t['requested_by'], '')
+    # Ops Verification opens under OPERATIONS (its own sidebar + header), not Sales
+    # or Clients (founder 2026-07-22).
     return render_template('verification_queue.html',
-        base_template='sales_sidebar_base.html', active_section='sales',
+        base_template='operations_verify_sidebar_base.html', active_section='operations',
         view='ops', title='Ops Team Verification', mode='verify',
         newreg=newreg_verify, transfers=transfer_verify, can_verify=True)
 

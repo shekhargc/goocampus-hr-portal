@@ -1221,6 +1221,12 @@ def client_register(token):
              inv['contract_path']))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
 
+        # The sales close date becomes the registration date (founder 2026-07-22).
+        _close_date = (closure_meta.get('close_date') or '').strip()
+        if _close_date:
+            conn.execute("UPDATE client_registrations SET sales_close_date = ? WHERE registration_number = ?",
+                         (_close_date, reg_num))
+
         # ── Welcome-call handling chosen by Sales at closure (founder 2026-07-22) ──
         _wc_mode = (closure_meta.get('wc_mode') or 'standard').strip().lower()
         if _wc_mode == 'hold':
@@ -3355,6 +3361,62 @@ def admin_attach_contract():
         except Exception: pass
 
 
+@app.route('/admin/set-registration-date', methods=['GET', 'POST'])
+@login_required
+def admin_set_registration_date():
+    """Admin: correct a client's registration date to the sales CLOSE date (founder
+    2026-07-22 — "the close date IS the registration date"). Going forward this is
+    automatic; this fixes clients registered before the change. Read-only preview on GET."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    reg_number = (request.values.get('reg') or '').strip()
+    conn = get_db()
+    try:
+        pc = None
+        if reg_number:
+            pc = conn.execute("SELECT id, prefix, first_name, last_name, registration_date "
+                              "FROM plab_clients WHERE registration_number = ?", (reg_number,)).fetchone()
+        if request.method == 'POST':
+            new_date = (request.form.get('new_date') or '').strip()
+            if not pc:
+                return f"<pre>No client found for '{reg_number}'.</pre>", 404
+            if not new_date:
+                return "<pre>Please choose the close/registration date.</pre>", 400
+            conn.execute("UPDATE plab_clients SET registration_date = ?, updated_at = CURRENT_TIMESTAMP "
+                         "WHERE registration_number = ?", (new_date, reg_number))
+            conn.execute("UPDATE client_registrations SET sales_close_date = ? WHERE registration_number = ?",
+                         (new_date, reg_number))
+            conn.commit()
+            return ("<div style='font-family:system-ui;max-width:620px;margin:40px auto'>"
+                    f"<h2>Done ✅</h2><p>Registration date for <b>{(pc['first_name'] or '')} "
+                    f"{(pc['last_name'] or '')}</b> ({reg_number}) set to <b>{new_date}</b> "
+                    "on the profile.</p><a href='/admin/set-registration-date?reg="
+                    f"{reg_number}'>Re-check</a></div>")
+        # GET preview + form
+        if not pc:
+            return ("<div style='font-family:system-ui;max-width:620px;margin:40px auto'>"
+                    "<h2>Set a client's registration date</h2>"
+                    "<form method='GET'>Registration number: "
+                    "<input name='reg' style='padding:6px;width:230px'> <button>Look up</button></form>"
+                    + (f"<p style='color:#b91c1c'>No client found for '{reg_number}'.</p>" if reg_number else "")
+                    + "</div>")
+        cur = pc['registration_date'] or ''
+        cur = cur.strftime('%Y-%m-%d') if hasattr(cur, 'strftime') else str(cur)[:10]
+        return ("<div style='font-family:system-ui;max-width:620px;margin:40px auto'>"
+                f"<h2>{(pc['prefix'] or '')} {(pc['first_name'] or '')} {(pc['last_name'] or '')} — {reg_number}</h2>"
+                f"<p>Current registration date on the profile: <b>{cur or '(none)'}</b></p>"
+                "<form method='POST'>"
+                f"<input type='hidden' name='reg' value='{reg_number}'>"
+                "<p>Set registration date (the sales close date): "
+                f"<input type='date' name='new_date' value='{cur}' required></p>"
+                "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:6px;"
+                "font-weight:700;cursor:pointer'>Update registration date</button></form></div>")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _pathway_audit_tables(conn):
     """Which OPS_PATHWAY_TABLES have BOTH a registration_number and a pathway column
     (so a row can be checked against its client's master pathway)."""
@@ -4427,14 +4489,16 @@ def admin_client_detail(reg_id):
         ops_config=ops_config, lookup_options=lookup_options, package_services=package_services,
         sales_completed_by_name=sales_completed_by_name, ops_verified_by_name=ops_verified_by_name,
         combined_siblings=combined_siblings, user=user,
-        # Stay in the section the queue sent us from. Verification lives under Sales
-        # (its Access Master department) for both teams, so a row opened from either
-        # queue keeps the Sales sidebar instead of dumping the user into Clients.
-        # Both bases fill {% block section_content %}, so they interchange safely —
-        # ops_sidebar_base does NOT (it uses content/ops_content) and would render blank.
+        # Stay in the section the queue sent us from (founder 2026-07-22):
+        #   ?from=sales -> Sales sidebar + Sales header
+        #   ?from=ops   -> Operations sidebar + Operations header
+        # Both these bases fill {% block section_content %} so they render this page
+        # correctly (the pathway ops_sidebar_base uses a different block and would blank).
         **({'base_template': 'sales_sidebar_base.html', 'active_section': 'sales'}
-           if request.args.get('from') in ('sales', 'ops')
-           else {'active_section': 'clients'}),
+           if request.args.get('from') == 'sales'
+           else ({'base_template': 'operations_verify_sidebar_base.html', 'active_section': 'operations'}
+                 if request.args.get('from') == 'ops'
+                 else {'active_section': 'clients'})),
         client_doc_types=CLIENT_DOC_TYPES,
         open_doc_requests=[d for d in (doc_requests or [])
                            if (d['status'] or 'pending') != 'fulfilled'])
@@ -4515,7 +4579,8 @@ def admin_client_sales_complete(reg_id):
     # Notify ops team
     _notify_sales_completed(reg_id)
     flash('Sales section completed! Operations team has been notified.', 'success')
-    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+    # Keep the Sales sidebar after the action (don't revert to Clients). (founder 2026-07-22)
+    return redirect(url_for('admin_client_detail', reg_id=reg_id, **{'from': 'sales'}))
 
 
 def _notify_sales_completed(reg_id):
@@ -4640,7 +4705,8 @@ def admin_client_ops_verify(reg_id):
     else:
         conn.close()
 
-    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+    # Keep the Operations sidebar after ops verifies (don't revert to Clients). (2026-07-22)
+    return redirect(url_for('admin_client_detail', reg_id=reg_id, **{'from': 'ops'}))
 
 
 def _notify_onboarding_confirmed(reg_id):
@@ -5222,7 +5288,9 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         ?, ?, ?,
         ?, ?, ?, ?
     )''', (
-        reg_num, reg.get('created_at', ''), reg.get('prefix', 'Dr.'),
+        # registration_date = the sales close date if present, else the form-submission
+        # timestamp (founder 2026-07-22: "the close date IS the registration date").
+        reg_num, (reg.get('sales_close_date') or reg.get('created_at', '')), reg.get('prefix', 'Dr.'),
         reg.get('first_name', ''), reg.get('last_name', ''),
         reg.get('mobile', ''), reg.get('whatsapp', ''), reg.get('whatsapp2', ''),
         reg.get('email', ''), reg.get('dob', ''), reg.get('city', ''), reg.get('state', ''),
@@ -10683,6 +10751,10 @@ def ensure_crm_tables():
             # Reason Sales gives when holding the welcome call (shown to ops in
             # verification + recorded in the welcome-call timeline). (founder 2026-07-22)
             ('client_registrations',     'wc_hold_note',           'TEXT'),
+            # The sales close date IS the registration date (founder 2026-07-22): the
+            # sync uses this for plab_clients.registration_date instead of the client's
+            # form-submission timestamp.
+            ('client_registrations',     'sales_close_date',       'TEXT'),
             # Onboarding-section timestamps (founder 2026-07-16): confirmed call time
             # + when the client was onboarded (ops-verified).
             ('client_onboarding',        'welcome_call_time',      'TEXT'),
@@ -29623,6 +29695,8 @@ def sales_leads_add():
                             'wc_completed_time':        _f('wc_completed_time'),
                             'wc_completed_by':          _f('wc_completed_by'),
                             'wc_completed_notes':       _f('wc_completed_notes'),
+                            # The sales close date becomes the client's registration date.
+                            'close_date':               _f('close_date'),
                         }
                         # Counsellor = the sales member who GENERATED the lead
                         # (founder rule 2026-07-15). Use the lead's creator as

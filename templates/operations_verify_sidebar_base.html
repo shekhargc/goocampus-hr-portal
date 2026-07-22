@@ -1,0 +1,19 @@
+{# Operations-context sidebar for pages that fill {% block section_content %}
+   (the Ops Verification queue + a client profile opened from it). The pathway
+   ops_sidebar_base.html uses a different block (content/ops_content) and would
+   render these pages blank, so this lightweight Operations sidebar extends
+   section_sidebar_base like the Sales/Clients ones. (founder 2026-07-22) #}
+{% extends "section_sidebar_base.html" %}
+
+{% block sidebar_title %}Operations{% endblock %}
+
+{% block sidebar_nav %}
+    <a href="/operations/dashboard" class="sec-nav-item" data-tooltip="Operations Dashboard">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+        <span class="sec-nav-text">Operations Dashboard</span>
+    </a>
+    <a href="/verifications/ops" class="sec-nav-item" data-tooltip="Ops Verification">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+        <span class="sec-nav-text">Ops Verification</span>
+    </a>
+{% endblock %}
