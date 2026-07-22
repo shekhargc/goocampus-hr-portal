@@ -1879,6 +1879,69 @@ def get_plan_package_amount(conn, product_id, plan_type):
     return float(r['package_amount']) if r and r['package_amount'] is not None else None
 
 
+def _closure_revenue_cost(conn, product_id, plan_type, discount=0.0, fallback_revenue=0.0):
+    """Sales revenue credited to a member for a (product, plan) closure.
+
+    Universal rule (founder 2026-07-22) — the SAME for every product + plan type:
+        Sales Revenue = Package - Cost - Discount
+    The sales dashboards credit the member on SUM(margin) on sales_closures, so
+    we store revenue = Package - Discount and cost = Cost, giving
+        margin = revenue - cost = Package - Cost - Discount.
+    Package + Cost are defined once per plan in Packages & Services; Discount is
+    the per-deal `discount_allowed` entered on the closure.
+
+    Exceptions kept so nothing existing breaks:
+      * fixed_sales_revenue set on the plan -> that flat INR is the whole credit
+        (the AMC AUD flat-credit case); returned as-is, no cost/discount applied.
+      * foreign-currency plan (currency != INR) -> Package/Cost converted to INR
+        at the plan's effective (live+markup) rate, so margin stays in rupees.
+
+    Returns (revenue, cost) both in INR. Falls back to `fallback_revenue`
+    (minus discount, cost 0) when the plan has no Packages row, preserving old
+    behaviour for products that never defined a package."""
+    try:
+        disc = max(0.0, float(discount or 0))
+    except (TypeError, ValueError):
+        disc = 0.0
+    row = None
+    try:
+        row = conn.execute(
+            "SELECT package_amount, COALESCE(plan_cost,0) AS plan_cost, "
+            "COALESCE(currency,'INR') AS currency, fixed_sales_revenue "
+            "FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+            (product_id, plan_type)).fetchone()
+    except Exception:
+        row = None
+    if not row:
+        try:
+            fb = float(fallback_revenue or 0)
+        except (TypeError, ValueError):
+            fb = 0.0
+        return (max(0.0, fb - disc), 0.0)
+    try:
+        fsr = row['fixed_sales_revenue']
+        if fsr is not None and float(fsr) > 0:
+            # Flat INR credit (AMC AUD): discount already forced to 0 upstream.
+            return (float(fsr), 0.0)
+    except (TypeError, ValueError):
+        pass
+    pkg = float(row['package_amount'] or 0)
+    cost = float(row['plan_cost'] or 0)
+    if (row['currency'] or 'INR').upper() != 'INR':
+        rate = 0.0
+        try:
+            q = amc_aud_quote(plan_type, conn=conn, product_id=product_id)
+            if q and q.get('effective_rate'):
+                rate = float(q['effective_rate'])
+        except Exception:
+            rate = 0.0
+        if rate > 0:
+            pkg *= rate
+            cost *= rate
+    # revenue = Package - Discount, cost = Cost  ->  margin = Package - Cost - Discount
+    return (max(0.0, pkg - disc), cost)
+
+
 @app.route('/sales/api/plan-package')
 @login_required
 def sales_plan_package_info():
@@ -1890,9 +1953,22 @@ def sales_plan_package_info():
     conn = get_db()
     amt = get_plan_package_amount(conn, product_id, plan_type)
     svcs = get_package_services(conn, product_id, plan_type)
+    # The sales revenue credited to the member = Package - Cost - Discount, same
+    # rule for every product + plan type. Surfaced so the rep sees it live (the
+    # form subtracts the deal's Discount on top of this base). fixed=True means a
+    # flat INR credit (AMC AUD) where cost/discount don't apply.
+    _prow = conn.execute("SELECT fixed_sales_revenue FROM plan_packages "
+                         "WHERE product_id = ? AND plan_type = ?",
+                         (product_id, plan_type)).fetchone()
+    _fixed = bool(_prow and _prow['fixed_sales_revenue'] and float(_prow['fixed_sales_revenue']) > 0)
+    _rev, _cost = _closure_revenue_cost(conn, product_id, plan_type,
+                                        fallback_revenue=(amt or 0))
     conn.close()
     return jsonify({
         'package_amount': amt,
+        'plan_cost': round(_cost, 2),
+        'fixed': _fixed,
+        'sales_revenue': round(_rev - _cost, 2),  # base = Package - Cost (before deal Discount)
         'services': [{'name': s['service_name'], 'description': s.get('description') or '',
                       'quantity': s.get('quantity') or ''} for s in svcs],
     })
@@ -3538,6 +3614,127 @@ def _pathway_audit_tables(conn):
         if 'registration_number' in cols and 'pathway' in cols:
             out.append(t)
     return out
+
+
+@app.route('/admin/recompute-closure', methods=['GET', 'POST'])
+@login_required
+def admin_recompute_closure():
+    """Admin: recompute a sales closure's revenue/cost/margin from its plan's
+    Package - Cost (the universal Sales Revenue rule), for closures saved before
+    the plan's package/cost was set — e.g. a V2 closure stuck at 0. Read-only
+    until you click Recompute on a specific row; never a silent backfill.
+    (founder 2026-07-22)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    q = (request.values.get('q') or '').strip()
+    conn = get_db()
+    msg = None
+    if request.method == 'POST':
+        cid = request.form.get('closure_id', type=int)
+        row = conn.execute(
+            "SELECT sc.id, sc.product_id AS c_pid, sc.revenue, sc.cost, sc.margin, "
+            "       sl.product_id AS l_pid, sl.plan_type "
+            "  FROM sales_closures sc LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
+            " WHERE sc.id = ?", (cid,)).fetchone()
+        if not row:
+            msg = ('error', f'Closure #{cid} not found.')
+        else:
+            pid = row['c_pid'] or row['l_pid']
+            pt = (row['plan_type'] or '').strip()
+            _disc = request.form.get('discount', 0)
+            new_rev, new_cost = _closure_revenue_cost(conn, pid, pt, discount=_disc,
+                                                      fallback_revenue=row['revenue'])
+            new_margin = new_rev - new_cost
+            conn.execute("UPDATE sales_closures SET revenue = ?, cost = ?, margin = ? WHERE id = ?",
+                         (new_rev, new_cost, new_margin, cid))
+            conn.commit()
+            try:
+                _dv = float(_disc or 0)
+            except (TypeError, ValueError):
+                _dv = 0.0
+            msg = ('success', f'Closure #{cid}: revenue ₹{new_rev:,.0f}, cost ₹{new_cost:,.0f}, '
+                              f'discount ₹{_dv:,.0f}, margin ₹{new_margin:,.0f} (plan "{pt or "—"}").')
+    rows = []
+    if q:
+        like = f"%{q}%"
+        rows = conn.execute(
+            "SELECT sc.id, sc.client_name, sc.product_name, sc.revenue, sc.cost, sc.margin, "
+            "       sc.product_id AS c_pid, sl.product_id AS l_pid, sl.plan_type, e.name AS emp, "
+            "       (SELECT cr.discount_allowed FROM client_registrations cr "
+            "         WHERE RIGHT(regexp_replace(COALESCE(cr.phone,''),'[^0-9]','','g'),10) "
+            "             = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
+            "           AND cr.discount_allowed IS NOT NULL "
+            "         ORDER BY cr.id DESC LIMIT 1) AS reg_discount "
+            "  FROM sales_closures sc "
+            "  LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
+            "  LEFT JOIN employees e ON e.id = sc.employee_id "
+            " WHERE sc.client_name ILIKE ? OR sc.product_name ILIKE ? OR e.name ILIKE ? "
+            "    OR CAST(sc.id AS TEXT) = ? "
+            " ORDER BY sc.id DESC LIMIT 50", (like, like, like, q)).fetchall()
+    preview = []
+    for r in rows:
+        pid = r['c_pid'] or r['l_pid']
+        pt = (r['plan_type'] or '').strip()
+        disc = float(r['reg_discount'] or 0)
+        nr, nc = _closure_revenue_cost(conn, pid, pt, discount=disc, fallback_revenue=r['revenue'])
+        preview.append({
+            'id': r['id'], 'client': r['client_name'] or '', 'product': r['product_name'] or '',
+            'emp': r['emp'] or '', 'plan': pt or '—', 'discount': disc,
+            'cur_rev': float(r['revenue'] or 0), 'cur_cost': float(r['cost'] or 0),
+            'cur_margin': float(r['margin'] or 0),
+            'new_rev': nr, 'new_cost': nc, 'new_margin': nr - nc,
+            'changed': abs((nr - nc) - float(r['margin'] or 0)) > 0.5,
+        })
+    conn.close()
+    def _f(v):
+        return f'{v:,.0f}'
+    trs = ''
+    for p in preview:
+        hl = 'background:#FEF9C3;' if p['changed'] else ''
+        trs += (f'<tr style="{hl}"><td style="padding:6px 9px;">#{p["id"]}</td>'
+                f'<td style="padding:6px 9px;">{p["client"]}</td>'
+                f'<td style="padding:6px 9px;">{p["product"]}<br><small style="color:#64748b;">{p["plan"]}</small></td>'
+                f'<td style="padding:6px 9px;">{p["emp"]}</td>'
+                f'<td style="padding:6px 9px;text-align:right;color:#64748b;">&#8377;{_f(p["cur_margin"])}<br>'
+                f'<small>rev {_f(p["cur_rev"])} &minus; cost {_f(p["cur_cost"])}</small></td>'
+                f'<td style="padding:6px 9px;text-align:right;font-weight:700;color:#3730A3;">&#8377;{_f(p["new_margin"])}<br>'
+                f'<small style="font-weight:400;">Pkg &minus; Cost &minus; Disc</small></td>'
+                f'<td style="padding:6px 9px;text-align:center;white-space:nowrap;">'
+                f'<form method="post" style="margin:0;display:flex;gap:6px;align-items:center;justify-content:center;">'
+                f'<input type="hidden" name="closure_id" value="{p["id"]}">'
+                f'<input type="hidden" name="q" value="{q}">'
+                f'<label style="font-size:0.72rem;color:#64748b;">Disc &#8377;<input type="number" name="discount" value="{p["discount"]:.0f}" '
+                f'style="width:78px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:0.8rem;"></label>'
+                f'<button type="submit" style="background:#4338CA;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.8rem;">'
+                f'{"Recompute" if p["changed"] else "Re-save"}</button></form></td></tr>')
+    banner = ''
+    if msg:
+        bg = '#DCFCE7' if msg[0] == 'success' else '#FEE2E2'
+        fg = '#166534' if msg[0] == 'success' else '#991B1B'
+        banner = f'<div style="background:{bg};color:{fg};padding:10px 14px;border-radius:8px;margin-bottom:14px;">{msg[1]}</div>'
+    html = f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recompute Sales Revenue</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:960px;margin:24px auto;padding:0 16px;color:#0f172a;">
+<h1 style="font-size:1.3rem;color:#1e3a5f;">Recompute Sales Revenue on a Closure</h1>
+<p style="color:#475569;font-size:0.9rem;">Sales revenue credited to a member = <strong>Package &minus; Cost &minus; Discount</strong> (Package &amp; Cost
+defined per plan in Packages &amp; Services; Discount is the deal's discount, prefilled below and editable). Use this
+for closures saved <em>before</em> a plan's Package/Cost was set — e.g. an AMC Consulting V2 closure that shows
+&#8377;0. Yellow rows will change. Nothing changes until you click a button.</p>
+{banner}
+<form method="get" style="margin:12px 0 18px;">
+  <input name="q" value="{q}" placeholder="Client name, product, sales member, or closure #"
+    style="padding:9px 12px;width:70%;border:1px solid #cbd5e1;border-radius:8px;font-size:0.9rem;">
+  <button type="submit" style="background:#1e3a5f;color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;">Find</button>
+</form>
+{'<table style="width:100%;border-collapse:collapse;font-size:0.85rem;border:1px solid #e2e8f0;"><thead><tr style="background:#f1f5f9;text-align:left;">'
+ '<th style="padding:7px 9px;">#</th><th style="padding:7px 9px;">Client</th><th style="padding:7px 9px;">Product / Plan</th>'
+ '<th style="padding:7px 9px;">Member</th><th style="padding:7px 9px;text-align:right;">Current (margin)</th>'
+ '<th style="padding:7px 9px;text-align:right;">New (Package &minus; Cost &minus; Disc)</th><th style="padding:7px 9px;">Discount &amp; apply</th></tr></thead><tbody>'
+ + trs + '</tbody></table>' if preview else ('<p style="color:#64748b;">No closures matched.</p>' if q else '')}
+<p style="margin-top:18px;"><a href="/sales/dashboard" style="color:#4338CA;">&larr; Back to Sales</a></p>
+</body></html>'''
+    return html
 
 
 @app.route('/admin/diag/pathway-audit', methods=['GET'])
@@ -29667,14 +29864,14 @@ def sales_leads_add():
                 except Exception:
                     train_lock = None
                 if new_lead_id:
-                    try:
-                        cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
-                    except ValueError:
-                        cl_revenue = ev or 0.0
-                    try:
-                        cl_cost = float(request.form.get('closure_cost') or 0)
-                    except ValueError:
-                        cl_cost = 0.0
+                    # Sales revenue is defined ONCE per plan in Packages:
+                    # margin = Package - Cost - Discount, the number the sales
+                    # dashboard credits the member on. Same rule across every
+                    # product + plan type. (founder 2026-07-22)
+                    cl_revenue, cl_cost = _closure_revenue_cost(
+                        conn, product_id, (request.form.get('plan_type') or '').strip(),
+                        discount=(request.form.get('discount_allowed') or 0),
+                        fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
                     cl_close_date = datetime.now().strftime('%Y-%m-%d')
@@ -29970,16 +30167,14 @@ def sales_leads_edit(lead_id):
                     'SELECT id FROM sales_closures WHERE lead_id = ?', (lead_id,)
                 ).fetchone()
                 if not existing_closure:
-                    # Pull revenue/cost from form (shown when Won selected),
-                    # fallback to expected_value for revenue
-                    try:
-                        cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
-                    except ValueError:
-                        cl_revenue = ev or 0.0
-                    try:
-                        cl_cost = float(request.form.get('closure_cost') or 0)
-                    except ValueError:
-                        cl_cost = 0.0
+                    # Sales revenue is defined ONCE per plan in Packages:
+                    # margin = Package - Cost - Discount (same rule for every
+                    # product + plan type); the dashboard credits the member on
+                    # SUM(margin). (founder 2026-07-22)
+                    cl_revenue, cl_cost = _closure_revenue_cost(
+                        conn, product_id, (request.form.get('plan_type') or '').strip(),
+                        discount=(request.form.get('discount_allowed') or 0),
+                        fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
                     cl_close_date = datetime.now().strftime('%Y-%m-%d')

@@ -93,6 +93,10 @@
                 <div>
                     <label class="slf-lbl">Package Value (<span id="pkgValueCur">₹</span>)</label>
                     <input type="number" step="1" min="0" name="expected_value" id="pkgValue" oninput="syncPackage()" value="{{ lead.expected_value or 0 if lead else 0 }}" class="slf-inp" />
+                    <div id="salesRevLine" style="display:none;margin-top:0.35rem;font-size:0.78rem;color:#3730A3;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:6px;padding:5px 9px;">
+                        Sales revenue credited: <strong>&#8377;<span id="salesRevVal">0</span></strong>
+                        <span style="color:#6366F1;">&nbsp;= Package &minus; Cost &minus; Discount</span>
+                    </div>
                 </div>
                 <div>
                     <label class="slf-lbl">Registration Date</label>
@@ -345,6 +349,22 @@
             window.updateFinal = function() {
                 var p = parseFloat(pkgAmount.value) || 0, d = parseFloat(discAllowed.value) || 0;
                 finalPkg.value = Math.max(0, p - d).toFixed(0);
+                updateSalesRev();
+            };
+            // Sales revenue credited = Package - Cost - Discount. Base (Package -
+            // Cost, or a fixed flat credit) comes from the plan; the deal's
+            // Discount is subtracted here so the figure updates live. A fixed
+            // (AMC AUD) plan ignores cost/discount.
+            window.updateSalesRev = function() {
+                var line = document.getElementById('salesRevLine');
+                var val  = document.getElementById('salesRevVal');
+                if (!line || !val) return;
+                if (window.__salesRevBase == null) { line.style.display = 'none'; return; }
+                var base = parseFloat(window.__salesRevBase) || 0;
+                var disc = window.__salesRevFixed ? 0 : (parseFloat(discAllowed && discAllowed.value) || 0);
+                var rev  = window.__salesRevFixed ? base : Math.max(0, base - disc);
+                val.textContent = Math.round(rev).toLocaleString('en-IN');
+                line.style.display = 'block';
             };
             // Package Amount mirrors the Package Value entered at the top.
             window.syncPackage = function() {
@@ -371,6 +391,12 @@
                             pkgValue.value = d.package_amount;
                             syncPackage();
                         }
+                        // Sales revenue credited to the member = Package - Cost -
+                        // Discount (same rule everywhere). Base = Package - Cost
+                        // from the plan; the deal's Discount is subtracted live.
+                        window.__salesRevBase  = (d.sales_revenue != null) ? d.sales_revenue : null;
+                        window.__salesRevFixed = !!d.fixed;
+                        updateSalesRev();
                         var svcs = d.services || [];
                         if (!svcs.length) { svcBox.style.display = 'none'; return; }
                         var html = '';
