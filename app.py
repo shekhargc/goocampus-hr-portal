@@ -3209,6 +3209,132 @@ def admin_diag_academics():
         conn.close()
 
 
+@app.route('/admin/attach-contract', methods=['GET', 'POST'])
+@login_required
+def admin_attach_contract():
+    """Admin tool: attach a signed contract to an ALREADY-ONBOARDED client whose
+    contract was missing at onboarding, and record their acceptance in one step —
+    so the dashboard gate stays satisfied and they are NOT re-locked / re-prompted.
+    Propagates the contract to registration + invitation + plab_clients master +
+    Documents, and records a 'contract' agreement under the client's own name with
+    an admin-backfill audit note. Refund policy untouched. (founder 2026-07-22)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    reg_number = (request.values.get('reg') or '').strip()
+    conn = get_db()
+    try:
+        reg = None
+        if reg_number:
+            reg = conn.execute(
+                "SELECT * FROM client_registrations WHERE registration_number = ? "
+                "AND client_submitted_at IS NOT NULL ORDER BY id DESC LIMIT 1", (reg_number,)).fetchone()
+
+        # ---- current-state snapshot (read-only) ----
+        def _state(r):
+            if not r:
+                return None
+            acct = r['account_id']; rid = r['id']
+            pc = conn.execute("SELECT id, prefix, first_name, last_name, contract_path FROM plab_clients "
+                              "WHERE registration_number = ?", (reg_number,)).fetchone()
+            contract_signed = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+                "AND agreement_type = 'contract' LIMIT 1", (acct, rid)).fetchone())
+            refund_signed = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' LIMIT 1",
+                (acct,)).fetchone())
+            full = f"{(r['prefix'] or '')} {(r['first_name'] or '')} {(r['last_name'] or '')}".strip()
+            return {'acct': acct, 'rid': rid, 'pc': pc, 'name': full,
+                    'reg_contract': bool(r['contract_path']),
+                    'pc_contract': bool(pc['contract_path']) if pc else False,
+                    'contract_signed': contract_signed, 'refund_signed': refund_signed,
+                    'onboarded': bool(r['client_submitted_at'])}
+
+        if request.method == 'POST':
+            if not reg:
+                return f"<pre>No submitted registration found for '{reg_number}'.</pre>", 404
+            st = _state(reg)
+            agreed_name = (request.form.get('agreed_name') or '').strip() or st['name']
+            cfile = request.files.get('contract_file')
+            if not cfile or not cfile.filename:
+                return "<pre>Please choose the signed contract PDF to upload.</pre>", 400
+            cbytes = cfile.read()
+            if len(cbytes) > 15 * 1024 * 1024:
+                return "<pre>File too large (max 15 MB).</pre>", 400
+            from core import storage
+            if not storage.is_configured():
+                return "<pre>File storage not configured — cannot save contract.</pre>", 500
+            cext = cfile.filename.rsplit('.', 1)[-1].lower() if '.' in cfile.filename else 'pdf'
+            ckey = storage.make_doc_key('client', f"reg_{reg['id']}", 'Contract', cfile.filename)
+            if not storage.upload_bytes(ckey, cbytes, _CONTRACT_CT.get(cext, 'application/octet-stream')):
+                return "<pre>Upload to storage failed. Try again.</pre>", 500
+
+            # 1) registration + 2) invitation + 3) plab_clients master
+            conn.execute("UPDATE client_registrations SET contract_path = ? WHERE id = ?", (ckey, reg['id']))
+            if reg['invitation_id']:
+                conn.execute("UPDATE client_invitations SET contract_path = ? WHERE id = ?", (ckey, reg['invitation_id']))
+            conn.execute("UPDATE plab_clients SET contract_path = ?, updated_at = CURRENT_TIMESTAMP "
+                         "WHERE registration_number = ?", (ckey, reg_number))
+            # 4) Documents section (skip if a Signed Contract doc already exists)
+            if st['pc']:
+                dup = conn.execute("SELECT 1 FROM plab_client_documents WHERE client_id = ? AND doc_type = 'Signed Contract' LIMIT 1",
+                                   (st['pc']['id'],)).fetchone()
+                if not dup:
+                    conn.execute(
+                        "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, "
+                        " file_path, file_size, status, uploaded_by) "
+                        "VALUES (?, 'Signed Contract', 'contract', 'Signed Contract', ?, ?, 'uploaded', 'admin-backfill')",
+                        (st['pc']['id'], ckey, len(cbytes)))
+            # 5) record the client's contract acceptance (under her name) — honest audit note
+            if not st['contract_signed']:
+                note = f"admin-recorded by {user['name']} (post-onboarding backfill) via /admin/attach-contract"
+                conn.execute(
+                    "INSERT INTO client_agreements (account_id, registration_id, agreement_type, agreed_name, ip_address) "
+                    "VALUES (?, ?, 'contract', ?, ?)", (reg['account_id'], reg['id'], agreed_name, note))
+            conn.commit()
+            return ("<div style='font-family:system-ui;max-width:680px;margin:40px auto'>"
+                    f"<h2>Done ✅</h2><p>Signed contract attached for <b>{agreed_name}</b> "
+                    f"({reg_number}) and recorded as digitally accepted (under her name, admin-noted).</p>"
+                    "<ul><li>Registration, invitation, client profile + Documents section all updated.</li>"
+                    "<li>Her dashboard stays unlocked — she is NOT asked to re-sign.</li>"
+                    "<li>Refund policy left exactly as it was.</li></ul>"
+                    f"<a href='/admin/attach-contract?reg={reg_number}'>Re-check her state</a></div>")
+
+        # ---- GET: show current state + upload form ----
+        if not reg:
+            return ("<div style='font-family:system-ui;max-width:680px;margin:40px auto'>"
+                    "<h2>Attach signed contract (already-onboarded client)</h2>"
+                    "<form method='GET'><label>Registration number: "
+                    "<input name='reg' value='' style='padding:6px;width:220px'></label> "
+                    "<button>Look up</button></form>"
+                    + (f"<p style='color:#b91c1c'>No submitted registration found for '{reg_number}'.</p>" if reg_number else "")
+                    + "</div>")
+        st = _state(reg)
+        def _yn(b): return "<b style='color:#065f46'>Yes</b>" if b else "<b style='color:#b91c1c'>No</b>"
+        return (
+            "<div style='font-family:system-ui;max-width:680px;margin:40px auto'>"
+            f"<h2>{st['name']} — {reg_number}</h2>"
+            "<table cellpadding='6' style='border-collapse:collapse'>"
+            f"<tr><td>Onboarded (submitted)</td><td>{_yn(st['onboarded'])}</td></tr>"
+            f"<tr><td>Contract file on record</td><td>{_yn(st['reg_contract'] or st['pc_contract'])}</td></tr>"
+            f"<tr><td>Contract digitally signed</td><td>{_yn(st['contract_signed'])}</td></tr>"
+            f"<tr><td>Refund policy signed</td><td>{_yn(st['refund_signed'])}</td></tr>"
+            "</table>"
+            "<hr><h3>Attach the signed contract + record her acceptance</h3>"
+            "<p style='font-size:.9rem;color:#555'>Uploads the PDF to her registration, invitation, profile "
+            "and Documents, and records it as digitally accepted under her name (with an admin audit note). "
+            "She will NOT be re-prompted; refund policy is untouched.</p>"
+            "<form method='POST' enctype='multipart/form-data'>"
+            f"<input type='hidden' name='reg' value='{reg_number}'>"
+            f"<p>Signatory name: <input name='agreed_name' value=\"{st['name']}\" style='padding:6px;width:280px'></p>"
+            "<p>Signed contract (PDF): <input type='file' name='contract_file' accept='.pdf,.doc,.docx,.jpg,.png' required></p>"
+            "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer'>"
+            "Attach contract + mark accepted</button></form></div>")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _pathway_audit_tables(conn):
     """Which OPS_PATHWAY_TABLES have BOTH a registration_number and a pathway column
     (so a row can be checked against its client's master pathway)."""
