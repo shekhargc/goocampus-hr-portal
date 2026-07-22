@@ -1220,6 +1220,26 @@ def client_register(token):
              lead_source, addl_notes, ops_notes_val,
              inv['contract_path']))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
+
+        # ── Welcome-call handling chosen by Sales at closure (founder 2026-07-22) ──
+        _wc_mode = (closure_meta.get('wc_mode') or 'standard').strip().lower()
+        if _wc_mode == 'hold':
+            # Hold the welcome call until Sales releases it (payment pending). The
+            # client dashboard hides the welcome-call section while held; the reason
+            # note surfaces to ops in verification + the welcome-call timeline.
+            conn.execute("UPDATE client_registrations SET welcome_call_hold = 1, wc_hold_note = ? "
+                         "WHERE registration_number = ?",
+                         (closure_meta.get('wc_hold_note', '') or '', reg_num))
+        elif _wc_mode == 'completed':
+            # Welcome call already done BEFORE onboarding — record it as confirmed with
+            # the past date/time so the client sees it done (no scheduler).
+            conn.execute("UPDATE client_registrations SET wc_confirmed = 1, wc_status = 'confirmed', "
+                         "wc_scheduled_date = ?, wc_scheduled_time = ?, wc_by = ?, wc_hold_note = ?, "
+                         "wc_confirmed_at = CURRENT_TIMESTAMP WHERE registration_number = ?",
+                         (closure_meta.get('wc_completed_date', '') or '',
+                          closure_meta.get('wc_completed_time', '') or '',
+                          closure_meta.get('wc_completed_by', '') or '',
+                          closure_meta.get('wc_completed_notes', '') or '', reg_num))
         conn.commit()
 
         # AMC Consulting + AMC 1 combined signup: if the closure opted the client
@@ -10660,6 +10680,9 @@ def ensure_crm_tables():
             ('client_registrations',     'wc_proposed_time',       'TEXT'),
             ('client_registrations',     'wc_proposed_note',       'TEXT'),
             ('client_registrations',     'welcome_call_hold',      'INTEGER DEFAULT 0'),
+            # Reason Sales gives when holding the welcome call (shown to ops in
+            # verification + recorded in the welcome-call timeline). (founder 2026-07-22)
+            ('client_registrations',     'wc_hold_note',           'TEXT'),
             # Onboarding-section timestamps (founder 2026-07-16): confirmed call time
             # + when the client was onboarded (ops-verified).
             ('client_onboarding',        'welcome_call_time',      'TEXT'),
@@ -29590,6 +29613,16 @@ def sales_leads_add():
                             # client-facing 'Additional Package Notes' field only.
                             'additional_notes':         _f('additional_package_notes') or _f('additional_notes'),
                             'ops_notes':                _f('notes') or _f('ops_notes'),
+                            # Welcome-call handling chosen by Sales at entry (founder 2026-07-22):
+                            #   'standard'  – normal (client schedules after onboarding)
+                            #   'hold'      – hold until payment; client doesn't see it until released
+                            #   'completed' – already done before onboarding; record the past details
+                            'wc_mode':                  _f('wc_mode') or 'standard',
+                            'wc_hold_note':             _f('wc_hold_note'),
+                            'wc_completed_date':        _f('wc_completed_date'),
+                            'wc_completed_time':        _f('wc_completed_time'),
+                            'wc_completed_by':          _f('wc_completed_by'),
+                            'wc_completed_notes':       _f('wc_completed_notes'),
                         }
                         # Counsellor = the sales member who GENERATED the lead
                         # (founder rule 2026-07-15). Use the lead's creator as

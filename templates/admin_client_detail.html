@@ -641,6 +641,9 @@
         {% if not reg.wc_confirmed %}
         <div class="card">
             <h3 style="font-size:1rem;font-weight:600;color:var(--navy);margin:0 0 0.5rem;">Welcome Call Hold</h3>
+            {% if reg.welcome_call_hold and reg.wc_hold_note %}
+            <div style="font-size:0.8rem;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:6px 10px;margin:0 0 0.5rem;"><b>Hold reason:</b> {{ reg.wc_hold_note }}</div>
+            {% endif %}
             {% if not _wc_owner %}
             <div>
                 {% if reg.welcome_call_hold %}
@@ -1121,7 +1124,7 @@
             <h2 class="card-title">Welcome Call{% if reg.wc_confirmed %} <span class="badge badge-approved" style="margin-left:0.5rem;font-size:0.75rem;">Confirmed</span>{% endif %}</h2>
 
             {% if reg.welcome_call_hold %}
-            <div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:0.5rem;padding:0.7rem 0.9rem;margin-bottom:1rem;font-size:0.88rem;font-weight:600;">&#9208; Welcome call is ON HOLD by Sales &mdash; booking is disabled until Sales releases it (after payment is received).</div>
+            <div style="background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;border-radius:0.5rem;padding:0.7rem 0.9rem;margin-bottom:1rem;font-size:0.88rem;font-weight:600;">&#9208; Welcome call is ON HOLD by Sales &mdash; booking is disabled until Sales releases it (after payment is received).{% if reg.wc_hold_note %}<div style="font-weight:400;margin-top:0.35rem;"><b>Reason:</b> {{ reg.wc_hold_note }}</div>{% endif %}</div>
             {% endif %}
 
             {% if reg.wc_pref_date or reg.wc_pref_time or reg.wc_pref_notes %}

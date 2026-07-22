@@ -213,6 +213,45 @@
                            style="width:100%;padding:0.5rem 0.6rem;border:1px dashed var(--gray-300);border-radius:0.4rem;font-size:0.82rem;box-sizing:border-box;background:#FAFAFA;" />
                     <p style="margin:0.3rem 0 0;font-size:0.72rem;color:var(--gray-500);">Max 15 MB. Optional — if left blank, the client skips straight to the Refund Policy.</p>
                 </div>
+
+                {# ===== Welcome Call handling (founder 2026-07-22) ===== #}
+                <div style="margin-top:0.9rem;padding-top:0.8rem;border-top:1px dashed var(--gray-200);">
+                    <label class="slf-lbl">Welcome Call</label>
+                    <div style="display:flex;flex-direction:column;gap:0.4rem;margin-top:0.3rem;font-size:0.84rem;color:var(--gray-700);">
+                        <label style="display:flex;gap:0.5rem;align-items:flex-start;cursor:pointer;">
+                            <input type="radio" name="wc_mode" value="standard" checked onchange="wcModeChange()" style="margin-top:3px;">
+                            <span><b>Standard</b> — client schedules the welcome call after onboarding (default).</span>
+                        </label>
+                        <label style="display:flex;gap:0.5rem;align-items:flex-start;cursor:pointer;">
+                            <input type="radio" name="wc_mode" value="hold" onchange="wcModeChange()" style="margin-top:3px;">
+                            <span><b>Put welcome call on hold</b> — client won't see the welcome call until Sales releases it (e.g. payment pending).</span>
+                        </label>
+                        <label style="display:flex;gap:0.5rem;align-items:flex-start;cursor:pointer;">
+                            <input type="radio" name="wc_mode" value="completed" onchange="wcModeChange()" style="margin-top:3px;">
+                            <span><b>Welcome call already completed</b> — the call was done before onboarding; record its details.</span>
+                        </label>
+                    </div>
+                    <div id="wcHoldBox" style="display:none;margin-top:0.55rem;">
+                        <label class="slf-lbl" style="font-size:0.78rem;">Reason for hold <span style="font-weight:400;color:var(--gray-500);">(shown to Ops in verification + saved to the welcome-call timeline)</span></label>
+                        <textarea name="wc_hold_note" rows="2" placeholder="e.g. balance payment pending — release once received"
+                                  style="width:100%;padding:0.5rem 0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.82rem;box-sizing:border-box;font-family:inherit;resize:vertical;"></textarea>
+                    </div>
+                    <div id="wcDoneBox" style="display:none;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.55rem;">
+                        <div><label class="slf-lbl" style="font-size:0.76rem;">Call date</label><input type="date" name="wc_completed_date" class="slf-inp"></div>
+                        <div><label class="slf-lbl" style="font-size:0.76rem;">Call time</label><input type="text" name="wc_completed_time" placeholder="e.g. 4:30 PM" class="slf-inp"></div>
+                        <div><label class="slf-lbl" style="font-size:0.76rem;">Done by</label><input type="text" name="wc_completed_by" placeholder="Team member" class="slf-inp"></div>
+                        <div><label class="slf-lbl" style="font-size:0.76rem;">Notes</label><input type="text" name="wc_completed_notes" placeholder="Optional" class="slf-inp"></div>
+                    </div>
+                </div>
+                <script>
+                    function wcModeChange(){
+                        var el=document.querySelector('input[name="wc_mode"]:checked');
+                        var m=el?el.value:'standard';
+                        document.getElementById('wcHoldBox').style.display=(m==='hold')?'block':'none';
+                        document.getElementById('wcDoneBox').style.display=(m==='completed')?'grid':'none';
+                    }
+                    document.addEventListener('DOMContentLoaded', wcModeChange);
+                </script>
             </div>
 
             {# ===== AMC Consulting + AMC 1 combined signup (shown only for AMC Consulting) ===== #}

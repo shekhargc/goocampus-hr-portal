@@ -627,7 +627,10 @@
                 </div>
             </div>
             {# ── Welcome Call: request a preferred slot; team confirms + emails an invite ── #}
-            {% if reg.form_status == 'submitted' and not reg.is_combined_addon %}
+            {# While Sales holds the welcome call (payment pending), the client sees NOTHING
+               here — the whole section is hidden until Sales releases it (founder 2026-07-22).
+               A held-then-confirmed call still shows (wc_confirmed wins). #}
+            {% if reg.form_status == 'submitted' and not reg.is_combined_addon and not (reg.welcome_call_hold and not reg.wc_confirmed) %}
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
                 {# A confirmed call wins over a stale hold flag — checking hold first
                    showed "pending" even after ops had confirmed (founder 2026-07-17). #}
