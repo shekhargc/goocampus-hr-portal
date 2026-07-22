@@ -1227,6 +1227,24 @@ def client_register(token):
             conn.execute("UPDATE client_registrations SET sales_close_date = ? WHERE registration_number = ?",
                          (_close_date, reg_num))
 
+        # Auto-close the originating sales lead(s) → 'Closed Won' when the client
+        # onboards, matched by phone. Robust across every creation path so a lead
+        # never lingers "open" after the client is in the system. (founder 2026-07-22)
+        try:
+            _won = conn.execute("SELECT id FROM sales_lead_stages WHERE is_won = 1 "
+                                "ORDER BY is_active DESC, id LIMIT 1").fetchone()
+            if _won and clean:
+                conn.execute(
+                    "UPDATE sales_leads SET stage_id = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'), 10) = ? "
+                    "  AND COALESCE(stage_id, 0) <> ?",
+                    (_won['id'], clean, _won['id']))
+                conn.commit()
+        except Exception as _le:
+            logging.warning(f"auto-close lead on register {reg_num}: {_le}")
+            try: conn.rollback()
+            except Exception: pass
+
         # ── Welcome-call handling chosen by Sales at closure (founder 2026-07-22) ──
         _wc_mode = (closure_meta.get('wc_mode') or 'standard').strip().lower()
         if _wc_mode == 'hold':
@@ -3428,6 +3446,78 @@ def admin_set_registration_date():
                 f"<input type='date' name='new_date' value='{cur}' required></p>"
                 "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:6px;"
                 "font-weight:700;cursor:pointer'>Update registration date</button></form></div>")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+@app.route('/admin/fix-lead', methods=['GET', 'POST'])
+@login_required
+def admin_fix_lead():
+    """Admin: find a client's sales lead(s) by name/phone and close them (set to the
+    Won stage) or delete a duplicate. Also surfaces if the Won stage is inactive (why
+    'Closed Won' wouldn't appear in the pipeline dropdown). (founder 2026-07-22)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    q = (request.values.get('q') or '').strip()
+    conn = get_db()
+    try:
+        won = conn.execute("SELECT id, name, is_active FROM sales_lead_stages WHERE is_won = 1 "
+                           "ORDER BY is_active DESC, id LIMIT 1").fetchone()
+        if request.method == 'POST':
+            action = request.form.get('action')
+            lead_id = request.form.get('lead_id', type=int)
+            if action == 'set_won' and lead_id and won:
+                conn.execute("UPDATE sales_leads SET stage_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                             (won['id'], lead_id)); conn.commit()
+                msg = f"Lead #{lead_id} set to {won['name']}."
+            elif action == 'delete' and lead_id:
+                conn.execute("DELETE FROM sales_leads WHERE id = ?", (lead_id,)); conn.commit()
+                msg = f"Lead #{lead_id} deleted."
+            elif action == 'activate_won' and won:
+                conn.execute("UPDATE sales_lead_stages SET is_active = 1 WHERE id = ?", (won['id'],)); conn.commit()
+                msg = f"Stage '{won['name']}' re-activated (now selectable in the pipeline)."
+            else:
+                msg = "Nothing to do."
+            return (f"<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+                    f"<h2>Done ✅</h2><p>{msg}</p><a href='/admin/fix-lead?q={q}'>Back</a></div>")
+        rows = []
+        if q:
+            like = f"%{q}%"
+            digits = re.sub(r'[^0-9]', '', q)
+            rows = conn.execute(
+                "SELECT sl.id, sl.lead_name, sl.phone, sl.email, s.name AS stage, COALESCE(s.is_won,0) AS won "
+                "FROM sales_leads sl LEFT JOIN sales_lead_stages s ON s.id = sl.stage_id "
+                "WHERE sl.lead_name ILIKE ? "
+                + ("OR RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) = ? " if len(digits) >= 10 else "")
+                + "ORDER BY sl.id DESC",
+                ((like, digits[-10:]) if len(digits) >= 10 else (like,))).fetchall()
+        won_note = ""
+        if won and not won['is_active']:
+            won_note = (f"<div style='background:#FEF3C7;border:1px solid #FCD34D;padding:8px 12px;border-radius:6px;margin:10px 0;'>"
+                        f"⚠ The Won stage '<b>{won['name']}</b>' is currently <b>inactive</b>, so it doesn't show in the pipeline "
+                        f"stage dropdown. <form method='POST' style='display:inline'><input type='hidden' name='action' value='activate_won'>"
+                        f"<button style='margin-left:8px;padding:4px 10px;cursor:pointer'>Re-activate it</button></form></div>")
+        items = "".join(
+            f"<tr><td>{r['id']}</td><td>{r['lead_name']}</td><td>{r['phone'] or '—'}</td>"
+            f"<td>{'<b style=color:#065f46>'+ (r['stage'] or '—') +'</b>' if r['won'] else (r['stage'] or '—')}</td>"
+            f"<td><form method='POST' style='display:inline'><input type='hidden' name='action' value='set_won'>"
+            f"<input type='hidden' name='lead_id' value='{r['id']}'>"
+            f"<button {'disabled' if r['won'] else ''} style='padding:4px 10px;cursor:pointer'>Set Closed Won</button></form> "
+            f"<form method='POST' style='display:inline' onsubmit=\"return confirm('Delete this lead permanently?')\">"
+            f"<input type='hidden' name='action' value='delete'><input type='hidden' name='lead_id' value='{r['id']}'>"
+            f"<button style='padding:4px 10px;color:#b91c1c;cursor:pointer'>Delete</button></form></td></tr>"
+            for r in rows)
+        return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+                "<h2>Fix a sales lead (close / dedupe)</h2>"
+                "<form method='GET'>Search by name or phone: "
+                f"<input name='q' value='{q}' style='padding:6px;width:260px'> <button>Search</button></form>"
+                + won_note
+                + (("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%;margin-top:12px'>"
+                    "<tr style='background:#f3f4f6'><th>ID</th><th>Lead</th><th>Phone</th><th>Stage</th><th>Actions</th></tr>"
+                    + items + "</table>") if rows else (f"<p>No leads found for '{q}'.</p>" if q else ""))
+                + "</div>")
     finally:
         try: conn.close()
         except Exception: pass
