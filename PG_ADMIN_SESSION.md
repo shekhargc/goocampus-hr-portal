@@ -81,3 +81,10 @@ CollegeApplication, InternationalPathways.
 **Where do doctor accounts + bookings live?** goocampus.org is now the backend, so they'd
 be NEW tables in the portal DB, exposed to goocampus.in via `/api/pg/*`. Propose the data
 model (tables + endpoints) and confirm with the founder before building.
+
+---
+
+**📐 Build to the shared data model:** read **`goocampus-pg/DATA_MODEL_PG.md`** (via `/add-dir
+~/Desktop/Claude Code/goocampus-pg`). It defines the `pg_mentors` / `pg_users` / `pg_bookings`
+Postgres tables you build here + the `/api/pg/*` shapes the user panel calls. You build the SAME
+fields the user panel shows.
