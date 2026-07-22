@@ -38565,18 +38565,10 @@ _SC_EMAIL_TEMPLATES = [
         '<p style="margin:16px 0 0;"><a href="https://goocampus.org/client/login" '
         'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Confirm in your portal</a></p>'
         '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
-    {'key': 'sc_onboarding_confirmed', 'label': 'Onboarding Confirmed (to client)',
-     'subject': 'Your Onboarding is Complete — GooCampus', 'recip': (1, 0, 0, 0),
-     'inner': (
-        '<p style="margin:0 0 12px;">Dear {{client_name}},</p>'
-        '<p style="margin:0 0 12px;">We are delighted to inform you that your onboarding for '
-        '<strong>{{product_name}}</strong> is now complete. Our team will begin working with you '
-        'on the next steps right away.</p>'
-        '<p style="margin:0 0 12px;">You can log in to your client portal at any time to track your '
-        'progress, upload documents, and stay updated.</p>'
-        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/client/login" '
-        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Log in to your portal</a></p>'
-        '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
+    # 'sc_onboarding_confirmed' removed (founder 2026-07-22): the client's
+    # onboarding email is the editable 'welcome_email' template sent at ops-verify,
+    # so a second onboarding email would duplicate it. A one-time cleanup below
+    # deletes any already-seeded row.
     {'key': 'sc_document_request', 'label': 'Document Request (to client)',
      'subject': 'Document Required — {{doc_type}}', 'recip': (1, 0, 0, 0),
      'inner': (
@@ -38607,6 +38599,9 @@ def seed_sc_email_group_once():
     conn = None
     try:
         conn = get_db()
+        # Retire the redundant onboarding-confirmed template (its job is the
+        # editable 'welcome_email' sent at ops-verify). (founder 2026-07-22)
+        conn.execute("DELETE FROM email_templates WHERE template_key = 'sc_onboarding_confirmed'")
         for t in _SC_EMAIL_TEMPLATES:
             exists = conn.execute("SELECT id FROM email_templates WHERE template_key = ?", (t['key'],)).fetchone()
             if exists:
