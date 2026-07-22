@@ -389,19 +389,20 @@ def inject_manager_status():
                         college_landing = _url
                     college_access = True
 
-        # has_partners_access — any of the Partners sub-sections (Directory /
-        # Invitations / Leads) shows the Partners menu, landing on the first page
-        # the member actually holds. (founder 2026-07-21)
+        # has_partners_access — Partners is its own top-level group now (founder
+        # 2026-07-22). Any of its sub-sections shows the Partners menu, landing on
+        # the first page the member holds.
         _partner_subs = [
-            ('partners',            '/partners'),
-            ('partner_leads',       '/partners/leads'),
-            ('partner_invitations', '/partners/invitations'),
+            ('dashboard',   '/partners/dashboard'),
+            ('directory',   '/partners'),
+            ('leads',       '/partners/leads'),
+            ('invitations', '/partners/invitations'),
         ]
         partners_access = False
         partners_landing = '/partners'
         if user:
             for _sub, _url in _partner_subs:
-                if has_section_permission(user, 'sales', _sub, 'view'):
+                if has_section_permission(user, 'partners', _sub, 'view'):
                     if not partners_access:
                         partners_landing = _url
                     partners_access = True
@@ -35570,6 +35571,20 @@ ACCESS_SECTION_CATALOG = [
             ('vendors_providers', 'Vendors & Providers',      'Vendor / partner directory (pathway-aware)'),
         ],
     },
+    # ── Partners (its OWN top-level group — matches the top menu, moved out of
+    #    Sales per founder 2026-07-22). This is the TEAM-facing internal view of
+    #    partners; the separate "Partner Logins" group below is for partner accounts. ──
+    {
+        'key': 'partners',
+        'label': 'Partners',
+        'description': 'Internal Partners section (team-facing): partner directory, invitations, and the leads partners referred. Grant to any team member who should see partner info.',
+        'sub_sections': [
+            ('dashboard',    'Partner Dashboard',   'Partner overview / stats'),
+            ('directory',    'Partners Directory',  'View partner list + profiles (Edit = add / edit / delete partners)'),
+            ('invitations',  'Partner Invitations', 'View + send partner onboarding invitations'),
+            ('leads',        'Partner Leads',       'View the student + B2B leads partners referred'),
+        ],
+    },
     # ── Sales (kept as one section per user feedback) ─────────────────────
     {
         'key': 'sales',
@@ -35579,9 +35594,6 @@ ACCESS_SECTION_CATALOG = [
             ('meetings',             'Meetings',             'Sales meeting log'),
             ('projects',             'Projects',             'Sales projects'),
             ('products',             'Products & Services',  'Product / service catalog'),
-            ('partners',             'Partners — Directory', 'View partner list + profiles (Edit = add / edit / delete partners)'),
-            ('partner_invitations',  'Partner Invitations',  'View + send partner onboarding invitations'),
-            ('partner_leads',        'Partner Leads',        'View the student + B2B leads partners referred'),
             ('news',                 'Sales News',           'Internal sales news feed'),
             ('clients_pipeline',     'Clients Pipeline',     'Client deal pipeline'),
             ('sales_verification',   'Sales Verification',   'Fill balance details for submitted registrations (queue)'),
@@ -35710,8 +35722,8 @@ ACCESS_SECTION_CATALOG = [
     # Aligned with the real partner portal sections (was a placeholder).
     {
         'key': 'partner_portal',
-        'label': 'Partner Portal',
-        'description': 'Sections visible inside the partner-facing portal. Grant these only to partner subjects.',
+        'label': 'Partner Logins (partners\' own portal)',
+        'description': 'Only for PARTNER accounts (not team members) — controls what a logged-in partner sees inside their own portal. Shown when you pick a Partner as the subject, not a team member.',
         'sub_sections': [
             ('dashboard',         'Dashboard',          'Partner landing page'),
             ('student_leads',     'Student Leads',      'Student leads referred by this partner'),
@@ -35904,6 +35916,36 @@ def cleanup_orphan_access_permissions():
         except Exception: pass
 
 
+def migrate_partners_to_own_group_once():
+    """Partners moved from sub-of-Sales to its OWN top-level Access Master group
+    (founder 2026-07-22). Re-key existing grants so nobody loses access. MUST run
+    BEFORE cleanup_orphan_access_permissions() (which would otherwise delete the
+    now-orphaned sales/partners* rows). Idempotent — no-op once migrated."""
+    _map = [('partners', 'directory'), ('partner_invitations', 'invitations'),
+            ('partner_leads', 'leads')]
+    try:
+        conn = get_db()
+        for old_sub, new_sub in _map:
+            try:
+                conn.execute(
+                    "UPDATE user_section_permissions SET main_section='partners', sub_section=? "
+                    "WHERE main_section='sales' AND sub_section=? "
+                    "  AND NOT EXISTS (SELECT 1 FROM user_section_permissions u2 "
+                    "     WHERE u2.subject_type = user_section_permissions.subject_type "
+                    "       AND u2.subject_id = user_section_permissions.subject_id "
+                    "       AND u2.main_section='partners' AND u2.sub_section=?)",
+                    (new_sub, old_sub, new_sub))
+                conn.commit()
+            except Exception as _e:
+                logging.warning(f"migrate_partners_to_own_group_once {old_sub}: {_e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.close()
+    except Exception as e:
+        logging.warning(f"migrate_partners_to_own_group_once: {e}")
+
+
+migrate_partners_to_own_group_once()
 cleanup_orphan_access_permissions()
 
 
@@ -38718,22 +38760,20 @@ ACCESS_ROUTE_MAP = {
     # ── Partners (internal admin view) — grant a team member Sales > Partners to
     #    let them see partner details + the partners' leads. Managing partners
     #    (add/edit/delete/invite) needs the 'edit' action = admins only. (founder 2026-07-21)
-    'partners_list':                                _ap('sales', 'partners', 'view'),
-    'partners_dashboard':                           _ap('sales', 'partners', 'view'),
-    'partners_api':                                 _ap('sales', 'partners', 'view'),
-    'partners_add':                                 _ap('sales', 'partners', 'edit'),
-    'partners_edit':                                _ap('sales', 'partners', 'edit'),
-    'partners_delete':                              _ap('sales', 'partners', 'edit'),
-    'partners_products':                            _ap('sales', 'partners', 'edit'),
-    # Partner Invitations — its own sub-section so it can be granted separately
-    # (viewing the invitations page = view; sending / deleting = edit). (founder 2026-07-21)
-    'partner_invitations_list':                     _ap('sales', 'partner_invitations', 'view'),
-    'partner_invitations_create':                   _ap('sales', 'partner_invitations', 'edit'),
-    'partner_invitation_delete':                    _ap('sales', 'partner_invitations', 'edit'),
-    # Partner Leads — its own sub-section (student + B2B leads partners referred).
-    'admin_partner_leads':                          _ap('sales', 'partner_leads', 'view'),
-    'admin_partner_b2b_leads':                      _ap('sales', 'partner_leads', 'view'),
-    'admin_partner_lead_detail':                    _ap('sales', 'partner_leads', 'view'),
+    # Partners is now its OWN top-level Access Master group (founder 2026-07-22).
+    'partners_dashboard':                           _ap('partners', 'dashboard', 'view'),
+    'partners_list':                                _ap('partners', 'directory', 'view'),
+    'partners_api':                                 _ap('partners', 'directory', 'view'),
+    'partners_add':                                 _ap('partners', 'directory', 'edit'),
+    'partners_edit':                                _ap('partners', 'directory', 'edit'),
+    'partners_delete':                              _ap('partners', 'directory', 'edit'),
+    'partners_products':                            _ap('partners', 'directory', 'edit'),
+    'partner_invitations_list':                     _ap('partners', 'invitations', 'view'),
+    'partner_invitations_create':                   _ap('partners', 'invitations', 'edit'),
+    'partner_invitation_delete':                    _ap('partners', 'invitations', 'edit'),
+    'admin_partner_leads':                          _ap('partners', 'leads', 'view'),
+    'admin_partner_b2b_leads':                      _ap('partners', 'leads', 'view'),
+    'admin_partner_lead_detail':                    _ap('partners', 'leads', 'view'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),
@@ -39079,7 +39119,6 @@ ACCESS_ROUTE_MAP = {
     'meetings_list':                _ap('sales', 'meetings'),
     'projects_list':                _ap('sales', 'projects'),
     'products_list':                _ap('sales', 'products'),
-    'partners':                     _ap('sales', 'partners'),
     'sales_news':                   _ap('sales', 'news'),
 
     # ── Sales · 12thPlus Schools CRM ──────────────────────────────────────
