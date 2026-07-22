@@ -2589,6 +2589,18 @@ def client_upload_doc(reg_id):
     # Ops now picks doc_type from CLIENT_DOC_TYPES, the same list the client uploads
     # against, so these actually match (they never did when it was a free-text box).
     doc_req_id = request.form.get('doc_request_id')
+    # Did this upload answer an outstanding document request? Used only to decide
+    # whether to fire the team notification below (not to change any behaviour).
+    _had_request = bool(doc_req_id)
+    if not _had_request:
+        try:
+            _pr = conn.execute("SELECT 1 FROM client_doc_requests WHERE registration_id = ? "
+                               "AND LOWER(TRIM(doc_type)) = LOWER(TRIM(?)) "
+                               "AND COALESCE(status,'pending') <> 'fulfilled' LIMIT 1",
+                               (reg_id, doc_type)).fetchone()
+            _had_request = bool(_pr)
+        except Exception:
+            _had_request = False
     if doc_req_id:
         conn.execute("UPDATE client_doc_requests SET status = 'fulfilled', fulfilled_at = CURRENT_TIMESTAMP "
                      "WHERE id = ?", (doc_req_id,))
@@ -2596,6 +2608,34 @@ def client_upload_doc(reg_id):
                  "WHERE registration_id = ? AND LOWER(TRIM(doc_type)) = LOWER(TRIM(?)) "
                  "AND COALESCE(status,'pending') <> 'fulfilled'", (reg_id, doc_type))
     conn.commit()
+    # When the client fulfils a requested document, tell the team via the editable
+    # 'sc_document_submitted' template. Sends nothing if the template is disabled,
+    # so this stays dormant until the founder enables it. (founder 2026-07-22)
+    if _had_request:
+        try:
+            info = conn.execute(
+                "SELECT TRIM(COALESCE(prefix,'')||' '||COALESCE(first_name,'')||' '||"
+                "COALESCE(last_name,'')) AS nm, counsellor_id "
+                "FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+            _cname = ((info['nm'] or '').strip() if info else '')
+            _sc = _sc_render(conn, 'sc_document_submitted', {
+                'client_name': _cname, 'doc_type': doc_type,
+                'registration_number': (reg['registration_number'] or '')})
+            if _sc:
+                from email_utils import send_email
+                _ops = _dept_emails(conn, ['Operations'])
+                _cons = []
+                if info and info['counsellor_id']:
+                    _ce = conn.execute("SELECT email FROM employees WHERE id = ?",
+                                       (info['counsellor_id'],)).fetchone()
+                    if _ce and _ce['email']:
+                        _cons = [_ce['email']]
+                _to = list(dict.fromkeys([e for e in (_ops + _cons) if e]))
+                if _to:
+                    _ds_subj, _ds_body = _sc
+                    send_email(_to, _ds_subj, _ds_body, from_address="GooCampus <info@goocampus.in>")
+        except Exception as _e:
+            logging.warning(f"sc_document_submitted notify {reg_id}: {_e}")
     conn.close()
     # Nested under 'doc' with every field the client_form.html row-builder reads,
     # so the uploaded file shows up immediately in the list below the upload box.
@@ -2882,9 +2922,20 @@ def _notify_client_submitted(reg_id):
                 f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
                 f"registration form. It is now with <strong>{sm_name or 'Sales'}</strong> for sales verification — "
                 f"the Operations team will be notified when it's ready to verify.</p>" + details)
-            send_email(plain_to, f"New Registration Submitted — {client_name}",
-                       render_branded_email('New Registration Submitted', p_inner,
-                                            preheader=f"{client_name} — awaiting sales verification"),
+            # Editable Standard Consulting template drives subject+body when the
+            # founder has enabled it; else the built-in email above. (2026-07-22)
+            _sc = _sc_render(conn, 'sc_registration_submitted', {
+                'client_name': client_name,
+                'product_name': (reg['product_name'] or ''),
+                'registration_number': (reg['registration_number'] or ''),
+                'counsellor_name': (sm_name or '')})
+            if _sc:
+                _subj, _body = _sc
+            else:
+                _subj = f"New Registration Submitted — {client_name}"
+                _body = render_branded_email('New Registration Submitted', p_inner,
+                                             preheader=f"{client_name} — awaiting sales verification")
+            send_email(plain_to, _subj, _body,
                        from_address="GooCampus <info@goocampus.in>")
 
         recipients = list(dict.fromkeys([e for e in ([sm_email] + plain_to) if e]))
@@ -5341,11 +5392,17 @@ def _notify_welcome_call_confirmed(reg_id):
                      color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
                      f"<p>Dear {client_name or 'there'}, a calendar invite is attached so you can add it "
                      f"to your calendar. We look forward to speaking with you!</p><p>&mdash; Team GooCampus</p>")
-            body = render_branded_email('Welcome Call Confirmed', inner,
-                                        preheader=f"{date_s} at {time_s} IST")
+            _sc = _sc_render(conn, 'sc_welcome_call_confirmed', {
+                'client_name': client_name, 'wc_date': date_s, 'wc_time': time_s})
+            if _sc:
+                _wc_subj, body = _sc
+            else:
+                _wc_subj = "Your GooCampus Welcome Call is confirmed"
+                body = render_branded_email('Welcome Call Confirmed', inner,
+                                            preheader=f"{date_s} at {time_s} IST")
             atts = [{'filename': 'welcome-call.ics', 'content': ics_b64}] if ics_b64 else None
             try:
-                send_email([client_email], "Your GooCampus Welcome Call is confirmed", body,
+                send_email([client_email], _wc_subj, body,
                            attachments=atts, from_address="GooCampus <info@goocampus.in>")
             except Exception as e:
                 logging.warning(f"welcome call client email {reg_id}: {e}")
@@ -5424,9 +5481,21 @@ def admin_client_welcome_call_propose(reg_id):
                 f"<p>Dear {client_name or 'there'}, please log in and <strong>confirm</strong> this time, "
                 f"or propose another slot that suits you.</p>" +
                 brand_button('Confirm your welcome call', 'https://goocampus.org/client/welcome-call'))
-            body = render_branded_email('Welcome Call — please confirm the proposed time', inner,
-                                        preheader=f"Proposed: {date_s} {time_s} IST")
-            send_email([client_email], "GooCampus Welcome Call — please confirm the time", body,
+            _sc = None
+            try:
+                _c2 = get_db()
+                _sc = _sc_render(_c2, 'sc_welcome_call_reschedule', {
+                    'client_name': client_name, 'wc_date': date_s, 'wc_time': time_s, 'note': (note or '')})
+                _c2.close()
+            except Exception:
+                _sc = None
+            if _sc:
+                _rs_subj, body = _sc
+            else:
+                _rs_subj = "GooCampus Welcome Call — please confirm the time"
+                body = render_branded_email('Welcome Call — please confirm the proposed time', inner,
+                                            preheader=f"Proposed: {date_s} {time_s} IST")
+            send_email([client_email], _rs_subj, body,
                        from_address="GooCampus <info@goocampus.in>")
     except Exception as e:
         logging.warning(f"welcome call propose email {reg_id}: {e}")
@@ -6154,9 +6223,15 @@ def _notify_doc_request(reg_id, doc_type, message):
                      f"<p>Hi {reg['first_name'] or 'there'}, please log in to your portal and upload it "
                      f"under the Documents section. It only takes a minute.</p>" +
                      brand_button('Upload document', 'https://goocampus.org/client/login'))
-            body = render_branded_email('Document Requested', inner,
-                                        preheader=f"Please upload: {doc_type}")
-            send_email([reg['email']], f"Document Required — {doc_type} (GooCampus)", body,
+            _sc = _sc_render(conn, 'sc_document_request', {
+                'client_name': (reg['first_name'] or ''), 'doc_type': doc_type, 'message': (message or '')})
+            if _sc:
+                _dr_subj, body = _sc
+            else:
+                _dr_subj = f"Document Required — {doc_type} (GooCampus)"
+                body = render_branded_email('Document Requested', inner,
+                                            preheader=f"Please upload: {doc_type}")
+            send_email([reg['email']], _dr_subj, body,
                        from_address="GooCampus <info@goocampus.in>")
         conn.close()
     except Exception as e:
@@ -38403,6 +38478,35 @@ def _sc_body(inner):
         return render_branded_email('', inner, '')
     except Exception:
         return ('<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;">' + inner + '</div>')
+
+
+def _sc_render(conn, key, context=None):
+    """(subject, body_html) for a Standard Consulting lifecycle email from its
+    EDITABLE template, or None to fall back to the built-in hardcoded email.
+
+    Returns None when the template is missing, disabled, or empty — so every
+    sender keeps working exactly as today until the founder edits/enables the
+    template in /admin/email-templates. Placeholders like {{client_name}} are
+    substituted from `context`. (founder 2026-07-22)"""
+    try:
+        row = conn.execute("SELECT * FROM email_templates WHERE template_key = ?", (key,)).fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    tpl = dict(row)
+    if not tpl.get('enabled'):
+        return None
+    if not (tpl.get('body_html') or '').strip():
+        return None
+    try:
+        subject, body = _render_stage_email(tpl, context or {})
+        if not (subject or '').strip() or not (body or '').strip():
+            return None
+        return (subject, body)
+    except Exception as e:
+        logging.warning("_sc_render(%s): %s", key, e)
+        return None
 
 
 # The Standard Consulting client-lifecycle emails, grouped under one heading in the
