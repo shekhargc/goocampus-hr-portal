@@ -3,11 +3,21 @@
 Multiple Claude Code sessions work on this portal at once, each in its **own git
 worktree + branch**. Read this before editing so sessions don't collide.
 
-## Active work-streams
-| Stream | Worktree folder | Branch | Owns these files |
-|---|---|---|---|
-| **College** | `../portal-college` | `feature/college-module` | `college/**` — College Portal, Medical Predictor, NEET-PG PDFs, partner college pages |
-| _(add rows as you spin up more sessions: HR, Operations, etc.)_ | | | |
+## The three sessions (settled 2026-07-21)
+| Session | Repo / worktree | Branch | Owns | Deploys? |
+|---|---|---|---|---|
+| **1. Portal Dashboard (integrator)** | `goocampus-portal` (this main checkout) | `develop` / `main` | Core goocampus.org — `app.py`, `routes/**`, Sales/Ops/Clients/HR/Access-Master | **YES — the only session that merges to `develop`/`main` + pushes live** |
+| **2. College + goocampus.in Admin Panel** | `../portal-pg-admin` | `feature/pg-admin-panel` | `college/**` (College Portal, Medical Predictor, NEET-PG PDFs) **+ the goocampus.in admin panel** (new module folder) + the `/api/pg/*` endpoints the .in user panel calls | No — commits to its branch; session 1 merges |
+| **3. goocampus.in website + user panel** | separate repo `goocampus-pg` (Next.js) | its own | The public goocampus.in site **+ the doctor/user panel**. Talks to goocampus.org via `/api/pg/*` + the WhatsApp OTP. Its own Render service. | Deploys its own Next.js service |
+
+**Architecture (settled 2026-07-21):** user-facing lives on **goocampus.in** (session 3);
+the **data + admin + APIs** for goocampus.in live on **goocampus.org** (session 2 builds the
+admin panel + APIs; the college module already holds NEET-PG PDFs/predictor/leads). No
+separate Mongo backend — goocampus.org IS the backend for goocampus.in. The user panel
+authenticates doctors with goocampus.org's WhatsApp OTP and reads/writes via `/api/pg/*`.
+
+_(Old note: the `../portal-college` worktree on `feature/college-module` is superseded by
+`../portal-pg-admin`; that branch is stale — don't build on it.)_
 
 ## Rules (keep merges painless)
 1. **Stay in your stream's files.** The College session edits `college/**` (+ its

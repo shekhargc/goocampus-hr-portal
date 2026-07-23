@@ -1879,6 +1879,82 @@ def get_plan_package_amount(conn, product_id, plan_type):
     return float(r['package_amount']) if r and r['package_amount'] is not None else None
 
 
+def _closure_revenue_cost(conn, product_id, plan_type, discount=0.0, fallback_revenue=0.0):
+    """Sales revenue credited to a member for a (product, plan) closure.
+
+    Universal rule (founder 2026-07-22) — the SAME for every product + plan type:
+        Sales Revenue = Package - Cost - Discount
+    The sales dashboards credit the member on SUM(margin) on sales_closures, so
+    we store revenue = Package - Discount and cost = Cost, giving
+        margin = revenue - cost = Package - Cost - Discount.
+    Package + Cost are defined once per plan in Packages & Services; Discount is
+    the per-deal `discount_allowed` entered on the closure.
+
+    Exceptions kept so nothing existing breaks:
+      * fixed_sales_revenue set on the plan -> that flat INR is the whole credit
+        (the AMC AUD flat-credit case); returned as-is, no cost/discount applied.
+      * foreign-currency plan (currency != INR) -> Package/Cost converted to INR
+        at the plan's effective (live+markup) rate, so margin stays in rupees.
+
+    Returns (revenue, cost) both in INR. Falls back to `fallback_revenue`
+    (minus discount, cost 0) when the plan has no Packages row, preserving old
+    behaviour for products that never defined a package."""
+    try:
+        disc = max(0.0, float(discount or 0))
+    except (TypeError, ValueError):
+        disc = 0.0
+    row = None
+    try:
+        row = conn.execute(
+            "SELECT package_amount, COALESCE(plan_cost,0) AS plan_cost, "
+            "COALESCE(currency,'INR') AS currency, fixed_sales_revenue "
+            "FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+            (product_id, plan_type)).fetchone()
+    except Exception:
+        row = None
+    if not row:
+        try:
+            fb = float(fallback_revenue or 0)
+        except (TypeError, ValueError):
+            fb = 0.0
+        return (max(0.0, fb - disc), 0.0)
+    try:
+        fsr = row['fixed_sales_revenue']
+        if fsr is not None and float(fsr) > 0:
+            # Flat INR credit (AMC AUD): discount already forced to 0 upstream.
+            return (float(fsr), 0.0)
+    except (TypeError, ValueError):
+        pass
+    pkg = float(row['package_amount'] or 0)
+    cost = float(row['plan_cost'] or 0)
+    if (row['currency'] or 'INR').upper() != 'INR':
+        rate = 0.0
+        try:
+            q = amc_aud_quote(plan_type, conn=conn, product_id=product_id)
+            if q and q.get('effective_rate'):
+                rate = float(q['effective_rate'])
+        except Exception:
+            rate = 0.0
+        if rate > 0:
+            pkg *= rate
+            cost *= rate
+    # revenue = Package - Discount, cost = Cost  ->  margin = Package - Cost - Discount
+    return (max(0.0, pkg - disc), cost)
+
+
+@app.route('/healthz')
+def healthz():
+    """Unauthenticated deploy-verification endpoint: reports the running git commit
+    (Render injects RENDER_GIT_COMMIT) so a deploy can be confirmed actually live —
+    not the old instance still serving during a build. (2026-07-23)"""
+    import os as _os
+    return jsonify({
+        'status': 'ok',
+        'commit': (_os.environ.get('RENDER_GIT_COMMIT') or '')[:12],
+        'branch': _os.environ.get('RENDER_GIT_BRANCH') or '',
+    })
+
+
 @app.route('/sales/api/plan-package')
 @login_required
 def sales_plan_package_info():
@@ -1890,9 +1966,22 @@ def sales_plan_package_info():
     conn = get_db()
     amt = get_plan_package_amount(conn, product_id, plan_type)
     svcs = get_package_services(conn, product_id, plan_type)
+    # The sales revenue credited to the member = Package - Cost - Discount, same
+    # rule for every product + plan type. Surfaced so the rep sees it live (the
+    # form subtracts the deal's Discount on top of this base). fixed=True means a
+    # flat INR credit (AMC AUD) where cost/discount don't apply.
+    _prow = conn.execute("SELECT fixed_sales_revenue FROM plan_packages "
+                         "WHERE product_id = ? AND plan_type = ?",
+                         (product_id, plan_type)).fetchone()
+    _fixed = bool(_prow and _prow['fixed_sales_revenue'] and float(_prow['fixed_sales_revenue']) > 0)
+    _rev, _cost = _closure_revenue_cost(conn, product_id, plan_type,
+                                        fallback_revenue=(amt or 0))
     conn.close()
     return jsonify({
         'package_amount': amt,
+        'plan_cost': round(_cost, 2),
+        'fixed': _fixed,
+        'sales_revenue': round(_rev - _cost, 2),  # base = Package - Cost (before deal Discount)
         'services': [{'name': s['service_name'], 'description': s.get('description') or '',
                       'quantity': s.get('quantity') or ''} for s in svcs],
     })
@@ -2513,6 +2602,18 @@ def client_upload_doc(reg_id):
     # Ops now picks doc_type from CLIENT_DOC_TYPES, the same list the client uploads
     # against, so these actually match (they never did when it was a free-text box).
     doc_req_id = request.form.get('doc_request_id')
+    # Did this upload answer an outstanding document request? Used only to decide
+    # whether to fire the team notification below (not to change any behaviour).
+    _had_request = bool(doc_req_id)
+    if not _had_request:
+        try:
+            _pr = conn.execute("SELECT 1 FROM client_doc_requests WHERE registration_id = ? "
+                               "AND LOWER(TRIM(doc_type)) = LOWER(TRIM(?)) "
+                               "AND COALESCE(status,'pending') <> 'fulfilled' LIMIT 1",
+                               (reg_id, doc_type)).fetchone()
+            _had_request = bool(_pr)
+        except Exception:
+            _had_request = False
     if doc_req_id:
         conn.execute("UPDATE client_doc_requests SET status = 'fulfilled', fulfilled_at = CURRENT_TIMESTAMP "
                      "WHERE id = ?", (doc_req_id,))
@@ -2520,6 +2621,34 @@ def client_upload_doc(reg_id):
                  "WHERE registration_id = ? AND LOWER(TRIM(doc_type)) = LOWER(TRIM(?)) "
                  "AND COALESCE(status,'pending') <> 'fulfilled'", (reg_id, doc_type))
     conn.commit()
+    # When the client fulfils a requested document, tell the team via the editable
+    # 'sc_document_submitted' template. Sends nothing if the template is disabled,
+    # so this stays dormant until the founder enables it. (founder 2026-07-22)
+    if _had_request:
+        try:
+            info = conn.execute(
+                "SELECT TRIM(COALESCE(prefix,'')||' '||COALESCE(first_name,'')||' '||"
+                "COALESCE(last_name,'')) AS nm, counsellor_id "
+                "FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+            _cname = ((info['nm'] or '').strip() if info else '')
+            _sc = _sc_render(conn, 'sc_document_submitted', {
+                'client_name': _cname, 'doc_type': doc_type,
+                'registration_number': (reg['registration_number'] or '')})
+            if _sc:
+                from email_utils import send_email
+                _ops = _dept_emails(conn, ['Operations'])
+                _cons = []
+                if info and info['counsellor_id']:
+                    _ce = conn.execute("SELECT email FROM employees WHERE id = ?",
+                                       (info['counsellor_id'],)).fetchone()
+                    if _ce and _ce['email']:
+                        _cons = [_ce['email']]
+                _to = list(dict.fromkeys([e for e in (_ops + _cons) if e]))
+                if _to:
+                    _ds_subj, _ds_body = _sc
+                    send_email(_to, _ds_subj, _ds_body, from_address="GooCampus <info@goocampus.in>")
+        except Exception as _e:
+            logging.warning(f"sc_document_submitted notify {reg_id}: {_e}")
     conn.close()
     # Nested under 'doc' with every field the client_form.html row-builder reads,
     # so the uploaded file shows up immediately in the list below the upload box.
@@ -2806,9 +2935,20 @@ def _notify_client_submitted(reg_id):
                 f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
                 f"registration form. It is now with <strong>{sm_name or 'Sales'}</strong> for sales verification — "
                 f"the Operations team will be notified when it's ready to verify.</p>" + details)
-            send_email(plain_to, f"New Registration Submitted — {client_name}",
-                       render_branded_email('New Registration Submitted', p_inner,
-                                            preheader=f"{client_name} — awaiting sales verification"),
+            # Editable Standard Consulting template drives subject+body when the
+            # founder has enabled it; else the built-in email above. (2026-07-22)
+            _sc = _sc_render(conn, 'sc_registration_submitted', {
+                'client_name': client_name,
+                'product_name': (reg['product_name'] or ''),
+                'registration_number': (reg['registration_number'] or ''),
+                'counsellor_name': (sm_name or '')})
+            if _sc:
+                _subj, _body = _sc
+            else:
+                _subj = f"New Registration Submitted — {client_name}"
+                _body = render_branded_email('New Registration Submitted', p_inner,
+                                             preheader=f"{client_name} — awaiting sales verification")
+            send_email(plain_to, _subj, _body,
                        from_address="GooCampus <info@goocampus.in>")
 
         recipients = list(dict.fromkeys([e for e in ([sm_email] + plain_to) if e]))
@@ -3538,6 +3678,145 @@ def _pathway_audit_tables(conn):
         if 'registration_number' in cols and 'pathway' in cols:
             out.append(t)
     return out
+
+
+@app.route('/admin/recompute-closure', methods=['GET', 'POST'])
+@login_required
+def admin_recompute_closure():
+    """Admin: recompute a sales closure's revenue/cost/margin from its plan's
+    Package - Cost (the universal Sales Revenue rule), for closures saved before
+    the plan's package/cost was set — e.g. a V2 closure stuck at 0. Read-only
+    until you click Recompute on a specific row; never a silent backfill.
+    (founder 2026-07-22)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    q = (request.values.get('q') or '').strip()
+    conn = get_db()
+    msg = None
+    if request.method == 'POST':
+        cid = request.form.get('closure_id', type=int)
+        row = conn.execute(
+            "SELECT sc.id, sc.product_id AS c_pid, sc.revenue, sc.cost, sc.margin, "
+            "       cr.product_id AS reg_pid, cr.plan_type AS reg_plan_type, "
+            "       cr.discount_allowed AS reg_discount "
+            "  FROM sales_closures sc "
+            "  LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
+            "  LEFT JOIN LATERAL ("
+            "      SELECT product_id, plan_type, discount_allowed FROM client_registrations "
+            "       WHERE regexp_replace(COALESCE(mobile,''),'[^0-9]','','g') <> '' "
+            "         AND RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) "
+            "           = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
+            "       ORDER BY id DESC LIMIT 1) cr ON TRUE "
+            " WHERE sc.id = ?", (cid,)).fetchone()
+        if not row:
+            msg = ('error', f'Closure #{cid} not found.')
+        else:
+            pid = row['c_pid'] or row['reg_pid']
+            pt = (row['reg_plan_type'] or '').strip()
+            _disc = request.form.get('discount', row['reg_discount'] or 0)
+            new_rev, new_cost = _closure_revenue_cost(conn, pid, pt, discount=_disc,
+                                                      fallback_revenue=row['revenue'])
+            new_margin = new_rev - new_cost
+            conn.execute("UPDATE sales_closures SET revenue = ?, cost = ?, margin = ? WHERE id = ?",
+                         (new_rev, new_cost, new_margin, cid))
+            conn.commit()
+            try:
+                _dv = float(_disc or 0)
+            except (TypeError, ValueError):
+                _dv = 0.0
+            msg = ('success', f'Closure #{cid}: revenue ₹{new_rev:,.0f}, cost ₹{new_cost:,.0f}, '
+                              f'discount ₹{_dv:,.0f}, margin ₹{new_margin:,.0f} (plan "{pt or "—"}").')
+    rows = []
+    if q:
+        like = f"%{q}%"
+        try:
+            rows = conn.execute(
+                "SELECT sc.id, sc.client_name, sc.product_name, sc.revenue, sc.cost, sc.margin, "
+                "       sc.product_id AS c_pid, e.name AS emp, "
+                "       cr.product_id AS reg_pid, cr.plan_type AS reg_plan_type, "
+                "       cr.discount_allowed AS reg_discount "
+                "  FROM sales_closures sc "
+                "  LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
+                "  LEFT JOIN employees e ON e.id = sc.employee_id "
+                "  LEFT JOIN LATERAL ("
+                "      SELECT product_id, plan_type, discount_allowed FROM client_registrations "
+                "       WHERE regexp_replace(COALESCE(mobile,''),'[^0-9]','','g') <> '' "
+                "         AND RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) "
+                "           = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
+                "       ORDER BY id DESC LIMIT 1) cr ON TRUE "
+                " WHERE sc.client_name ILIKE ? OR sc.product_name ILIKE ? OR e.name ILIKE ? "
+                "    OR CAST(sc.id AS TEXT) = ? "
+                " ORDER BY sc.id DESC LIMIT 50", (like, like, like, q)).fetchall()
+        except Exception as _se:
+            try: conn.rollback()
+            except Exception: pass
+            rows = []
+            if not msg:
+                msg = ('error', f'Search failed: {_se}')
+    preview = []
+    for r in rows:
+        pid = r['c_pid'] or r['reg_pid']
+        pt = (r['reg_plan_type'] or '').strip()
+        disc = float(r['reg_discount'] or 0)
+        nr, nc = _closure_revenue_cost(conn, pid, pt, discount=disc, fallback_revenue=r['revenue'])
+        preview.append({
+            'id': r['id'], 'client': r['client_name'] or '', 'product': r['product_name'] or '',
+            'emp': r['emp'] or '', 'plan': pt or '—', 'discount': disc,
+            'cur_rev': float(r['revenue'] or 0), 'cur_cost': float(r['cost'] or 0),
+            'cur_margin': float(r['margin'] or 0),
+            'new_rev': nr, 'new_cost': nc, 'new_margin': nr - nc,
+            'changed': abs((nr - nc) - float(r['margin'] or 0)) > 0.5,
+        })
+    conn.close()
+    def _f(v):
+        return f'{v:,.0f}'
+    trs = ''
+    for p in preview:
+        hl = 'background:#FEF9C3;' if p['changed'] else ''
+        trs += (f'<tr style="{hl}"><td style="padding:6px 9px;">#{p["id"]}</td>'
+                f'<td style="padding:6px 9px;">{p["client"]}</td>'
+                f'<td style="padding:6px 9px;">{p["product"]}<br><small style="color:#64748b;">{p["plan"]}</small></td>'
+                f'<td style="padding:6px 9px;">{p["emp"]}</td>'
+                f'<td style="padding:6px 9px;text-align:right;color:#64748b;">&#8377;{_f(p["cur_margin"])}<br>'
+                f'<small>rev {_f(p["cur_rev"])} &minus; cost {_f(p["cur_cost"])}</small></td>'
+                f'<td style="padding:6px 9px;text-align:right;font-weight:700;color:#3730A3;">&#8377;{_f(p["new_margin"])}<br>'
+                f'<small style="font-weight:400;">Pkg &minus; Cost &minus; Disc</small></td>'
+                f'<td style="padding:6px 9px;text-align:center;white-space:nowrap;">'
+                f'<form method="post" style="margin:0;display:flex;gap:6px;align-items:center;justify-content:center;">'
+                f'<input type="hidden" name="closure_id" value="{p["id"]}">'
+                f'<input type="hidden" name="q" value="{q}">'
+                f'<label style="font-size:0.72rem;color:#64748b;">Disc &#8377;<input type="number" name="discount" value="{p["discount"]:.0f}" '
+                f'style="width:78px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:0.8rem;"></label>'
+                f'<button type="submit" style="background:#4338CA;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.8rem;">'
+                f'{"Recompute" if p["changed"] else "Re-save"}</button></form></td></tr>')
+    banner = ''
+    if msg:
+        bg = '#DCFCE7' if msg[0] == 'success' else '#FEE2E2'
+        fg = '#166534' if msg[0] == 'success' else '#991B1B'
+        banner = f'<div style="background:{bg};color:{fg};padding:10px 14px;border-radius:8px;margin-bottom:14px;">{msg[1]}</div>'
+    html = f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recompute Sales Revenue</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:960px;margin:24px auto;padding:0 16px;color:#0f172a;">
+<h1 style="font-size:1.3rem;color:#1e3a5f;">Recompute Sales Revenue on a Closure</h1>
+<p style="color:#475569;font-size:0.9rem;">Sales revenue credited to a member = <strong>Package &minus; Cost &minus; Discount</strong> (Package &amp; Cost
+defined per plan in Packages &amp; Services; Discount is the deal's discount, prefilled below and editable). Use this
+for closures saved <em>before</em> a plan's Package/Cost was set — e.g. an AMC Consulting V2 closure that shows
+&#8377;0. Yellow rows will change. Nothing changes until you click a button.</p>
+{banner}
+<form method="get" style="margin:12px 0 18px;">
+  <input name="q" value="{q}" placeholder="Client name, product, sales member, or closure #"
+    style="padding:9px 12px;width:70%;border:1px solid #cbd5e1;border-radius:8px;font-size:0.9rem;">
+  <button type="submit" style="background:#1e3a5f;color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;">Find</button>
+</form>
+{'<table style="width:100%;border-collapse:collapse;font-size:0.85rem;border:1px solid #e2e8f0;"><thead><tr style="background:#f1f5f9;text-align:left;">'
+ '<th style="padding:7px 9px;">#</th><th style="padding:7px 9px;">Client</th><th style="padding:7px 9px;">Product / Plan</th>'
+ '<th style="padding:7px 9px;">Member</th><th style="padding:7px 9px;text-align:right;">Current (margin)</th>'
+ '<th style="padding:7px 9px;text-align:right;">New (Package &minus; Cost &minus; Disc)</th><th style="padding:7px 9px;">Discount &amp; apply</th></tr></thead><tbody>'
+ + trs + '</tbody></table>' if preview else ('<p style="color:#64748b;">No closures matched.</p>' if q else '')}
+<p style="margin-top:18px;"><a href="/sales/dashboard" style="color:#4338CA;">&larr; Back to Sales</a></p>
+</body></html>'''
+    return html
 
 
 @app.route('/admin/diag/pathway-audit', methods=['GET'])
@@ -4902,28 +5181,45 @@ def _notify_onboarding_confirmed(reg_id):
                                   brand_photo_block, brand_callout)
         sm_name, _sm_email = _lead_sales_member(conn, reg)
         onb_photo_url = _client_photo_email_url(conn, reg)
-        team_recipients = list(dict.fromkeys(
-            _dept_emails(conn, ['Sales', 'Operations', 'Marketing', 'Digital Marketing'])
-            + _management_emails(conn)))
+        # Editable + recipient-controlled via the 'client_onboarded_team' template:
+        # edit the wording, tick exactly who gets it, or disable to switch it off.
+        # Defaults to the historical broad recipient list + wording. (2026-07-22)
+        _ob_row = conn.execute("SELECT * FROM email_templates WHERE template_key = 'client_onboarded_team'").fetchone()
+        _ob_tpl = dict(_ob_row) if _ob_row else {}
+        _ob_enabled = (_ob_tpl.get('enabled', 1) if _ob_tpl else 1)
+        if _ob_enabled:
+            team_recipients = _onboarded_team_recipients(conn, _ob_tpl, reg, _sm_email)
+        else:
+            team_recipients = []
         if team_recipients:
-            team_subject = f"New Client Onboarded — {client_name} ({reg['product_name'] or 'N/A'})"
-            team_inner = (
-                brand_photo_block(onb_photo_url, client_name) +
-                brand_callout(
-                    f"<strong>{client_name}</strong> has successfully registered with GooCampus and "
-                    f"completed both sales &amp; operations verification. The client is now onboarded.",
-                    color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
-                brand_detail_rows([
-                    ('Client', client_name),
-                    ('Registration #', reg['registration_number']),
-                    ('Product', reg['product_name']),
-                    ('Whose lead', sm_name),
-                    ('Mobile', reg['mobile']),
-                    ('Email', reg['email']),
-                ])
-            )
-            team_body = render_branded_email('Client Registered with GooCampus', team_inner,
-                                             preheader=f"{client_name} is now onboarded")
+            _ob_r = _sc_render(conn, 'client_onboarded_team', {
+                'client_name': client_name,
+                'registration_number': (reg['registration_number'] or ''),
+                'product_name': (reg['product_name'] or 'N/A'),
+                'sales_member': (sm_name or ''),
+                'mobile': (reg['mobile'] or ''),
+                'email': (reg['email'] or '')})
+            if _ob_r:
+                team_subject, team_body = _ob_r
+            else:
+                team_subject = f"New Client Onboarded — {client_name} ({reg['product_name'] or 'N/A'})"
+                team_inner = (
+                    brand_photo_block(onb_photo_url, client_name) +
+                    brand_callout(
+                        f"<strong>{client_name}</strong> has successfully registered with GooCampus and "
+                        f"completed both sales &amp; operations verification. The client is now onboarded.",
+                        color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
+                    brand_detail_rows([
+                        ('Client', client_name),
+                        ('Registration #', reg['registration_number']),
+                        ('Product', reg['product_name']),
+                        ('Whose lead', sm_name),
+                        ('Mobile', reg['mobile']),
+                        ('Email', reg['email']),
+                    ])
+                )
+                team_body = render_branded_email('Client Registered with GooCampus', team_inner,
+                                                 preheader=f"{client_name} is now onboarded")
             send_email(team_recipients, team_subject, team_body,
                        from_address="GooCampus <info@goocampus.in>")
 
@@ -5144,11 +5440,17 @@ def _notify_welcome_call_confirmed(reg_id):
                      color='#F0FDF4', border='#BBF7D0', tcolor='#166534') +
                      f"<p>Dear {client_name or 'there'}, a calendar invite is attached so you can add it "
                      f"to your calendar. We look forward to speaking with you!</p><p>&mdash; Team GooCampus</p>")
-            body = render_branded_email('Welcome Call Confirmed', inner,
-                                        preheader=f"{date_s} at {time_s} IST")
+            _sc = _sc_render(conn, 'sc_welcome_call_confirmed', {
+                'client_name': client_name, 'wc_date': date_s, 'wc_time': time_s})
+            if _sc:
+                _wc_subj, body = _sc
+            else:
+                _wc_subj = "Your GooCampus Welcome Call is confirmed"
+                body = render_branded_email('Welcome Call Confirmed', inner,
+                                            preheader=f"{date_s} at {time_s} IST")
             atts = [{'filename': 'welcome-call.ics', 'content': ics_b64}] if ics_b64 else None
             try:
-                send_email([client_email], "Your GooCampus Welcome Call is confirmed", body,
+                send_email([client_email], _wc_subj, body,
                            attachments=atts, from_address="GooCampus <info@goocampus.in>")
             except Exception as e:
                 logging.warning(f"welcome call client email {reg_id}: {e}")
@@ -5227,9 +5529,21 @@ def admin_client_welcome_call_propose(reg_id):
                 f"<p>Dear {client_name or 'there'}, please log in and <strong>confirm</strong> this time, "
                 f"or propose another slot that suits you.</p>" +
                 brand_button('Confirm your welcome call', 'https://goocampus.org/client/welcome-call'))
-            body = render_branded_email('Welcome Call — please confirm the proposed time', inner,
-                                        preheader=f"Proposed: {date_s} {time_s} IST")
-            send_email([client_email], "GooCampus Welcome Call — please confirm the time", body,
+            _sc = None
+            try:
+                _c2 = get_db()
+                _sc = _sc_render(_c2, 'sc_welcome_call_reschedule', {
+                    'client_name': client_name, 'wc_date': date_s, 'wc_time': time_s, 'note': (note or '')})
+                _c2.close()
+            except Exception:
+                _sc = None
+            if _sc:
+                _rs_subj, body = _sc
+            else:
+                _rs_subj = "GooCampus Welcome Call — please confirm the time"
+                body = render_branded_email('Welcome Call — please confirm the proposed time', inner,
+                                            preheader=f"Proposed: {date_s} {time_s} IST")
+            send_email([client_email], _rs_subj, body,
                        from_address="GooCampus <info@goocampus.in>")
     except Exception as e:
         logging.warning(f"welcome call propose email {reg_id}: {e}")
@@ -5957,9 +6271,15 @@ def _notify_doc_request(reg_id, doc_type, message):
                      f"<p>Hi {reg['first_name'] or 'there'}, please log in to your portal and upload it "
                      f"under the Documents section. It only takes a minute.</p>" +
                      brand_button('Upload document', 'https://goocampus.org/client/login'))
-            body = render_branded_email('Document Requested', inner,
-                                        preheader=f"Please upload: {doc_type}")
-            send_email([reg['email']], f"Document Required — {doc_type} (GooCampus)", body,
+            _sc = _sc_render(conn, 'sc_document_request', {
+                'client_name': (reg['first_name'] or ''), 'doc_type': doc_type, 'message': (message or '')})
+            if _sc:
+                _dr_subj, body = _sc
+            else:
+                _dr_subj = f"Document Required — {doc_type} (GooCampus)"
+                body = render_branded_email('Document Requested', inner,
+                                            preheader=f"Please upload: {doc_type}")
+            send_email([reg['email']], _dr_subj, body,
                        from_address="GooCampus <info@goocampus.in>")
         conn.close()
     except Exception as e:
@@ -22364,6 +22684,7 @@ def ops_plab_dashboard(client_id):
         'academic_details':    _plab_section('ops_academic_details', 'id DESC'),
         'research_publication': _plab_section('ops_research_publication', 'id DESC'),
         'online_subscriptions': _plab_section('ops_online_subscriptions', 'id DESC'),
+        'online_courses':      _plab_section('ops_online_courses', 'id DESC'),
         'webinars_conferences': _plab_section('ops_webinars_conferences', 'id DESC'),
         'ngo_activities':      _plab_section('ops_ngo_activities', 'id DESC'),
         'mentorship':          _plab_section('ops_mentorship', 'id DESC'),
@@ -28167,7 +28488,9 @@ def ops_courses_add():
         flash('Course record added', 'success')
         return redirect(request.args.get('next') or url_for('ops_courses_list'))
     conn.close()
-    pre_reg = request.args.get('client', '')
+    # Accept the profile drawer's ?reg= (falls back to ?client=) so the client is
+    # pre-filled when adding from the PLAB profile. (founder 2026-07-23)
+    pre_reg = request.args.get('reg') or request.args.get('client', '')
     course_vendors = get_vendors_by_category('Online Courses', 'UK Pathway')
     course_provider_names = [v['name'] for v in course_vendors] if course_vendors else get_lookup_options('course_provider')
     cert_vendors = get_vendors_by_category('Certification Bodies', 'UK Pathway')
@@ -29667,14 +29990,14 @@ def sales_leads_add():
                 except Exception:
                     train_lock = None
                 if new_lead_id:
-                    try:
-                        cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
-                    except ValueError:
-                        cl_revenue = ev or 0.0
-                    try:
-                        cl_cost = float(request.form.get('closure_cost') or 0)
-                    except ValueError:
-                        cl_cost = 0.0
+                    # Sales revenue is defined ONCE per plan in Packages:
+                    # margin = Package - Cost - Discount, the number the sales
+                    # dashboard credits the member on. Same rule across every
+                    # product + plan type. (founder 2026-07-22)
+                    cl_revenue, cl_cost = _closure_revenue_cost(
+                        conn, product_id, (request.form.get('plan_type') or '').strip(),
+                        discount=(request.form.get('discount_allowed') or 0),
+                        fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
                     cl_close_date = datetime.now().strftime('%Y-%m-%d')
@@ -29970,16 +30293,14 @@ def sales_leads_edit(lead_id):
                     'SELECT id FROM sales_closures WHERE lead_id = ?', (lead_id,)
                 ).fetchone()
                 if not existing_closure:
-                    # Pull revenue/cost from form (shown when Won selected),
-                    # fallback to expected_value for revenue
-                    try:
-                        cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
-                    except ValueError:
-                        cl_revenue = ev or 0.0
-                    try:
-                        cl_cost = float(request.form.get('closure_cost') or 0)
-                    except ValueError:
-                        cl_cost = 0.0
+                    # Sales revenue is defined ONCE per plan in Packages:
+                    # margin = Package - Cost - Discount (same rule for every
+                    # product + plan type); the dashboard credits the member on
+                    # SUM(margin). (founder 2026-07-22)
+                    cl_revenue, cl_cost = _closure_revenue_cost(
+                        conn, product_id, (request.form.get('plan_type') or '').strip(),
+                        discount=(request.form.get('discount_allowed') or 0),
+                        fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
                     cl_close_date = datetime.now().strftime('%Y-%m-%d')
@@ -38210,6 +38531,35 @@ def _sc_body(inner):
         return ('<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;">' + inner + '</div>')
 
 
+def _sc_render(conn, key, context=None):
+    """(subject, body_html) for a Standard Consulting lifecycle email from its
+    EDITABLE template, or None to fall back to the built-in hardcoded email.
+
+    Returns None when the template is missing, disabled, or empty — so every
+    sender keeps working exactly as today until the founder edits/enables the
+    template in /admin/email-templates. Placeholders like {{client_name}} are
+    substituted from `context`. (founder 2026-07-22)"""
+    try:
+        row = conn.execute("SELECT * FROM email_templates WHERE template_key = ?", (key,)).fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    tpl = dict(row)
+    if not tpl.get('enabled'):
+        return None
+    if not (tpl.get('body_html') or '').strip():
+        return None
+    try:
+        subject, body = _render_stage_email(tpl, context or {})
+        if not (subject or '').strip() or not (body or '').strip():
+            return None
+        return (subject, body)
+    except Exception as e:
+        logging.warning("_sc_render(%s): %s", key, e)
+        return None
+
+
 # The Standard Consulting client-lifecycle emails, grouped under one heading in the
 # admin. Each is editable + recipient-pickable; the senders fall back to the current
 # built-in email if a template is missing or disabled (founder 2026-07-20).
@@ -38249,18 +38599,10 @@ _SC_EMAIL_TEMPLATES = [
         '<p style="margin:16px 0 0;"><a href="https://goocampus.org/client/login" '
         'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Confirm in your portal</a></p>'
         '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
-    {'key': 'sc_onboarding_confirmed', 'label': 'Onboarding Confirmed (to client)',
-     'subject': 'Your Onboarding is Complete — GooCampus', 'recip': (1, 0, 0, 0),
-     'inner': (
-        '<p style="margin:0 0 12px;">Dear {{client_name}},</p>'
-        '<p style="margin:0 0 12px;">We are delighted to inform you that your onboarding for '
-        '<strong>{{product_name}}</strong> is now complete. Our team will begin working with you '
-        'on the next steps right away.</p>'
-        '<p style="margin:0 0 12px;">You can log in to your client portal at any time to track your '
-        'progress, upload documents, and stay updated.</p>'
-        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/client/login" '
-        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Log in to your portal</a></p>'
-        '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
+    # 'sc_onboarding_confirmed' removed (founder 2026-07-22): the client's
+    # onboarding email is the editable 'welcome_email' template sent at ops-verify,
+    # so a second onboarding email would duplicate it. A one-time cleanup below
+    # deletes any already-seeded row.
     {'key': 'sc_document_request', 'label': 'Document Request (to client)',
      'subject': 'Document Required — {{doc_type}}', 'recip': (1, 0, 0, 0),
      'inner': (
@@ -38291,6 +38633,9 @@ def seed_sc_email_group_once():
     conn = None
     try:
         conn = get_db()
+        # Retire the redundant onboarding-confirmed template (its job is the
+        # editable 'welcome_email' sent at ops-verify). (founder 2026-07-22)
+        conn.execute("DELETE FROM email_templates WHERE template_key = 'sc_onboarding_confirmed'")
         for t in _SC_EMAIL_TEMPLATES:
             exists = conn.execute("SELECT id FROM email_templates WHERE template_key = ?", (t['key'],)).fetchone()
             if exists:
@@ -38316,10 +38661,93 @@ def seed_sc_email_group_once():
             pass
 
 
+_ONBOARDED_TEAM_TEMPLATE = {
+    'key': 'client_onboarded_team',
+    'label': 'Client Onboarded (to team)',
+    'subject': 'New Client Onboarded — {{client_name}} ({{product_name}})',
+    'recip': (0, 0, 0, 0),  # none pre-set -> keeps the historical broad default until edited
+    'inner': (
+        '<div style="background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;padding:12px 16px;'
+        'border-radius:8px;margin:0 0 14px;"><strong>{{client_name}}</strong> has successfully '
+        'registered with GooCampus and completed both sales &amp; operations verification. '
+        'The client is now onboarded.</div>'
+        '<table style="border-collapse:collapse;font-size:0.9rem;">'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Client</td><td style="padding:4px 0;"><strong>{{client_name}}</strong></td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Registration #</td><td style="padding:4px 0;">{{registration_number}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Product</td><td style="padding:4px 0;">{{product_name}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Whose lead</td><td style="padding:4px 0;">{{sales_member}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Mobile</td><td style="padding:4px 0;">{{mobile}}</td></tr>'
+        '<tr><td style="padding:4px 14px 4px 0;color:#64748b;">Email</td><td style="padding:4px 0;">{{email}}</td></tr>'
+        '</table>')
+}
+
+
+def seed_onboarded_team_template_once():
+    """Seed the editable 'Client Onboarded (to team)' template so its wording +
+    recipients are managed in /admin/email-templates instead of being hardcoded and
+    blasted to every department. Inserts only if missing (preserves edits).
+    (founder 2026-07-22)"""
+    conn = None
+    try:
+        conn = get_db()
+        t = _ONBOARDED_TEAM_TEMPLATE
+        exists = conn.execute("SELECT id FROM email_templates WHERE template_key = ?", (t['key'],)).fetchone()
+        if not exists:
+            rc, rco, ro, rp = t['recip']
+            conn.execute(
+                "INSERT INTO email_templates (template_key, label, subject, body_html, enabled, "
+                " recipients_client, recipients_counsellor, recipients_ops, recipients_parents, category) "
+                "VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'Onboarding')",
+                (t['key'], t['label'], t['subject'], _sc_body(t['inner']), rc, rco, ro, rp))
+        else:
+            conn.execute("UPDATE email_templates SET category = 'Onboarding' WHERE template_key = ?", (t['key'],))
+        conn.commit()
+    except Exception as e:
+        logging.warning("seed_onboarded_team_template_once: %s", e)
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
+def _onboarded_team_recipients(conn, tpl, reg, sm_email):
+    """Recipients for the 'client onboarded' team note. If the template has ANY
+    explicit recipient set (a role toggle or a picked staff member) send to exactly
+    that set; otherwise fall back to the historical broad default so it never
+    silently goes dark. (founder 2026-07-22)"""
+    def _on(col):
+        try:
+            return bool(tpl.get(col))
+        except Exception:
+            return False
+    try:
+        picked = _template_staff_emails(conn, tpl)
+    except Exception:
+        picked = []
+    if not picked and not any(_on(c) for c in ('recipients_client', 'recipients_counsellor', 'recipients_ops')):
+        return list(dict.fromkeys(
+            _dept_emails(conn, ['Sales', 'Operations', 'Marketing', 'Digital Marketing'])
+            + _management_emails(conn)))
+    out = list(picked)
+    if _on('recipients_ops'):
+        out += _dept_emails(conn, ['Operations'])
+    if _on('recipients_counsellor') and sm_email:
+        out.append(sm_email)
+    if _on('recipients_client') and reg['email']:
+        out.append(reg['email'])
+    return list(dict.fromkeys([e for e in out if e]))
+
+
 seed_email_templates_once()
 fix_welcome_email_hardcoded_counsellor_once()
 set_welcome_email_format_v2_once()
 seed_sc_email_group_once()
+seed_onboarded_team_template_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from
@@ -39506,6 +39934,9 @@ ACCESS_ROUTE_MAP = {
     'ops_subscriptions_list':       _ap('plab_pathway', 'subscriptions'),
     'ops_webinars_list':            _ap('plab_pathway', 'webinars'),
     'ops_courses_list':             _ap('plab_pathway', 'online_courses'),
+    'ops_courses_add':              _ap('plab_pathway', 'online_courses', 'edit'),
+    'ops_courses_edit':             _ap('plab_pathway', 'online_courses', 'edit'),
+    'ops_courses_delete':           _ap('plab_pathway', 'online_courses', 'edit'),
     'ops_ngo_list':                 _ap('plab_pathway', 'ngo'),
     'ops_mentorship_list':          _ap('plab_pathway', 'mentorship'),
 
