@@ -20713,11 +20713,34 @@ def _compute_onboarding_status(onb, kit_items, pathway=None, reg=None):
     return 'Call Done'
 
 
+def _master_onboarding_status(pathway, onb, kit_items):
+    """Onboarding phase for a client that already exists in the plab_clients master
+    (which means they are verified/onboarded — the master row is only created at
+    ops-verify, or via the Zoho import for legacy clients). Founder rule 2026-07-23:
+      - no-kit (Standard Consulting, Training, UAE, Portfolio) -> Completed.
+      - kit (PLAB, Australia) -> Completed once the kit is delivered, else
+        Kit Dispatched (dispatched) / Call Done (awaiting kit).
+    Deliberately does NOT gate on the welcome call or on a client_registrations
+    row — legacy clients have neither yet are fully onboarded."""
+    onb = onb or {}
+    if not _pathway_has_kit(pathway):
+        return 'Completed'
+    total = len(kit_items or [])
+    delivered = sum(1 for ki in (kit_items or []) if ki.get('delivered'))
+    kit_done = (total > 0 and delivered == total) or bool(onb.get('kit_delivered_date')) \
+        or bool(onb.get('welcome_kit_sent_date'))
+    if kit_done:
+        return 'Completed'
+    if onb.get('kit_delivery_method'):
+        return 'Kit Dispatched'
+    return 'Call Done'
+
+
 def _recompute_onboarding(conn, client_id):
-    """Recompute + persist a client's onboarding_status from authoritative state
-    (pathway kit rule + ops-verified + welcome call + kit delivered). Called on
-    each relevant event (auto-update) and looped over all clients (bulk-complete);
-    both share this one rule. Returns the new status or None. (founder 2026-07-23)"""
+    """Recompute + persist a client's onboarding_status via the master kit rule
+    (_master_onboarding_status). Called on each relevant event (auto-update) and
+    looped over all clients (bulk-complete); both share this one rule. Returns the
+    new status or None. (founder 2026-07-23)"""
     try:
         cli = conn.execute(
             "SELECT id, registration_number, COALESCE(pathway,'plab') AS pathway "
@@ -20725,25 +20748,20 @@ def _recompute_onboarding(conn, client_id):
         if not cli:
             return None
         onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (client_id,)).fetchone()
-        reg = conn.execute(
-            "SELECT ops_status, wc_confirmed FROM client_registrations "
-            "WHERE registration_number = ? ORDER BY id DESC LIMIT 1",
-            (cli['registration_number'],)).fetchone()
         kit_items = []
         if _pathway_has_kit(cli['pathway']):
             try:
                 cwk = conn.execute("SELECT status FROM client_welcome_kit WHERE client_id = ?",
                                    (client_id,)).fetchall()
-                kit_items = [{'included': 1, 'delivered': 1 if (r['status'] or '') == 'done' else 0} for r in cwk]
+                kit_items = [{'delivered': 1 if (r['status'] or '') == 'done' else 0} for r in cwk]
             except Exception:
                 kit_items = []
-        status = _compute_onboarding_status(dict(onb) if onb else None, kit_items,
-                                            pathway=cli['pathway'], reg=dict(reg) if reg else None)
+        status = _master_onboarding_status(cli['pathway'], dict(onb) if onb else None, kit_items)
         if onb:
             conn.execute("UPDATE client_onboarding SET onboarding_status = ?, updated_at = CURRENT_TIMESTAMP "
                          "WHERE id = ?", (status, onb['id']))
-        elif reg and (reg['ops_status'] or '').strip().lower() == 'verified':
-            # Ops-verified but no onboarding row yet — create one so the section reflects reality.
+        else:
+            # No onboarding row yet (e.g. legacy client) — create it reflecting the status.
             conn.execute(
                 "INSERT INTO client_onboarding (client_id, registration_number, onboarding_status, welcome_email_sent) "
                 "VALUES (?, ?, ?, 1) ON CONFLICT (client_id) DO UPDATE SET onboarding_status = EXCLUDED.onboarding_status",
@@ -20760,9 +20778,6 @@ def _recompute_onboarding(conn, client_id):
 
 def _onboarding_preview_status(conn, client_id, pathway, reg_number, onb_row):
     """Read-only: what onboarding_status _recompute_onboarding WOULD set (no write)."""
-    reg = conn.execute("SELECT ops_status, wc_confirmed FROM client_registrations "
-                       "WHERE registration_number = ? ORDER BY id DESC LIMIT 1",
-                       (reg_number,)).fetchone()
     kit_items = []
     if _pathway_has_kit(pathway):
         try:
@@ -20771,8 +20786,7 @@ def _onboarding_preview_status(conn, client_id, pathway, reg_number, onb_row):
             kit_items = [{'delivered': 1 if (x['status'] or '') == 'done' else 0} for x in cwk]
         except Exception:
             kit_items = []
-    return _compute_onboarding_status(dict(onb_row) if onb_row else None, kit_items,
-                                      pathway=pathway, reg=dict(reg) if reg else None)
+    return _master_onboarding_status(pathway, dict(onb_row) if onb_row else None, kit_items)
 
 
 @app.route('/admin/recompute-onboarding', methods=['GET', 'POST'])
@@ -21283,7 +21297,7 @@ def ops_onboarding_update(client_id):
         {'included': 1, 'delivered': 1 if (r['status'] or '') == 'done' else 0}
         for r in cwk
     ]
-    new_status = _compute_onboarding_status(dict(onb), pseudo_items)
+    new_status = _master_onboarding_status((client['pathway'] if client else None), dict(onb), pseudo_items)
     conn.execute("UPDATE client_onboarding SET onboarding_status=? WHERE id=?", (new_status, onb['id']))
     # Item E-3: re-read fresh state and fire any stage emails whose
     # milestone just transitioned. Helper is dormant (template
