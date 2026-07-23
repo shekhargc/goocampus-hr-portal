@@ -130,6 +130,41 @@
     </div>
     {% endif %}
 
+    {# ── Training (AMC 1) installments — shown for combo deals (AMC Consulting + Training) ── #}
+    {% set _has_tinst = closure.get('training_inst1_amount') or closure.get('training_inst2_amount') or closure.get('training_inst3_amount') or closure.get('training_inst4_amount') %}
+    {% if closure.get('include_training') or _has_tinst %}
+    <div style="margin-top:20px;">
+      <div class="lv-h" style="margin-bottom:6px;">Training (AMC 1) Installments</div>
+      {% if _has_tinst %}
+      <div style="overflow-x:auto;">
+      <table class="lv-table">
+        <thead><tr><th>#</th><th style="text-align:right;">Base</th><th style="text-align:right;">GST (18%)</th><th style="text-align:right;">Total</th><th>Status</th><th>Date</th><th>Note</th></tr></thead>
+        <tbody>
+        {% for i in [1,2,3,4] %}
+        {% set amt = closure.get('training_inst' ~ i ~ '_amount') %}
+        {% if amt %}
+        {% set base = amt|float %}{% set total = base * 1.18 %}
+        {% set rec = (closure.get('training_inst' ~ i ~ '_status') or '')|lower == 'received' %}
+        <tr>
+          <td>{{ i }}</td>
+          <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
+          <td style="text-align:right;color:var(--gray-400);">₹{{ '{:,.0f}'.format(total - base) }}</td>
+          <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
+          <td><span class="lv-pill {{ 'lv-rec' if rec else 'lv-due' }}">{{ 'Received' if rec else 'Pending' }}</span></td>
+          <td>{% if closure.get('training_inst' ~ i ~ '_date') %}<span style="color:var(--gray-400);font-size:0.72rem;">{{ 'Received' if rec else 'Due' }}</span> {{ closure.get('training_inst' ~ i ~ '_date') }}{% else %}—{% endif %}</td>
+          <td>{{ closure.get('training_inst' ~ i ~ '_note') or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <span style="font-size:0.82rem;color:var(--gray-500);">Training add-on included — no installments recorded.</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div style="margin-top:14px;">
       <div class="lv-h" style="margin-bottom:6px;">Signed Contract</div>
       {% if closure.get('contract_path') %}
