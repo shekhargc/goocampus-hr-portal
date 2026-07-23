@@ -20789,6 +20789,38 @@ def _onboarding_preview_status(conn, client_id, pathway, reg_number, onb_row):
     return _master_onboarding_status(pathway, dict(onb_row) if onb_row else None, kit_items)
 
 
+def _backfill_kit_dispatch(conn, client_id):
+    """One-time: for a KIT-pathway client (PLAB/Australia) with no kit recorded, set
+    the kit dispatch date to registration_date + 15 days and mark it dispatched, so
+    onboarding completes. Skips clients whose kit is already recorded. Returns True
+    if it set a date. (founder 2026-07-23)"""
+    cli = conn.execute("SELECT registration_number, registration_date, "
+                       "COALESCE(pathway,'plab') AS pathway FROM plab_clients WHERE id = ?",
+                       (client_id,)).fetchone()
+    if not cli or not _pathway_has_kit(cli['pathway']):
+        return False
+    onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (client_id,)).fetchone()
+    od = dict(onb) if onb else {}
+    if od.get('kit_delivered_date') or od.get('welcome_kit_sent_date'):
+        return False  # kit already recorded — leave it
+    rd = str(cli['registration_date'] or '')[:10]
+    base = None
+    for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%d/%m/%Y', '%d-%m-%Y'):
+        try:
+            base = datetime.strptime(rd, fmt); break
+        except Exception:
+            continue
+    if not base:
+        return False
+    disp = (base + timedelta(days=15)).strftime('%Y-%m-%d')
+    _ensure_client_onboarding(conn, client_id, cli['registration_number'])
+    conn.execute(
+        "UPDATE client_onboarding SET kit_delivered_date = ?, "
+        "kit_delivery_method = COALESCE(NULLIF(kit_delivery_method,''), 'Dispatched'), "
+        "updated_at = CURRENT_TIMESTAMP WHERE client_id = ?", (disp, client_id))
+    return True
+
+
 @app.route('/admin/recompute-onboarding', methods=['GET', 'POST'])
 @login_required
 def admin_recompute_onboarding():
@@ -20803,14 +20835,20 @@ def admin_recompute_onboarding():
     conn = get_db()
     applied = None
     if request.method == 'POST':
-        n = done = 0
+        action = request.form.get('action', 'recompute')
+        n = done = kitted = 0
         for c in conn.execute("SELECT id FROM plab_clients").fetchall():
+            if action == 'dispatch_kits':
+                # Backfill the kit dispatch date (reg + 15 days) for pending kit clients,
+                # THEN recompute so they complete. (founder 2026-07-23)
+                if _backfill_kit_dispatch(conn, c['id']):
+                    kitted += 1
             st = _recompute_onboarding(conn, c['id'])
             n += 1
             if st == 'Completed':
                 done += 1
         conn.commit()
-        applied = (n, done)
+        applied = (n, done, kitted, action)
     rows = conn.execute(
         "SELECT p.id, COALESCE(p.pathway,'plab') AS pathway, p.registration_number, "
         "       o.onboarding_status AS cur_status "
@@ -20844,8 +20882,9 @@ def admin_recompute_onboarding():
                 f'{t.get("new_Pending",0)}P / {t.get("new_Email Sent",0)}E / {t.get("new_Call Done",0)}C / {t.get("new_Kit Dispatched",0)}K</td></tr>')
     banner = ''
     if applied:
+        _extra = f' Dispatched {applied[2]} pending kit(s) at registration date + 15 days.' if len(applied) > 2 and applied[3] == 'dispatch_kits' else ''
         banner = (f'<div style="background:#DCFCE7;color:#166534;padding:10px 14px;border-radius:8px;margin-bottom:14px;">'
-                  f'Recomputed {applied[0]} clients — {applied[1]} now Completed.</div>')
+                  f'Recomputed {applied[0]} clients — {applied[1]} now Completed.{_extra}</div>')
     html = f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Recompute Onboarding</title></head>
 <body style="font-family:system-ui,-apple-system,sans-serif;max-width:840px;margin:24px auto;padding:0 16px;color:#0f172a;">
@@ -20860,9 +20899,17 @@ is for existing clients. Nothing changes until you click Apply.</p>
 <th style="padding:8px 10px;">Pathway</th><th style="padding:8px 10px;text-align:right;">Clients</th>
 <th style="padding:8px 10px;text-align:right;">Will be Completed</th><th style="padding:8px 10px;text-align:right;">Newly completing</th>
 <th style="padding:8px 10px;text-align:right;">Other (P/E/C/K)</th></tr></thead><tbody>{trs}</tbody></table>
-<form method="post" style="margin-top:18px;">
-  <button type="submit" style="background:#166534;color:#fff;border:0;border-radius:8px;padding:10px 20px;cursor:pointer;font-size:0.95rem;">Apply — recompute all onboarding</button>
-</form>
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;">
+  <form method="post" style="margin:0;">
+    <input type="hidden" name="action" value="recompute">
+    <button type="submit" style="background:#166534;color:#fff;border:0;border-radius:8px;padding:10px 20px;cursor:pointer;font-size:0.95rem;">Apply — recompute all onboarding</button>
+  </form>
+  <form method="post" style="margin:0;">
+    <input type="hidden" name="action" value="dispatch_kits">
+    <button type="submit" style="background:#B45309;color:#fff;border:0;border-radius:8px;padding:10px 20px;cursor:pointer;font-size:0.95rem;">Dispatch pending kits (reg date + 15 days) &amp; complete</button>
+  </form>
+</div>
+<p style="margin-top:10px;font-size:0.8rem;color:#64748b;">The second button is for PLAB/Australia: it stamps a kit dispatch date of <b>registration date + 15 days</b> on any client whose kit isn't recorded yet, marks it Dispatched, and completes them. Clients whose kit is already recorded are left untouched.</p>
 <p style="margin-top:14px;font-size:0.8rem;color:#64748b;">P=Pending · E=Email Sent · C=Call Done · K=Kit Dispatched. "Newly completing" = currently not Completed but will be.</p>
 <p style="margin-top:10px;"><a href="/operations/onboarding" style="color:#166534;">&larr; Operations Onboarding</a></p>
 </body></html>'''
