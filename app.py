@@ -3698,15 +3698,23 @@ def admin_recompute_closure():
         cid = request.form.get('closure_id', type=int)
         row = conn.execute(
             "SELECT sc.id, sc.product_id AS c_pid, sc.revenue, sc.cost, sc.margin, "
-            "       sl.product_id AS l_pid, sl.plan_type "
-            "  FROM sales_closures sc LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
+            "       cr.product_id AS reg_pid, cr.plan_type AS reg_plan_type, "
+            "       cr.discount_allowed AS reg_discount "
+            "  FROM sales_closures sc "
+            "  LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
+            "  LEFT JOIN LATERAL ("
+            "      SELECT product_id, plan_type, discount_allowed FROM client_registrations "
+            "       WHERE regexp_replace(COALESCE(mobile,''),'[^0-9]','','g') <> '' "
+            "         AND RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) "
+            "           = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
+            "       ORDER BY id DESC LIMIT 1) cr ON TRUE "
             " WHERE sc.id = ?", (cid,)).fetchone()
         if not row:
             msg = ('error', f'Closure #{cid} not found.')
         else:
-            pid = row['c_pid'] or row['l_pid']
-            pt = (row['plan_type'] or '').strip()
-            _disc = request.form.get('discount', 0)
+            pid = row['c_pid'] or row['reg_pid']
+            pt = (row['reg_plan_type'] or '').strip()
+            _disc = request.form.get('discount', row['reg_discount'] or 0)
             new_rev, new_cost = _closure_revenue_cost(conn, pid, pt, discount=_disc,
                                                       fallback_revenue=row['revenue'])
             new_margin = new_rev - new_cost
@@ -3725,15 +3733,18 @@ def admin_recompute_closure():
         try:
             rows = conn.execute(
                 "SELECT sc.id, sc.client_name, sc.product_name, sc.revenue, sc.cost, sc.margin, "
-                "       sc.product_id AS c_pid, sl.product_id AS l_pid, sl.plan_type, e.name AS emp, "
-                "       (SELECT cr.discount_allowed FROM client_registrations cr "
-                "         WHERE RIGHT(regexp_replace(COALESCE(cr.mobile,''),'[^0-9]','','g'),10) "
-                "             = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
-                "           AND cr.discount_allowed IS NOT NULL "
-                "         ORDER BY cr.id DESC LIMIT 1) AS reg_discount "
+                "       sc.product_id AS c_pid, e.name AS emp, "
+                "       cr.product_id AS reg_pid, cr.plan_type AS reg_plan_type, "
+                "       cr.discount_allowed AS reg_discount "
                 "  FROM sales_closures sc "
                 "  LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
                 "  LEFT JOIN employees e ON e.id = sc.employee_id "
+                "  LEFT JOIN LATERAL ("
+                "      SELECT product_id, plan_type, discount_allowed FROM client_registrations "
+                "       WHERE regexp_replace(COALESCE(mobile,''),'[^0-9]','','g') <> '' "
+                "         AND RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) "
+                "           = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
+                "       ORDER BY id DESC LIMIT 1) cr ON TRUE "
                 " WHERE sc.client_name ILIKE ? OR sc.product_name ILIKE ? OR e.name ILIKE ? "
                 "    OR CAST(sc.id AS TEXT) = ? "
                 " ORDER BY sc.id DESC LIMIT 50", (like, like, like, q)).fetchall()
@@ -3745,8 +3756,8 @@ def admin_recompute_closure():
                 msg = ('error', f'Search failed: {_se}')
     preview = []
     for r in rows:
-        pid = r['c_pid'] or r['l_pid']
-        pt = (r['plan_type'] or '').strip()
+        pid = r['c_pid'] or r['reg_pid']
+        pt = (r['reg_plan_type'] or '').strip()
         disc = float(r['reg_discount'] or 0)
         nr, nc = _closure_revenue_cost(conn, pid, pt, discount=disc, fallback_revenue=r['revenue'])
         preview.append({
