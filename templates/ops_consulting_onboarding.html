@@ -62,7 +62,7 @@
     <input type="text" id="searchInput" placeholder="Search by name, reg number..." value="{{ search }}" onkeyup="debounceSearch(this.value)">
     <select id="statusFilter" onchange="applyFilters()">
         <option value="">All Statuses</option>
-        {% for st in ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] %}
+        {% for st in ['Pending','Email Sent','Call Done','Completed'] %}
         <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
         {% endfor %}
     </select>
@@ -70,7 +70,7 @@
 </div>
 
 <div id="kanbanView" class="kanban-container">
-    {% set statuses = ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] %}
+    {% set statuses = ['Pending','Email Sent','Call Done','Completed'] %}
     {% for st in statuses %}
     <div class="kanban-col">
         <div class="kanban-col-header">
