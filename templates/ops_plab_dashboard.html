@@ -590,7 +590,7 @@
       {% if client.registration_date %}
       <div>
         <p style="margin:0 0 4px 0;font-weight:600;color:var(--gray-700);">Registration Date</p>
-        <p style="margin:0;">{{ client.registration_date }}</p>
+        <p style="margin:0;">{{ client.registration_date|format_date }}</p>
       </div>
       {% endif %}
       {% if client.created_at %}

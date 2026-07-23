@@ -78,7 +78,7 @@
         </p>
         {% if client.registration_date %}
         <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
-          Registered: {{ client.registration_date }}
+          Registered: {{ client.registration_date|format_date }}
         </p>
         {% else %}
         <div style="margin-bottom:12px;"></div>

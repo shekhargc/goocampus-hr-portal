@@ -5714,8 +5714,9 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         ?, ?, ?, ?
     )''', (
         # registration_date = the sales close date if present, else the form-submission
-        # timestamp (founder 2026-07-22: "the close date IS the registration date").
-        reg_num, (reg.get('sales_close_date') or reg.get('created_at', '')), reg.get('prefix', 'Dr.'),
+        # DATE (founder 2026-07-22: "the close date IS the registration date"). Store
+        # date-only (strip any time) — the registration date is never a timestamp.
+        reg_num, (reg.get('sales_close_date') or str(reg.get('created_at') or '')[:10]), reg.get('prefix', 'Dr.'),
         reg.get('first_name', ''), reg.get('last_name', ''),
         reg.get('mobile', ''), reg.get('whatsapp', ''), reg.get('whatsapp2', ''),
         reg.get('email', ''), reg.get('dob', ''), reg.get('city', ''), reg.get('state', ''),
@@ -30291,7 +30292,10 @@ def sales_leads_add():
                             'wc_completed_by':          _f('wc_completed_by'),
                             'wc_completed_notes':       _f('wc_completed_notes'),
                             # The sales close date becomes the client's registration date.
-                            'close_date':               _f('close_date'),
+                            # The lead form's date field is named expected_close_date
+                            # (labelled "Registration Date") — read THAT, not a
+                            # non-existent 'close_date' field. (founder 2026-07-23)
+                            'close_date':               (_f('expected_close_date') or _f('close_date')),
                         }
                         # Counsellor = the sales member who GENERATED the lead
                         # (founder rule 2026-07-15). Use the lead's creator as
