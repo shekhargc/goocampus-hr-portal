@@ -5241,6 +5241,9 @@ def _notify_onboarding_confirmed(reg_id):
                     "welcome_email_sent_at = COALESCE(welcome_email_sent_at, CURRENT_TIMESTAMP), "
                     "onboarded_at = COALESCE(onboarded_at, CURRENT_TIMESTAMP), "
                     "updated_at = CURRENT_TIMESTAMP WHERE client_id = ?", (pcob['id'],))
+                # Auto-advance onboarding phase from the now-verified state (no-kit
+                # pathways complete once the welcome call is done). (founder 2026-07-23)
+                _recompute_onboarding(conn, pcob['id'])
         except Exception as _obe:
             logging.warning(f"onboarding timestamps {reg_id}: {_obe}")
 
@@ -5483,6 +5486,8 @@ def _notify_welcome_call_confirmed(reg_id):
                               "welcome_call_date = ?, welcome_call_time = ?, welcome_call_by = ?, "
                               "updated_at = CURRENT_TIMESTAMP WHERE client_id = ?",
                               (date_s, time_s, wc_by, pc['id']))
+                # Welcome call done -> auto-advance onboarding (no-kit pathways complete).
+                _recompute_onboarding(conn3, pc['id'])
                 conn3.commit()
             conn3.close()
         except Exception as _oe:
@@ -20636,25 +20641,186 @@ def ops_vendor_delete(vid):
 #   ONBOARDING SECTION
 # ═══════════════════════════════════════════════════════
 
-def _compute_onboarding_status(onb, kit_items):
-    """Compute onboarding status from current data."""
-    if not onb:
+def _pathway_has_kit(pathway):
+    """Only PLAB and Australia dispatch a physical welcome kit. Standard
+    Consulting, Training, UAE and Portfolio have NO kit — their onboarding
+    completes once the welcome call is done, with no kit step. (founder 2026-07-23)"""
+    return (pathway or 'plab').strip().lower() in ('plab', 'australia')
+
+
+def _compute_onboarding_status(onb, kit_items, pathway=None, reg=None):
+    """Onboarding phase from AUTHORITATIVE state so it auto-tracks the registration
+    flow. Email done = welcome email sent OR ops-verified; Call done = the
+    registration's confirmed welcome call (wc_confirmed) OR the onboarding record's
+    flag. No-kit pathways (per _pathway_has_kit) complete once email + call are
+    done; kit pathways also need the kit delivered. When `pathway` is omitted the
+    kit requirement is inferred from kit_items (backward compatible). (founder 2026-07-23)"""
+    reg = reg or {}
+    onb = onb or {}
+    ops_verified = ((reg.get('ops_status') or '').strip().lower() == 'verified')
+    if not onb and not ops_verified:
         return 'Pending'
-    if not onb.get('welcome_email_sent'):
+    email_done = bool(onb.get('welcome_email_sent')) or ops_verified
+    call_done = bool(reg.get('wc_confirmed')) or bool(onb.get('welcome_call_confirmed'))
+    if not email_done:
         return 'Pending'
-    if not onb.get('welcome_call_confirmed'):
+    if not call_done:
         return 'Email Sent'
-    total_items = len(kit_items)
-    # No welcome kit (e.g. Standard Consulting): once the welcome call is done,
-    # onboarding is complete — there is no kit step to wait on.
-    if total_items == 0:
+    has_kit = _pathway_has_kit(pathway) if pathway is not None else (len(kit_items or []) > 0)
+    if not has_kit:
         return 'Completed'
-    delivered_count = sum(1 for ki in kit_items if ki.get('delivered'))
-    if delivered_count == total_items:
+    # Kit pathway: delivered if all kit items done, or a kit-delivered/sent date is set.
+    total = len(kit_items or [])
+    delivered = sum(1 for ki in (kit_items or []) if ki.get('delivered'))
+    kit_done = (total > 0 and delivered == total) or bool(onb.get('kit_delivered_date')) \
+        or bool(onb.get('welcome_kit_sent_date'))
+    if kit_done:
         return 'Completed'
     if onb.get('kit_delivery_method'):
         return 'Kit Dispatched'
     return 'Call Done'
+
+
+def _recompute_onboarding(conn, client_id):
+    """Recompute + persist a client's onboarding_status from authoritative state
+    (pathway kit rule + ops-verified + welcome call + kit delivered). Called on
+    each relevant event (auto-update) and looped over all clients (bulk-complete);
+    both share this one rule. Returns the new status or None. (founder 2026-07-23)"""
+    try:
+        cli = conn.execute(
+            "SELECT id, registration_number, COALESCE(pathway,'plab') AS pathway "
+            "FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+        if not cli:
+            return None
+        onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (client_id,)).fetchone()
+        reg = conn.execute(
+            "SELECT ops_status, wc_confirmed FROM client_registrations "
+            "WHERE registration_number = ? ORDER BY id DESC LIMIT 1",
+            (cli['registration_number'],)).fetchone()
+        kit_items = []
+        if _pathway_has_kit(cli['pathway']):
+            try:
+                cwk = conn.execute("SELECT status FROM client_welcome_kit WHERE client_id = ?",
+                                   (client_id,)).fetchall()
+                kit_items = [{'included': 1, 'delivered': 1 if (r['status'] or '') == 'done' else 0} for r in cwk]
+            except Exception:
+                kit_items = []
+        status = _compute_onboarding_status(dict(onb) if onb else None, kit_items,
+                                            pathway=cli['pathway'], reg=dict(reg) if reg else None)
+        if onb:
+            conn.execute("UPDATE client_onboarding SET onboarding_status = ?, updated_at = CURRENT_TIMESTAMP "
+                         "WHERE id = ?", (status, onb['id']))
+        elif reg and (reg['ops_status'] or '').strip().lower() == 'verified':
+            # Ops-verified but no onboarding row yet — create one so the section reflects reality.
+            conn.execute(
+                "INSERT INTO client_onboarding (client_id, registration_number, onboarding_status, welcome_email_sent) "
+                "VALUES (?, ?, ?, 1) ON CONFLICT (client_id) DO UPDATE SET onboarding_status = EXCLUDED.onboarding_status",
+                (client_id, cli['registration_number'], status))
+        return status
+    except Exception as e:
+        logging.warning("_recompute_onboarding(%s): %s", client_id, e)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _onboarding_preview_status(conn, client_id, pathway, reg_number, onb_row):
+    """Read-only: what onboarding_status _recompute_onboarding WOULD set (no write)."""
+    reg = conn.execute("SELECT ops_status, wc_confirmed FROM client_registrations "
+                       "WHERE registration_number = ? ORDER BY id DESC LIMIT 1",
+                       (reg_number,)).fetchone()
+    kit_items = []
+    if _pathway_has_kit(pathway):
+        try:
+            cwk = conn.execute("SELECT status FROM client_welcome_kit WHERE client_id = ?",
+                               (client_id,)).fetchall()
+            kit_items = [{'delivered': 1 if (x['status'] or '') == 'done' else 0} for x in cwk]
+        except Exception:
+            kit_items = []
+    return _compute_onboarding_status(dict(onb_row) if onb_row else None, kit_items,
+                                      pathway=pathway, reg=dict(reg) if reg else None)
+
+
+@app.route('/admin/recompute-onboarding', methods=['GET', 'POST'])
+@login_required
+def admin_recompute_onboarding():
+    """Admin: recompute every client's onboarding_status from the pathway rule —
+    no-kit (Standard Consulting / Training / UAE / Portfolio) complete once
+    ops-verified + welcome call; kit (PLAB / Australia) also need the kit delivered.
+    Preview per-pathway counts, then Apply. Doubles as the one-time
+    complete-existing-clients action. (founder 2026-07-23)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    applied = None
+    if request.method == 'POST':
+        n = done = 0
+        for c in conn.execute("SELECT id FROM plab_clients").fetchall():
+            st = _recompute_onboarding(conn, c['id'])
+            n += 1
+            if st == 'Completed':
+                done += 1
+        conn.commit()
+        applied = (n, done)
+    rows = conn.execute(
+        "SELECT p.id, COALESCE(p.pathway,'plab') AS pathway, p.registration_number, "
+        "       o.onboarding_status AS cur_status "
+        "  FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id "
+        " ORDER BY p.id").fetchall()
+    from collections import defaultdict
+    tally = defaultdict(lambda: defaultdict(int))
+    for r in rows:
+        onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (r['id'],)).fetchone()
+        newst = _onboarding_preview_status(conn, r['id'], r['pathway'], r['registration_number'], onb)
+        t = tally[r['pathway']]
+        t['total'] += 1
+        t['new_' + newst] += 1
+        if newst == 'Completed' and (r['cur_status'] or '') != 'Completed':
+            t['will_complete'] += 1
+    conn.close()
+    order = ['consulting', 'training', 'uae', 'portfolio', 'plab', 'australia']
+    label = {'consulting': 'Standard Consulting', 'training': 'Training', 'uae': 'UAE',
+             'portfolio': 'Portfolio', 'plab': 'PLAB (kit)', 'australia': 'Australia (kit)'}
+    trs = ''
+    for pw in order + [k for k in tally if k not in order]:
+        if pw not in tally:
+            continue
+        t = tally[pw]
+        kit = ' <span style="color:#92400E;background:#FEF3C7;padding:1px 7px;border-radius:999px;font-size:0.7rem;">needs kit</span>' if _pathway_has_kit(pw) else ''
+        trs += (f'<tr><td style="padding:7px 10px;">{label.get(pw, pw)}{kit}</td>'
+                f'<td style="padding:7px 10px;text-align:right;">{t["total"]}</td>'
+                f'<td style="padding:7px 10px;text-align:right;font-weight:700;color:#166534;">{t.get("new_Completed",0)}</td>'
+                f'<td style="padding:7px 10px;text-align:right;color:#b45309;">{t.get("will_complete",0)}</td>'
+                f'<td style="padding:7px 10px;text-align:right;color:#64748b;">'
+                f'{t.get("new_Pending",0)}P / {t.get("new_Email Sent",0)}E / {t.get("new_Call Done",0)}C / {t.get("new_Kit Dispatched",0)}K</td></tr>')
+    banner = ''
+    if applied:
+        banner = (f'<div style="background:#DCFCE7;color:#166534;padding:10px 14px;border-radius:8px;margin-bottom:14px;">'
+                  f'Recomputed {applied[0]} clients — {applied[1]} now Completed.</div>')
+    html = f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recompute Onboarding</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:840px;margin:24px auto;padding:0 16px;color:#0f172a;">
+<h1 style="font-size:1.3rem;color:#1e3a5f;">Recompute / Complete Onboarding</h1>
+<p style="color:#475569;font-size:0.9rem;">Sets each client's onboarding phase from the rule:
+<strong>no-kit</strong> (Standard Consulting, Training, UAE, Portfolio) complete once <strong>ops-verified + welcome call</strong>;
+<strong>kit</strong> (PLAB, Australia) also need the <strong>kit delivered</strong>. New registrations update automatically from now on — this
+is for existing clients. Nothing changes until you click Apply.</p>
+{banner}
+<table style="width:100%;border-collapse:collapse;font-size:0.86rem;border:1px solid #e2e8f0;">
+<thead><tr style="background:#f1f5f9;text-align:left;">
+<th style="padding:8px 10px;">Pathway</th><th style="padding:8px 10px;text-align:right;">Clients</th>
+<th style="padding:8px 10px;text-align:right;">Will be Completed</th><th style="padding:8px 10px;text-align:right;">Newly completing</th>
+<th style="padding:8px 10px;text-align:right;">Other (P/E/C/K)</th></tr></thead><tbody>{trs}</tbody></table>
+<form method="post" style="margin-top:18px;">
+  <button type="submit" style="background:#166534;color:#fff;border:0;border-radius:8px;padding:10px 20px;cursor:pointer;font-size:0.95rem;">Apply — recompute all onboarding</button>
+</form>
+<p style="margin-top:14px;font-size:0.8rem;color:#64748b;">P=Pending · E=Email Sent · C=Call Done · K=Kit Dispatched. "Newly completing" = currently not Completed but will be.</p>
+<p style="margin-top:10px;"><a href="/operations/onboarding" style="color:#166534;">&larr; Operations Onboarding</a></p>
+</body></html>'''
+    return html
 
 
 def _build_client_timeline(onb, holidays_set=None, reg=None):
