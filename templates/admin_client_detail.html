@@ -585,8 +585,8 @@
 
         <!-- Package Deliverables (what this client is owed) -->
         {% if package_services %}
-        <div class="card" style="margin-top: 1.25rem;">
-            <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 0 0 0.25rem;">Package Deliverables</h3>
+        <details class="card" style="margin-top: 1.25rem;">
+            <summary style="cursor:pointer;font-size: 1rem; font-weight: 600; color: var(--navy); margin: 0 0 0.25rem;">Package Deliverables ({{ package_services|length }}) <span style="font-size:0.8rem;font-weight:500;color:var(--gray-400);">— click to expand</span></summary>
             <p style="margin: 0 0 1rem; font-size: 0.8rem; color: var(--gray-400);">Services included in {{ reg.plan_type or 'this plan' }} — part of the contract.</p>
             <div style="display: flex; flex-direction: column; gap: 0.6rem;">
                 {% for sv in package_services %}
@@ -602,9 +602,9 @@
                 </div>
                 {% endfor %}
             </div>
-        </div>
+        </details>
         {% endif %}
-    
+
         {# Step through the client in order — ops must review the details and the
            documents before confirming, without hunting for the right tab. #}
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:0.9rem;margin:1.25rem 0 0.25rem;">

@@ -22653,6 +22653,7 @@ def ops_plab_dashboard(client_id):
         'academic_details':    _plab_section('ops_academic_details', 'id DESC'),
         'research_publication': _plab_section('ops_research_publication', 'id DESC'),
         'online_subscriptions': _plab_section('ops_online_subscriptions', 'id DESC'),
+        'online_courses':      _plab_section('ops_online_courses', 'id DESC'),
         'webinars_conferences': _plab_section('ops_webinars_conferences', 'id DESC'),
         'ngo_activities':      _plab_section('ops_ngo_activities', 'id DESC'),
         'mentorship':          _plab_section('ops_mentorship', 'id DESC'),
@@ -28456,7 +28457,9 @@ def ops_courses_add():
         flash('Course record added', 'success')
         return redirect(request.args.get('next') or url_for('ops_courses_list'))
     conn.close()
-    pre_reg = request.args.get('client', '')
+    # Accept the profile drawer's ?reg= (falls back to ?client=) so the client is
+    # pre-filled when adding from the PLAB profile. (founder 2026-07-23)
+    pre_reg = request.args.get('reg') or request.args.get('client', '')
     course_vendors = get_vendors_by_category('Online Courses', 'UK Pathway')
     course_provider_names = [v['name'] for v in course_vendors] if course_vendors else get_lookup_options('course_provider')
     cert_vendors = get_vendors_by_category('Certification Bodies', 'UK Pathway')
@@ -39900,6 +39903,9 @@ ACCESS_ROUTE_MAP = {
     'ops_subscriptions_list':       _ap('plab_pathway', 'subscriptions'),
     'ops_webinars_list':            _ap('plab_pathway', 'webinars'),
     'ops_courses_list':             _ap('plab_pathway', 'online_courses'),
+    'ops_courses_add':              _ap('plab_pathway', 'online_courses', 'edit'),
+    'ops_courses_edit':             _ap('plab_pathway', 'online_courses', 'edit'),
+    'ops_courses_delete':           _ap('plab_pathway', 'online_courses', 'edit'),
     'ops_ngo_list':                 _ap('plab_pathway', 'ngo'),
     'ops_mentorship_list':          _ap('plab_pathway', 'mentorship'),
 
