@@ -30509,8 +30509,15 @@ def sales_leads_edit(lead_id):
         product_id = int(product_id) if product_id and product_id.isdigit() else None
         stream_id = request.form.get('stream_id')
         stream_id = int(stream_id) if stream_id and stream_id.isdigit() else None
-        stage_id = request.form.get('stage_id')
-        stage_id = int(stage_id) if stage_id and stage_id.isdigit() else None
+        # This form records a FINALISED (closed) client and has no stage field, so
+        # request.form.get('stage_id') is None — which was wiping the lead's stage
+        # to NULL on every re-edit ("Closed Won" disappeared). Keep it Closed Won on
+        # edit, mirroring the add path; prefer the active Won stage, else fall back
+        # to any Won stage, else preserve the lead's existing stage. (founder 2026-07-23)
+        _won_row = conn.execute(
+            "SELECT id FROM sales_lead_stages WHERE is_won = 1 "
+            "ORDER BY is_active DESC, id LIMIT 1").fetchone()
+        stage_id = (_won_row['id'] if _won_row else lead['stage_id'])
         try:
             ev = float(request.form.get('expected_value') or 0)
         except ValueError:
