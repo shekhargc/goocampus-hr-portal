@@ -3722,20 +3722,27 @@ def admin_recompute_closure():
     rows = []
     if q:
         like = f"%{q}%"
-        rows = conn.execute(
-            "SELECT sc.id, sc.client_name, sc.product_name, sc.revenue, sc.cost, sc.margin, "
-            "       sc.product_id AS c_pid, sl.product_id AS l_pid, sl.plan_type, e.name AS emp, "
-            "       (SELECT cr.discount_allowed FROM client_registrations cr "
-            "         WHERE RIGHT(regexp_replace(COALESCE(cr.phone,''),'[^0-9]','','g'),10) "
-            "             = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
-            "           AND cr.discount_allowed IS NOT NULL "
-            "         ORDER BY cr.id DESC LIMIT 1) AS reg_discount "
-            "  FROM sales_closures sc "
-            "  LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
-            "  LEFT JOIN employees e ON e.id = sc.employee_id "
-            " WHERE sc.client_name ILIKE ? OR sc.product_name ILIKE ? OR e.name ILIKE ? "
-            "    OR CAST(sc.id AS TEXT) = ? "
-            " ORDER BY sc.id DESC LIMIT 50", (like, like, like, q)).fetchall()
+        try:
+            rows = conn.execute(
+                "SELECT sc.id, sc.client_name, sc.product_name, sc.revenue, sc.cost, sc.margin, "
+                "       sc.product_id AS c_pid, sl.product_id AS l_pid, sl.plan_type, e.name AS emp, "
+                "       (SELECT cr.discount_allowed FROM client_registrations cr "
+                "         WHERE RIGHT(regexp_replace(COALESCE(cr.mobile,''),'[^0-9]','','g'),10) "
+                "             = RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
+                "           AND cr.discount_allowed IS NOT NULL "
+                "         ORDER BY cr.id DESC LIMIT 1) AS reg_discount "
+                "  FROM sales_closures sc "
+                "  LEFT JOIN sales_leads sl ON sl.id = sc.lead_id "
+                "  LEFT JOIN employees e ON e.id = sc.employee_id "
+                " WHERE sc.client_name ILIKE ? OR sc.product_name ILIKE ? OR e.name ILIKE ? "
+                "    OR CAST(sc.id AS TEXT) = ? "
+                " ORDER BY sc.id DESC LIMIT 50", (like, like, like, q)).fetchall()
+        except Exception as _se:
+            try: conn.rollback()
+            except Exception: pass
+            rows = []
+            if not msg:
+                msg = ('error', f'Search failed: {_se}')
     preview = []
     for r in rows:
         pid = r['c_pid'] or r['l_pid']
