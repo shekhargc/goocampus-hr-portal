@@ -72,7 +72,8 @@
 </div>
 
 <!-- Progress Steps -->
-{% set steps = ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] %}
+{# Standard Consulting has no welcome kit — no Kit Dispatched step. #}
+{% set steps = ['Pending','Email Sent','Call Done','Completed'] %}
 {% set current_idx = steps.index(status) if status in steps else 0 %}
 {% set is_completed = (status == 'Completed') %}
 <div class="steps-track">

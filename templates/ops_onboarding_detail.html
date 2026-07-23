@@ -76,7 +76,10 @@
 </div>
 
 <!-- Progress Steps -->
-{% set steps = ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] %}
+{# Kit step only for kit pathways (PLAB, Australia). No-kit pathways (Standard
+   Consulting, Training, UAE, Portfolio) complete once the welcome call is done. #}
+{% set _has_kit = (client.pathway or 'plab')|lower in ['plab','australia'] %}
+{% set steps = ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] if _has_kit else ['Pending','Email Sent','Call Done','Completed'] %}
 {% set current_idx = steps.index(status) if status in steps else 0 %}
 {% set is_completed = (status == 'Completed') %}
 <div class="steps-track">
