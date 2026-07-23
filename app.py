@@ -1942,6 +1942,19 @@ def _closure_revenue_cost(conn, product_id, plan_type, discount=0.0, fallback_re
     return (max(0.0, pkg - disc), cost)
 
 
+@app.route('/healthz')
+def healthz():
+    """Unauthenticated deploy-verification endpoint: reports the running git commit
+    (Render injects RENDER_GIT_COMMIT) so a deploy can be confirmed actually live —
+    not the old instance still serving during a build. (2026-07-23)"""
+    import os as _os
+    return jsonify({
+        'status': 'ok',
+        'commit': (_os.environ.get('RENDER_GIT_COMMIT') or '')[:12],
+        'branch': _os.environ.get('RENDER_GIT_BRANCH') or '',
+    })
+
+
 @app.route('/sales/api/plan-package')
 @login_required
 def sales_plan_package_info():
