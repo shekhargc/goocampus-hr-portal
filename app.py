@@ -3544,48 +3544,79 @@ def admin_set_registration_date():
     user = get_user()
     if not (user and user['is_admin']):
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
-    reg_number = (request.values.get('reg') or '').strip()
+    q = (request.values.get('q') or request.values.get('reg') or '').strip()
     conn = get_db()
+    msg = None
     try:
-        pc = None
-        if reg_number:
-            pc = conn.execute("SELECT id, prefix, first_name, last_name, registration_date "
-                              "FROM plab_clients WHERE registration_number = ?", (reg_number,)).fetchone()
         if request.method == 'POST':
-            new_date = (request.form.get('new_date') or '').strip()
-            if not pc:
-                return f"<pre>No client found for '{reg_number}'.</pre>", 404
-            if not new_date:
-                return "<pre>Please choose the close/registration date.</pre>", 400
-            conn.execute("UPDATE plab_clients SET registration_date = ?, updated_at = CURRENT_TIMESTAMP "
-                         "WHERE registration_number = ?", (new_date, reg_number))
-            conn.execute("UPDATE client_registrations SET sales_close_date = ? WHERE registration_number = ?",
-                         (new_date, reg_number))
-            conn.commit()
-            return ("<div style='font-family:system-ui;max-width:620px;margin:40px auto'>"
-                    f"<h2>Done ✅</h2><p>Registration date for <b>{(pc['first_name'] or '')} "
-                    f"{(pc['last_name'] or '')}</b> ({reg_number}) set to <b>{new_date}</b> "
-                    "on the profile.</p><a href='/admin/set-registration-date?reg="
-                    f"{reg_number}'>Re-check</a></div>")
-        # GET preview + form
-        if not pc:
-            return ("<div style='font-family:system-ui;max-width:620px;margin:40px auto'>"
-                    "<h2>Set a client's registration date</h2>"
-                    "<form method='GET'>Registration number: "
-                    "<input name='reg' style='padding:6px;width:230px'> <button>Look up</button></form>"
-                    + (f"<p style='color:#b91c1c'>No client found for '{reg_number}'.</p>" if reg_number else "")
-                    + "</div>")
-        cur = pc['registration_date'] or ''
-        cur = cur.strftime('%Y-%m-%d') if hasattr(cur, 'strftime') else str(cur)[:10]
-        return ("<div style='font-family:system-ui;max-width:620px;margin:40px auto'>"
-                f"<h2>{(pc['prefix'] or '')} {(pc['first_name'] or '')} {(pc['last_name'] or '')} — {reg_number}</h2>"
-                f"<p>Current registration date on the profile: <b>{cur or '(none)'}</b></p>"
-                "<form method='POST'>"
-                f"<input type='hidden' name='reg' value='{reg_number}'>"
-                "<p>Set registration date (the sales close date): "
-                f"<input type='date' name='new_date' value='{cur}' required></p>"
-                "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:6px;"
-                "font-weight:700;cursor:pointer'>Update registration date</button></form></div>")
+            reg_number = (request.form.get('reg') or '').strip()
+            new_date = (request.form.get('new_date') or '').strip()[:10]
+            if not reg_number or not new_date:
+                msg = ('error', 'Client and date are both required.')
+            else:
+                conn.execute("UPDATE plab_clients SET registration_date = ?, updated_at = CURRENT_TIMESTAMP "
+                             "WHERE registration_number = ?", (new_date, reg_number))
+                conn.execute("UPDATE client_registrations SET sales_close_date = ? WHERE registration_number = ?",
+                             (new_date, reg_number))
+                conn.commit()
+                msg = ('success', f'Registration date for {reg_number} set to {new_date}.')
+        # Search by name or registration number; suggest each client's date from
+        # their lead's "Registration Date" (expected_close_date), matched by phone.
+        rows = []
+        if q:
+            like = f"%{q}%"
+            rows = conn.execute(
+                "SELECT p.registration_number AS reg, p.prefix, p.first_name, p.last_name, "
+                "       p.registration_date, COALESCE(p.pathway,'plab') AS pathway, "
+                "       (SELECT sl.expected_close_date FROM sales_leads sl "
+                "         WHERE regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g') <> '' "
+                "           AND RIGHT(regexp_replace(COALESCE(sl.phone,''),'[^0-9]','','g'),10) "
+                "             = RIGHT(regexp_replace(COALESCE(p.mobile,''),'[^0-9]','','g'),10) "
+                "           AND sl.expected_close_date IS NOT NULL "
+                "         ORDER BY sl.id DESC LIMIT 1) AS lead_date "
+                "  FROM plab_clients p "
+                " WHERE p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.registration_number ILIKE ? "
+                "    OR (COALESCE(p.first_name,'')||' '||COALESCE(p.last_name,'')) ILIKE ? "
+                " ORDER BY p.id DESC LIMIT 50", (like, like, like, like)).fetchall()
+        def _ds(v):
+            return v.strftime('%Y-%m-%d') if hasattr(v, 'strftime') else (str(v)[:10] if v else '')
+        trs = ''
+        for r in rows:
+            cur = _ds(r['registration_date'])
+            suggest = _ds(r['lead_date'])
+            prefill = suggest or cur
+            hl = 'background:#FEF9C3;' if (suggest and suggest != cur) else ''
+            trs += (f'<tr style="{hl}"><td style="padding:7px 10px;">{(r["prefix"] or "")} {(r["first_name"] or "")} {(r["last_name"] or "")}'
+                    f'<br><small style="color:#64748b;">{r["reg"]} · {r["pathway"]}</small></td>'
+                    f'<td style="padding:7px 10px;">{cur or "—"}</td>'
+                    f'<td style="padding:7px 10px;color:#3730A3;font-weight:600;">{suggest or "(no lead date)"}</td>'
+                    f'<td style="padding:7px 10px;white-space:nowrap;"><form method="post" style="margin:0;display:flex;gap:6px;align-items:center;">'
+                    f'<input type="hidden" name="reg" value="{r["reg"]}"><input type="hidden" name="q" value="{q}">'
+                    f'<input type="date" name="new_date" value="{prefill}" required style="padding:4px 6px;border:1px solid #cbd5e1;border-radius:5px;">'
+                    f'<button type="submit" style="background:#F57C1F;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.8rem;">Set</button>'
+                    f'</form></td></tr>')
+        banner = ''
+        if msg:
+            bg = '#DCFCE7' if msg[0] == 'success' else '#FEE2E2'
+            fg = '#166534' if msg[0] == 'success' else '#991B1B'
+            banner = f'<div style="background:{bg};color:{fg};padding:10px 14px;border-radius:8px;margin-bottom:14px;">{msg[1]}</div>'
+        table = ('<table style="width:100%;border-collapse:collapse;font-size:0.86rem;border:1px solid #e2e8f0;">'
+                 '<thead><tr style="background:#f1f5f9;text-align:left;"><th style="padding:8px 10px;">Client</th>'
+                 '<th style="padding:8px 10px;">Current date</th><th style="padding:8px 10px;">Lead date (suggested)</th>'
+                 '<th style="padding:8px 10px;">Set to</th></tr></thead><tbody>' + trs + '</tbody></table>') if rows else (
+                 '<p style="color:#64748b;">No clients matched.</p>' if q else '')
+        return ('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+                '<title>Set Registration Date</title></head>'
+                '<body style="font-family:system-ui,-apple-system,sans-serif;max-width:840px;margin:24px auto;padding:0 16px;color:#0f172a;">'
+                '<h1 style="font-size:1.3rem;color:#1e3a5f;">Set a client\'s Registration Date</h1>'
+                '<p style="color:#475569;font-size:0.9rem;">The registration date is the sales close date from the lead form. Going forward this is '
+                'automatic; use this to correct clients registered before the fix (e.g. Sanjana, Ramez). The suggested date comes from the client\'s '
+                'lead; adjust if needed. Nothing changes until you click Set.</p>'
+                + banner +
+                f'<form method="get" style="margin:12px 0 18px;"><input name="q" value="{q}" placeholder="Client name or registration number" '
+                'style="padding:9px 12px;width:70%;border:1px solid #cbd5e1;border-radius:8px;font-size:0.9rem;">'
+                '<button type="submit" style="background:#1e3a5f;color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;">Find</button></form>'
+                + table + '</body></html>')
     finally:
         try: conn.close()
         except Exception: pass
