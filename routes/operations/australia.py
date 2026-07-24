@@ -315,7 +315,7 @@ def ops_australia_clients_list():
             ) """
             params.extend([f'%{search}%'] * 6)
         # Latest registrations on top (user request 2026-06-01) — mirrors PLAB.
-        sql += " ORDER BY registration_date DESC NULLS LAST, id DESC "
+        sql += " ORDER BY id DESC "
         records = [dict(r) for r in conn.execute(sql, params).fetchall()]
         total = len(records)
         # Attach per-client payment totals from ops_payments (single source of
