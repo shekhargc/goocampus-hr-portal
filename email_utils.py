@@ -14,8 +14,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# Default sender
-DEFAULT_SENDER = "GooCampus HR <info@goocampus.in>"
+# Default sender — client-facing mail should read just "GooCampus", not
+# "GooCampus HR" (founder 2026-07-24). GooCampus is the company brand.
+DEFAULT_SENDER = "GooCampus <info@goocampus.in>"
 
 # GooCampus Branding Colors
 BRAND_NAVY = "#1e3a5f"
