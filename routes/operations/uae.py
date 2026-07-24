@@ -273,7 +273,7 @@ def ops_uae_clients_list():
         records = [dict(r) for r in conn.execute(
             f"""SELECT * FROM plab_clients
                  WHERE {where_sql}
-                 ORDER BY registration_date DESC NULLS LAST, id DESC""",
+                 ORDER BY id DESC""",
             params,
         ).fetchall()]
         if records:

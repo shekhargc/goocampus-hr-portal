@@ -4969,7 +4969,11 @@ def admin_client_sales_complete(reg_id):
     # 2026-07-13: "sales member is the counsellor"). If the form still posts an
     # explicit counsellor_id (e.g. assigning to a colleague) we honour it; otherwise
     # default to the logged-in user so it's never left blank / re-asked.
-    counsellor_id = request.form.get('counsellor_id') or user['id']
+    # When an ADMIN verifies on behalf of a sales member, keep the LEAD's counsellor
+    # (the sales member who generated it) instead of stamping the admin. Honour an
+    # explicit form pick first; else the lead's existing counsellor; else the
+    # logged-in user. (founder 2026-07-24)
+    counsellor_id = request.form.get('counsellor_id') or reg['counsellor_id'] or user['id']
     set_parts = ["counsellor_id = ?", "counsellor_name = (SELECT name FROM employees WHERE id = ?)"]
     vals = [counsellor_id, counsellor_id]
     # Installments are entered by the sales member in the lead form and already
@@ -5758,7 +5762,10 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
         # picked during verification and the stage ops set were both thrown away and
         # the pathway profile always showed them blank.
         reg.get('joined_stage', '') or '', reg.get('plan_type', ''), '',
-        'In Process', reg.get('current_stage', '') or reg.get('joined_stage', '') or '',
+        # Use the status Ops set at verification (e.g. 'On Hold'); only default to
+        # 'In Process' when none was chosen. Was hardcoded 'In Process', which
+        # overwrote an ops 'On Hold' on the master. (founder 2026-07-24)
+        (reg.get('account_status') or 'In Process'), reg.get('current_stage', '') or reg.get('joined_stage', '') or '',
         counsellor_name, counsellor_email, counsellor_number,
         reg.get('lead_source', ''), '', '', '',
         reg.get('package_amount', 0), reg.get('discount_allowed', 0), '',
