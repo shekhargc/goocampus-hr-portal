@@ -7,10 +7,111 @@ number/state, or admin_notes (see pg_admin/utils.mentor_public_dict). Only mento
 with is_published = TRUE AND is_active = TRUE are visible.
 """
 import os
+import re
+import random
+import secrets
 import logging
+from datetime import datetime, timedelta
 from flask import request, jsonify, redirect, abort
 from db import get_db
 from pg_admin.utils import mentor_public_dict, as_dict
+
+
+def _norm_mobile(v):
+    """Digits only, last 10 (drops +91 / country code)."""
+    return re.sub(r'\D', '', str(v or ''))[-10:]
+
+
+def api_pg_otp_send():
+    """POST /api/pg/otp/send  {mobile}  → {ok:true}. Sends a WhatsApp OTP for the
+    goocampus.in doctor login. X-PG-Key guarded. (founder 2026-07-24)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    mobile = _norm_mobile(data.get('mobile'))
+    if len(mobile) != 10:
+        return jsonify({'ok': False, 'error': 'A valid 10-digit mobile number is required.'}), 400
+    otp = str(random.randint(100000, 999999))
+    expires = datetime.utcnow() + timedelta(minutes=5)
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM pg_otps WHERE mobile = ?", (mobile,))
+        conn.execute("INSERT INTO pg_otps (mobile, otp_code, expires_at) VALUES (?, ?, ?)",
+                     (mobile, otp, expires))
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        conn.close()
+        logging.error("api_pg_otp_send store: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    conn.close()
+    try:
+        from app import _send_whatsapp_otp  # reuse the portal's live WhatsApp OTP sender
+        ok, err = _send_whatsapp_otp(mobile, otp)
+    except Exception as e:
+        logging.error("api_pg_otp_send send: %s", e)
+        ok, err = False, 'Could not send the code. Please try again.'
+    if not ok:
+        return jsonify({'ok': False, 'error': err or 'Could not send the code.'}), 502
+    return jsonify({'ok': True})
+
+
+def api_pg_otp_verify():
+    """POST /api/pg/otp/verify  {mobile, otp}  → {ok:true, token, user{id,name,mobile}}.
+    A verified new mobile creates a pg_users row (first login = signup). Returns an
+    opaque 30-day session token the site stores in an httpOnly cookie. X-PG-Key
+    guarded. (founder 2026-07-24)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    data = request.get_json(silent=True) or {}
+    mobile = _norm_mobile(data.get('mobile'))
+    otp = re.sub(r'\D', '', str(data.get('otp', '')))
+    if len(mobile) != 10 or not otp:
+        return jsonify({'ok': False, 'error': 'Mobile and code are required.'}), 400
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id, otp_code, expires_at FROM pg_otps "
+                           "WHERE mobile = ? ORDER BY id DESC LIMIT 1", (mobile,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'ok': False, 'error': 'Please request a new code.'}), 400
+        exp = row['expires_at']
+        if isinstance(exp, str):
+            try: exp = datetime.strptime(exp[:19], '%Y-%m-%d %H:%M:%S')
+            except Exception: exp = None
+        if exp and datetime.utcnow() > exp:
+            conn.execute("DELETE FROM pg_otps WHERE mobile = ?", (mobile,)); conn.commit(); conn.close()
+            return jsonify({'ok': False, 'error': 'Incorrect or expired code.'}), 400
+        if str(row['otp_code']) != otp:
+            conn.execute("UPDATE pg_otps SET attempts = COALESCE(attempts,0)+1 WHERE id = ?", (row['id'],))
+            conn.commit(); conn.close()
+            return jsonify({'ok': False, 'error': 'Incorrect or expired code.'}), 400
+        # Valid — clear codes, upsert the user, issue a token.
+        conn.execute("DELETE FROM pg_otps WHERE mobile = ?", (mobile,))
+        token = secrets.token_urlsafe(32)
+        token_exp = datetime.utcnow() + timedelta(days=30)
+        user = conn.execute("SELECT id, name FROM pg_users WHERE mobile = ?", (mobile,)).fetchone()
+        if user:
+            conn.execute("UPDATE pg_users SET session_token = ?, token_expires_at = ?, "
+                         "last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                         (token, token_exp, user['id']))
+            uid, uname = user['id'], (user['name'] or '')
+        else:
+            uid = conn.execute("INSERT INTO pg_users (mobile, session_token, token_expires_at, last_login_at) "
+                               "VALUES (?, ?, ?, CURRENT_TIMESTAMP) RETURNING id",
+                               (mobile, token, token_exp)).fetchone()['id']
+            uname = ''
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        conn.close()
+        logging.error("api_pg_otp_verify: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    conn.close()
+    return jsonify({'ok': True, 'token': token,
+                    'user': {'id': uid, 'name': uname, 'mobile': mobile}})
 
 
 def _authorized():

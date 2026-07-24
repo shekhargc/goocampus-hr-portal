@@ -22,7 +22,7 @@ def register_pg_admin(app):
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
 
     # Tables self-create at boot (idempotent) — same pattern as college module.
-    for fn in (_tables.ensure_pg_mentors_table,):
+    for fn in (_tables.ensure_pg_mentors_table, _tables.ensure_pg_auth_tables):
         try:
             fn()
         except Exception as e:
@@ -48,3 +48,9 @@ def register_pg_admin(app):
     # Public photo redirect (no key: it's public content; only published+active served)
     app.add_url_rule('/api/pg/mentors/<int:mentor_id>/photo', 'api_pg_mentor_photo',
                      api.api_pg_mentor_photo, methods=['GET'])
+
+    # ── Doctor login for goocampus.in — WhatsApp OTP (X-PG-Key guarded) ──
+    app.add_url_rule('/api/pg/otp/send', 'api_pg_otp_send',
+                     api.api_pg_otp_send, methods=['POST'])
+    app.add_url_rule('/api/pg/otp/verify', 'api_pg_otp_verify',
+                     api.api_pg_otp_verify, methods=['POST'])
