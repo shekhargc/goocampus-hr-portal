@@ -273,7 +273,7 @@ def ops_training_clients_list():
         records = [dict(r) for r in conn.execute(
             f"""SELECT * FROM plab_clients
                  WHERE {where_sql}
-                 ORDER BY id DESC""",
+                 ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''), '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, id DESC""",
             params,
         ).fetchall()]
         if records:

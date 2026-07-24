@@ -21179,12 +21179,15 @@ def ops_onboarding_list():
     total = conn.execute(count_sql, count_params).fetchone()['cnt']
     total_pages = max(1, (total + per_page - 1) // per_page)
 
-    # Full set for Kanban (all matching clients, no pagination)
-    kanban_sql = sql + " ORDER BY p.id DESC"
+    # Full set for Kanban (all matching clients, no pagination). Order by the
+    # registration NUMBER (latest on top), not id — a later-verified client can
+    # carry a lower reg number. (founder 2026-07-24)
+    _regnum_order = "NULLIF(regexp_replace(COALESCE(p.registration_number,''), '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, p.id DESC"
+    kanban_sql = sql + f" ORDER BY {_regnum_order}"
     kanban_clients = conn.execute(kanban_sql, params).fetchall()
 
     # Paginated set for Table view
-    table_sql = sql + " ORDER BY p.id DESC LIMIT ? OFFSET ?"
+    table_sql = sql + f" ORDER BY {_regnum_order} LIMIT ? OFFSET ?"
     table_params = params + [per_page, (page - 1) * per_page]
     table_clients = conn.execute(table_sql, table_params).fetchall()
 
@@ -40357,7 +40360,9 @@ def client_transfer_info(reg):
 # the pathway Registration lists. Hidden by default (see data-default-hidden);
 # the route must SELECT * so the data is present. Keys are plab_clients columns.
 REGISTRATION_OPTIONAL_FIELDS = [
-    ('customer_id', 'Customer ID'), ('email', 'Email'), ('dob', 'DOB'),
+    # Customer ID removed as a list column (founder 2026-07-24): a legacy Zoho
+    # import field, not relevant across pathways. Still stored + shown on the profile.
+    ('email', 'Email'), ('dob', 'DOB'),
     ('whatsapp1', 'WhatsApp 1'), ('whatsapp2', 'WhatsApp 2'),
     ('instagram', 'Instagram'), ('facebook', 'Facebook'), ('linkedin', 'LinkedIn'),
     ('joined_stage', 'Joined Stage'), ('english_training', 'English Training'),
