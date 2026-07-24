@@ -66,3 +66,50 @@ def ensure_pg_mentors_table():
             conn.close()
         except Exception:
             pass
+
+
+def ensure_pg_auth_tables():
+    """pg_users (goocampus.in aspirant who logs in via WhatsApp OTP; first login =
+    signup) + pg_otps (DB-stored one-time codes — send + verify are stateless
+    service-to-service API calls, so the code can't live in a Flask session).
+    Idempotent. (founder 2026-07-24)"""
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_users (
+            id SERIAL PRIMARY KEY,
+            mobile TEXT UNIQUE NOT NULL,
+            name TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            neet_pg_year TEXT DEFAULT '',
+            neet_pg_rank INTEGER,
+            target_speciality TEXT DEFAULT '',
+            photo_url TEXT DEFAULT '',
+            session_token TEXT,
+            token_expires_at TIMESTAMP,
+            last_login_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_users_token ON pg_users (session_token)")
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_otps (
+            id SERIAL PRIMARY KEY,
+            mobile TEXT NOT NULL,
+            otp_code TEXT NOT NULL,
+            expires_at TIMESTAMP,
+            attempts INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_otps_mobile ON pg_otps (mobile)")
+        conn.commit()
+        logging.info("pg_users + pg_otps tables ensured successfully")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"ensure_pg_auth_tables: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
