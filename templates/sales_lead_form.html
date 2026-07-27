@@ -33,11 +33,11 @@
             <div class="slf-row">
                 <div>
                     <label class="slf-lbl">Client Email</label>
-                    <input type="email" name="email" maxlength="160" value="{{ lead.email if lead else '' }}" class="slf-inp" />
+                    <input type="email" name="email" required maxlength="160" value="{{ lead.email if lead else '' }}" class="slf-inp" />
                 </div>
                 <div>
                     <label class="slf-lbl">Lead Source</label>
-                    <select name="source" class="slf-inp" style="background:white;">
+                    <select name="source" required class="slf-inp" style="background:white;">
                         <option value="">Select Lead Source</option>
                         {% for ls in lead_sources %}
                         <option value="{{ ls }}" {% if lead and lead.source == ls %}selected{% endif %}>{{ ls }}</option>
@@ -79,8 +79,12 @@
                     </select>
                 </div>
                 <div>
-                    <label class="slf-lbl">Revenue Stream</label>
-                    <select name="stream_id" id="streamSel" class="slf-inp" style="background:white;">
+                    {# Auto-filled from the chosen Product — sales members can't edit it
+                       (founder 2026-07-24). pointer-events:none keeps the value SUBMITTING
+                       (unlike `disabled`, which would post nothing and wipe the stream). #}
+                    <label class="slf-lbl">Revenue Stream <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                    <select name="stream_id" id="streamSel" class="slf-inp"
+                            {% if role != 'admin' %}tabindex="-1" style="background:var(--gray-50);color:var(--gray-600);pointer-events:none;"{% else %}style="background:white;"{% endif %}>
                         <option value="">— None —</option>
                         {% for s in streams %}
                         <option value="{{ s.id }}" {% if lead and lead.stream_id == s.id %}selected{% endif %}>{{ s.name }}</option>
@@ -91,8 +95,11 @@
 
             <div class="slf-row">
                 <div>
-                    <label class="slf-lbl">Package Value (<span id="pkgValueCur">₹</span>)</label>
-                    <input type="number" step="1" min="0" name="expected_value" id="pkgValue" oninput="syncPackage()" value="{{ lead.expected_value or 0 if lead else 0 }}" class="slf-inp" />
+                    {# Auto-filled from the plan's Package (or the product's price / the
+                       locked AUD amount) — not editable by sales members. (founder 2026-07-24) #}
+                    <label class="slf-lbl">Package Value (<span id="pkgValueCur">₹</span>) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                    <input type="number" step="1" min="0" name="expected_value" id="pkgValue" oninput="syncPackage()" value="{{ lead.expected_value or 0 if lead else 0 }}" class="slf-inp"
+                           {% if role != 'admin' %}readonly style="background:var(--gray-50);color:var(--gray-600);"{% endif %} />
                     <div id="salesRevLine" style="display:none;margin-top:0.35rem;font-size:0.78rem;color:#3730A3;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:6px;padding:5px 9px;">
                         Sales revenue credited: <strong>&#8377;<span id="salesRevVal">0</span></strong>
                         <span style="color:#6366F1;">&nbsp;= Package &minus; Cost &minus; Discount</span>
@@ -170,7 +177,9 @@
                 <div class="inst-row" data-inst="{{ i }}" style="margin-bottom:0.7rem;{% if not _show %}display:none;{% endif %}">
                     <div style="font-size:0.72rem;font-weight:700;color:#9A3412;margin-bottom:0.25rem;">{{ _ords[i] }} Installment</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.7rem;">
-                        <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="{{ 'Amount (AUD)' if _wlroute else 'Total (incl GST)' }}" value="{{ ('{:.0f}'.format(_amt|float) if _wlroute else '{:.0f}'.format((_amt|float) * 1.18)) if _amt else '' }}"
+                        {# At least ONE installment must be entered (founder 2026-07-24) —
+                           row 1 is always visible, so only it carries `required`. #}
+                        <input type="number" step="1" min="0" name="inst{{ i }}_amount"{% if i == 1 %} required{% endif %} placeholder="{{ 'Amount (AUD)' if _wlroute else 'Total (incl GST)' }}" value="{{ ('{:.0f}'.format(_amt|float) if _wlroute else '{:.0f}'.format((_amt|float) * 1.18)) if _amt else '' }}"
                                oninput="updateInstHint(this)"
                                style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
                         <input type="date" name="inst{{ i }}_date" value="{{ (_dt|string)[:10] if _dt else '' }}"
@@ -213,9 +222,12 @@
                     {% if closure and closure.contract_path %}
                     <div style="font-size:0.8rem;color:#166534;font-weight:600;margin:0.15rem 0 0.35rem;">&#10003; Contract already on file — choose a new file only to replace it.</div>
                     {% endif %}
+                    {# The signed agreement is MANDATORY (founder 2026-07-24) — but only when
+                       one isn't already on file, so editing an existing lead doesn't force a re-upload. #}
                     <input type="file" name="contract_file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                           {% if not (closure and closure.contract_path) %}required{% endif %}
                            style="width:100%;padding:0.5rem 0.6rem;border:1px dashed var(--gray-300);border-radius:0.4rem;font-size:0.82rem;box-sizing:border-box;background:#FAFAFA;" />
-                    <p style="margin:0.3rem 0 0;font-size:0.72rem;color:var(--gray-500);">Max 15 MB. Optional — if left blank, the client skips straight to the Refund Policy.</p>
+                    <p style="margin:0.3rem 0 0;font-size:0.72rem;color:var(--gray-500);">Max 15 MB. {% if closure and closure.contract_path %}Choose a file only to replace the one on file.{% else %}<b>Required</b> — the client reads &amp; digitally signs it after registering.{% endif %}</p>
                 </div>
 
                 {# ===== Welcome Call handling (founder 2026-07-22) ===== #}
