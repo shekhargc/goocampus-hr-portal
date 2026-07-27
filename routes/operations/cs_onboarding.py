@@ -66,7 +66,7 @@ def ops_consulting_onboarding_list():
     ).fetchone()['cnt']
     total_pages = max(1, (total + per_page - 1) // per_page)
 
-    kanban_sql = base_select + base_from + where_sql + " ORDER BY p.registration_date DESC NULLS LAST"
+    kanban_sql = base_select + base_from + where_sql + " ORDER BY NULLIF(regexp_replace(COALESCE(p.registration_number,''), '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, p.id DESC"
     kanban_clients = conn.execute(kanban_sql, params).fetchall()
     table_sql = kanban_sql + " LIMIT ? OFFSET ?"
     table_clients = conn.execute(table_sql, params + [per_page, (page - 1) * per_page]).fetchall()

@@ -4994,6 +4994,11 @@ def admin_client_sales_complete(reg_id):
     vals.append(user['id'])
     conn.execute(f"UPDATE client_registrations SET {', '.join(set_parts)} WHERE id = ?", vals + [reg_id])
     conn.commit()
+    # Reflect the counsellor / lead source / stage just verified onto the client's
+    # master profile (no-op if the master doesn't exist yet — ops-verify creates it
+    # and pushes again). (founder 2026-07-24)
+    _push_reg_to_master(conn, reg_id)
+    conn.commit()
     conn.close()
 
     # Notify ops team
@@ -5261,6 +5266,11 @@ def _notify_onboarding_confirmed(reg_id):
         # 4. Auto-sync to plab_clients and ops_academic_details
         try:
             _sync_to_plab_and_academics(conn, reg, reg_id)
+            # The sync only CREATES the master record; push the verification-owned
+            # fields (status / stage / counsellor / lead source) so a re-verify or a
+            # correction reaches the client profile too. (founder 2026-07-24)
+            _push_reg_to_master(conn, reg_id)
+            conn.commit()
         except Exception as sync_e:
             logging.error(f"Auto-sync to plab/academics: {sync_e}")
 
@@ -5678,6 +5688,72 @@ def client_welcome_call_confirm_proposal():
     _notify_welcome_call_confirmed(reg_id)
     flash('Thank you — your welcome call is confirmed. A calendar invite has been emailed to you.', 'success')
     return redirect(url_for('client_welcome_call_page'))
+
+
+def _push_reg_to_master(conn, reg_id):
+    """Push the fields OWNED by sales/ops verification onto the client's master
+    profile (plab_clients), so an edit made in verification shows up on the client
+    profile immediately.
+
+    _sync_to_plab_and_academics only creates the master record ONCE (it returns
+    early when the client already exists), so re-verifying or correcting Status /
+    Counsellor / Lead Source afterwards never reached the profile — it kept the
+    values captured at first sync. This closes that gap. (founder 2026-07-24)
+
+    Only NON-EMPTY values are written, so a blank field in the registration can
+    never wipe good data on the profile. Ops/sales can still edit the profile
+    directly afterwards; the next verification save re-asserts these fields.
+    """
+    try:
+        reg = conn.execute("SELECT * FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+        if not reg:
+            return
+        reg = dict(reg)
+        reg_num = reg.get('registration_number')
+        if not reg_num:
+            return
+        sets, vals = [], []
+
+        def _put(col, value):
+            if value not in (None, ''):
+                sets.append(f"{col} = ?")
+                vals.append(value)
+
+        # Status + stage + plan (ops/sales verification own these)
+        _put('account_status', reg.get('account_status'))
+        _put('current_stage', reg.get('current_stage'))
+        _put('joined_stage', reg.get('joined_stage'))
+        _put('plan_type', reg.get('plan_type'))
+        _put('lead_source', reg.get('lead_source'))
+        # Counsellor (the LEAD's sales member) + their contact details
+        if reg.get('counsellor_id'):
+            emp = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?",
+                               (reg['counsellor_id'],)).fetchone()
+            if emp:
+                _put('counsellor', emp['name'])
+                _put('counsellor_email', emp['email'])
+                _put('counsellor_number', emp['phone'])
+        elif reg.get('counsellor_name'):
+            _put('counsellor', reg.get('counsellor_name'))
+        if not sets:
+            return
+        sets.append("updated_at = CURRENT_TIMESTAMP")
+        conn.execute(f"UPDATE plab_clients SET {', '.join(sets)} WHERE registration_number = ?",
+                     vals + [reg_num])
+        # counsellor_id is an ALTER-added column on some deployments — set separately
+        # so a missing column can't abort the whole update.
+        if reg.get('counsellor_id'):
+            try:
+                conn.execute("UPDATE plab_clients SET counsellor_id = ? WHERE registration_number = ?",
+                             (reg['counsellor_id'], reg_num))
+            except Exception:
+                pass
+    except Exception as e:
+        logging.warning("_push_reg_to_master(%s): %s", reg_id, e)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def _sync_to_plab_and_academics(conn, reg, reg_id):
@@ -21421,7 +21497,7 @@ def ops_au_onboarding_list():
     ).fetchone()['cnt']
     total_pages = max(1, (total + per_page - 1) // per_page)
 
-    kanban_sql = base_select + base_from + where_sql + " ORDER BY p.id DESC"
+    kanban_sql = base_select + base_from + where_sql + " ORDER BY NULLIF(regexp_replace(COALESCE(p.registration_number,''), '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, p.id DESC"
     kanban_clients = conn.execute(kanban_sql, params).fetchall()
     table_sql = kanban_sql + " LIMIT ? OFFSET ?"
     table_clients = conn.execute(table_sql, params + [per_page, (page - 1) * per_page]).fetchall()
@@ -22832,7 +22908,7 @@ def ops_plab_list():
             params.append(stage_filter)
         # Recent registrations on top (user request 2026-06-01). Fall back to
         # id DESC for rows missing a registration_date — keeps order stable.
-        sql += " ORDER BY id DESC"
+        sql += " ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''), '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, id DESC"
         clients_raw = conn.execute(sql, tuple(params)).fetchall()
 
         # Payment totals scoped to PLAB too so the Total Paid card on this
