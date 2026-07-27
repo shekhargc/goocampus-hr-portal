@@ -1,0 +1,118 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Predictor Data · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="margin-bottom:18px;">
+    <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Predictor Data</h1>
+    <p style="margin:0;font-size:0.88rem;color:var(--gray-500);max-width:760px;">
+      The NEET-PG closing-rank dataset behind the <b>College Predictor</b> on goocampus.in.
+      Upload it here once a year — the site reads it live from this portal, so no code
+      deploy is needed to refresh the cut-offs.
+    </p>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      {% for cat, m in msgs %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                  background:{{ '#DCFCE7' if cat == 'success' else '#FEE2E2' }};
+                  color:{{ '#166534' if cat == 'success' else '#991B1B' }};">{{ m }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- ── What's loaded ── -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="margin:0 0 12px;font-size:1rem;font-weight:700;color:var(--navy);">Loaded datasets</h2>
+    {% if years %}
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+      <thead><tr style="background:#f1f5f9;text-align:left;">
+        <th style="padding:8px 10px;">Year</th>
+        <th style="padding:8px 10px;text-align:right;">Rows</th>
+        <th style="padding:8px 10px;">Loaded</th>
+      </tr></thead>
+      <tbody>
+        {% for y in years %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:8px 10px;font-weight:700;color:var(--navy);">{{ y.year }}</td>
+          <td style="padding:8px 10px;text-align:right;">{{ '{:,}'.format(y.rows) }}</td>
+          <td style="padding:8px 10px;color:var(--gray-500);">{{ y.loaded_at|format_datetime if y.loaded_at else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p style="margin:12px 0 0;font-size:0.8rem;color:var(--gray-500);">
+      The predictor always uses the <b>latest year</b> loaded. Total rows: {{ '{:,}'.format(total) }}.
+    </p>
+    {% else %}
+    <div style="padding:14px;border:1px dashed #FCA5A5;background:#FEF2F2;border-radius:8px;">
+      <p style="margin:0;font-size:0.88rem;color:#991B1B;">
+        <b>No dataset loaded yet</b> — the predictor on goocampus.in has nothing to search.
+        Upload the cut-off JSON below to switch it on.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Upload ── -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="margin:0 0 6px;font-size:1rem;font-weight:700;color:var(--navy);">Upload cut-off data</h2>
+    <p style="margin:0 0 14px;font-size:0.82rem;color:var(--gray-500);">
+      Accepts the same JSON file the predictor already uses
+      (<code style="background:var(--gray-50);padding:1px 5px;border-radius:4px;">neet-pg-cutoffs.json</code>).
+      Uploading <b>replaces that year only</b> — other years and the rest of the portal are untouched.
+      A large file can take up to a minute; don't close the tab.
+    </p>
+    <form method="POST" action="/admin/pg/predictor/upload" enctype="multipart/form-data"
+          onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Importing…';">
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+        <div style="flex:1;min-width:280px;">
+          <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Cut-off JSON file</label>
+          <input type="file" name="data_file" accept=".json,application/json" required
+                 style="width:100%;padding:0.5rem 0.6rem;border:1px dashed var(--gray-300);border-radius:0.4rem;font-size:0.82rem;box-sizing:border-box;background:#FAFAFA;" />
+        </div>
+        <div style="width:130px;">
+          <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:4px;">Year <span style="font-weight:400;color:var(--gray-400);">(if absent)</span></label>
+          <input type="number" name="year" placeholder="2025" min="2000" max="2100"
+                 style="width:100%;padding:0.55rem 0.6rem;border:1px solid var(--gray-200);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+        </div>
+        <button type="submit"
+                style="background:var(--orange);color:#fff;border:none;border-radius:8px;padding:0.62rem 1.3rem;font-size:0.88rem;font-weight:700;cursor:pointer;">
+          Upload &amp; import
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Sanity check ── -->
+  {% if sample %}
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="margin:0 0 10px;font-size:1rem;font-weight:700;color:var(--navy);">Most recent rows <span style="font-weight:500;color:var(--gray-500);font-size:0.82rem;">— a quick check the import looks right</span></h2>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+        <thead><tr style="background:#f1f5f9;text-align:left;">
+          <th style="padding:7px 9px;">Institute</th><th style="padding:7px 9px;">Course</th>
+          <th style="padding:7px 9px;">Category</th><th style="padding:7px 9px;">Authority</th>
+          <th style="padding:7px 9px;">State</th><th style="padding:7px 9px;text-align:right;">Closing rank</th>
+        </tr></thead>
+        <tbody>
+          {% for s in sample %}
+          <tr style="border-bottom:1px solid var(--gray-100);">
+            <td style="padding:7px 9px;">{{ s.institute }}</td>
+            <td style="padding:7px 9px;">{{ s.course }}</td>
+            <td style="padding:7px 9px;">{{ s.category }}</td>
+            <td style="padding:7px 9px;">{{ s.authority }}</td>
+            <td style="padding:7px 9px;">{{ s.state }}</td>
+            <td style="padding:7px 9px;text-align:right;font-weight:600;">{{ '{:,}'.format(s.closing_rank) if s.closing_rank else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
