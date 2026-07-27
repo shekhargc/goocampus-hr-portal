@@ -113,3 +113,61 @@ def ensure_pg_auth_tables():
             conn.close()
         except Exception:
             pass
+
+
+def ensure_pg_cutoffs_table():
+    """NEET-PG closing-rank dataset that powers the goocampus.in College Predictor.
+
+    The site used to read a 10 MB JSON from its own repo — but that file is
+    .gitignored, so it never reached the deployed site and the predictor silently
+    fell back to a 168 KB sample ("Preview mode"). Per the settled architecture
+    (goocampus.org IS the backend for goocampus.in) the data now lives here and is
+    served over /api/pg/predictor, so next year's cut-offs are an admin upload
+    instead of a code deploy. (founder 2026-07-24)
+
+    closing_rank is DERIVED at import (the worst/last-round closing rank) so the
+    predictor's "within reach" filter is a single indexed comparison.
+    """
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_cutoffs (
+            id SERIAL PRIMARY KEY,
+            year INTEGER NOT NULL,
+            institute TEXT DEFAULT '',
+            authority TEXT DEFAULT '',
+            quota TEXT DEFAULT '',
+            category TEXT DEFAULT '',
+            degree TEXT DEFAULT '',
+            course TEXT DEFAULT '',
+            state TEXT DEFAULT '',
+            fee NUMERIC(14,2),
+            stipend NUMERIC(14,2),
+            bond_years NUMERIC(6,2),
+            penalty NUMERIC(14,2),
+            r1 INTEGER, r2 INTEGER, r3 INTEGER, r4 INTEGER, stray INTEGER,
+            closing_rank INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # The predictor filters on year + closing_rank, then narrows by
+        # authority / category / state / course keyword.
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_cutoffs_rank "
+                     "ON pg_cutoffs (year, closing_rank)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_cutoffs_auth "
+                     "ON pg_cutoffs (authority)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_cutoffs_cat "
+                     "ON pg_cutoffs (category)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_cutoffs_state "
+                     "ON pg_cutoffs (state)")
+        conn.commit()
+        logging.info("pg_cutoffs table ensured successfully")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"ensure_pg_cutoffs_table: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass

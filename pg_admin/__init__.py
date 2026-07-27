@@ -13,7 +13,7 @@ import os
 import logging
 from jinja2 import ChoiceLoader, FileSystemLoader
 from pg_admin.data import tables as _tables
-from pg_admin.routes import mentors_admin, api
+from pg_admin.routes import mentors_admin, api, predictor_admin
 
 
 def register_pg_admin(app):
@@ -22,7 +22,8 @@ def register_pg_admin(app):
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
 
     # Tables self-create at boot (idempotent) — same pattern as college module.
-    for fn in (_tables.ensure_pg_mentors_table, _tables.ensure_pg_auth_tables):
+    for fn in (_tables.ensure_pg_mentors_table, _tables.ensure_pg_auth_tables,
+               _tables.ensure_pg_cutoffs_table):
         try:
             fn()
         except Exception as e:
@@ -48,6 +49,18 @@ def register_pg_admin(app):
     # Public photo redirect (no key: it's public content; only published+active served)
     app.add_url_rule('/api/pg/mentors/<int:mentor_id>/photo', 'api_pg_mentor_photo',
                      api.api_pg_mentor_photo, methods=['GET'])
+
+    # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
+    app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
+                     predictor_admin.predictor_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/predictor/upload', 'pg_predictor_upload',
+                     predictor_admin.predictor_upload, methods=['POST'])
+
+    # ── Predictor API for the goocampus.in site (X-PG-Key guarded) ──
+    app.add_url_rule('/api/pg/predictor', 'api_pg_predictor',
+                     api.api_pg_predictor, methods=['GET'])
+    app.add_url_rule('/api/pg/predictor/filters', 'api_pg_predictor_filters',
+                     api.api_pg_predictor_filters, methods=['GET'])
 
     # ── Doctor login for goocampus.in — WhatsApp OTP (X-PG-Key guarded) ──
     app.add_url_rule('/api/pg/otp/send', 'api_pg_otp_send',

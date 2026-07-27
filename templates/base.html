@@ -415,6 +415,10 @@
                     <li><a href="/operations/dashboard" class="{% if active_section == 'operations' %}active{% endif %}">Operations</a></li>
                     <li><a href="/partners/dashboard" class="{% if active_section == 'partners' %}active{% endif %}">Partners</a></li>
                     <li><a href="/colleges" class="{% if active_section == 'colleges' %}active{% endif %}">Colleges</a></li>
+                    {# Everything that powers the public goocampus.in site — mentors,
+                       predictor data (and bookings/users as they're built) — under one
+                       section instead of scattered admin URLs. (founder 2026-07-24) #}
+                    <li><a href="/admin/pg/mentors" class="{% if active_section == 'goocampus_in' %}active{% endif %}">GooCampus.in</a></li>
                     <li><a href="/admin/holidays" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
                     <li><a href="/whatsapp" class="{% if active_section == 'whatsapp' %}active{% endif %}">WhatsApp</a></li>
                     <li><a href="/admin/clients" class="{% if active_section == 'clients' %}active{% endif %}">Clients</a></li>

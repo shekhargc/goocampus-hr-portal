@@ -236,3 +236,111 @@ def api_pg_mentor_photo(mentor_id):
     if not url:
         abort(404)
     return redirect(url, code=302)
+
+
+def api_pg_predictor():
+    """GET /api/pg/predictor?rank=&authority=&category=&state=&q=&year=&limit=
+
+    Colleges within reach for a NEET-PG rank, from the pg_cutoffs dataset uploaded
+    in the portal (Predictor Data admin). Replaces the 10 MB JSON the site used to
+    ship in its own repo — which was .gitignored and so never reached production,
+    leaving the live predictor stuck in "Preview mode". (founder 2026-07-24)
+
+    A row is "within reach" when the user's rank is at or better than the seat's
+    last-round closing rank, with a small stretch band so near-misses still show
+    (labelled honestly rather than dropped).
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    try:
+        rank = int(request.args.get('rank') or 0)
+    except (TypeError, ValueError):
+        rank = 0
+    if rank <= 0:
+        return jsonify({'ok': False, 'error': 'A valid rank is required.'}), 400
+    authority = (request.args.get('authority') or '').strip()
+    category = (request.args.get('category') or '').strip()
+    state = (request.args.get('state') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    try:
+        limit = min(int(request.args.get('limit') or 200), 500)
+    except (TypeError, ValueError):
+        limit = 200
+
+    conn = get_db()
+    try:
+        year_row = conn.execute(
+            "SELECT COALESCE(MAX(year), 0) AS y FROM pg_cutoffs").fetchone()
+        year = int(request.args.get('year') or (year_row['y'] if year_row else 0) or 0)
+        if not year:
+            conn.close()
+            return jsonify({'ok': True, 'year': None, 'count': 0, 'results': [],
+                            'note': 'No cut-off dataset has been uploaded yet.'})
+        # Stretch band: show seats up to 15% beyond the rank so a near-miss is
+        # visible (and labelled 'reach') rather than silently dropped.
+        where = ["year = ?", "closing_rank IS NOT NULL", "closing_rank >= ?"]
+        params = [year, int(rank * 0.85)]
+        if authority and authority.lower() not in ('all', 'all authorities'):
+            where.append("authority ILIKE ?"); params.append(f"%{authority}%")
+        if category and category.lower() not in ('any', 'any category'):
+            where.append("category ILIKE ?"); params.append(f"%{category}%")
+        if state:
+            where.append("state ILIKE ?"); params.append(f"%{state}%")
+        if q:
+            where.append("(course ILIKE ? OR institute ILIKE ?)")
+            params.extend([f"%{q}%", f"%{q}%"])
+        rows = conn.execute(
+            "SELECT institute, authority, quota, category, degree, course, state, "
+            "       fee, stipend, bond_years, penalty, r1, r2, r3, r4, stray, closing_rank "
+            f"  FROM pg_cutoffs WHERE {' AND '.join(where)} "
+            "  ORDER BY closing_rank ASC LIMIT ?", params + [limit]).fetchall()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        conn.close()
+        logging.error("api_pg_predictor: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    conn.close()
+
+    def _chance(closing):
+        """Honest banding — never a false-precision percentage."""
+        if not closing:
+            return 'unknown'
+        if rank <= closing * 0.75:
+            return 'high'
+        if rank <= closing:
+            return 'good'
+        return 'reach'
+
+    results = []
+    for r in rows:
+        d = as_dict(r)
+        d['chance'] = _chance(d.get('closing_rank'))
+        results.append(d)
+    return jsonify({'ok': True, 'year': year, 'rank': rank,
+                    'count': len(results), 'results': results})
+
+
+def api_pg_predictor_filters():
+    """GET /api/pg/predictor/filters — the authority / category / state option lists
+    actually present in the loaded dataset, so the site's dropdowns match the data."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    out = {'ok': True, 'year': None, 'authorities': [], 'categories': [], 'states': []}
+    try:
+        yr = conn.execute("SELECT COALESCE(MAX(year), 0) AS y FROM pg_cutoffs").fetchone()
+        year = int(yr['y']) if yr and yr['y'] else 0
+        out['year'] = year or None
+        if year:
+            for key, col in (('authorities', 'authority'), ('categories', 'category'),
+                             ('states', 'state')):
+                out[key] = [r[col] for r in conn.execute(
+                    f"SELECT DISTINCT {col} FROM pg_cutoffs "
+                    f" WHERE year = ? AND COALESCE({col},'') <> '' ORDER BY {col}",
+                    (year,)).fetchall()]
+    except Exception as e:
+        logging.error("api_pg_predictor_filters: %s", e)
+    finally:
+        conn.close()
+    return jsonify(out)

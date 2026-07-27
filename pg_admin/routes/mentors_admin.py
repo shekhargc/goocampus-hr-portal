@@ -156,7 +156,7 @@ def mentors_admin():
                            specializations=specializations, weekdays=_WEEKDAYS,
                            service_types=_SERVICE_TYPES,
                            q=q, f_spec=f_spec, f_pub=f_pub, f_avail=f_avail,
-                           active_section='pg_admin')
+                           active_section='goocampus_in')
 
 
 @login_required
