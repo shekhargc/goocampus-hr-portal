@@ -2923,9 +2923,15 @@ def _notify_client_submitted(reg_id):
                 f"<p style='margin:0 0 6px;'><strong>{client_name or 'A client'}</strong> has completed their "
                 f"registration form. Please complete the <strong>Sales Verification</strong>.</p>" + details +
                 brand_button('Open Sales Verification', 'https://goocampus.org/verifications/sales'))
-            send_email([sm_email], f"Action needed — Sales Verification: {client_name}",
-                       render_branded_email('New Registration — Sales Verification needed', s_inner,
-                                            preheader=f"{client_name} completed their form"),
+            _t = _sc_render(conn, 'notify_sales_verification_needed', {
+                'client_name': client_name,
+                'registration_number': (reg['registration_number'] or ''),
+                'product_name': (reg['product_name'] or '')})
+            _subj_s, _body_s = _t if _t else (
+                f"Action needed — Sales Verification: {client_name}",
+                render_branded_email('New Registration — Sales Verification needed', s_inner,
+                                     preheader=f"{client_name} completed their form"))
+            send_email([sm_email], _subj_s, _body_s,
                        from_address="GooCampus <info@goocampus.in>")
         # 2) Operations + Management — PLAIN, NO button. Ops gets its action link only
         #    AFTER sales verifies (see _notify_sales_completed). Management is always plain.
@@ -4698,7 +4704,25 @@ def _send_client_invite_email(email, name, link, service_name='', counsellor_nam
   </div>
   <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
 </body></html>'''
-        return send_email([email], 'Complete Your GooCampus Registration', html,
+        # Editable override: 'notify_client_invite' in /admin/email-templates. Seeded
+        # DISABLED, so this built-in invite is sent unchanged until it is enabled.
+        _subj_i, _body_i = 'Complete Your GooCampus Registration', html
+        _c = None
+        try:
+            _c = get_db()
+            _t = _sc_render(_c, 'notify_client_invite', {
+                'client_name': name or '', 'service_name': service_name or '',
+                'counsellor_name': counsellor_name or '', 'registration_link': link or ''})
+            if _t:
+                _subj_i, _body_i = _t
+        except Exception:
+            pass
+        finally:
+            try:
+                if _c: _c.close()
+            except Exception:
+                pass
+        return send_email([email], _subj_i, _body_i,
                           from_address="GooCampus <info@goocampus.in>")
     except Exception as e:
         logging.error(f"_send_client_invite_email: {e}")
@@ -5032,17 +5056,33 @@ def _notify_sales_completed(reg_id):
             o_inner = (f"<p><strong>Sales verification is complete</strong> for <strong>{client_name}</strong>. "
                        f"Please complete the <strong>Ops Verification</strong>.</p>" + details +
                        brand_button('Open Ops Verification', 'https://goocampus.org/verifications/ops'))
-            send_email(ops_emails, f"Action needed — Ops Verification: {client_name}",
-                       render_branded_email('Sales Verification Complete — Ops Verification needed', o_inner,
-                                            preheader=f"{client_name} is ready for ops verification"),
+            _pkg_txt = ('₹{:,.0f}'.format(reg['final_package']) if reg['final_package'] else '—')
+            _t = _sc_render(conn, 'notify_ops_verification_needed', {
+                'client_name': client_name,
+                'registration_number': (reg['registration_number'] or ''),
+                'product_name': (reg['product_name'] or ''),
+                'plan_type': (reg['plan_type'] or ''), 'package': _pkg_txt})
+            _subj_o, _body_o = _t if _t else (
+                f"Action needed — Ops Verification: {client_name}",
+                render_branded_email('Sales Verification Complete — Ops Verification needed', o_inner,
+                                     preheader=f"{client_name} is ready for ops verification"))
+            send_email(ops_emails, _subj_o, _body_o,
                        from_address="GooCampus <info@goocampus.in>")
         # Management — plain informational note (never a button).
         mgmt_only = list(dict.fromkeys([e for e in mgmt_emails if e and e not in ops_emails]))
         if mgmt_only:
             m_inner = (f"<p>Sales verification is complete for <strong>{client_name}</strong>. "
                        f"It is now with Operations to verify.</p>" + details)
-            send_email(mgmt_only, f"Sales Verification Complete — {client_name}",
-                       render_branded_email('Sales Verification Complete', m_inner),
+            _t = _sc_render(conn, 'notify_sales_verification_complete_mgmt', {
+                'client_name': client_name,
+                'registration_number': (reg['registration_number'] or ''),
+                'product_name': (reg['product_name'] or ''),
+                'plan_type': (reg['plan_type'] or ''),
+                'package': ('₹{:,.0f}'.format(reg['final_package']) if reg['final_package'] else '—')})
+            _subj_m, _body_m = _t if _t else (
+                f"Sales Verification Complete — {client_name}",
+                render_branded_email('Sales Verification Complete', m_inner))
+            send_email(mgmt_only, _subj_m, _body_m,
                        from_address="GooCampus <info@goocampus.in>")
         recipients = list(dict.fromkeys(ops_emails + mgmt_only))
         conn.execute(
@@ -5402,8 +5442,16 @@ def client_welcome_call_request():
                         ('Product', full['product_name']), ('Whose lead', sm_name),
                         ('Preferred date', pdate), ('Preferred time', ptime)]) +
                      brand_button('Open in portal', f"https://goocampus.org/admin/client/{reg_id}?from=ops"))
-            send_email(team_to, f"Welcome Call Requested — {cname}",
-                       render_branded_email('Client requested a Welcome Call', inner),
+            _t = _sc_render(conn, 'notify_welcome_call_requested', {
+                'client_name': cname,
+                'registration_number': (full['registration_number'] or ''),
+                'product_name': (full['product_name'] or ''),
+                'sales_member': (sm_name or ''),
+                'preferred_date': pdate, 'preferred_time': ptime})
+            _subj_wr, _body_wr = _t if _t else (
+                f"Welcome Call Requested — {cname}",
+                render_branded_email('Client requested a Welcome Call', inner))
+            send_email(team_to, _subj_wr, _body_wr,
                        from_address="GooCampus <info@goocampus.in>")
     except Exception as e:
         logging.warning(f"welcome call request notify {reg_id}: {e}")
@@ -5515,8 +5563,16 @@ def _notify_welcome_call_confirmed(reg_id):
             t_body = render_branded_email('Welcome Call Confirmed', t_inner,
                                           preheader=f"{client_name}: {date_s} {time_s} IST")
             try:
-                send_email(team_to, f"Welcome Call Confirmed — {client_name} ({date_s} {time_s} IST)",
-                           t_body, from_address="GooCampus <info@goocampus.in>")
+                _t = _sc_render(conn, 'notify_welcome_call_confirmed_team', {
+                    'client_name': client_name,
+                    'registration_number': (reg['registration_number'] or ''),
+                    'product_name': product_name, 'sales_member': (sm_name or ''),
+                    'wc_date': date_s, 'wc_time': time_s, 'wc_by': (wc_by or '—'),
+                    'wc_by_suffix': (f", to be taken by {wc_by}" if wc_by else '')})
+                _subj_wc, _body_wc = _t if _t else (
+                    f"Welcome Call Confirmed — {client_name} ({date_s} {time_s} IST)", t_body)
+                send_email(team_to, _subj_wc, _body_wc,
+                           from_address="GooCampus <info@goocampus.in>")
             except Exception as e:
                 logging.warning(f"welcome call team email {reg_id}: {e}")
         # Record the confirmed call on the ops onboarding record too, so the pathway
@@ -39058,6 +39114,103 @@ _ONBOARDED_TEAM_TEMPLATE = {
 }
 
 
+_NOTIFY_EMAIL_TEMPLATES = [
+    {'key': 'notify_client_invite', 'label': 'Client Invitation (to client)',
+     'subject': 'Complete Your GooCampus Registration', 'recip': (1, 0, 0, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">Dear {{client_name}},</p>'
+        '<p style="margin:0 0 12px;">Welcome to GooCampus. To begin, please complete your '
+        'registration for <strong>{{service_name}}</strong>.</p>'
+        '<p style="margin:0 0 12px;">Your counsellor <strong>{{counsellor_name}}</strong> will '
+        'guide you through the next steps.</p>'
+        '<p style="margin:16px 0 0;"><a href="{{registration_link}}" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Complete your registration</a></p>'
+        '<p style="margin:18px 0 0;">Warm regards,<br>Team GooCampus</p>')},
+    {'key': 'notify_sales_verification_needed', 'label': 'Sales Verification Needed (to sales member)',
+     'subject': 'Action needed — Sales Verification: {{client_name}}', 'recip': (0, 1, 0, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;"><strong>{{client_name}}</strong> has completed their '
+        'registration form. Please complete the <strong>Sales Verification</strong>.</p>'
+        '<p style="margin:0 0 6px;"><strong>Registration #:</strong> {{registration_number}}<br>'
+        '<strong>Product:</strong> {{product_name}}</p>'
+        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/verifications/sales" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Open Sales Verification</a></p>')},
+    {'key': 'notify_ops_verification_needed', 'label': 'Ops Verification Needed (to operations)',
+     'subject': 'Action needed — Ops Verification: {{client_name}}', 'recip': (0, 0, 1, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;"><strong>Sales verification is complete</strong> for '
+        '<strong>{{client_name}}</strong>. Please complete the <strong>Ops Verification</strong>.</p>'
+        '<p style="margin:0 0 6px;"><strong>Registration #:</strong> {{registration_number}}<br>'
+        '<strong>Product:</strong> {{product_name}}<br><strong>Plan:</strong> {{plan_type}}<br>'
+        '<strong>Package:</strong> {{package}}</p>'
+        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/verifications/ops" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Open Ops Verification</a></p>')},
+    {'key': 'notify_sales_verification_complete_mgmt', 'label': 'Sales Verification Complete (to management)',
+     'subject': 'Sales Verification Complete — {{client_name}}', 'recip': (0, 0, 0, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">Sales verification is complete for '
+        '<strong>{{client_name}}</strong>; the registration has moved to Operations.</p>'
+        '<p style="margin:0 0 6px;"><strong>Registration #:</strong> {{registration_number}}<br>'
+        '<strong>Product:</strong> {{product_name}}<br><strong>Plan:</strong> {{plan_type}}<br>'
+        '<strong>Package:</strong> {{package}}</p>')},
+    {'key': 'notify_welcome_call_requested', 'label': 'Welcome Call Requested (to team)',
+     'subject': 'Welcome Call Requested — {{client_name}}', 'recip': (0, 1, 1, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;"><strong>{{client_name}}</strong> has requested a welcome call.</p>'
+        '<p style="margin:0 0 6px;"><strong>Registration #:</strong> {{registration_number}}<br>'
+        '<strong>Product:</strong> {{product_name}}<br><strong>Whose lead:</strong> {{sales_member}}<br>'
+        '<strong>Preferred date:</strong> {{preferred_date}}<br>'
+        '<strong>Preferred time:</strong> {{preferred_time}}</p>'
+        '<p style="margin:16px 0 0;"><a href="https://goocampus.org/verifications/ops" '
+        'style="background:#f97316;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:700;display:inline-block;">Open in portal</a></p>')},
+    {'key': 'notify_welcome_call_confirmed_team', 'label': 'Welcome Call Confirmed (to team)',
+     'subject': 'Welcome Call Confirmed — {{client_name}} ({{wc_date}} {{wc_time}} IST)', 'recip': (0, 1, 1, 0),
+     'inner': (
+        '<p style="margin:0 0 12px;">Welcome call confirmed for <strong>{{client_name}}</strong> — '
+        '<strong>{{wc_date}} at {{wc_time}} IST</strong>{{wc_by_suffix}}.</p>'
+        '<p style="margin:0 0 6px;"><strong>Registration #:</strong> {{registration_number}}<br>'
+        '<strong>Product:</strong> {{product_name}}<br><strong>Whose lead:</strong> {{sales_member}}<br>'
+        '<strong>Taken by:</strong> {{wc_by}}</p>')},
+]
+
+
+def seed_notify_email_templates_once():
+    """Seed the internal notification templates so their wording is editable in
+    /admin/email-templates. Seeded **disabled** (enabled = 0) on purpose: while a
+    template is off, _sc_render returns None and the existing built-in email is sent
+    UNCHANGED — so nothing about the current flow alters. Enable one only when its
+    wording has been reviewed, and it takes over from that point.
+    (founder 2026-07-24: "make sure nothing alters in the previous setup and flow")"""
+    conn = None
+    try:
+        conn = get_db()
+        for t in _NOTIFY_EMAIL_TEMPLATES:
+            exists = conn.execute("SELECT id FROM email_templates WHERE template_key = ?",
+                                  (t['key'],)).fetchone()
+            if exists:
+                conn.execute("UPDATE email_templates SET category = 'Notifications' "
+                             "WHERE template_key = ?", (t['key'],))
+            else:
+                rc, rco, ro, rp = t['recip']
+                conn.execute(
+                    "INSERT INTO email_templates (template_key, label, subject, body_html, enabled, "
+                    " recipients_client, recipients_counsellor, recipients_ops, recipients_parents, category) "
+                    "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, 'Notifications')",
+                    (t['key'], t['label'], t['subject'], _sc_body(t['inner']), rc, rco, ro, rp))
+        conn.commit()
+    except Exception as e:
+        logging.warning("seed_notify_email_templates_once: %s", e)
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
 def seed_onboarded_team_template_once():
     """Seed the editable 'Client Onboarded (to team)' template so its wording +
     recipients are managed in /admin/email-templates instead of being hardcoded and
@@ -39124,6 +39277,7 @@ fix_welcome_email_hardcoded_counsellor_once()
 set_welcome_email_format_v2_once()
 seed_sc_email_group_once()
 seed_onboarded_team_template_once()
+seed_notify_email_templates_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from
