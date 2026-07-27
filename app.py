@@ -19292,27 +19292,48 @@ def ensure_ops_tables():
                 pass
             logging.error(f"switched_program migration: {e}")
 
-        # Migration: force-replace lead_source options to match Zoho form
+        # ONE common Lead Source list, shared by the sales lead form and the client
+        # profile/registration (both read get_lookup_options('lead_source')).
+        #
+        # This used to DELETE every lead_source option and re-insert a fixed Zoho
+        # list — which wiped any option added later in the Field Manager and could
+        # leave existing records holding a value no longer in the dropdown. Now it
+        # is purely ADDITIVE (founder 2026-07-24: "club both of them into a common
+        # list and make sure the whole data is not affected"):
+        #   1. ensure the canonical options exist,
+        #   2. union in every lead source ALREADY used in the data (client profiles,
+        #      registrations, sales leads) so no historical value is ever unselectable.
+        # Nothing is ever deleted or renamed.
         try:
-            old_ls = conn.execute(
-                "SELECT value FROM lookup_options WHERE category = 'lead_source' AND value = 'Social Media'"
-            ).fetchone()
-            new_ls = conn.execute(
-                "SELECT value FROM lookup_options WHERE category = 'lead_source' AND value = 'CRM Lead'"
-            ).fetchone()
-            if old_ls or not new_ls:
-                conn.execute("DELETE FROM lookup_options WHERE category = 'lead_source'")
-                for sort_idx, val in enumerate([
-                    'CRM Lead', 'LandLine', 'Social Media DM or Ping',
-                    'UK Client Referral', 'Australia Client Referral',
-                    'Portfolio CLient Referral', 'Not Sure'
-                ], 1):
+            _existing = {(r['value'] or '').strip() for r in conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'lead_source'").fetchall()}
+            _canonical = [
+                'CRM Lead', 'LandLine', 'Social Media DM or Ping',
+                'UK Client Referral', 'Australia Client Referral',
+                'Portfolio CLient Referral', 'Not Sure',
+            ]
+            # Values already sitting on real records — must stay selectable.
+            _in_use = set()
+            for _sql in (
+                "SELECT DISTINCT lead_source AS v FROM plab_clients WHERE COALESCE(lead_source,'') <> ''",
+                "SELECT DISTINCT lead_source AS v FROM client_registrations WHERE COALESCE(lead_source,'') <> ''",
+                "SELECT DISTINCT source AS v FROM sales_leads WHERE COALESCE(source,'') <> ''",
+            ):
+                try:
+                    _in_use |= {(r['v'] or '').strip() for r in conn.execute(_sql).fetchall()}
+                except Exception:
+                    pass  # table/column may not exist on a fresh DB
+            _to_add = [v for v in _canonical if v and v not in _existing]
+            _to_add += sorted(v for v in _in_use if v and v not in _existing and v not in _canonical)
+            if _to_add:
+                _next = len(_existing) + 1
+                for _val in _to_add:
                     conn.execute(
-                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
-                        ('lead_source', val, val, sort_idx)
-                    )
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                        "VALUES (?, ?, ?, ?, TRUE)", ('lead_source', _val, _val, _next))
+                    _next += 1
                 conn.commit()
-                logging.info("Updated lead_source options to match Zoho form")
+                logging.info("lead_source options unioned (added %d, deleted 0)", len(_to_add))
         except Exception as e:
             try:
                 conn.rollback()
