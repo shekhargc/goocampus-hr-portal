@@ -12,7 +12,7 @@ import random
 import secrets
 import logging
 from datetime import datetime, timedelta
-from flask import request, jsonify, redirect, abort
+from flask import request, jsonify, redirect, abort, Response
 from db import get_db
 from pg_admin.utils import mentor_public_dict, as_dict
 
@@ -241,11 +241,25 @@ def api_pg_mentor_photo(mentor_id):
         url = storage.presigned_get_url(key)
         if url:
             return redirect(url, code=302)
-    # Not migrated to R2 yet — fall back to the original source image.
-    src = row.get('source_photo_url')
-    if src:
-        return redirect(src, code=302)
-    abort(404)
+    # No migrated photo. Serve a generated initials avatar rather than 404 or a
+    # redirect to the old goocampus-s3bucket — that bucket is PRIVATE (403), so
+    # redirecting there just renders a broken image on every card. This makes
+    # <img src=".../photo"> always work; consumers that want their own placeholder
+    # can still branch on the JSON's photo_url being null. (founder 2026-07-28)
+    name = (row.get('name') or '').strip()
+    parts = [p for p in name.replace('.', ' ').split() if p]
+    initials = ((parts[0][0] + parts[-1][0]) if len(parts) > 1 else
+                (parts[0][:2] if parts else '?')).upper()
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">'
+        '<rect width="256" height="256" fill="#FFF7ED"/>'
+        '<circle cx="128" cy="128" r="120" fill="#FFEDD5" stroke="#FED7AA" stroke-width="4"/>'
+        f'<text x="50%" y="50%" dy=".35em" text-anchor="middle" '
+        f'font-family="system-ui,-apple-system,Segoe UI,Arial,sans-serif" '
+        f'font-size="96" font-weight="700" fill="#F97316">{initials}</text></svg>'
+    )
+    return Response(svg, mimetype='image/svg+xml',
+                    headers={'Cache-Control': 'public, max-age=3600'})
 
 
 def api_pg_predictor():
