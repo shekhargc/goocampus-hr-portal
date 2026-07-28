@@ -117,3 +117,99 @@ def ensure_pg_mentors_table():
             conn.close()
         except Exception:
             pass
+
+
+def ensure_pg_users_table():
+    """The goocampus.in aspirant who logs in via WhatsApp OTP (DATA_MODEL_PG.md §1).
+    `mobile` (10-digit) is the login identity; v1 has no password."""
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_users (
+            id SERIAL PRIMARY KEY,
+            mobile TEXT UNIQUE NOT NULL,
+            name TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            neet_pg_year TEXT DEFAULT '',
+            neet_pg_rank INTEGER,
+            target_speciality TEXT DEFAULT '',
+            photo_url TEXT DEFAULT '',
+            is_active BOOLEAN DEFAULT TRUE,
+            last_login_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_users_mobile ON pg_users (mobile)")
+        conn.commit()
+        logging.info("pg_users table ensured successfully")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"ensure_pg_users_table: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def ensure_pg_otps_table():
+    """Server-side OTP store (one active code per mobile). We CANNOT use Flask session
+    for /api/pg/* OTP state — the caller is goocampus.in's server, not the aspirant's
+    browser, so there's no shared session. The OTP is stored HASHED, never plaintext."""
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_otps (
+            id SERIAL PRIMARY KEY,
+            mobile TEXT UNIQUE NOT NULL,
+            otp_hash TEXT NOT NULL,
+            pending_name TEXT DEFAULT '',
+            expires_at TIMESTAMP NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            last_sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_otps_mobile ON pg_otps (mobile)")
+        conn.commit()
+        logging.info("pg_otps table ensured successfully")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"ensure_pg_otps_table: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def ensure_pg_user_sessions_table():
+    """Bearer-token sessions for logged-in aspirants (one row per device/login).
+    Only the token HASH is stored; the raw token is returned once to the caller."""
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_user_sessions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES pg_users(id) ON DELETE CASCADE,
+            token_hash TEXT UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_sessions_user ON pg_user_sessions (user_id)")
+        conn.commit()
+        logging.info("pg_user_sessions table ensured successfully")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"ensure_pg_user_sessions_table: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass

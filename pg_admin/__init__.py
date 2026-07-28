@@ -13,7 +13,7 @@ import os
 import logging
 from jinja2 import ChoiceLoader, FileSystemLoader
 from pg_admin.data import tables as _tables
-from pg_admin.routes import mentors_admin, api
+from pg_admin.routes import mentors_admin, api, auth
 
 
 def register_pg_admin(app):
@@ -22,7 +22,10 @@ def register_pg_admin(app):
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
 
     # Tables self-create at boot (idempotent) — same pattern as college module.
-    for fn in (_tables.ensure_pg_mentors_table,):
+    for fn in (_tables.ensure_pg_mentors_table,
+               _tables.ensure_pg_users_table,
+               _tables.ensure_pg_otps_table,
+               _tables.ensure_pg_user_sessions_table):
         try:
             fn()
         except Exception as e:
@@ -52,3 +55,12 @@ def register_pg_admin(app):
     # Public photo redirect (no key: it's public content; only published+active served)
     app.add_url_rule('/api/pg/mentors/<int:mentor_id>/photo', 'api_pg_mentor_photo',
                      api.api_pg_mentor_photo, methods=['GET'])
+
+    # ── Aspirant auth (WhatsApp OTP) for the goocampus.in user panel ──
+    app.add_url_rule('/api/pg/otp/send', 'api_pg_otp_send',
+                     auth.api_pg_otp_send, methods=['POST'])
+    app.add_url_rule('/api/pg/otp/verify', 'api_pg_otp_verify',
+                     auth.api_pg_otp_verify, methods=['POST'])
+    app.add_url_rule('/api/pg/me', 'api_pg_me', auth.api_pg_me, methods=['GET'])
+    app.add_url_rule('/api/pg/me', 'api_pg_me_update', auth.api_pg_me_update, methods=['POST'])
+    app.add_url_rule('/api/pg/logout', 'api_pg_logout', auth.api_pg_logout, methods=['POST'])
