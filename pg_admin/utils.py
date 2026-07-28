@@ -51,26 +51,32 @@ def mentor_public_dict(row, photo_base_url):
     created_by/updated_by) are NEVER included. `photo_base_url` is the absolute
     origin (e.g. https://goocampus.org) used to build the stable photo URL.
     """
+    # A photo exists if it's migrated to R2 (photo_url) or still on the source (source_photo_url).
     photo = None
-    if row.get('photo_url'):
+    if row.get('photo_url') or row.get('source_photo_url'):
         photo = f"{photo_base_url}/api/pg/mentors/{row['id']}/photo"
     return {
         'id': row['id'],
+        'mentor_type': row.get('mentor_type') or 'specialist',
         'name': row['name'],
         'specialization': row.get('specialization') or '',
         'qualification': row.get('qualification') or '',
         'designation': row.get('designation') or '',
         'experience_years': row.get('experience_years'),
+        'experience_range': row.get('experience_range') or '',
         'specialties': as_list(row.get('specialties')),
         'languages': as_list(row.get('languages')),
         'bio': row.get('bio') or '',
+        'awards': row.get('awards') or '',
+        'certifications': row.get('certifications') or '',
         'photo_url': photo,
         'hospital_name': row.get('hospital_name') or '',
         'counselling_fee': _num(row.get('counselling_fee')),
         'consultation_fee': _num(row.get('consultation_fee')),
         'service_type': row.get('service_type') or 'counselling',
+        'total_mentees': row.get('total_mentees') or '',
         'is_available': bool(row.get('is_available')),
         'is_verified': bool(row.get('is_verified')),
         'rating': _num(row.get('rating')) or 0,
-        'total_reviews': row.get('total_reviews') or 0,
+        'total_reviews': row.get('reviews_count') or row.get('total_reviews') or 0,
     }

@@ -44,15 +44,66 @@ def ensure_pg_mentors_table():
             created_by INTEGER,
             updated_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            -- Type split: 'specialist' (senior expert) vs 'peer_to_peer' (junior/peer mentor).
+            mentor_type TEXT DEFAULT 'specialist',
+            -- Richer profile fields scraped from the live site (goocampusworld.com).
+            experience_range TEXT DEFAULT '',
+            total_mentees TEXT DEFAULT '',
+            mentorship_hours TEXT DEFAULT '',
+            awards TEXT DEFAULT '',
+            certifications TEXT DEFAULT '',
+            reviews_count INTEGER DEFAULT 0,
+            -- Provenance (for idempotent import + image migration).
+            source TEXT DEFAULT '',
+            external_id TEXT DEFAULT '',
+            source_photo_url TEXT DEFAULT '',
+            profile_source_url TEXT DEFAULT ''
         )''')
-        # Indexes for the public list's filter/sort (published+active, specialization, rating).
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"ensure_pg_mentors_table create: {e}")
+
+    # ── Idempotent ALTERs so a pre-existing table (from the first commit) gains the
+    #    new columns without a manual migration. Each guarded independently. ──
+    for col, ddl in [
+        ('mentor_type', "TEXT DEFAULT 'specialist'"),
+        ('experience_range', "TEXT DEFAULT ''"),
+        ('total_mentees', "TEXT DEFAULT ''"),
+        ('mentorship_hours', "TEXT DEFAULT ''"),
+        ('awards', "TEXT DEFAULT ''"),
+        ('certifications', "TEXT DEFAULT ''"),
+        ('reviews_count', "INTEGER DEFAULT 0"),
+        ('source', "TEXT DEFAULT ''"),
+        ('external_id', "TEXT DEFAULT ''"),
+        ('source_photo_url', "TEXT DEFAULT ''"),
+        ('profile_source_url', "TEXT DEFAULT ''"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE pg_mentors ADD COLUMN {col} {ddl}")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    try:
+        # Filter/sort indexes + a unique key on (source, external_id) so the seed
+        # importer can upsert idempotently (one row per old-site mentor).
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_mentors_pub "
                      "ON pg_mentors (is_published, is_active)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_mentors_spec "
-                     "ON pg_mentors (specialization)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_mentors_type "
+                     "ON pg_mentors (mentor_type)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_mentors_rating "
                      "ON pg_mentors (rating)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_mentors_source "
+                     "ON pg_mentors (source, external_id) "
+                     "WHERE source <> '' AND external_id <> ''")
         conn.commit()
         logging.info("pg_mentors table ensured successfully")
     except Exception as e:
@@ -60,7 +111,7 @@ def ensure_pg_mentors_table():
             conn.rollback()
         except Exception:
             pass
-        logging.error(f"ensure_pg_mentors_table: {e}")
+        logging.error(f"ensure_pg_mentors_table index: {e}")
     finally:
         try:
             conn.close()

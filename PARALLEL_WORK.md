@@ -1,3 +1,46 @@
+# 🔄 SYNC 2026-07-28 — current state of all three sessions
+
+Live: portal `fd01648` · site `goocampus.in` auto-deploys from `goocampus-pg` main.
+
+## Session 1 — Portal / integrator (this checkout, `develop` → `main`)
+Shipped today: **GooCampus.in section** (top-nav; sidebar Mentors + Predictor Data),
+`pg_cutoffs` + **Predictor Data admin** (xlsx/csv/json upload, replaces one year only),
+`/api/pg/predictor` + `/filters` (cascading) + `/courses` (type-ahead), **WhatsApp OTP
+login** (`pg_users`/`pg_otps`, `/api/pg/otp/*`), the last 6 internal emails made
+editable (seeded OFF), sales-lead-form rules, registration/verification fixes,
+Lead Source made one additive list.
+
+## Session 2 — College + goocampus.in admin (`../portal-pg-admin`, `feature/pg-admin-panel`)
+⚠️ **That branch is 38 commits behind `develop`** and edits the same pg_admin files the
+integrator has since extended (`__init__.py`, `data/tables.py`, `routes/api.py`,
+`utils.py`, `mentors_admin.py`). **Never `git merge` it** — it would delete the live OTP
+login, predictor API and `pg_cutoffs`.
+
+Its commit `035682f` is genuinely valuable: **160 real mentors** + type split + import
+script + rich profile page. Integration plan: copy the NEW files as-is
+(`mentors_seed.json`, `mentors_seed_import.py`, `mentor_detail.html`) and **hand-merge**
+the five shared files. Then staging → verify → live.
+
+**Decision (founder, 2026-07-28): retire that worktree.** Session 2 should work directly
+on `develop` in this repo, pulling first, or cut a fresh short-lived branch from today's
+`develop`. The stale-worktree trap has now cost us twice.
+
+## Session 3 — goocampus.in site (`../goocampus-pg`, its own repo/deploy)
+Shipped today: homepage redesign (predictor-led hero), branded illustrations, dashboard
+SaaS overview, and the **portal-backed predictor** + reworked filters (authority → quota
+→ category cascade, speciality type-ahead) — all live.
+
+⚠️ **Two sessions have been committing to that repo.** Session 3's `aa5ffef`/`38777af`
+swept up the integrator's uncommitted predictor work. Harmless this time; the rule is
+`git status` before committing, never blind `git add -A`.
+
+## The one real gap left
+**Bookings + payment.** `pg_bookings` doesn't exist, `/api/pg/bookings` 404s, and the
+site's booking UI is built and waiting. Everything else in the funnel works: attract →
+lead → login → predict. This is the piece that earns.
+
+---
+
 # Parallel Development — Coordination
 
 Multiple Claude Code sessions work on this portal at once, each in its **own git

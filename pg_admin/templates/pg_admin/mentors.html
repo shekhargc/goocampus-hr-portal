@@ -8,6 +8,15 @@
     .pgm-header h1 { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
     .pgm-header p { color:var(--gray-500); font-size:0.9rem; margin:0.15rem 0 0; }
 
+    .pgm-tabs { display:flex; gap:0.4rem; border-bottom:2px solid var(--gray-200); margin-bottom:1.25rem; flex-wrap:wrap; }
+    .pgm-tab { padding:0.6rem 1.1rem; font-size:0.9rem; font-weight:600; color:var(--gray-500);
+        text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-2px; }
+    .pgm-tab:hover { color:var(--navy); }
+    .pgm-tab.active { color:var(--orange); border-bottom-color:var(--orange); }
+    .pgm-tab-count { display:inline-block; background:var(--gray-100); color:var(--gray-600); border-radius:1rem;
+        padding:0.05rem 0.5rem; font-size:0.75rem; margin-left:0.25rem; }
+    .pgm-tab.active .pgm-tab-count { background:#fde9d6; color:var(--orange); }
+
     .pgm-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
     .pgm-stat { background:white; border:1px solid var(--gray-200); border-radius:0.6rem; padding:1rem 1.25rem; }
     .pgm-stat .lbl { font-size:0.78rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
@@ -76,9 +85,27 @@
 <div class="pgm-header">
     <div>
         <h1>Mentor Management</h1>
-        <p>The expert doctors aspirants browse &amp; book on goocampus.in. Only <strong>Published</strong> mentors appear publicly.</p>
+        <p>The doctors aspirants browse &amp; book on goocampus.in. Only <strong>Published</strong> mentors appear publicly.</p>
     </div>
-    <button class="pgm-btn pgm-btn-primary" onclick="pgmOpenAdd()"><i class="fas fa-plus"></i> Add Mentor</button>
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+        <form method="POST" action="/admin/pg/mentors/import" style="display:inline"
+              onsubmit="return confirm('Import / refresh the goocampusworld.com mentor set (160 mentors) and migrate photos to R2? Safe to re-run — your publish/verify choices are kept.');">
+            <button class="pgm-btn pgm-btn-ghost" title="Upsert the scraped dataset + migrate photos to R2"><i class="fas fa-cloud-arrow-down"></i> Import from goocampusworld.com</button>
+        </form>
+        <button class="pgm-btn pgm-btn-primary" onclick="pgmOpenAdd()"><i class="fas fa-plus"></i> Add Mentor</button>
+    </div>
+</div>
+
+<!-- Mentor-type tabs -->
+<div class="pgm-tabs">
+    {% for t in mentor_types %}
+    <a href="/admin/pg/mentors?type={{ t }}" class="pgm-tab {% if active_type == t %}active{% endif %}">
+        {{ mentor_type_labels[t] }} <span class="pgm-tab-count">{{ type_counts[t] }}</span>
+    </a>
+    {% endfor %}
+    <a href="/admin/pg/mentors?type=all" class="pgm-tab {% if active_type == 'all' %}active{% endif %}">
+        All <span class="pgm-tab-count">{{ type_counts['all'] }}</span>
+    </a>
 </div>
 
 <div class="pgm-stats">
@@ -89,6 +116,7 @@
 </div>
 
 <form method="GET" action="/admin/pg/mentors" class="pgm-controls">
+    <input type="hidden" name="type" value="{{ active_type }}">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name, specialization, qualification…">
     <select name="specialization">
         <option value="">All specializations</option>
@@ -129,8 +157,8 @@
                         <span class="pgm-avatar">{{ m.name[:1]|upper }}</span>
                     {% endif %}
                     <div>
-                        <div><strong>Dr. {{ m.name }}</strong></div>
-                        <div class="sub">{{ m.qualification }}</div>
+                        <div><a href="/admin/pg/mentors/{{ m.id }}" style="color:var(--navy);text-decoration:none;font-weight:600;">Dr. {{ m.name }}</a></div>
+                        <div class="sub">{{ m.qualification or m.designation }}</div>
                     </div>
                 </div>
             </td>
@@ -147,8 +175,13 @@
             </td>
             <td>
                 <div class="pgm-actions">
+                    <a class="icon-btn" title="View profile" href="/admin/pg/mentors/{{ m.id }}"><i class="fas fa-id-card"></i></a>
                     <button class="icon-btn" title="Edit"
                         data-id="{{ m.id }}"
+                        data-mentor-type="{{ m.mentor_type }}"
+                        data-experience-range="{{ m.experience_range }}"
+                        data-awards="{{ m.awards }}"
+                        data-certifications="{{ m.certifications }}"
                         data-name="{{ m.name }}"
                         data-email="{{ m.email }}"
                         data-phone="{{ m.phone }}"
@@ -209,11 +242,16 @@
       <div class="pgm-modal-body">
         <input type="hidden" name="edit_id" id="f_edit_id" value="">
         <div class="pgm-grid">
+          <div class="pgm-field"><label>Mentor type</label>
+            <select name="mentor_type" id="f_mentor_type">
+              {% for mt in mentor_types %}<option value="{{ mt }}">{{ mentor_type_labels[mt] }}</option>{% endfor %}
+            </select></div>
           <div class="pgm-field"><label>Name *</label><input name="name" id="f_name" required></div>
-          <div class="pgm-field"><label>Specialization *</label><input name="specialization" id="f_specialization" required placeholder="e.g. Radiology"></div>
-          <div class="pgm-field"><label>Qualification *</label><input name="qualification" id="f_qualification" required placeholder="MD / MS / DNB"></div>
+          <div class="pgm-field"><label>Specialization</label><input name="specialization" id="f_specialization" placeholder="e.g. Radiology"></div>
+          <div class="pgm-field"><label>Qualification</label><input name="qualification" id="f_qualification" placeholder="MD / MS / DNB"></div>
           <div class="pgm-field"><label>Designation</label><input name="designation" id="f_designation" placeholder="e.g. Senior Consultant"></div>
           <div class="pgm-field"><label>Experience (years)</label><input type="number" min="0" name="experience_years" id="f_experience_years"></div>
+          <div class="pgm-field"><label>Experience label</label><input name="experience_range" id="f_experience_range" placeholder="e.g. 6-8 years"></div>
           <div class="pgm-field"><label>Service type</label>
             <select name="service_type" id="f_service_type">
               {% for st in service_types %}<option value="{{ st }}">{{ st|capitalize }}</option>{% endfor %}
@@ -222,7 +260,9 @@
           <div class="pgm-field"><label>Mentorship fee (₹)</label><input type="number" step="0.01" min="0" name="consultation_fee" id="f_consultation_fee"><div class="hint">Kept for later; optional now.</div></div>
           <div class="pgm-field full"><label>Specialties</label><input name="specialties" id="f_specialties" placeholder="Comma separated — e.g. Emergency Care, Trauma, Critical Care"></div>
           <div class="pgm-field full"><label>Languages</label><input name="languages" id="f_languages" placeholder="Comma separated — e.g. English, Hindi, Kannada"></div>
-          <div class="pgm-field full"><label>Bio</label><textarea name="bio" id="f_bio" rows="3"></textarea></div>
+          <div class="pgm-field"><label>Awards</label><input name="awards" id="f_awards" placeholder="e.g. University Gold Medalist"></div>
+          <div class="pgm-field"><label>Certifications</label><input name="certifications" id="f_certifications" placeholder="e.g. American Board of Pediatrics"></div>
+          <div class="pgm-field full"><label>Bio</label><textarea name="bio" id="f_bio" rows="4"></textarea></div>
 
           <div class="pgm-field"><label>Email <span class="hint">(admin-only)</span></label><input type="email" name="email" id="f_email"></div>
           <div class="pgm-field"><label>Phone <span class="hint">(admin-only)</span></label><input name="phone" id="f_phone"></div>
@@ -273,6 +313,7 @@
 {% block section_extra_js %}
 <script>
 const PGM_DAYS = {{ weekdays|tojson }};
+const PGM_ACTIVE_TYPE = {{ active_type|tojson }};
 
 function pgmSetVal(id, v){ var el=document.getElementById(id); if(el) el.value = (v==null?'':v); }
 function pgmSetChk(id, on){ var el=document.getElementById(id); if(el) el.checked = !!on; }
@@ -283,10 +324,12 @@ function pgmClearAvail(){
 
 function pgmReset(){
     ['f_edit_id','f_name','f_specialization','f_qualification','f_designation','f_experience_years',
-     'f_counselling_fee','f_consultation_fee','f_specialties','f_languages','f_bio','f_email','f_phone',
+     'f_experience_range','f_counselling_fee','f_consultation_fee','f_specialties','f_languages',
+     'f_awards','f_certifications','f_bio','f_email','f_phone',
      'f_council_number','f_council_state','f_hospital_name','f_hospital_address','f_admin_notes'
     ].forEach(function(id){ pgmSetVal(id,''); });
     pgmSetVal('f_service_type','counselling');
+    pgmSetVal('f_mentor_type', (PGM_ACTIVE_TYPE && PGM_ACTIVE_TYPE!=='all') ? PGM_ACTIVE_TYPE : 'specialist');
     pgmSetChk('f_is_available',false); pgmSetChk('f_is_verified',false); pgmSetChk('f_is_published',false);
     pgmClearAvail();
     var ph=document.getElementById('f_photo'); if(ph) ph.value='';
@@ -304,11 +347,15 @@ function pgmOpenEdit(btn){
     var d = btn.dataset;
     document.getElementById('pgmModalTitle').textContent = 'Edit Mentor';
     pgmSetVal('f_edit_id', d.id);
+    pgmSetVal('f_mentor_type', d.mentorType || 'specialist');
     pgmSetVal('f_name', d.name);
     pgmSetVal('f_specialization', d.specialization);
     pgmSetVal('f_qualification', d.qualification);
     pgmSetVal('f_designation', d.designation);
     pgmSetVal('f_experience_years', d.experience);
+    pgmSetVal('f_experience_range', d.experienceRange);
+    pgmSetVal('f_awards', d.awards);
+    pgmSetVal('f_certifications', d.certifications);
     pgmSetVal('f_counselling_fee', d.counsellingFee);
     pgmSetVal('f_consultation_fee', d.consultationFee);
     pgmSetVal('f_service_type', d.serviceType || 'counselling');

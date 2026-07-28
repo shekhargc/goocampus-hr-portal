@@ -2,8 +2,9 @@
 section isn't wired into Access Master yet, so we restrict to is_admin exactly like
 the NEET-PG PDF admin does.
 
-CRUD every pg_mentors field + publish/verify/available toggles + photo upload to R2.
-Mirrors the old React DoctorManagement screen's fields.
+Two mentor types are managed separately (Specialist vs Peer-to-Peer) via tabs.
+CRUD every pg_mentors field + publish/verify/available toggles + photo upload to R2
++ a rich detail view + a one-click import of the goocampusworld.com dataset.
 """
 import io
 import json
@@ -16,15 +17,15 @@ from core.users import get_user
 from core import storage
 from pg_admin.utils import as_list, as_dict
 
-# Weekdays used to build the availability JSON from the form.
 _WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday',
              'friday', 'saturday', 'sunday']
 _SERVICE_TYPES = ('consultation', 'counselling', 'both')
+_MENTOR_TYPES = ('specialist', 'peer_to_peer')
+_MENTOR_TYPE_LABELS = {'specialist': 'Specialist', 'peer_to_peer': 'Peer-to-Peer'}
 _ALLOWED_IMG = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
 
 
 def _require_admin():
-    """Return the logged-in admin user, or None (caller redirects/aborts)."""
     user = get_user()
     if not user or not user.get('is_admin'):
         return None
@@ -32,7 +33,6 @@ def _require_admin():
 
 
 def _parse_csv_list(raw):
-    """'Emergency Care, Trauma' -> ['Emergency Care', 'Trauma'] (deduped, order-kept)."""
     out, seen = [], set()
     for part in (raw or '').split(','):
         s = part.strip()
@@ -43,8 +43,6 @@ def _parse_csv_list(raw):
 
 
 def _parse_availability(form):
-    """Build the availability JSON from per-weekday start/end form fields.
-    avail_<day>_start / avail_<day>_end → {"monday":[{"start":"18:00","end":"20:00"}]}."""
     avail = {}
     for day in _WEEKDAYS:
         start = (form.get(f'avail_{day}_start') or '').strip()
@@ -76,19 +74,25 @@ def _int_or_none(raw):
 
 @login_required
 def mentors_admin():
-    """List + filter mentors with the stat cards, and render the CRUD screen."""
+    """List + filter mentors (per type), with stat cards, and render the CRUD screen."""
     user = _require_admin()
     if not user:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
 
+    mtype = (request.args.get('type') or 'specialist').strip()
+    if mtype not in _MENTOR_TYPES and mtype != 'all':
+        mtype = 'specialist'
     q = (request.args.get('q') or '').strip()
     f_spec = (request.args.get('specialization') or '').strip()
-    f_pub = (request.args.get('published') or '').strip()      # '', 'true', 'false'
-    f_avail = (request.args.get('available') or '').strip()    # '', 'true', 'false'
+    f_pub = (request.args.get('published') or '').strip()
+    f_avail = (request.args.get('available') or '').strip()
 
-    conds = ["is_active"]   # hide soft-deleted from the working list
+    conds = ["is_active"]
     params = []
+    if mtype != 'all':
+        conds.append("mentor_type = ?")
+        params.append(mtype)
     if q:
         conds.append("(name ILIKE ? OR specialization ILIKE ? OR qualification ILIKE ?)")
         like = f"%{q}%"
@@ -112,18 +116,25 @@ def mentors_admin():
             f"SELECT * FROM pg_mentors WHERE {where} ORDER BY updated_at DESC, id DESC",
             params
         ).fetchall()
-        # Stat cards (across all non-deleted mentors, ignoring the filters).
+
+        def _cnt(extra_sql='', extra=()):
+            return conn.execute(
+                "SELECT COUNT(*) AS c FROM pg_mentors WHERE is_active" + extra_sql, extra
+            ).fetchone()['c']
+
+        # Tab counts per mentor_type
+        type_counts = {t: _cnt(" AND mentor_type = ?", (t,)) for t in _MENTOR_TYPES}
+        type_counts['all'] = _cnt()
+
+        # Stat cards scoped to the active tab
+        scope_sql = "" if mtype == 'all' else " AND mentor_type = ?"
+        scope = () if mtype == 'all' else (mtype,)
         stats = {
-            'total': conn.execute(
-                "SELECT COUNT(*) AS c FROM pg_mentors WHERE is_active").fetchone()['c'],
-            'published': conn.execute(
-                "SELECT COUNT(*) AS c FROM pg_mentors WHERE is_active AND is_published").fetchone()['c'],
-            'available': conn.execute(
-                "SELECT COUNT(*) AS c FROM pg_mentors WHERE is_active AND is_available").fetchone()['c'],
-            'verified': conn.execute(
-                "SELECT COUNT(*) AS c FROM pg_mentors WHERE is_active AND is_verified").fetchone()['c'],
+            'total': _cnt(scope_sql, scope),
+            'published': _cnt(scope_sql + " AND is_published", scope),
+            'available': _cnt(scope_sql + " AND is_available", scope),
+            'verified': _cnt(scope_sql + " AND is_verified", scope),
         }
-        # Specialization options for the filter dropdown (distinct, non-empty).
         spec_rows = conn.execute(
             "SELECT DISTINCT specialization FROM pg_mentors "
             "WHERE is_active AND specialization <> '' ORDER BY specialization"
@@ -135,14 +146,15 @@ def mentors_admin():
         except Exception:
             pass
         logging.error("mentors_admin: %s", e)
-        mentors, stats, specializations = [], {'total': 0, 'published': 0, 'available': 0, 'verified': 0}, []
+        mentors, specializations = [], []
+        type_counts = {t: 0 for t in _MENTOR_TYPES}; type_counts['all'] = 0
+        stats = {'total': 0, 'published': 0, 'available': 0, 'verified': 0}
     finally:
         try:
             conn.close()
         except Exception:
             pass
 
-    # Pre-decode the JSON columns for the template (avail form + specialty/language chips).
     view = []
     for m in mentors:
         d = dict(m)
@@ -154,8 +166,42 @@ def mentors_admin():
     return render_template('pg_admin/mentors.html',
                            user=user, mentors=view, stats=stats,
                            specializations=specializations, weekdays=_WEEKDAYS,
-                           service_types=_SERVICE_TYPES,
+                           service_types=_SERVICE_TYPES, mentor_types=_MENTOR_TYPES,
+                           mentor_type_labels=_MENTOR_TYPE_LABELS,
+                           active_type=mtype, type_counts=type_counts,
                            q=q, f_spec=f_spec, f_pub=f_pub, f_avail=f_avail,
+                           active_section='goocampus_in')
+
+
+@login_required
+def mentor_detail(mentor_id):
+    """Rich read-only profile view (mirrors the goocampus.in public profile)."""
+    user = _require_admin()
+    if not user:
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM pg_mentors WHERE id = ?", (mentor_id,)).fetchone()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        row = None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    if not row:
+        abort(404)
+    m = dict(row)
+    m['specialties_list'] = as_list(row.get('specialties'))
+    m['languages_list'] = as_list(row.get('languages'))
+    m['availability_map'] = as_dict(row.get('availability'))
+    return render_template('pg_admin/mentor_detail.html', user=user, m=m,
+                           mentor_type_labels=_MENTOR_TYPE_LABELS,
                            active_section='goocampus_in')
 
 
@@ -172,15 +218,19 @@ def mentor_save():
     name = (form.get('name') or '').strip()
     specialization = (form.get('specialization') or '').strip()
     qualification = (form.get('qualification') or '').strip()
-    if not name or not specialization or not qualification:
-        flash('Name, specialization and qualification are required.', 'error')
+    if not name:
+        flash('Name is required.', 'error')
         return redirect(url_for('pg_mentors_admin'))
 
     service_type = (form.get('service_type') or 'counselling').strip()
     if service_type not in _SERVICE_TYPES:
         service_type = 'counselling'
+    mentor_type = (form.get('mentor_type') or 'specialist').strip()
+    if mentor_type not in _MENTOR_TYPES:
+        mentor_type = 'specialist'
 
     fields = {
+        'mentor_type': mentor_type,
         'name': name,
         'email': (form.get('email') or '').strip(),
         'phone': (form.get('phone') or '').strip(),
@@ -188,9 +238,12 @@ def mentor_save():
         'qualification': qualification,
         'designation': (form.get('designation') or '').strip(),
         'experience_years': _int_or_none(form.get('experience_years')),
+        'experience_range': (form.get('experience_range') or '').strip(),
         'specialties': json.dumps(_parse_csv_list(form.get('specialties'))),
         'languages': json.dumps(_parse_csv_list(form.get('languages'))),
         'bio': (form.get('bio') or '').strip(),
+        'awards': (form.get('awards') or '').strip(),
+        'certifications': (form.get('certifications') or '').strip(),
         'medical_council_number': (form.get('medical_council_number') or '').strip(),
         'medical_council_state': (form.get('medical_council_state') or '').strip(),
         'hospital_name': (form.get('hospital_name') or '').strip(),
@@ -216,17 +269,14 @@ def mentor_save():
             conn.execute(
                 f"UPDATE pg_mentors SET {set_clause}, updated_by = ?, "
                 f"updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                vals + [user.get('id'), mentor_id]
-            )
+                vals + [user.get('id'), mentor_id])
         else:
             cols = list(fields.keys()) + ['created_by', 'updated_by']
             placeholders = ", ".join(["?"] * len(cols))
             vals = [fields[c] for c in fields] + [user.get('id'), user.get('id')]
             row = conn.execute(
                 f"INSERT INTO pg_mentors ({', '.join(cols)}) "
-                f"VALUES ({placeholders}) RETURNING id",
-                vals
-            ).fetchone()
+                f"VALUES ({placeholders}) RETURNING id", vals).fetchone()
             mentor_id = row['id'] if row else None
         conn.commit()
     except Exception as e:
@@ -240,9 +290,8 @@ def mentor_save():
         except Exception:
             pass
         flash('Save failed.', 'error')
-        return redirect(url_for('pg_mentors_admin'))
+        return redirect(url_for('pg_mentors_admin', type=mentor_type))
 
-    # ── Optional photo upload → R2 (photo_url stores the R2 object key) ──
     photo_msg = ''
     file = request.files.get('photo')
     if mentor_id and file and file.filename:
@@ -276,7 +325,7 @@ def mentor_save():
         pass
 
     flash(('Mentor updated.' if edit_id else 'Mentor created.') + photo_msg, 'success')
-    return redirect(url_for('pg_mentors_admin'))
+    return redirect(url_for('pg_mentors_admin', type=mentor_type))
 
 
 @login_required
@@ -294,8 +343,7 @@ def mentor_toggle(mentor_id):
         conn.execute(
             f"UPDATE pg_mentors SET {flag} = NOT {flag}, "
             f"updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (user.get('id'), mentor_id)
-        )
+            (user.get('id'), mentor_id))
         conn.commit()
         flash('Updated.', 'success')
     except Exception as e:
@@ -310,7 +358,7 @@ def mentor_toggle(mentor_id):
             conn.close()
         except Exception:
             pass
-    return redirect(url_for('pg_mentors_admin'))
+    return redirect(request.referrer or url_for('pg_mentors_admin'))
 
 
 @login_required
@@ -324,8 +372,7 @@ def mentor_delete(mentor_id):
         conn.execute(
             "UPDATE pg_mentors SET is_active = FALSE, is_published = FALSE, "
             "updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (user.get('id'), mentor_id)
-        )
+            (user.get('id'), mentor_id))
         conn.commit()
         flash('Mentor removed.', 'success')
     except Exception as e:
@@ -340,18 +387,53 @@ def mentor_delete(mentor_id):
             conn.close()
         except Exception:
             pass
+    return redirect(request.referrer or url_for('pg_mentors_admin'))
+
+
+@login_required
+def mentors_import():
+    """Import (upsert) the goocampusworld.com mentor dataset + migrate photos to R2.
+    Idempotent — safe to re-run; admin publish/verify/available choices are preserved."""
+    user = _require_admin()
+    if not user:
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    do_images = request.form.get('skip_images') != 'on'
+    conn = get_db()
+    try:
+        from pg_admin.data.mentors_seed_import import import_mentors_from_seed
+        res = import_mentors_from_seed(conn, created_by=user.get('id'), do_images=do_images)
+        img = res['images']
+        flash(f"Import done — {res['created']} created, {res['updated']} updated "
+              f"(of {res['total_seed']}). Photos: {img['migrated']} migrated, "
+              f"{img['skipped']} skipped, {img['failed']} failed."
+              + (f" Errors on {len(res['errors'])} rows." if res['errors'] else ''),
+              'success' if not res['errors'] else 'warning')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error("mentors_import: %s", e)
+        flash('Import failed — see logs.', 'error')
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
     return redirect(url_for('pg_mentors_admin'))
 
 
 @login_required
 def mentor_photo_admin(mentor_id):
-    """Admin photo preview — 302 to a presigned R2 URL (works for drafts too)."""
+    """Admin photo preview — 302 to a presigned R2 URL, or 302 to the original S3
+    photo if it hasn't been migrated to R2 yet (so previews work pre-import)."""
     user = _require_admin()
     if not user:
         abort(403)
     conn = get_db()
     try:
-        row = conn.execute("SELECT photo_url FROM pg_mentors WHERE id = ?",
+        row = conn.execute("SELECT photo_url, source_photo_url FROM pg_mentors WHERE id = ?",
                            (mentor_id,)).fetchone()
     except Exception:
         try:
@@ -364,10 +446,15 @@ def mentor_photo_admin(mentor_id):
             conn.close()
         except Exception:
             pass
-    key = row.get('photo_url') if row else None
-    if not key:
+    if not row:
         abort(404)
-    url = storage.presigned_get_url(key)
-    if not url:
-        abort(404)
-    return redirect(url, code=302)
+    key = row.get('photo_url')
+    if key and key.startswith('pg_mentors/'):
+        url = storage.presigned_get_url(key)
+        if url:
+            return redirect(url, code=302)
+    # Fallback: not yet migrated — show the original source image.
+    src = row.get('source_photo_url')
+    if src:
+        return redirect(src, code=302)
+    abort(404)
