@@ -61,6 +61,8 @@ def register_pg_admin(app):
                      api.api_pg_predictor, methods=['GET'])
     app.add_url_rule('/api/pg/predictor/filters', 'api_pg_predictor_filters',
                      api.api_pg_predictor_filters, methods=['GET'])
+    app.add_url_rule('/api/pg/predictor/courses', 'api_pg_predictor_courses',
+                     api.api_pg_predictor_courses, methods=['GET'])
 
     # ── Doctor login for goocampus.in — WhatsApp OTP (X-PG-Key guarded) ──
     app.add_url_rule('/api/pg/otp/send', 'api_pg_otp_send',

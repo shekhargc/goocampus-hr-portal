@@ -260,6 +260,7 @@ def api_pg_predictor():
         return jsonify({'ok': False, 'error': 'A valid rank is required.'}), 400
     authority = (request.args.get('authority') or '').strip()
     category = (request.args.get('category') or '').strip()
+    quota = (request.args.get('quota') or '').strip()
     state = (request.args.get('state') or '').strip()
     q = (request.args.get('q') or '').strip()
     try:
@@ -286,6 +287,8 @@ def api_pg_predictor():
             where.append("authority ILIKE ?"); params.append(f"%{authority}%")
         if category and category.lower() not in ('any', 'any category'):
             where.append("category ILIKE ?"); params.append(f"%{category}%")
+        if quota and quota.lower() not in ('any', 'any quota'):
+            where.append("quota ILIKE ?"); params.append(f"%{quota}%")
         if state:
             where.append("state ILIKE ?"); params.append(f"%{state}%")
         if q:
@@ -330,25 +333,93 @@ def api_pg_predictor():
 
 
 def api_pg_predictor_filters():
-    """GET /api/pg/predictor/filters — the authority / category / state option lists
-    actually present in the loaded dataset, so the site's dropdowns match the data."""
+    """GET /api/pg/predictor/filters[?authority=&quota=]
+
+    CASCADING option lists, straight from the loaded dataset (founder 2026-07-28):
+      - no args      -> authorities (+ all categories/states, for compatibility)
+      - ?authority=  -> the quotas that actually exist for THAT authority
+      - ?authority=&quota= -> the categories that exist for that authority+quota
+
+    So the dropdowns only ever offer combinations that return results, instead of
+    a flat list where most choices find nothing.
+    """
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    authority = (request.args.get('authority') or '').strip()
+    quota = (request.args.get('quota') or '').strip()
     conn = get_db()
-    out = {'ok': True, 'year': None, 'authorities': [], 'categories': [], 'states': []}
+    out = {'ok': True, 'year': None, 'authorities': [], 'quotas': [],
+           'categories': [], 'states': []}
     try:
         yr = conn.execute("SELECT COALESCE(MAX(year), 0) AS y FROM pg_cutoffs").fetchone()
         year = int(yr['y']) if yr and yr['y'] else 0
         out['year'] = year or None
-        if year:
-            for key, col in (('authorities', 'authority'), ('categories', 'category'),
-                             ('states', 'state')):
-                out[key] = [r[col] for r in conn.execute(
-                    f"SELECT DISTINCT {col} FROM pg_cutoffs "
-                    f" WHERE year = ? AND COALESCE({col},'') <> '' ORDER BY {col}",
-                    (year,)).fetchall()]
+        if not year:
+            return jsonify(out)
+
+        def _distinct(col, extra_where='', extra_params=()):
+            return [r[col] for r in conn.execute(
+                f"SELECT DISTINCT {col} FROM pg_cutoffs "
+                f" WHERE year = ? AND COALESCE({col},'') <> '' {extra_where} "
+                f" ORDER BY {col}", (year,) + tuple(extra_params)).fetchall()]
+
+        out['authorities'] = _distinct('authority')
+        out['states'] = _distinct('state')
+        if authority:
+            out['quotas'] = _distinct('quota', 'AND authority = ?', (authority,))
+            if quota:
+                out['categories'] = _distinct(
+                    'category', 'AND authority = ? AND quota = ?', (authority, quota))
+            else:
+                out['categories'] = _distinct('category', 'AND authority = ?', (authority,))
+        else:
+            out['quotas'] = _distinct('quota')
+            out['categories'] = _distinct('category')
     except Exception as e:
         logging.error("api_pg_predictor_filters: %s", e)
     finally:
         conn.close()
     return jsonify(out)
+
+
+def api_pg_predictor_courses():
+    """GET /api/pg/predictor/courses?q=&authority=&limit=
+
+    Speciality/course names matching a typed fragment — powers the type-ahead on
+    the site so a doctor picks a real course instead of guessing a keyword that
+    may match nothing. Scoped to the chosen authority when given.
+    (founder 2026-07-28)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    q = (request.args.get('q') or '').strip()
+    authority = (request.args.get('authority') or '').strip()
+    try:
+        limit = min(int(request.args.get('limit') or 20), 50)
+    except (TypeError, ValueError):
+        limit = 20
+    conn = get_db()
+    courses = []
+    try:
+        yr = conn.execute("SELECT COALESCE(MAX(year), 0) AS y FROM pg_cutoffs").fetchone()
+        year = int(yr['y']) if yr and yr['y'] else 0
+        if year:
+            where = ["year = ?", "COALESCE(course,'') <> ''"]
+            params = [year]
+            if q:
+                where.append("course ILIKE ?")
+                params.append(f"%{q}%")
+            if authority:
+                where.append("authority = ?")
+                params.append(authority)
+            # Most-offered courses first: a doctor typing 'radio' should see the
+            # common MD Radiodiagnosis before a one-off variant.
+            courses = [r['course'] for r in conn.execute(
+                f"SELECT course, COUNT(*) AS n FROM pg_cutoffs "
+                f" WHERE {' AND '.join(where)} "
+                f" GROUP BY course ORDER BY n DESC, course ASC LIMIT ?",
+                params + [limit]).fetchall()]
+    except Exception as e:
+        logging.error("api_pg_predictor_courses: %s", e)
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'courses': courses})
