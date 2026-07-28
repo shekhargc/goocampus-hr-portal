@@ -72,6 +72,10 @@ def ensure_pg_mentors_table():
     #    new columns without a manual migration. Each guarded independently. ──
     for col, ddl in [
         ('mentor_type', "TEXT DEFAULT 'specialist'"),
+        # Pathway country the mentor advises on (UK/Australia/USA/…). Blank
+        # until set — only ~40 of 160 are inferable from their topic, so the
+        # rest are filled in by the team. (founder 2026-07-28)
+        ('country', "TEXT DEFAULT ''"),
         ('experience_range', "TEXT DEFAULT ''"),
         ('total_mentees', "TEXT DEFAULT ''"),
         ('mentorship_hours', "TEXT DEFAULT ''"),

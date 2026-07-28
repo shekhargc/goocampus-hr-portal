@@ -68,6 +68,12 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/predictor/courses', 'api_pg_predictor_courses',
                      api.api_pg_predictor_courses, methods=['GET'])
 
+    # ── NEET-PG PDF library for the goocampus.in dashboard (same library as .org) ──
+    app.add_url_rule('/api/pg/neetpg-pdfs', 'api_pg_neetpg_pdfs',
+                     api.api_pg_neetpg_pdfs, methods=['GET'])
+    app.add_url_rule('/api/pg/neetpg-pdfs/<int:pdf_id>/file', 'api_pg_neetpg_pdf_file',
+                     api.api_pg_neetpg_pdf_file, methods=['GET'])
+
     # ── Doctor login for goocampus.in — WhatsApp OTP (X-PG-Key guarded) ──
     app.add_url_rule('/api/pg/otp/send', 'api_pg_otp_send',
                      api.api_pg_otp_send, methods=['POST'])

@@ -447,3 +447,106 @@ def api_pg_predictor_courses():
     finally:
         conn.close()
     return jsonify({'ok': True, 'courses': courses})
+
+
+def api_pg_neetpg_pdfs():
+    """GET /api/pg/neetpg-pdfs?category=&specialty=&state=&q=
+
+    The NEET-PG cut-off PDF library for the goocampus.in user dashboard.
+
+    Reads the SAME neetpg_pdfs library the goocampus.org page serves — one library,
+    two front-ends — so uploads made in the existing admin appear on both. The
+    goocampus.org page keeps its own behaviour untouched.
+
+    Difference on .in (founder 2026-07-28): only REAL files are returned —
+    published AND actually carrying a file — so the site never shows a
+    "coming soon" placeholder. Metadata only; bytes come from /file.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    category = (request.args.get('category') or '').strip()
+    specialty = (request.args.get('specialty') or '').strip()
+    state = (request.args.get('state') or '').strip()
+    q = (request.args.get('q') or '').strip()
+
+    where = ["COALESCE(is_active, 1) = 1", "COALESCE(is_published, 0) = 1",
+             "file_data IS NOT NULL", "COALESCE(file_size, 0) > 0"]
+    params = []
+    if category:
+        where.append("category = ?"); params.append(category)
+    if specialty:
+        where.append("specialty = ?"); params.append(specialty)
+    if state:
+        where.append("state = ?"); params.append(state)
+    if q:
+        where.append("(title ILIKE ? OR specialty ILIKE ? OR file_name ILIKE ?)")
+        params.extend([f"%{q}%"] * 3)
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, title, category, specialty, state, file_name, file_size, "
+            "       upload_date, COALESCE(download_count,0) AS download_count "
+            f"  FROM neetpg_pdfs WHERE {' AND '.join(where)} "
+            "  ORDER BY state ASC, specialty ASC, title ASC", params).fetchall()
+        # Filter values that actually exist, so the site's dropdowns never offer
+        # a choice that returns nothing.
+        facets = {}
+        for col in ('category', 'specialty', 'state'):
+            facets[col + 's'] = [r[col] for r in conn.execute(
+                f"SELECT DISTINCT {col} FROM neetpg_pdfs "
+                "  WHERE COALESCE(is_active,1)=1 AND COALESCE(is_published,0)=1 "
+                f"    AND file_data IS NOT NULL AND COALESCE({col},'') <> '' "
+                f"  ORDER BY {col}").fetchall()]
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        conn.close()
+        logging.error("api_pg_neetpg_pdfs: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    conn.close()
+
+    base = _photo_base()
+    pdfs = []
+    for r in rows:
+        d = as_dict(r)
+        d['file_url'] = f"{base}/api/pg/neetpg-pdfs/{r['id']}/file"
+        d['file_size_kb'] = round((r['file_size'] or 0) / 1024)
+        if d.get('upload_date') is not None:
+            d['upload_date'] = str(d['upload_date'])[:10]
+        pdfs.append(d)
+    return jsonify({'ok': True, 'count': len(pdfs), 'pdfs': pdfs, **facets})
+
+
+def api_pg_neetpg_pdf_file(pdf_id):
+    """GET /api/pg/neetpg-pdfs/:id/file — stream one PDF and count the download.
+
+    Public (no key): it's the file itself, and only published+active rows with real
+    bytes are ever served — the same content the goocampus.org library hands out."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT title, file_name, file_data FROM neetpg_pdfs "
+            "  WHERE id = ? AND COALESCE(is_active,1)=1 AND COALESCE(is_published,0)=1",
+            (pdf_id,)).fetchone()
+        if not row or not row['file_data']:
+            conn.close()
+            abort(404)
+        try:
+            conn.execute("UPDATE neetpg_pdfs SET download_count = COALESCE(download_count,0)+1 "
+                         "WHERE id = ?", (pdf_id,))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        data = bytes(row['file_data'])
+        fname = (row['file_name'] or f"{row['title']}.pdf").replace('"', '')
+    except Exception as e:
+        try: conn.close()
+        except Exception: pass
+        logging.error("api_pg_neetpg_pdf_file(%s): %s", pdf_id, e)
+        abort(404)
+    conn.close()
+    return Response(data, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'inline; filename="{fname}"',
+                             'Cache-Control': 'public, max-age=3600'})
