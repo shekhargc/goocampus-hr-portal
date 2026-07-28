@@ -73,13 +73,65 @@ def _norm_header(h):
     return re.sub(r'\s+', ' ', s).strip()
 
 
+# Second-pass hints: if an exact alias didn't match, a header CONTAINING one of
+# these fragments still maps. Ordered most-specific first so 'bond penalty' lands
+# on penalty, not bond_years. Lets real-world headers like 'Allotted Quota',
+# 'Quota Type', 'Seat Type (Quota)' work without me guessing every wording.
+_CONTAINS_HINTS = [
+    ('penalty', 'penalty'),
+    ('stray', 'stray'),
+    ('mop', 'stray'),
+    ('stipend', 'stipend'),
+    ('bond', 'bond_years'),
+    ('quota', 'quota'),
+    ('categ', 'category'),
+    ('institut', 'institute'),
+    ('college', 'institute'),
+    ('hospital', 'institute'),
+    ('special', 'course'),
+    ('course', 'course'),
+    ('subject', 'course'),
+    ('branch', 'course'),
+    ('authorit', 'authority'),
+    ('counsel', 'authority'),
+    ('state', 'state'),
+    ('fee', 'fee'),
+    ('degree', 'degree'),
+]
+# 'Round 3', 'R-3', 'Closing Rank Round 3' -> r3
+_ROUND_RE = re.compile(r'(?:^|\b)(?:r|round)\s*[-_ ]?\s*([1-4])(?:\b|$)')
+
+
 def _map_headers(headers):
-    """Header row -> {column_index: our_column}. Unmatched headers are ignored."""
+    """Header row -> {column_index: our_column}.
+
+    Pass 1 exact alias, pass 2 fuzzy (round-number regex, then keyword
+    containment) so a spreadsheet doesn't have to use our exact wording.
+    Unmatched headers are ignored and reported back to the admin."""
     mapping = {}
-    for idx, h in enumerate(headers):
-        col = _ALIAS_TO_COL.get(_norm_header(h))
-        if col and col not in mapping.values():
+    taken = set()
+
+    def _claim(idx, col):
+        if col and col not in taken:
             mapping[idx] = col
+            taken.add(col)
+            return True
+        return False
+
+    for idx, h in enumerate(headers):
+        _claim(idx, _ALIAS_TO_COL.get(_norm_header(h)))
+    for idx, h in enumerate(headers):
+        if idx in mapping:
+            continue
+        n = _norm_header(h)
+        if not n:
+            continue
+        m = _ROUND_RE.search(n)
+        if m and _claim(idx, f"r{m.group(1)}"):
+            continue
+        for frag, col in _CONTAINS_HINTS:
+            if frag in n and _claim(idx, col):
+                break
     return mapping
 
 
@@ -207,7 +259,7 @@ def predictor_admin():
         total = sum(y['rows'] for y in years)
         if total:
             sample = [dict(r) for r in conn.execute(
-                "SELECT institute, course, category, authority, state, closing_rank "
+                "SELECT institute, course, quota, category, authority, state, closing_rank "
                 "  FROM pg_cutoffs ORDER BY id DESC LIMIT 5").fetchall()]
     except Exception as e:
         logging.error("predictor_admin: %s", e)
