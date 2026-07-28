@@ -96,14 +96,16 @@
       <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
         <thead><tr style="background:#f1f5f9;text-align:left;">
           <th style="padding:7px 9px;">Institute</th><th style="padding:7px 9px;">Course</th>
-          <th style="padding:7px 9px;">Category</th><th style="padding:7px 9px;">Authority</th>
-          <th style="padding:7px 9px;">State</th><th style="padding:7px 9px;text-align:right;">Closing rank</th>
+          <th style="padding:7px 9px;">Quota</th><th style="padding:7px 9px;">Category</th>
+          <th style="padding:7px 9px;">Authority</th><th style="padding:7px 9px;">State</th>
+          <th style="padding:7px 9px;text-align:right;">Closing rank</th>
         </tr></thead>
         <tbody>
           {% for s in sample %}
           <tr style="border-bottom:1px solid var(--gray-100);">
             <td style="padding:7px 9px;">{{ s.institute }}</td>
             <td style="padding:7px 9px;">{{ s.course }}</td>
+            <td style="padding:7px 9px;">{{ s.quota or '—' }}</td>
             <td style="padding:7px 9px;">{{ s.category }}</td>
             <td style="padding:7px 9px;">{{ s.authority }}</td>
             <td style="padding:7px 9px;">{{ s.state }}</td>
