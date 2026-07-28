@@ -31,8 +31,12 @@ def register_pg_admin(app):
     # ── Admin screens (goocampus.org staff; true-admin gated inside) ──
     app.add_url_rule('/admin/pg/mentors', 'pg_mentors_admin',
                      mentors_admin.mentors_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/mentors/import', 'pg_mentors_import',
+                     mentors_admin.mentors_import, methods=['POST'])
     app.add_url_rule('/admin/pg/mentors/save', 'pg_mentor_save',
                      mentors_admin.mentor_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/mentors/<int:mentor_id>', 'pg_mentor_detail',
+                     mentors_admin.mentor_detail, methods=['GET'])
     app.add_url_rule('/admin/pg/mentors/<int:mentor_id>/toggle', 'pg_mentor_toggle',
                      mentors_admin.mentor_toggle, methods=['POST'])
     app.add_url_rule('/admin/pg/mentors/<int:mentor_id>/delete', 'pg_mentor_delete',
