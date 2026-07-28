@@ -1,0 +1,111 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Dr. {{ m.name }} — Mentor{% endblock %}
+
+{% block section_extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    .md-back { display:inline-flex; align-items:center; gap:0.4rem; color:var(--gray-500); text-decoration:none; font-size:0.87rem; margin-bottom:1rem; }
+    .md-back:hover { color:var(--navy); }
+    .md-top { display:flex; gap:1.5rem; flex-wrap:wrap; align-items:flex-start; background:white; border:1px solid var(--gray-200); border-radius:0.7rem; padding:1.5rem; }
+    .md-photo { width:130px; height:130px; border-radius:0.7rem; object-fit:cover; background:var(--gray-100);
+        display:flex; align-items:center; justify-content:center; font-size:2.5rem; font-weight:700; color:var(--navy); flex-shrink:0; }
+    .md-id { flex:1; min-width:260px; }
+    .md-name { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
+    .md-sub { color:var(--gray-500); font-size:0.95rem; margin:0.2rem 0 0.6rem; }
+    .md-badges { display:flex; gap:0.5rem; flex-wrap:wrap; margin:0.5rem 0; }
+    .badge { display:inline-flex; align-items:center; gap:0.3rem; padding:0.2rem 0.65rem; border-radius:1rem; font-size:0.76rem; font-weight:600; }
+    .b-type { background:#eef2ff; color:#3730a3; } .b-green { background:#dcfce7; color:#166534; }
+    .b-gray { background:var(--gray-100); color:var(--gray-500); } .b-blue { background:#dbeafe; color:#1e40af; }
+    .b-amber { background:#fef3c7; color:#92400e; }
+    .md-metrics { display:flex; gap:1.5rem; flex-wrap:wrap; margin-top:0.75rem; }
+    .md-metric .v { font-size:1.15rem; font-weight:700; color:var(--navy); } .md-metric .l { font-size:0.75rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
+    .md-actions { display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:1rem; }
+    .btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.9rem; border-radius:0.45rem; border:1px solid var(--gray-300); background:white; font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--navy); text-decoration:none; }
+    .btn-primary { background:var(--orange); color:white; border-color:var(--orange); }
+    .md-grid { display:grid; grid-template-columns:2fr 1fr; gap:1.25rem; margin-top:1.25rem; }
+    @media (max-width:800px){ .md-grid{ grid-template-columns:1fr; } }
+    .card { background:white; border:1px solid var(--gray-200); border-radius:0.7rem; padding:1.25rem 1.4rem; margin-bottom:1.25rem; }
+    .card h3 { font-size:0.8rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin:0 0 0.75rem; }
+    .chip { display:inline-block; padding:0.2rem 0.6rem; border-radius:1rem; font-size:0.78rem; background:#fff3e9; color:#9a4a12; margin:0 0.3rem 0.3rem 0; }
+    .chip-lang { background:#eef2ff; color:#3730a3; }
+    .bio { white-space:pre-line; line-height:1.6; color:var(--gray-700); font-size:0.92rem; }
+    .kv { display:flex; justify-content:space-between; gap:1rem; padding:0.4rem 0; border-bottom:1px solid var(--gray-100); font-size:0.87rem; }
+    .kv:last-child { border-bottom:none; } .kv .k { color:var(--gray-500); } .kv .v { color:var(--navy); font-weight:600; text-align:right; }
+    .adminbox { background:#fffbeb; border:1px solid #fde68a; border-radius:0.6rem; padding:1rem 1.2rem; margin-top:0.5rem; }
+    .adminbox h3 { color:#92400e; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<a href="/admin/pg/mentors?type={{ m.mentor_type }}" class="md-back"><i class="fas fa-arrow-left"></i> Back to Mentors</a>
+
+<div class="md-top">
+    {% if m.photo_url or m.source_photo_url %}
+        <img class="md-photo" src="/admin/pg/mentors/{{ m.id }}/photo" alt="{{ m.name }}">
+    {% else %}
+        <div class="md-photo">{{ m.name[:1]|upper }}</div>
+    {% endif %}
+    <div class="md-id">
+        <h1 class="md-name">Dr. {{ m.name }}</h1>
+        <p class="md-sub">{{ m.designation }}{% if m.qualification %} · {{ m.qualification }}{% endif %}</p>
+        <div class="md-badges">
+            <span class="badge b-type">{{ mentor_type_labels.get(m.mentor_type, m.mentor_type) }}</span>
+            {% if m.is_published %}<span class="badge b-green">Published</span>{% else %}<span class="badge b-gray">Draft</span>{% endif %}
+            {% if m.is_available %}<span class="badge b-blue">Available</span>{% else %}<span class="badge b-gray">Unavailable</span>{% endif %}
+            {% if m.is_verified %}<span class="badge b-amber"><i class="fas fa-certificate"></i> Verified</span>{% endif %}
+        </div>
+        <div class="md-metrics">
+            <div class="md-metric"><div class="v">₹ {{ m.counselling_fee or 0 }}</div><div class="l">Per session</div></div>
+            <div class="md-metric"><div class="v">{{ m.experience_range or (m.experience_years ~ ' yrs' if m.experience_years is not none else '—') }}</div><div class="l">Experience</div></div>
+            <div class="md-metric"><div class="v">{{ '%.1f'|format(m.rating or 0) }} <span style="color:#f5a623">★</span></div><div class="l">{{ m.reviews_count or 0 }} reviews</div></div>
+            <div class="md-metric"><div class="v">{{ m.total_mentees or '—' }}</div><div class="l">Mentees</div></div>
+        </div>
+        <div class="md-actions">
+            <a class="btn btn-primary" href="/admin/pg/mentors?type={{ m.mentor_type }}#edit-{{ m.id }}" onclick="sessionStorage.setItem('pgm_edit','{{ m.id }}')"><i class="fas fa-pen"></i> Edit</a>
+            <form method="POST" action="/admin/pg/mentors/{{ m.id }}/toggle?flag=is_published" style="display:inline">
+                <button class="btn"><i class="fas {{ 'fa-eye-slash' if m.is_published else 'fa-eye' }}"></i> {{ 'Unpublish' if m.is_published else 'Publish' }}</button></form>
+            <form method="POST" action="/admin/pg/mentors/{{ m.id }}/toggle?flag=is_verified" style="display:inline">
+                <button class="btn"><i class="fas fa-certificate"></i> {{ 'Unverify' if m.is_verified else 'Verify' }}</button></form>
+            <form method="POST" action="/admin/pg/mentors/{{ m.id }}/toggle?flag=is_available" style="display:inline">
+                <button class="btn"><i class="fas fa-toggle-{{ 'on' if m.is_available else 'off' }}"></i> {{ 'Set unavailable' if m.is_available else 'Set available' }}</button></form>
+        </div>
+    </div>
+</div>
+
+<div class="md-grid">
+    <div>
+        {% if m.specialties_list %}
+        <div class="card">
+            <h3>Mentors on</h3>
+            {% for s in m.specialties_list %}<span class="chip">{{ s }}</span>{% endfor %}
+        </div>
+        {% endif %}
+        {% if m.bio %}
+        <div class="card"><h3>About</h3><div class="bio">{{ m.bio }}</div></div>
+        {% endif %}
+        {% if m.admin_notes %}
+        <div class="card adminbox"><h3>Admin notes (internal)</h3><div class="bio">{{ m.admin_notes }}</div></div>
+        {% endif %}
+    </div>
+    <div>
+        <div class="card">
+            <h3>Details</h3>
+            <div class="kv"><span class="k">Specialization</span><span class="v">{{ m.specialization or '—' }}</span></div>
+            <div class="kv"><span class="k">Qualification</span><span class="v">{{ m.qualification or '—' }}</span></div>
+            <div class="kv"><span class="k">Service type</span><span class="v">{{ m.service_type or 'counselling' }}</span></div>
+            {% if m.languages_list %}<div class="kv"><span class="k">Languages</span><span class="v">{% for l in m.languages_list %}<span class="chip chip-lang">{{ l }}</span>{% endfor %}</span></div>{% endif %}
+            {% if m.awards %}<div class="kv"><span class="k">Awards</span><span class="v">{{ m.awards }}</span></div>{% endif %}
+            {% if m.certifications %}<div class="kv"><span class="k">Certifications</span><span class="v">{{ m.certifications }}</span></div>{% endif %}
+            {% if m.hospital_name %}<div class="kv"><span class="k">Hospital</span><span class="v">{{ m.hospital_name }}</span></div>{% endif %}
+        </div>
+        <div class="card adminbox">
+            <h3>Admin-only</h3>
+            <div class="kv"><span class="k">Email</span><span class="v">{{ m.email or '—' }}</span></div>
+            <div class="kv"><span class="k">Phone</span><span class="v">{{ m.phone or '—' }}</span></div>
+            {% if m.medical_council_number %}<div class="kv"><span class="k">Council no.</span><span class="v">{{ m.medical_council_number }}</span></div>{% endif %}
+            {% if m.source %}<div class="kv"><span class="k">Source</span><span class="v">{{ m.source }}</span></div>{% endif %}
+            {% if m.profile_source_url %}<div class="kv"><span class="k">Source profile</span><span class="v"><a href="{{ m.profile_source_url }}" target="_blank" rel="noopener">open ↗</a></span></div>{% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

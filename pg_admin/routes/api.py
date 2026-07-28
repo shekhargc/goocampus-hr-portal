@@ -147,6 +147,10 @@ def api_pg_mentors():
         params.extend([like, like, like])
     if available in ('1', 'true', 'yes'):
         conds.append("is_available")
+    mtype = (request.args.get('type') or '').strip()
+    if mtype in ('specialist', 'peer_to_peer'):
+        conds.append("mentor_type = ?")
+        params.append(mtype)
 
     where = " AND ".join(conds)
     conn = get_db()
@@ -214,7 +218,8 @@ def api_pg_mentor_photo(mentor_id):
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT photo_url FROM pg_mentors WHERE id = ? AND is_published AND is_active",
+            "SELECT photo_url, source_photo_url FROM pg_mentors "
+            "WHERE id = ? AND is_published AND is_active",
             (mentor_id,)
         ).fetchone()
     except Exception as e:
@@ -229,13 +234,18 @@ def api_pg_mentor_photo(mentor_id):
             conn.close()
         except Exception:
             pass
-    key = row.get('photo_url') if row else None
-    if not key:
+    if not row:
         abort(404)
-    url = storage.presigned_get_url(key)
-    if not url:
-        abort(404)
-    return redirect(url, code=302)
+    key = row.get('photo_url')
+    if key and key.startswith('pg_mentors/'):
+        url = storage.presigned_get_url(key)
+        if url:
+            return redirect(url, code=302)
+    # Not migrated to R2 yet — fall back to the original source image.
+    src = row.get('source_photo_url')
+    if src:
+        return redirect(src, code=302)
+    abort(404)
 
 
 def api_pg_predictor():
