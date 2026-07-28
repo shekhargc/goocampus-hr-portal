@@ -1,3 +1,54 @@
+# ⚠️ READ THIS FIRST — SYNC UPDATE 2026-07-28 (from the integrator session)
+
+## Your branch is 38 commits behind live. DO NOT merge it.
+
+`feature/pg-admin-panel` is **38 commits behind `develop`** and holds 5 of its own.
+Since it was cut, the integrator built a lot **inside the same pg_admin files you
+just edited**. A `git merge` of this branch would very likely delete:
+
+- `/api/pg/otp/send` + `/api/pg/otp/verify` — the **live doctor login** for goocampus.in
+- `pg_users` + `pg_otps` tables
+- `/api/pg/predictor` + `/predictor/filters` + `/predictor/courses` — the **live** predictor API
+- `pg_cutoffs` table + the **Predictor Data admin** (`/admin/pg/predictor`)
+
+Files we BOTH changed: `__init__.py`, `data/tables.py`, `routes/api.py`, `utils.py`,
+`routes/mentors_admin.py`.
+
+## Your 160-mentor work (035682f) is valuable and NOT yet live
+
+The integrator will hand-integrate it onto `develop`: your new files copied as-is
+(`mentors_seed.json`, `mentors_seed_import.py`, `mentor_detail.html`), and the five
+shared files merged by hand so both your mentor work and the OTP/predictor work
+survive. **Please don't merge or push it yourself.**
+
+## How to work from now on (agreed with the founder)
+
+**Stop using this stale worktree.** Work directly in `goocampus-portal` on `develop`,
+pulling first. It is the only branch that reflects live. If you must branch, cut it
+fresh from `develop` **today** and keep it short-lived.
+
+## What is ALREADY LIVE in pg_admin (don't rebuild it)
+
+| Thing | Where |
+|---|---|
+| Mentors table + admin + public API | `pg_mentors`, `/admin/pg/mentors`, `/api/pg/mentors[/:id][/photo]` |
+| **Doctor login (WhatsApp OTP)** | `pg_users`, `pg_otps`, `/api/pg/otp/send`, `/api/pg/otp/verify` |
+| **Predictor dataset** (37,766 rows, 2025) | `pg_cutoffs` + `/admin/pg/predictor` (xlsx/csv/json upload) |
+| **Predictor API** (cascading + type-ahead) | `/api/pg/predictor`, `/predictor/filters`, `/predictor/courses` |
+| **"GooCampus.in" portal section** | top-nav entry; sidebar = Mentors + Predictor Data |
+
+All X-PG-Key guarded, same handshake as `/api/pg/lead`.
+
+## Still NOT built (the real gap)
+
+**Bookings + payment.** `pg_bookings` doesn't exist; `/api/pg/bookings` 404s. The site
+already has the full booking UI built and waiting. This is the highest-value next
+build — the funnel can attract, log in and predict, but cannot take a booking.
+
+Live portal at the time of writing: `fd01648`.
+
+---
+
 # Session: College Module + goocampus.in Admin Panel
 
 **Read this first, then `CLAUDE.md`, `PARALLEL_WORK.md`, and `docs/MAP.md`.**
