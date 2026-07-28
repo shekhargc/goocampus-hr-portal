@@ -263,9 +263,9 @@ def api_pg_predictor():
     state = (request.args.get('state') or '').strip()
     q = (request.args.get('q') or '').strip()
     try:
-        limit = min(int(request.args.get('limit') or 200), 500)
+        limit = min(int(request.args.get('limit') or 800), 2000)
     except (TypeError, ValueError):
-        limit = 200
+        limit = 800
 
     conn = get_db()
     try:
@@ -276,10 +276,12 @@ def api_pg_predictor():
             conn.close()
             return jsonify({'ok': True, 'year': None, 'count': 0, 'results': [],
                             'note': 'No cut-off dataset has been uploaded yet.'})
-        # Stretch band: show seats up to 15% beyond the rank so a near-miss is
-        # visible (and labelled 'reach') rather than silently dropped.
+        # closing_rank is the WORST (last-round) closing rank, so `rank <= closing_rank`
+        # is exactly "at least one round is clearable" — the same test the site's
+        # engine applies per round. Keeping it exact (no stretch band) means the
+        # total below is a true count, not an approximation.
         where = ["year = ?", "closing_rank IS NOT NULL", "closing_rank >= ?"]
-        params = [year, int(rank * 0.85)]
+        params = [year, rank]
         if authority and authority.lower() not in ('all', 'all authorities'):
             where.append("authority ILIKE ?"); params.append(f"%{authority}%")
         if category and category.lower() not in ('any', 'any category'):
@@ -289,10 +291,15 @@ def api_pg_predictor():
         if q:
             where.append("(course ILIKE ? OR institute ILIKE ?)")
             params.extend([f"%{q}%", f"%{q}%"])
+        where_sql = ' AND '.join(where)
+        # Exact match count (not just the page) so the site can say "N within reach"
+        # truthfully even though only `limit` rows are returned for display.
+        total = conn.execute(
+            f"SELECT COUNT(*) AS c FROM pg_cutoffs WHERE {where_sql}", params).fetchone()['c']
         rows = conn.execute(
             "SELECT institute, authority, quota, category, degree, course, state, "
             "       fee, stipend, bond_years, penalty, r1, r2, r3, r4, stray, closing_rank "
-            f"  FROM pg_cutoffs WHERE {' AND '.join(where)} "
+            f"  FROM pg_cutoffs WHERE {where_sql} "
             "  ORDER BY closing_rank ASC LIMIT ?", params + [limit]).fetchall()
     except Exception as e:
         try: conn.rollback()
@@ -318,7 +325,8 @@ def api_pg_predictor():
         d['chance'] = _chance(d.get('closing_rank'))
         results.append(d)
     return jsonify({'ok': True, 'year': year, 'rank': rank,
-                    'count': len(results), 'results': results})
+                    'count': len(results), 'total': total,
+                    'truncated': total > len(results), 'results': results})
 
 
 def api_pg_predictor_filters():
