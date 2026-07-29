@@ -3733,11 +3733,12 @@ def admin_stage_seed():
     user = get_user()
     if not (user and user['is_admin']):
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    force = bool(request.args.get('force'))
     try:
         from seed_stage_lookups import run_seed_stage_lookups_once
-        res = run_seed_stage_lookups_once(get_db)
+        res = run_seed_stage_lookups_once(get_db, force=force)
     except Exception as e:
-        res = {'options': 0, 'registry': 0, 'retired_plab_stage': False, 'errors': [str(e)]}
+        res = {'options': 0, 'registry': 0, 'retired_plab_stage': False, 'skipped': 0, 'errors': [str(e)]}
     esc = lambda s: str(s).replace('<', '&lt;').replace('>', '&gt;')
     errs = ''.join(f"<li style='color:#b91c1c'>{esc(e)}</li>" for e in res.get('errors', []))
     ok = not res.get('errors')
@@ -3761,8 +3762,13 @@ def admin_stage_seed():
             f"<h2>Stage settings — seed {'✅' if ok else '⚠️'}</h2>"
             f"<p>Added <b>{res.get('options',0)}</b> dropdown option(s), "
             f"<b>{res.get('registry',0)}</b> new settings field; "
+            f"left <b>{res.get('skipped',0)}</b> already-curated list(s) untouched; "
             f"legacy 'PLAB Stages' field retired: <b>{res.get('retired_plab_stage')}</b>.</p>"
             + (f"<ul>{errs}</ul>" if errs else "")
+            + ("<p style='color:#065f46'>Your manual edits are safe — this only fills empty lists. "
+               "Any list you've added to or trimmed is left exactly as you set it.</p>" if not force else
+               "<p style='color:#b45309'><b>Force mode:</b> re-pulled every value from the records "
+               "(this can re-add options you had removed).</p>")
             + "<h3 style='margin-top:20px'>Current Stage options, per pathway</h3>"
             "<table style='border-collapse:collapse;width:100%;font-size:13px'>"
             "<tr style='background:#f3f4f6'><th style='padding:6px 10px;text-align:left'>Pathway</th>"
