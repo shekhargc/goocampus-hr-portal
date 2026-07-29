@@ -2422,6 +2422,12 @@ def client_form(reg_id):
             # Academic details — config-driven.
             s2 = [f for f in form_config if (f['step_number'] or 2) == 2 and f['field_name'] in _CA_FORM_COLS]
             acad_fields = {f['field_name']: request.form.get(f['field_name'], '') for f in s2}
+            # PG fields render as a custom conditional block (not in form_config), so
+            # capture them explicitly. Only when actually posted, so a form that never
+            # showed them can't blank existing PG data.
+            for _pg in ('pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status'):
+                if _pg in request.form:
+                    acad_fields[_pg] = request.form.get(_pg, '')
             if academics:
                 if acad_fields:
                     set_clause = ', '.join(f"{k} = ?" for k in acad_fields)
@@ -3716,6 +3722,94 @@ def _pathway_audit_tables(conn):
         if 'registration_number' in cols and 'pathway' in cols:
             out.append(t)
     return out
+
+
+@app.route('/admin/pg-doctor-badge', methods=['GET', 'POST'])
+@login_required
+def admin_pg_doctor_badge():
+    """Admin: bulk-mark existing clients as PG Doctors (for the founder's list of
+    doctors who did their PG before the form captured it). Paste registration numbers
+    or names, one per line. New registrations that mark PG started/completed get the
+    badge automatically. Read + set only; a client is never un-flagged here unless the
+    admin clicks Remove on that row. (founder 2026-07-29)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    conn = get_db()
+    msg = ''
+    try:
+        if request.method == 'POST':
+            action = request.form.get('action')
+            if action == 'remove':
+                cid = request.form.get('client_id', type=int)
+                conn.execute("UPDATE plab_clients SET is_pg_doctor = 0 WHERE id = ?", (cid,))
+                conn.commit()
+                msg = 'Removed the PG Doctor badge from that client.'
+            else:
+                raw = request.form.get('entries') or ''
+                lines = [l.strip() for l in raw.replace(',', '\n').splitlines() if l.strip()]
+                matched, unmatched = 0, []
+                for line in lines:
+                    digits = re.sub(r'[^0-9]', '', line)
+                    rows = conn.execute(
+                        "SELECT id FROM plab_clients WHERE "
+                        "UPPER(REPLACE(registration_number,' ','')) = UPPER(REPLACE(?,' ','')) "
+                        "OR (first_name || ' ' || last_name) ILIKE ? "
+                        "OR registration_number ILIKE ? "
+                        + ("OR RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? " if len(digits) >= 10 else ""),
+                        ((line, f'%{line}%', f'%{line}%', digits[-10:]) if len(digits) >= 10
+                         else (line, f'%{line}%', f'%{line}%'))).fetchall()
+                    if rows:
+                        for r in rows:
+                            conn.execute("UPDATE plab_clients SET is_pg_doctor = 1 WHERE id = ?", (r['id'],))
+                        matched += len(rows)
+                    else:
+                        unmatched.append(line)
+                conn.commit()
+                msg = f"Marked {matched} client(s) as PG Doctor."
+                if unmatched:
+                    msg += " Not found: " + esc(', '.join(unmatched[:30]))
+
+        current = conn.execute(
+            "SELECT id, registration_number, prefix, first_name, last_name, pathway "
+            "FROM plab_clients WHERE COALESCE(is_pg_doctor,0) = 1 "
+            "ORDER BY first_name, last_name LIMIT 500").fetchall()
+        rows_html = ''
+        for c in current:
+            nm = f"{c['prefix'] or ''} {c['first_name'] or ''} {c['last_name'] or ''}".strip()
+            rows_html += (
+                f"<tr><td>{esc(c['registration_number'])}</td><td>{esc(nm)}</td>"
+                f"<td>{esc(c['pathway'])}</td>"
+                "<td><form method='POST' style='display:inline' onsubmit=\"return confirm('Remove PG Doctor badge?')\">"
+                "<input type='hidden' name='action' value='remove'>"
+                f"<input type='hidden' name='client_id' value='{c['id']}'>"
+                "<button style='padding:3px 10px;color:#b91c1c;cursor:pointer'>Remove</button></form></td></tr>")
+        body = ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+                "<h2>PG Doctor badge — bulk mark</h2>"
+                "<p style='color:#555'>Paste registration numbers or client names (one per line) of "
+                "doctors who have done their PG. They'll show a <b>PG Doctor</b> badge on their profile. "
+                "New registrations that mark PG started/completed get it automatically.</p>"
+                + (f"<div style='background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;padding:8px 12px;border-radius:6px;margin:10px 0'>{msg}</div>" if msg else "")
+                + "<form method='POST'>"
+                "<textarea name='entries' rows='8' style='width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace' "
+                "placeholder='GCCONS/26-27/012&#10;Dr Ramesh Kumar&#10;9876543210'></textarea>"
+                "<button style='margin-top:10px;padding:8px 16px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer'>Mark as PG Doctor</button>"
+                "</form>"
+                f"<h3 style='margin-top:28px'>Current PG Doctors ({len(current)})</h3>"
+                "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%;font-size:14px'>"
+                "<tr style='background:#f3f4f6'><th>Reg No</th><th>Name</th><th>Pathway</th><th></th></tr>"
+                + (rows_html or "<tr><td colspan='4' style='text-align:center;color:#888'>None yet</td></tr>")
+                + "</table></div>")
+        return body
+    except Exception as e:
+        logging.error("admin_pg_doctor_badge: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return f"<div style='font-family:system-ui;margin:40px'>Error: {esc(e)}</div>"
+    finally:
+        try: conn.close()
+        except Exception: pass
 
 
 @app.route('/admin/partner-diag', methods=['GET'])
@@ -29082,8 +29176,9 @@ def ops_academic_add():
             internship_hospital, internship_location, internship_hospital_2,
             internship_location_2, internship_start_date, internship_end_date,
             internship_gap, gap_in_months, gap_reason, working_status,
-            working_hospital_name, additional_info, created_by
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            working_hospital_name, additional_info,
+            pg_done, pg_type, pg_specialty, pg_college, pg_status, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
             f.get('registration_number'), f.get('img_fmg'), f.get('img_medical_college'),
             f.get('fmg_medical_college'), f.get('country'), f.get('mbbs_status'),
             f.get('mbbs_start_date'), f.get('mbbs_end_date'), f.get('speciality_interest_1'),
@@ -29093,18 +29188,21 @@ def ops_academic_add():
             f.get('internship_start_date'), f.get('internship_end_date'),
             f.get('internship_gap'), f.get('gap_in_months'), f.get('gap_reason'),
             f.get('working_status'), f.get('working_hospital_name'),
-            f.get('additional_info'), session.get('user_id', 0)
+            f.get('additional_info'),
+            f.get('pg_done'), f.get('pg_type'), f.get('pg_specialty'),
+            f.get('pg_college'), f.get('pg_status'), session.get('user_id', 0)
         ))
         conn.commit(); conn.close()
         flash('Academic details added', 'success')
         return redirect(request.args.get('next') or url_for('ops_academic_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    from routes.operations._form_lookups import section_academic_lookups
     return render_template('ops_academic_form.html', record=None,
                            img_fmg_options=get_lookup_options('img_fmg'), mbbs_statuses=get_lookup_options('mbbs_status'),
                            internship_statuses=get_lookup_options('internship_status'), internship_gap_options=get_lookup_options('internship_gap'),
                            working_statuses=get_lookup_options('working_status'), pre_reg=pre_reg,
-                           active_ops_page='academic')
+                           active_ops_page='academic', **section_academic_lookups('plab'))
 
 
 @app.route('/operations/academic-details/<int:rid>/edit', methods=['GET', 'POST'])
@@ -29123,7 +29221,8 @@ def ops_academic_edit(rid):
             internship_hospital=?, internship_location=?, internship_hospital_2=?,
             internship_location_2=?, internship_start_date=?, internship_end_date=?,
             internship_gap=?, gap_in_months=?, gap_reason=?, working_status=?,
-            working_hospital_name=?, additional_info=? WHERE id=?''', (
+            working_hospital_name=?, additional_info=?,
+            pg_done=?, pg_type=?, pg_specialty=?, pg_college=?, pg_status=? WHERE id=?''', (
             f.get('registration_number'), f.get('img_fmg'), f.get('img_medical_college'),
             f.get('fmg_medical_college'), f.get('country'), f.get('mbbs_status'),
             f.get('mbbs_start_date'), f.get('mbbs_end_date'), f.get('speciality_interest_1'),
@@ -29133,17 +29232,29 @@ def ops_academic_edit(rid):
             f.get('internship_start_date'), f.get('internship_end_date'),
             f.get('internship_gap'), f.get('gap_in_months'), f.get('gap_reason'),
             f.get('working_status'), f.get('working_hospital_name'),
-            f.get('additional_info'), rid
+            f.get('additional_info'),
+            f.get('pg_done'), f.get('pg_type'), f.get('pg_specialty'),
+            f.get('pg_college'), f.get('pg_status'), rid
         ))
+        # Keep the PG-Doctor badge in step with an ops edit.
+        try:
+            _reg = f.get('registration_number')
+            _pg = ((f.get('pg_done') or '').strip().lower() in ('yes','y','true','1')
+                   and (f.get('pg_status') or '').strip() != '')
+            if _reg and _pg:
+                conn.execute("UPDATE plab_clients SET is_pg_doctor = 1 WHERE registration_number = ?", (_reg,))
+        except Exception:
+            pass
         conn.commit(); conn.close()
         flash('Academic details updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_academic_list'))
     conn.close()
+    from routes.operations._form_lookups import section_academic_lookups
     return render_template('ops_academic_form.html', record=record,
                            img_fmg_options=get_lookup_options('img_fmg'), mbbs_statuses=get_lookup_options('mbbs_status'),
                            internship_statuses=get_lookup_options('internship_status'), internship_gap_options=get_lookup_options('internship_gap'),
                            working_statuses=get_lookup_options('working_status'), pre_reg='',
-                           active_ops_page='academic')
+                           active_ops_page='academic', **section_academic_lookups('plab'))
 
 
 @app.route('/operations/academic-details/<int:rid>/delete', methods=['POST'])

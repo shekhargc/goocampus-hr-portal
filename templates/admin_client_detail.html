@@ -575,6 +575,30 @@
                     <div class="info-value">{{ academics.additional_info }}</div>
                 </div>
                 {% endif %}
+                {% if academics.pg_done %}
+                <div class="info-item">
+                    <div class="info-label">Done PG?</div>
+                    <div class="info-value">{{ academics.pg_done }}</div>
+                </div>
+                {% if academics.pg_type %}
+                <div class="info-item">
+                    <div class="info-label">Which PG</div>
+                    <div class="info-value">{{ academics.pg_type }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">PG Course / Specialty</div>
+                    <div class="info-value">{{ academics.pg_specialty or '-' }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">PG College</div>
+                    <div class="info-value">{{ academics.pg_college or '-' }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">PG Status</div>
+                    <div class="info-value">{{ academics.pg_status or '-' }}</div>
+                </div>
+                {% endif %}
+                {% endif %}
             </div>
         </div>
         {% else %}

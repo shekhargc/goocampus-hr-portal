@@ -77,6 +77,11 @@
       <div>
         <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
           {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
+          {% if client.is_pg_doctor %}
+          <span style="vertical-align:middle;display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#FEF3E7;color:#C2410C;border:1px solid #FDBA74;margin-left:8px;">PG Doctor</span>
+          {% else %}
+          <span style="vertical-align:middle;display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;margin-left:8px;">MBBS Doctor</span>
+          {% endif %}
         </h1>
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
           Registration #{{ client.registration_number|format_reg }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}

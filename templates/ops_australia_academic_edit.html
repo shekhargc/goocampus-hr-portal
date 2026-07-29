@@ -192,6 +192,58 @@
                 </div>
             </div>
 
+            <!-- ===== POSTGRADUATE (PG) ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Postgraduate (PG)</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Done PG?</label>
+                    <select name="pg_done" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select…</option>
+                        {% for s in pg_done_options %}<option value="{{ s }}" {% if record.pg_done == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Which PG?</label>
+                    <select name="pg_type" id="pg_type" onchange="auRebuildPgSpec()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select…</option>
+                        {% for s in pg_type_options %}<option value="{{ s }}" {% if record.pg_type == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PG Course / Specialty</label>
+                    <select name="pg_specialty" id="pg_specialty" data-current="{{ record.pg_specialty or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select…</option>
+                        {% if record.pg_specialty %}<option value="{{ record.pg_specialty }}" selected>{{ record.pg_specialty }}</option>{% endif %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PG College</label>
+                    <input type="text" name="pg_college" value="{{ record.pg_college or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PG Status</label>
+                    <select name="pg_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select…</option>
+                        {% for s in pg_status_options %}<option value="{{ s }}" {% if record.pg_status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <script>
+              window.AU_PG_NEETPG = {{ (pg_specialty_neetpg or [])|tojson }};
+              window.AU_PG_DNB    = {{ (pg_specialty_dnb or [])|tojson }};
+              function auRebuildPgSpec(){
+                var sel = document.getElementById('pg_specialty'); if(!sel) return;
+                var t = (document.getElementById('pg_type')||{}).value || '';
+                var list = (t==='DNB') ? (window.AU_PG_DNB||[]) : (t ? (window.AU_PG_NEETPG||[]) : []);
+                var cur = sel.getAttribute('data-current') || sel.value;
+                var html = '<option value="">Select…</option>';
+                list.forEach(function(o){ html += '<option value="'+o+'">'+o+'</option>'; });
+                sel.innerHTML = html;
+                if(cur && list.indexOf(cur)>=0) sel.value = cur;
+              }
+              auRebuildPgSpec();
+            </script>
+
             <!-- ===== ADDITIONAL INFO ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Additional Info</h3>
             <div style="margin-bottom:1.1rem;">
