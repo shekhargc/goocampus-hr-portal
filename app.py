@@ -3753,14 +3753,23 @@ def admin_joined_stage_sync():
                     "WHERE COALESCE(t.pathway,'plab')='training' AND COALESCE(TRIM(t.joined_stage),'')='' "
                     "AND " + (M10 % 't.mobile') + " = src.m10 AND LENGTH(src.m10) = 10")
                 n = getattr(cur.cursor, 'rowcount', 0) if cur else 0
-                # Make sure those joined_stage values show in the training dropdown.
+                # Sync the Training joined_stage DROPDOWN OPTIONS too: give Training the
+                # same menu choices as Consulting/AMC — the union of every joined_stage
+                # value in use on training/consulting/australia records AND already in
+                # those pathways' dropdowns. Additive; a curated training list keeps its
+                # extras, this only ADDS any missing choice.
                 conn.execute(
                     "INSERT INTO lookup_options (category, label, value, pathway, is_active, sort_order) "
-                    "SELECT 'joined_stage', joined_stage, joined_stage, 'training', TRUE, 50 "
-                    "FROM (SELECT DISTINCT joined_stage FROM plab_clients "
-                    "  WHERE COALESCE(pathway,'plab')='training' AND COALESCE(TRIM(joined_stage),'')<>'') d "
+                    "SELECT 'joined_stage', v, v, 'training', TRUE, 50 FROM ("
+                    "  SELECT DISTINCT TRIM(joined_stage) AS v FROM plab_clients "
+                    "    WHERE COALESCE(pathway,'plab') IN ('training','consulting','australia') "
+                    "    AND COALESCE(TRIM(joined_stage),'') <> '' "
+                    "  UNION "
+                    "  SELECT DISTINCT TRIM(value) AS v FROM lookup_options "
+                    "    WHERE category='joined_stage' AND COALESCE(pathway,'plab') IN ('consulting','australia') "
+                    "    AND COALESCE(TRIM(value),'') <> '' ) d "
                     "WHERE NOT EXISTS (SELECT 1 FROM lookup_options lo WHERE lo.category='joined_stage' "
-                    "  AND lo.value = d.joined_stage AND COALESCE(lo.pathway,'plab')='training')")
+                    "  AND lo.value = d.v AND COALESCE(lo.pathway,'plab')='training')")
                 conn.commit()
             except Exception as e:
                 conn.rollback()
