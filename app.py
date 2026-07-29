@@ -18225,6 +18225,13 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             registered_at TIMESTAMP
         )''')
+        # draft_data holds a partly-filled onboarding form so a partner can leave and
+        # come back to the same link and finish later (founder 2026-07-29).
+        try:
+            conn.execute("ALTER TABLE partner_invitations ADD COLUMN IF NOT EXISTS draft_data TEXT")
+            conn.execute("ALTER TABLE partner_invitations ADD COLUMN IF NOT EXISTS draft_saved_at TIMESTAMP")
+        except Exception:
+            conn.rollback()
 
         # ── Partner Team Members ──
         conn.execute('''CREATE TABLE IF NOT EXISTS partner_team_members (
@@ -33028,6 +33035,44 @@ def partner_api_cities():
         conn.close()
 
 
+@app.route('/partner/onboard/<token>/save-draft', methods=['POST'])
+def partner_onboard_save_draft(token):
+    """Save a partly-filled onboarding form so the partner can come back to the same
+    link and finish later. Same session guard as the onboarding form. Passwords are
+    NEVER stored in a draft. (founder 2026-07-29)"""
+    if not session.get('partner_register_token') or session.get('partner_register_token') != token:
+        return jsonify({'error': 'Please verify your email first.'}), 401
+    data = request.get_json(silent=True) or {}
+    # Whitelist the fields we persist — explicitly no password / confirm_password.
+    allow = ('company_name', 'contact_person', 'phone', 'website',
+             'address', 'city', 'state', 'country', 'partner_type')
+    draft = {k: (str(data.get(k) or '')).strip() for k in allow}
+    team = []
+    for m in (data.get('team') or [])[:20]:
+        if not isinstance(m, dict):
+            continue
+        row = {kk: (str(m.get(kk) or '')).strip()
+               for kk in ('name', 'designation', 'email', 'phone')}
+        if any(row.values()):
+            team.append(row)
+    draft['team'] = team
+    import json as _json
+    conn = get_db()
+    try:
+        conn.execute("UPDATE partner_invitations SET draft_data = ?, "
+                     "draft_saved_at = CURRENT_TIMESTAMP WHERE token = ? AND status = 'pending'",
+                     (_json.dumps(draft), token))
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("partner_onboard_save_draft: %s", e)
+        return jsonify({'error': 'Could not save right now.'}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/partner/onboard/<token>', methods=['GET'])
 def partner_onboard_form(token):
     """Partner onboarding form - company details, team members, address."""
@@ -33036,14 +33081,33 @@ def partner_onboard_form(token):
         return redirect(url_for('login'))
 
     conn = get_db()
-    invitation = conn.execute('''
-        SELECT id, name, email, token, status FROM partner_invitations WHERE token = ?
-    ''', (token,)).fetchone()
+    # Pull draft_data too so a returning partner sees their part-filled form. Guard
+    # the column so an older DB without it can't 500 the page.
+    try:
+        invitation = conn.execute('''
+            SELECT id, name, email, token, status, draft_data FROM partner_invitations WHERE token = ?
+        ''', (token,)).fetchone()
+    except Exception:
+        conn.rollback()
+        invitation = conn.execute('''
+            SELECT id, name, email, token, status FROM partner_invitations WHERE token = ?
+        ''', (token,)).fetchone()
 
     if not invitation:
         conn.close()
         flash('Invalid invitation token', 'error')
         return redirect(url_for('login'))
+
+    draft = {}
+    inv_d = dict(invitation)
+    if inv_d.get('draft_data'):
+        try:
+            import json as _json
+            draft = _json.loads(inv_d['draft_data']) or {}
+            if not isinstance(draft, dict):
+                draft = {}
+        except Exception:
+            draft = {}
 
     products = conn.execute(
         'SELECT id, name FROM products_services WHERE status = ? ORDER BY name',
@@ -33051,7 +33115,8 @@ def partner_onboard_form(token):
     ).fetchall()
     conn.close()
 
-    return render_template('partner_onboard.html', token=token, invitation=invitation, products=products)
+    return render_template('partner_onboard.html', token=token, invitation=invitation,
+                           products=products, draft=draft)
 
 
 @app.route('/partner/onboard/<token>', methods=['POST'])

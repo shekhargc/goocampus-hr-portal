@@ -818,6 +818,12 @@
 
     <!-- Form -->
     <div class="form-outer">
+        {% if draft %}
+        <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.9rem;">
+            <i class="fas fa-clock-rotate-left"></i> Welcome back — we've filled in what you saved last time. Just carry on where you left off.
+        </div>
+        {% endif %}
+
         <form id="partnerForm" method="POST" action="/partner/onboard/{{ invitation.token }}">
 
             <!-- Step 1: Company Details -->
@@ -1063,6 +1069,14 @@
         </form>
     </div>
 
+    <!-- Save & continue later -->
+    <button type="button" id="saveDraftBtn" onclick="saveDraft(true)"
+        style="position:fixed;right:18px;bottom:18px;z-index:900;background:#fff;color:var(--navy,#1e3a5f);
+               border:1.5px solid var(--navy,#1e3a5f);padding:0.6rem 1rem;border-radius:30px;font-weight:600;
+               cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,0.12);display:inline-flex;align-items:center;gap:8px;">
+        <i class="fas fa-floppy-disk"></i> Save &amp; continue later
+    </button>
+
     <!-- Footer -->
     <div class="footer">
         &copy; 2026 GooCampus Edu Solutions Pvt Ltd &middot;
@@ -1087,6 +1101,60 @@
         // ─── State Machine ───
         let currentStep = 1;
         const totalSteps = 4;
+
+        // ── Save & continue later (founder 2026-07-29) ──
+        // DRAFT is whatever the partner saved on a previous visit (never a password).
+        const DRAFT = {{ draft|tojson }};
+
+        function gatherDraft() {
+            const val = id => (document.getElementById(id)?.value || '').trim();
+            const team = [];
+            document.querySelectorAll('#teamMembersContainer .team-member-card').forEach(card => {
+                const g = n => (card.querySelector(`[name="${n}"]`)?.value || '').trim();
+                const row = { name: g('team_name[]'), designation: g('team_designation[]'),
+                              email: g('team_email[]'), phone: g('team_phone[]') };
+                if (row.name || row.designation || row.email || row.phone) team.push(row);
+            });
+            return {
+                company_name: val('companyName'), contact_person: val('contactPerson'),
+                phone: val('phone'), website: val('website'), address: val('address'),
+                city: val('city'), state: val('state'), country: val('country'), team
+            };
+        }
+
+        async function saveDraft(showFeedback) {
+            const btn = document.getElementById('saveDraftBtn');
+            const orig = btn ? btn.innerHTML : '';
+            if (btn && showFeedback) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
+            try {
+                const r = await fetch(`/partner/onboard/${ONBOARD_TOKEN}/save-draft`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(gatherDraft())
+                });
+                const ok = r.ok && (await r.json()).success;
+                if (btn && showFeedback) {
+                    btn.innerHTML = ok ? '<i class="fas fa-check"></i> Saved — you can close this and come back'
+                                       : '<i class="fas fa-triangle-exclamation"></i> Could not save';
+                    setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 3500);
+                }
+                return ok;
+            } catch (e) {
+                if (btn && showFeedback) { btn.disabled = false; btn.innerHTML = orig; }
+                return false;
+            }
+        }
+
+        function restoreDraftTextFields() {
+            if (!DRAFT || typeof DRAFT !== 'object') return;
+            const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+            set('companyName', DRAFT.company_name);
+            set('contactPerson', DRAFT.contact_person);
+            set('phone', DRAFT.phone);
+            set('website', DRAFT.website);
+            set('address', DRAFT.address);
+            if (DRAFT.country) set('country', DRAFT.country);
+            // state + city are async (loaded by fetch); handled in loadStates()/city change.
+        }
 
         function updateUI() {
             // Cards
@@ -1227,6 +1295,7 @@
             if (currentStep < totalSteps) {
                 currentStep++;
                 updateUI();
+                saveDraft(false);   // silently checkpoint progress on each step
             }
         }
         function prevStep() {
@@ -1247,7 +1316,18 @@
         function initializeTeamMembers() {
             const c = document.getElementById('teamMembersContainer');
             c.innerHTML = '';
-            addTeamMemberRow();
+            const saved = (DRAFT && Array.isArray(DRAFT.team)) ? DRAFT.team : [];
+            if (saved.length) {
+                saved.forEach(m => {
+                    addTeamMemberRow();
+                    const card = c.lastElementChild;
+                    const set = (n, v) => { const el = card.querySelector(`[name="${n}"]`); if (el && v) el.value = v; };
+                    set('team_name[]', m.name); set('team_designation[]', m.designation);
+                    set('team_email[]', m.email); set('team_phone[]', m.phone);
+                });
+            } else {
+                addTeamMemberRow();
+            }
         }
 
         function addTeamMemberRow() {
@@ -1350,6 +1430,12 @@
                             sel.appendChild(opt);
                         });
                     }
+                    // Restore a saved state, then let the change handler load + restore the city.
+                    if (DRAFT && DRAFT.state) {
+                        sel.value = DRAFT.state;
+                        window._pendingDraftCity = DRAFT.city || '';
+                        sel.dispatchEvent(new Event('change'));
+                    }
                 })
                 .catch(e => console.error('Error loading states:', e));
         }
@@ -1357,6 +1443,7 @@
         // ─── Init ───
         document.addEventListener('DOMContentLoaded', function() {
             initializeTeamMembers();
+            restoreDraftTextFields();
             loadStates();
 
             // Add team member
@@ -1391,6 +1478,11 @@
                             });
                         }
                         citySelect.disabled = false;
+                        // Restore a saved city once its options exist.
+                        if (window._pendingDraftCity) {
+                            citySelect.value = window._pendingDraftCity;
+                            window._pendingDraftCity = '';
+                        }
                     })
                     .catch(e => {
                         console.error('Error loading cities:', e);
