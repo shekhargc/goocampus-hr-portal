@@ -718,6 +718,53 @@
                 {% for f in form_config if (f.step_number or 2) == 2 %}
                 {{ render_field(f, academics[f.field_name] if academics else '') }}
                 {% endfor %}
+
+                {# ── PG (postgraduate) education — revealed only once MBBS AND
+                     internship are marked Completed. Course list comes from the
+                     same NEET-PG data the PDF library uses (editable in settings). #}
+                {% set _ro = readonly|default(false) %}
+                <div class="form-group full-width" data-fname="pg_done" style="display:none;">
+                    <label>Have you done your PG (postgraduate)?</label>
+                    <select name="pg_done"{% if _ro %} disabled{% endif %}>
+                        <option value="">Select…</option>
+                        {% for o in (lookup_options.get('pg_done') or ['Yes','No']) %}
+                        <option value="{{ o }}"{% if academics and academics.pg_done == o %} selected{% endif %}>{{ o }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group full-width" data-fname="pg_type" style="display:none;">
+                    <label>Which PG?</label>
+                    <select name="pg_type"{% if _ro %} disabled{% endif %}>
+                        <option value="">Select…</option>
+                        {% for o in (lookup_options.get('pg_type') or ['NEET PG (MD/MS)','DNB']) %}
+                        <option value="{{ o }}"{% if academics and academics.pg_type == o %} selected{% endif %}>{{ o }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group full-width" data-fname="pg_specialty" style="display:none;">
+                    <label>PG Course / Specialty</label>
+                    <select name="pg_specialty" data-current="{{ academics.pg_specialty if academics else '' }}"{% if _ro %} disabled{% endif %}>
+                        <option value="">Select…</option>
+                        {% if academics and academics.pg_specialty %}<option value="{{ academics.pg_specialty }}" selected>{{ academics.pg_specialty }}</option>{% endif %}
+                    </select>
+                </div>
+                <div class="form-group full-width" data-fname="pg_college" style="display:none;">
+                    <label>PG College</label>
+                    <input type="text" name="pg_college" value="{{ academics.pg_college if academics else '' }}" placeholder="College / institute name"{% if _ro %} disabled{% endif %}>
+                </div>
+                <div class="form-group full-width" data-fname="pg_status" style="display:none;">
+                    <label>PG Status</label>
+                    <select name="pg_status"{% if _ro %} disabled{% endif %}>
+                        <option value="">Select…</option>
+                        {% for o in (lookup_options.get('pg_status') or ['First Year','Second Year','Final Year','Completed']) %}
+                        <option value="{{ o }}"{% if academics and academics.pg_status == o %} selected{% endif %}>{{ o }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <script>
+                  window.PG_SPECIALTY_NEETPG = {{ (lookup_options.get('pg_specialty_neetpg') or [])|tojson }};
+                  window.PG_SPECIALTY_DNB    = {{ (lookup_options.get('pg_specialty_dnb') or [])|tojson }};
+                </script>
             </div>
 
             {% if not readonly %}
@@ -1348,7 +1395,37 @@ function initAcademicCascade(){
     show('gap_reason', internDone && gv==='Yes');
     show('working_status', internDone);
     show('working_hospital_name', internDone && wv==='Yes');
+
+    // ── PG (postgraduate) block — only once MBBS AND internship are Completed
+    //    (internDone already encodes exactly that gate). ──
+    show('pg_done', internDone);
+    var pgYes = internDone && (val('pg_done')==='Yes');
+    show('pg_type', pgYes);
+    var pgTypeSet = pgYes && (val('pg_type')!=='');
+    show('pg_specialty', pgTypeSet);
+    show('pg_college', pgTypeSet);
+    show('pg_status', pgTypeSet);
   }
+
+  // The specialty picklist switches source by PG type: NEET PG (MD/MS) vs DNB —
+  // both lists come from the same NEET-PG data the PDF library uses.
+  function rebuildPgSpecialty(){
+    var sel = ctrl('pg_specialty'); if(!sel || sel.tagName!=='SELECT') return;
+    var t = val('pg_type');
+    var list = (t==='DNB') ? (window.PG_SPECIALTY_DNB||[])
+             : (t ? (window.PG_SPECIALTY_NEETPG||[]) : []);
+    var cur = sel.getAttribute('data-current') || sel.value;
+    var html = '<option value="">Select…</option>';
+    list.forEach(function(o){ html += '<option value="'+o+'">'+o+'</option>'; });
+    sel.innerHTML = html;
+    if(cur && list.indexOf(cur)>=0) sel.value = cur;
+  }
+  rebuildPgSpecialty();
+
+  var cPgType = ctrl('pg_type');
+  if(cPgType) cPgType.addEventListener('change', function(){ rebuildPgSpecialty(); recompute(); });
+  var cPgDone = ctrl('pg_done');
+  if(cPgDone) cPgDone.addEventListener('change', recompute);
 
   [cImgFmg, ctrl('mbbs_status'), cIntern, cGap, cWork].forEach(function(c){
     if(c) c.addEventListener('change', function(){ if(c===cImgFmg) rebuildMbbs(); recompute(); });

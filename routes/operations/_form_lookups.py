@@ -184,6 +184,14 @@ def section_academic_lookups(pathway):
         'internship_statuses':     get_lookup_options('internship_status', pathway=pathway),
         'internship_gap_options':  get_lookup_options('internship_gap',    pathway=pathway) or ['Yes', 'No'],
         'working_statuses':        get_lookup_options('working_status',    pathway=pathway),
+        # PG (postgraduate) medical education — shown once MBBS + internship done.
+        'pg_done_options':         get_lookup_options('pg_done',           pathway=pathway) or ['Yes', 'No'],
+        'pg_type_options':         get_lookup_options('pg_type',           pathway=pathway) or ['NEET PG (MD/MS)', 'DNB'],
+        'pg_status_options':       get_lookup_options('pg_status',         pathway=pathway) or ['First Year', 'Second Year', 'Final Year', 'Completed'],
+        # The specialty picklist depends on the PG type; both lists are seeded
+        # from the NEET-PG PDF course data and are editable in the Field Manager.
+        'pg_specialty_neetpg':     get_lookup_options('pg_specialty_neetpg', pathway=pathway),
+        'pg_specialty_dnb':        get_lookup_options('pg_specialty_dnb',    pathway=pathway),
     }
 
 

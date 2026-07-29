@@ -34,6 +34,8 @@ AU_ACADEMIC_EDITABLE_COLUMNS = [
     'internship_gap', 'gap_in_months', 'gap_reason',
     'working_status', 'working_hospital_name',
     'additional_info',
+    # PG (postgraduate) medical education — shown once MBBS + internship completed.
+    'pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status',
 ]
 
 # Columns that should be coerced to float (storage is TEXT but UI uses
