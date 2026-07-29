@@ -8,11 +8,12 @@ with is_published = TRUE AND is_active = TRUE are visible.
 """
 import os
 import re
+import json
 import random
 import secrets
 import logging
 from datetime import datetime, timedelta
-from flask import request, jsonify, redirect, abort
+from flask import request, jsonify, redirect, abort, Response
 from db import get_db
 from pg_admin.utils import mentor_public_dict, as_dict
 
@@ -241,11 +242,25 @@ def api_pg_mentor_photo(mentor_id):
         url = storage.presigned_get_url(key)
         if url:
             return redirect(url, code=302)
-    # Not migrated to R2 yet — fall back to the original source image.
-    src = row.get('source_photo_url')
-    if src:
-        return redirect(src, code=302)
-    abort(404)
+    # No migrated photo. Serve a generated initials avatar rather than 404 or a
+    # redirect to the old goocampus-s3bucket — that bucket is PRIVATE (403), so
+    # redirecting there just renders a broken image on every card. This makes
+    # <img src=".../photo"> always work; consumers that want their own placeholder
+    # can still branch on the JSON's photo_url being null. (founder 2026-07-28)
+    name = (row.get('name') or '').strip()
+    parts = [p for p in name.replace('.', ' ').split() if p]
+    initials = ((parts[0][0] + parts[-1][0]) if len(parts) > 1 else
+                (parts[0][:2] if parts else '?')).upper()
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">'
+        '<rect width="256" height="256" fill="#FFF7ED"/>'
+        '<circle cx="128" cy="128" r="120" fill="#FFEDD5" stroke="#FED7AA" stroke-width="4"/>'
+        f'<text x="50%" y="50%" dy=".35em" text-anchor="middle" '
+        f'font-family="system-ui,-apple-system,Segoe UI,Arial,sans-serif" '
+        f'font-size="96" font-weight="700" fill="#F97316">{initials}</text></svg>'
+    )
+    return Response(svg, mimetype='image/svg+xml',
+                    headers={'Cache-Control': 'public, max-age=3600'})
 
 
 def api_pg_predictor():
@@ -433,3 +448,300 @@ def api_pg_predictor_courses():
     finally:
         conn.close()
     return jsonify({'ok': True, 'courses': courses})
+
+
+def api_pg_neetpg_pdfs():
+    """GET /api/pg/neetpg-pdfs?category=&specialty=&state=&q=
+
+    The NEET-PG cut-off PDF library for the goocampus.in user dashboard.
+
+    Reads the SAME neetpg_pdfs library the goocampus.org page serves — one library,
+    two front-ends — so uploads made in the existing admin appear on both. The
+    goocampus.org page keeps its own behaviour untouched.
+
+    Difference on .in (founder 2026-07-28): only REAL files are returned —
+    published AND actually carrying a file — so the site never shows a
+    "coming soon" placeholder. Metadata only; bytes come from /file.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    # Every filter the goocampus.org cut-off library exposes, so the .in dashboard
+    # can reproduce the SAME UI (doc-type tabs, NEET-PG/DNB split, State, Specialty,
+    # Quota & Category). category = 'neetpg'|'dnb'; doc_type = cutoff|mcc_profile|…
+    category = (request.args.get('category') or '').strip()
+    doc_type = (request.args.get('doc_type') or '').strip()
+    specialty = (request.args.get('specialty') or '').strip()
+    state = (request.args.get('state') or '').strip()
+    quota = (request.args.get('quota') or request.args.get('quota_category') or '').strip()
+    q = (request.args.get('q') or '').strip()
+
+    where = ["COALESCE(is_active, 1) = 1", "COALESCE(is_published, 0) = 1",
+             "file_data IS NOT NULL", "COALESCE(file_size, 0) > 0"]
+    params = []
+    if category:
+        where.append("category = ?"); params.append(category)
+    if doc_type:
+        where.append("doc_type = ?"); params.append(doc_type)
+    if specialty:
+        where.append("specialty = ?"); params.append(specialty)
+    if state:
+        where.append("state = ?"); params.append(state)
+    if quota:
+        where.append("quota_category = ?"); params.append(quota)
+    if q:
+        where.append("(title ILIKE ? OR specialty ILIKE ? OR file_name ILIKE ?)")
+        params.extend([f"%{q}%"] * 3)
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, title, category, doc_type, specialty, quota_category, state, "
+            "       file_name, file_size, upload_date, published_at, "
+            "       COALESCE(download_count,0) AS download_count "
+            f"  FROM neetpg_pdfs WHERE {' AND '.join(where)} "
+            "  ORDER BY state ASC, specialty ASC, title ASC", params).fetchall()
+        # Filter values that actually exist, so the site's controls never offer a
+        # choice that returns nothing. Keyed to match the .org UI's four filters.
+        facets = {}
+        for col in ('category', 'doc_type', 'specialty', 'state', 'quota_category'):
+            facets[col + 's'] = [r[col] for r in conn.execute(
+                f"SELECT DISTINCT {col} FROM neetpg_pdfs "
+                "  WHERE COALESCE(is_active,1)=1 AND COALESCE(is_published,0)=1 "
+                f"    AND file_data IS NOT NULL AND COALESCE({col},'') <> '' "
+                f"  ORDER BY {col}").fetchall()]
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        conn.close()
+        logging.error("api_pg_neetpg_pdfs: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    conn.close()
+
+    base = _photo_base()
+    pdfs = []
+    for r in rows:
+        d = as_dict(r)
+        d['file_url'] = f"{base}/api/pg/neetpg-pdfs/{r['id']}/file"
+        d['file_size_kb'] = round((r['file_size'] or 0) / 1024)
+        if d.get('upload_date') is not None:
+            d['upload_date'] = str(d['upload_date'])[:10]
+        pdfs.append(d)
+    return jsonify({'ok': True, 'count': len(pdfs), 'pdfs': pdfs, **facets})
+
+
+def api_pg_neetpg_pdf_file(pdf_id):
+    """GET /api/pg/neetpg-pdfs/:id/file — stream one PDF and count the download.
+
+    Public (no key): it's the file itself, and only published+active rows with real
+    bytes are ever served — the same content the goocampus.org library hands out."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT title, file_name, file_data FROM neetpg_pdfs "
+            "  WHERE id = ? AND COALESCE(is_active,1)=1 AND COALESCE(is_published,0)=1",
+            (pdf_id,)).fetchone()
+        if not row or not row['file_data']:
+            conn.close()
+            abort(404)
+        try:
+            conn.execute("UPDATE neetpg_pdfs SET download_count = COALESCE(download_count,0)+1 "
+                         "WHERE id = ?", (pdf_id,))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        data = bytes(row['file_data'])
+        fname = (row['file_name'] or f"{row['title']}.pdf").replace('"', '')
+    except Exception as e:
+        try: conn.close()
+        except Exception: pass
+        logging.error("api_pg_neetpg_pdf_file(%s): %s", pdf_id, e)
+        abort(404)
+    conn.close()
+    return Response(data, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'inline; filename="{fname}"',
+                             'Cache-Control': 'public, max-age=3600'})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Pricing, entitlements & coupons — the goocampus.in site + user dashboard call
+# these. Everything below is X-PG-Key guarded like the rest of this file. Endpoints
+# that act on a specific doctor also resolve that doctor from their login token.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _resolve_pg_user(conn):
+    """The logged-in doctor for this request, or None.
+
+    The site holds the session token issued at OTP verify. It forwards it as
+    X-PG-User-Token (or ?token= / body token). A None result means "treat as a
+    logged-out free visitor" — never an error, so public pricing still renders.
+    """
+    token = request.headers.get('X-PG-User-Token') or request.args.get('token')
+    if not token and request.is_json:
+        token = (request.get_json(silent=True) or {}).get('token')
+    if not token:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT id FROM pg_users WHERE session_token = ? "
+            "AND (token_expires_at IS NULL OR token_expires_at > CURRENT_TIMESTAMP) "
+            "AND COALESCE(is_blocked,0) = 0", (token,)).fetchone()
+        return row['id'] if row else None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+
+
+def api_pg_plans():
+    """GET /api/pg/plans → the public pricing cards, exactly as configured in admin.
+
+    Only active + public plans, each with its feature list resolved to plain values
+    the site can render without knowing the schema. This is what a doctor sees on
+    the pricing page.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        plans = [dict(r) for r in conn.execute(
+            "SELECT * FROM pg_plans WHERE COALESCE(is_active,1)=1 AND COALESCE(is_public,1)=1 "
+            "ORDER BY sort_order, id").fetchall()]
+        feats = {r['code']: dict(r) for r in conn.execute(
+            "SELECT * FROM pg_features WHERE COALESCE(is_active,1)=1 "
+            "ORDER BY sort_order, id").fetchall()}
+        matrix = {}
+        for r in conn.execute("SELECT * FROM pg_plan_features").fetchall():
+            matrix.setdefault(r['plan_id'], {})[r['feature_code']] = dict(r)
+        out = []
+        for p in plans:
+            grants = matrix.get(p['id'], {})
+            features = []
+            for code, f in feats.items():
+                g = grants.get(code)
+                if not g or g['value_type'] == 'off':
+                    included, display = False, None
+                elif g['value_type'] == 'unlimited':
+                    included, display = True, 'Unlimited'
+                elif f['unit'] == 'boolean':
+                    included, display = True, 'Included'
+                elif g['limit_value'] is not None:
+                    included, display = True, int(g['limit_value'])
+                else:
+                    included, display = True, 'Unlimited'
+                features.append({'code': code, 'name': f['name'], 'unit': f['unit'],
+                                 'included': included, 'value': display,
+                                 'note': g['note'] if g else ''})
+            try:
+                highlights = json.loads(p.get('highlights') or '[]')
+            except Exception:
+                highlights = []
+            out.append({
+                'id': p['id'], 'code': p['code'], 'name': p['name'],
+                'tagline': p.get('tagline') or '', 'description': p.get('description') or '',
+                'plan_kind': p.get('plan_kind') or 'paid',
+                'price': float(p.get('price') or 0),
+                'compare_at_price': float(p['compare_at_price']) if p.get('compare_at_price') else None,
+                'currency': p.get('currency') or 'INR',
+                'billing_period': p.get('billing_period') or 'one_time',
+                'badge_text': p.get('badge_text') or '', 'badge_color': p.get('badge_color') or '',
+                'accent_color': p.get('accent_color') or '', 'is_featured': bool(p.get('is_featured')),
+                'cta_label': p.get('cta_label') or '', 'highlights': highlights,
+                'features': features,
+            })
+        return jsonify({'ok': True, 'plans': out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_plans: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_entitlements():
+    """GET /api/pg/entitlements → this doctor's plan + every limit/used/remaining.
+
+    One call powers the whole dashboard: which sections to show, what to grey out,
+    and the "2 of 3 PDFs used — upgrade for the rest" nudges.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import entitlements
+    conn = get_db()
+    try:
+        uid = _resolve_pg_user(conn)
+        return jsonify({'ok': True, 'logged_in': bool(uid),
+                        'entitlements': entitlements.summary(conn, uid)})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_entitlements: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_entitlement_consume():
+    """POST /api/pg/entitlements/consume {feature, item_key?} → allow + record.
+
+    The gate the site calls the instant a doctor opens a gated thing (a PDF, a new
+    state). It re-checks server-side — the front-end greying-out is a courtesy, this
+    is the real fence — and only records usage when it actually allows the action.
+    Returns 402 with the entitlement info when blocked, so the site can show the
+    right upgrade prompt.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import entitlements
+    data = request.get_json(silent=True) or {}
+    feature = (data.get('feature') or '').strip()
+    item_key = data.get('item_key')
+    if not feature:
+        return jsonify({'ok': False, 'error': 'feature required'}), 400
+    conn = get_db()
+    try:
+        uid = _resolve_pg_user(conn)
+        if not uid:
+            return jsonify({'ok': False, 'allowed': False, 'reason': 'login_required'}), 401
+        allowed, info = entitlements.check(conn, uid, feature, item_key=item_key)
+        if not allowed:
+            return jsonify({'ok': True, 'allowed': False, 'info': info}), 402
+        entitlements.consume(conn, uid, feature, item_key=item_key)
+        conn.commit()
+        return jsonify({'ok': True, 'allowed': True, 'info': info})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_entitlement_consume: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_coupon_validate():
+    """POST /api/pg/coupons/validate {code, plan_id} → discount + payable.
+
+    Read-only: it prices the discount so the checkout can show it, but never burns
+    a use. Redemption happens only after payment succeeds (built with the Razorpay
+    step, not here). Works for logged-out visitors too, so the pricing page can
+    preview a code before login.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import coupons as coupon_lib
+    data = request.get_json(silent=True) or {}
+    code = (data.get('code') or '').strip()
+    plan_id = data.get('plan_id')
+    conn = get_db()
+    try:
+        uid = _resolve_pg_user(conn)
+        ok, res = coupon_lib.validate(conn, code, plan_id=plan_id, user_id=uid)
+        return jsonify({'ok': ok, 'result': res})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_coupon_validate: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()

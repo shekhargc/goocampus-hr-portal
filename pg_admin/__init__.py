@@ -13,7 +13,9 @@ import os
 import logging
 from jinja2 import ChoiceLoader, FileSystemLoader
 from pg_admin.data import tables as _tables
-from pg_admin.routes import mentors_admin, api, predictor_admin
+from pg_admin.data import plans_tables as _plans_tables
+from pg_admin.routes import (mentors_admin, api, predictor_admin,
+                             plans_admin, users_admin, coupons_admin)
 
 
 def register_pg_admin(app):
@@ -23,7 +25,9 @@ def register_pg_admin(app):
 
     # Tables self-create at boot (idempotent) — same pattern as college module.
     for fn in (_tables.ensure_pg_mentors_table, _tables.ensure_pg_auth_tables,
-               _tables.ensure_pg_cutoffs_table):
+               _tables.ensure_pg_cutoffs_table,
+               _plans_tables.ensure_pg_plans_tables,
+               _plans_tables.seed_pg_pricing_defaults):
         try:
             fn()
         except Exception as e:
@@ -68,8 +72,72 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/predictor/courses', 'api_pg_predictor_courses',
                      api.api_pg_predictor_courses, methods=['GET'])
 
+    # ── NEET-PG PDF library for the goocampus.in dashboard (same library as .org) ──
+    app.add_url_rule('/api/pg/neetpg-pdfs', 'api_pg_neetpg_pdfs',
+                     api.api_pg_neetpg_pdfs, methods=['GET'])
+    app.add_url_rule('/api/pg/neetpg-pdfs/<int:pdf_id>/file', 'api_pg_neetpg_pdf_file',
+                     api.api_pg_neetpg_pdf_file, methods=['GET'])
+
     # ── Doctor login for goocampus.in — WhatsApp OTP (X-PG-Key guarded) ──
     app.add_url_rule('/api/pg/otp/send', 'api_pg_otp_send',
                      api.api_pg_otp_send, methods=['POST'])
     app.add_url_rule('/api/pg/otp/verify', 'api_pg_otp_verify',
                      api.api_pg_otp_verify, methods=['POST'])
+
+    # ── Pricing & Plans admin ──────────────────────────────────────────────
+    app.add_url_rule('/admin/pg/plans', 'pg_plans_admin',
+                     plans_admin.plans_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/plans/save', 'pg_plan_save',
+                     plans_admin.plan_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/plans/<int:plan_id>/toggle', 'pg_plan_toggle',
+                     plans_admin.plan_toggle, methods=['POST'])
+    app.add_url_rule('/admin/pg/plans/<int:plan_id>/delete', 'pg_plan_delete',
+                     plans_admin.plan_delete, methods=['POST'])
+    app.add_url_rule('/admin/pg/plans/<int:plan_id>/duplicate', 'pg_plan_duplicate',
+                     plans_admin.plan_duplicate, methods=['POST'])
+    app.add_url_rule('/admin/pg/plans/feature/save', 'pg_feature_save',
+                     plans_admin.feature_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/plans/compare.json', 'pg_plan_compare',
+                     plans_admin.plan_compare, methods=['GET'])
+
+    # ── Registered Doctors admin ───────────────────────────────────────────
+    app.add_url_rule('/admin/pg/users', 'pg_users_admin',
+                     users_admin.users_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>', 'pg_user_detail',
+                     users_admin.user_detail, methods=['GET'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/save', 'pg_user_save',
+                     users_admin.user_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/block', 'pg_user_block',
+                     users_admin.user_block, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/grant-plan', 'pg_user_grant_plan',
+                     users_admin.user_grant_plan, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/reset-usage', 'pg_user_reset_usage',
+                     users_admin.user_reset_usage, methods=['POST'])
+    app.add_url_rule('/admin/pg/subscriptions/<int:sub_id>/cancel',
+                     'pg_subscription_cancel', users_admin.subscription_cancel,
+                     methods=['POST'])
+
+    # ── Coupons admin ──────────────────────────────────────────────────────
+    app.add_url_rule('/admin/pg/coupons', 'pg_coupons_admin',
+                     coupons_admin.coupons_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/coupons/save', 'pg_coupon_save',
+                     coupons_admin.coupon_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/coupons/<int:coupon_id>/toggle', 'pg_coupon_toggle',
+                     coupons_admin.coupon_toggle, methods=['POST'])
+    app.add_url_rule('/admin/pg/coupons/<int:coupon_id>/delete', 'pg_coupon_delete',
+                     coupons_admin.coupon_delete, methods=['POST'])
+    app.add_url_rule('/admin/pg/coupons/<int:coupon_id>/redemptions',
+                     'pg_coupon_redemptions', coupons_admin.coupon_redemptions,
+                     methods=['GET'])
+    app.add_url_rule('/admin/pg/coupons/preview.json', 'pg_coupon_preview',
+                     coupons_admin.coupon_preview, methods=['GET'])
+
+    # ── Public pricing + entitlement + coupon API for goocampus.in ─────────
+    app.add_url_rule('/api/pg/plans', 'api_pg_plans',
+                     api.api_pg_plans, methods=['GET'])
+    app.add_url_rule('/api/pg/entitlements', 'api_pg_entitlements',
+                     api.api_pg_entitlements, methods=['GET'])
+    app.add_url_rule('/api/pg/entitlements/consume', 'api_pg_entitlement_consume',
+                     api.api_pg_entitlement_consume, methods=['POST'])
+    app.add_url_rule('/api/pg/coupons/validate', 'api_pg_coupon_validate',
+                     api.api_pg_coupon_validate, methods=['POST'])

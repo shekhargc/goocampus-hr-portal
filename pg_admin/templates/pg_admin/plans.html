@@ -1,0 +1,452 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Pricing & Plans{% endblock %}
+
+{% block section_extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  .pp-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
+  .pp-header h1 { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
+  .pp-header p { color:var(--gray-500); font-size:0.9rem; margin:0.15rem 0 0; }
+  .pp-btn { display:inline-flex; align-items:center; gap:0.45rem; padding:0.55rem 1rem; border-radius:0.5rem;
+      border:none; font-size:0.88rem; font-weight:600; cursor:pointer; text-decoration:none; }
+  .pp-btn-primary { background:var(--orange); color:#fff; }
+  .pp-btn-ghost { background:var(--gray-100); color:var(--navy); border:1px solid var(--gray-300); }
+  .pp-btn-sm { padding:0.35rem 0.6rem; font-size:0.8rem; }
+
+  .pp-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+  .pp-stat { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:1rem 1.25rem; }
+  .pp-stat .lbl { font-size:0.76rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
+  .pp-stat .val { font-size:1.7rem; font-weight:700; color:var(--navy); margin-top:0.2rem; }
+  @media (max-width:900px){ .pp-stats{ grid-template-columns:repeat(2,1fr);} }
+
+  /* Plan cards — these mirror how a plan looks to a doctor on goocampus.in */
+  .pp-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1.25rem; margin-bottom:1rem; }
+  .pp-card { position:relative; background:#fff; border:1.5px solid var(--gray-200); border-radius:0.9rem;
+      padding:1.5rem 1.35rem 1.35rem; display:flex; flex-direction:column; transition:box-shadow .15s, transform .15s; }
+  .pp-card:hover { box-shadow:0 10px 30px rgba(15,27,51,0.10); }
+  .pp-card.featured { border-color:var(--orange); box-shadow:0 8px 26px rgba(245,124,31,0.16); }
+  .pp-card.inactive { opacity:0.55; }
+  .pp-ribbon { position:absolute; top:-11px; left:50%; transform:translateX(-50%); color:#fff; font-size:0.72rem;
+      font-weight:700; letter-spacing:0.3px; padding:0.25rem 0.8rem; border-radius:1rem; white-space:nowrap; }
+  .pp-kind { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-400); }
+  .pp-name { font-size:1.25rem; font-weight:800; color:var(--navy); margin:0.15rem 0 0.1rem; }
+  .pp-tagline { font-size:0.83rem; color:var(--gray-500); min-height:1.1rem; }
+  .pp-price { margin:0.7rem 0 0.2rem; display:flex; align-items:baseline; gap:0.5rem; flex-wrap:wrap; }
+  .pp-price .amt { font-size:2rem; font-weight:800; color:var(--navy); }
+  .pp-price .was { font-size:1rem; color:var(--gray-400); text-decoration:line-through; }
+  .pp-price .per { font-size:0.8rem; color:var(--gray-500); }
+  .pp-off { display:inline-block; background:#dcfce7; color:#166534; font-size:0.72rem; font-weight:700;
+      padding:0.1rem 0.5rem; border-radius:1rem; margin-top:0.2rem; }
+  .pp-hl { list-style:none; padding:0; margin:0.9rem 0 0; flex:1; }
+  .pp-hl li { font-size:0.85rem; color:var(--gray-700); padding:0.25rem 0 0.25rem 1.5rem; position:relative; }
+  .pp-hl li:before { content:"\f00c"; font-family:"Font Awesome 6 Free"; font-weight:900; color:#16a34a;
+      position:absolute; left:0; font-size:0.78rem; top:0.35rem; }
+  .pp-feat-lines { margin:0.8rem 0 0; border-top:1px dashed var(--gray-200); padding-top:0.7rem; }
+  .pp-feat-lines .fl { display:flex; justify-content:space-between; gap:0.5rem; font-size:0.8rem; padding:0.18rem 0; }
+  .pp-feat-lines .fl .k { color:var(--gray-500); } .pp-feat-lines .fl .v { font-weight:600; color:var(--navy); }
+  .pp-feat-lines .fl.off .v { color:var(--gray-300); }
+  .pp-card-cta { margin-top:1rem; text-align:center; padding:0.6rem; border-radius:0.5rem; font-weight:700;
+      font-size:0.9rem; color:#fff; }
+  .pp-sub-count { font-size:0.76rem; color:var(--gray-500); margin-top:0.6rem; text-align:center; }
+  .pp-card-tools { display:flex; gap:0.3rem; justify-content:center; margin-top:0.7rem; flex-wrap:wrap; }
+  .pp-icon { border:1px solid var(--gray-300); background:#fff; border-radius:0.4rem; width:30px; height:30px;
+      display:inline-flex; align-items:center; justify-content:center; cursor:pointer; color:var(--gray-600); font-size:0.8rem; }
+  .pp-icon:hover { background:var(--gray-100); color:var(--navy); }
+  .pp-icon.danger:hover { background:#fee2e2; color:#b91c1c; border-color:#fca5a5; }
+
+  /* Modal */
+  .pp-overlay { position:fixed; inset:0; background:rgba(15,27,51,0.55); z-index:1000; display:none;
+      align-items:flex-start; justify-content:center; overflow-y:auto; padding:2rem 1rem; }
+  .pp-overlay.open { display:flex; }
+  .pp-modal { background:#fff; border-radius:0.8rem; width:min(1080px,100%); box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+  .pp-modal-head { display:flex; justify-content:space-between; align-items:center; padding:1.1rem 1.4rem;
+      border-bottom:1px solid var(--gray-200); position:sticky; top:0; background:#fff; border-radius:0.8rem 0.8rem 0 0; z-index:2; }
+  .pp-modal-head h2 { font-size:1.15rem; font-weight:700; color:var(--navy); margin:0; }
+  .pp-modal-body { padding:1.2rem 1.4rem; }
+  .pp-split { display:grid; grid-template-columns:1.3fr 1fr; gap:1.5rem; }
+  @media (max-width:860px){ .pp-split{ grid-template-columns:1fr; } }
+  .pp-fieldset { border:1px solid var(--gray-200); border-radius:0.6rem; padding:1rem 1.1rem; margin-bottom:1rem; }
+  .pp-fieldset > legend { font-size:0.8rem; font-weight:700; color:var(--orange); text-transform:uppercase;
+      letter-spacing:0.5px; padding:0 0.4rem; }
+  .pp-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1rem; }
+  @media (max-width:600px){ .pp-grid2{ grid-template-columns:1fr; } }
+  .pp-f label { display:block; font-size:0.78rem; font-weight:600; color:var(--navy); margin-bottom:0.22rem; }
+  .pp-f input, .pp-f select, .pp-f textarea { width:100%; padding:0.5rem 0.6rem; border:1px solid var(--gray-300);
+      border-radius:0.45rem; font-size:0.86rem; font-family:inherit; }
+  .pp-f .full { grid-column:1/-1; }
+  .pp-f .hint { font-size:0.72rem; color:var(--gray-500); margin-top:0.18rem; }
+  .pp-check { display:inline-flex; align-items:center; gap:0.4rem; font-size:0.85rem; font-weight:600; color:var(--navy); }
+
+  /* Feature matrix */
+  .pp-matrix { }
+  .pp-matrix .fm-row { display:grid; grid-template-columns:1fr 130px 90px; gap:0.6rem; align-items:center;
+      padding:0.5rem 0; border-top:1px solid var(--gray-100); }
+  .pp-matrix .fm-row:first-child { border-top:none; }
+  .pp-matrix .fm-name { font-size:0.84rem; font-weight:600; color:var(--navy); }
+  .pp-matrix .fm-name .desc { font-size:0.72rem; color:var(--gray-500); font-weight:400; }
+  .pp-matrix select, .pp-matrix input { padding:0.4rem 0.5rem; border:1px solid var(--gray-300);
+      border-radius:0.4rem; font-size:0.82rem; width:100%; }
+  .pp-matrix input.limit-off { visibility:hidden; }
+  .pp-modal-foot { display:flex; justify-content:flex-end; gap:0.6rem; padding:1rem 1.4rem;
+      border-top:1px solid var(--gray-200); position:sticky; bottom:0; background:#fff; }
+
+  /* Live preview inside the modal */
+  .pp-preview-wrap { background:linear-gradient(160deg,#f8fafc,#eef2f9); border-radius:0.7rem; padding:1.3rem;
+      position:sticky; top:5rem; }
+  .pp-preview-label { font-size:0.72rem; font-weight:700; color:var(--gray-400); text-transform:uppercase;
+      letter-spacing:0.5px; margin-bottom:0.7rem; text-align:center; }
+  .pp-empty { text-align:center; padding:3rem 1rem; color:var(--gray-500); background:#fff; border-radius:0.7rem;
+      border:1px dashed var(--gray-300); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="pp-header">
+  <div>
+    <h1>Pricing &amp; Plans</h1>
+    <p>Design each plan exactly as doctors will see it on goocampus.in — and decide what it unlocks.</p>
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <button class="pp-btn pp-btn-ghost" onclick="ppOpenFeature()"><i class="fa-solid fa-sliders"></i> Manage features</button>
+    <button class="pp-btn pp-btn-primary" onclick="ppOpenEdit(null)"><i class="fa-solid fa-plus"></i> New plan</button>
+  </div>
+</div>
+
+<div class="pp-stats">
+  <div class="pp-stat"><div class="lbl">Plans</div><div class="val">{{ stats.total }}</div></div>
+  <div class="pp-stat"><div class="lbl">Active</div><div class="val">{{ stats.active }}</div></div>
+  <div class="pp-stat"><div class="lbl">Paid plans</div><div class="val">{{ stats.paid }}</div></div>
+  <div class="pp-stat"><div class="lbl">Active subscribers</div><div class="val">{{ stats.subscribers }}</div></div>
+</div>
+
+{% if plans %}
+<div class="pp-cards">
+  {% for p in plans %}
+  <div class="pp-card {% if p.is_featured %}featured{% endif %} {% if not p.is_active %}inactive{% endif %}">
+    {% if p.badge_text %}<span class="pp-ribbon" style="background:{{ p.badge_color or '#F57C1F' }}">{{ p.badge_text }}</span>{% endif %}
+    <div class="pp-kind">{{ 'Free' if p.plan_kind == 'free' else 'Paid' }}{% if not p.is_active %} · hidden{% endif %}{% if not p.is_public %} · unlisted{% endif %}</div>
+    <div class="pp-name">{{ p.name }}</div>
+    <div class="pp-tagline">{{ p.tagline }}</div>
+    <div class="pp-price">
+      {% if p.price and p.price > 0 %}
+        <span class="amt" style="color:{{ p.accent_color or 'var(--navy)' }}">₹{{ '{:,.0f}'.format(p.price) }}</span>
+        {% if p.compare_at_price %}<span class="was">₹{{ '{:,.0f}'.format(p.compare_at_price) }}</span>{% endif %}
+        <span class="per">/ {{ billing_labels.get(p.billing_period, p.billing_period) }}</span>
+      {% else %}
+        <span class="amt" style="color:#16a34a">Free</span>
+      {% endif %}
+    </div>
+    {% if p.compare_at_price and p.price and p.compare_at_price > p.price %}
+      <span class="pp-off">Save ₹{{ '{:,.0f}'.format(p.compare_at_price - p.price) }}
+        ({{ ((1 - p.price / p.compare_at_price) * 100) | round | int }}% off)</span>
+    {% endif %}
+    {% if p.highlights_list %}
+    <ul class="pp-hl">{% for h in p.highlights_list %}<li>{{ h }}</li>{% endfor %}</ul>
+    {% endif %}
+    <div class="pp-feat-lines">
+      {% for f in features %}
+        {% set g = p.features.get(f.code) %}
+        <div class="fl {% if not g %}off{% endif %}">
+          <span class="k">{{ f.name }}</span>
+          <span class="v">
+            {% if not g %}—
+            {% elif g.value_type == 'unlimited' %}Unlimited
+            {% elif f.unit == 'boolean' %}Included
+            {% elif g.limit_value is not none %}{{ g.limit_value }}
+            {% else %}Unlimited{% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="pp-card-cta" style="background:{{ p.accent_color or '#2952A3' }}">
+      {{ p.cta_label or ('Get started' if p.plan_kind == 'free' else 'Upgrade') }}
+    </div>
+    <div class="pp-sub-count">{{ p.subscribers }} active subscriber{{ '' if p.subscribers == 1 else 's' }}</div>
+    <div class="pp-card-tools">
+      <button class="pp-icon" title="Edit" onclick='ppOpenEdit({{ p.id }})'><i class="fa-solid fa-pen"></i></button>
+      <button class="pp-icon" title="Duplicate"
+        onclick="if(confirm('Duplicate this plan?')) ppPost('/admin/pg/plans/{{ p.id }}/duplicate')"><i class="fa-solid fa-copy"></i></button>
+      <button class="pp-icon" title="{{ 'Hide' if p.is_active else 'Activate' }}"
+        onclick="ppPost('/admin/pg/plans/{{ p.id }}/toggle')"><i class="fa-solid fa-{{ 'eye-slash' if p.is_active else 'eye' }}"></i></button>
+      <button class="pp-icon danger" title="Delete"
+        onclick="if(confirm('Delete this plan? (kept if it has subscribers)')) ppPost('/admin/pg/plans/{{ p.id }}/delete')"><i class="fa-solid fa-trash"></i></button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="pp-empty"><i class="fa-solid fa-tags" style="font-size:2rem; opacity:0.3;"></i>
+  <p>No plans yet. Create your first plan — a Free tier is a good place to start.</p>
+  <button class="pp-btn pp-btn-primary" onclick="ppOpenEdit(null)"><i class="fa-solid fa-plus"></i> New plan</button>
+</div>
+{% endif %}
+
+<!-- ══ Plan editor ══ -->
+<div class="pp-overlay" id="ppOverlay">
+  <div class="pp-modal">
+    <form method="POST" action="/admin/pg/plans/save" id="ppForm">
+      <div class="pp-modal-head">
+        <h2 id="ppModalTitle">New plan</h2>
+        <button type="button" class="pp-icon" onclick="ppClose()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="pp-modal-body">
+        <input type="hidden" name="edit_id" id="pf_edit_id">
+        <div class="pp-split">
+          <div>
+            <fieldset class="pp-fieldset">
+              <legend>The basics</legend>
+              <div class="pp-grid2 pp-f">
+                <div class="full"><label>Plan name *</label><input name="name" id="pf_name" oninput="ppPreview()" placeholder="e.g. Pro, Premium, Ultimate"></div>
+                <div><label>Type</label>
+                  <select name="plan_kind" id="pf_plan_kind" onchange="ppPreview()">
+                    <option value="paid">Paid</option><option value="free">Free</option>
+                  </select></div>
+                <div><label>Billing period</label>
+                  <select name="billing_period" id="pf_billing_period" onchange="ppPreview()">
+                    {% for b in billing %}<option value="{{ b }}">{{ billing_labels[b] }}</option>{% endfor %}
+                  </select></div>
+                <div class="full"><label>Tagline</label><input name="tagline" id="pf_tagline" oninput="ppPreview()" placeholder="One line under the name"></div>
+                <div class="full"><label>Description</label><textarea name="description" id="pf_description" rows="2" placeholder="Longer text for the plan detail"></textarea></div>
+              </div>
+            </fieldset>
+
+            <fieldset class="pp-fieldset">
+              <legend>Price &amp; offer</legend>
+              <div class="pp-grid2 pp-f">
+                <div><label>Price (₹)</label><input type="number" step="1" min="0" name="price" id="pf_price" oninput="ppPreview()" value="0"></div>
+                <div><label>Compare-at "was" price (₹)</label><input type="number" step="1" min="0" name="compare_at_price" id="pf_compare" oninput="ppPreview()" placeholder="optional">
+                  <div class="hint">Shows struck-through to signal a discount.</div></div>
+                <div><label>Access duration (days)</label><input type="number" step="1" min="1" name="duration_days" id="pf_duration" placeholder="blank = from billing period">
+                  <div class="hint">How long access lasts after purchase.</div></div>
+                <div><label>Seats limit</label><input type="number" step="1" min="1" name="seats_limit" id="pf_seats" placeholder="unlimited"></div>
+              </div>
+            </fieldset>
+
+            <fieldset class="pp-fieldset">
+              <legend>Badge &amp; look</legend>
+              <div class="pp-grid2 pp-f">
+                <div><label>Badge / ribbon text</label><input name="badge_text" id="pf_badge_text" oninput="ppPreview()" placeholder="Bestseller · Most Popular">
+                  <div class="hint">Leave blank for no ribbon.</div></div>
+                <div><label>Badge colour</label><input type="color" name="badge_color" id="pf_badge_color" value="#F57C1F" oninput="ppPreview()"></div>
+                <div><label>Accent colour</label><input type="color" name="accent_color" id="pf_accent_color" value="#2952A3" oninput="ppPreview()"></div>
+                <div><label>Button label</label><input name="cta_label" id="pf_cta" oninput="ppPreview()" placeholder="Upgrade / Get started"></div>
+                <div class="full"><label>Selling points (one per line)</label>
+                  <textarea name="highlights" id="pf_highlights" rows="3" oninput="ppPreview()" placeholder="Full predictor access&#10;All 8-year cut-off PDFs&#10;2 mentor sessions included"></textarea></div>
+              </div>
+            </fieldset>
+
+            <fieldset class="pp-fieldset">
+              <legend>What this plan unlocks</legend>
+              <div class="pp-matrix" id="pf_matrix">
+                {% for f in features %}
+                <div class="fm-row">
+                  <div class="fm-name">{{ f.name }}
+                    {% if f.description %}<div class="desc">{{ f.description }}</div>{% endif %}</div>
+                  <select name="feat_{{ f.code }}_type" data-code="{{ f.code }}" data-unit="{{ f.unit }}"
+                          onchange="ppMatrixToggle(this)">
+                    <option value="off">Not included</option>
+                    <option value="limited">{{ 'Included' if f.unit == 'boolean' else 'Limited to…' }}</option>
+                    <option value="unlimited">Unlimited</option>
+                  </select>
+                  <input type="number" min="0" step="1" name="feat_{{ f.code }}_limit"
+                         data-code="{{ f.code }}" placeholder="#"
+                         class="{% if f.unit == 'boolean' %}limit-off{% endif %}">
+                </div>
+                {% endfor %}
+              </div>
+              <div class="hint" style="font-size:0.74rem; color:var(--gray-500); margin-top:0.5rem;">
+                Tip: for the Free plan, set <b>Predictor — states visible</b> to a small number (e.g. 1) and
+                <b>PDF library — documents</b> to a few. Keep <b>Book a mentor individually</b> included so free
+                users can still pay per session.
+              </div>
+            </fieldset>
+
+            <fieldset class="pp-fieldset">
+              <legend>Visibility &amp; payment</legend>
+              <div class="pp-grid2 pp-f">
+                <div><label class="pp-check"><input type="checkbox" name="is_active" id="pf_active" checked> Active</label>
+                  <div class="hint">Off = removed from the site, subscribers kept.</div></div>
+                <div><label class="pp-check"><input type="checkbox" name="is_public" id="pf_public" checked> Show on public pricing page</label></div>
+                <div><label class="pp-check"><input type="checkbox" name="is_featured" id="pf_featured" onchange="ppPreview()"> Highlight as featured</label></div>
+                <div><label>Sort order</label><input type="number" name="sort_order" id="pf_sort" value="100"></div>
+                <div class="full"><label>Razorpay Plan ID <span style="color:var(--gray-400)">(optional, for later)</span></label>
+                  <input name="razorpay_plan_id" id="pf_razorpay" placeholder="plan_xxx — fill when Razorpay is connected"></div>
+              </div>
+            </fieldset>
+          </div>
+
+          <div>
+            <div class="pp-preview-wrap">
+              <div class="pp-preview-label">Live preview — how doctors see it</div>
+              <div id="ppPreviewCard"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pp-modal-foot">
+        <button type="button" class="pp-btn pp-btn-ghost" onclick="ppClose()">Cancel</button>
+        <button type="submit" class="pp-btn pp-btn-primary"><i class="fa-solid fa-check"></i> Save plan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══ Feature catalogue editor ══ -->
+<div class="pp-overlay" id="ppFeatureOverlay">
+  <div class="pp-modal" style="width:min(560px,100%)">
+    <form method="POST" action="/admin/pg/plans/feature/save">
+      <div class="pp-modal-head"><h2>Add a gateable feature</h2>
+        <button type="button" class="pp-icon" onclick="document.getElementById('ppFeatureOverlay').classList.remove('open')"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="pp-modal-body pp-f">
+        <p style="font-size:0.83rem; color:var(--gray-600); margin-top:0;">
+          A feature is anything a plan can switch on/off or cap. Add one here and it appears in every plan editor —
+          no developer needed.</p>
+        <div class="pp-grid2">
+          <div class="full"><label>Feature name *</label><input name="name" placeholder="e.g. AI college shortlist"></div>
+          <div><label>Kind</label><select name="unit">
+            <option value="quota">A number (cap it)</option>
+            <option value="boolean">On / off switch</option></select></div>
+          <div><label>Resets</label><select name="reset_period">
+            <option value="lifetime">Never (lifetime total)</option>
+            <option value="monthly">Every month</option>
+            <option value="daily">Every day</option>
+            <option value="plan_period">Each plan purchase</option></select></div>
+          <div class="full"><label>Count distinct items of kind <span style="color:var(--gray-400)">(optional)</span></label>
+            <input name="resource_kind" placeholder="e.g. pdf, state — leave blank to count every use">
+            <div class="hint">Set this so re-opening the same item doesn't burn another slot.</div></div>
+          <div class="full"><label>Description</label><input name="description" placeholder="Shown to you in the plan editor"></div>
+        </div>
+      </div>
+      <div class="pp-modal-foot">
+        <button type="button" class="pp-btn pp-btn-ghost" onclick="document.getElementById('ppFeatureOverlay').classList.remove('open')">Cancel</button>
+        <button type="submit" class="pp-btn pp-btn-primary">Add feature</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // The plans + feature matrix, handed to JS so Edit prefills without a round-trip.
+  const PP_PLANS = {{ plans | tojson }};
+  const PP_FEATURES = {{ features | tojson }};
+  const PP_BILLING_LABELS = {{ billing_labels | tojson }};
+
+  function ppV(id){ return document.getElementById(id); }
+  function ppSet(id,val){ const e=ppV(id); if(!e) return;
+    if(e.type==='checkbox') e.checked=!!val; else e.value=(val===null||val===undefined)?'':val; }
+
+  function ppMatrixToggle(sel){
+    const code=sel.dataset.code, unit=sel.dataset.unit;
+    const inp=document.querySelector('#pf_matrix input[data-code="'+code+'"]');
+    if(!inp) return;
+    inp.classList.toggle('limit-off', unit==='boolean' || sel.value!=='limited');
+    ppPreview();
+  }
+
+  function ppResetMatrix(){
+    document.querySelectorAll('#pf_matrix select').forEach(s=>{ s.value='off'; ppMatrixToggle(s); });
+    document.querySelectorAll('#pf_matrix input').forEach(i=> i.value='');
+  }
+
+  function ppOpenEdit(id){
+    ppV('ppForm').reset();
+    ppResetMatrix();
+    ppSet('pf_edit_id','');
+    ppSet('pf_badge_color','#F57C1F'); ppSet('pf_accent_color','#2952A3');
+    ppSet('pf_active', true); ppSet('pf_public', true);
+    if(id){
+      const p = PP_PLANS.find(x=>x.id===id);
+      if(p){
+        ppV('ppModalTitle').textContent = 'Edit — ' + p.name;
+        ppSet('pf_edit_id', p.id); ppSet('pf_name', p.name); ppSet('pf_plan_kind', p.plan_kind);
+        ppSet('pf_billing_period', p.billing_period); ppSet('pf_tagline', p.tagline);
+        ppSet('pf_description', p.description); ppSet('pf_price', p.price);
+        ppSet('pf_compare', p.compare_at_price); ppSet('pf_duration', p.duration_days);
+        ppSet('pf_seats', p.seats_limit); ppSet('pf_badge_text', p.badge_text);
+        ppSet('pf_badge_color', p.badge_color || '#F57C1F'); ppSet('pf_accent_color', p.accent_color || '#2952A3');
+        ppSet('pf_cta', p.cta_label); ppSet('pf_highlights', (p.highlights_list||[]).join('\n'));
+        ppSet('pf_active', p.is_active); ppSet('pf_public', p.is_public);
+        ppSet('pf_featured', p.is_featured); ppSet('pf_sort', p.sort_order);
+        ppSet('pf_razorpay', p.razorpay_plan_id);
+        (PP_FEATURES||[]).forEach(f=>{
+          const g = (p.features||{})[f.code];
+          const sel=document.querySelector('#pf_matrix select[data-code="'+f.code+'"]');
+          const inp=document.querySelector('#pf_matrix input[data-code="'+f.code+'"]');
+          if(sel){ sel.value = g ? g.value_type : 'off'; ppMatrixToggle(sel); }
+          if(inp && g && g.limit_value!==null && g.limit_value!==undefined) inp.value = g.limit_value;
+        });
+      }
+    } else {
+      ppV('ppModalTitle').textContent = 'New plan';
+    }
+    ppV('ppOverlay').classList.add('open');
+    ppPreview();
+  }
+  function ppClose(){ ppV('ppOverlay').classList.remove('open'); }
+  function ppOpenFeature(){ document.getElementById('ppFeatureOverlay').classList.add('open'); }
+
+  function ppPost(url){
+    const f=document.createElement('form'); f.method='POST'; f.action=url; document.body.appendChild(f); f.submit();
+  }
+
+  function ppPreview(){
+    const name = ppV('pf_name').value || 'Plan name';
+    const kind = ppV('pf_plan_kind').value;
+    const price = parseFloat(ppV('pf_price').value||'0');
+    const compare = parseFloat(ppV('pf_compare').value||'0');
+    const per = PP_BILLING_LABELS[ppV('pf_billing_period').value] || '';
+    const badge = ppV('pf_badge_text').value;
+    const badgeColor = ppV('pf_badge_color').value;
+    const accent = ppV('pf_accent_color').value;
+    const tagline = ppV('pf_tagline').value;
+    const cta = ppV('pf_cta').value || (kind==='free'?'Get started':'Upgrade');
+    const featured = ppV('pf_featured').checked;
+    const hls = (ppV('pf_highlights').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+
+    let priceHtml;
+    if(price>0){
+      priceHtml = '<span class="amt" style="color:'+accent+'">₹'+price.toLocaleString('en-IN')+'</span>';
+      if(compare>price) priceHtml += ' <span class="was">₹'+compare.toLocaleString('en-IN')+'</span>';
+      priceHtml += ' <span class="per">/ '+per+'</span>';
+    } else { priceHtml = '<span class="amt" style="color:#16a34a">Free</span>'; }
+
+    let off='';
+    if(compare>price && price>0){
+      const pct = Math.round((1-price/compare)*100);
+      off = '<span class="pp-off">Save ₹'+(compare-price).toLocaleString('en-IN')+' ('+pct+'% off)</span>';
+    }
+
+    let lines='';
+    (PP_FEATURES||[]).forEach(f=>{
+      const sel=document.querySelector('#pf_matrix select[data-code="'+f.code+'"]');
+      const inp=document.querySelector('#pf_matrix input[data-code="'+f.code+'"]');
+      let v='—', off2='off';
+      if(sel && sel.value!=='off'){
+        off2='';
+        if(sel.value==='unlimited') v='Unlimited';
+        else if(f.unit==='boolean') v='Included';
+        else v = (inp && inp.value!=='') ? inp.value : 'Unlimited';
+      }
+      lines += '<div class="fl '+off2+'"><span class="k">'+f.name+'</span><span class="v">'+v+'</span></div>';
+    });
+
+    const card =
+      '<div class="pp-card '+(featured?'featured':'')+'" style="max-width:320px; margin:0 auto;">'+
+      (badge?'<span class="pp-ribbon" style="background:'+badgeColor+'">'+badge+'</span>':'')+
+      '<div class="pp-kind">'+(kind==='free'?'Free':'Paid')+'</div>'+
+      '<div class="pp-name">'+name+'</div>'+
+      '<div class="pp-tagline">'+(tagline||'')+'</div>'+
+      '<div class="pp-price">'+priceHtml+'</div>'+ off +
+      (hls.length?'<ul class="pp-hl">'+hls.map(h=>'<li>'+h+'</li>').join('')+'</ul>':'')+
+      '<div class="pp-feat-lines">'+lines+'</div>'+
+      '<div class="pp-card-cta" style="background:'+accent+'">'+cta+'</div>'+
+      '</div>';
+    ppV('ppPreviewCard').innerHTML = card;
+  }
+
+  // Close on overlay backdrop click
+  document.querySelectorAll('.pp-overlay').forEach(o=>{
+    o.addEventListener('click', e=>{ if(e.target===o) o.classList.remove('open'); });
+  });
+</script>
+{% endblock %}

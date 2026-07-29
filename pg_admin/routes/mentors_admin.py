@@ -87,6 +87,7 @@ def mentors_admin():
     f_spec = (request.args.get('specialization') or '').strip()
     f_pub = (request.args.get('published') or '').strip()
     f_avail = (request.args.get('available') or '').strip()
+    f_country = (request.args.get('country') or '').strip()
 
     conds = ["is_active"]
     params = []
@@ -104,6 +105,9 @@ def mentors_admin():
         conds.append("is_published")
     elif f_pub == 'false':
         conds.append("NOT is_published")
+    if f_country:
+        conds.append("country = ?")
+        params.append(f_country)
     if f_avail == 'true':
         conds.append("is_available")
     elif f_avail == 'false':
@@ -140,13 +144,16 @@ def mentors_admin():
             "WHERE is_active AND specialization <> '' ORDER BY specialization"
         ).fetchall()
         specializations = [r['specialization'] for r in spec_rows]
+        countries = [r['country'] for r in conn.execute(
+            "SELECT DISTINCT country FROM pg_mentors "
+            "WHERE is_active AND COALESCE(country,'') <> '' ORDER BY country").fetchall()]
     except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
         logging.error("mentors_admin: %s", e)
-        mentors, specializations = [], []
+        mentors, specializations, countries = [], [], []
         type_counts = {t: 0 for t in _MENTOR_TYPES}; type_counts['all'] = 0
         stats = {'total': 0, 'published': 0, 'available': 0, 'verified': 0}
     finally:
@@ -170,6 +177,7 @@ def mentors_admin():
                            mentor_type_labels=_MENTOR_TYPE_LABELS,
                            active_type=mtype, type_counts=type_counts,
                            q=q, f_spec=f_spec, f_pub=f_pub, f_avail=f_avail,
+                           countries=countries, f_country=f_country,
                            active_section='goocampus_in')
 
 
@@ -235,6 +243,7 @@ def mentor_save():
         'email': (form.get('email') or '').strip(),
         'phone': (form.get('phone') or '').strip(),
         'specialization': specialization,
+        'country': (form.get('country') or '').strip(),
         'qualification': qualification,
         'designation': (form.get('designation') or '').strip(),
         'experience_years': _int_or_none(form.get('experience_years')),

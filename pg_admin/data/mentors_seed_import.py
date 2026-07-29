@@ -2,6 +2,29 @@
 (goocampusworld.com) into pg_mentors, and migrates each profile photo from the old
 S3 bucket into our own R2.
 
+# Pathway country inferred from the mentor's topic where it is unambiguous
+# (PLAB -> UK, AMC -> Australia, USMLE -> USA...). Only ~40 of 160 can be derived
+# this way; the rest stay blank for the team to set in the admin, rather than
+# guessing a country onto a real person's profile. (founder 2026-07-28)
+_COUNTRY_HINTS = [
+    ('plab', 'UK'), ('mrcp', 'UK'), ('mrcs', 'UK'), ('nhs', 'UK'), ('united kingdom', 'UK'),
+    ('amc', 'Australia'), ('austral', 'Australia'),
+    ('usmle', 'USA'), ('united states', 'USA'),
+    ('mccqe', 'Canada'), ('canada', 'Canada'),
+    ('ireland', 'Ireland'), ('rcsi', 'Ireland'),
+    ('new zealand', 'New Zealand'), ('nzrex', 'New Zealand'),
+    ('germany', 'Germany'), ('fsp', 'Germany'),
+]
+
+
+def _infer_country(*texts):
+    blob = ' '.join((t or '') for t in texts).lower()
+    for frag, country in _COUNTRY_HINTS:
+        if frag in blob:
+            return country
+    return ''
+
+
 Design notes
 ------------
 - **Idempotent** on (source, external_id): re-running updates the SOURCE-derived content

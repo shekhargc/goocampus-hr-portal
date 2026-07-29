@@ -1,0 +1,201 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Coupons{% endblock %}
+
+{% block section_extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  .pc-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
+  .pc-header h1 { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
+  .pc-header p { color:var(--gray-500); font-size:0.9rem; margin:0.15rem 0 0; }
+  .pc-btn { display:inline-flex; align-items:center; gap:0.45rem; padding:0.55rem 1rem; border-radius:0.5rem;
+      border:none; font-size:0.88rem; font-weight:600; cursor:pointer; text-decoration:none; }
+  .pc-btn-primary { background:var(--orange); color:#fff; } .pc-btn-ghost { background:var(--gray-100); color:var(--navy); border:1px solid var(--gray-300); }
+  .pc-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+  .pc-stat { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.9rem 1.1rem; }
+  .pc-stat .lbl { font-size:0.74rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
+  .pc-stat .val { font-size:1.55rem; font-weight:700; color:var(--navy); margin-top:0.15rem; }
+  @media (max-width:900px){ .pc-stats{ grid-template-columns:repeat(2,1fr);} }
+  .pc-controls { display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem; }
+  .pc-controls input, .pc-controls select { padding:0.5rem 0.7rem; border:1px solid var(--gray-300); border-radius:0.45rem; font-size:0.87rem; background:#fff; }
+  .pc-table { width:100%; border-collapse:collapse; background:#fff; border-radius:0.6rem; overflow:hidden; border:1px solid var(--gray-200); }
+  .pc-table th { background:var(--navy); color:#fff; text-align:left; padding:0.65rem 0.8rem; font-size:0.76rem; text-transform:uppercase; letter-spacing:0.4px; }
+  .pc-table td { padding:0.6rem 0.8rem; border-top:1px solid var(--gray-100); font-size:0.86rem; }
+  .pc-code { font-family:ui-monospace,monospace; font-weight:700; color:var(--navy); background:var(--gray-100); padding:0.15rem 0.5rem; border-radius:0.35rem; }
+  .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
+  .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-500); }
+  .chip-blue { background:#dbeafe; color:#1e40af; } .chip-amber { background:#fef3c7; color:#92400e; } .chip-red { background:#fee2e2; color:#b91c1c; }
+  .pc-actions { display:flex; gap:0.3rem; }
+  .icon-btn { border:1px solid var(--gray-300); background:#fff; border-radius:0.4rem; width:30px; height:30px;
+      display:inline-flex; align-items:center; justify-content:center; cursor:pointer; color:var(--gray-600); font-size:0.8rem; }
+  .icon-btn:hover { background:var(--gray-100); color:var(--navy); } .icon-btn.danger:hover { background:#fee2e2; color:#b91c1c; }
+  .pc-overlay { position:fixed; inset:0; background:rgba(15,27,51,0.55); z-index:1000; display:none; align-items:flex-start; justify-content:center; overflow-y:auto; padding:2rem 1rem; }
+  .pc-overlay.open { display:flex; }
+  .pc-modal { background:#fff; border-radius:0.8rem; width:min(680px,100%); box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+  .pc-modal-head { display:flex; justify-content:space-between; align-items:center; padding:1.1rem 1.4rem; border-bottom:1px solid var(--gray-200); position:sticky; top:0; background:#fff; border-radius:0.8rem 0.8rem 0 0; }
+  .pc-modal-head h2 { font-size:1.15rem; font-weight:700; color:var(--navy); margin:0; }
+  .pc-modal-body { padding:1.2rem 1.4rem; }
+  .pc-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0.8rem 1rem; }
+  @media (max-width:600px){ .pc-grid2{ grid-template-columns:1fr; } }
+  .pc-f label { display:block; font-size:0.78rem; font-weight:600; color:var(--navy); margin-bottom:0.22rem; }
+  .pc-f input, .pc-f select, .pc-f textarea { width:100%; padding:0.5rem 0.6rem; border:1px solid var(--gray-300); border-radius:0.45rem; font-size:0.86rem; font-family:inherit; }
+  .pc-f .full { grid-column:1/-1; } .pc-f .hint { font-size:0.72rem; color:var(--gray-500); margin-top:0.18rem; }
+  .pc-check { display:inline-flex; align-items:center; gap:0.4rem; font-size:0.85rem; font-weight:600; color:var(--navy); }
+  .pc-modal-foot { display:flex; justify-content:flex-end; gap:0.6rem; padding:1rem 1.4rem; border-top:1px solid var(--gray-200); position:sticky; bottom:0; background:#fff; }
+  .pc-preview { background:#f0f6ff; border:1px solid #cfe0f7; border-radius:0.5rem; padding:0.7rem 0.9rem; font-size:0.84rem; color:var(--navy); margin-top:0.4rem; min-height:1.2rem; }
+  .pc-empty { text-align:center; padding:2.5rem; color:var(--gray-500); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="pc-header">
+  <div><h1>Coupons</h1><p>Discount codes for the pricing plans. Ready to apply the moment online payment goes live.</p></div>
+  <button class="pc-btn pc-btn-primary" onclick="pcOpen(null)"><i class="fa-solid fa-plus"></i> New coupon</button>
+</div>
+
+<div class="pc-stats">
+  <div class="pc-stat"><div class="lbl">Coupons</div><div class="val">{{ stats.total }}</div></div>
+  <div class="pc-stat"><div class="lbl">Live now</div><div class="val">{{ stats.live }}</div></div>
+  <div class="pc-stat"><div class="lbl">Redemptions</div><div class="val">{{ stats.redemptions }}</div></div>
+  <div class="pc-stat"><div class="lbl">Discount given</div><div class="val">₹{{ '{:,.0f}'.format(stats.discount_given) }}</div></div>
+</div>
+
+<form method="GET" class="pc-controls">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search code or description…">
+  <select name="state" onchange="this.form.submit()">
+    <option value="">All</option>
+    {% for s in ['live','scheduled','expired','exhausted','off'] %}
+      <option value="{{ s }}" {{ 'selected' if f_state==s }}>{{ s|capitalize }}</option>{% endfor %}
+  </select>
+  <button class="pc-btn pc-btn-ghost" type="submit">Filter</button>
+</form>
+
+{% if coupons %}
+<div style="overflow-x:auto;">
+<table class="pc-table">
+  <thead><tr><th>Code</th><th>Discount</th><th>Rules</th><th>Validity</th><th>Used</th><th>State</th><th></th></tr></thead>
+  <tbody>
+    {% for c in coupons %}
+    <tr>
+      <td><span class="pc-code">{{ c.code }}</span>{% if c.description %}<div style="font-size:0.76rem; color:var(--gray-500); margin-top:0.2rem;">{{ c.description }}</div>{% endif %}</td>
+      <td>{% if c.discount_type == 'percent' %}{{ c.discount_value | round | int }}% off
+          {% if c.max_discount_amount %}<div style="font-size:0.74rem; color:var(--gray-500)">max ₹{{ '{:,.0f}'.format(c.max_discount_amount) }}</div>{% endif %}
+          {% else %}₹{{ '{:,.0f}'.format(c.discount_value) }} off{% endif %}</td>
+      <td style="font-size:0.8rem; color:var(--gray-600)">
+        {% if c.min_order_amount %}Min ₹{{ '{:,.0f}'.format(c.min_order_amount) }}<br>{% endif %}
+        {% if c.applies_to == 'plans' %}Selected plans<br>{% else %}All plans<br>{% endif %}
+        {% if c.first_time_only %}First-time only<br>{% endif %}
+        {% if c.usage_limit_per_user %}{{ c.usage_limit_per_user }}/user{% endif %}</td>
+      <td style="font-size:0.8rem; color:var(--gray-600)">
+        {% if c.valid_from %}From {{ c.valid_from.strftime('%d %b %y') }}<br>{% endif %}
+        {% if c.valid_until %}Until {{ c.valid_until.strftime('%d %b %y') }}{% else %}No end{% endif %}</td>
+      <td>{{ c.used_count or 0 }}{% if c.usage_limit_total %} / {{ c.usage_limit_total }}{% endif %}</td>
+      <td>
+        {% if c.state == 'live' %}<span class="chip chip-green">Live</span>
+        {% elif c.state == 'scheduled' %}<span class="chip chip-blue">Scheduled</span>
+        {% elif c.state == 'expired' %}<span class="chip chip-amber">Expired</span>
+        {% elif c.state == 'exhausted' %}<span class="chip chip-amber">Used up</span>
+        {% else %}<span class="chip chip-gray">Off</span>{% endif %}
+      </td>
+      <td><div class="pc-actions">
+        <a class="icon-btn" title="Redemptions" href="/admin/pg/coupons/{{ c.id }}/redemptions"><i class="fa-solid fa-receipt"></i></a>
+        <button class="icon-btn" title="Edit" onclick='pcOpen({{ c.id }})'><i class="fa-solid fa-pen"></i></button>
+        <button class="icon-btn" title="{{ 'Turn off' if c.is_active else 'Turn on' }}" onclick="pcPost('/admin/pg/coupons/{{ c.id }}/toggle')"><i class="fa-solid fa-power-off"></i></button>
+        <button class="icon-btn danger" title="Delete" onclick="if(confirm('Delete this coupon? (kept if used)')) pcPost('/admin/pg/coupons/{{ c.id }}/delete')"><i class="fa-solid fa-trash"></i></button>
+      </div></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="pc-empty"><i class="fa-solid fa-ticket" style="font-size:2rem; opacity:0.3;"></i>
+  <p>No coupons yet. Create one now — it'll be ready to use as soon as payments are live.</p></div>
+{% endif %}
+
+<!-- editor -->
+<div class="pc-overlay" id="pcOverlay">
+  <div class="pc-modal">
+    <form method="POST" action="/admin/pg/coupons/save" id="pcForm">
+      <div class="pc-modal-head"><h2 id="pcTitle">New coupon</h2>
+        <button type="button" class="icon-btn" onclick="pcClose()"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="pc-modal-body pc-f">
+        <input type="hidden" name="edit_id" id="cf_edit_id">
+        <div class="pc-grid2">
+          <div><label>Code</label><input name="code" id="cf_code" placeholder="LAUNCH50 — blank = auto" style="text-transform:uppercase; font-family:ui-monospace,monospace;"></div>
+          <div><label>Description (internal)</label><input name="description" id="cf_desc" placeholder="Launch offer"></div>
+          <div><label>Discount type</label><select name="discount_type" id="cf_type" onchange="pcPrev()">
+            <option value="percent">Percentage (%)</option><option value="fixed">Fixed amount (₹)</option></select></div>
+          <div><label>Value</label><input type="number" step="0.01" min="0" name="discount_value" id="cf_value" oninput="pcPrev()" value="0"></div>
+          <div><label>Max discount cap (₹) <span style="color:var(--gray-400)">— % only</span></label><input type="number" step="1" min="0" name="max_discount_amount" id="cf_cap" oninput="pcPrev()" placeholder="no cap"></div>
+          <div><label>Minimum order (₹)</label><input type="number" step="1" min="0" name="min_order_amount" id="cf_min" oninput="pcPrev()" placeholder="0"></div>
+          <div><label>Valid from</label><input type="datetime-local" name="valid_from" id="cf_from"></div>
+          <div><label>Valid until</label><input type="datetime-local" name="valid_until" id="cf_until"></div>
+          <div><label>Total uses allowed</label><input type="number" step="1" min="1" name="usage_limit_total" id="cf_total" placeholder="unlimited"></div>
+          <div><label>Uses per doctor</label><input type="number" step="1" min="1" name="usage_limit_per_user" id="cf_peruser" value="1"></div>
+          <div><label>Applies to</label><select name="applies_to" id="cf_applies" onchange="pcApplies()">
+            <option value="all">All plans</option><option value="plans">Selected plans</option></select></div>
+          <div><label>&nbsp;</label>
+            <label class="pc-check"><input type="checkbox" name="first_time_only" id="cf_first"> First-time buyers only</label>
+            <label class="pc-check" style="margin-top:0.4rem;"><input type="checkbox" name="is_active" id="cf_active" checked> Active</label></div>
+          <div class="full" id="cf_plans_wrap" style="display:none;">
+            <label>Which plans</label>
+            <div style="display:flex; flex-wrap:wrap; gap:0.6rem; padding:0.5rem 0.7rem; border:1px solid var(--gray-300); border-radius:0.45rem;">
+              {% for p in plans %}<label class="pc-check" style="font-weight:500;">
+                <input type="checkbox" name="plan_ids" value="{{ p.id }}" class="cf-plan"> {{ p.name }}
+                {% if p.price %}<span style="color:var(--gray-400)">(₹{{ '{:,.0f}'.format(p.price) }})</span>{% endif %}</label>{% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="pc-preview" id="cf_preview">Example: on a ₹4,999 plan…</div>
+      </div>
+      <div class="pc-modal-foot">
+        <button type="button" class="pc-btn pc-btn-ghost" onclick="pcClose()">Cancel</button>
+        <button type="submit" class="pc-btn pc-btn-primary"><i class="fa-solid fa-check"></i> Save coupon</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const PC_COUPONS = {{ coupons | tojson }};
+  function pcV(id){ return document.getElementById(id); }
+  function pcSet(id,v){ const e=pcV(id); if(!e) return; if(e.type==='checkbox') e.checked=!!v; else e.value=(v===null||v===undefined)?'':v; }
+  function pcFmtDt(s){ if(!s) return ''; try { return s.replace(' ','T').slice(0,16); } catch(e){ return ''; } }
+
+  function pcApplies(){ pcV('cf_plans_wrap').style.display = pcV('cf_applies').value==='plans' ? 'block' : 'none'; }
+
+  function pcOpen(id){
+    pcV('pcForm').reset(); pcSet('cf_edit_id',''); pcSet('cf_active',true); pcSet('cf_peruser',1);
+    document.querySelectorAll('.cf-plan').forEach(c=> c.checked=false);
+    if(id){
+      const c = PC_COUPONS.find(x=>x.id===id);
+      if(c){
+        pcV('pcTitle').textContent = 'Edit — ' + c.code;
+        pcSet('cf_edit_id', c.id); pcSet('cf_code', c.code); pcSet('cf_desc', c.description);
+        pcSet('cf_type', c.discount_type); pcSet('cf_value', c.discount_value);
+        pcSet('cf_cap', c.max_discount_amount); pcSet('cf_min', c.min_order_amount);
+        pcSet('cf_from', pcFmtDt(c.valid_from)); pcSet('cf_until', pcFmtDt(c.valid_until));
+        pcSet('cf_total', c.usage_limit_total); pcSet('cf_peruser', c.usage_limit_per_user);
+        pcSet('cf_applies', c.applies_to); pcSet('cf_first', c.first_time_only); pcSet('cf_active', c.is_active);
+        (c.plan_ids||[]).forEach(pid=>{ const b=document.querySelector('.cf-plan[value="'+pid+'"]'); if(b) b.checked=true; });
+      }
+    } else { pcV('pcTitle').textContent = 'New coupon'; }
+    pcApplies(); pcPrev(); pcV('pcOverlay').classList.add('open');
+  }
+  function pcClose(){ pcV('pcOverlay').classList.remove('open'); }
+  function pcPost(url){ const f=document.createElement('form'); f.method='POST'; f.action=url; document.body.appendChild(f); f.submit(); }
+
+  function pcPrev(){
+    const base = 4999, type = pcV('cf_type').value, val = parseFloat(pcV('cf_value').value||'0');
+    const cap = parseFloat(pcV('cf_cap').value||'0'), min = parseFloat(pcV('cf_min').value||'0');
+    let disc = type==='percent' ? base*val/100 : val;
+    if(type==='percent' && cap>0) disc = Math.min(disc, cap);
+    disc = Math.max(0, Math.min(disc, base));
+    let msg = 'On a ₹'+base.toLocaleString('en-IN')+' plan, this takes off ₹'+Math.round(disc).toLocaleString('en-IN')+
+              ' → doctor pays ₹'+Math.round(base-disc).toLocaleString('en-IN')+'.';
+    if(min>0 && base<min) msg = 'Needs a minimum order of ₹'+min.toLocaleString('en-IN')+'.';
+    pcV('cf_preview').textContent = msg;
+  }
+  document.getElementById('pcOverlay').addEventListener('click', e=>{ if(e.target.id==='pcOverlay') pcClose(); });
+</script>
+{% endblock %}

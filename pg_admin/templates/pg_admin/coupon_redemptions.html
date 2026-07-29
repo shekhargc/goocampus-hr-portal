@@ -1,0 +1,42 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Redemptions — {{ coupon.code }}{% endblock %}
+
+{% block section_extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  .cr-back { color:var(--gray-500); text-decoration:none; font-size:0.85rem; }
+  .cr-h { font-size:1.5rem; font-weight:800; color:var(--navy); margin:0.3rem 0 0.2rem; }
+  .cr-code { font-family:ui-monospace,monospace; background:var(--gray-100); padding:0.15rem 0.5rem; border-radius:0.35rem; }
+  .cr-table { width:100%; border-collapse:collapse; background:#fff; border-radius:0.6rem; overflow:hidden; border:1px solid var(--gray-200); margin-top:1rem; }
+  .cr-table th { background:var(--navy); color:#fff; text-align:left; padding:0.65rem 0.8rem; font-size:0.76rem; text-transform:uppercase; }
+  .cr-table td { padding:0.6rem 0.8rem; border-top:1px solid var(--gray-100); font-size:0.86rem; }
+  .cr-empty { text-align:center; padding:2.5rem; color:var(--gray-500); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<a class="cr-back" href="/admin/pg/coupons"><i class="fa-solid fa-arrow-left"></i> All coupons</a>
+<h1 class="cr-h">Redemptions — <span class="cr-code">{{ coupon.code }}</span></h1>
+<p style="color:var(--gray-500); font-size:0.9rem;">
+  Used {{ coupon.used_count or 0 }} time{{ '' if (coupon.used_count or 0) == 1 else 's' }}{% if coupon.usage_limit_total %} of {{ coupon.usage_limit_total }} allowed{% endif %}.</p>
+
+{% if rows %}
+<table class="cr-table">
+  <thead><tr><th>Doctor</th><th>Plan</th><th>Order</th><th>Discount</th><th>When</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.user_name or 'Doctor #' ~ (r.user_id or '?') }}<div style="font-size:0.76rem; color:var(--gray-500)">{{ r.mobile or '' }}</div></td>
+      <td>{{ r.plan_name or '—' }}</td>
+      <td>₹{{ '{:,.0f}'.format(r.order_amount or 0) }}</td>
+      <td style="color:#16a34a; font-weight:600;">− ₹{{ '{:,.0f}'.format(r.discount_amount or 0) }}</td>
+      <td>{{ r.redeemed_at.strftime('%d %b %Y, %H:%M') if r.redeemed_at else '' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="cr-empty"><i class="fa-solid fa-receipt" style="font-size:2rem; opacity:0.3;"></i>
+  <p>Not redeemed yet. Redemptions appear here once doctors start using it at checkout.</p></div>
+{% endif %}
+{% endblock %}

@@ -124,6 +124,12 @@
         <option value="{{ s }}" {% if s == f_spec %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
     </select>
+    <select name="country">
+        <option value="">All countries</option>
+        {% for c in countries %}
+        <option value="{{ c }}" {% if c == f_country %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+    </select>
     <select name="published">
         <option value="">Any status</option>
         <option value="true" {% if f_pub == 'true' %}selected{% endif %}>Published</option>
@@ -186,6 +192,7 @@
                         data-email="{{ m.email }}"
                         data-phone="{{ m.phone }}"
                         data-specialization="{{ m.specialization }}"
+                        data-country="{{ m.country or '' }}"
                         data-qualification="{{ m.qualification }}"
                         data-designation="{{ m.designation }}"
                         data-experience="{{ m.experience_years if m.experience_years is not none else '' }}"
@@ -248,6 +255,8 @@
             </select></div>
           <div class="pgm-field"><label>Name *</label><input name="name" id="f_name" required></div>
           <div class="pgm-field"><label>Specialization</label><input name="specialization" id="f_specialization" placeholder="e.g. Radiology"></div>
+          <div class="pgm-field"><label>Country <span style="font-weight:400;color:#94a3b8;">(pathway advised on)</span></label><input name="country" id="f_country_edit" placeholder="UK / Australia / USA" list="pgm-countries"></div>
+          <datalist id="pgm-countries">{% for c in countries %}<option value="{{ c }}">{% endfor %}<option value="UK"><option value="Australia"><option value="USA"><option value="Canada"><option value="Ireland"><option value="New Zealand"><option value="Germany"><option value="India"></datalist>
           <div class="pgm-field"><label>Qualification</label><input name="qualification" id="f_qualification" placeholder="MD / MS / DNB"></div>
           <div class="pgm-field"><label>Designation</label><input name="designation" id="f_designation" placeholder="e.g. Senior Consultant"></div>
           <div class="pgm-field"><label>Experience (years)</label><input type="number" min="0" name="experience_years" id="f_experience_years"></div>
@@ -326,7 +335,8 @@ function pgmReset(){
     ['f_edit_id','f_name','f_specialization','f_qualification','f_designation','f_experience_years',
      'f_experience_range','f_counselling_fee','f_consultation_fee','f_specialties','f_languages',
      'f_awards','f_certifications','f_bio','f_email','f_phone',
-     'f_council_number','f_council_state','f_hospital_name','f_hospital_address','f_admin_notes'
+     'f_council_number','f_council_state','f_hospital_name','f_hospital_address','f_admin_notes',
+     'f_country_edit'
     ].forEach(function(id){ pgmSetVal(id,''); });
     pgmSetVal('f_service_type','counselling');
     pgmSetVal('f_mentor_type', (PGM_ACTIVE_TYPE && PGM_ACTIVE_TYPE!=='all') ? PGM_ACTIVE_TYPE : 'specialist');
@@ -350,6 +360,7 @@ function pgmOpenEdit(btn){
     pgmSetVal('f_mentor_type', d.mentorType || 'specialist');
     pgmSetVal('f_name', d.name);
     pgmSetVal('f_specialization', d.specialization);
+    pgmSetVal('f_country_edit', d.country || '');
     pgmSetVal('f_qualification', d.qualification);
     pgmSetVal('f_designation', d.designation);
     pgmSetVal('f_experience_years', d.experience);
