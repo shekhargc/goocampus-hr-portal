@@ -3717,6 +3717,118 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/fix-counsellor', methods=['GET', 'POST'])
+@login_required
+def admin_fix_counsellor():
+    """Admin: find a client whose profile shows no counsellor, see exactly where the
+    link broke, and one-click repair it.
+
+    The counsellor on the client profile (plab_clients.counsellor) is filled from the
+    registration's counsellor_id at sync time. When that id was missing — an invite
+    raised without invited_by, or a registration path that didn't stamp it — the
+    profile is left blank. This tool walks the same fallback chain the sync now uses
+    (invitation -> matching lead -> text name) and writes the recovered counsellor
+    back onto BOTH the registration and the master profile. Read-only until you press
+    Repair; only fills a blank, never overwrites a different name. (founder 2026-07-29)
+    """
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    q = (request.values.get('q') or '').strip()
+    conn = get_db()
+    try:
+        if request.method == 'POST' and request.form.get('action') == 'repair':
+            cid = request.form.get('client_id', type=int)
+            plab = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (cid,)).fetchone()
+            if not plab:
+                return ("<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+                        f"<h2>Not found</h2><a href='/admin/fix-counsellor?q={q}'>Back</a></div>")
+            plab = dict(plab)
+            reg = conn.execute("SELECT * FROM client_registrations WHERE registration_number = ? "
+                               "ORDER BY id DESC LIMIT 1", (plab['registration_number'],)).fetchone()
+            reg = dict(reg) if reg else {
+                'mobile': plab.get('mobile'), 'counsellor_name': plab.get('counsellor'),
+                'counsellor_id': plab.get('counsellor_id'),
+                'registration_number': plab.get('registration_number'), 'invitation_id': None}
+            c_name, c_email, c_phone, c_emp_id = _resolve_counsellor_for_reg(conn, reg)
+            if not c_name and not c_emp_id:
+                msg = ("No counsellor could be recovered — there is no invitation, no "
+                       "matching sales lead by phone, and no name on the registration. "
+                       "Set it manually on the client's edit page.")
+            else:
+                sets, vals = [], []
+                if c_name:   sets.append("counsellor = ?");        vals.append(c_name)
+                if c_email:  sets.append("counsellor_email = ?");  vals.append(c_email)
+                if c_phone:  sets.append("counsellor_number = ?"); vals.append(c_phone)
+                if sets:
+                    conn.execute(f"UPDATE plab_clients SET {', '.join(sets)}, "
+                                 "updated_at = CURRENT_TIMESTAMP WHERE id = ?", vals + [cid])
+                if c_emp_id:
+                    try:
+                        conn.execute("UPDATE plab_clients SET counsellor_id = ? WHERE id = ?",
+                                     (c_emp_id, cid))
+                    except Exception:
+                        pass
+                    if reg.get('id'):
+                        conn.execute("UPDATE client_registrations SET counsellor_id = ?, "
+                                     "counsellor_name = COALESCE(NULLIF(counsellor_name,''), ?) "
+                                     "WHERE id = ?", (c_emp_id, c_name, reg['id']))
+                conn.commit()
+                msg = f"Counsellor set to <b>{c_name or '(name only)'}</b> for {plab['registration_number']}."
+            return ("<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+                    f"<h2>Done ✅</h2><p>{msg}</p><a href='/admin/fix-counsellor?q={q}'>Back</a></div>")
+
+        rows_html = ""
+        if q:
+            like = f"%{q}%"
+            digits = re.sub(r'[^0-9]', '', q)
+            clients = conn.execute(
+                "SELECT id, registration_number, prefix, first_name, last_name, mobile, "
+                "counsellor, counsellor_id, invitation_id, pathway "
+                "FROM plab_clients WHERE "
+                "(first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+                + ("OR RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? " if len(digits) >= 10 else "")
+                + ") ORDER BY id DESC LIMIT 40",
+                ((like, like, like, digits[-10:]) if len(digits) >= 10 else (like, like, like))
+            ).fetchall()
+            for c in clients:
+                c = dict(c)
+                reg = conn.execute("SELECT * FROM client_registrations WHERE registration_number = ? "
+                                   "ORDER BY id DESC LIMIT 1", (c['registration_number'],)).fetchone()
+                reg = dict(reg) if reg else {'mobile': c.get('mobile'),
+                    'counsellor_name': c.get('counsellor'), 'counsellor_id': c.get('counsellor_id'),
+                    'registration_number': c['registration_number'], 'invitation_id': c.get('invitation_id')}
+                would_n, _e, _p, would_id = _resolve_counsellor_for_reg(conn, reg)
+                cur = c.get('counsellor') or ''
+                nm = f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".strip()
+                status = ("<span style='color:#065f46;font-weight:600'>OK</span>" if cur
+                          else ("<span style='color:#b45309;font-weight:600'>can repair → " + would_n + "</span>"
+                                if would_n else "<span style='color:#b91c1c;font-weight:600'>unknown</span>"))
+                btn = ("" if cur or not would_n else
+                       "<form method='POST' style='display:inline'><input type='hidden' name='action' value='repair'>"
+                       f"<input type='hidden' name='client_id' value='{c['id']}'>"
+                       "<button style='padding:4px 10px;cursor:pointer'>Repair</button></form>")
+                rows_html += (f"<tr><td>{c['registration_number']}</td><td>{nm}</td>"
+                              f"<td>{cur or '—'}</td><td>{status}</td><td>{btn}</td></tr>")
+        body = ("<div style='font-family:system-ui;max-width:920px;margin:30px auto'>"
+                "<h2>Fix a client's counsellor</h2>"
+                "<p style='color:#555'>Search a client whose profile shows no counsellor. "
+                "'Repair' recovers it from the invitation or the matching sales lead and writes "
+                "it onto the profile. It only fills a blank — it never changes a counsellor that "
+                "is already set.</p>"
+                "<form method='GET'>Search by name / reg no / phone: "
+                f"<input name='q' value='{q}' style='padding:6px;width:280px'> <button>Search</button></form>"
+                + ("<table border='1' cellpadding='6' cellspacing='0' style='margin-top:16px;border-collapse:collapse;width:100%'>"
+                   "<tr style='background:#f3f4f6'><th>Reg No</th><th>Client</th><th>Counsellor now</th>"
+                   "<th>Status</th><th>Action</th></tr>" + (rows_html or
+                   "<tr><td colspan='5' style='text-align:center;color:#888'>No matches</td></tr>") + "</table>"
+                   if q else "") + "</div>")
+        return body
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 @app.route('/admin/recompute-closure', methods=['GET', 'POST'])
 @login_required
 def admin_recompute_closure():
@@ -5746,6 +5858,55 @@ def client_welcome_call_confirm_proposal():
     return redirect(url_for('client_welcome_call_page'))
 
 
+def _resolve_counsellor_for_reg(conn, reg):
+    """Best-effort (name, email, phone, emp_id) for a registration's counsellor.
+
+    The counsellor used to be read ONLY from reg.counsellor_id, so whenever that was
+    empty — an invitation raised without invited_by, a registration created by a path
+    that didn't stamp it — the client's whole profile showed a blank counsellor and
+    there was no way for it to recover. This walks a fallback chain instead:
+
+        1. reg.counsellor_id                      (the normal case)
+        2. the linked invitation's invited_by     (the sales rep who invited them)
+        3. the sales lead matched by phone         (created_by = the lead generator)
+        4. reg.counsellor_name                      (a plain text name, last resort)
+
+    Returns ('', '', '', None) only when the counsellor is genuinely unknown.
+    (founder 2026-07-29 — Lingaraja showed no counsellor on the consulting profile)
+    """
+    emp_id = reg.get('counsellor_id')
+    if not emp_id and reg.get('invitation_id'):
+        try:
+            inv = conn.execute("SELECT invited_by FROM client_invitations WHERE id = ?",
+                               (reg['invitation_id'],)).fetchone()
+            if inv and inv['invited_by']:
+                emp_id = inv['invited_by']
+        except Exception:
+            pass
+    if not emp_id:
+        phone = re.sub(r'\D', '', str(reg.get('mobile') or ''))[-10:]
+        if len(phone) == 10:
+            try:
+                lead = conn.execute(
+                    "SELECT created_by FROM sales_leads "
+                    "WHERE RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) = ? "
+                    "AND created_by IS NOT NULL ORDER BY id DESC LIMIT 1",
+                    (phone,)).fetchone()
+                if lead and lead['created_by']:
+                    emp_id = lead['created_by']
+            except Exception:
+                pass
+    if emp_id:
+        try:
+            emp = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?",
+                               (emp_id,)).fetchone()
+            if emp:
+                return (emp['name'] or ''), (emp['email'] or ''), (emp['phone'] or ''), emp_id
+        except Exception:
+            pass
+    return (reg.get('counsellor_name') or ''), '', '', None
+
+
 def _push_reg_to_master(conn, reg_id):
     """Push the fields OWNED by sales/ops verification onto the client's master
     profile (plab_clients), so an edit made in verification shows up on the client
@@ -5781,16 +5942,13 @@ def _push_reg_to_master(conn, reg_id):
         _put('joined_stage', reg.get('joined_stage'))
         _put('plan_type', reg.get('plan_type'))
         _put('lead_source', reg.get('lead_source'))
-        # Counsellor (the LEAD's sales member) + their contact details
-        if reg.get('counsellor_id'):
-            emp = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?",
-                               (reg['counsellor_id'],)).fetchone()
-            if emp:
-                _put('counsellor', emp['name'])
-                _put('counsellor_email', emp['email'])
-                _put('counsellor_number', emp['phone'])
-        elif reg.get('counsellor_name'):
-            _put('counsellor', reg.get('counsellor_name'))
+        # Counsellor (the LEAD's sales member) + their contact details. Resolved via
+        # the fallback chain so a missing counsellor_id still recovers the name from
+        # the invitation / lead, instead of leaving the profile blank.
+        c_name, c_email, c_phone, c_emp_id = _resolve_counsellor_for_reg(conn, reg)
+        _put('counsellor', c_name)
+        _put('counsellor_email', c_email)
+        _put('counsellor_number', c_phone)
         if not sets:
             return
         sets.append("updated_at = CURRENT_TIMESTAMP")
@@ -5798,12 +5956,22 @@ def _push_reg_to_master(conn, reg_id):
                      vals + [reg_num])
         # counsellor_id is an ALTER-added column on some deployments — set separately
         # so a missing column can't abort the whole update.
-        if reg.get('counsellor_id'):
+        if c_emp_id:
             try:
                 conn.execute("UPDATE plab_clients SET counsellor_id = ? WHERE registration_number = ?",
-                             (reg['counsellor_id'], reg_num))
+                             (c_emp_id, reg_num))
             except Exception:
                 pass
+            # Self-heal: if we recovered the counsellor from the invitation/lead,
+            # write it back onto the registration too, so the next verification save
+            # (and the client dashboard's employees-join) is clean without a repair.
+            if not reg.get('counsellor_id'):
+                try:
+                    conn.execute("UPDATE client_registrations SET counsellor_id = ?, "
+                                 "counsellor_name = COALESCE(NULLIF(counsellor_name,''), ?) "
+                                 "WHERE id = ?", (c_emp_id, c_name, reg_id))
+                except Exception:
+                    pass
     except Exception as e:
         logging.warning("_push_reg_to_master(%s): %s", reg_id, e)
         try:
@@ -5827,19 +5995,14 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
     # Load academics from client_academics
     academics = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
 
-    # Get counsellor details
-    counsellor_name = reg.get('counsellor_name', '')
-    counsellor_email = ''
-    counsellor_number = ''
-    if reg.get('counsellor_id'):
-        emp = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?", (reg['counsellor_id'],)).fetchone()
-        if emp:
-            counsellor_name = emp['name'] or ''
-            counsellor_email = emp['email'] or ''
-            counsellor_number = emp['phone'] or ''
+    # Get counsellor details — via the fallback chain so a registration created
+    # without a counsellor_id still lands a counsellor name on the master profile
+    # (recovered from the invitation / matching lead). (founder 2026-07-29)
+    counsellor_name, counsellor_email, counsellor_number, _c_emp_id = \
+        _resolve_counsellor_for_reg(conn, reg)
 
     # Get created_by (the ops user who confirmed)
-    created_by = reg.get('ops_verified_by') or reg.get('counsellor_id')
+    created_by = reg.get('ops_verified_by') or reg.get('counsellor_id') or _c_emp_id
 
     # Resolve the client's REAL pathway from their product so the master record
     # is stamped correctly. Root fix for "everything shows PLAB": this insert
