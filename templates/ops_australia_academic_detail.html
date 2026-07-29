@@ -120,6 +120,22 @@
         </div>
       </div>
 
+      {% if record.pg_done %}
+      <!-- Postgraduate (PG) Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Postgraduate (PG)</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Done PG?:</span><span style="color:var(--navy);font-weight:600;">{{ record.pg_done or '—' }}</span></div>
+          {% if record.pg_type %}
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Which PG:</span><span style="color:var(--navy);font-weight:600;">{{ record.pg_type }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Course / Specialty:</span><span style="color:var(--navy);font-weight:600;">{{ record.pg_specialty or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">College:</span><span style="color:var(--navy);font-weight:600;">{{ record.pg_college or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Status:</span><span style="color:var(--navy);font-weight:600;">{{ record.pg_status or '—' }}</span></div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
     </div>
   </div>
 
