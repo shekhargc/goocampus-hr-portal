@@ -465,9 +465,14 @@ def api_pg_neetpg_pdfs():
     """
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    # Every filter the goocampus.org cut-off library exposes, so the .in dashboard
+    # can reproduce the SAME UI (doc-type tabs, NEET-PG/DNB split, State, Specialty,
+    # Quota & Category). category = 'neetpg'|'dnb'; doc_type = cutoff|mcc_profile|…
     category = (request.args.get('category') or '').strip()
+    doc_type = (request.args.get('doc_type') or '').strip()
     specialty = (request.args.get('specialty') or '').strip()
     state = (request.args.get('state') or '').strip()
+    quota = (request.args.get('quota') or request.args.get('quota_category') or '').strip()
     q = (request.args.get('q') or '').strip()
 
     where = ["COALESCE(is_active, 1) = 1", "COALESCE(is_published, 0) = 1",
@@ -475,10 +480,14 @@ def api_pg_neetpg_pdfs():
     params = []
     if category:
         where.append("category = ?"); params.append(category)
+    if doc_type:
+        where.append("doc_type = ?"); params.append(doc_type)
     if specialty:
         where.append("specialty = ?"); params.append(specialty)
     if state:
         where.append("state = ?"); params.append(state)
+    if quota:
+        where.append("quota_category = ?"); params.append(quota)
     if q:
         where.append("(title ILIKE ? OR specialty ILIKE ? OR file_name ILIKE ?)")
         params.extend([f"%{q}%"] * 3)
@@ -486,14 +495,15 @@ def api_pg_neetpg_pdfs():
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT id, title, category, specialty, state, file_name, file_size, "
-            "       upload_date, COALESCE(download_count,0) AS download_count "
+            "SELECT id, title, category, doc_type, specialty, quota_category, state, "
+            "       file_name, file_size, upload_date, published_at, "
+            "       COALESCE(download_count,0) AS download_count "
             f"  FROM neetpg_pdfs WHERE {' AND '.join(where)} "
             "  ORDER BY state ASC, specialty ASC, title ASC", params).fetchall()
-        # Filter values that actually exist, so the site's dropdowns never offer
-        # a choice that returns nothing.
+        # Filter values that actually exist, so the site's controls never offer a
+        # choice that returns nothing. Keyed to match the .org UI's four filters.
         facets = {}
-        for col in ('category', 'specialty', 'state'):
+        for col in ('category', 'doc_type', 'specialty', 'state', 'quota_category'):
             facets[col + 's'] = [r[col] for r in conn.execute(
                 f"SELECT DISTINCT {col} FROM neetpg_pdfs "
                 "  WHERE COALESCE(is_active,1)=1 AND COALESCE(is_published,0)=1 "
