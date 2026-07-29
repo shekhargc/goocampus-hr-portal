@@ -3724,6 +3724,124 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/stage-backfill', methods=['GET', 'POST'])
+@login_required
+def admin_stage_backfill():
+    """Fill the BLANK Current Stage on client records (founder 2026-07-30):
+       Consulting + AMC Consulting product  -> 'AMC 1'
+       Consulting + UK Consulting product   -> 'PLAB 1 Stage'
+       Consulting + USA/USMLE Consulting     -> 'USMLE 1'
+       Training (any)                        -> 'AMC 1'
+    ONLY where current_stage is blank — never overwrites a stage that's already set.
+    GET previews the exact counts; POST applies. Read the preview before applying."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+
+    # product-name keyword -> stage. Order matters (AMC before USA before UK).
+    def _target_for(product_upper):
+        if 'AMC' in product_upper:              return 'AMC 1'
+        if 'USMLE' in product_upper or 'USA' in product_upper: return 'USMLE 1'
+        if 'UK' in product_upper or 'PLAB' in product_upper:   return 'PLAB 1 Stage'
+        return None
+
+    conn = get_db()
+    try:
+        BLANK = "COALESCE(TRIM(current_stage),'') = ''"
+        # Consulting blank clients grouped by their product.
+        cons = []
+        try:
+            for r in conn.execute(
+                "SELECT COALESCE(ps.name,'(no product)') AS product, COUNT(*) AS n "
+                "FROM plab_clients pc LEFT JOIN products_services ps ON ps.id = pc.product_id "
+                f"WHERE COALESCE(pc.pathway,'plab')='consulting' AND {BLANK.replace('current_stage','pc.current_stage')} "
+                "GROUP BY 1 ORDER BY n DESC").fetchall():
+                cons.append((r['product'], r['n'], _target_for((r['product'] or '').upper())))
+        except Exception:
+            conn.rollback()
+        try:
+            train_blank = conn.execute(
+                f"SELECT COUNT(*) AS n FROM plab_clients WHERE COALESCE(pathway,'plab')='training' AND {BLANK}"
+            ).fetchone()['n']
+        except Exception:
+            conn.rollback(); train_blank = 0
+
+        if request.method == 'POST' and request.form.get('confirm') == 'yes':
+            changed = {'AMC 1': 0, 'PLAB 1 Stage': 0, 'USMLE 1': 0, 'training AMC 1': 0, 'unmapped': 0}
+            # Consulting, per bucket — each UPDATE only touches still-blank rows.
+            buckets = [
+                ('AMC 1',        "UPPER(ps.name) LIKE '%AMC%'"),
+                ('USMLE 1',      "(UPPER(ps.name) LIKE '%USMLE%' OR UPPER(ps.name) LIKE '%USA%')"),
+                ('PLAB 1 Stage', "(UPPER(ps.name) LIKE '%UK%' OR UPPER(ps.name) LIKE '%PLAB%')"),
+            ]
+            for stage, cond in buckets:
+                try:
+                    cur = conn.execute(
+                        "UPDATE plab_clients pc SET current_stage = ?, updated_at = CURRENT_TIMESTAMP "
+                        "FROM products_services ps WHERE ps.id = pc.product_id "
+                        "AND COALESCE(pc.pathway,'plab')='consulting' "
+                        "AND COALESCE(TRIM(pc.current_stage),'')='' AND " + cond, (stage,))
+                    changed[stage] = getattr(cur.cursor, 'rowcount', 0) if cur else 0
+                except Exception as e:
+                    conn.rollback(); changed['unmapped'] = changed.get('unmapped', 0)
+            # Training -> AMC 1
+            try:
+                cur = conn.execute(
+                    "UPDATE plab_clients SET current_stage='AMC 1', updated_at=CURRENT_TIMESTAMP "
+                    "WHERE COALESCE(pathway,'plab')='training' AND COALESCE(TRIM(current_stage),'')=''")
+                changed['training AMC 1'] = getattr(cur.cursor, 'rowcount', 0) if cur else 0
+            except Exception:
+                conn.rollback()
+            # Make sure the filled values are offered in the consulting/training dropdowns.
+            for cat_pw, val in [('consulting', 'AMC 1'), ('consulting', 'PLAB 1 Stage'),
+                                ('consulting', 'USMLE 1'), ('training', 'AMC 1')]:
+                pw, v = cat_pw, val
+                try:
+                    ex = conn.execute("SELECT 1 FROM lookup_options WHERE category='current_stage' "
+                                      "AND value=? AND COALESCE(pathway,'plab')=?", (v, pw)).fetchone()
+                    if not ex:
+                        conn.execute("INSERT INTO lookup_options (category,label,value,pathway,is_active,sort_order) "
+                                     "VALUES ('current_stage',?,?,?,TRUE,50)", (v, v, pw))
+                except Exception:
+                    conn.rollback()
+            conn.commit()
+            done = ''.join(f"<li>{esc(k)}: <b>{v}</b> client(s)</li>" for k, v in changed.items() if v)
+            return ("<div style='font-family:system-ui;max-width:680px;margin:40px auto'>"
+                    "<h2>Backfill done ✅</h2><ul>" + (done or "<li>Nothing to fill.</li>") + "</ul>"
+                    "<p>Only blank stages were filled; existing stages were untouched.</p>"
+                    "<p><a href='/admin/stage-usage'>→ See the updated per-pathway report</a></p></div>")
+
+        # ── Preview (GET) ──
+        crows = ''
+        for product, n, tgt in cons:
+            crows += (f"<tr><td style='padding:4px 10px'>{esc(product)}</td>"
+                      f"<td style='padding:4px 10px;text-align:right'>{n}</td>"
+                      f"<td style='padding:4px 10px'>{'→ '+esc(tgt) if tgt else '<span style=color:#b45309>no match — will be left blank</span>'}</td></tr>")
+        return ("<div style='font-family:system-ui;max-width:760px;margin:30px auto'>"
+                "<h2>Fill blank Current Stage — preview</h2>"
+                "<p style='color:#065f46'>This fills only clients whose Current Stage is <b>blank</b>. "
+                "Clients that already have a stage are never changed.</p>"
+                "<h3>Standard Consulting — blank clients by product</h3>"
+                "<table style='border-collapse:collapse;width:100%;font-size:13px'>"
+                "<tr style='background:#f3f4f6'><th style='padding:4px 10px;text-align:left'>Product</th>"
+                "<th style='padding:4px 10px;text-align:right'>Blank clients</th><th style='padding:4px 10px;text-align:left'>Will become</th></tr>"
+                + (crows or "<tr><td colspan='3' style='padding:6px;color:#888'>no blank consulting clients</td></tr>") + "</table>"
+                f"<h3 style='margin-top:18px'>Training — blank clients</h3><p><b>{train_blank}</b> client(s) → <b>AMC 1</b></p>"
+                "<form method='POST' style='margin-top:20px'><input type='hidden' name='confirm' value='yes'>"
+                "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer' "
+                "onclick=\"return confirm('Fill the blank stages as previewed? Existing stages are not touched.')\">Apply backfill</button>"
+                "</form></div>")
+    except Exception as e:
+        logging.error("admin_stage_backfill: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return f"<div style='font-family:system-ui;margin:40px'>Error: {esc(e)}</div>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 @app.route('/admin/stage-usage', methods=['GET'])
 @login_required
 def admin_stage_usage():
