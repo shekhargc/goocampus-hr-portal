@@ -99,6 +99,9 @@
         ">
           {{ client.account_status or 'Unknown' }}
         </div>
+        {% if client.current_stage %}
+        <span style="display:inline-block;margin-left:8px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;">Stage: {{ client.current_stage }}</span>
+        {% endif %}
         {% if (referred_count or 0) >= 1 %}
         <span style="display:inline-block;margin-left:8px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;">&#9733; Referred {{ referred_count }} client{{ '' if referred_count == 1 else 's' }}</span>
         {% endif %}

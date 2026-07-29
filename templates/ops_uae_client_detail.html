@@ -102,6 +102,9 @@
         ">
           {{ client.account_status or 'Unknown' }}
         </div>
+        {% if client.current_stage %}
+        <span style="display:inline-block;margin-left:8px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;">Stage: {{ client.current_stage }}</span>
+        {% endif %}
         {% set _xfer = client_transfer_info(client.registration_number) %}
         {% if _xfer.out %}<span style="display:inline-block;margin-left:8px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;">&#8599; Internal transfer &rarr; {{ _xfer.out.to_product or (_xfer.out.to_pathway or '')|upper }}{% if _xfer.out.to_reg %} ({{ _xfer.out.to_reg|format_reg }}){% endif %}</span>{% endif %}
         {% if _xfer.in %}<span style="display:inline-block;margin-left:8px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;">&#8600; Transferred in from {{ _xfer.in.from_product or (_xfer.in.from_pathway or '')|upper }}{% if _xfer.in.from_reg %} ({{ _xfer.in.from_reg|format_reg }}){% endif %}</span>{% endif %}
