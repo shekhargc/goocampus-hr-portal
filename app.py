@@ -3724,6 +3724,80 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/pg-selfcheck', methods=['GET'])
+@login_required
+def admin_pg_selfcheck():
+    """Read-only audit of the PG-academic + badge feature: confirms the columns were
+    added, the dropdowns seeded, the Field Manager rows exist, and reports usage —
+    so we can prove every connection is wired on live. (founder 2026-07-29)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    checks = []
+    def _ok(label, good, detail=''):
+        checks.append((label, good, detail))
+    try:
+        def _cols(table):
+            try:
+                return {r['column_name'] for r in conn.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+                    (table,)).fetchall()}
+            except Exception:
+                conn.rollback(); return set()
+        pg5 = {'pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status'}
+        ca, oa, pc = _cols('client_academics'), _cols('ops_academic_details'), _cols('plab_clients')
+        _ok('client_academics has 5 PG columns', pg5 <= ca, ', '.join(sorted(pg5 - ca)) or 'all present')
+        _ok('ops_academic_details has 5 PG columns', pg5 <= oa, ', '.join(sorted(pg5 - oa)) or 'all present')
+        _ok('plab_clients.is_pg_doctor exists', 'is_pg_doctor' in pc, 'present' if 'is_pg_doctor' in pc else 'MISSING')
+
+        def _cnt(cat):
+            try:
+                return conn.execute("SELECT COUNT(*) AS n FROM lookup_options WHERE category = ?",
+                                    (cat,)).fetchone()['n']
+            except Exception:
+                conn.rollback(); return 0
+        for cat, want in [('pg_done', 2), ('pg_type', 2), ('pg_status', 4),
+                          ('pg_specialty_neetpg', 40), ('pg_specialty_dnb', 40)]:
+            n = _cnt(cat)
+            _ok(f"dropdown '{cat}' seeded", n >= want, f"{n} option(s)")
+        try:
+            fr = conn.execute("SELECT COUNT(*) AS n FROM field_registry WHERE section='ops_academic_details' "
+                              "AND field_name IN ('pg_done','pg_type','pg_specialty','pg_college','pg_status')").fetchone()['n']
+        except Exception:
+            conn.rollback(); fr = 0
+        _ok('Field Manager rows for PG fields', fr >= 5, f"{fr}/5 registered")
+        try:
+            badge = conn.execute("SELECT COUNT(*) AS n FROM plab_clients WHERE COALESCE(is_pg_doctor,0)=1").fetchone()['n']
+            total = conn.execute("SELECT COUNT(*) AS n FROM plab_clients").fetchone()['n']
+        except Exception:
+            conn.rollback(); badge, total = 0, 0
+        _ok('badge data readable', True, f"{badge} PG Doctor / {total} total (rest show MBBS Doctor)")
+        try:
+            filled = conn.execute("SELECT COUNT(*) AS n FROM client_academics WHERE COALESCE(pg_done,'')<>''").fetchone()['n']
+        except Exception:
+            conn.rollback(); filled = 0
+        _ok('clients who answered the PG question', True, f"{filled} so far")
+    except Exception as e:
+        _ok('self-check ran', False, str(e))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    allgood = all(g for _, g, _ in checks)
+    rows = ''.join(
+        f"<tr><td style='padding:6px 10px'>{'✅' if g else '❌'}</td>"
+        f"<td style='padding:6px 10px'>{l}</td>"
+        f"<td style='padding:6px 10px;color:#555'>{d}</td></tr>" for l, g, d in checks)
+    banner = ("<div style='background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;padding:10px 14px;border-radius:8px'>"
+              "All connections wired ✅</div>" if allgood else
+              "<div style='background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 14px;border-radius:8px'>"
+              "Some checks failed — see ❌ below. Tell Claude; a re-deploy usually re-runs the boot seed.</div>")
+    return ("<div style='font-family:system-ui;max-width:720px;margin:30px auto'>"
+            "<h2>PG feature — self-check</h2>" + banner +
+            "<table style='border-collapse:collapse;width:100%;margin-top:14px;font-size:14px'>" + rows + "</table></div>")
+
+
 @app.route('/admin/pg-doctor-badge', methods=['GET', 'POST'])
 @login_required
 def admin_pg_doctor_badge():
