@@ -73,7 +73,7 @@ def run_seed_pg_lookups_once(get_db):
                 conn.execute(
                     "INSERT INTO field_registry (section, field_name, field_label, "
                     "field_type, lookup_category, display_order, is_active) "
-                    "VALUES (?, ?, ?, ?, ?, ?, 1)",
+                    "VALUES (?, ?, ?, ?, ?, ?, TRUE)",
                     ('ops_academic_details', fname, flabel, ftype, lcat, 90 + i))
                 result['registry'] += 1
         conn.commit()
