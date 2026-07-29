@@ -3724,6 +3724,107 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/joined-stage-sync', methods=['GET', 'POST'])
+@login_required
+def admin_joined_stage_sync():
+    """Sync Joined Stage onto Training clients from their matching Consulting/AMC
+    record (same person, matched by mobile). Only fills a BLANK Training joined_stage
+    from a non-blank Consulting/Australia one — never overwrites. New AMC combos
+    already inherit it automatically at verification. Preview then apply.
+    (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    M10 = "RIGHT(regexp_replace(COALESCE(%s,''),'[^0-9]','','g'),10)"
+    # The latest non-blank Joined Stage per mobile among Consulting/Australia clients.
+    SRC = ("(SELECT DISTINCT ON (m10) m10, js FROM ("
+           "  SELECT " + (M10 % 'mobile') + " AS m10, joined_stage AS js, id "
+           "  FROM plab_clients WHERE COALESCE(pathway,'plab') IN ('consulting','australia') "
+           "  AND COALESCE(TRIM(joined_stage),'') <> '') q ORDER BY m10, id DESC) src")
+    conn = get_db()
+    try:
+        if request.method == 'POST' and request.form.get('confirm') == 'yes':
+            n = 0
+            try:
+                cur = conn.execute(
+                    "UPDATE plab_clients t SET joined_stage = src.js, updated_at = CURRENT_TIMESTAMP "
+                    "FROM " + SRC + " "
+                    "WHERE COALESCE(t.pathway,'plab')='training' AND COALESCE(TRIM(t.joined_stage),'')='' "
+                    "AND " + (M10 % 't.mobile') + " = src.m10 AND LENGTH(src.m10) = 10")
+                n = getattr(cur.cursor, 'rowcount', 0) if cur else 0
+                # Make sure those joined_stage values show in the training dropdown.
+                conn.execute(
+                    "INSERT INTO lookup_options (category, label, value, pathway, is_active, sort_order) "
+                    "SELECT 'joined_stage', joined_stage, joined_stage, 'training', TRUE, 50 "
+                    "FROM (SELECT DISTINCT joined_stage FROM plab_clients "
+                    "  WHERE COALESCE(pathway,'plab')='training' AND COALESCE(TRIM(joined_stage),'')<>'') d "
+                    "WHERE NOT EXISTS (SELECT 1 FROM lookup_options lo WHERE lo.category='joined_stage' "
+                    "  AND lo.value = d.joined_stage AND COALESCE(lo.pathway,'plab')='training')")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                return f"<div style='font-family:system-ui;margin:40px'>Error: {esc(e)}</div>"
+            return ("<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+                    f"<h2>Joined Stage synced ✅</h2><p>Filled <b>{n}</b> Training client(s) "
+                    "from their matching Consulting/AMC record. Existing values were untouched.</p>"
+                    "<p><a href='/admin/joined-stage-sync'>← Back</a></p></div>")
+
+        # ── Preview ──
+        total = 0
+        try:
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM plab_clients t WHERE COALESCE(t.pathway,'plab')='training' "
+                "AND COALESCE(TRIM(t.joined_stage),'')='' AND EXISTS (SELECT 1 FROM " + SRC + " "
+                "WHERE " + (M10 % 't.mobile') + " = src.m10 AND LENGTH(src.m10)=10)").fetchone()['n']
+        except Exception:
+            conn.rollback()
+        samples = ''
+        try:
+            for r in conn.execute(
+                "SELECT t.registration_number AS reg, t.first_name, t.last_name, src.js "
+                "FROM plab_clients t JOIN " + SRC + " ON " + (M10 % 't.mobile') + " = src.m10 "
+                "WHERE COALESCE(t.pathway,'plab')='training' AND COALESCE(TRIM(t.joined_stage),'')='' "
+                "AND LENGTH(src.m10)=10 ORDER BY t.id DESC LIMIT 30").fetchall():
+                samples += (f"<tr><td style='padding:4px 10px'>{esc(r['reg'])}</td>"
+                            f"<td style='padding:4px 10px'>{esc((r['first_name'] or '')+' '+(r['last_name'] or ''))}</td>"
+                            f"<td style='padding:4px 10px'>→ {esc(r['js'])}</td></tr>")
+        except Exception:
+            conn.rollback()
+        # Training clients still blank with NO consulting/AMC match (can't be synced).
+        nomatch = 0
+        try:
+            nomatch = conn.execute(
+                "SELECT COUNT(*) AS n FROM plab_clients t WHERE COALESCE(t.pathway,'plab')='training' "
+                "AND COALESCE(TRIM(t.joined_stage),'')='' AND NOT EXISTS (SELECT 1 FROM " + SRC + " "
+                "WHERE " + (M10 % 't.mobile') + " = src.m10 AND LENGTH(src.m10)=10)").fetchone()['n']
+        except Exception:
+            conn.rollback()
+        return ("<div style='font-family:system-ui;max-width:760px;margin:30px auto'>"
+                "<h2>Sync Joined Stage to Training — preview</h2>"
+                "<p style='color:#065f46'>Fills a Training client's <b>blank</b> Joined Stage from their "
+                "matching Consulting/AMC record (same mobile). Never overwrites an existing value.</p>"
+                f"<p><b>{total}</b> Training client(s) will be filled from a matching record."
+                + (f" <span style='color:#6b7280'>({nomatch} more are blank but have no Consulting/AMC match — nothing to sync from.)</span>" if nomatch else "")
+                + "</p>"
+                + (("<table style='border-collapse:collapse;width:100%;font-size:13px'>"
+                    "<tr style='background:#f3f4f6'><th style='padding:4px 10px;text-align:left'>Training reg</th>"
+                    "<th style='padding:4px 10px;text-align:left'>Client</th><th style='padding:4px 10px;text-align:left'>Joined Stage to set</th></tr>"
+                    + samples + "</table>") if samples else "<p>Nothing to sync right now.</p>")
+                + ("<form method='POST' style='margin-top:18px'><input type='hidden' name='confirm' value='yes'>"
+                   "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer' "
+                   "onclick=\"return confirm('Sync Joined Stage onto these Training clients? Existing values are untouched.')\">Apply sync</button></form>" if total else "")
+                + "</div>")
+    except Exception as e:
+        logging.error("admin_joined_stage_sync: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return f"<div style='font-family:system-ui;margin:40px'>Error: {esc(e)}</div>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 @app.route('/admin/stage-backfill', methods=['GET', 'POST'])
 @login_required
 def admin_stage_backfill():
