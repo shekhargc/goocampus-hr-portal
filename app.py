@@ -2288,7 +2288,8 @@ _CA_FORM_COLS = {'img_fmg', 'img_medical_college', 'fmg_medical_college', 'count
                  'internship_location', 'internship_hospital_2', 'internship_location_2',
                  'internship_start_date', 'internship_end_date', 'internship_gap',
                  'gap_in_months', 'gap_reason', 'working_status', 'working_hospital_name',
-                 'additional_info'}
+                 'additional_info',
+                 'pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status'}
 
 
 @app.route('/client/form/<int:reg_id>', methods=['GET', 'POST'])
@@ -6199,8 +6200,9 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
             internship_hospital_2, internship_location_2,
             internship_start_date, internship_end_date,
             internship_gap, gap_in_months, gap_reason,
-            working_status, working_hospital_name, additional_info, created_by, pathway
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+            working_status, working_hospital_name, additional_info,
+            pg_done, pg_type, pg_specialty, pg_college, pg_status, created_by, pathway
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
             reg_num,
             academics.get('img_fmg', ''), academics.get('img_medical_college', ''),
             academics.get('fmg_medical_college', ''),
@@ -6214,8 +6216,20 @@ def _sync_to_plab_and_academics(conn, reg, reg_id):
             academics.get('internship_gap', ''), academics.get('gap_in_months', ''),
             academics.get('gap_reason', ''),
             academics.get('working_status', ''), academics.get('working_hospital_name', ''),
-            academics.get('additional_info', ''), created_by, (pathway or 'plab')
+            academics.get('additional_info', ''),
+            academics.get('pg_done', ''), academics.get('pg_type', ''),
+            academics.get('pg_specialty', ''), academics.get('pg_college', ''),
+            academics.get('pg_status', ''), created_by, (pathway or 'plab')
         ))
+        # Badge: mark the master as a PG Doctor when PG is started or completed.
+        _pg_started = ((academics.get('pg_done') or '').strip().lower() in ('yes', 'y', 'true', '1')
+                       and (academics.get('pg_status') or '').strip() != '')
+        if _pg_started:
+            try:
+                conn.execute("UPDATE plab_clients SET is_pg_doctor = 1 WHERE registration_number = ?",
+                             (reg_num,))
+            except Exception:
+                pass
 
     # ── Carry the registration's documents into the ops pathway profile ──────
     # The pathway profile reads plab_client_documents (by client_id); the client
@@ -11668,6 +11682,24 @@ def ensure_crm_tables():
             ('internal_transfers',       'sales_submitted_at',     'TIMESTAMP'),
             ('internal_transfers',       'ops_verified_by',        'INTEGER'),
             ('internal_transfers',       'ops_verified_at',        'TIMESTAMP'),
+            # PG (postgraduate) medical education — conditional academic block shown
+            # once MBBS + internship are completed. Same 5 fields on the client-side
+            # academics, the ops-side academics, so they sync across every view.
+            # (founder 2026-07-29)
+            ('client_academics',    'pg_done',      'TEXT'),
+            ('client_academics',    'pg_type',      'TEXT'),
+            ('client_academics',    'pg_specialty', 'TEXT'),
+            ('client_academics',    'pg_college',   'TEXT'),
+            ('client_academics',    'pg_status',    'TEXT'),
+            ('ops_academic_details','pg_done',      'TEXT'),
+            ('ops_academic_details','pg_type',      'TEXT'),
+            ('ops_academic_details','pg_specialty', 'TEXT'),
+            ('ops_academic_details','pg_college',   'TEXT'),
+            ('ops_academic_details','pg_status',    'TEXT'),
+            # Doctor badge on the client profile banner: 0 = MBBS Doctor (default),
+            # 1 = PG Doctor. Auto-set when PG is started/completed; also bulk-settable
+            # for the founder's list of existing PG doctors.
+            ('plab_clients',        'is_pg_doctor', 'INTEGER DEFAULT 0'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -18091,6 +18123,11 @@ def ensure_ops_tables():
             working_status TEXT,
             working_hospital_name TEXT,
             additional_info TEXT,
+            pg_done TEXT,
+            pg_type TEXT,
+            pg_specialty TEXT,
+            pg_college TEXT,
+            pg_status TEXT,
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
@@ -18856,6 +18893,11 @@ def ensure_ops_tables():
             working_status TEXT,
             working_hospital_name TEXT,
             additional_info TEXT,
+            pg_done TEXT,
+            pg_type TEXT,
+            pg_specialty TEXT,
+            pg_college TEXT,
+            pg_status TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
@@ -34612,6 +34654,15 @@ try:
     run_seed_consulting_lookups_once(get_db)
 except Exception as _cs_lk_err:
     logging.error(f"Consulting lookups seed failed: {_cs_lk_err}")
+
+# ── PG (postgraduate) academic dropdowns — pg_done/pg_type/pg_status + the two
+# specialty picklists seeded from the NEET-PG PDF course data. Editable in the
+# Field Manager once seeded. Idempotent. (founder 2026-07-29)
+try:
+    from seed_pg_lookups import run_seed_pg_lookups_once
+    run_seed_pg_lookups_once(get_db)
+except Exception as _pg_lk_err:
+    logging.error(f"PG lookups seed failed: {_pg_lk_err}")
 
 # ── X-2: One-time import for AMC Pathway AMC Registrations (152 rows) ──
 # Excel candidate names don't have embedded reg#; importer name-matches
