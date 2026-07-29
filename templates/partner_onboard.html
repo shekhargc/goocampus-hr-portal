@@ -1069,13 +1069,17 @@
         </form>
     </div>
 
-    <!-- Save & continue later -->
-    <button type="button" id="saveDraftBtn" onclick="saveDraft(true)"
-        style="position:fixed;right:18px;bottom:18px;z-index:900;background:#fff;color:var(--navy,#1e3a5f);
-               border:1.5px solid var(--navy,#1e3a5f);padding:0.6rem 1rem;border-radius:30px;font-weight:600;
-               cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,0.12);display:inline-flex;align-items:center;gap:8px;">
-        <i class="fas fa-floppy-disk"></i> Save &amp; continue later
-    </button>
+    <!-- Save & continue later (auto-saves on its own too) -->
+    <div style="position:fixed;right:18px;bottom:18px;z-index:900;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+        <span id="autosaveStatus" style="font-size:0.75rem;color:#16a34a;background:#fff;padding:2px 10px;border-radius:20px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.08);display:none;"><i class="fas fa-cloud"></i> <span id="autosaveStatusText"></span></span>
+        <button type="button" id="saveDraftBtn" onclick="saveDraft(true)"
+            style="background:#fff;color:var(--navy,#1e3a5f);border:1.5px solid var(--navy,#1e3a5f);
+                   padding:0.6rem 1rem;border-radius:30px;font-weight:600;cursor:pointer;
+                   box-shadow:0 6px 18px rgba(0,0,0,0.12);display:inline-flex;align-items:center;gap:8px;">
+            <i class="fas fa-floppy-disk"></i> Save &amp; continue later
+        </button>
+    </div>
 
     <!-- Footer -->
     <div class="footer">
@@ -1122,6 +1126,14 @@
             };
         }
 
+        function _autosaveStatus(text) {
+            const box = document.getElementById('autosaveStatus');
+            const t = document.getElementById('autosaveStatusText');
+            if (!box || !t) return;
+            t.textContent = text;
+            box.style.display = 'inline-flex';
+        }
+
         async function saveDraft(showFeedback) {
             const btn = document.getElementById('saveDraftBtn');
             const orig = btn ? btn.innerHTML : '';
@@ -1132,6 +1144,7 @@
                     body: JSON.stringify(gatherDraft())
                 });
                 const ok = r.ok && (await r.json()).success;
+                if (ok) _autosaveStatus('All changes saved');
                 if (btn && showFeedback) {
                     btn.innerHTML = ok ? '<i class="fas fa-check"></i> Saved — you can close this and come back'
                                        : '<i class="fas fa-triangle-exclamation"></i> Could not save';
@@ -1142,6 +1155,24 @@
                 if (btn && showFeedback) { btn.disabled = false; btn.innerHTML = orig; }
                 return false;
             }
+        }
+
+        // Best-effort save when the partner leaves — survives tab close / app switch
+        // via keepalive, so an accidental exit mid-step still keeps their progress.
+        function saveDraftOnLeave() {
+            try {
+                fetch(`/partner/onboard/${ONBOARD_TOKEN}/save-draft`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(gatherDraft()), keepalive: true
+                });
+            } catch (e) {}
+        }
+
+        let _autosaveTimer = null;
+        function scheduleAutosave() {
+            _autosaveStatus('Saving…');
+            clearTimeout(_autosaveTimer);
+            _autosaveTimer = setTimeout(() => saveDraft(false), 1200);
         }
 
         function restoreDraftTextFields() {
@@ -1445,6 +1476,16 @@
             initializeTeamMembers();
             restoreDraftTextFields();
             loadStates();
+
+            // ── Auto-save: as they type (debounced) + whenever they leave the page,
+            //    so nothing is lost even if they never touch the Save button. ──
+            const _pf = document.getElementById('partnerForm');
+            _pf.addEventListener('input', scheduleAutosave);
+            _pf.addEventListener('change', scheduleAutosave);
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'hidden') saveDraftOnLeave();
+            });
+            window.addEventListener('pagehide', saveDraftOnLeave);
 
             // Add team member
             document.getElementById('addTeamBtn').addEventListener('click', e => {
