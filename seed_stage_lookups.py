@@ -38,8 +38,17 @@ def _has_column(conn, table, column):
         return False
 
 
-def run_seed_stage_lookups_once(get_db):
-    result = {'options': 0, 'registry': 0, 'retired_plab_stage': False, 'errors': []}
+def run_seed_stage_lookups_once(get_db, force=False):
+    """Seed each pathway's Client & Pipeline dropdowns from its own records.
+
+    CURATION-SAFE (founder 2026-07-29): a (category, pathway) list that ALREADY has
+    any options is left completely untouched — so once the team has added or removed
+    options in the Field Manager, no boot or re-run ever undoes those edits. Only a
+    genuinely EMPTY list is filled. Pass force=True (the /admin/stage-seed?force=1
+    link) to deliberately re-pull every value from the records again.
+    """
+    result = {'options': 0, 'registry': 0, 'retired_plab_stage': False,
+              'skipped': 0, 'errors': []}
 
     # ── 1. Per-pathway option values from that pathway's own records ──
     for pathway in _PATHWAYS:
@@ -48,6 +57,16 @@ def run_seed_stage_lookups_once(get_db):
             try:
                 if not _has_column(conn, 'plab_clients', column):
                     conn.close(); continue
+                # Don't touch a list the team has already curated (added/removed) —
+                # only fill an empty one. force=True re-pulls regardless.
+                if not force:
+                    curated = conn.execute(
+                        "SELECT 1 FROM lookup_options WHERE category = ? "
+                        "AND COALESCE(pathway,'plab') = ? LIMIT 1",
+                        (category, pathway)).fetchone()
+                    if curated:
+                        result['skipped'] += 1
+                        conn.close(); continue
                 rows = conn.execute(
                     f"SELECT DISTINCT {column} AS v FROM plab_clients "
                     "WHERE COALESCE(pathway,'plab') = ? AND COALESCE(" + column + ",'') <> '' "
