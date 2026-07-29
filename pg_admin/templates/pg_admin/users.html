@@ -1,0 +1,117 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Registered Doctors{% endblock %}
+
+{% block section_extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  .pu-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
+  .pu-header h1 { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
+  .pu-header p { color:var(--gray-500); font-size:0.9rem; margin:0.15rem 0 0; }
+  .pu-stats { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; margin-bottom:1.5rem; }
+  .pu-stat { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.9rem 1.1rem; }
+  .pu-stat .lbl { font-size:0.74rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
+  .pu-stat .val { font-size:1.55rem; font-weight:700; color:var(--navy); margin-top:0.15rem; }
+  .pu-stat.paid .val { color:#16a34a; } .pu-stat.blk .val { color:#b91c1c; }
+  @media (max-width:900px){ .pu-stats{ grid-template-columns:repeat(2,1fr);} }
+  .pu-controls { display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
+  .pu-controls input[type=text], .pu-controls select { padding:0.5rem 0.7rem; border:1px solid var(--gray-300);
+      border-radius:0.45rem; font-size:0.87rem; background:#fff; }
+  .pu-controls input[type=text]{ min-width:260px; }
+  .pu-btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.9rem; border-radius:0.45rem;
+      border:none; font-size:0.87rem; font-weight:600; cursor:pointer; text-decoration:none; }
+  .pu-btn-primary { background:var(--orange); color:#fff; } .pu-btn-ghost { background:var(--gray-100); color:var(--navy); border:1px solid var(--gray-300); }
+  .pu-table { width:100%; border-collapse:collapse; background:#fff; border-radius:0.6rem; overflow:hidden; border:1px solid var(--gray-200); }
+  .pu-table th { background:var(--navy); color:#fff; text-align:left; padding:0.65rem 0.8rem; font-size:0.76rem;
+      text-transform:uppercase; letter-spacing:0.4px; }
+  .pu-table td { padding:0.6rem 0.8rem; border-top:1px solid var(--gray-100); font-size:0.86rem; }
+  .pu-table tr:hover td { background:#f8fafc; }
+  .pu-name { font-weight:600; color:var(--navy); }
+  .pu-sub { color:var(--gray-500); font-size:0.78rem; }
+  .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
+  .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-500); }
+  .chip-red { background:#fee2e2; color:#b91c1c; } .chip-orange { background:#fde9d6; color:#c2410c; }
+  .pu-pager { display:flex; gap:0.4rem; justify-content:center; margin-top:1.2rem; align-items:center; }
+  .pu-pager a, .pu-pager span { padding:0.4rem 0.75rem; border:1px solid var(--gray-300); border-radius:0.4rem;
+      font-size:0.85rem; text-decoration:none; color:var(--navy); }
+  .pu-pager .cur { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .pu-empty { text-align:center; padding:2.5rem; color:var(--gray-500); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="pu-header">
+  <div><h1>Registered Doctors</h1>
+    <p>Everyone who has signed up on goocampus.in, and the plan each is on.</p></div>
+</div>
+
+<div class="pu-stats">
+  <div class="pu-stat"><div class="lbl">Total doctors</div><div class="val">{{ stats.total }}</div></div>
+  <div class="pu-stat paid"><div class="lbl">Paid</div><div class="val">{{ stats.paid }}</div></div>
+  <div class="pu-stat"><div class="lbl">Free</div><div class="val">{{ stats.free }}</div></div>
+  <div class="pu-stat"><div class="lbl">New (30 days)</div><div class="val">{{ stats.new_30d }}</div></div>
+  <div class="pu-stat blk"><div class="lbl">Blocked</div><div class="val">{{ stats.blocked }}</div></div>
+</div>
+
+<form method="GET" class="pu-controls">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name, mobile, email, college…">
+  <select name="plan" onchange="this.form.submit()">
+    <option value="">All plans</option>
+    <option value="paid" {{ 'selected' if f_plan=='paid' }}>Paid only</option>
+    <option value="free" {{ 'selected' if f_plan=='free' }}>Free only</option>
+    {% for p in plans %}<option value="{{ p.code }}" {{ 'selected' if f_plan==p.code }}>{{ p.name }}</option>{% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All statuses</option>
+    <option value="active" {{ 'selected' if f_status=='active' }}>Active</option>
+    <option value="blocked" {{ 'selected' if f_status=='blocked' }}>Blocked</option>
+  </select>
+  <button class="pu-btn pu-btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+  {% if q or f_plan or f_status %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
+</form>
+
+{% if users %}
+<div style="overflow-x:auto;">
+<table class="pu-table">
+  <thead><tr>
+    <th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Plan ends</th><th>Joined</th><th></th>
+  </tr></thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>
+        <div class="pu-name">{{ u.name or 'Unnamed' }}
+          {% if u.is_blocked %}<span class="chip chip-red">Blocked</span>{% endif %}</div>
+        <div class="pu-sub">{{ u.college or '' }}{% if u.state %} · {{ u.state }}{% endif %}</div>
+      </td>
+      <td>{{ u.mobile }}<div class="pu-sub">{{ u.email or '' }}</div></td>
+      <td>{% if u.neet_pg_rank %}Rank {{ '{:,}'.format(u.neet_pg_rank) }}{% else %}—{% endif %}
+        <div class="pu-sub">{{ u.target_speciality or '' }}</div></td>
+      <td>
+        {% if u.plan_kind == 'paid' %}<span class="chip chip-green">{{ u.plan_name }}</span>
+        {% elif u.plan_name %}<span class="chip chip-orange">{{ u.plan_name }}</span>
+        {% else %}<span class="chip chip-gray">Free</span>{% endif %}
+        {% if u.plan_source == 'admin_grant' %}<div class="pu-sub">granted</div>{% endif %}
+      </td>
+      <td>{% if u.plan_expires_at %}{{ u.plan_expires_at.strftime('%d %b %Y') }}{% else %}—{% endif %}</td>
+      <td>{% if u.created_at %}{{ u.created_at.strftime('%d %b %Y') }}{% endif %}</td>
+      <td><a class="pu-btn pu-btn-ghost pu-btn-sm" href="/admin/pg/users/{{ u.id }}"
+             style="padding:0.35rem 0.6rem;">Open <i class="fa-solid fa-arrow-right"></i></a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pu-pager">
+  {% set qs = '&q=' ~ q ~ '&plan=' ~ f_plan ~ '&status=' ~ f_status %}
+  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
+  <span class="cur">{{ page }} / {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}
+</div>
+{% endif %}
+{% else %}
+<div class="pu-empty"><i class="fa-solid fa-user-doctor" style="font-size:2rem; opacity:0.3;"></i>
+  <p>No doctors match. They appear here automatically after their first OTP login on goocampus.in.</p></div>
+{% endif %}
+{% endblock %}

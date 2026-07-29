@@ -11,5 +11,17 @@
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></span>
         <span class="sec-nav-text">Predictor Data</span>
     </a>
-    {# Bookings and Users land here as they're built. #}
+    <a href="/admin/pg/users" class="sec-nav-item" data-tooltip="Registered Doctors">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+        <span class="sec-nav-text">Registered Doctors</span>
+    </a>
+    <a href="/admin/pg/plans" class="sec-nav-item" data-tooltip="Pricing &amp; Plans">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span>
+        <span class="sec-nav-text">Pricing &amp; Plans</span>
+    </a>
+    <a href="/admin/pg/coupons" class="sec-nav-item" data-tooltip="Coupons">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9V7a2 2 0 012-2h14a2 2 0 012 2v2a2 2 0 000 6v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-2a2 2 0 000-6z"/><path d="M13 5v2m0 4v2m0 4v2" stroke-dasharray="1 3"/></svg></span>
+        <span class="sec-nav-text">Coupons</span>
+    </a>
+    {# Bookings lands here as it's built. #}
 {% endblock %}

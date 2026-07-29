@@ -8,6 +8,7 @@ with is_published = TRUE AND is_active = TRUE are visible.
 """
 import os
 import re
+import json
 import random
 import secrets
 import logging
@@ -550,3 +551,187 @@ def api_pg_neetpg_pdf_file(pdf_id):
     return Response(data, mimetype='application/pdf',
                     headers={'Content-Disposition': f'inline; filename="{fname}"',
                              'Cache-Control': 'public, max-age=3600'})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Pricing, entitlements & coupons — the goocampus.in site + user dashboard call
+# these. Everything below is X-PG-Key guarded like the rest of this file. Endpoints
+# that act on a specific doctor also resolve that doctor from their login token.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _resolve_pg_user(conn):
+    """The logged-in doctor for this request, or None.
+
+    The site holds the session token issued at OTP verify. It forwards it as
+    X-PG-User-Token (or ?token= / body token). A None result means "treat as a
+    logged-out free visitor" — never an error, so public pricing still renders.
+    """
+    token = request.headers.get('X-PG-User-Token') or request.args.get('token')
+    if not token and request.is_json:
+        token = (request.get_json(silent=True) or {}).get('token')
+    if not token:
+        return None
+    try:
+        row = conn.execute(
+            "SELECT id FROM pg_users WHERE session_token = ? "
+            "AND (token_expires_at IS NULL OR token_expires_at > CURRENT_TIMESTAMP) "
+            "AND COALESCE(is_blocked,0) = 0", (token,)).fetchone()
+        return row['id'] if row else None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+
+
+def api_pg_plans():
+    """GET /api/pg/plans → the public pricing cards, exactly as configured in admin.
+
+    Only active + public plans, each with its feature list resolved to plain values
+    the site can render without knowing the schema. This is what a doctor sees on
+    the pricing page.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        plans = [dict(r) for r in conn.execute(
+            "SELECT * FROM pg_plans WHERE COALESCE(is_active,1)=1 AND COALESCE(is_public,1)=1 "
+            "ORDER BY sort_order, id").fetchall()]
+        feats = {r['code']: dict(r) for r in conn.execute(
+            "SELECT * FROM pg_features WHERE COALESCE(is_active,1)=1 "
+            "ORDER BY sort_order, id").fetchall()}
+        matrix = {}
+        for r in conn.execute("SELECT * FROM pg_plan_features").fetchall():
+            matrix.setdefault(r['plan_id'], {})[r['feature_code']] = dict(r)
+        out = []
+        for p in plans:
+            grants = matrix.get(p['id'], {})
+            features = []
+            for code, f in feats.items():
+                g = grants.get(code)
+                if not g or g['value_type'] == 'off':
+                    included, display = False, None
+                elif g['value_type'] == 'unlimited':
+                    included, display = True, 'Unlimited'
+                elif f['unit'] == 'boolean':
+                    included, display = True, 'Included'
+                elif g['limit_value'] is not None:
+                    included, display = True, int(g['limit_value'])
+                else:
+                    included, display = True, 'Unlimited'
+                features.append({'code': code, 'name': f['name'], 'unit': f['unit'],
+                                 'included': included, 'value': display,
+                                 'note': g['note'] if g else ''})
+            try:
+                highlights = json.loads(p.get('highlights') or '[]')
+            except Exception:
+                highlights = []
+            out.append({
+                'id': p['id'], 'code': p['code'], 'name': p['name'],
+                'tagline': p.get('tagline') or '', 'description': p.get('description') or '',
+                'plan_kind': p.get('plan_kind') or 'paid',
+                'price': float(p.get('price') or 0),
+                'compare_at_price': float(p['compare_at_price']) if p.get('compare_at_price') else None,
+                'currency': p.get('currency') or 'INR',
+                'billing_period': p.get('billing_period') or 'one_time',
+                'badge_text': p.get('badge_text') or '', 'badge_color': p.get('badge_color') or '',
+                'accent_color': p.get('accent_color') or '', 'is_featured': bool(p.get('is_featured')),
+                'cta_label': p.get('cta_label') or '', 'highlights': highlights,
+                'features': features,
+            })
+        return jsonify({'ok': True, 'plans': out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_plans: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_entitlements():
+    """GET /api/pg/entitlements → this doctor's plan + every limit/used/remaining.
+
+    One call powers the whole dashboard: which sections to show, what to grey out,
+    and the "2 of 3 PDFs used — upgrade for the rest" nudges.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import entitlements
+    conn = get_db()
+    try:
+        uid = _resolve_pg_user(conn)
+        return jsonify({'ok': True, 'logged_in': bool(uid),
+                        'entitlements': entitlements.summary(conn, uid)})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_entitlements: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_entitlement_consume():
+    """POST /api/pg/entitlements/consume {feature, item_key?} → allow + record.
+
+    The gate the site calls the instant a doctor opens a gated thing (a PDF, a new
+    state). It re-checks server-side — the front-end greying-out is a courtesy, this
+    is the real fence — and only records usage when it actually allows the action.
+    Returns 402 with the entitlement info when blocked, so the site can show the
+    right upgrade prompt.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import entitlements
+    data = request.get_json(silent=True) or {}
+    feature = (data.get('feature') or '').strip()
+    item_key = data.get('item_key')
+    if not feature:
+        return jsonify({'ok': False, 'error': 'feature required'}), 400
+    conn = get_db()
+    try:
+        uid = _resolve_pg_user(conn)
+        if not uid:
+            return jsonify({'ok': False, 'allowed': False, 'reason': 'login_required'}), 401
+        allowed, info = entitlements.check(conn, uid, feature, item_key=item_key)
+        if not allowed:
+            return jsonify({'ok': True, 'allowed': False, 'info': info}), 402
+        entitlements.consume(conn, uid, feature, item_key=item_key)
+        conn.commit()
+        return jsonify({'ok': True, 'allowed': True, 'info': info})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_entitlement_consume: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_coupon_validate():
+    """POST /api/pg/coupons/validate {code, plan_id} → discount + payable.
+
+    Read-only: it prices the discount so the checkout can show it, but never burns
+    a use. Redemption happens only after payment succeeds (built with the Razorpay
+    step, not here). Works for logged-out visitors too, so the pricing page can
+    preview a code before login.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import coupons as coupon_lib
+    data = request.get_json(silent=True) or {}
+    code = (data.get('code') or '').strip()
+    plan_id = data.get('plan_id')
+    conn = get_db()
+    try:
+        uid = _resolve_pg_user(conn)
+        ok, res = coupon_lib.validate(conn, code, plan_id=plan_id, user_id=uid)
+        return jsonify({'ok': ok, 'result': res})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_coupon_validate: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()

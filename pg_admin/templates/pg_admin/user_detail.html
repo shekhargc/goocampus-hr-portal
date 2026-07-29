@@ -1,0 +1,177 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}{{ d.name or 'Doctor' }}{% endblock %}
+
+{% block section_extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  .ud-top { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
+  .ud-back { color:var(--gray-500); text-decoration:none; font-size:0.85rem; }
+  .ud-name { font-size:1.6rem; font-weight:800; color:var(--navy); margin:0.3rem 0 0.1rem; }
+  .ud-sub { color:var(--gray-500); font-size:0.9rem; }
+  .ud-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:1.25rem; }
+  @media (max-width:900px){ .ud-grid{ grid-template-columns:1fr; } }
+  .ud-card { background:#fff; border:1px solid var(--gray-200); border-radius:0.7rem; padding:1.2rem 1.3rem; margin-bottom:1.25rem; }
+  .ud-card h3 { font-size:0.95rem; font-weight:700; color:var(--navy); margin:0 0 0.9rem; display:flex; align-items:center; gap:0.5rem; }
+  .ud-f { margin-bottom:0.75rem; } .ud-f label { display:block; font-size:0.76rem; font-weight:600; color:var(--navy); margin-bottom:0.2rem; }
+  .ud-f input, .ud-f select, .ud-f textarea { width:100%; padding:0.5rem 0.6rem; border:1px solid var(--gray-300);
+      border-radius:0.45rem; font-size:0.86rem; font-family:inherit; }
+  .ud-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 0.9rem; }
+  .btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.9rem; border-radius:0.45rem; border:none;
+      font-size:0.85rem; font-weight:600; cursor:pointer; text-decoration:none; }
+  .btn-primary { background:var(--orange); color:#fff; } .btn-ghost { background:var(--gray-100); color:var(--navy); border:1px solid var(--gray-300); }
+  .btn-danger { background:#fee2e2; color:#b91c1c; } .btn-navy { background:var(--navy); color:#fff; }
+  .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
+  .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-500); }
+  .chip-red { background:#fee2e2; color:#b91c1c; } .chip-blue { background:#dbeafe; color:#1e40af; }
+  .ud-plan-now { background:linear-gradient(160deg,#f0f6ff,#eaf0fb); border:1px solid #cfe0f7; border-radius:0.6rem; padding:0.9rem 1rem; margin-bottom:1rem; }
+  .ud-plan-now .big { font-size:1.15rem; font-weight:800; color:var(--navy); }
+  .ent-row { display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0; border-top:1px solid var(--gray-100); font-size:0.84rem; }
+  .ent-row:first-child { border-top:none; }
+  .ent-bar { height:6px; background:var(--gray-200); border-radius:3px; overflow:hidden; width:90px; }
+  .ent-bar > span { display:block; height:100%; background:var(--orange); }
+  .ud-table { width:100%; border-collapse:collapse; font-size:0.83rem; }
+  .ud-table th { text-align:left; color:var(--gray-500); font-weight:600; padding:0.4rem 0.5rem; border-bottom:1px solid var(--gray-200); font-size:0.74rem; text-transform:uppercase; }
+  .ud-table td { padding:0.45rem 0.5rem; border-bottom:1px solid var(--gray-100); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="ud-top">
+  <div>
+    <a class="ud-back" href="/admin/pg/users"><i class="fa-solid fa-arrow-left"></i> All doctors</a>
+    <h1 class="ud-name">{{ d.name or 'Unnamed doctor' }}
+      {% if d.is_blocked %}<span class="chip chip-red">Blocked</span>{% endif %}</h1>
+    <div class="ud-sub">{{ d.mobile }}{% if d.email %} · {{ d.email }}{% endif %}
+      · joined {{ d.created_at.strftime('%d %b %Y') if d.created_at else '—' }}</div>
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <form method="POST" action="/admin/pg/users/{{ d.id }}/block" onsubmit="return confirm('{{ 'Unblock' if d.is_blocked else 'Block' }} this doctor?')">
+      <button class="btn {{ 'btn-ghost' if d.is_blocked else 'btn-danger' }}" type="submit">
+        <i class="fa-solid fa-{{ 'unlock' if d.is_blocked else 'ban' }}"></i> {{ 'Unblock' if d.is_blocked else 'Block' }}</button>
+    </form>
+  </div>
+</div>
+
+<div class="ud-grid">
+  <!-- LEFT — profile -->
+  <div>
+    <form method="POST" action="/admin/pg/users/{{ d.id }}/save">
+      <div class="ud-card">
+        <h3><i class="fa-solid fa-user"></i> Profile</h3>
+        <div class="ud-grid2">
+          <div class="ud-f"><label>Name</label><input name="name" value="{{ d.name or '' }}"></div>
+          <div class="ud-f"><label>Email</label><input name="email" value="{{ d.email or '' }}"></div>
+          <div class="ud-f"><label>NEET-PG year</label><input name="neet_pg_year" value="{{ d.neet_pg_year or '' }}"></div>
+          <div class="ud-f"><label>NEET-PG rank</label><input type="number" name="neet_pg_rank" value="{{ d.neet_pg_rank or '' }}"></div>
+          <div class="ud-f"><label>Target speciality</label><input name="target_speciality" value="{{ d.target_speciality or '' }}"></div>
+          <div class="ud-f"><label>College</label><input name="college" value="{{ d.college or '' }}"></div>
+          <div class="ud-f"><label>City</label><input name="city" value="{{ d.city or '' }}"></div>
+          <div class="ud-f"><label>State</label><input name="state" value="{{ d.state or '' }}"></div>
+          <div class="ud-f"><label>Source</label><input name="source" value="{{ d.source or '' }}" placeholder="how they found us"></div>
+          <div class="ud-f"><label>Tags</label><input name="tags" value="{{ d.tags or '' }}" placeholder="comma separated"></div>
+        </div>
+        <div class="ud-f"><label>Admin notes</label><textarea name="admin_notes" rows="2">{{ d.admin_notes or '' }}</textarea></div>
+        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-check"></i> Save profile</button>
+        <span style="font-size:0.76rem; color:var(--gray-400); margin-left:0.5rem;">Mobile is the login and can't be changed here.</span>
+      </div>
+    </form>
+
+    <div class="ud-card">
+      <h3><i class="fa-solid fa-clock-rotate-left"></i> Plan history</h3>
+      {% if subs %}
+      <table class="ud-table">
+        <thead><tr><th>Plan</th><th>Status</th><th>Started</th><th>Ends</th><th>Source</th><th></th></tr></thead>
+        <tbody>
+          {% for s in subs %}
+          <tr>
+            <td><b>{{ s.plan_name or s.plan_id }}</b>{% if s.coupon_code %}<div style="font-size:0.72rem; color:var(--gray-500)">coupon {{ s.coupon_code }}</div>{% endif %}</td>
+            <td>{% if s.status == 'active' and (not s.expires_at or s.expires_at.strftime('%Y') >= '2000') %}
+                  <span class="chip chip-green">Active</span>
+                {% elif s.status == 'cancelled' %}<span class="chip chip-gray">Cancelled</span>
+                {% else %}<span class="chip chip-gray">{{ s.status }}</span>{% endif %}</td>
+            <td>{{ s.started_at.strftime('%d %b %Y') if s.started_at else '—' }}</td>
+            <td>{{ s.expires_at.strftime('%d %b %Y') if s.expires_at else 'No expiry' }}</td>
+            <td style="font-size:0.78rem; color:var(--gray-500)">{{ s.source or '' }}</td>
+            <td>{% if s.status == 'active' %}
+              <form method="POST" action="/admin/pg/subscriptions/{{ s.id }}/cancel" onsubmit="return confirm('Cancel this subscription? The doctor drops to Free.')">
+                <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.76rem;" type="submit">Cancel</button></form>
+            {% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p style="color:var(--gray-500); font-size:0.86rem;">On the Free plan — no paid subscription yet.</p>{% endif %}
+    </div>
+
+    {% if recent %}
+    <div class="ud-card">
+      <h3><i class="fa-solid fa-chart-simple"></i> Recent activity</h3>
+      <table class="ud-table">
+        <thead><tr><th>Feature</th><th>Item</th><th>Period</th><th>Uses</th><th>Last used</th></tr></thead>
+        <tbody>
+          {% for r in recent %}
+          <tr><td>{{ r.feature_code }}</td><td style="color:var(--gray-500)">{{ r.item_key or '—' }}</td>
+            <td>{{ r.period_key }}</td><td>{{ r.hits }}</td>
+            <td>{{ r.last_used_at.strftime('%d %b, %H:%M') if r.last_used_at else '' }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT — plan + entitlements -->
+  <div>
+    <div class="ud-card">
+      <h3><i class="fa-solid fa-crown"></i> Current plan</h3>
+      <div class="ud-plan-now">
+        <div class="big">{{ ent.plan.name }}</div>
+        <div style="font-size:0.82rem; color:var(--gray-600); margin-top:0.2rem;">
+          {% if ent.subscription.active %}
+            {% if ent.subscription.expires_at %}Renews/expires {{ ent.subscription.expires_at[:10] }}{% else %}Active, no expiry{% endif %}
+          {% else %}Free plan{% endif %}
+        </div>
+      </div>
+
+      <form method="POST" action="/admin/pg/users/{{ d.id }}/grant-plan">
+        <div class="ud-f"><label>Grant / change plan</label>
+          <select name="plan_id" required>
+            <option value="">Choose a plan…</option>
+            {% for p in plans %}<option value="{{ p.id }}">{{ p.name }}
+              {% if p.price and p.price > 0 %}(₹{{ '{:,.0f}'.format(p.price) }}){% else %}(Free){% endif %}</option>{% endfor %}
+          </select></div>
+        <div class="ud-grid2">
+          <div class="ud-f"><label>Duration (days)</label><input type="number" name="duration_days" placeholder="plan default"></div>
+          <div class="ud-f"><label>Note</label><input name="notes" placeholder="e.g. comp / phone sale"></div>
+        </div>
+        <button class="btn btn-navy" type="submit"><i class="fa-solid fa-gift"></i> Grant plan</button>
+        <div style="font-size:0.74rem; color:var(--gray-400); margin-top:0.4rem;">
+          Recorded as an admin grant (₹0), separate from paid revenue.</div>
+      </form>
+    </div>
+
+    <div class="ud-card">
+      <h3><i class="fa-solid fa-key"></i> What they can access
+        <form method="POST" action="/admin/pg/users/{{ d.id }}/reset-usage" style="margin-left:auto;"
+              onsubmit="return confirm('Reset ALL usage counters for this doctor?')">
+          <button class="btn btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.74rem;" type="submit">Reset usage</button></form>
+      </h3>
+      {% for code, f in ent.features.items() %}
+      <div class="ent-row">
+        <div>{{ f.name }}
+          {% if not f.allowed %}<span class="chip chip-gray" style="font-size:0.66rem;">off</span>{% endif %}</div>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          {% if f.unlimited %}<span class="chip chip-blue">Unlimited</span>
+          {% elif f.unit == 'boolean' %}
+            {% if f.allowed %}<span class="chip chip-green">Yes</span>{% else %}<span class="chip chip-gray">No</span>{% endif %}
+          {% elif f.limit is not none %}
+            <span style="font-size:0.78rem; color:var(--gray-600)">{{ f.used }}/{{ f.limit }}</span>
+            <span class="ent-bar"><span style="width:{{ (100 if f.limit == 0 else (f.used / f.limit * 100)) | round | int }}%"></span></span>
+          {% else %}<span class="chip chip-gray">—</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
