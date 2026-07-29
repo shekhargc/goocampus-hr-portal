@@ -3717,6 +3717,93 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/partner-diag', methods=['GET'])
+@login_required
+def admin_partner_diag():
+    """Admin: trace a partner across the whole onboarding chain by email / name /
+    phone, so we can see exactly where one is stuck when their invite link 'isn't
+    working'. Read-only. (founder 2026-07-29)
+
+    Shows, for the match: the invitation (status + the LIVE registration link), whether
+    an actual partners ACCOUNT exists yet (login only works once it does), and the OTP
+    history (whether verification codes were generated at all).
+    """
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    q = (request.values.get('q') or '').strip()
+    conn = get_db()
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    try:
+        out = []
+        if q:
+            like = f"%{q}%"
+            digits = re.sub(r'[^0-9]', '', q)
+            invs = conn.execute(
+                "SELECT * FROM partner_invitations WHERE name ILIKE ? OR email ILIKE ? "
+                "ORDER BY created_at DESC LIMIT 20", (like, like)).fetchall()
+            base = request.host_url
+            for iv in invs:
+                iv = dict(iv)
+                link = f"{base}partner/register/{iv.get('token')}"
+                # Does an actual account exist for this email?
+                acct = conn.execute("SELECT id, status, onboarding_status, phone, created_at "
+                                    "FROM partners WHERE email = ? ORDER BY id DESC LIMIT 1",
+                                    (iv.get('email'),)).fetchone()
+                # Were any OTPs generated for this email?
+                try:
+                    otp = conn.execute("SELECT COUNT(*) AS n, MAX(created_at) AS last "
+                                       "FROM partner_otps WHERE email = ?", (iv.get('email'),)).fetchone()
+                except Exception:
+                    conn.rollback(); otp = None
+                st = (iv.get('status') or '').lower()
+                if acct:
+                    verdict = ("<b style='color:#065f46'>Account exists &amp; Active — tell them to "
+                               "use PARTNER LOGIN</b>" if (dict(acct).get('status') == 'Active')
+                               else f"<b style='color:#b45309'>Account exists but status = "
+                                    f"{esc(dict(acct).get('status'))} — activate it in Partners</b>")
+                elif st == 'registered':
+                    verdict = ("<b style='color:#b45309'>Invitation marked registered but NO account "
+                               "row found — data mismatch, check Partners list</b>")
+                else:
+                    verdict = ("<b style='color:#b91c1c'>Not onboarded yet — send them the link below "
+                               "and have them finish register → OTP → form in ONE sitting. Login won't "
+                               "work until they submit the form.</b>")
+                otp_txt = (f"{dict(otp).get('n')} code(s), last {esc(dict(otp).get('last'))}"
+                           if otp and dict(otp).get('n') else "none generated")
+                out.append(
+                    "<div style='border:1px solid #ddd;border-radius:8px;padding:14px 16px;margin:12px 0'>"
+                    f"<div style='font-size:16px;font-weight:600'>{esc(iv.get('name'))} &lt;{esc(iv.get('email'))}&gt;</div>"
+                    f"<table style='margin-top:8px;font-size:14px'>"
+                    f"<tr><td style='color:#666;padding:2px 12px 2px 0'>Invitation status</td><td><b>{esc(iv.get('status'))}</b></td></tr>"
+                    f"<tr><td style='color:#666;padding:2px 12px 2px 0'>Created</td><td>{esc(iv.get('created_at'))}</td></tr>"
+                    f"<tr><td style='color:#666;padding:2px 12px 2px 0'>Registered at</td><td>{esc(iv.get('registered_at')) or '—'}</td></tr>"
+                    f"<tr><td style='color:#666;padding:2px 12px 2px 0'>Account row</td><td>{'YES — status ' + esc(dict(acct).get('status')) + ', onboarding ' + esc(dict(acct).get('onboarding_status')) if acct else 'NONE yet'}</td></tr>"
+                    f"<tr><td style='color:#666;padding:2px 12px 2px 0'>OTP emails</td><td>{otp_txt}</td></tr>"
+                    f"</table>"
+                    f"<div style='margin-top:10px;padding:8px 10px;background:#f8fafc;border-radius:6px'>{verdict}</div>"
+                    f"<div style='margin-top:8px;font-size:13px'>Live registration link:<br>"
+                    f"<a href='{esc(link)}' style='color:#F58220;word-break:break-all'>{esc(link)}</a></div>"
+                    "</div>")
+        body = ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+                "<h2>Partner onboarding diagnostic</h2>"
+                "<p style='color:#555'>Search a partner to see where they are in the flow and whether "
+                "they can log in yet.</p>"
+                "<form method='GET'>Search by email / name: "
+                f"<input name='q' value='{esc(q)}' style='padding:6px;width:280px'> <button>Search</button></form>"
+                + ("".join(out) if out else ("<p style='color:#888;margin-top:16px'>No partner invitations match.</p>" if q else ""))
+                + "</div>")
+        return body
+    except Exception as e:
+        logging.error("admin_partner_diag: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return f"<div style='font-family:system-ui;margin:40px'>Diagnostic error: {esc(e)}</div>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 @app.route('/admin/fix-counsellor', methods=['GET', 'POST'])
 @login_required
 def admin_fix_counsellor():
