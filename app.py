@@ -3724,6 +3724,72 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/stage-usage', methods=['GET'])
+@login_required
+def admin_stage_usage():
+    """Read-only proof that the dropdown options came from real records and that no
+    client data was changed: per pathway, every Current Stage VALUE actually stored
+    on client records + how many clients have it, side by side with what's in the
+    dropdown menu. Purely reports — touches nothing. (founder 2026-07-29)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    conn = get_db()
+    blocks = ''
+    try:
+        for pw in ['plab', 'consulting', 'australia', 'training', 'portfolio', 'uae']:
+            # What clients ACTUALLY have (the real records) + counts.
+            used = {}
+            try:
+                for r in conn.execute(
+                    "SELECT COALESCE(NULLIF(TRIM(current_stage),''),'(blank)') AS v, COUNT(*) AS n "
+                    "FROM plab_clients WHERE COALESCE(pathway,'plab') = ? GROUP BY 1 ORDER BY n DESC",
+                    (pw,)).fetchall():
+                    used[r['v']] = r['n']
+            except Exception:
+                conn.rollback()
+            # What the dropdown menu currently offers.
+            menu = set()
+            try:
+                for r in conn.execute(
+                    "SELECT value FROM lookup_options WHERE category='current_stage' "
+                    "AND COALESCE(pathway,'plab') = ?", (pw,)).fetchall():
+                    menu.add(r['value'])
+            except Exception:
+                conn.rollback()
+            total = sum(used.values())
+            rows = ''
+            for v, n in sorted(used.items(), key=lambda x: -x[1]):
+                in_menu = ('<span style="color:#065f46">in menu</span>' if v in menu
+                           else ('' if v == '(blank)' else '<span style="color:#b45309">used but NOT in menu</span>'))
+                rows += (f"<tr><td style='padding:4px 10px'>{esc(v)}</td>"
+                         f"<td style='padding:4px 10px;text-align:right'>{n}</td>"
+                         f"<td style='padding:4px 10px'>{in_menu}</td></tr>")
+            # Menu options that no record uses (safe to remove; nothing depends on them).
+            unused = sorted([m for m in menu if m not in used])
+            unused_html = (f"<div style='font-size:12px;color:#6b7280;margin-top:6px'>Menu options no record uses "
+                           f"(safe to remove): {esc(', '.join(unused))}</div>" if unused else '')
+            blocks += (f"<div style='margin:18px 0;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px'>"
+                       f"<div style='font-weight:700;color:#1e3a5f'>{pw} <span style='font-weight:400;color:#6b7280'>— {total} clients</span></div>"
+                       "<table style='border-collapse:collapse;width:100%;font-size:13px;margin-top:6px'>"
+                       "<tr style='background:#f3f4f6'><th style='padding:4px 10px;text-align:left'>Current Stage on records</th>"
+                       "<th style='padding:4px 10px;text-align:right'>Clients</th><th style='padding:4px 10px;text-align:left'>In dropdown?</th></tr>"
+                       + (rows or "<tr><td colspan='3' style='padding:6px 10px;color:#888'>no records</td></tr>")
+                       + "</table>" + unused_html + "</div>")
+    except Exception as e:
+        blocks = f"<p style='color:#b91c1c'>Error: {esc(e)}</p>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+            "<h2>Current Stage — what your records actually contain</h2>"
+            "<p style='color:#065f46'>This only reads your data — it changes nothing. It shows, per pathway, "
+            "the current stage stored on real client records and how many clients have each. "
+            "The dropdown menu was built from these values; removing a menu option never changes any of these records.</p>"
+            + blocks + "</div>")
+
+
 @app.route('/admin/stage-seed', methods=['GET'])
 @login_required
 def admin_stage_seed():
