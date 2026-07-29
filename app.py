@@ -3739,25 +3739,31 @@ def admin_stage_backfill():
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
     esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
 
-    # product-name keyword -> stage. Order matters (AMC before USA before UK).
-    def _target_for(product_upper):
-        if 'AMC' in product_upper:              return 'AMC 1'
-        if 'USMLE' in product_upper or 'USA' in product_upper: return 'USMLE 1'
-        if 'UK' in product_upper or 'PLAB' in product_upper:   return 'PLAB 1 Stage'
+    # keyword -> stage, checked against product name + plan type together.
+    # Order matters (AMC before USA before UK).
+    def _target_for(text_upper):
+        if 'AMC' in text_upper:                              return 'AMC 1'
+        if 'USMLE' in text_upper or 'USA' in text_upper:     return 'USMLE 1'
+        if 'UK' in text_upper or 'PLAB' in text_upper:       return 'PLAB 1 Stage'
         return None
 
     conn = get_db()
     try:
         BLANK = "COALESCE(TRIM(current_stage),'') = ''"
-        # Consulting blank clients grouped by their product.
+        # The signal for a consulting client's sub-type = product name + plan type.
+        # LEFT JOIN so clients with no product linked are still included (matched on
+        # their plan type). This is what was missing before.
+        SIGNAL = ("UPPER(COALESCE(ps.name,'') || ' ' || COALESCE(pc.plan_type,''))")
         cons = []
         try:
             for r in conn.execute(
-                "SELECT COALESCE(ps.name,'(no product)') AS product, COUNT(*) AS n "
+                "SELECT COALESCE(NULLIF(TRIM(ps.name),''),'(no product)') AS product, "
+                "COALESCE(NULLIF(TRIM(pc.plan_type),''),'(no plan)') AS plan_type, "
+                f"{SIGNAL} AS signal, COUNT(*) AS n "
                 "FROM plab_clients pc LEFT JOIN products_services ps ON ps.id = pc.product_id "
                 f"WHERE COALESCE(pc.pathway,'plab')='consulting' AND {BLANK.replace('current_stage','pc.current_stage')} "
-                "GROUP BY 1 ORDER BY n DESC").fetchall():
-                cons.append((r['product'], r['n'], _target_for((r['product'] or '').upper())))
+                "GROUP BY 1, 2, 3 ORDER BY n DESC").fetchall():
+                cons.append((r['product'], r['plan_type'], r['n'], _target_for(r['signal'] or '')))
         except Exception:
             conn.rollback()
         try:
@@ -3768,23 +3774,26 @@ def admin_stage_backfill():
             conn.rollback(); train_blank = 0
 
         if request.method == 'POST' and request.form.get('confirm') == 'yes':
-            changed = {'AMC 1': 0, 'PLAB 1 Stage': 0, 'USMLE 1': 0, 'training AMC 1': 0, 'unmapped': 0}
-            # Consulting, per bucket — each UPDATE only touches still-blank rows.
+            changed = {'AMC 1': 0, 'PLAB 1 Stage': 0, 'USMLE 1': 0, 'training AMC 1': 0}
+            # Consulting, per bucket. Match on product name + plan type via a subquery,
+            # so no-product clients are still filled from their plan type. Each UPDATE
+            # only touches still-blank rows, so order avoids double-assignment.
+            SIG = ("UPPER(COALESCE((SELECT name FROM products_services WHERE id = plab_clients.product_id),'') "
+                   "|| ' ' || COALESCE(plan_type,''))")
             buckets = [
-                ('AMC 1',        "UPPER(ps.name) LIKE '%AMC%'"),
-                ('USMLE 1',      "(UPPER(ps.name) LIKE '%USMLE%' OR UPPER(ps.name) LIKE '%USA%')"),
-                ('PLAB 1 Stage', "(UPPER(ps.name) LIKE '%UK%' OR UPPER(ps.name) LIKE '%PLAB%')"),
+                ('AMC 1',        f"{SIG} LIKE '%AMC%'"),
+                ('USMLE 1',      f"({SIG} LIKE '%USMLE%' OR {SIG} LIKE '%USA%')"),
+                ('PLAB 1 Stage', f"({SIG} LIKE '%UK%' OR {SIG} LIKE '%PLAB%')"),
             ]
             for stage, cond in buckets:
                 try:
                     cur = conn.execute(
-                        "UPDATE plab_clients pc SET current_stage = ?, updated_at = CURRENT_TIMESTAMP "
-                        "FROM products_services ps WHERE ps.id = pc.product_id "
-                        "AND COALESCE(pc.pathway,'plab')='consulting' "
-                        "AND COALESCE(TRIM(pc.current_stage),'')='' AND " + cond, (stage,))
+                        "UPDATE plab_clients SET current_stage = ?, updated_at = CURRENT_TIMESTAMP "
+                        "WHERE COALESCE(pathway,'plab')='consulting' "
+                        "AND COALESCE(TRIM(current_stage),'')='' AND " + cond, (stage,))
                     changed[stage] = getattr(cur.cursor, 'rowcount', 0) if cur else 0
-                except Exception as e:
-                    conn.rollback(); changed['unmapped'] = changed.get('unmapped', 0)
+                except Exception:
+                    conn.rollback()
             # Training -> AMC 1
             try:
                 cur = conn.execute(
@@ -3814,19 +3823,27 @@ def admin_stage_backfill():
 
         # ── Preview (GET) ──
         crows = ''
-        for product, n, tgt in cons:
+        unmatched_total = 0
+        for product, plan_type, n, tgt in cons:
+            if not tgt:
+                unmatched_total += n
             crows += (f"<tr><td style='padding:4px 10px'>{esc(product)}</td>"
+                      f"<td style='padding:4px 10px'>{esc(plan_type)}</td>"
                       f"<td style='padding:4px 10px;text-align:right'>{n}</td>"
-                      f"<td style='padding:4px 10px'>{'→ '+esc(tgt) if tgt else '<span style=color:#b45309>no match — will be left blank</span>'}</td></tr>")
-        return ("<div style='font-family:system-ui;max-width:760px;margin:30px auto'>"
+                      f"<td style='padding:4px 10px'>{'→ '+esc(tgt) if tgt else '<span style=color:#b45309>no AMC/UK/USA signal — stays blank</span>'}</td></tr>")
+        return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
                 "<h2>Fill blank Current Stage — preview</h2>"
                 "<p style='color:#065f46'>This fills only clients whose Current Stage is <b>blank</b>. "
-                "Clients that already have a stage are never changed.</p>"
-                "<h3>Standard Consulting — blank clients by product</h3>"
+                "Clients that already have a stage are never changed. Sub-type is read from the "
+                "product name <b>and</b> plan type together.</p>"
+                + (f"<p style='color:#b45309'><b>{unmatched_total}</b> blank consulting client(s) have no AMC/UK/USA "
+                   "signal in either their product or plan type — they'll stay blank. Tell me how to fill those and I'll add a rule.</p>" if unmatched_total else "")
+                + "<h3>Standard Consulting — blank clients by product + plan</h3>"
                 "<table style='border-collapse:collapse;width:100%;font-size:13px'>"
                 "<tr style='background:#f3f4f6'><th style='padding:4px 10px;text-align:left'>Product</th>"
+                "<th style='padding:4px 10px;text-align:left'>Plan type</th>"
                 "<th style='padding:4px 10px;text-align:right'>Blank clients</th><th style='padding:4px 10px;text-align:left'>Will become</th></tr>"
-                + (crows or "<tr><td colspan='3' style='padding:6px;color:#888'>no blank consulting clients</td></tr>") + "</table>"
+                + (crows or "<tr><td colspan='4' style='padding:6px;color:#888'>no blank consulting clients</td></tr>") + "</table>"
                 f"<h3 style='margin-top:18px'>Training — blank clients</h3><p><b>{train_blank}</b> client(s) → <b>AMC 1</b></p>"
                 "<form method='POST' style='margin-top:20px'><input type='hidden' name='confirm' value='yes'>"
                 "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer' "
