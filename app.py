@@ -3783,8 +3783,11 @@ def admin_fix_counsellor():
             like = f"%{q}%"
             digits = re.sub(r'[^0-9]', '', q)
             clients = conn.execute(
+                # NB: plab_clients has counsellor_id (ALTER-added) but NOT invitation_id
+                # — the invitation link lives on client_registrations, fetched per row
+                # below. Selecting invitation_id here 500s every search.
                 "SELECT id, registration_number, prefix, first_name, last_name, mobile, "
-                "counsellor, counsellor_id, invitation_id, pathway "
+                "counsellor, counsellor_id, pathway "
                 "FROM plab_clients WHERE "
                 "(first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
                 + ("OR RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? " if len(digits) >= 10 else "")
@@ -3793,12 +3796,19 @@ def admin_fix_counsellor():
             ).fetchall()
             for c in clients:
                 c = dict(c)
-                reg = conn.execute("SELECT * FROM client_registrations WHERE registration_number = ? "
-                                   "ORDER BY id DESC LIMIT 1", (c['registration_number'],)).fetchone()
-                reg = dict(reg) if reg else {'mobile': c.get('mobile'),
-                    'counsellor_name': c.get('counsellor'), 'counsellor_id': c.get('counsellor_id'),
-                    'registration_number': c['registration_number'], 'invitation_id': c.get('invitation_id')}
-                would_n, _e, _p, would_id = _resolve_counsellor_for_reg(conn, reg)
+                # One bad row must not 500 the whole page — contain each lookup.
+                try:
+                    reg = conn.execute("SELECT * FROM client_registrations WHERE registration_number = ? "
+                                       "ORDER BY id DESC LIMIT 1", (c['registration_number'],)).fetchone()
+                    reg = dict(reg) if reg else {'mobile': c.get('mobile'),
+                        'counsellor_name': c.get('counsellor'), 'counsellor_id': c.get('counsellor_id'),
+                        'registration_number': c['registration_number'], 'invitation_id': None}
+                    would_n, _e, _p, would_id = _resolve_counsellor_for_reg(conn, reg)
+                except Exception as row_e:
+                    logging.warning("fix-counsellor row %s: %s", c.get('registration_number'), row_e)
+                    try: conn.rollback()
+                    except Exception: pass
+                    would_n = ''
                 cur = c.get('counsellor') or ''
                 nm = f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".strip()
                 status = ("<span style='color:#065f46;font-weight:600'>OK</span>" if cur
