@@ -3724,6 +3724,52 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/stage-seed', methods=['GET'])
+@login_required
+def admin_stage_seed():
+    """Run the per-pathway stage/status dropdown seed on demand (request context,
+    so it works even when the cold-start boot seed didn't). Additive; safe to
+    re-run. (founder 2026-07-29)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    try:
+        from seed_stage_lookups import run_seed_stage_lookups_once
+        res = run_seed_stage_lookups_once(get_db)
+    except Exception as e:
+        res = {'options': 0, 'registry': 0, 'retired_plab_stage': False, 'errors': [str(e)]}
+    esc = lambda s: str(s).replace('<', '&lt;').replace('>', '&gt;')
+    errs = ''.join(f"<li style='color:#b91c1c'>{esc(e)}</li>" for e in res.get('errors', []))
+    ok = not res.get('errors')
+    # Show what each pathway now has for Current Stage, so it's visibly per-pathway.
+    conn = get_db()
+    rows = ''
+    try:
+        for pw in ['plab', 'consulting', 'australia', 'training', 'portfolio', 'uae']:
+            cs = [r['value'] for r in conn.execute(
+                "SELECT value FROM lookup_options WHERE category='current_stage' "
+                "AND COALESCE(pathway,'plab')=? AND COALESCE(is_active,TRUE)=TRUE "
+                "ORDER BY sort_order, value", (pw,)).fetchall()]
+            rows += (f"<tr><td style='padding:6px 10px;font-weight:600'>{pw}</td>"
+                     f"<td style='padding:6px 10px;color:#555'>{esc(', '.join(cs)) or '—'}</td></tr>")
+    except Exception:
+        conn.rollback()
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return ("<div style='font-family:system-ui;max-width:760px;margin:40px auto'>"
+            f"<h2>Stage settings — seed {'✅' if ok else '⚠️'}</h2>"
+            f"<p>Added <b>{res.get('options',0)}</b> dropdown option(s), "
+            f"<b>{res.get('registry',0)}</b> new settings field; "
+            f"legacy 'PLAB Stages' field retired: <b>{res.get('retired_plab_stage')}</b>.</p>"
+            + (f"<ul>{errs}</ul>" if errs else "")
+            + "<h3 style='margin-top:20px'>Current Stage options, per pathway</h3>"
+            "<table style='border-collapse:collapse;width:100%;font-size:13px'>"
+            "<tr style='background:#f3f4f6'><th style='padding:6px 10px;text-align:left'>Pathway</th>"
+            "<th style='padding:6px 10px;text-align:left'>Current Stage options</th></tr>" + rows + "</table>"
+            "<p style='margin-top:16px'><a href='/operations/field-manager?pathway=training'>→ Open Field Manager (Training)</a></p></div>")
+
+
 @app.route('/admin/pg-seed', methods=['GET'])
 @login_required
 def admin_pg_seed():
@@ -20528,7 +20574,7 @@ def ops_plab_pathway_dashboard():
 
 
 CATEGORY_GROUPS = {
-    'Client & Pipeline': ['plab_stage', 'account_status', 'switched_program', 'plan_type', 'joined_stage', 'lead_source', 'operations_referral', 'upgraded_to', 'counsellor'],
+    'Client & Pipeline': ['current_stage', 'account_status', 'switched_program', 'plan_type', 'joined_stage', 'lead_source', 'operations_referral', 'upgraded_to', 'counsellor'],
     'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'training_program', 'coaching_attendance', 'batch_month'],
     'Test Bookings': ['exam_name', 'exam_status', 'exam_result', 'exam_method', 'exam_booked_by', 'exam_country', 'revaluation_option', 'reval_result'],
     'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_english_exam', 'gmc_license_status'],
@@ -20548,6 +20594,7 @@ CATEGORY_GROUPS = {
 
 CATEGORY_LABELS = {
     'plab_stage': 'PLAB Stages',
+    'current_stage': 'Current Stage',
     'account_status': 'Account Statuses',
     'plan_type': 'Plan Types',
     'joined_stage': 'Joined Stages',
@@ -20737,7 +20784,7 @@ def ops_plab_settings_add():
         # don't pass the new field. Frontend will pass the currently-selected
         # pathway tab so PLAB and Australia dropdowns stay isolated.
         pathway = (request.json.get('pathway') or 'plab').strip().lower()
-        if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+        if pathway not in {'plab', 'australia', 'uae', 'consulting', 'training', 'portfolio'}:
             pathway = 'plab'
 
         if not category or not value:
@@ -34873,6 +34920,16 @@ try:
     run_seed_pg_lookups_once(get_db)
 except Exception as _pg_lk_err:
     logging.error(f"PG lookups seed failed: {_pg_lk_err}")
+
+# ── Per-pathway Client & Pipeline dropdowns (Current Stage / Account Status /
+# Joined Stage / Plan Type / Lead Source) seeded from each pathway's own records,
+# + register "Current Stage" in settings + retire the legacy "PLAB Stages" field.
+# Additive; also runnable on demand via /admin/stage-seed. (founder 2026-07-29)
+try:
+    from seed_stage_lookups import run_seed_stage_lookups_once
+    run_seed_stage_lookups_once(get_db)
+except Exception as _stg_err:
+    logging.error(f"Stage lookups seed failed: {_stg_err}")
 
 # ── X-2: One-time import for AMC Pathway AMC Registrations (152 rows) ──
 # Excel candidate names don't have embedded reg#; importer name-matches
