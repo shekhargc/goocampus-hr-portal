@@ -3724,6 +3724,31 @@ def _pathway_audit_tables(conn):
     return out
 
 
+@app.route('/admin/pg-seed', methods=['GET'])
+@login_required
+def admin_pg_seed():
+    """Run the PG dropdown seed on demand (request context — DB is definitely up,
+    unlike a Render cold-start boot). Safe to run repeatedly; only inserts what's
+    missing. (founder 2026-07-29)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    try:
+        from seed_pg_lookups import run_seed_pg_lookups_once
+        res = run_seed_pg_lookups_once(get_db)
+    except Exception as e:
+        res = {'values': 0, 'registry': 0, 'errors': [str(e)]}
+    esc = lambda s: str(s).replace('<', '&lt;').replace('>', '&gt;')
+    errs = ''.join(f"<li style='color:#b91c1c'>{esc(e)}</li>" for e in res.get('errors', []))
+    ok = not res.get('errors')
+    return ("<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+            f"<h2>PG dropdowns — seed {'✅' if ok else '⚠️'}</h2>"
+            f"<p>Inserted <b>{res.get('values',0)}</b> dropdown option(s) and "
+            f"<b>{res.get('registry',0)}</b> Field Manager row(s).</p>"
+            + (f"<ul>{errs}</ul>" if errs else "")
+            + "<p><a href='/admin/pg-selfcheck'>→ Re-run the self-check</a></p></div>")
+
+
 @app.route('/admin/pg-selfcheck', methods=['GET'])
 @login_required
 def admin_pg_selfcheck():
