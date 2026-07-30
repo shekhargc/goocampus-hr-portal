@@ -1,0 +1,226 @@
+{% extends "colleges_sidebar_base.html" %}
+{% block title %}Edit {{ college.name }} - GooCampus{% endblock %}
+{% block section_content %}
+{% set sym = currency_sym(college.currency) %}
+<div style="max-width:1000px;margin:0 auto;padding:1.5rem;">
+    <div style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <a href="/colleges/{{ college.slug }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to profile</a>
+        <span style="font-size:0.72rem;color:var(--gray-500);background:var(--gray-100);padding:3px 9px;border-radius:20px;">Smart editor · International</span>
+    </div>
+
+    <form method="POST">
+        <input type="hidden" name="fee_editor" value="1">
+        <input type="hidden" name="category" value="international">
+
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;">
+            <div style="padding:1.1rem 1.5rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);">
+                <h1 style="font-size:1.15rem;font-weight:700;color:var(--navy);margin:0;">Edit — {{ college.name }}</h1>
+            </div>
+
+            <div style="padding:1.5rem;">
+                <!-- Basic info -->
+                <h3 style="font-size:0.8rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 1rem;padding-bottom:0.4rem;border-bottom:1px solid var(--gray-100);">Basic Information</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+                    <div style="grid-column:1/-1;">
+                        <label class="lbl">College Name *</label>
+                        <input class="fld" type="text" name="name" required value="{{ college.name }}">
+                    </div>
+                    <div><label class="lbl">University / Affiliated To</label><input class="fld" type="text" name="university_name" value="{{ college.university_name or '' }}"></div>
+                    <div>
+                        <label class="lbl">Country</label>
+                        <select class="fld" name="country">
+                            <option value="">-- Select --</option>
+                            {% for c in countries %}<option value="{{ c.name }}" {% if college.country == c.name %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div><label class="lbl">City</label><input class="fld" type="text" name="city_text" value="{{ college.city or '' }}"></div>
+                    <div><label class="lbl">Established Year</label><input class="fld" type="number" name="established_year" value="{{ college.established_year or '' }}"></div>
+                    <div>
+                        <label class="lbl">College Type</label>
+                        <select class="fld" name="university_type">
+                            {% for t in ['Government','Private','Deemed Institute','Autonomous'] %}<option value="{{ t }}" {% if college.university_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="lbl">Medium</label>
+                        <select class="fld" name="medium_of_instruction">
+                            {% for m in ['English','Bilingual','Hindi'] %}<option value="{{ m }}" {% if college.medium_of_instruction == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div><label class="lbl">Indian Passouts</label><input class="fld" type="text" name="indian_passouts" value="{{ college.indian_passouts or '' }}"></div>
+                    <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;grid-column:1/-1;padding-top:0.3rem;">
+                        <label class="chk"><input type="checkbox" name="nmc_approved" {% if college.nmc_approved %}checked{% endif %}> NMC Approved</label>
+                        <label class="chk"><input type="checkbox" name="who_approved" {% if college.who_approved %}checked{% endif %}> WHO Approved</label>
+                        <label class="chk"><input type="checkbox" name="hostel_included" {% if college.hostel_included %}checked{% endif %}> Hostel in Tuition</label>
+                        <label class="chk"><input type="checkbox" name="is_featured" {% if college.is_featured %}checked{% endif %}> Featured</label>
+                    </div>
+                </div>
+
+                <!-- Currency + costs -->
+                <h3 style="font-size:0.8rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 1rem;padding-bottom:0.4rem;border-bottom:1px solid var(--gray-100);">Currency & Costs</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                    <div>
+                        <label class="lbl">Fee Currency</label>
+                        <select class="fld" name="currency" id="currencySel" onchange="ceRecalc()">
+                            {% for code in ['INR','RUB','GEL','USD','AUD','UZS','EGP','MYR','CNY','PHP','EUR','GBP','KZT','UAH','KGS','AMD'] %}
+                            <option value="{{ code }}" {% if college.currency == code %}selected{% endif %}>{{ code }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div><label class="lbl">Mess Charges</label><input class="fld" type="text" name="mess_charges" value="{{ college.mess_charges or '' }}"></div>
+                    <div><label class="lbl">Consultancy Fee (INR)</label><input class="fld" type="number" name="consultancy_fee_inr" value="{{ (college.consultancy_fee_inr or 0)|int }}"></div>
+                    <div><label class="lbl">Admin Fee</label><input class="fld" type="text" name="admin_fee" value="{{ college.admin_fee or '' }}"></div>
+                    <div><label class="lbl">Travel Cost (INR)</label><input class="fld" type="number" name="travel_cost_inr" value="{{ (college.travel_cost_inr or 0)|int }}"></div>
+                    <div>
+                        <label class="lbl">Full Package (auto)</label>
+                        <div style="padding:0.55rem 0.75rem;background:#eef6ff;border:1px solid #cfe0f5;border-radius:0.4rem;font-weight:700;color:var(--navy);font-size:0.9rem;">
+                            ₹<span id="fullFull">0</span> <span style="font-weight:500;color:var(--gray-500);font-size:0.78rem;">(<span id="fullLac">0.00</span> Lac)</span>
+                        </div>
+                    </div>
+                </div>
+                <p style="font-size:0.75rem;color:var(--gray-500);margin:0 0 1.5rem;">Enter fees below in the selected currency — totals and the INR full package auto-calculate at the live rate.</p>
+
+                <!-- Courses + fee tables -->
+                <h3 style="font-size:0.8rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 1rem;padding-bottom:0.4rem;border-bottom:1px solid var(--gray-100);">Courses & Fee Structure</h3>
+                {% for course in courses %}
+                <div style="border:1px solid var(--gray-200);border-radius:0.6rem;margin-bottom:1.2rem;overflow:hidden;">
+                    <div style="display:grid;grid-template-columns:2fr 1fr 1.4fr 1.2fr;gap:0.6rem;padding:0.8rem;background:var(--gray-50);">
+                        <div><label class="lbl">Course</label><input class="fld" type="text" name="course_name_{{ course.id }}" value="{{ course.course_name }}"></div>
+                        <div><label class="lbl">Duration (yrs)</label><input class="fld" type="number" name="duration_years_{{ course.id }}" value="{{ course.duration_years }}"></div>
+                        <div><label class="lbl">Includes</label><input class="fld" type="text" name="duration_includes_{{ course.id }}" value="{{ course.duration_includes }}"></div>
+                        <div><label class="lbl">Intake</label><input class="fld" type="text" name="intake_season_{{ course.id }}" value="{{ course.intake_season }}"></div>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table style="width:100%;border-collapse:collapse;font-size:0.8rem;min-width:760px;">
+                            <thead>
+                                <tr style="background:var(--gray-100);">
+                                    <th class="fh">Year</th><th class="fh">Semester</th>
+                                    <th class="fh sym-h">Tuition</th><th class="fh sym-h">Hostel</th>
+                                    <th class="fh sym-h">Docs &amp; Med</th><th class="fh sym-h">Visa &amp; Ins</th>
+                                    <th class="fh" style="color:var(--navy);">Total (<span class="sym">{{ sym }}</span>)</th>
+                                    <th class="fh" style="color:var(--orange);">INR (₹)</th><th class="fh"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="fee-body" data-course-id="{{ course.id }}">
+                                {% for f in fees_by_course.get(course.id, []) %}
+                                <tr class="fee-row">
+                                    <input type="hidden" name="fee_course_id" value="{{ course.id }}">
+                                    <td><input class="fcell" type="text" name="fee_year" value="{{ f.year_label }}"></td>
+                                    <td><input class="fcell" type="text" name="fee_sem" value="{{ f.semester }}"></td>
+                                    <td><input class="fcell fnum" type="number" name="fee_tuition" value="{{ (f.tuition_fee or 0)|int }}" oninput="ceRecalc()"></td>
+                                    <td><input class="fcell fnum" type="number" name="fee_hostel" value="{{ (f.hostel_fee or 0)|int }}" oninput="ceRecalc()"></td>
+                                    <td><input class="fcell fnum" type="number" name="fee_docs" value="{{ (f.docs_med_checkup or 0)|int }}" oninput="ceRecalc()"></td>
+                                    <td><input class="fcell fnum" type="number" name="fee_visa" value="{{ (f.visa_med_insurance or 0)|int }}" oninput="ceRecalc()"></td>
+                                    <td class="row-total" style="text-align:right;font-weight:600;color:var(--navy);white-space:nowrap;">0</td>
+                                    <td class="row-inr" style="text-align:right;font-weight:600;color:var(--orange);white-space:nowrap;">₹0</td>
+                                    <td style="text-align:center;"><button type="button" class="delrow" onclick="ceDelRow(this)" title="Remove">✕</button></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="padding:0.6rem 0.8rem;">
+                        <button type="button" onclick="ceAddRow({{ course.id }})" style="font-size:0.78rem;color:var(--orange);font-weight:600;background:none;border:1px dashed var(--orange);border-radius:0.4rem;padding:0.35rem 0.8rem;cursor:pointer;">+ Add Fee Row</button>
+                    </div>
+                </div>
+                {% else %}
+                <p style="font-size:0.82rem;color:var(--gray-500);">No courses yet — add one from the profile page, then edit its fees here.</p>
+                {% endfor %}
+
+                <!-- Description / URLs -->
+                <h3 style="font-size:0.8rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:1.5rem 0 1rem;padding-bottom:0.4rem;border-bottom:1px solid var(--gray-100);">Details & Media</h3>
+                <div style="display:grid;grid-template-columns:1fr;gap:1rem;">
+                    <div><label class="lbl">Description</label><textarea class="fld" name="description" rows="2" style="resize:vertical;font-family:inherit;">{{ college.description or '' }}</textarea></div>
+                    <div><label class="lbl">Eligibility</label><textarea class="fld" name="eligibility" rows="2" style="resize:vertical;font-family:inherit;">{{ college.eligibility or '' }}</textarea></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+                    <div><label class="lbl">Official Website</label><input class="fld" type="url" name="website_url" value="{{ college.website_url or '' }}"></div>
+                    <div><label class="lbl">Prospectus URL</label><input class="fld" type="url" name="prospects_url" value="{{ college.prospects_url or '' }}"></div>
+                    <div><label class="lbl">Logo URL</label><input class="fld" type="url" name="logo_url" value="{{ college.logo_url or '' }}"></div>
+                    <div><label class="lbl">Cover Image URL</label><input class="fld" type="url" name="cover_image_url" value="{{ college.cover_image_url or '' }}"></div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:0.75rem;justify-content:flex-end;border-top:1px solid var(--gray-100);padding:1.1rem 1.5rem;background:var(--gray-50);">
+                <a href="/colleges/{{ college.slug }}" style="padding:0.55rem 1.2rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;text-decoration:none;color:var(--gray-600);font-weight:500;">Cancel</a>
+                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.55rem 1.6rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.88rem;">Save College</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<style>
+    .lbl { display:block;font-size:0.74rem;font-weight:600;color:var(--gray-600);margin-bottom:0.25rem; }
+    .fld { width:100%;padding:0.5rem 0.65rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box; }
+    .chk { display:flex;align-items:center;gap:0.4rem;font-size:0.84rem;cursor:pointer; }
+    .fh { padding:0.45rem 0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);font-size:0.72rem;white-space:nowrap; }
+    .fh:first-child, .fh:nth-child(2) { text-align:left; }
+    .fcell { width:100%;padding:0.35rem 0.4rem;border:1px solid var(--gray-200);border-radius:0.3rem;font-size:0.8rem;box-sizing:border-box; }
+    .fnum { text-align:right; }
+    td { padding:0.3rem 0.4rem;border:1px solid var(--gray-100); }
+    .delrow { background:none;border:none;color:#dc2626;cursor:pointer;font-size:0.9rem;font-weight:700; }
+</style>
+
+<script>
+var CE_RATES = {{ rates|tojson }};
+var CE_SYMBOLS = { INR:'₹', RUB:'₽', GEL:'₾', USD:'$', AUD:'A$', UZS:'сўм', EGP:'E£', MYR:'RM', CNY:'¥', PHP:'₱', EUR:'€', GBP:'£', KZT:'₸', UAH:'₴', KGS:'с', AMD:'֏' };
+
+function ceToINR(amount, cur) {
+    amount = parseFloat(amount) || 0;
+    var inr = CE_RATES.INR || 85;
+    if (cur === 'INR') return amount;
+    if (cur === 'USD') return amount * inr;
+    var c = CE_RATES[cur];
+    return (c && c > 0) ? amount * (inr / c) : amount;
+}
+function ceFmt(n) { return Math.round(n).toLocaleString('en-IN'); }
+
+function ceRecalc() {
+    var cur = document.getElementById('currencySel').value;
+    var sym = CE_SYMBOLS[cur] || cur;
+    document.querySelectorAll('.sym').forEach(function(s) { s.textContent = sym; });
+    var grand = 0;
+    document.querySelectorAll('.fee-row').forEach(function(row) {
+        var total = 0;
+        ['fee_tuition', 'fee_hostel', 'fee_docs', 'fee_visa'].forEach(function(n) {
+            var el = row.querySelector('[name="' + n + '"]');
+            total += parseFloat(el && el.value) || 0;
+        });
+        var inr = ceToINR(total, cur);
+        grand += inr;
+        row.querySelector('.row-total').textContent = ceFmt(total);
+        row.querySelector('.row-inr').textContent = '₹' + ceFmt(inr);
+    });
+    document.getElementById('fullFull').textContent = ceFmt(grand);
+    document.getElementById('fullLac').textContent = (grand / 100000).toFixed(2);
+}
+
+function ceRowHtml(courseId) {
+    return '<input type="hidden" name="fee_course_id" value="' + courseId + '">' +
+        '<td><input class="fcell" type="text" name="fee_year" value="1st Year"></td>' +
+        '<td><input class="fcell" type="text" name="fee_sem" value="1st Sem"></td>' +
+        '<td><input class="fcell fnum" type="number" name="fee_tuition" value="0" oninput="ceRecalc()"></td>' +
+        '<td><input class="fcell fnum" type="number" name="fee_hostel" value="0" oninput="ceRecalc()"></td>' +
+        '<td><input class="fcell fnum" type="number" name="fee_docs" value="0" oninput="ceRecalc()"></td>' +
+        '<td><input class="fcell fnum" type="number" name="fee_visa" value="0" oninput="ceRecalc()"></td>' +
+        '<td class="row-total" style="text-align:right;font-weight:600;color:var(--navy);white-space:nowrap;">0</td>' +
+        '<td class="row-inr" style="text-align:right;font-weight:600;color:var(--orange);white-space:nowrap;">₹0</td>' +
+        '<td style="text-align:center;"><button type="button" class="delrow" onclick="ceDelRow(this)" title="Remove">✕</button></td>';
+}
+function ceAddRow(courseId) {
+    var body = document.querySelector('.fee-body[data-course-id="' + courseId + '"]');
+    if (!body) return;
+    var tr = document.createElement('tr');
+    tr.className = 'fee-row';
+    tr.innerHTML = ceRowHtml(courseId);
+    body.appendChild(tr);
+    ceRecalc();
+}
+function ceDelRow(btn) {
+    var row = btn.closest('.fee-row');
+    if (row) row.remove();
+    ceRecalc();
+}
+document.addEventListener('DOMContentLoaded', ceRecalc);
+</script>
+{% endblock %}
