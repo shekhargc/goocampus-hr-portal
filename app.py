@@ -128,28 +128,28 @@ def format_datetime_filter(value):
         return value
 
 
-_INSTALLMENT_WORDS = {'1': 'First', '2': 'Second', '3': 'Third', '4': 'Fourth', '5': 'Fifth'}
-
-
 @app.template_filter('installment_label')
 def installment_label_filter(value):
-    """Standardise any installment label to 'First Installment' … 'Fifth Installment'.
-    Handles every legacy variant in the data: '1st', '1st Instalment', '1',
-    'First', 'First Installment'. Unknown text is returned unchanged.
-    (founder 2026-07-30 — one consistent wording everywhere)"""
+    """Standardise any installment label to '1st Installment' … '4th Installment'.
+    Purely a DISPLAY normaliser — it never changes stored data. Handles every legacy
+    variant: '1st', '1st Instalment', '1', 'First', 'First Installment'. Unknown text
+    is returned unchanged. (founder 2026-07-30 — one consistent wording everywhere)"""
     s = str(value or '').strip()
     if not s:
         return ''
     low = s.lower()
-    word = None
-    m = re.match(r'^\s*(\d)', low)
+    num = None
+    m = re.match(r'^\s*(\d+)', low)
     if m:
-        word = _INSTALLMENT_WORDS.get(m.group(1))
+        num = int(m.group(1))
     else:
-        for w in ('first', 'second', 'third', 'fourth', 'fifth'):
+        for w, nn in (('first', 1), ('second', 2), ('third', 3), ('fourth', 4), ('fifth', 5)):
             if low.startswith(w):
-                word = w.capitalize(); break
-    return f"{word} Installment" if word else s
+                num = nn; break
+    if not num:
+        return s
+    suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(num, 'th')
+    return f"{num}{suffix} Installment"
 
 
 @app.template_filter('format_reg')
@@ -19861,7 +19861,7 @@ def ensure_ops_tables():
                 'gmc_license_status': ['Received', 'Rejected', 'Not Received', 'On Hold'],
                 # Payment
                 'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque', 'Website Link'],
-                'instalment': ['First Installment', 'Second Installment', 'Third Installment', 'Fourth Installment', 'Fifth Installment'],
+                'instalment': ['1st Installment', '2nd Installment', '3rd Installment', '4th Installment'],
                 # Research
                 'research_status': ['Started', 'Research Completed', 'Research Published', 'Scrapped'],
                 'author_position': ['1 st Author', '2 nd Author', 'Co-Author'],
@@ -20517,7 +20517,7 @@ GMC_LICENSE_STATUSES = ['Received', 'Not Received', 'In Process']
 
 # ── Payment dropdowns ──
 PAYMENT_METHODS = ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque']
-INSTALMENT_OPTIONS = ['First Installment', 'Second Installment', 'Third Installment', 'Fourth Installment', 'Fifth Installment']
+INSTALMENT_OPTIONS = ['1st Installment', '2nd Installment', '3rd Installment', '4th Installment']
 
 # ── Research & Publication dropdowns ──
 RESEARCH_STATUSES = ['Started', 'In Progress', 'Completed', 'Published']
@@ -27097,8 +27097,8 @@ def ops_payments_delete(record_id):
 #  A Received installment on a new-reg client needs admin sign-off before it
 #  posts into that pathway's Payments; Pending ones show on the Follow-up page.
 # ─────────────────────────────────────────────────────────
-_INST_ORD = {1: 'First Installment', 2: 'Second Installment',
-             3: 'Third Installment', 4: 'Fourth Installment'}
+_INST_ORD = {1: '1st Installment', 2: '2nd Installment',
+             3: '3rd Installment', 4: '4th Installment'}
 
 
 def _reg_pathway(conn, product_id):
@@ -35268,12 +35268,21 @@ except Exception as _pg_lk_err:
 # legacy values is handled separately by the installment_label filter.
 try:
     _il_conn = get_db()
-    _il_map = {'1st Instalment': 'First Installment', '2nd Instalment': 'Second Installment',
-               '3rd Instalment': 'Third Installment', '4th Instalment': 'Fourth Installment',
-               '5th Instalment': 'Fifth Installment'}
+    # Normalise the dropdown menu choices to '1st Installment'…'4th Installment'.
+    # Covers the UK-spelling legacy ('1st Instalment') and the brief 'First Installment'
+    # wording. Only the lookup_options MENU is touched — never a client's payment record.
+    _il_map = {'1st Instalment': '1st Installment', '2nd Instalment': '2nd Installment',
+               '3rd Instalment': '3rd Installment', '4th Instalment': '4th Installment',
+               '5th Instalment': '4th Installment',
+               'First Installment': '1st Installment', 'Second Installment': '2nd Installment',
+               'Third Installment': '3rd Installment', 'Fourth Installment': '4th Installment',
+               'Fifth Installment': '4th Installment'}
     for _old, _new in _il_map.items():
         _il_conn.execute("UPDATE lookup_options SET label = ?, value = ? "
                          "WHERE category = 'instalment' AND value = ?", (_new, _new, _old))
+    # Drop any 5th-installment menu choice (max is 4 per pathway/product).
+    _il_conn.execute("DELETE FROM lookup_options WHERE category = 'instalment' "
+                     "AND (value ILIKE '5th%%' OR value ILIKE 'Fifth%%')")
     _il_conn.commit(); _il_conn.close()
 except Exception as _il_err:
     logging.error(f"instalment label normalise failed: {_il_err}")
