@@ -3992,6 +3992,83 @@ def admin_stage_backfill():
         except Exception: pass
 
 
+@app.route('/admin/fix-training-installments', methods=['GET', 'POST'])
+@login_required
+def admin_fix_training_installments():
+    """Correct the Training installment values that came in from the Zoho import as a
+    running 1..41 serial. Renumbers each CLIENT's payments by date: their 1st payment
+    -> '1st Installment', 2nd -> '2nd Installment', etc. Preview shows every from->to;
+    nothing is written until Apply. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    _ORD = {1: '1st Installment', 2: '2nd Installment', 3: '3rd Installment', 4: '4th Installment'}
+
+    def _label(rn):
+        return _ORD.get(rn, f"{rn}th Installment")
+
+    conn = get_db()
+    try:
+        # Rank each training payment within its own client, by date then id.
+        rows = conn.execute(
+            "SELECT id, registration_number AS reg, COALESCE(instalment,'') AS cur, "
+            "       COALESCE(payment_date,'') AS pdate, "
+            "       ROW_NUMBER() OVER (PARTITION BY registration_number "
+            "         ORDER BY payment_date NULLS LAST, id) AS rn "
+            "FROM ops_payments WHERE COALESCE(pathway,'plab') = 'training' "
+            "ORDER BY registration_number, rn").fetchall()
+        changes = [(r['id'], r['reg'], r['cur'], _label(r['rn']), r['pdate'])
+                   for r in rows if (r['cur'] or '') != _label(r['rn'])]
+
+        if request.method == 'POST' and request.form.get('confirm') == 'yes':
+            n = 0
+            for _id, _reg, _cur, _new, _pd in changes:
+                conn.execute("UPDATE ops_payments SET instalment = ?, updated_at = CURRENT_TIMESTAMP "
+                             "WHERE id = ?", (_new, _id))
+                n += 1
+            conn.commit()
+            return ("<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+                    f"<h2>Training installments corrected ✅</h2><p>Updated <b>{n}</b> payment record(s) "
+                    "to their per-client 1st/2nd installment.</p>"
+                    "<p><a href='/admin/installment-check'>→ Re-check the values</a></p></div>")
+
+        # Preview
+        dist = {}
+        for _id, _reg, _cur, _new, _pd in changes:
+            dist[_new] = dist.get(_new, 0) + 1
+        sample = ''.join(
+            f"<tr><td style='padding:4px 10px'>{esc(reg)}</td>"
+            f"<td style='padding:4px 10px'>{esc(pd)}</td>"
+            f"<td style='padding:4px 10px;color:#b91c1c'>{esc(cur) or '(blank)'}</td>"
+            f"<td style='padding:4px 10px;color:#065f46'>{esc(new)}</td></tr>"
+            for (_id, reg, cur, new, pd) in changes[:60])
+        dist_html = ' · '.join(f"{esc(k)}: <b>{v}</b>" for k, v in sorted(dist.items()))
+        return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+                "<h2>Fix Training installments — preview</h2>"
+                "<p style='color:#065f46'>Renumbers each client's training payments by date. "
+                "Nothing is written until you click Apply. Only records that need changing are shown.</p>"
+                f"<p><b>{len(changes)}</b> record(s) will change. After: {dist_html or '—'}</p>"
+                + (("<table style='border-collapse:collapse;width:100%;font-size:13px'>"
+                    "<tr style='background:#f3f4f6'><th style='padding:4px 10px;text-align:left'>Client reg</th>"
+                    "<th style='padding:4px 10px;text-align:left'>Payment date</th>"
+                    "<th style='padding:4px 10px;text-align:left'>From</th><th style='padding:4px 10px;text-align:left'>To</th></tr>"
+                    + sample + "</table>" + (f"<p style='color:#6b7280'>Showing first 60 of {len(changes)}.</p>" if len(changes) > 60 else ""))
+                   if changes else "<p>Nothing to change — training installments already look correct.</p>")
+                + ("<form method='POST' style='margin-top:18px'><input type='hidden' name='confirm' value='yes'>"
+                   "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer' "
+                   "onclick=\"return confirm('Apply these training installment corrections?')\">Apply corrections</button></form>" if changes else "")
+                + "</div>")
+    except Exception as e:
+        logging.error("admin_fix_training_installments: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return f"<div style='font-family:system-ui;margin:40px'>Error: {esc(e)}</div>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 @app.route('/admin/installment-check', methods=['GET'])
 @login_required
 def admin_installment_check():
