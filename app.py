@@ -1408,9 +1408,11 @@ self.addEventListener('fetch', e => {
   );
 });
 """
-    return Response(js, mimetype='application/javascript',
-                    headers={'Service-Worker-Allowed': '/client/',
-                             'Cache-Control': 'no-cache'})
+    resp = make_response(js)
+    resp.mimetype = 'application/javascript'
+    resp.headers['Service-Worker-Allowed'] = '/client/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
 
 
 @app.route('/client/heartbeat', methods=['POST'])
