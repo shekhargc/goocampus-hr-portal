@@ -106,6 +106,10 @@
   .edit-hint{ font-size:12.5px; color:var(--muted); margin-bottom:12px; }
   .edit-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
   .pedit .grid2 > div{ margin-bottom:4px; }
+  .v-empty{ color:#94A3B8; font-style:italic; font-weight:400; }
+  .acad-group{ text-transform:uppercase; font-size:11px; font-weight:700; color:var(--orange);
+               letter-spacing:.03em; margin:16px 0 8px; }
+  .acad-group:first-child{ margin-top:0; }
   .lock-note{ background:#FFF7ED; border:1px solid #FED7AA; color:#9A3412; border-radius:10px;
               padding:10px 14px; font-size:13px; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
 
@@ -238,7 +242,7 @@
           <button class="ptab" data-ptab="academic"><i class="bi bi-mortarboard"></i> Academic</button>
         </div>
         {% if profile_locked %}
-        <div class="lock-note"><i class="bi bi-lock-fill"></i> Your details have been verified, so they're read-only here. Please contact your counsellor for any change.</div>
+        <div class="lock-note"><i class="bi bi-lock-fill"></i> Your <strong>personal &amp; contact details</strong> are verified, so they're read-only — please contact your counsellor to change them. You can still complete or update your <strong>Academic details</strong> anytime.</div>
         {% endif %}
 
         <!-- Personal -->
@@ -331,64 +335,96 @@
           {% endif %}
         </div>
 
-        <!-- Academic -->
+        <!-- Academic (always editable — client-owned, syncs to ops) -->
+        {% macro af(label, val) %}<div class="field"><div class="k">{{ label }}</div><div class="v {% if not val %}v-empty{% endif %}">{{ val or 'Not added yet' }}</div></div>{% endmacro %}
         <div class="ppane" id="ppane-academic">
           <div class="pane-head"><h3><i class="bi bi-mortarboard"></i> Academic details</h3>
-            {% if not profile_locked %}<button class="btn btn-ghost btn-sm" onclick="editPane('academic',true)" id="edit-academic"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
+            <button class="btn btn-ghost btn-sm" onclick="editPane('academic',true)" id="edit-academic"><i class="bi bi-pencil"></i> Edit</button>
           </div>
+          <p class="edit-hint" id="acad-open-hint"><i class="bi bi-info-circle"></i> You can complete or update your academic details anytime — even after verification. What you save here updates your GooCampus record automatically.</p>
           <div class="pview" id="view-academic">
+            <div class="k acad-group">Medical college &amp; MBBS</div>
             <div class="grid2">
-              <div class="field"><div class="k">Country of study</div><div class="v">{{ ac.country or '—' }}</div></div>
-              <div class="field"><div class="k">Medical college</div><div class="v">{{ ac.fmg_medical_college or ac.img_medical_college or '—' }}</div></div>
-              <div class="field"><div class="k">MBBS status</div><div class="v">{{ ac.mbbs_status or '—' }}</div></div>
-              <div class="field"><div class="k">Internship status</div><div class="v">{{ ac.internship_status or '—' }}</div></div>
-              <div class="field"><div class="k">Internship hospital</div><div class="v">{{ ac.internship_hospital or '—' }}</div></div>
-              <div class="field"><div class="k">Currently working?</div><div class="v">{{ ac.working_status or '—' }}</div></div>
-              <div class="field"><div class="k">Speciality interest 1</div><div class="v">{{ ac.speciality_interest_1 or '—' }}</div></div>
-              <div class="field"><div class="k">Speciality interest 2</div><div class="v">{{ ac.speciality_interest_2 or '—' }}</div></div>
+              {{ af('Country of study', ac.country) }}
+              {{ af('Medical college', ac.fmg_medical_college or ac.img_medical_college) }}
+              {{ af('IMG / FMG', ac.img_fmg) }}
+              {{ af('MBBS status', ac.mbbs_status) }}
+              {{ af('MBBS start date', ac.mbbs_start_date) }}
+              {{ af('MBBS end date', ac.mbbs_end_date) }}
             </div>
-            {% if ac.pg_done == 'Yes' or ac.pg_type or ac.pg_specialty %}
-            <div style="margin-top:6px;padding-top:12px;border-top:1px dashed var(--line)">
-              <div class="k" style="text-transform:uppercase;font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">Postgraduate</div>
-              <div class="grid2">
-                <div class="field"><div class="k">PG type</div><div class="v">{{ ac.pg_type or '—' }}</div></div>
-                <div class="field"><div class="k">Specialty</div><div class="v">{{ ac.pg_specialty or '—' }}</div></div>
-                <div class="field"><div class="k">College</div><div class="v">{{ ac.pg_college or '—' }}</div></div>
-                <div class="field"><div class="k">PG status</div><div class="v">{{ ac.pg_status or '—' }}</div></div>
-              </div>
+            <div class="k acad-group">Internship</div>
+            <div class="grid2">
+              {{ af('Internship status', ac.internship_status) }}
+              {{ af('Internship hospital', ac.internship_hospital) }}
+              {{ af('Internship location', ac.internship_location) }}
+              {{ af('Internship start date', ac.internship_start_date) }}
+              {{ af('Internship end date', ac.internship_end_date) }}
+              {{ af('Internship gap?', ac.internship_gap) }}
+              {{ af('Gap (months)', ac.gap_in_months) }}
+              {{ af('Gap reason', ac.gap_reason) }}
             </div>
+            <div class="k acad-group">Work &amp; Postgraduate</div>
+            <div class="grid2">
+              {{ af('Currently working?', ac.working_status) }}
+              {{ af('Working hospital', ac.working_hospital_name) }}
+              {{ af('Done / doing PG?', ac.pg_done) }}
+              {{ af('PG type', ac.pg_type) }}
+              {{ af('PG specialty', ac.pg_specialty) }}
+              {{ af('PG college', ac.pg_college) }}
+              {{ af('PG status', ac.pg_status) }}
+            </div>
+            {% if ac.additional_info %}
+            <div class="k acad-group">Anything else you told us</div>
+            <div class="field"><div class="v">{{ ac.additional_info }}</div></div>
             {% endif %}
           </div>
-          {% if not profile_locked %}
+
           <form class="pedit" id="form-academic" method="POST" action="/client/profile/save" style="display:none">
             <input type="hidden" name="section" value="academic">
+            <div class="k acad-group">Medical college &amp; MBBS</div>
             <div class="grid2">
               <div><label class="in-lbl">Country of study</label><input class="in-field" name="country" value="{{ ac.country or '' }}"></div>
               <div><label class="in-lbl">Medical college</label><input class="in-field" name="fmg_medical_college" value="{{ ac.fmg_medical_college or ac.img_medical_college or '' }}"></div>
-              <div><label class="in-lbl">MBBS status</label><input class="in-field" name="mbbs_status" value="{{ ac.mbbs_status or '' }}"></div>
+              <div><label class="in-lbl">Are you an IMG / FMG?</label>
+                <select class="in-field" name="img_fmg">
+                  <option value="" {% if not ac.img_fmg %}selected{% endif %}>Not specified</option>
+                  <option value="IMG" {% if ac.img_fmg == 'IMG' %}selected{% endif %}>IMG (studied in India)</option>
+                  <option value="FMG" {% if ac.img_fmg == 'FMG' %}selected{% endif %}>FMG (studied abroad)</option>
+                </select></div>
+              <div><label class="in-lbl">MBBS status</label><input class="in-field" name="mbbs_status" value="{{ ac.mbbs_status or '' }}" placeholder="e.g. Completed / Pursuing"></div>
+              <div><label class="in-lbl">MBBS start date</label><input class="in-field" name="mbbs_start_date" value="{{ ac.mbbs_start_date or '' }}" placeholder="YYYY-MM-DD"></div>
+              <div><label class="in-lbl">MBBS end date</label><input class="in-field" name="mbbs_end_date" value="{{ ac.mbbs_end_date or '' }}" placeholder="YYYY-MM-DD"></div>
+            </div>
+            <div class="k acad-group">Internship</div>
+            <div class="grid2">
               <div><label class="in-lbl">Internship status</label><input class="in-field" name="internship_status" value="{{ ac.internship_status or '' }}"></div>
               <div><label class="in-lbl">Internship hospital</label><input class="in-field" name="internship_hospital" value="{{ ac.internship_hospital or '' }}"></div>
+              <div><label class="in-lbl">Internship location</label><input class="in-field" name="internship_location" value="{{ ac.internship_location or '' }}"></div>
+              <div><label class="in-lbl">Internship start date</label><input class="in-field" name="internship_start_date" value="{{ ac.internship_start_date or '' }}" placeholder="YYYY-MM-DD"></div>
+              <div><label class="in-lbl">Internship end date</label><input class="in-field" name="internship_end_date" value="{{ ac.internship_end_date or '' }}" placeholder="YYYY-MM-DD"></div>
+              <div><label class="in-lbl">Any gap?</label><input class="in-field" name="internship_gap" value="{{ ac.internship_gap or '' }}"></div>
+              <div><label class="in-lbl">Gap (months)</label><input class="in-field" name="gap_in_months" value="{{ ac.gap_in_months or '' }}"></div>
+              <div><label class="in-lbl">Gap reason</label><input class="in-field" name="gap_reason" value="{{ ac.gap_reason or '' }}"></div>
+            </div>
+            <div class="k acad-group">Work &amp; Postgraduate</div>
+            <div class="grid2">
               <div><label class="in-lbl">Currently working?</label><input class="in-field" name="working_status" value="{{ ac.working_status or '' }}"></div>
-              <div><label class="in-lbl">Speciality interest 1</label><input class="in-field" name="speciality_interest_1" value="{{ ac.speciality_interest_1 or '' }}"></div>
-              <div><label class="in-lbl">Speciality interest 2</label><input class="in-field" name="speciality_interest_2" value="{{ ac.speciality_interest_2 or '' }}"></div>
+              <div><label class="in-lbl">Working hospital</label><input class="in-field" name="working_hospital_name" value="{{ ac.working_hospital_name or '' }}"></div>
+              <div><label class="in-lbl">Have you done / are you doing PG?</label>
+                <select class="in-field" name="pg_done">
+                  <option value="" {% if not ac.pg_done %}selected{% endif %}>Not specified</option>
+                  <option value="Yes" {% if ac.pg_done == 'Yes' %}selected{% endif %}>Yes</option>
+                  <option value="No" {% if ac.pg_done == 'No' %}selected{% endif %}>No</option>
+                </select></div>
+              <div><label class="in-lbl">PG type</label><input class="in-field" name="pg_type" value="{{ ac.pg_type or '' }}" placeholder="NEET PG MD/MS or DNB"></div>
+              <div><label class="in-lbl">PG specialty</label><input class="in-field" name="pg_specialty" value="{{ ac.pg_specialty or '' }}"></div>
+              <div><label class="in-lbl">PG college</label><input class="in-field" name="pg_college" value="{{ ac.pg_college or '' }}"></div>
+              <div><label class="in-lbl">PG status</label><input class="in-field" name="pg_status" value="{{ ac.pg_status or '' }}" placeholder="First/Second/Final year or Completed"></div>
             </div>
-            <div style="margin-top:10px;padding-top:12px;border-top:1px dashed var(--line)">
-              <label class="in-lbl">Have you done / are you doing PG?</label>
-              <select class="in-field" name="pg_done" style="margin-bottom:12px">
-                <option value="" {% if not ac.pg_done %}selected{% endif %}>Not specified</option>
-                <option value="Yes" {% if ac.pg_done == 'Yes' %}selected{% endif %}>Yes</option>
-                <option value="No" {% if ac.pg_done == 'No' %}selected{% endif %}>No</option>
-              </select>
-              <div class="grid2">
-                <div><label class="in-lbl">PG type</label><input class="in-field" name="pg_type" value="{{ ac.pg_type or '' }}" placeholder="NEET PG MD/MS or DNB"></div>
-                <div><label class="in-lbl">Specialty</label><input class="in-field" name="pg_specialty" value="{{ ac.pg_specialty or '' }}"></div>
-                <div><label class="in-lbl">College</label><input class="in-field" name="pg_college" value="{{ ac.pg_college or '' }}"></div>
-                <div><label class="in-lbl">PG status</label><input class="in-field" name="pg_status" value="{{ ac.pg_status or '' }}" placeholder="First/Second/Final year or Completed"></div>
-              </div>
-            </div>
-            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('academic',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save</button></div>
+            <div style="margin-top:8px"><label class="in-lbl">Anything else you'd like us to know</label>
+              <textarea class="in-field" name="additional_info" rows="3">{{ ac.additional_info or '' }}</textarea></div>
+            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('academic',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save academic details</button></div>
           </form>
-          {% endif %}
         </div>
       </div>
     </div>

@@ -1446,11 +1446,56 @@ _CLIENT_PROFILE_FAMILY = ('guardian_type',
     'father_first_name', 'father_last_name', 'father_phone', 'father_email',
     'mother_first_name', 'mother_last_name', 'mother_phone', 'mother_email',
     'guardian_first_name', 'guardian_last_name', 'guardian_phone', 'guardian_email')
-_CLIENT_PROFILE_ACADEMIC = ('country', 'fmg_medical_college', 'img_medical_college',
-    'mbbs_status', 'mbbs_start_date', 'mbbs_end_date', 'internship_status',
-    'internship_hospital', 'internship_location', 'working_status',
-    'working_hospital_name', 'speciality_interest_1', 'speciality_interest_2',
+_CLIENT_PROFILE_ACADEMIC = ('img_fmg', 'country', 'fmg_medical_college', 'img_medical_college',
+    'mbbs_status', 'mbbs_start_date', 'mbbs_end_date',
+    'internship_status', 'internship_hospital', 'internship_location',
+    'internship_start_date', 'internship_end_date', 'internship_gap',
+    'gap_in_months', 'gap_reason', 'working_status', 'working_hospital_name',
     'pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status', 'additional_info')
+
+
+def _sync_client_academics_to_ops(conn, reg_id):
+    """Push a client's academic edits into the ops-side record so every pathway's
+    Academic Details page reflects what the client entered. The client OWNS these
+    fields (they filled them at registration); this keeps ops in sync when they
+    complete/correct them later from the dashboard. UPDATEs the existing
+    ops_academic_details row for the registration_number, or INSERTs one.
+    (founder 2026-07-30)"""
+    try:
+        row = conn.execute(
+            "SELECT cr.registration_number, ps.pathway FROM client_registrations cr "
+            "LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?",
+            (reg_id,)).fetchone()
+        if not row or not row['registration_number']:
+            return
+        rnum = row['registration_number']
+        pathway = row['pathway'] or 'plab'
+        ac = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
+        if not ac:
+            return
+        ac = dict(ac)
+        # Columns that exist on BOTH tables (minus keys) are the ones we mirror.
+        oa_cols = {r['column_name'] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'ops_academic_details'").fetchall()}
+        shared = [c for c in ac.keys() if c in oa_cols and c not in ('id', 'created_at', 'created_by', 'registration_number', 'pathway')]
+        existing = conn.execute(
+            "SELECT id FROM ops_academic_details WHERE registration_number = ?", (rnum,)).fetchone()
+        if existing:
+            sets = ', '.join(f"{c} = ?" for c in shared)
+            conn.execute(f"UPDATE ops_academic_details SET {sets} WHERE registration_number = ?",
+                         [ac.get(c) for c in shared] + [rnum])
+        else:
+            cols = ['registration_number', 'pathway'] + shared
+            conn.execute(
+                f"INSERT INTO ops_academic_details ({', '.join(cols)}) VALUES ({', '.join(['?']*len(cols))})",
+                [rnum, pathway] + [ac.get(c) for c in shared])
+        # Keep the PG-doctor badge in step with what the client entered.
+        _pg_started = ((ac.get('pg_done') or '').strip().lower() in ('yes', 'y', 'true', '1')
+                       and (ac.get('pg_status') or '').strip() != '')
+        if _pg_started:
+            conn.execute("UPDATE plab_clients SET is_pg_doctor = 1 WHERE registration_number = ?", (rnum,))
+    except Exception as e:
+        logging.warning(f"_sync_client_academics_to_ops reg {reg_id}: {e}")
 
 
 @app.route('/client/profile/save', methods=['POST'])
@@ -1474,14 +1519,15 @@ def client_profile_save():
         if not regs:
             flash('No registration on file.', 'error')
             return redirect(url_for('client_dashboard') + '#profile')
-        # Respect the same lock as the registration form: once ops has verified, the
-        # client can no longer self-edit — they contact their counsellor.
-        if any((r['ops_status'] or '').strip().lower() == 'verified' for r in regs):
-            flash('Your details are verified and can no longer be edited here. Please contact your counsellor for changes.', 'error')
-            return redirect(url_for('client_dashboard') + '#profile')
         reg_ids = [r['id'] for r in regs]
+        verified = any((r['ops_status'] or '').strip().lower() == 'verified' for r in regs)
 
         if section in ('personal', 'family'):
+            # Personal + contact details lock once operations verifies (contact the
+            # counsellor after that). Academic (below) stays open — it's client-owned.
+            if verified:
+                flash('Your personal details are verified and can no longer be edited here. Please contact your counsellor for changes.', 'error')
+                return redirect(url_for('client_dashboard') + '#profile')
             cols = _CLIENT_PROFILE_PERSONAL if section == 'personal' else _CLIENT_PROFILE_FAMILY
             data = {c: (request.form.get(c) or '').strip() for c in cols if c in request.form}
             if section == 'family':
@@ -1500,7 +1546,14 @@ def client_profile_save():
                              list(data.values()) + reg_ids)
 
         elif section == 'academic':
-            data = {c: (request.form.get(c) or '').strip() for c in _CLIENT_PROFILE_ACADEMIC if c in request.form}
+            # Academic details are entered + owned by the client and auto-flow to
+            # every pathway's ops Academic Details page. So they stay editable even
+            # after verification (clients complete missing dates etc. later), and each
+            # save re-syncs to ops. Write only real client_academics columns.
+            ca_cols = {r['column_name'] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'client_academics'").fetchall()}
+            data = {c: (request.form.get(c) or '').strip()
+                    for c in _CLIENT_PROFILE_ACADEMIC if c in request.form and c in ca_cols}
             if data:
                 sets = ', '.join(f"{c} = ?" for c in data)
                 for rid in reg_ids:
@@ -1512,6 +1565,7 @@ def client_profile_save():
                         keys = ['registration_id'] + list(data.keys())
                         conn.execute(f"INSERT INTO client_academics ({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
                                      [rid] + list(data.values()))
+                    _sync_client_academics_to_ops(conn, rid)
         else:
             flash('Unknown section.', 'error')
             return redirect(url_for('client_dashboard') + '#profile')
