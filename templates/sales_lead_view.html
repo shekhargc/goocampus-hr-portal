@@ -115,7 +115,7 @@
         {% set base = amt|float %}{% set total = base * 1.18 %}
         {% set rec = (closure.get('inst' ~ i ~ '_status') or '')|lower == 'received' %}
         <tr>
-          <td>{{ i }}</td>
+          <td>{{ i | installment_label }}</td>
           <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
           <td style="text-align:right;color:var(--gray-400);">₹{{ '{:,.0f}'.format(total - base) }}</td>
           <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
@@ -146,7 +146,7 @@
         {% set base = amt|float %}{% set total = base * 1.18 %}
         {% set rec = (closure.get('training_inst' ~ i ~ '_status') or '')|lower == 'received' %}
         <tr>
-          <td>{{ i }}</td>
+          <td>{{ i | installment_label }}</td>
           <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
           <td style="text-align:right;color:var(--gray-400);">₹{{ '{:,.0f}'.format(total - base) }}</td>
           <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>

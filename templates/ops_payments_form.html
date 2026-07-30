@@ -60,9 +60,9 @@
                     <input type="date" name="payment_date" value="{{ record.payment_date or '' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instalment</label>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Installment</label>
                     <select name="instalment" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Instalment</option>
+                        <option value="">Select Installment</option>
                         {% for inst in instalment_options %}
                         <option value="{{ inst }}" {% if record and record.instalment == inst %}selected{% endif %}>{{ inst }}</option>
                         {% endfor %}

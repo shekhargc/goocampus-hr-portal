@@ -68,7 +68,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                 </select>
             </div>
             <div>
-                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Instalment</label>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Installment</label>
                 <select name="instalment" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
                     <option value="">All</option>
                     {% for opt in instalment_options %}
@@ -97,7 +97,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Date</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
-                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Instalment</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Installment</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Amount (₹)</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">GST (₹)</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Total (₹)</th>
@@ -111,7 +111,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;">{{ record.payment_date|format_date }}</td>
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number|format_reg }}</td>
-                        <td style="padding:12px 16px;">{{ record.instalment or '—' }}{% if record.source == 'installment' %} <span style="display:inline-block;font-size:10px;font-weight:700;color:#9A3412;background:#FFEDD5;padding:1px 6px;border-radius:8px;margin-left:4px;">from installment</span>{% endif %}</td>
+                        <td style="padding:12px 16px;">{{ record.instalment | installment_label or '—' }}{% if record.source == 'installment' %} <span style="display:inline-block;font-size:10px;font-weight:700;color:#9A3412;background:#FFEDD5;padding:1px 6px;border-radius:8px;margin-left:4px;">from installment</span>{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.amount_paid or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.gst_paid or '—' }}</td>
                         <td style="padding:12px 16px;font-weight:500;">{{ record.total_amount_paid or '—' }}</td>
@@ -163,7 +163,7 @@ const PAY_RECORDS = {
         amount_paid: {{ (record.amount_paid or '')|tojson }},
         gst_paid: {{ (record.gst_paid or '')|tojson }},
         total_amount_paid: {{ (record.total_amount_paid or '')|tojson }},
-        instalment: {{ (record.instalment or '')|tojson }},
+        instalment: {{ (record.instalment | installment_label or '')|tojson }},
         payment_method: {{ (record.payment_method or '')|tojson }},
         total_package: {{ (record.total_package or '')|tojson }},
         notes: {{ (record.notes or '')|tojson }}
@@ -202,7 +202,7 @@ function openPayDetail(id) {
 
     <div class="drawer-grid">
         ${field('Payment Date', r.payment_date)}
-        ${field('Instalment', r.instalment)}
+        ${field('Installment', r.instalment)}
         ${field('Amount Paid', r.amount_paid)}
         ${field('GST Paid', r.gst_paid)}
         ${field('Total Amount', r.total_amount_paid)}

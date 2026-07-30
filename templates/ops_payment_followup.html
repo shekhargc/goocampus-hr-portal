@@ -28,7 +28,7 @@
                         <div style="font-weight:600;color:var(--navy);">{{ x.name }}</div>
                         <div style="font-size:0.75rem;color:var(--gray-500);">{{ x.registration_number }}</div>
                     </td>
-                    <td style="padding:0.7rem 0.9rem;">{{ x.ordinal }} installment</td>
+                    <td style="padding:0.7rem 0.9rem;">{{ x.ordinal }}</td>
                     <td style="padding:0.7rem 0.9rem;text-align:right;">
                         <div style="font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(x.total) }}</div>
                         <div style="font-size:0.72rem;color:var(--gray-500);">₹{{ '{:,.0f}'.format(x.base) }} + GST ₹{{ '{:,.0f}'.format(x.gst) }}</div>
