@@ -67,7 +67,7 @@
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
         <div>
-          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Instalment</label>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Installment</label>
           <select name="instalment" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
             <option value="">--</option>
             {% for i in instalment_options %}<option value="{{ i }}" {% if record and record.instalment==i %}selected{% endif %}>{{ i }}</option>{% endfor %}
