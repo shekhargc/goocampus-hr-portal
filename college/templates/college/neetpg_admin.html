@@ -526,7 +526,7 @@
 {% if analytics.draft_pdfs > 0 %}
 <div class="np-schedule-banner">
     <i class="fas fa-clock"></i>
-    <div><strong>Auto-Publish Active:</strong> {{ analytics.draft_pdfs }} draft{{ 's' if analytics.draft_pdfs != 1 }} queued. Publishes automatically at <strong>10:00 AM</strong>, <strong>1:00 PM</strong> &amp; <strong>5:00 PM IST</strong> daily — <strong>1 PDF per tab per slot</strong> (each doc-type queue rolls out in parallel, oldest first). Runs on the server — no need to keep the page open.</div>
+    <div><strong>Auto-Publish Active:</strong> <a href="{{ url_for('neetpg_admin', status='scheduled') }}" style="color:#1e3a8a;font-weight:700;text-decoration:underline;">{{ analytics.draft_pdfs }} draft{{ 's' if analytics.draft_pdfs != 1 }} queued</a>. Publishes automatically at <strong>10:00 AM</strong>, <strong>1:00 PM</strong> &amp; <strong>5:00 PM IST</strong> daily — <strong>1 PDF per tab per slot</strong> (each doc-type queue rolls out in parallel, oldest first). Runs on the server — no need to keep the page open. <a href="{{ url_for('neetpg_admin', status='scheduled') }}" style="color:#1e3a8a;font-weight:700;">View the queue →</a></div>
 </div>
 {% endif %}
 
@@ -719,31 +719,50 @@
 <div class="np-tab-panel active" id="panel-pdfs">
     <!-- Exam-category filter (NEET PG / DNB) -->
     <div class="np-doctype-tabs">
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='all') }}"
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='all', status=active_status) }}"
            class="np-doctype-tab {{ 'active' if active_category == 'all' else '' }}">
             All Exams <span class="np-doctype-count">{{ category_counts['all'] }}</span>
         </a>
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='neetpg') }}"
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='neetpg', status=active_status) }}"
            class="np-doctype-tab {{ 'active' if active_category == 'neetpg' else '' }}">
             NEET PG (MD/MS) <span class="np-doctype-count">{{ category_counts['neetpg'] }}</span>
         </a>
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='dnb') }}"
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category='dnb', status=active_status) }}"
            class="np-doctype-tab {{ 'active' if active_category == 'dnb' else '' }}">
             DNB (NBEMS) <span class="np-doctype-count">{{ category_counts['dnb'] }}</span>
         </a>
     </div>
     <!-- Document-type filter sub-tabs -->
     <div class="np-doctype-tabs">
-        <a href="{{ url_for('neetpg_admin', doc_type='all', category=active_category) }}"
+        <a href="{{ url_for('neetpg_admin', doc_type='all', category=active_category, status=active_status) }}"
            class="np-doctype-tab {{ 'active' if active_doc_type == 'all' else '' }}">
             All <span class="np-doctype-count">{{ doctype_counts['all'] }}</span>
         </a>
         {% for key, label in doc_types %}
-        <a href="{{ url_for('neetpg_admin', doc_type=key, category=active_category) }}"
+        <a href="{{ url_for('neetpg_admin', doc_type=key, category=active_category, status=active_status) }}"
            class="np-doctype-tab {{ 'active' if active_doc_type == key else '' }}">
             {{ label }} <span class="np-doctype-count">{{ doctype_counts.get(key, 0) }}</span>
         </a>
         {% endfor %}
+    </div>
+    <!-- Publish-status filter (see what's queued vs published) -->
+    <div class="np-doctype-tabs">
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status='all') }}"
+           class="np-doctype-tab {{ 'active' if active_status == 'all' else '' }}">
+            All <span class="np-doctype-count">{{ status_counts['all'] }}</span>
+        </a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status='published') }}"
+           class="np-doctype-tab {{ 'active' if active_status == 'published' else '' }}">
+            <i class="fas fa-check-circle" style="font-size:0.7rem;"></i> Published <span class="np-doctype-count">{{ status_counts['published'] }}</span>
+        </a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status='scheduled') }}"
+           class="np-doctype-tab {{ 'active' if active_status == 'scheduled' else '' }}">
+            <i class="fas fa-clock" style="font-size:0.7rem;"></i> Scheduled (in queue) <span class="np-doctype-count">{{ status_counts['scheduled'] }}</span>
+        </a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status='draft') }}"
+           class="np-doctype-tab {{ 'active' if active_status == 'draft' else '' }}">
+            <i class="fas fa-pen" style="font-size:0.7rem;"></i> Draft (off) <span class="np-doctype-count">{{ status_counts['draft'] }}</span>
+        </a>
     </div>
 
     <!-- Backfill quota + all-uploads -->
@@ -879,21 +898,21 @@
     <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:1.2rem 0 0.5rem;flex-wrap:wrap;">
         <span style="font-size:0.78rem;color:var(--gray-500);margin-right:8px;">Page {{ page }} of {{ total_pages }} ({{ total_pdfs_count }} PDFs)</span>
         {% if page > 1 %}
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&laquo;</a>
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=page-1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&lsaquo; Prev</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status=active_status, page=1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&laquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status=active_status, page=page-1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&lsaquo; Prev</a>
         {% endif %}
         {% for p in range(1, total_pages + 1) %}
             {% if p == page %}
             <span style="padding:6px 12px;background:var(--orange);color:white;border-radius:6px;font-size:0.8rem;font-weight:700;">{{ p }}</span>
             {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
-            <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=p) }}" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">{{ p }}</a>
+            <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status=active_status, page=p) }}" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">{{ p }}</a>
             {% elif p == 4 or p == total_pages - 2 %}
             <span style="padding:6px 4px;color:var(--gray-400);font-size:0.8rem;">...</span>
             {% endif %}
         {% endfor %}
         {% if page < total_pages %}
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=page+1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">Next &rsaquo;</a>
-        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, page=total_pages) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&raquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status=active_status, page=page+1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">Next &rsaquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, category=active_category, status=active_status, page=total_pages) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&raquo;</a>
         {% endif %}
     </div>
     {% endif %}
