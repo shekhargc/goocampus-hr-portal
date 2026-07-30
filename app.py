@@ -128,6 +128,30 @@ def format_datetime_filter(value):
         return value
 
 
+_INSTALLMENT_WORDS = {'1': 'First', '2': 'Second', '3': 'Third', '4': 'Fourth', '5': 'Fifth'}
+
+
+@app.template_filter('installment_label')
+def installment_label_filter(value):
+    """Standardise any installment label to 'First Installment' … 'Fifth Installment'.
+    Handles every legacy variant in the data: '1st', '1st Instalment', '1',
+    'First', 'First Installment'. Unknown text is returned unchanged.
+    (founder 2026-07-30 — one consistent wording everywhere)"""
+    s = str(value or '').strip()
+    if not s:
+        return ''
+    low = s.lower()
+    word = None
+    m = re.match(r'^\s*(\d)', low)
+    if m:
+        word = _INSTALLMENT_WORDS.get(m.group(1))
+    else:
+        for w in ('first', 'second', 'third', 'fourth', 'fifth'):
+            if low.startswith(w):
+                word = w.capitalize(); break
+    return f"{word} Installment" if word else s
+
+
 @app.template_filter('format_reg')
 def format_reg_filter(value):
     """Normalize registration numbers to a single canonical display:
@@ -19837,7 +19861,7 @@ def ensure_ops_tables():
                 'gmc_license_status': ['Received', 'Rejected', 'Not Received', 'On Hold'],
                 # Payment
                 'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque', 'Website Link'],
-                'instalment': ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment'],
+                'instalment': ['First Installment', 'Second Installment', 'Third Installment', 'Fourth Installment', 'Fifth Installment'],
                 # Research
                 'research_status': ['Started', 'Research Completed', 'Research Published', 'Scrapped'],
                 'author_position': ['1 st Author', '2 nd Author', 'Co-Author'],
@@ -20493,7 +20517,7 @@ GMC_LICENSE_STATUSES = ['Received', 'Not Received', 'In Process']
 
 # ── Payment dropdowns ──
 PAYMENT_METHODS = ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque']
-INSTALMENT_OPTIONS = ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment']
+INSTALMENT_OPTIONS = ['First Installment', 'Second Installment', 'Third Installment', 'Fourth Installment', 'Fifth Installment']
 
 # ── Research & Publication dropdowns ──
 RESEARCH_STATUSES = ['Started', 'In Progress', 'Completed', 'Published']
@@ -27073,7 +27097,8 @@ def ops_payments_delete(record_id):
 #  A Received installment on a new-reg client needs admin sign-off before it
 #  posts into that pathway's Payments; Pending ones show on the Follow-up page.
 # ─────────────────────────────────────────────────────────
-_INST_ORD = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th'}
+_INST_ORD = {1: 'First Installment', 2: 'Second Installment',
+             3: 'Third Installment', 4: 'Fourth Installment'}
 
 
 def _reg_pathway(conn, product_id):
@@ -27228,7 +27253,7 @@ def ops_payment_approve(reg_id, inst_no):
             " total_amount_paid, instalment, payment_method, notes, pathway, source, created_by) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'installment', ?)",
             (reg_no, pdate, amount, gst, total, _INST_ORD[inst_no], method,
-             f"Auto-posted from {_INST_ORD[inst_no]} installment (approved)", pathway, session.get('user_id')))
+             f"Auto-posted from {_INST_ORD[inst_no]} (approved)", pathway, session.get('user_id')))
         pay = conn.execute(
             "SELECT id FROM ops_payments WHERE registration_number = ? AND source = 'installment' "
             "AND instalment = ? ORDER BY id DESC LIMIT 1", (reg_no, _INST_ORD[inst_no])).fetchone()
@@ -35237,6 +35262,21 @@ try:
     run_seed_pg_lookups_once(get_db)
 except Exception as _pg_lk_err:
     logging.error(f"PG lookups seed failed: {_pg_lk_err}")
+
+# ── Standardise installment dropdown values to full words (founder 2026-07-30):
+# '1st Instalment' -> 'First Installment', etc. Idempotent; display of stored
+# legacy values is handled separately by the installment_label filter.
+try:
+    _il_conn = get_db()
+    _il_map = {'1st Instalment': 'First Installment', '2nd Instalment': 'Second Installment',
+               '3rd Instalment': 'Third Installment', '4th Instalment': 'Fourth Installment',
+               '5th Instalment': 'Fifth Installment'}
+    for _old, _new in _il_map.items():
+        _il_conn.execute("UPDATE lookup_options SET label = ?, value = ? "
+                         "WHERE category = 'instalment' AND value = ?", (_new, _new, _old))
+    _il_conn.commit(); _il_conn.close()
+except Exception as _il_err:
+    logging.error(f"instalment label normalise failed: {_il_err}")
 
 # ── Per-pathway Client & Pipeline dropdowns (Current Stage / Account Status /
 # Joined Stage / Plan Type / Lead Source) seeded from each pathway's own records,

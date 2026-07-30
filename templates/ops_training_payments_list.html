@@ -216,7 +216,7 @@
                     {% endif %}
                 </td>
                 <td>{{ r.payment_date or '—' }}</td>
-                <td>{{ r.instalment or '—' }}</td>
+                <td>{{ r.instalment | installment_label or '—' }}</td>
                 <td class="amt">{% if r.amount_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.amount_paid|float) }}{% else %}—{% endif %}</td>
                 <td class="amt">{% if r.gst_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.gst_paid|float) }}{% else %}—{% endif %}</td>
                 <td class="amt">{% if r.total_amount_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}—{% endif %}</td>

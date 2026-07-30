@@ -83,7 +83,7 @@
         <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Payment Details</h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Payment Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.payment_date or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Instalment:</span><span style="color:var(--navy);font-weight:600;">{{ record.instalment or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Instalment:</span><span style="color:var(--navy);font-weight:600;">{{ record.instalment | installment_label or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Payment Method:</span><span style="color:var(--navy);font-weight:600;">{{ record.payment_method or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration No.:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
         </div>

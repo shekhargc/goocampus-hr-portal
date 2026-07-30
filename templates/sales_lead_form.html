@@ -164,7 +164,7 @@
 
                 {% set _wlroute = (lead and lead.amc_payment_route == 'website_link') %}
                 <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments <span style="font-weight:400;color:var(--gray-500);">{% if _wlroute %}· flat AUD paid via Website Link (no GST, no conversion){% else %}· enter the total received (incl. 18% GST); the base + GST split is shown under each row{% endif %}</span></p>
-                {% set _ords = ['', '1st', '2nd', '3rd', '4th'] %}
+                {% set _ords = ['', 'First', 'Second', 'Third', 'Fourth'] %}
                 <div id="instContainer">
                 {% for i in range(1, 5) %}
                 {% set _amt = closure['inst' ~ i ~ '_amount'] if closure else None %}
@@ -308,7 +308,7 @@
                     {% for i in range(1, 5) %}
                     {% set _ta = closure['training_inst' ~ i ~ '_amount'] if closure else None %}
                     <div class="tr-inst-row" data-inst="{{ i }}" style="margin-bottom:0.7rem;{% if i > 1 and not (_ta and _ta|float > 0) %}display:none;{% endif %}">
-                        <div style="font-size:0.72rem;font-weight:700;color:#1E40AF;margin-bottom:0.25rem;">{{ ['','1st','2nd','3rd','4th'][i] }} Installment</div>
+                        <div style="font-size:0.72rem;font-weight:700;color:#1E40AF;margin-bottom:0.25rem;">{{ ['','First','Second','Third','Fourth'][i] }} Installment</div>
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.7rem;">
                             <input type="number" step="1" min="0" name="training_inst{{ i }}_amount" placeholder="{{ 'Amount (AUD)' if _tr_wlroute else 'Total (incl GST)' }}" value="{{ ('{:.0f}'.format(_ta|float) if _tr_wlroute else '{:.0f}'.format((_ta|float) * 1.18)) if _ta else '' }}" oninput="updateTrInstHint(this)"
                                    style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
