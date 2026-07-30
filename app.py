@@ -2540,7 +2540,9 @@ def client_dashboard():
     import re as _re
     _raw_name = (((account['first_name'] or '') + ' ' + (account['last_name'] or '')).strip()
                  or account['first_name'] or 'Doctor')
-    _clean_name = _re.sub(r'^\s*(dr\.?|doctor)\s+', '', _raw_name, flags=_re.I).strip() or 'Doctor'
+    # Strip a leading Dr / Dr. / Doctor prefix — including "Dr.Rachana" (no space) —
+    # so the template's single "Dr." never doubles. Won't touch names like "Drake".
+    _clean_name = _re.sub(r'^\s*(?:dr\.\s*|dr\s+|doctor\s+)', '', _raw_name, flags=_re.I).strip() or 'Doctor'
     _tpl = 'client_dashboard.html' if _onboarded else 'client_dashboard_onboarding.html'
     return render_template(_tpl,
         account=account, registrations=registrations, doc_requests=doc_requests,
@@ -30245,6 +30247,12 @@ def ops_academic_edit(rid):
                 conn.execute("UPDATE plab_clients SET is_pg_doctor = 1 WHERE registration_number = ?", (_reg,))
         except Exception:
             pass
+        # Mirror the ops edit back to the client's dashboard academic record.
+        try:
+            from core.academic_sync import sync_ops_academics_to_client
+            sync_ops_academics_to_client(conn, f.get('registration_number'))
+        except Exception as _se:
+            logging.warning(f"plab academic ops->client sync: {_se}")
         conn.commit(); conn.close()
         flash('Academic details updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_academic_list'))
