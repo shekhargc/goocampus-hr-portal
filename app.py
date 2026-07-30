@@ -4639,6 +4639,109 @@ def admin_preview_clients():
             "<th style='padding:6px 10px;text-align:left'>Status</th><th></th></tr>" + rows + "</table></div>")
 
 
+_TEST_CLIENT_MOBILE = '9000000001'
+_TEST_CLIENT_PASSWORD = 'gctest123'
+
+
+@app.route('/admin/test-client', methods=['GET', 'POST'])
+@login_required
+def admin_test_client():
+    """Create (or delete) ONE clearly-marked, dashboard-ready TEST client so the
+    founder can log in on a phone and try the real client login + PWA. It skips the
+    onboarding gates (onboarding_gated=0) and is ops-verified so it never lands in a
+    verification queue, and it has NO plab_clients master so it never shows on a
+    pathway client list. Fully reversible via Delete. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    action = request.form.get('action') if request.method == 'POST' else None
+    msg = ''
+    conn = get_db()
+    try:
+        acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ?", (_TEST_CLIENT_MOBILE,)).fetchone()
+
+        if action == 'delete' and acct:
+            regs = conn.execute("SELECT id FROM client_registrations WHERE account_id = ?", (acct['id'],)).fetchall()
+            for r in regs:
+                conn.execute("DELETE FROM client_academics WHERE registration_id = ?", (r['id'],))
+                conn.execute("DELETE FROM client_documents WHERE registration_id = ?", (r['id'],))
+            conn.execute("DELETE FROM client_agreements WHERE account_id = ?", (acct['id'],))
+            conn.execute("DELETE FROM client_registrations WHERE account_id = ?", (acct['id'],))
+            conn.execute("DELETE FROM client_accounts WHERE id = ?", (acct['id'],))
+            conn.commit()
+            acct = None
+            msg = "<b style='color:#065f46'>Test client deleted.</b> The CRM is clean again."
+
+        elif action in ('create', 'reset'):
+            # A consulting-style product + an employee to make the dashboard look real.
+            prod = conn.execute(
+                "SELECT id, name FROM products_services WHERE COALESCE(pathway,'') IN ('consulting','plab') "
+                "ORDER BY id LIMIT 1").fetchone() or conn.execute(
+                "SELECT id, name FROM products_services ORDER BY id LIMIT 1").fetchone()
+            emp = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY id LIMIT 1").fetchone()
+            pid = prod['id'] if prod else None
+            eid = emp['id'] if emp else None
+            if not acct:
+                acct_id = conn.execute(
+                    "INSERT INTO client_accounts (mobile, email, password_hash, first_name, last_name, is_active) "
+                    "VALUES (?, ?, ?, ?, ?, 1) RETURNING id",
+                    (_TEST_CLIENT_MOBILE, 'test@goocampus.in', hash_password(_TEST_CLIENT_PASSWORD),
+                     'ZZ Test', 'Client')).fetchone()['id']
+            else:
+                acct_id = acct['id']
+                conn.execute("UPDATE client_accounts SET password_hash = ?, first_name='ZZ Test', last_name='Client', is_active = 1 WHERE id = ?",
+                             (hash_password(_TEST_CLIENT_PASSWORD), acct_id))
+                conn.execute("DELETE FROM client_registrations WHERE account_id = ?", (acct_id,))
+            reg_id = conn.execute(
+                "INSERT INTO client_registrations (account_id, product_id, counsellor_id, plan_type, "
+                "prefix, first_name, last_name, dob, mobile, email, city, state, country, "
+                "package_amount, final_package, form_status, client_submitted_at, onboarding_gated, "
+                "sales_completed, ops_status, registration_number, "
+                "inst1_amount, inst1_status, inst1_method, inst2_amount, inst2_status) "
+                "VALUES (?, ?, ?, ?, 'Dr.', 'ZZ Test', 'Client', '1995-01-01', ?, 'test@goocampus.in', "
+                "'Bengaluru', 'Karnataka', 'India', 100000, 100000, 'submitted', CURRENT_TIMESTAMP, 0, "
+                "1, 'verified', 'ZZTEST-001', 50000, 'received', 'UPI', 50000, 'pending') RETURNING id",
+                (acct_id, pid, eid, 'Test Plan', _TEST_CLIENT_MOBILE)).fetchone()['id']
+            conn.execute(
+                "INSERT INTO client_academics (registration_id, country, fmg_medical_college, mbbs_status, "
+                "mbbs_start_date, mbbs_end_date, internship_status, working_status, pg_done) "
+                "VALUES (?, 'India', 'Test Medical College', 'Completed', '2013-08-01', '2018-06-30', "
+                "'Completed', 'No', 'No')", (reg_id,))
+            conn.commit()
+            acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ?", (_TEST_CLIENT_MOBILE,)).fetchone()
+            msg = "<b style='color:#065f46'>Test client ready.</b> Log in with the details below."
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        msg = f"<b style='color:#b91c1c'>Error: {esc(e)}</b>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    exists = bool(acct)
+    login_url = 'https://goocampus-hr-portal-staging.onrender.com/client/login'
+    box = (f"<div style='background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px;margin:14px 0'>"
+           f"<div style='font-size:13px;color:#065f46;margin-bottom:8px'>Test client login</div>"
+           f"<div><b>Mobile:</b> {_TEST_CLIENT_MOBILE}</div><div><b>Password:</b> {_TEST_CLIENT_PASSWORD}</div>"
+           f"<div style='margin-top:8px'><a href='{login_url}' target='_blank' style='color:#F57C1F'>{login_url}</a></div>"
+           f"</div>") if exists else "<p style='color:#64748b'>No test client exists yet.</p>"
+    return ("<div style='font-family:system-ui;max-width:640px;margin:30px auto'>"
+            "<h2>Test client (for mobile / PWA testing)</h2>"
+            f"{('<p>'+msg+'</p>') if msg else ''}"
+            "<p style='color:#64748b;font-size:14px'>A safe, clearly-marked test account ('ZZ Test Client'). "
+            "It skips onboarding gates and is verified, so it never shows in an ops verification queue or a "
+            "pathway client list. <b>Delete it when you're done</b> — this DB is shared with live.</p>"
+            f"{box}"
+            "<form method='POST' style='display:flex;gap:10px;margin-top:8px'>"
+            f"<button name='action' value='{'reset' if exists else 'create'}' "
+            "style='padding:9px 16px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:600'>"
+            f"{'Reset test client' if exists else 'Create test client'}</button>"
+            + ("<button name='action' value='delete' style='padding:9px 16px;background:#fff;color:#b91c1c;"
+               "border:1px solid #FCA5A5;border-radius:8px;font-weight:600'>Delete test client</button>" if exists else "")
+            + "</form></div>")
+
+
 @app.route('/admin/view-as-client/<int:account_id>')
 @login_required
 def admin_view_as_client(account_id):
