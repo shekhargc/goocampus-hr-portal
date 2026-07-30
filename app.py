@@ -1355,6 +1355,83 @@ def client_logout():
     return redirect(url_for('client_login_page'))
 
 
+@app.route('/client/manifest.webmanifest')
+def client_manifest():
+    """PWA manifest so the client dashboard is installable ('Add to Home Screen')
+    and opens full-screen like an app on mobile. (founder 2026-07-30)"""
+    return jsonify({
+        "name": "GooCampus — My Dashboard",
+        "short_name": "GooCampus",
+        "start_url": "/client/dashboard",
+        "scope": "/client/",
+        "display": "standalone",
+        "background_color": "#0F1B33",
+        "theme_color": "#0F1B33",
+        "icons": [
+            {"src": "/static/logo.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/logo.png", "sizes": "512x512", "type": "image/png"},
+        ],
+    })
+
+
+@app.route('/client/heartbeat', methods=['POST'])
+def client_heartbeat():
+    """The client dashboard pings this every ~30s while open. Stamps last_seen_at so
+    ops can show a live 'Online' badge on the client profile. (founder 2026-07-30)"""
+    if not session.get('is_client'):
+        return jsonify({'ok': False}), 401
+    conn = get_db()
+    try:
+        conn.execute("UPDATE client_accounts SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     (session.get('user_id'),))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+
+@app.route('/client/change-password', methods=['POST'])
+def client_change_password():
+    """Client Settings → change password. Verifies the current password, then sets
+    the new one (min 6 chars). (founder 2026-07-30)"""
+    if not session.get('is_client'):
+        return redirect(url_for('client_login_page'))
+    current = (request.form.get('current_password') or '').strip()
+    new = (request.form.get('new_password') or '').strip()
+    confirm = (request.form.get('confirm_password') or '').strip()
+    if not current or not new:
+        flash('Please fill in all password fields.', 'error')
+        return redirect(url_for('client_dashboard') + '#settings')
+    if len(new) < 6:
+        flash('Your new password must be at least 6 characters.', 'error')
+        return redirect(url_for('client_dashboard') + '#settings')
+    if new != confirm:
+        flash('The new password and confirmation do not match.', 'error')
+        return redirect(url_for('client_dashboard') + '#settings')
+    conn = get_db()
+    try:
+        acct = conn.execute("SELECT password_hash FROM client_accounts WHERE id = ?",
+                            (session.get('user_id'),)).fetchone()
+        if not acct or acct['password_hash'] != hash_password(current):
+            flash('Your current password is incorrect.', 'error')
+            return redirect(url_for('client_dashboard') + '#settings')
+        conn.execute("UPDATE client_accounts SET password_hash = ? WHERE id = ?",
+                     (hash_password(new), session.get('user_id')))
+        conn.commit()
+        flash('Your password has been updated.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_change_password: %s", e)
+        flash('Could not update the password right now.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('client_dashboard') + '#settings')
+
+
 # ── Refund Policy: editable policy doc + client digital agreement ──
 
 _DEFAULT_REFUND_POLICY_HTML = '''<p>Cancellations will be considered only if the request is made immediately after enrolment. However, the cancellation request may not be entertained if the services have already been initiated or scheduled on your behalf.</p>
@@ -2264,7 +2341,15 @@ def client_dashboard():
             photo_doc = {'url': url_for('client_serve_reg_doc', doc_id=_prow['id'])}
 
     conn.close()
-    return render_template('client_dashboard.html',
+    # Choose the view: once the client has SUBMITTED their registration (and thus
+    # passed the contract/refund/welcome-call gates to reach here), show the new
+    # full SaaS dashboard. While they're still filling the form / uploading the
+    # photo, keep the original onboarding flow. (founder 2026-07-30)
+    _primary = registrations[0] if registrations else None
+    _onboarded = bool(_primary and (_primary.get('form_status') if hasattr(_primary, 'get')
+                                    else _primary['form_status']) == 'submitted')
+    _tpl = 'client_dashboard.html' if _onboarded else 'client_dashboard_onboarding.html'
+    return render_template(_tpl,
         account=account, registrations=registrations, doc_requests=doc_requests,
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
         photo_doc=photo_doc,
@@ -12411,6 +12496,9 @@ def ensure_crm_tables():
             # 1 = PG Doctor. Auto-set when PG is started/completed; also bulk-settable
             # for the founder's list of existing PG doctors.
             ('plab_clients',        'is_pg_doctor', 'INTEGER DEFAULT 0'),
+            # Client dashboard presence: heartbeat updates this while the client has
+            # their dashboard open, so ops can see a live "● Online" badge.
+            ('client_accounts',     'last_seen_at', 'TIMESTAMP'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
