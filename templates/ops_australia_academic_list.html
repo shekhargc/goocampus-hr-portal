@@ -318,14 +318,26 @@
           fmg_medical_college: {{ (r.fmg_medical_college or '')|tojson }},
           country: {{ (r.country or '')|tojson }},
           mbbs_status: {{ (r.mbbs_status or '')|tojson }},
+          mbbs_start_date: {{ (r.mbbs_start_date or '')|tojson }},
           mbbs_end_date: {{ (r.mbbs_end_date or '')|tojson }},
           speciality_interest_1: {{ (r.speciality_interest_1 or '')|tojson }},
           speciality_interest_2: {{ (r.speciality_interest_2 or '')|tojson }},
           internship_status: {{ (r.internship_status or '')|tojson }},
           internship_hospital: {{ (r.internship_hospital or '')|tojson }},
           internship_location: {{ (r.internship_location or '')|tojson }},
+          internship_start_date: {{ (r.internship_start_date or '')|tojson }},
+          internship_end_date: {{ (r.internship_end_date or '')|tojson }},
+          internship_gap: {{ (r.internship_gap or '')|tojson }},
+          gap_in_months: {{ (r.gap_in_months or '')|tojson }},
+          gap_reason: {{ (r.gap_reason or '')|tojson }},
           working_status: {{ (r.working_status or '')|tojson }},
-          working_hospital_name: {{ (r.working_hospital_name or '')|tojson }}
+          working_hospital_name: {{ (r.working_hospital_name or '')|tojson }},
+          pg_done: {{ (r.pg_done or '')|tojson }},
+          pg_type: {{ (r.pg_type or '')|tojson }},
+          pg_specialty: {{ (r.pg_specialty or '')|tojson }},
+          pg_college: {{ (r.pg_college or '')|tojson }},
+          pg_status: {{ (r.pg_status or '')|tojson }},
+          additional_info: {{ (r.additional_info or '')|tojson }}
       },
       {% endfor %}
   };
@@ -357,14 +369,14 @@
           + '<div class="emp-avatar-lg-ph">' + (initials || '?') + '</div>'
           + '<div><p class="name">' + (r.name || '—') + '</p>'
           + '<div class="meta">' + (r.registration_number || '') + '</div></div></div>'
-          + '<div class="drawer-grid">'
+          + '<div class="drawer-section"><h4>Medical College &amp; MBBS</h4><div class="drawer-grid">'
           + field('IMG / FMG', r.img_fmg)
           + field('Medical College', college)
           + field('Country', r.country)
           + field('MBBS Status', r.mbbs_status)
+          + field('MBBS Start Date', r.mbbs_start_date)
           + field('MBBS End Date', r.mbbs_end_date)
-          + field('Working Status', r.working_status)
-          + '</div>'
+          + '</div></div>'
           + '<div class="drawer-section"><h4>Specialities</h4><div class="drawer-grid">'
           + field('Speciality 1', r.speciality_interest_1)
           + field('Speciality 2', r.speciality_interest_2)
@@ -373,10 +385,25 @@
           + field('Status', r.internship_status)
           + field('Hospital', r.internship_hospital)
           + field('Location', r.internship_location)
+          + field('Start Date', r.internship_start_date)
+          + field('End Date', r.internship_end_date)
+          + field('Gap?', r.internship_gap)
+          + field('Gap (months)', r.gap_in_months)
+          + field('Gap Reason', r.gap_reason)
           + '</div></div>'
           + '<div class="drawer-section"><h4>Working</h4><div class="drawer-grid">'
           + field('Status', r.working_status)
           + field('Hospital', r.working_hospital_name)
+          + '</div></div>'
+          + '<div class="drawer-section"><h4>Postgraduate</h4><div class="drawer-grid">'
+          + field('Done / doing PG?', r.pg_done)
+          + field('PG Type', r.pg_type)
+          + field('PG Specialty', r.pg_specialty)
+          + field('PG College', r.pg_college)
+          + field('PG Status', r.pg_status)
+          + '</div></div>'
+          + '<div class="drawer-section"><h4>Anything else the client told us</h4><div class="drawer-grid">'
+          + '<div class="drawer-field full"><div class="value">' + (r.additional_info || '<span style="color:var(--gray-400);">—</span>') + '</div></div>'
           + '</div></div>';
 
       document.getElementById('auAcadDrawerBody').innerHTML = html;

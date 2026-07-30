@@ -62,13 +62,7 @@ def ops_consulting_academic_list():
     total = 0
 
     try:
-        sql = '''SELECT a.id, a.registration_number, a.img_fmg,
-                        a.img_medical_college, a.fmg_medical_college,
-                        a.country, a.mbbs_status, a.mbbs_end_date,
-                        a.speciality_interest_1, a.speciality_interest_2,
-                        a.internship_status, a.internship_hospital,
-                        a.internship_location, a.working_status,
-                        a.working_hospital_name,
+        sql = '''SELECT a.*,
                         p.first_name, p.last_name, p.prefix
                    FROM ops_academic_details a
                    LEFT JOIN plab_clients p
@@ -221,7 +215,7 @@ def ops_consulting_academic_edit_save(rid):
     conn = get_db()
     try:
         existing = conn.execute(
-            """SELECT id FROM ops_academic_details
+            """SELECT id, registration_number FROM ops_academic_details
                 WHERE id = ? AND COALESCE(pathway, 'plab') = 'consulting' """,
             (rid,),
         ).fetchone()
@@ -250,6 +244,12 @@ def ops_consulting_academic_edit_save(rid):
                        AND COALESCE(pathway, 'plab') = 'consulting' """,
                 params,
             )
+            # Mirror the edit back to the client's dashboard record.
+            try:
+                from core.academic_sync import sync_ops_academics_to_client
+                sync_ops_academics_to_client(conn, existing['registration_number'])
+            except Exception as _se:
+                logging.warning(f"consulting academic ops->client sync: {_se}")
             conn.commit()
             flash('Academic details saved.', 'success')
         else:

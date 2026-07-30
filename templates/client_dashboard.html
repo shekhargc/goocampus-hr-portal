@@ -1,759 +1,662 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Portal &mdash; GooCampus</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        :root {
-            --gc-navy: #1e3a5f;
-            --gc-orange: #f97316;
-            --gc-orange-light: #fff7ed;
-            --gc-navy-light: #e8edf3;
-        }
-        body {
-            background: #f4f6f9;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-        }
-        .gc-navbar {
-            background: var(--gc-navy);
-            padding: 0.75rem 0;
-        }
-        .gc-navbar .navbar-brand {
-            color: #fff;
-            font-weight: 700;
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .gc-navbar .navbar-brand span {
-            color: var(--gc-orange);
-        }
-        .gc-navbar .nav-link {
-            color: rgba(255,255,255,0.85);
-            font-weight: 500;
-        }
-        .gc-navbar .nav-link:hover {
-            color: #fff;
-        }
-        .gc-navbar .client-name {
-            color: #fff;
-            font-weight: 500;
-            margin-right: 1rem;
-        }
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--gc-navy) 0%, #2c5282 100%);
-            color: #fff;
-            border-radius: 12px;
-            padding: 2rem 2.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .welcome-banner h2 {
-            margin: 0;
-            font-weight: 700;
-            font-size: 1.6rem;
-        }
-        .welcome-banner p {
-            margin: 0.5rem 0 0;
-            opacity: 0.85;
-            font-size: 0.95rem;
-        }
-        .doc-alert {
-            background: var(--gc-orange-light);
-            border: 1px solid var(--gc-orange);
-            border-radius: 10px;
-            padding: 1rem 1.5rem;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        .doc-alert i {
-            color: var(--gc-orange);
-            font-size: 1.4rem;
-        }
-        .doc-alert .doc-alert-text {
-            font-weight: 600;
-            color: #92400e;
-        }
-        .doc-alert .doc-alert-count {
-            background: var(--gc-orange);
-            color: #fff;
-            border-radius: 50%;
-            width: 26px;
-            height: 26px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 700;
-            margin-left: 0.5rem;
-        }
-        .reg-card {
-            background: #fff;
-            border-radius: 12px;
-            border: 1px solid #e5e7eb;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            transition: box-shadow 0.2s;
-        }
-        .reg-card:hover {
-            box-shadow: 0 4px 16px rgba(30,58,95,0.1);
-        }
-        .reg-card .product-name {
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: var(--gc-navy);
-            margin-bottom: 0.25rem;
-        }
-        .reg-card .reg-number {
-            font-size: 0.85rem;
-            color: #6b7280;
-            margin-bottom: 0.75rem;
-        }
-        .badge-form {
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 0.3em 0.7em;
-            border-radius: 6px;
-        }
-        .badge-draft {
-            background: #fef3c7;
-            color: #92400e;
-        }
-        .badge-submitted {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-        .badge-pending {
-            background: #f3f4f6;
-            color: #6b7280;
-        }
-        .badge-verified {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        .badge-confirmed {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        .badge-onboarded {
-            background: #059669;
-            color: #fff;
-            font-size: 0.8rem;
-            padding: 0.35em 0.85em;
-            border-radius: 6px;
-        }
-        .progress-section {
-            margin: 0.75rem 0;
-        }
-        .progress-section .progress {
-            height: 8px;
-            border-radius: 4px;
-            background: #e5e7eb;
-        }
-        .progress-section .progress-bar {
-            background: var(--gc-orange);
-            border-radius: 4px;
-        }
-        .progress-section .step-label {
-            font-size: 0.78rem;
-            color: #6b7280;
-            margin-top: 0.25rem;
-        }
-        .btn-gc-primary {
-            background: var(--gc-orange);
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 1.25rem;
-            font-weight: 600;
-            font-size: 0.88rem;
-        }
-        .btn-gc-primary:hover {
-            background: #ea580c;
-            color: #fff;
-        }
-        .btn-gc-outline {
-            background: transparent;
-            color: var(--gc-navy);
-            border: 1.5px solid var(--gc-navy);
-            border-radius: 8px;
-            padding: 0.5rem 1.25rem;
-            font-weight: 600;
-            font-size: 0.88rem;
-        }
-        .btn-gc-outline:hover {
-            background: var(--gc-navy);
-            color: #fff;
-        }
-        .created-date {
-            font-size: 0.78rem;
-            color: #9ca3af;
-        }
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-        }
-        .empty-state i {
-            font-size: 3rem;
-            color: #d1d5db;
-            margin-bottom: 1rem;
-        }
-        .empty-state h5 {
-            color: #6b7280;
-            font-weight: 600;
-        }
-        .empty-state p {
-            color: #9ca3af;
-            font-size: 0.9rem;
-        }
-        .flash-msg {
-            border-radius: 8px;
-            margin-bottom: 1rem;
-        }
-        .section-title {
-            font-weight: 700;
-            color: var(--gc-navy);
-            font-size: 1.15rem;
-            margin-bottom: 1rem;
-        }
-        @media (max-width: 576px) {
-            .welcome-banner {
-                padding: 1.25rem 1.5rem;
-            }
-            .welcome-banner h2 {
-                font-size: 1.25rem;
-            }
-            .reg-card {
-                padding: 1rem;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0F1B33">
+<title>My Dashboard — GooCampus</title>
+<link rel="manifest" href="/client/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/logo.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="GooCampus">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  :root{ --orange:#F57C1F; --orange-d:#D96E0E; --navy:#0F1B33; --navy-2:#1B2A4A;
+         --ink:#0F172A; --muted:#64748B; --line:#E2E8F0; --bg:#F1F5F9; --card:#fff;
+         --ok:#16A34A; --okbg:#ECFDF5; --warn:#B45309; --sidebar:264px; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg);
+        color:var(--ink); -webkit-font-smoothing:antialiased; }
+  a{ text-decoration:none; color:inherit; }
+
+  /* ── Sidebar ── */
+  .sidebar{ position:fixed; top:0; left:0; bottom:0; width:var(--sidebar); background:var(--navy);
+            color:#fff; display:flex; flex-direction:column; z-index:60; transition:transform .25s ease; }
+  .sb-brand{ display:flex; align-items:center; gap:10px; padding:20px 20px 16px; }
+  .sb-brand img{ height:34px; width:auto; }
+  .sb-user{ padding:6px 20px 18px; border-bottom:1px solid rgba(255,255,255,.08); }
+  .sb-avatar{ width:52px; height:52px; border-radius:50%; background:#FFF7ED; color:var(--orange);
+              display:flex; align-items:center; justify-content:center; font-weight:800; font-size:20px;
+              overflow:hidden; margin-bottom:8px; }
+  .sb-avatar img{ width:100%; height:100%; object-fit:cover; }
+  .sb-name{ font-weight:700; font-size:15px; }
+  .sb-sub{ font-size:12px; color:rgba(255,255,255,.55); margin-top:2px; }
+  .sb-nav{ flex:1; overflow-y:auto; padding:12px 12px; }
+  .sb-link{ display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:10px;
+            color:rgba(255,255,255,.72); font-size:14.5px; font-weight:500; cursor:pointer; margin-bottom:2px; }
+  .sb-link i{ font-size:17px; width:20px; text-align:center; }
+  .sb-link:hover{ background:rgba(255,255,255,.06); color:#fff; }
+  .sb-link.active{ background:var(--orange); color:#fff; box-shadow:0 6px 16px rgba(245,124,31,.3); }
+  .sb-foot{ padding:12px; border-top:1px solid rgba(255,255,255,.08); }
+  .sb-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px;
+              color:rgba(255,255,255,.7); font-size:14px; }
+  .sb-logout:hover{ background:rgba(239,68,68,.15); color:#FCA5A5; }
+
+  /* ── Top bar ── */
+  .topbar{ position:sticky; top:0; height:64px; background:#fff; border-bottom:1px solid var(--line);
+           display:flex; align-items:center; gap:14px; padding:0 24px; z-index:40; }
+  .hamburger{ display:none; font-size:22px; color:var(--navy); background:none; border:none; cursor:pointer; }
+  .topbar h1{ font-size:19px; font-weight:700; color:var(--navy); }
+  .topbar .spacer{ flex:1; }
+  .topbar .greet{ font-size:13px; color:var(--muted); }
+
+  /* ── Layout ── */
+  .main{ margin-left:var(--sidebar); min-height:100vh; }
+  .content{ padding:24px; max-width:1080px; }
+  .backdrop{ display:none; position:fixed; inset:0; background:rgba(15,27,51,.5); z-index:55; }
+
+  /* ── Cards & bits ── */
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px;
+         margin-bottom:18px; box-shadow:0 1px 2px rgba(15,27,51,.04); }
+  .card h3{ font-size:15px; font-weight:700; color:var(--navy); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  .card h3 i{ color:var(--orange); }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:14px 26px; }
+  @media(max-width:560px){ .grid2{ grid-template-columns:1fr; } }
+  .field .k{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; }
+  .field .v{ font-size:14.5px; font-weight:600; color:var(--ink); margin-top:2px; }
+  .chip{ display:inline-block; padding:3px 11px; border-radius:999px; font-size:12px; font-weight:700; }
+  .chip-ok{ background:var(--okbg); color:var(--ok); } .chip-gray{ background:#F1F5F9; color:#475569; }
+  .chip-warn{ background:#FFFBEB; color:var(--warn); } .chip-blue{ background:#EFF6FF; color:#1E40AF; }
+  .hero{ background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 70%); color:#fff; border:none; }
+  .hero h2{ font-size:22px; font-weight:800; } .hero p{ color:rgba(255,255,255,.7); font-size:14px; margin-top:4px; }
+  .section{ display:none; } .section.active{ display:block; animation:fade .2s ease; }
+  @keyframes fade{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none; } }
+  .btn{ display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:9px; font-weight:600;
+        font-size:14px; border:none; cursor:pointer; }
+  .btn-primary{ background:var(--orange); color:#fff; } .btn-ghost{ background:#fff; color:var(--navy); border:1px solid var(--line); }
+  .flash{ padding:11px 16px; border-radius:10px; margin-bottom:16px; font-size:14px; font-weight:500; }
+  .flash.success{ background:var(--okbg); color:#065F46; border:1px solid #A7F3D0; }
+  .flash.error{ background:#FEF2F2; color:#991B1B; border:1px solid #FCA5A5; }
+  .flash.warning,.flash.info{ background:#FFFBEB; color:#92400E; border:1px solid #FDE68A; }
+  table.pay{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.pay th{ text-align:left; color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase;
+                padding:8px 10px; border-bottom:1px solid var(--line); }
+  table.pay td{ padding:9px 10px; border-bottom:1px solid #F1F5F9; }
+  .totrow{ display:flex; justify-content:space-between; padding:8px 0; font-size:14px; }
+  .totrow.big{ font-weight:800; color:var(--navy); font-size:16px; border-top:1px solid var(--line); margin-top:6px; padding-top:12px; }
+  .in-field{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px; font-size:14px; font-family:inherit; }
+  .in-lbl{ display:block; font-size:12px; font-weight:600; color:var(--navy); margin-bottom:5px; }
+  .btn-sm{ padding:6px 12px; font-size:13px; }
+
+  /* Avatar photo + change badge */
+  .sb-avatar{ position:relative; cursor:pointer; }
+  .avatar-cam{ position:absolute; right:-2px; bottom:-2px; width:22px; height:22px; border-radius:50%;
+               background:var(--orange); color:#fff; display:flex; align-items:center; justify-content:center;
+               font-size:11px; border:2px solid var(--navy); }
+
+  /* Profile tabs */
+  .ptabs{ display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:16px; flex-wrap:wrap; }
+  .ptab{ background:none; border:none; padding:10px 14px; font-size:14px; font-weight:600; color:var(--muted);
+         cursor:pointer; border-bottom:2px solid transparent; font-family:inherit; display:flex; align-items:center; gap:7px; }
+  .ptab:hover{ color:var(--navy); }
+  .ptab.active{ color:var(--orange); border-bottom-color:var(--orange); }
+  .ppane{ display:none; } .ppane.active{ display:block; }
+  .pane-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .pane-head h3{ margin:0; }
+  .edit-hint{ font-size:12.5px; color:var(--muted); margin-bottom:12px; }
+  .edit-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .pedit .grid2 > div{ margin-bottom:4px; }
+  .v-empty{ color:#94A3B8; font-style:italic; font-weight:400; }
+  .acad-group{ text-transform:uppercase; font-size:11px; font-weight:700; color:var(--orange);
+               letter-spacing:.03em; margin:16px 0 8px; }
+  .acad-group:first-child{ margin-top:0; }
+  .lock-note{ background:#FFF7ED; border:1px solid #FED7AA; color:#9A3412; border-radius:10px;
+              padding:12px 14px; font-size:13px; line-height:1.5; margin-bottom:14px; }
+
+  /* Service delivery */
+  .svc-list{ display:flex; flex-direction:column; gap:10px; }
+  .svc-item{ border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .svc-name{ font-weight:700; font-size:14.5px; color:var(--navy); display:flex; align-items:center; gap:8px; }
+  .svc-qty{ font-size:12px; font-weight:600; color:var(--orange); background:#FFF7ED; padding:1px 8px; border-radius:20px; }
+  .svc-desc{ margin-top:7px; padding-left:24px; }
+  .svc-line{ position:relative; font-size:13.5px; color:var(--ink); line-height:1.5; padding-left:14px; margin-bottom:3px; }
+  .svc-line::before{ content:'•'; position:absolute; left:0; color:var(--orange); }
+  .acc{ border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .acc-head{ width:100%; display:flex; justify-content:space-between; align-items:center; background:#F8FAFC;
+             border:none; padding:13px 15px; font-size:14px; font-weight:700; color:var(--navy); cursor:pointer; font-family:inherit; }
+  .acc-head span{ display:flex; align-items:center; gap:8px; }
+  .acc-chev{ transition:transform .2s; }
+  .acc.open .acc-chev{ transform:rotate(180deg); }
+  .acc-body{ display:none; padding:4px 14px 14px; }
+  .acc.open .acc-body{ display:block; }
+
+  @media(max-width:860px){
+    .sidebar{ transform:translateX(-100%); box-shadow:0 0 40px rgba(0,0,0,.3); }
+    .sidebar.open{ transform:none; } .backdrop.open{ display:block; }
+    .main{ margin-left:0; } .hamburger{ display:block; } .content{ padding:16px; }
+  }
+</style>
 </head>
-<body>
-    <!-- Navbar -->
-    <nav class="gc-navbar navbar navbar-expand-md">
-        <div class="container">
-            <a class="navbar-brand" href="/client/dashboard">
-                <img src="/static/logo-white.png" alt="GooCampus" style="height:34px;width:auto;display:block;">
-            </a>
-            <div class="d-flex align-items-center ms-auto">
-                <span class="client-name d-none d-sm-inline">
-                    <i class="bi bi-person-circle me-1"></i>{{ session.client_name }}
-                </span>
-                <a href="/client/refund-policy" class="nav-link me-2">
-                    <i class="bi bi-file-earmark-text me-1"></i>Refund Policy
-                </a>
-                <a href="/client/logout" class="nav-link">
-                    <i class="bi bi-box-arrow-right me-1"></i>Logout
-                </a>
-            </div>
-        </div>
-    </nav>
+<body{% if session.get('client_preview') %} style="padding-top:44px"{% endif %}>
+{% if session.get('client_preview') %}
+<div style="position:fixed;top:0;left:0;right:0;height:44px;z-index:200;background:#0F1B33;color:#fff;
+            display:flex;align-items:center;gap:12px;padding:0 16px;font-size:13.5px;
+            font-family:'Inter',-apple-system,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25)">
+  <i class="bi bi-eye-fill" style="color:#F57C1F"></i>
+  <span><strong>Admin preview</strong> — viewing {{ (account.first_name or '') }} {{ (account.last_name or '') }}'s dashboard. Nothing here changes any data.</span>
+  <span style="flex:1"></span>
+  <a href="/admin/exit-client-preview" style="background:#F57C1F;color:#fff;padding:5px 14px;border-radius:6px;font-weight:600">Exit preview</a>
+</div>
+{% endif %}
+{% set reg = registrations[0] if registrations else None %}
+{% set _fullname = ((account.first_name or '') ~ ' ' ~ (account.last_name or '')).strip() or account.first_name or 'Doctor' %}
+{% set _initials = ((account.first_name or 'D')[0] ~ ((account.last_name or ' ')[0])).upper() %}
 
-    <!-- Main Content -->
-    <div class="container py-4">
+<!-- ── Sidebar ── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand"><img src="/static/logo-white.png" alt="GooCampus" onerror="this.style.display='none'"><span style="font-weight:800;font-size:17px;">GooCampus</span></div>
+  <div class="sb-user">
+    <div class="sb-avatar" id="avatarBox" {% if not session.get('client_preview') %}onclick="pickPhoto()" title="Change your photo"{% endif %}>
+      {% if photo_doc %}<img src="{{ photo_doc.url }}" alt="">{% else %}<i class="bi bi-person-fill" style="font-size:30px;color:var(--orange)"></i>{% endif %}
+      {% if not session.get('client_preview') %}<span class="avatar-cam"><i class="bi bi-camera-fill"></i></span>{% endif %}
+    </div>
+    <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="uploadPhoto(this)">
+    <div class="sb-name">Dr. {{ client_name_clean }}</div>
+    <div class="sb-sub">{% if reg %}{{ reg.product_name or 'GooCampus Client' }}{% else %}GooCampus Client{% endif %}</div>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-link active" data-section="overview"><i class="bi bi-grid-1x2-fill"></i> Overview</div>
+    <div class="sb-link" data-section="profile"><i class="bi bi-person-vcard"></i> My Profile</div>
+    <div class="sb-link" data-section="payments"><i class="bi bi-wallet2"></i> Payments</div>
+    <div class="sb-link" data-section="service"><i class="bi bi-box-seam"></i> Service Delivery</div>
+    <div class="sb-link" data-section="documents"><i class="bi bi-folder2-open"></i> Documents</div>
+    <div class="sb-link" data-section="agreements"><i class="bi bi-file-earmark-check"></i> Agreements</div>
+    <div class="sb-link" data-section="call"><i class="bi bi-telephone-inbound"></i> Welcome Call</div>
+    <div class="sb-link" data-section="settings"><i class="bi bi-gear"></i> Settings</div>
+  </nav>
+  <div class="sb-foot"><a href="/client/logout" class="sb-logout"><i class="bi bi-box-arrow-right"></i> Log out</a></div>
+</aside>
+<div class="backdrop" id="backdrop" onclick="closeSidebar()"></div>
 
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ 'success' if category == 'success' else ('danger' if category == 'error' else 'info') }} flash-msg alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
+<div class="main">
+  <div class="topbar">
+    <button class="hamburger" onclick="openSidebar()"><i class="bi bi-list"></i></button>
+    <h1 id="pageTitle">Overview</h1>
+    <div class="spacer"></div>
+    <div class="greet">Welcome, Doctor</div>
+  </div>
 
-        <!-- Welcome Banner -->
-        <div class="welcome-banner">
-            {% if first_login %}
-            {% set _full_name = ((account.first_name or '') ~ ' ' ~ (account.last_name or '')) %}
-            <h2>Welcome, {{ _full_name.strip() or account.first_name }}</h2>
-            {% else %}
-            <h2>Welcome back, {{ account.first_name }}</h2>
-            {% endif %}
-            <p>Manage your registrations and track your application progress below.</p>
-        </div>
+  <div class="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+    {% endwith %}
 
-        <!-- Onboarding progress strip (Registration → … → Completed) -->
-        {% if onboarding_stages %}
+    <!-- ══ OVERVIEW ══ -->
+    <div class="section active" id="sec-overview">
+      <div class="card hero">
+        <h2>Welcome, Doctor 👋</h2>
+        <p>Your GooCampus journey, all in one place. Use the menu to view your details, payments, documents and more.</p>
+      </div>
+      {% if onboarding_stages %}
+      <div class="card"><h3><i class="bi bi-signpost-2-fill"></i> Your journey</h3>
         {% with stages = onboarding_stages %}{% include '_onboarding_strip.html' %}{% endwith %}
+      </div>
+      {% endif %}
+      <div class="grid2">
+        {% if reg %}
+        <div class="card"><h3><i class="bi bi-person-badge"></i> Your counsellor</h3>
+          {% if reg.counsellor_full_name %}
+          <div class="field"><div class="v" style="font-size:16px">{{ reg.counsellor_full_name }}</div></div>
+          <div style="margin-top:8px;font-size:13.5px;color:var(--muted);display:flex;flex-direction:column;gap:4px">
+            {% if reg.counsellor_email_addr %}<span><i class="bi bi-envelope me-1"></i> {{ reg.counsellor_email_addr }}</span>{% endif %}
+            {% if reg.counsellor_phone_no %}<span><i class="bi bi-telephone me-1"></i> {{ reg.counsellor_phone_no }}</span>{% endif %}
+          </div>
+          {% else %}<div class="field"><div class="v">Your counsellor will be in touch.</div></div>{% endif %}
+        </div>
+        <div class="card"><h3><i class="bi bi-box-seam"></i> Your programme</h3>
+          <div class="field"><div class="k">Service</div><div class="v">{{ reg.product_name or '—' }}</div></div>
+          {% if reg.plan_type %}<div class="field" style="margin-top:10px"><div class="k">Plan</div><div class="v">{{ reg.plan_type }}</div></div>{% endif %}
+          <div class="field" style="margin-top:10px"><div class="k">Registration No.</div><div class="v">{{ reg.registration_number|format_reg if reg.registration_number else '—' }}</div></div>
+        </div>
         {% endif %}
-
-        <!-- Document Requests Alert -->
-        {# A document request used to be a dead end: an alert with nowhere to act, so
-           clients went back into the registration form and re-submitted the whole
-           thing — which restarted verification and re-sent every notification. Upload
-           it right here instead; the registration is never touched. #}
-        {% if doc_requests %}
-        <div class="doc-alert">
-            <i class="bi bi-exclamation-triangle-fill"></i>
-            <div>
-                <span class="doc-alert-text">{{ 'Document requested' if doc_requests|length == 1 else 'Documents requested' }}</span>
-                <span class="doc-alert-count">{{ doc_requests|length }}</span>
-            </div>
-        </div>
-        <div style="background:#fff;border:1px solid #FCD34D;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
-            {% for dr in doc_requests %}
-            <div style="{% if not loop.last %}border-bottom:1px solid #f3f4f6;padding-bottom:12px;margin-bottom:12px;{% endif %}">
-                <div style="font-size:0.9rem;font-weight:700;color:#92400E;">
-                    {{ dr.doc_type }}
-                    {% if dr.urgency and dr.urgency != 'normal' %}
-                    <span style="background:#FEE2E2;color:#991B1B;font-size:0.68rem;padding:1px 7px;border-radius:999px;margin-left:6px;text-transform:uppercase;">{{ dr.urgency }}</span>
-                    {% endif %}
-                </div>
-                {% if dr.message %}<div style="font-size:0.82rem;color:#6b7280;margin-top:3px;">{{ dr.message }}</div>{% endif %}
-                <form class="dr-form" data-reg="{{ dr.registration_id }}" data-req="{{ dr.id }}" data-type="{{ dr.doc_type }}"
-                      style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:9px;">
-                    <input type="file" name="file" required accept=".pdf,.jpg,.jpeg,.png"
-                           style="font-size:0.8rem;flex:1;min-width:180px;">
-                    <button type="submit" style="background:#f97316;color:#fff;border:none;border-radius:7px;padding:7px 15px;font-weight:600;font-size:0.82rem;cursor:pointer;">
-                        Upload
-                    </button>
-                    <span class="dr-msg" style="font-size:0.8rem;"></span>
-                </form>
-            </div>
-            {% endfor %}
-            <div style="font-size:0.75rem;color:#9ca3af;margin-top:10px;">
-                Uploading here does <b>not</b> change your registration — it just sends us the file.
-            </div>
-        </div>
-        <script>
-        document.querySelectorAll('.dr-form').forEach(function (f) {
-            f.addEventListener('submit', function (e) {
-                e.preventDefault();
-                var msg = f.querySelector('.dr-msg');
-                var file = f.querySelector('input[type=file]');
-                if (!file.files.length) { return; }
-                var fd = new FormData();
-                fd.append('file', file.files[0]);
-                fd.append('doc_type', f.dataset.type);
-                fd.append('doc_request_id', f.dataset.req);
-                msg.textContent = 'Uploading…'; msg.style.color = '#6b7280';
-                fetch('/client/upload-doc/' + f.dataset.reg, { method: 'POST', body: fd })
-                    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-                    .then(function (res) {
-                        if (res.ok && res.d.success) {
-                            msg.textContent = '✓ Uploaded'; msg.style.color = '#16a34a';
-                            setTimeout(function () { window.location.reload(); }, 900);
-                        } else {
-                            msg.textContent = (res.d && res.d.error) || 'Upload failed'; msg.style.color = '#dc2626';
-                        }
-                    })
-                    .catch(function () { msg.textContent = 'Upload failed — please try again.'; msg.style.color = '#dc2626'; });
-            });
-        });
-        </script>
-        {% endif %}
-
-        <!-- Registrations -->
-        <div class="section-title">
-            <i class="bi bi-journal-text me-1"></i> My Registrations
-        </div>
-
-        {% if registrations %}
-        {% for reg in registrations %}
-        <div class="reg-card">
-            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
-                <div class="flex-grow-1">
-                    <div class="product-name">{{ reg.product_name }}</div>
-                    <div class="reg-number">
-                        <i class="bi bi-hash"></i> {{ reg.registration_number or 'Pending' }}
-                    </div>
-                </div>
-                {% if reg.onboarding_status == 'confirmed' %}
-                <span class="badge-onboarded">
-                    <i class="bi bi-check-circle-fill me-1"></i>Onboarded
-                </span>
-                {% endif %}
-            </div>
-
-            <!-- Status Badges -->
-            <div class="d-flex flex-wrap gap-2 mb-2">
-                <span class="badge-form {% if reg.form_status == 'draft' %}badge-draft{% else %}badge-submitted{% endif %}">
-                    <i class="bi {% if reg.form_status == 'draft' %}bi-pencil{% else %}bi-check2{% endif %} me-1"></i>
-                    Form: {{ reg.form_status|capitalize }}
-                </span>
-                <span class="badge-form {% if reg.ops_status == 'verified' %}badge-verified{% else %}badge-pending{% endif %}">
-                    <i class="bi {% if reg.ops_status == 'verified' %}bi-shield-check{% else %}bi-clock{% endif %} me-1"></i>
-                    Ops: {{ reg.ops_status|capitalize }}
-                </span>
-                <span class="badge-form {% if reg.onboarding_status == 'confirmed' %}badge-confirmed{% else %}badge-pending{% endif %}">
-                    <i class="bi {% if reg.onboarding_status == 'confirmed' %}bi-check-circle{% else %}bi-clock{% endif %} me-1"></i>
-                    Onboarding: {{ reg.onboarding_status|capitalize }}
-                </span>
-            </div>
-
-            <!-- Progress Bar -->
-            <div class="progress-section">
-                {% set pct = ((reg.current_step|int) / 4 * 100)|int %}
-                <div class="progress">
-                    <div class="progress-bar" role="progressbar" style="width: {{ pct }}%"
-                         aria-valuenow="{{ reg.current_step }}" aria-valuemin="0" aria-valuemax="4"></div>
-                </div>
-                <div class="step-label">Step {{ reg.current_step }} of 4</div>
-            </div>
-
-            {# ── Item D: "Your onboarding journey" -- 5-step live
-                timeline of the client's onboarding progress. Visible
-                once a registration_number exists (i.e. they've passed
-                sign-up). Steps go grey -> orange-with-✓ as Ops marks
-                each milestone in the operations onboarding screen. ── #}
-            {% if reg.registration_number and reg.timeline %}
-            <div style="margin-top:1rem;padding:1.1rem 1.1rem 0.9rem;background:white;border:1px solid #E5E7EB;border-radius:0.75rem;">
-                <h6 style="margin:0 0 1rem;font-size:0.85rem;font-weight:700;color:#0F172A;">
-                    <i class="bi bi-signpost-2-fill me-1" style="color:#F97316;"></i> Your onboarding journey
-                </h6>
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-                    {% for step in reg.timeline %}
-                    <div style="flex:1;text-align:center;position:relative;padding:0 4px;min-width:0;">
-                        {# connector line to the next step -- coloured orange when this step is done #}
-                        {% if not loop.last %}
-                        <div style="position:absolute;top:14px;left:50%;width:100%;height:3px;background:{% if step.done %}#F97316{% else %}#E5E7EB{% endif %};z-index:0;"></div>
-                        {% endif %}
-                        {# milestone dot #}
-                        <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 0.45rem;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
-                            {% if step.done %}background:#F97316;color:white;
-                            {% elif step.current %}background:white;border:3px solid #F97316;color:#F97316;
-                            {% else %}background:#E5E7EB;color:transparent;{% endif %}">
-                            {% if step.done %}✓{% endif %}
-                        </div>
-                        <div style="font-size:0.7rem;font-weight:600;line-height:1.2;color:{% if step.done or step.current %}#0F172A{% else %}#94A3B8{% endif %};">{{ step.label }}</div>
-                        {% if step.date and step.projected %}
-                        {# Item F: working-day projection -- shown with ~ to flag forecast vs recorded #}
-                        <div style="font-size:0.62rem;color:#F97316;margin-top:0.2rem;font-weight:600;" title="Projected from your Onboarded date (30 working days, weekends + holidays skipped)">~ {{ step.date }}</div>
-                        {% elif step.date %}
-                        <div style="font-size:0.62rem;color:#64748B;margin-top:0.2rem;">{{ step.date }}</div>
-                        {% elif step.current and not step.done %}
-                        <div style="font-size:0.62rem;color:#F97316;margin-top:0.2rem;font-weight:600;">Up next</div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-                <p style="margin:0.8rem 0 0;font-size:0.68rem;color:#64748B;text-align:center;">
-                    <i class="bi bi-info-circle me-1"></i>Your counsellor and the operations team update each step as it happens.
-                </p>
-            </div>
-            {% endif %}
-
-            {# ── Item C-2: "What you signed up for" -- read-only summary
-                of plan / package / installments + counsellor contact,
-                visible only if Sales captured them upfront. ── #}
-            {% if reg.plan_type or reg.package_amount or reg.counsellor_full_name or reg.product_name %}
-            <div style="margin-top:1rem;padding:1rem 1.1rem;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%);border:1px solid #FED7AA;border-radius:0.75rem;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.4rem;">
-                    <h6 style="margin:0;font-size:0.85rem;font-weight:700;color:#9A3412;">
-                        <i class="bi bi-bag-check-fill me-1"></i> What you signed up for
-                    </h6>
-                    {% if reg.updated_at %}
-                    <small style="font-size:0.7rem;color:#9A3412;opacity:0.7;">
-                        Last updated {{ reg.updated_at.strftime('%d %b %Y, %H:%M') if reg.updated_at.strftime else reg.updated_at }}
-                    </small>
-                    {% endif %}
-                </div>
-
-                {# Counsellor + Programme cards, side by side #}
-                {% if reg.counsellor_full_name or reg.product_name %}
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.7rem;margin-bottom:0.7rem;">
-                    {% if reg.counsellor_full_name %}
-                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;padding:0.7rem 0.9rem;">
-                        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#9A3412;font-weight:600;margin-bottom:0.25rem;">Your counsellor</div>
-                        <div style="font-size:0.95rem;font-weight:700;color:#0F172A;">{{ reg.counsellor_full_name }}</div>
-                        <div style="font-size:0.78rem;color:#475569;margin-top:0.15rem;display:flex;flex-wrap:wrap;gap:0.7rem;">
-                            {% if reg.counsellor_email_addr %}<span><i class="bi bi-envelope me-1"></i>{{ reg.counsellor_email_addr }}</span>{% endif %}
-                            {% if reg.counsellor_phone_no %}<span><i class="bi bi-telephone me-1"></i>{{ reg.counsellor_phone_no }}</span>{% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if reg.product_name %}
-                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;padding:0.7rem 0.9rem;">
-                        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#9A3412;font-weight:600;margin-bottom:0.25rem;">Your programme</div>
-                        <div style="font-size:0.95rem;font-weight:700;color:#0F172A;">{{ reg.product_name }}</div>
-                        {% if reg.registration_number %}<div style="font-size:0.78rem;color:#475569;margin-top:0.15rem;"><i class="bi bi-hash me-1"></i>{{ reg.registration_number }}</div>{% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                {# Plan + Package summary tiles #}
-                {% if reg.plan_type or reg.package_amount or reg.final_package %}
-                {% set _disc = reg.discount_allowed|float %}
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.6rem;margin-bottom:0.7rem;">
-                    {% if reg.plan_type %}
-                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
-                        <div style="font-size:0.66rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Plan</div>
-                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">{{ reg.plan_type }}</div>
-                    </div>
-                    {% endif %}
-                    {% if reg.package_amount %}
-                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
-                        <div style="font-size:0.66rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Package</div>
-                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">₹{{ '{:,.0f}'.format(reg.package_amount|float) }}</div>
-                    </div>
-                    {% endif %}
-                    {% if _disc > 0 %}
-                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
-                        <div style="font-size:0.66rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Discount</div>
-                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">- ₹{{ '{:,.0f}'.format(_disc) }}</div>
-                    </div>
-                    {% endif %}
-                    {% if reg.final_package and (_disc > 0 or not reg.package_amount) %}
-                    <div style="background:#FB923C;border:1px solid #EA580C;border-radius:0.45rem;padding:0.55rem 0.7rem;">
-                        <div style="font-size:0.66rem;color:white;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Final</div>
-                        <div style="font-size:0.96rem;font-weight:700;color:white;margin-top:0.1rem;">₹{{ '{:,.0f}'.format(reg.final_package|float) }}</div>
-                    </div>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                {# Installments — per-installment breakdown (Amount + 18% GST = Total) #}
-                {% if reg.installments %}
-                <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;overflow:hidden;">
-                    <div style="padding:0.5rem 0.9rem;background:#FFEDD5;font-size:0.7rem;font-weight:600;color:#9A3412;text-transform:uppercase;letter-spacing:0.05em;">
-                        Payment Schedule
-                    </div>
-                    <div style="padding:0.8rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.7rem;">
-                        {% for inst in reg.installments %}
-                        <div style="border:1px solid #F1F5F9;border-radius:0.5rem;padding:0.75rem 0.9rem;background:#FCFCFD;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-                                <span style="font-size:0.86rem;font-weight:700;color:#0F172A;">{{ inst.ordinal }} Installment</span>
-                                {% if inst.received %}<span style="background:#D1FAE5;color:#065F46;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.66rem;font-weight:700;">Received</span>
-                                {% else %}<span style="background:#FEF3C7;color:#92400E;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.66rem;font-weight:700;">Pending</span>{% endif %}
-                            </div>
-                            <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#475569;margin-bottom:0.25rem;">
-                                <span>{{ 'Amount Paid' if inst.received else 'Amount Due' }}</span>
-                                <span style="font-weight:600;color:#0F172A;">₹{{ '{:,.0f}'.format(inst.amount) }}</span>
-                            </div>
-                            <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#475569;margin-bottom:0.25rem;">
-                                <span>GST Amount (18%)</span>
-                                <span style="font-weight:600;color:#0F172A;">₹{{ '{:,.0f}'.format(inst.gst) }}</span>
-                            </div>
-                            <div style="display:flex;justify-content:space-between;font-size:0.84rem;padding-top:0.4rem;margin-top:0.25rem;border-top:1px dashed #E2E8F0;">
-                                <span style="font-weight:700;color:#9A3412;">{{ 'Total Amount Paid' if inst.received else 'Total Amount Due' }}</span>
-                                <span style="font-weight:800;color:#9A3412;">₹{{ '{:,.0f}'.format(inst.total) }}</span>
-                            </div>
-                            {% if inst.date %}<div style="font-size:0.72rem;color:#64748B;margin-top:0.45rem;"><i class="bi bi-calendar3 me-1"></i>{{ inst.date }}{% if not inst.received %} <span style="color:#92400E;font-weight:600;">(due)</span>{% endif %}</div>{% endif %}
-                            {% if inst.note %}<div style="font-size:0.72rem;color:#64748B;margin-top:0.2rem;">{{ inst.note }}</div>{% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <div style="padding:0.6rem 0.9rem;background:#FFF7ED;border-top:1px solid #FED7AA;display:flex;flex-wrap:wrap;gap:1.4rem;font-size:0.76rem;">
-                        <span><strong style="color:#065F46;">Received (incl. GST):</strong> ₹{{ '{:,.0f}'.format(reg.pay_received_total or 0) }}</span>
-                        <span><strong style="color:#92400E;">Due (incl. GST):</strong> ₹{{ '{:,.0f}'.format(reg.pay_due_total or 0) }}</span>
-                        <span><strong style="color:#1e3a5f;">GST received:</strong> ₹{{ '{:,.0f}'.format(reg.gst_received_total or 0) }}</span>
-                        <span><strong style="color:#0F172A;">Grand total (incl. GST):</strong> ₹{{ '{:,.0f}'.format(reg.grand_total or 0) }}</span>
-                    </div>
-                </div>
-                {% endif %}
-
-                {% if reg.additional_notes %}
-                <div style="margin-top:0.6rem;padding:0.55rem 0.8rem;background:white;border:1px solid #FED7AA;border-radius:0.45rem;">
-                    <div style="font-size:0.68rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.2rem;">Notes</div>
-                    <div style="font-size:0.82rem;color:#0F172A;line-height:1.5;">{{ reg.additional_notes }}</div>
-                </div>
-                {% endif %}
-
-                <p style="margin:0.7rem 0 0;font-size:0.7rem;color:#9A3412;opacity:0.75;">
-                    <i class="bi bi-shield-check me-1"></i>This is what your counsellor recorded at sign-up. If anything looks off, contact them directly.
-                </p>
-            </div>
-            {% endif %}
-
-            {# ── What's included in your package (service names + descriptions;
-                budgets/costs are never shown to the client) ── #}
-            {% if reg.package_services %}
-            {# Collapsible after submission — collapsed by default to keep the dashboard tidy. #}
-            <details {% if reg.form_status != 'submitted' %}open{% endif %} style="margin-top:1rem;background:white;border:1px solid #E5E7EB;border-radius:0.75rem;overflow:hidden;">
-                <summary style="padding:1rem 1.1rem;font-size:0.85rem;font-weight:700;color:#0F172A;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
-                    <span><i class="bi bi-check2-square me-1" style="color:#16A34A;"></i> What's included in your package</span>
-                    <span style="font-size:0.72rem;font-weight:500;color:#94A3B8;">{{ reg.package_services|length }} item{{ 's' if reg.package_services|length != 1 else '' }} · tap to view</span>
-                </summary>
-                <div style="display:flex;flex-direction:column;gap:0.6rem;padding:0 1.1rem 1rem;">
-                    {% for sv in reg.package_services %}
-                    <div style="display:flex;gap:0.6rem;align-items:flex-start;">
-                        <i class="bi bi-check-circle-fill" style="color:#16A34A;font-size:0.9rem;margin-top:0.15rem;flex-shrink:0;"></i>
-                        <div>
-                            <div style="font-size:0.9rem;font-weight:600;color:#0F172A;">{{ sv.service_name }}{% if sv.quantity %} <span style="font-weight:500;color:#64748B;font-size:0.8rem;">({{ sv.quantity }})</span>{% endif %}</div>
-                            {% if sv.description %}<div style="font-size:0.8rem;color:#64748B;line-height:1.5;white-space:pre-line;">{{ sv.description }}</div>{% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </details>
-            {% endif %}
-
-            <!-- Actions & Date -->
-            <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
-                <div>
-                    {% if reg.form_status == 'draft' %}
-                    {% if photo_doc %}
-                    <a href="/client/form/{{ reg.id }}" class="btn btn-gc-primary">
-                        <i class="bi bi-pencil-square me-1"></i>Continue Registration
-                    </a>
-                    {% else %}
-                    {# Photo-first: the registration form only opens once a photograph
-                       is on file, so it's never skipped (founder 2026-07-13). #}
-                    <span class="btn btn-gc-primary disabled" style="opacity:.55;cursor:not-allowed;pointer-events:none;" aria-disabled="true">
-                        <i class="bi bi-camera me-1"></i>Continue Registration
-                    </span>
-                    <div class="text-muted small mt-1"><i class="bi bi-arrow-down me-1"></i>Upload your photograph first (Photograph section below) to begin.</div>
-                    {% endif %}
-                    {% elif reg.is_combined_addon %}
-                    {# Combined enrolment add-on — no separate form; details come
-                       from the client's main registration. #}
-                    <span class="text-muted small"><i class="bi bi-link-45deg me-1"></i>Part of your combined enrolment — the details are taken from your main registration, so there's no separate form to fill here.</span>
-                    {% elif reg.form_status == 'submitted' %}
-                    {% if reg.ops_status == 'verified' %}
-                    <a href="/client/form/{{ reg.id }}" class="btn btn-gc-outline">
-                        <i class="bi bi-eye me-1"></i>View Details
-                    </a>
-                    {% else %}
-                    <a href="/client/form/{{ reg.id }}" class="btn btn-gc-outline">
-                        <i class="bi bi-pencil-square me-1"></i>Edit / View Details
-                    </a>
-                    <span class="text-muted small ms-1">You can edit until verification is complete</span>
-                    {% endif %}
-                    {% endif %}
-                </div>
-                <div class="created-date">
-                    <i class="bi bi-calendar3 me-1"></i>Registered: {{ reg.created_at.strftime('%d %b %Y') if reg.created_at else 'N/A' }}
-                </div>
-            </div>
-            {# ── Welcome Call: request a preferred slot; team confirms + emails an invite ── #}
-            {# While Sales holds the welcome call (payment pending), the client sees NOTHING
-               here — the whole section is hidden until Sales releases it (founder 2026-07-22).
-               A held-then-confirmed call still shows (wc_confirmed wins). #}
-            {% if reg.form_status == 'submitted' and not reg.is_combined_addon and not (reg.welcome_call_hold and not reg.wc_confirmed) %}
-            <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;">
-                {# A confirmed call wins over a stale hold flag — checking hold first
-                   showed "pending" even after ops had confirmed (founder 2026-07-17). #}
-                {% if reg.wc_confirmed %}
-                <div style="display:flex;align-items:center;gap:8px;color:#166534;font-weight:600;font-size:0.9rem;">
-                    <span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;align-items:center;justify-content:center;font-size:0.72rem;">&#10003;</span>
-                    Welcome call confirmed: {{ reg.wc_scheduled_date }} at {{ reg.wc_scheduled_time }} IST{% if reg.wc_by %} with {{ reg.wc_by }}{% endif %}
-                </div>
-                <div style="font-size:0.78rem;color:#9ca3af;margin-top:4px;">A calendar invite was emailed to you.</div>
-                {% elif reg.welcome_call_hold %}
-                <div style="font-size:0.9rem;color:#92400e;"><b>Welcome call — pending.</b> It will be scheduled once your enrolment is confirmed by our team.</div>
-                {% elif reg.wc_status == 'proposed' and reg.wc_proposed_date %}
-                <div style="font-size:0.9rem;color:#1e3a5f;"><b>GooCampus team proposed:</b> {{ reg.wc_proposed_date }}{% if reg.wc_proposed_time %} at {{ reg.wc_proposed_time }} IST{% endif %}{% if reg.wc_by %} · with {{ reg.wc_by }}{% endif %}.{% if reg.wc_proposed_note %} <span style="color:#64748b;">{{ reg.wc_proposed_note }}</span>{% endif %}</div>
-                <form method="POST" action="/client/welcome-call/confirm-proposal" style="margin-top:6px;">
-                    <input type="hidden" name="reg_id" value="{{ reg.id }}">
-                    <button type="submit" style="background:#16a34a;color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;">Confirm this time</button>
-                    <a href="/client/welcome-call" style="margin-left:10px;font-size:0.8rem;color:#f97316;">Request a different time</a>
-                </form>
-                {% elif reg.wc_pref_date %}
-                <div style="font-size:0.9rem;color:#374151;"><b>Welcome call requested</b> — preferred {{ reg.wc_pref_date }}{% if reg.wc_pref_time %} at {{ reg.wc_pref_time }}{% endif %}. Our team will confirm shortly.</div>
-                {% else %}
-                <div style="font-size:0.9rem;font-weight:600;color:#1f2937;margin-bottom:8px;">Request your Welcome Call</div>
-                <form method="POST" action="/client/welcome-call/request" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
-                    <input type="hidden" name="reg_id" value="{{ reg.id }}">
-                    <div><label style="display:block;font-size:0.72rem;color:#6b7280;">Preferred date</label><input type="date" name="wc_pref_date" required style="padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:0.82rem;"></div>
-                    <div><label style="display:block;font-size:0.72rem;color:#6b7280;">Preferred time</label><select name="wc_pref_time" style="padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:0.82rem;"><option value="">Select a time</option><option>10:00 AM</option><option>10:30 AM</option><option>11:00 AM</option><option>11:30 AM</option><option>12:00 PM</option><option>12:30 PM</option><option>1:00 PM</option><option>1:30 PM</option><option>2:00 PM</option><option>2:30 PM</option><option>3:00 PM</option><option>3:30 PM</option><option>4:00 PM</option><option>4:30 PM</option><option>5:00 PM</option><option>5:30 PM</option><option>6:00 PM</option></select></div>
-                    <div style="flex:1;min-width:150px;"><label style="display:block;font-size:0.72rem;color:#6b7280;">Note (optional)</label><input type="text" name="wc_pref_notes" placeholder="Anything we should know" style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:0.82rem;"></div>
-                    <button type="submit" style="background:#f97316;color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;">Request Call</button>
-                </form>
-                {% endif %}
-            </div>
-            {% endif %}
+      </div>
+      {% if registrations|length > 1 %}
+      <div class="card"><h3><i class="bi bi-collection"></i> Your other programmes</h3>
+        {% for r in registrations[1:] %}
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #F1F5F9;font-size:14px">
+          <span style="font-weight:600">{{ r.product_name or 'Programme' }}{% if r.plan_type %} · {{ r.plan_type }}{% endif %}</span>
+          <span style="color:var(--muted)">{{ r.registration_number|format_reg if r.registration_number else '' }}</span>
         </div>
         {% endfor %}
-        {% else %}
-        <!-- Empty State -->
-        <div class="reg-card empty-state">
-            <i class="bi bi-inbox"></i>
-            <h5>No Registrations Yet</h5>
-            <p>You don't have any active registrations. Please contact GooCampus to get started.</p>
-        </div>
-        {% endif %}
-
-        <!-- ═══════════ MY DOCUMENTS ═══════════ -->
-        {% if plab_documents is defined %}
-        <div class="section-title" style="margin-top:28px;">
-            <i class="bi bi-file-earmark-text me-1"></i> My Documents
-        </div>
-
-        <!-- Uploaded Documents -->
-        {% if plab_documents %}
-        <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
-            {% for doc in plab_documents %}
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 0;{% if not loop.last %}border-bottom:1px solid #f3f4f6;{% endif %}">
-                <i class="bi bi-file-earmark" style="font-size:1.2rem;color:#6b7280;"></i>
-                <div style="flex:1;">
-                    <div style="font-size:0.88rem;font-weight:600;color:#1f2937;">{{ doc.doc_type }}</div>
-                    <div style="font-size:0.75rem;color:#9ca3af;">{{ doc.doc_category|capitalize }} · {{ (doc.uploaded_at|string)[:10] if doc.uploaded_at else '' }}</div>
-                </div>
-                <span style="font-size:0.7rem;padding:2px 8px;border-radius:10px;font-weight:600;
-                    {% if doc.status == 'verified' %}background:#d1fae5;color:#065f46;
-                    {% elif doc.status == 'rejected' %}background:#fee2e2;color:#991b1b;
-                    {% else %}background:#fef3c7;color:#92400e;{% endif %}">{{ doc.status|capitalize }}</span>
-                <a href="/client/plab-doc/{{ doc.id }}/file" target="_blank" style="font-size:0.8rem;color:#f97316;text-decoration:none;font-weight:600;">View</a>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        <!-- Photograph: once uploaded, show the photo + a done tick and block re-upload -->
-        <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
-            <h6 style="font-size:0.88rem;font-weight:700;color:#1f2937;margin:0 0 12px 0;">Photograph</h6>
-            {% if photo_doc %}
-            <div style="display:flex;align-items:center;gap:14px;">
-                <img src="{{ photo_doc.url }}" alt="Your photograph"
-                     style="width:78px;height:78px;object-fit:cover;border-radius:10px;border:1px solid #e5e7eb;background:#f9fafb;flex:0 0 auto;">
-                <div>
-                    <div style="display:inline-flex;align-items:center;gap:7px;color:#166534;font-weight:700;font-size:0.88rem;">
-                        <span style="display:inline-flex;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;align-items:center;justify-content:center;font-size:0.72rem;">&#10003;</span>
-                        Photograph uploaded
-                    </div>
-                    <div style="font-size:0.76rem;color:#9ca3af;margin-top:4px;">Your photo is on file. Contact GooCampus if you need to change it.</div>
-                </div>
-            </div>
-            {% else %}
-            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-                <!-- Client portal upload is restricted to a single Photograph. Hidden
-                     single-option select keeps uploadClientDoc() working unchanged. -->
-                <select id="clientDocType" style="display:none;">
-                    <option value="Photograph" data-cat="personal">Photograph</option>
-                </select>
-                <span style="font-size:0.82rem;color:#374151;font-weight:600;padding:6px 10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">Photograph</span>
-                <input type="file" id="clientDocFile" accept=".jpg,.jpeg,.png" style="font-size:0.8rem;flex:1;min-width:160px;" />
-                <button onclick="uploadClientDoc()" id="photoUploadBtn" style="background:#f97316;color:white;border:none;padding:6px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;white-space:nowrap;">Upload</button>
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
+      </div>
+      {% endif %}
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-    function uploadClientDoc() {
-        var sel = document.getElementById('clientDocType');
-        var fileInput = document.getElementById('clientDocFile');
-        var btn = document.getElementById('photoUploadBtn');
-        if (!fileInput.files.length) { alert('Please select a file.'); return; }
-        // Prevent a second upload while this one is in flight.
-        if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Uploading…'; }
-        var opt = sel.options[sel.selectedIndex];
-        var fd = new FormData();
-        fd.append('file', fileInput.files[0]);
-        fd.append('doc_type', sel.value);
-        fd.append('doc_category', opt.getAttribute('data-cat') || 'personal');
-        fetch('/client/upload-plab-doc', { method: 'POST', body: fd })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success) { location.reload(); }  // reloads into the "uploaded" state (photo + tick, no uploader)
-                else { alert(data.error || 'Upload failed'); if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Upload'; } }
-            })
-            .catch(function() { alert('Upload failed'); if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Upload'; } });
-    }
-    </script>
-<script>window.gcWkday=window.gcWkday||function(inp){if(!inp.value)return;var d=new Date(inp.value+'T00:00:00');var g=d.getDay();if(g===0||g===6){alert('Please choose a weekday (Monday\u2013Friday). Welcome calls are not scheduled on weekends.');inp.value='';}};(function(){var t=new Date().toISOString().slice(0,10);document.querySelectorAll('input[name=\"wc_pref_date\"],input[name=\"wc_scheduled_date\"]').forEach(function(i){i.min=t;i.setAttribute('onchange','gcWkday(this)');});})();</script>
+    <!-- ══ PROFILE (tabbed, editable per section) ══ -->
+    <div class="section" id="sec-profile">
+      {% set ac = reg.academics if reg and reg.academics else {} %}
+      <div class="card" style="padding-top:16px">
+        <div class="ptabs">
+          <button class="ptab active" data-ptab="personal"><i class="bi bi-person-vcard"></i> Personal</button>
+          <button class="ptab" data-ptab="family"><i class="bi bi-people"></i> Parents / Guardian</button>
+          <button class="ptab" data-ptab="academic"><i class="bi bi-mortarboard"></i> Academic</button>
+        </div>
+        {% if profile_locked %}
+        <div class="lock-note">
+          <div style="display:flex;gap:9px;align-items:flex-start"><i class="bi bi-lock-fill" style="margin-top:2px"></i><span><strong>Personal &amp; Parents/Guardian details are locked</strong> — these have been verified by our team. To change anything here, please contact your counsellor.</span></div>
+          <div style="display:flex;gap:9px;align-items:flex-start;margin-top:8px"><i class="bi bi-pencil-fill" style="margin-top:2px"></i><span><strong>Academic details are always open</strong> — you can add or update them here anytime, even now.</span></div>
+        </div>
+        {% endif %}
+
+        <!-- Personal -->
+        <div class="ppane active" id="ppane-personal">
+          <div class="pane-head"><h3><i class="bi bi-person-vcard"></i> Personal details</h3>
+            {% if not profile_locked %}<button class="btn btn-ghost btn-sm" onclick="editPane('personal',true)" id="edit-personal"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
+          </div>
+          <div class="pview" id="view-personal">
+            <div class="grid2">
+              <div class="field"><div class="k">Full name</div><div class="v">Dr. {{ client_name_clean }}</div></div>
+              <div class="field"><div class="k">Mobile (login)</div><div class="v">{{ reg.mobile or account.mobile or '—' }}</div></div>
+              <div class="field"><div class="k">Email</div><div class="v">{{ reg.email or account.email or '—' }}</div></div>
+              <div class="field"><div class="k">Date of birth</div><div class="v">{{ reg.dob or '—' }}</div></div>
+              <div class="field"><div class="k">WhatsApp</div><div class="v">{{ reg.whatsapp or '—' }}</div></div>
+              <div class="field"><div class="k">Address</div><div class="v">{{ reg.address or '—' }}</div></div>
+              <div class="field"><div class="k">City</div><div class="v">{{ reg.city or '—' }}</div></div>
+              <div class="field"><div class="k">State</div><div class="v">{{ reg.state or '—' }}</div></div>
+              <div class="field"><div class="k">Country</div><div class="v">{{ reg.country or '—' }}</div></div>
+            </div>
+          </div>
+          {% if not profile_locked %}
+          <form class="pedit" id="form-personal" method="POST" action="/client/profile/save" style="display:none">
+            <input type="hidden" name="section" value="personal">
+            <p class="edit-hint">Name, date of birth, email and login mobile are fixed — contact your counsellor to change those.</p>
+            <div class="grid2">
+              <div><label class="in-lbl">WhatsApp</label><input class="in-field" name="whatsapp" value="{{ reg.whatsapp or '' }}"></div>
+              <div><label class="in-lbl">Address</label><input class="in-field" name="address" value="{{ reg.address or '' }}"></div>
+              <div><label class="in-lbl">City</label><input class="in-field" name="city" value="{{ reg.city or '' }}"></div>
+              <div><label class="in-lbl">State</label><input class="in-field" name="state" value="{{ reg.state or '' }}"></div>
+              <div><label class="in-lbl">Country</label><input class="in-field" name="country" value="{{ reg.country or '' }}"></div>
+            </div>
+            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('personal',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save</button></div>
+          </form>
+          {% endif %}
+        </div>
+
+        <!-- Parents / Guardian -->
+        <div class="ppane" id="ppane-family">
+          <div class="pane-head"><h3><i class="bi bi-people"></i> Parents / Guardian</h3>
+            {% if not profile_locked %}<button class="btn btn-ghost btn-sm" onclick="editPane('family',true)" id="edit-family"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
+          </div>
+          <div class="pview" id="view-family">
+            {% if reg.guardian_type == 'guardian' %}
+            <div class="grid2">
+              <div class="field"><div class="k">Guardian name</div><div class="v">{{ (reg.guardian_first_name ~ ' ' ~ (reg.guardian_last_name or '')).strip() or '—' }}</div></div>
+              <div class="field"><div class="k">Guardian phone</div><div class="v">{{ reg.guardian_phone or '—' }}</div></div>
+              <div class="field"><div class="k">Guardian email</div><div class="v">{{ reg.guardian_email or '—' }}</div></div>
+            </div>
+            {% else %}
+            <div class="grid2">
+              <div class="field"><div class="k">Father</div><div class="v">{{ (reg.father_first_name ~ ' ' ~ (reg.father_last_name or '')).strip() or reg.father_name or '—' }}</div></div>
+              <div class="field"><div class="k">Father phone</div><div class="v">{{ reg.father_phone or '—' }}</div></div>
+              <div class="field"><div class="k">Father email</div><div class="v">{{ reg.father_email or '—' }}</div></div>
+              <div class="field"><div class="k">Mother</div><div class="v">{{ (reg.mother_first_name ~ ' ' ~ (reg.mother_last_name or '')).strip() or reg.mother_name or '—' }}</div></div>
+              <div class="field"><div class="k">Mother phone</div><div class="v">{{ reg.mother_phone or '—' }}</div></div>
+              <div class="field"><div class="k">Mother email</div><div class="v">{{ reg.mother_email or '—' }}</div></div>
+            </div>
+            {% endif %}
+          </div>
+          {% if not profile_locked %}
+          <form class="pedit" id="form-family" method="POST" action="/client/profile/save" style="display:none">
+            <input type="hidden" name="section" value="family">
+            <label class="in-lbl">Who is your primary contact?</label>
+            <select class="in-field" name="guardian_type" id="guardianType" onchange="toggleGuardian()" style="margin-bottom:14px">
+              <option value="parents" {% if reg.guardian_type != 'guardian' %}selected{% endif %}>Parents</option>
+              <option value="guardian" {% if reg.guardian_type == 'guardian' %}selected{% endif %}>Guardian</option>
+            </select>
+            <div id="parentsFields" style="{% if reg.guardian_type == 'guardian' %}display:none{% endif %}">
+              <div class="grid2">
+                <div><label class="in-lbl">Father — first name</label><input class="in-field" name="father_first_name" value="{{ reg.father_first_name or '' }}"></div>
+                <div><label class="in-lbl">Father — last name</label><input class="in-field" name="father_last_name" value="{{ reg.father_last_name or '' }}"></div>
+                <div><label class="in-lbl">Father — phone</label><input class="in-field" name="father_phone" value="{{ reg.father_phone or '' }}"></div>
+                <div><label class="in-lbl">Father — email</label><input class="in-field" name="father_email" value="{{ reg.father_email or '' }}"></div>
+                <div><label class="in-lbl">Mother — first name</label><input class="in-field" name="mother_first_name" value="{{ reg.mother_first_name or '' }}"></div>
+                <div><label class="in-lbl">Mother — last name</label><input class="in-field" name="mother_last_name" value="{{ reg.mother_last_name or '' }}"></div>
+                <div><label class="in-lbl">Mother — phone</label><input class="in-field" name="mother_phone" value="{{ reg.mother_phone or '' }}"></div>
+                <div><label class="in-lbl">Mother — email</label><input class="in-field" name="mother_email" value="{{ reg.mother_email or '' }}"></div>
+              </div>
+            </div>
+            <div id="guardianFields" style="{% if reg.guardian_type != 'guardian' %}display:none{% endif %}">
+              <div class="grid2">
+                <div><label class="in-lbl">Guardian — first name</label><input class="in-field" name="guardian_first_name" value="{{ reg.guardian_first_name or '' }}"></div>
+                <div><label class="in-lbl">Guardian — last name</label><input class="in-field" name="guardian_last_name" value="{{ reg.guardian_last_name or '' }}"></div>
+                <div><label class="in-lbl">Guardian — phone</label><input class="in-field" name="guardian_phone" value="{{ reg.guardian_phone or '' }}"></div>
+                <div><label class="in-lbl">Guardian — email</label><input class="in-field" name="guardian_email" value="{{ reg.guardian_email or '' }}"></div>
+              </div>
+            </div>
+            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('family',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save</button></div>
+          </form>
+          {% endif %}
+        </div>
+
+        <!-- Academic (always editable — client-owned, syncs to ops) -->
+        {% macro af(label, val) %}<div class="field"><div class="k">{{ label }}</div><div class="v {% if not val %}v-empty{% endif %}">{{ val or 'Not added yet' }}</div></div>{% endmacro %}
+        <div class="ppane" id="ppane-academic">
+          <div class="pane-head"><h3><i class="bi bi-mortarboard"></i> Academic details</h3>
+            <button class="btn btn-ghost btn-sm" onclick="editPane('academic',true)" id="edit-academic"><i class="bi bi-pencil"></i> Edit</button>
+          </div>
+          <p class="edit-hint" id="acad-open-hint"><i class="bi bi-info-circle"></i> You can complete or update your academic details anytime — even after verification. What you save here updates your GooCampus record automatically.</p>
+          <div class="pview" id="view-academic">
+            <div class="k acad-group">Medical college &amp; MBBS</div>
+            <div class="grid2">
+              {{ af('Country of study', ac.country) }}
+              {{ af('Medical college', ac.fmg_medical_college or ac.img_medical_college) }}
+              {{ af('IMG / FMG', ac.img_fmg) }}
+              {{ af('MBBS status', ac.mbbs_status) }}
+              {{ af('MBBS start date', ac.mbbs_start_date) }}
+              {{ af('MBBS end date', ac.mbbs_end_date) }}
+            </div>
+            <div class="k acad-group">Internship</div>
+            <div class="grid2">
+              {{ af('Internship status', ac.internship_status) }}
+              {{ af('Internship hospital', ac.internship_hospital) }}
+              {{ af('Internship location', ac.internship_location) }}
+              {{ af('Internship start date', ac.internship_start_date) }}
+              {{ af('Internship end date', ac.internship_end_date) }}
+              {{ af('Internship gap?', ac.internship_gap) }}
+              {{ af('Gap (months)', ac.gap_in_months) }}
+              {{ af('Gap reason', ac.gap_reason) }}
+            </div>
+            <div class="k acad-group">Work &amp; Postgraduate</div>
+            <div class="grid2">
+              {{ af('Currently working?', ac.working_status) }}
+              {{ af('Working hospital', ac.working_hospital_name) }}
+              {{ af('Done / doing PG?', ac.pg_done) }}
+              {{ af('PG type', ac.pg_type) }}
+              {{ af('PG specialty', ac.pg_specialty) }}
+              {{ af('PG college', ac.pg_college) }}
+              {{ af('PG status', ac.pg_status) }}
+            </div>
+            {% if ac.additional_info %}
+            <div class="k acad-group">Anything else you told us</div>
+            <div class="field"><div class="v">{{ ac.additional_info }}</div></div>
+            {% endif %}
+          </div>
+
+          <form class="pedit" id="form-academic" method="POST" action="/client/profile/save" style="display:none">
+            <input type="hidden" name="section" value="academic">
+            <div class="k acad-group">Medical college &amp; MBBS</div>
+            <div class="grid2">
+              <div><label class="in-lbl">Country of study</label><input class="in-field" name="country" value="{{ ac.country or '' }}"></div>
+              <div><label class="in-lbl">Medical college</label><input class="in-field" name="fmg_medical_college" value="{{ ac.fmg_medical_college or ac.img_medical_college or '' }}"></div>
+              <div><label class="in-lbl">Are you an IMG / FMG?</label>
+                <select class="in-field" name="img_fmg">
+                  <option value="" {% if not ac.img_fmg %}selected{% endif %}>Not specified</option>
+                  <option value="IMG" {% if ac.img_fmg == 'IMG' %}selected{% endif %}>IMG (studied in India)</option>
+                  <option value="FMG" {% if ac.img_fmg == 'FMG' %}selected{% endif %}>FMG (studied abroad)</option>
+                </select></div>
+              <div><label class="in-lbl">MBBS status</label><input class="in-field" name="mbbs_status" value="{{ ac.mbbs_status or '' }}" placeholder="e.g. Completed / Pursuing"></div>
+              <div><label class="in-lbl">MBBS start date</label><input class="in-field" name="mbbs_start_date" value="{{ ac.mbbs_start_date or '' }}" placeholder="YYYY-MM-DD"></div>
+              <div><label class="in-lbl">MBBS end date</label><input class="in-field" name="mbbs_end_date" value="{{ ac.mbbs_end_date or '' }}" placeholder="YYYY-MM-DD"></div>
+            </div>
+            <div class="k acad-group">Internship</div>
+            <div class="grid2">
+              <div><label class="in-lbl">Internship status</label><input class="in-field" name="internship_status" value="{{ ac.internship_status or '' }}"></div>
+              <div><label class="in-lbl">Internship hospital</label><input class="in-field" name="internship_hospital" value="{{ ac.internship_hospital or '' }}"></div>
+              <div><label class="in-lbl">Internship location</label><input class="in-field" name="internship_location" value="{{ ac.internship_location or '' }}"></div>
+              <div><label class="in-lbl">Internship start date</label><input class="in-field" name="internship_start_date" value="{{ ac.internship_start_date or '' }}" placeholder="YYYY-MM-DD"></div>
+              <div><label class="in-lbl">Internship end date</label><input class="in-field" name="internship_end_date" value="{{ ac.internship_end_date or '' }}" placeholder="YYYY-MM-DD"></div>
+              <div><label class="in-lbl">Any gap?</label><input class="in-field" name="internship_gap" value="{{ ac.internship_gap or '' }}"></div>
+              <div><label class="in-lbl">Gap (months)</label><input class="in-field" name="gap_in_months" value="{{ ac.gap_in_months or '' }}"></div>
+              <div><label class="in-lbl">Gap reason</label><input class="in-field" name="gap_reason" value="{{ ac.gap_reason or '' }}"></div>
+            </div>
+            <div class="k acad-group">Work &amp; Postgraduate</div>
+            <div class="grid2">
+              <div><label class="in-lbl">Currently working?</label><input class="in-field" name="working_status" value="{{ ac.working_status or '' }}"></div>
+              <div><label class="in-lbl">Working hospital</label><input class="in-field" name="working_hospital_name" value="{{ ac.working_hospital_name or '' }}"></div>
+              <div><label class="in-lbl">Have you done / are you doing PG?</label>
+                <select class="in-field" name="pg_done">
+                  <option value="" {% if not ac.pg_done %}selected{% endif %}>Not specified</option>
+                  <option value="Yes" {% if ac.pg_done == 'Yes' %}selected{% endif %}>Yes</option>
+                  <option value="No" {% if ac.pg_done == 'No' %}selected{% endif %}>No</option>
+                </select></div>
+              <div><label class="in-lbl">PG type</label><input class="in-field" name="pg_type" value="{{ ac.pg_type or '' }}" placeholder="NEET PG MD/MS or DNB"></div>
+              <div><label class="in-lbl">PG specialty</label><input class="in-field" name="pg_specialty" value="{{ ac.pg_specialty or '' }}"></div>
+              <div><label class="in-lbl">PG college</label><input class="in-field" name="pg_college" value="{{ ac.pg_college or '' }}"></div>
+              <div><label class="in-lbl">PG status</label><input class="in-field" name="pg_status" value="{{ ac.pg_status or '' }}" placeholder="First/Second/Final year or Completed"></div>
+            </div>
+            <div style="margin-top:8px"><label class="in-lbl">Anything else you'd like us to know</label>
+              <textarea class="in-field" name="additional_info" rows="3">{{ ac.additional_info or '' }}</textarea></div>
+            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('academic',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save academic details</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAYMENTS (payments only — all programmes) ══ -->
+    <div class="section" id="sec-payments">
+      {% set ns = namespace(recv=0, due=0, grand=0, any=false) %}
+      {% for r in registrations %}{% if r.installments %}{% set ns.any = true %}
+        {% set ns.recv = ns.recv + r.pay_received_total %}{% set ns.due = ns.due + r.pay_due_total %}{% set ns.grand = ns.grand + r.grand_total %}
+      {% endif %}{% endfor %}
+      {% if ns.any %}
+      {% for r in registrations %}{% if r.installments %}
+      <div class="card">
+        <h3><i class="bi bi-receipt"></i> Installments{% if registrations|length > 1 %} — {{ r.product_name or 'Programme' }}{% endif %}</h3>
+        {% if registrations|length > 1 %}<div class="k" style="margin:-6px 0 12px;font-size:12px;color:var(--muted)">{{ r.registration_number|format_reg if r.registration_number else '' }}{% if r.plan_type %} · {{ r.plan_type }}{% endif %}</div>{% endif %}
+        <div style="overflow-x:auto"><table class="pay">
+          <tr><th>Installment</th><th>Amount</th><th>GST (18%)</th><th>Total</th><th>Status</th></tr>
+          {% for inst in r.installments %}
+          <tr>
+            <td style="font-weight:700;color:var(--navy)">{{ inst.ordinal | installment_label }}</td>
+            <td>₹{{ '{:,.0f}'.format(inst.amount) }}</td>
+            <td>₹{{ '{:,.0f}'.format(inst.gst) }}</td>
+            <td style="font-weight:700">₹{{ '{:,.0f}'.format(inst.total) }}</td>
+            <td>{% if inst.received %}<span class="chip chip-ok">Received</span>{% else %}<span class="chip chip-warn">Pending</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </table></div>
+        <div style="margin-top:14px">
+          <div class="totrow"><span style="color:var(--muted)">Received</span><span style="font-weight:700;color:var(--ok)">₹{{ '{:,.0f}'.format(r.pay_received_total) }}</span></div>
+          <div class="totrow"><span style="color:var(--muted)">Balance due</span><span style="font-weight:700;color:{% if r.pay_due_total %}var(--warn){% else %}var(--muted){% endif %}">₹{{ '{:,.0f}'.format(r.pay_due_total) }}</span></div>
+          <div class="totrow big"><span>Total (incl. GST)</span><span>₹{{ '{:,.0f}'.format(r.grand_total) }}</span></div>
+        </div>
+      </div>
+      {% endif %}{% endfor %}
+      {% if registrations|length > 1 %}
+      <div class="card" style="background:var(--navy);color:#fff">
+        <h3 style="color:#fff"><i class="bi bi-cash-stack"></i> All programmes — combined</h3>
+        <div class="totrow" style="border-color:rgba(255,255,255,.15)"><span style="color:rgba(255,255,255,.7)">Received</span><span style="font-weight:700">₹{{ '{:,.0f}'.format(ns.recv) }}</span></div>
+        <div class="totrow" style="border-color:rgba(255,255,255,.15)"><span style="color:rgba(255,255,255,.7)">Balance due</span><span style="font-weight:700;color:#FDBA74">₹{{ '{:,.0f}'.format(ns.due) }}</span></div>
+        <div class="totrow big" style="border-color:rgba(255,255,255,.15)"><span>Grand total (incl. GST)</span><span>₹{{ '{:,.0f}'.format(ns.grand) }}</span></div>
+      </div>
+      {% endif %}
+      {% if ns.due > 0 %}<p style="font-size:13px;color:var(--muted);margin-top:4px"><i class="bi bi-info-circle"></i> Any pending amount above is still due. Your counsellor will share payment details for the next installment.</p>{% endif %}
+      {% else %}<div class="card"><p style="color:var(--muted)">No installments recorded yet.</p></div>{% endif %}
+    </div>
+
+    <!-- ══ SERVICE DELIVERY ══ -->
+    <div class="section" id="sec-service">
+      {% set sv = namespace(any=false) %}
+      {% for r in registrations %}
+      {% if r.std_services or r.plan_services %}
+      {% set sv.any = true %}
+      <div class="card">
+        <h3><i class="bi bi-box-seam"></i> What your programme includes{% if registrations|length > 1 %} — {{ r.product_name or 'Programme' }}{% endif %}</h3>
+
+        {% if r.plan_services %}
+        <div class="k" style="text-transform:uppercase;font-size:11px;font-weight:700;color:var(--orange);margin:6px 0 10px">Your plan — {{ r.plan_type or 'included services' }}</div>
+        <div class="svc-list">
+          {% for s in r.plan_services %}
+          <div class="svc-item">
+            <div class="svc-name"><i class="bi bi-check-circle-fill" style="color:var(--ok)"></i> {{ s.service_name }}{% if s.quantity %} <span class="svc-qty">× {{ s.quantity }}</span>{% endif %}</div>
+            {% if s.description %}<div class="svc-desc">{% for line in (s.description|string).replace('\\n','\n').split('\n') %}{% set ln = line.strip().lstrip('•').strip() %}{% if ln %}<div class="svc-line">{{ ln }}</div>{% endif %}{% endfor %}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if r.std_services %}
+        <div class="acc {% if not r.plan_services %}open{% endif %}" style="margin-top:{% if r.plan_services %}16px{% else %}4px{% endif %}">
+          <button type="button" class="acc-head" onclick="toggleAcc(this)">
+            <span><i class="bi bi-list-check"></i> Standard deliverables <span class="svc-qty">({{ r.std_services|length }})</span></span>
+            <i class="bi bi-chevron-down acc-chev"></i>
+          </button>
+          <div class="acc-body">
+            <div class="svc-list" style="padding-top:8px">
+              {% for s in r.std_services %}
+              <div class="svc-item">
+                <div class="svc-name"><i class="bi bi-dot" style="color:var(--muted)"></i> {{ s.service_name }}{% if s.quantity %} <span class="svc-qty">× {{ s.quantity }}</span>{% endif %}</div>
+                {% if s.description %}<div class="svc-desc">{% for line in (s.description|string).replace('\\n','\n').split('\n') %}{% set ln = line.strip().lstrip('•').strip() %}{% if ln %}<div class="svc-line">{{ ln }}</div>{% endif %}{% endfor %}</div>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% if not sv.any %}<div class="card"><p style="color:var(--muted)">Your service deliverables will appear here once your programme is set up.</p></div>{% endif %}
+    </div>
+
+    <!-- ══ DOCUMENTS ══ -->
+    <div class="section" id="sec-documents">
+      <div class="card"><h3><i class="bi bi-folder2-open"></i> Your documents</h3>
+        {% if plab_documents %}
+        <div style="display:flex;flex-direction:column;gap:8px">
+          {% for d in plab_documents %}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px">
+            <span style="font-size:14px;font-weight:600"><i class="bi bi-file-earmark-text me-1" style="color:var(--orange)"></i> {{ d.doc_type or d.file_name }}</span>
+            <a class="btn btn-ghost" style="padding:6px 12px;font-size:13px" href="/client/plab-doc/{{ d.id }}/file" target="_blank">View</a>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}<p style="color:var(--muted)">No documents uploaded yet.</p>{% endif %}
+        {% if doc_requests %}
+        <div style="margin-top:16px"><div class="k" style="font-size:11px;text-transform:uppercase;color:var(--warn);font-weight:700">Requested by the team</div>
+          <ul style="margin:8px 0 0 18px;font-size:13.5px">{% for dr in doc_requests %}<li style="margin-bottom:3px">{{ dr.doc_type if dr.doc_type is defined else dr }}</li>{% endfor %}</ul>
+        </div>{% endif %}
+      </div>
+    </div>
+
+    <!-- ══ AGREEMENTS ══ -->
+    <div class="section" id="sec-agreements">
+      <div class="card"><h3><i class="bi bi-file-earmark-check"></i> Signed agreements</h3>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:10px">
+            <div><div style="font-weight:700">Service Agreement / Contract</div><div style="font-size:12.5px;color:var(--ok);margin-top:2px"><i class="bi bi-check-circle-fill"></i> Digitally signed</div></div>
+            <a class="btn btn-ghost" style="padding:7px 14px" href="/client/contract/view" target="_blank">View</a>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:10px">
+            <div><div style="font-weight:700">Refund Policy</div><div style="font-size:12.5px;color:var(--ok);margin-top:2px"><i class="bi bi-check-circle-fill"></i> Agreed &amp; signed</div></div>
+            <a class="btn btn-ghost" style="padding:7px 14px" href="/client/refund-policy" target="_blank">View</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ WELCOME CALL ══ -->
+    <div class="section" id="sec-call">
+      <div class="card"><h3><i class="bi bi-telephone-inbound"></i> Welcome call</h3>
+        {% if reg and reg.wc_confirmed %}
+        <div class="chip chip-ok" style="margin-bottom:12px"><i class="bi bi-check-circle-fill"></i> Confirmed</div>
+        <div class="grid2">
+          <div class="field"><div class="k">Date</div><div class="v">{{ reg.wc_scheduled_date or '—' }}</div></div>
+          <div class="field"><div class="k">Time (IST)</div><div class="v">{{ reg.wc_scheduled_time or '—' }}</div></div>
+          {% if reg.wc_by %}<div class="field"><div class="k">With</div><div class="v">{{ reg.wc_by }}</div></div>{% endif %}
+        </div>
+        {% elif reg %}
+        <p style="color:var(--muted)">Your welcome call is being arranged. You'll see the confirmed date and time here.</p>
+        <a class="btn btn-primary" style="margin-top:12px" href="/client/welcome-call">Manage my welcome call</a>
+        {% else %}<p style="color:var(--muted)">—</p>{% endif %}
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ══ -->
+    <div class="section" id="sec-settings">
+      <div class="card"><h3><i class="bi bi-person-gear"></i> Account</h3>
+        <div class="grid2">
+          <div class="field"><div class="k">Name</div><div class="v">Dr. {{ client_name_clean }}</div></div>
+          <div class="field"><div class="k">Mobile (login)</div><div class="v">{{ account.mobile }}</div></div>
+          <div class="field"><div class="k">Email</div><div class="v">{{ account.email or '—' }}</div></div>
+        </div>
+      </div>
+      <div class="card"><h3><i class="bi bi-key"></i> Change password</h3>
+        <form method="POST" action="/client/change-password" style="max-width:420px">
+          <label class="in-lbl">Current password</label>
+          <input class="in-field" type="password" name="current_password" required style="margin-bottom:12px">
+          <label class="in-lbl">New password</label>
+          <input class="in-field" type="password" name="new_password" minlength="6" required style="margin-bottom:12px">
+          <label class="in-lbl">Confirm new password</label>
+          <input class="in-field" type="password" name="confirm_password" minlength="6" required style="margin-bottom:16px">
+          <button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> Update password</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const links = document.querySelectorAll('.sb-link');
+  const sections = document.querySelectorAll('.section');
+  const titles = {overview:'Overview',profile:'My Profile',payments:'Payments',service:'Service Delivery',documents:'Documents',agreements:'Agreements',call:'Welcome Call',settings:'Settings'};
+  function show(key){
+    links.forEach(l=>l.classList.toggle('active', l.dataset.section===key));
+    sections.forEach(s=>s.classList.toggle('active', s.id==='sec-'+key));
+    document.getElementById('pageTitle').textContent = titles[key]||'Overview';
+    if(history.replaceState) history.replaceState(null,'','#'+key);
+    closeSidebar();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  links.forEach(l=> l.addEventListener('click', ()=> show(l.dataset.section)));
+  const h=(location.hash||'').replace('#',''); if(h && titles[h]) show(h);
+
+  function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('backdrop').classList.add('open'); }
+  function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('backdrop').classList.remove('open'); }
+
+  // ── My Profile: tabs + per-section edit toggles ──
+  document.querySelectorAll('.ptab').forEach(t=> t.addEventListener('click', ()=>{
+    const k = t.dataset.ptab;
+    document.querySelectorAll('.ptab').forEach(x=>x.classList.toggle('active', x===t));
+    document.querySelectorAll('.ppane').forEach(p=>p.classList.toggle('active', p.id==='ppane-'+k));
+  }));
+  function editPane(k, on){
+    const v=document.getElementById('view-'+k), f=document.getElementById('form-'+k), e=document.getElementById('edit-'+k);
+    if(!f) return;
+    v.style.display = on ? 'none':'block';
+    f.style.display = on ? 'block':'none';
+    if(e) e.style.display = on ? 'none':'';
+  }
+  function toggleGuardian(){
+    const g = document.getElementById('guardianType').value;
+    document.getElementById('parentsFields').style.display = (g==='guardian')?'none':'block';
+    document.getElementById('guardianFields').style.display = (g==='guardian')?'block':'none';
+  }
+
+  // ── Service Delivery: standard-deliverables accordion ──
+  function toggleAcc(btn){ btn.parentElement.classList.toggle('open'); }
+
+  // ── Profile photo: pick from camera / gallery / files, upload, refresh ──
+  function pickPhoto(){ const i=document.getElementById('photoInput'); if(i) i.click(); }
+  function uploadPhoto(input){
+    if(!input.files || !input.files[0]) return;
+    const box=document.getElementById('avatarBox');
+    if(box) box.style.opacity='.5';
+    const fd=new FormData();
+    fd.append('file', input.files[0]);
+    fd.append('doc_type','Photograph');
+    fd.append('doc_category','personal');
+    fetch('/client/upload-plab-doc',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(d=>{ if(d && d.success){ location.reload(); } else { alert((d&&d.error)||'Could not update your photo. Please try again.'); if(box) box.style.opacity='1'; } })
+      .catch(()=>{ alert('Could not update your photo. Please try again.'); if(box) box.style.opacity='1'; });
+  }
+
+  // ── Presence heartbeat: tell ops we're live while the dashboard is open ──
+  function beat(){ fetch('/client/heartbeat',{method:'POST',keepalive:true}).catch(()=>{}); }
+  beat(); setInterval(beat, 30000);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') beat(); });
+</script>
 </body>
 </html>

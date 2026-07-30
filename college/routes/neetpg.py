@@ -761,38 +761,57 @@ def neetpg_admin():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
     conn = get_db()
-    # ── Filters (sub-tabs): document type + NEET PG / DNB exam category ──
+    # ── Filters (sub-tabs): NEET PG/DNB category · document type · publish status ──
     active_doc_type = request.args.get('doc_type', 'all').strip()
     if active_doc_type not in VALID_DOC_TYPES:
         active_doc_type = 'all'
     active_category = request.args.get('category', 'all').strip()
     if active_category not in ('neetpg', 'dnb'):
         active_category = 'all'
+    active_status = request.args.get('status', 'all').strip()
+    if active_status not in ('published', 'scheduled', 'draft'):
+        active_status = 'all'
 
     def _admin_count(cnds, prms):
         w = (" WHERE " + " AND ".join(cnds)) if cnds else ""
         return conn.execute(f"SELECT COUNT(*) as c FROM neetpg_pdfs{w}", prms).fetchone()['c']
 
+    def _status_conds(status):
+        if status == 'published':
+            return ["is_published = 1"]
+        if status == 'scheduled':                    # queued for auto-publish
+            return ["is_published = 0", "auto_schedule = 1"]
+        if status == 'draft':                        # unpublished, auto-publish off
+            return ["is_published = 0", "auto_schedule = 0"]
+        return []
+
+    def _filter_conds(include_dt=True, include_cat=True, include_status=True):
+        c, p = [], []
+        if include_dt and active_doc_type != 'all':
+            c.append("doc_type = ?"); p.append(active_doc_type)
+        if include_cat and active_category != 'all':
+            c.append("category = ?"); p.append(active_category)
+        if include_status and active_status != 'all':
+            c += _status_conds(active_status)
+        return c, p
+
     # Combined filter for the listing
-    conds, params = [], []
-    if active_doc_type != 'all':
-        conds.append("doc_type = ?"); params.append(active_doc_type)
-    if active_category != 'all':
-        conds.append("category = ?"); params.append(active_category)
+    conds, params = _filter_conds()
     flt_where = (" WHERE " + " AND ".join(conds)) if conds else ""
 
-    # Doc-type tab counts (within the active category)
-    cat_conds = [] if active_category == 'all' else ["category = ?"]
-    cat_params = [] if active_category == 'all' else [active_category]
-    doctype_counts = {'all': _admin_count(cat_conds, cat_params)}
+    # Each tab row's counts reflect the OTHER two active filters.
+    dc, dp = _filter_conds(include_dt=False)
+    doctype_counts = {'all': _admin_count(dc, dp)}
     for key in DOC_TYPE_LABELS:
-        doctype_counts[key] = _admin_count(cat_conds + ["doc_type = ?"], cat_params + [key])
-    # Category tab counts (within the active doc type)
-    dtc_conds = [] if active_doc_type == 'all' else ["doc_type = ?"]
-    dtc_params = [] if active_doc_type == 'all' else [active_doc_type]
-    category_counts = {'all': _admin_count(dtc_conds, dtc_params)}
+        doctype_counts[key] = _admin_count(dc + ["doc_type = ?"], dp + [key])
+    cc, cp = _filter_conds(include_cat=False)
+    category_counts = {'all': _admin_count(cc, cp)}
     for c in ('neetpg', 'dnb'):
-        category_counts[c] = _admin_count(dtc_conds + ["category = ?"], dtc_params + [c])
+        category_counts[c] = _admin_count(cc + ["category = ?"], cp + [c])
+    sc, sp = _filter_conds(include_status=False)
+    status_counts = {'all': _admin_count(sc, sp)}
+    for s in ('published', 'scheduled', 'draft'):
+        status_counts[s] = _admin_count(sc + _status_conds(s), sp)
 
     # Pagination for PDFs (within the active filters)
     page = int(request.args.get('page', 1))
@@ -888,6 +907,7 @@ def neetpg_admin():
                            specialty_alias=_SPECIALTY_ALIAS,
                            active_doc_type=active_doc_type, doctype_counts=doctype_counts,
                            active_category=active_category, category_counts=category_counts,
+                           active_status=active_status, status_counts=status_counts,
                     active_section='colleges')
 
 

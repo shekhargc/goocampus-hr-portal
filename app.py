@@ -1355,6 +1355,232 @@ def client_logout():
     return redirect(url_for('client_login_page'))
 
 
+@app.route('/client/manifest.webmanifest')
+def client_manifest():
+    """PWA manifest so the client dashboard is installable ('Add to Home Screen')
+    and opens full-screen like an app on mobile. (founder 2026-07-30)"""
+    return jsonify({
+        "name": "GooCampus — My Dashboard",
+        "short_name": "GooCampus",
+        "start_url": "/client/dashboard",
+        "scope": "/client/",
+        "display": "standalone",
+        "background_color": "#0F1B33",
+        "theme_color": "#0F1B33",
+        "icons": [
+            {"src": "/static/logo.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/logo.png", "sizes": "512x512", "type": "image/png"},
+        ],
+    })
+
+
+@app.route('/client/heartbeat', methods=['POST'])
+def client_heartbeat():
+    """The client dashboard pings this every ~30s while open. Stamps last_seen_at so
+    ops can show a live 'Online' badge on the client profile. (founder 2026-07-30)"""
+    if not session.get('is_client'):
+        return jsonify({'ok': False}), 401
+    if session.get('client_preview'):
+        # Admin previewing — don't mark the real client as online.
+        return jsonify({'ok': True, 'preview': True})
+    conn = get_db()
+    try:
+        conn.execute("UPDATE client_accounts SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     (session.get('user_id'),))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+
+@app.route('/client/change-password', methods=['POST'])
+def client_change_password():
+    """Client Settings → change password. Verifies the current password, then sets
+    the new one (min 6 chars). (founder 2026-07-30)"""
+    if not session.get('is_client'):
+        return redirect(url_for('client_login_page'))
+    if session.get('client_preview'):
+        flash('Preview mode — password changes are disabled here.', 'info')
+        return redirect(url_for('client_dashboard') + '#settings')
+    current = (request.form.get('current_password') or '').strip()
+    new = (request.form.get('new_password') or '').strip()
+    confirm = (request.form.get('confirm_password') or '').strip()
+    if not current or not new:
+        flash('Please fill in all password fields.', 'error')
+        return redirect(url_for('client_dashboard') + '#settings')
+    if len(new) < 6:
+        flash('Your new password must be at least 6 characters.', 'error')
+        return redirect(url_for('client_dashboard') + '#settings')
+    if new != confirm:
+        flash('The new password and confirmation do not match.', 'error')
+        return redirect(url_for('client_dashboard') + '#settings')
+    conn = get_db()
+    try:
+        acct = conn.execute("SELECT password_hash FROM client_accounts WHERE id = ?",
+                            (session.get('user_id'),)).fetchone()
+        if not acct or acct['password_hash'] != hash_password(current):
+            flash('Your current password is incorrect.', 'error')
+            return redirect(url_for('client_dashboard') + '#settings')
+        conn.execute("UPDATE client_accounts SET password_hash = ? WHERE id = ?",
+                     (hash_password(new), session.get('user_id')))
+        conn.commit()
+        flash('Your password has been updated.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_change_password: %s", e)
+        flash('Could not update the password right now.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('client_dashboard') + '#settings')
+
+
+# Client-editable fields per My-Profile tab. Whitelisted so a client can only write
+# real, safe columns. Personal + family apply to ALL the client's registrations
+# (combined siblings share them); academic applies per registration's client_academics.
+_CLIENT_PROFILE_PERSONAL = ('address', 'city', 'state', 'country', 'whatsapp')
+_CLIENT_PROFILE_FAMILY = ('guardian_type',
+    'father_first_name', 'father_last_name', 'father_phone', 'father_email',
+    'mother_first_name', 'mother_last_name', 'mother_phone', 'mother_email',
+    'guardian_first_name', 'guardian_last_name', 'guardian_phone', 'guardian_email')
+_CLIENT_PROFILE_ACADEMIC = ('img_fmg', 'country', 'fmg_medical_college', 'img_medical_college',
+    'mbbs_status', 'mbbs_start_date', 'mbbs_end_date',
+    'internship_status', 'internship_hospital', 'internship_location',
+    'internship_start_date', 'internship_end_date', 'internship_gap',
+    'gap_in_months', 'gap_reason', 'working_status', 'working_hospital_name',
+    'pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status', 'additional_info')
+
+
+def _sync_client_academics_to_ops(conn, reg_id):
+    """Push a client's academic edits into the ops-side record so every pathway's
+    Academic Details page reflects what the client entered. The client OWNS these
+    fields (they filled them at registration); this keeps ops in sync when they
+    complete/correct them later from the dashboard. UPDATEs the existing
+    ops_academic_details row for the registration_number, or INSERTs one.
+    (founder 2026-07-30)"""
+    try:
+        row = conn.execute(
+            "SELECT cr.registration_number, ps.pathway FROM client_registrations cr "
+            "LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?",
+            (reg_id,)).fetchone()
+        if not row or not row['registration_number']:
+            return
+        rnum = row['registration_number']
+        pathway = row['pathway'] or 'plab'
+        ac = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
+        if not ac:
+            return
+        ac = dict(ac)
+        # Columns that exist on BOTH tables (minus keys) are the ones we mirror.
+        oa_cols = {r['column_name'] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'ops_academic_details'").fetchall()}
+        shared = [c for c in ac.keys() if c in oa_cols and c not in ('id', 'created_at', 'created_by', 'registration_number', 'pathway')]
+        existing = conn.execute(
+            "SELECT id FROM ops_academic_details WHERE registration_number = ?", (rnum,)).fetchone()
+        if existing:
+            sets = ', '.join(f"{c} = ?" for c in shared)
+            conn.execute(f"UPDATE ops_academic_details SET {sets} WHERE registration_number = ?",
+                         [ac.get(c) for c in shared] + [rnum])
+        else:
+            cols = ['registration_number', 'pathway'] + shared
+            conn.execute(
+                f"INSERT INTO ops_academic_details ({', '.join(cols)}) VALUES ({', '.join(['?']*len(cols))})",
+                [rnum, pathway] + [ac.get(c) for c in shared])
+        # Keep the PG-doctor badge in step with what the client entered.
+        _pg_started = ((ac.get('pg_done') or '').strip().lower() in ('yes', 'y', 'true', '1')
+                       and (ac.get('pg_status') or '').strip() != '')
+        if _pg_started:
+            conn.execute("UPDATE plab_clients SET is_pg_doctor = 1 WHERE registration_number = ?", (rnum,))
+    except Exception as e:
+        logging.warning(f"_sync_client_academics_to_ops reg {reg_id}: {e}")
+
+
+@app.route('/client/profile/save', methods=['POST'])
+def client_profile_save():
+    """Client edits one My-Profile tab (personal | family | academic) and saves.
+    Editable only until operations verifies the record; blocked during admin preview.
+    Personal/family write to every registration the client owns (combined siblings
+    stay in sync); academic writes each registration's client_academics row.
+    (founder 2026-07-30)"""
+    if not session.get('is_client'):
+        return redirect(url_for('client_login_page'))
+    if session.get('client_preview'):
+        flash('Preview mode — edits are disabled here.', 'info')
+        return redirect(url_for('client_dashboard') + '#profile')
+    acct_id = session.get('user_id')
+    section = (request.form.get('section') or '').strip()
+    conn = get_db()
+    try:
+        regs = conn.execute("SELECT id, ops_status FROM client_registrations WHERE account_id = ?",
+                            (acct_id,)).fetchall()
+        if not regs:
+            flash('No registration on file.', 'error')
+            return redirect(url_for('client_dashboard') + '#profile')
+        reg_ids = [r['id'] for r in regs]
+        verified = any((r['ops_status'] or '').strip().lower() == 'verified' for r in regs)
+
+        if section in ('personal', 'family'):
+            # Personal + contact details lock once operations verifies (contact the
+            # counsellor after that). Academic (below) stays open — it's client-owned.
+            if verified:
+                flash('Your personal details are verified and can no longer be edited here. Please contact your counsellor for changes.', 'error')
+                return redirect(url_for('client_dashboard') + '#profile')
+            cols = _CLIENT_PROFILE_PERSONAL if section == 'personal' else _CLIENT_PROFILE_FAMILY
+            data = {c: (request.form.get(c) or '').strip() for c in cols if c in request.form}
+            if section == 'family':
+                # Keep the legacy flat fields other displays/master-sync read.
+                gtype = data.get('guardian_type', '')
+                data['father_name'] = (data.get('father_first_name', '') + ' ' + data.get('father_last_name', '')).strip()
+                data['mother_name'] = (data.get('mother_first_name', '') + ' ' + data.get('mother_last_name', '')).strip()
+                if gtype == 'guardian':
+                    data['parents_email'] = data.get('guardian_email') or ''
+                else:
+                    data['parents_email'] = data.get('father_email') or data.get('mother_email') or ''
+            if data:
+                sets = ', '.join(f"{c} = ?" for c in data)
+                ph = ','.join(['?'] * len(reg_ids))
+                conn.execute(f"UPDATE client_registrations SET {sets} WHERE id IN ({ph})",
+                             list(data.values()) + reg_ids)
+
+        elif section == 'academic':
+            # Academic details are entered + owned by the client and auto-flow to
+            # every pathway's ops Academic Details page. So they stay editable even
+            # after verification (clients complete missing dates etc. later), and each
+            # save re-syncs to ops. Write only real client_academics columns.
+            ca_cols = {r['column_name'] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'client_academics'").fetchall()}
+            data = {c: (request.form.get(c) or '').strip()
+                    for c in _CLIENT_PROFILE_ACADEMIC if c in request.form and c in ca_cols}
+            if data:
+                sets = ', '.join(f"{c} = ?" for c in data)
+                for rid in reg_ids:
+                    exists = conn.execute("SELECT 1 FROM client_academics WHERE registration_id = ?", (rid,)).fetchone()
+                    if exists:
+                        conn.execute(f"UPDATE client_academics SET {sets} WHERE registration_id = ?",
+                                     list(data.values()) + [rid])
+                    else:
+                        keys = ['registration_id'] + list(data.keys())
+                        conn.execute(f"INSERT INTO client_academics ({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
+                                     [rid] + list(data.values()))
+                    _sync_client_academics_to_ops(conn, rid)
+        else:
+            flash('Unknown section.', 'error')
+            return redirect(url_for('client_dashboard') + '#profile')
+        conn.commit()
+        flash('Your details have been updated.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_profile_save: %s", e)
+        flash('Could not save your changes right now.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('client_dashboard') + '#profile')
+
+
 # ── Refund Policy: editable policy doc + client digital agreement ──
 
 _DEFAULT_REFUND_POLICY_HTML = '''<p>Cancellations will be considered only if the request is made immediately after enrolment. However, the cancellation request may not be entertained if the services have already been initiated or scheduled on your behalf.</p>
@@ -1893,6 +2119,31 @@ def get_package_services(conn, product_id, plan_type):
     return out
 
 
+def get_package_services_split(conn, product_id, plan_type):
+    """Same data as get_package_services, but kept in two buckets for the client's
+    Service Delivery view: 'standard' (the product's standard contract inclusions,
+    plan_type='__standard__') and 'additional' (the plan-specific extras). Names +
+    descriptions only — never budget/cost to the client. (founder 2026-07-30)"""
+    cols = "service_name, description, quantity, delivery_stage"
+    standard, additional = [], []
+    if not product_id:
+        return {'standard': standard, 'additional': additional}
+    std = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = '__standard__'",
+                       (product_id,)).fetchone()
+    if std:
+        standard = [dict(s) for s in conn.execute(
+            f"SELECT {cols} FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+            (std['id'],)).fetchall()]
+    if plan_type:
+        pp = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+                          (product_id, plan_type)).fetchone()
+        if pp:
+            additional = [dict(s) for s in conn.execute(
+                f"SELECT {cols} FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+                (pp['id'],)).fetchall()]
+    return {'standard': standard, 'additional': additional}
+
+
 def get_plan_package_amount(conn, product_id, plan_type):
     """The gross/sale price defined for a (product, plan) in Packages, or None."""
     if not product_id or not plan_type:
@@ -2206,8 +2457,18 @@ def client_dashboard():
             onboarding_by_reg.get(d.get('registration_number')),
             holidays_set=holidays_set, reg=d)
         # What's included in the client's package (standard + plan-specific).
-        # Names + descriptions only for the client — NEVER budget/cost.
+        # Names + descriptions only for the client — NEVER budget/cost. Kept in two
+        # buckets so Service Delivery shows Standard vs Additional separately.
         d['package_services'] = get_package_services(conn, d.get('product_id'), d.get('plan_type'))
+        _svc = get_package_services_split(conn, d.get('product_id'), d.get('plan_type'))
+        d['std_services'] = _svc['standard']
+        d['plan_services'] = _svc['additional']
+        # This registration's academic record (for the My Profile → Academic tab).
+        try:
+            d['academics'] = dict(conn.execute(
+                "SELECT * FROM client_academics WHERE registration_id = ?", (d['id'],)).fetchone() or {})
+        except Exception:
+            d['academics'] = {}
         registrations.append(d)
 
     # Get doc requests for all registrations
@@ -2264,10 +2525,30 @@ def client_dashboard():
             photo_doc = {'url': url_for('client_serve_reg_doc', doc_id=_prow['id'])}
 
     conn.close()
-    return render_template('client_dashboard.html',
+    # Choose the view: once the client has SUBMITTED their registration (and thus
+    # passed the contract/refund/welcome-call gates to reach here), show the new
+    # full SaaS dashboard. While they're still filling the form / uploading the
+    # photo, keep the original onboarding flow. (founder 2026-07-30)
+    _primary = registrations[0] if registrations else None
+    _onboarded = bool(_primary and (_primary.get('form_status') if hasattr(_primary, 'get')
+                                    else _primary['form_status']) == 'submitted')
+    # The client may edit their own details until operations verifies the record;
+    # after that the profile is read-only (matches the client_form lock).
+    _locked = bool(_primary and (_primary.get('ops_status') or '').strip().lower() == 'verified')
+    # Clean display name: the stored name sometimes already carries a "Dr." prefix,
+    # so strip any leading Dr./Dr so the template's single "Dr." never doubles.
+    import re as _re
+    _raw_name = (((account['first_name'] or '') + ' ' + (account['last_name'] or '')).strip()
+                 or account['first_name'] or 'Doctor')
+    # Strip a leading Dr / Dr. / Doctor prefix — including "Dr.Rachana" (no space) —
+    # so the template's single "Dr." never doubles. Won't touch names like "Drake".
+    _clean_name = _re.sub(r'^\s*(?:dr\.\s*|dr\s+|doctor\s+)', '', _raw_name, flags=_re.I).strip() or 'Doctor'
+    _tpl = 'client_dashboard.html' if _onboarded else 'client_dashboard_onboarding.html'
+    return render_template(_tpl,
         account=account, registrations=registrations, doc_requests=doc_requests,
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
-        photo_doc=photo_doc,
+        photo_doc=photo_doc, profile_locked=_locked, client_name_clean=_clean_name,
+        primary_reg_id=(_primary['id'] if _primary else None),
         onboarding_stages=onboarding_stages,
         first_login=session.get('first_login', False))
 
@@ -2796,6 +3077,8 @@ def admin_serve_client_doc(doc_id):
 @client_required
 def client_upload_plab_doc():
     """Client uploads a document to plab_client_documents for ops review."""
+    if session.get('client_preview'):
+        return jsonify({'error': 'Preview mode — uploads are disabled.'}), 403
     acct_id = session.get('user_id')
     conn = get_db()
     # Find the client's registration. Prefer one that already has a reg number
@@ -4265,6 +4548,96 @@ def admin_pg_seed():
             f"<b>{res.get('registry',0)}</b> Field Manager row(s).</p>"
             + (f"<ul>{errs}</ul>" if errs else "")
             + "<p><a href='/admin/pg-selfcheck'>→ Re-run the self-check</a></p></div>")
+
+
+@app.route('/admin/preview-clients', methods=['GET'])
+@login_required
+def admin_preview_clients():
+    """Pick a client to preview their dashboard exactly as they see it — read-only,
+    no data changed, no fake account needed. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    q = (request.args.get('q') or '').strip()
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    conn = get_db()
+    rows = ''
+    try:
+        like = f"%{q}%"
+        recs = conn.execute(
+            "SELECT ca.id, ca.first_name, ca.last_name, ca.mobile, "
+            "  MAX(cr.registration_number) AS reg, "
+            "  BOOL_OR(cr.form_status = 'submitted') AS onboarded "
+            "FROM client_accounts ca JOIN client_registrations cr ON cr.account_id = ca.id "
+            + ("WHERE ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ? " if q else "")
+            + "GROUP BY ca.id, ca.first_name, ca.last_name, ca.mobile "
+            "ORDER BY ca.id DESC LIMIT 100",
+            ((like, like, like) if q else ())).fetchall()
+        for r in recs:
+            nm = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            badge = ("<span style='color:#065f46;font-weight:600'>onboarded</span>" if r['onboarded']
+                     else "<span style='color:#b45309'>still onboarding</span>")
+            rows += (f"<tr><td style='padding:6px 10px'>{esc(nm)}</td><td style='padding:6px 10px'>{esc(r['mobile'])}</td>"
+                     f"<td style='padding:6px 10px'>{esc(r['reg'])}</td><td style='padding:6px 10px'>{badge}</td>"
+                     f"<td style='padding:6px 10px'><a href='/admin/view-as-client/{r['id']}' "
+                     "style='padding:5px 12px;background:#F57C1F;color:#fff;border-radius:6px;text-decoration:none;font-weight:600'>Preview</a></td></tr>")
+    except Exception as e:
+        rows = f"<tr><td colspan='5' style='color:#b91c1c'>{esc(e)}</td></tr>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+            "<h2>Preview a client dashboard</h2>"
+            "<p style='color:#065f46'>See exactly what a client sees when they log in — read-only. "
+            "Nothing is changed, no fake account is created. 'Onboarded' clients show the new dashboard.</p>"
+            "<form method='GET'>Search name / mobile: "
+            f"<input name='q' value='{esc(q)}' style='padding:6px;width:260px'> <button>Search</button></form>"
+            "<table style='border-collapse:collapse;width:100%;margin-top:14px;font-size:14px'>"
+            "<tr style='background:#f3f4f6'><th style='padding:6px 10px;text-align:left'>Client</th>"
+            "<th style='padding:6px 10px;text-align:left'>Mobile</th><th style='padding:6px 10px;text-align:left'>Reg</th>"
+            "<th style='padding:6px 10px;text-align:left'>Status</th><th></th></tr>" + rows + "</table></div>")
+
+
+@app.route('/admin/view-as-client/<int:account_id>')
+@login_required
+def admin_view_as_client(account_id):
+    """Enter read-only preview of a client's dashboard. Backs up the admin session,
+    switches to a preview client session, and shows a banner + Exit. Mutating client
+    actions are blocked while previewing. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    acct = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (account_id,)).fetchone()
+    conn.close()
+    if not acct:
+        flash('Client account not found.', 'error'); return redirect(url_for('admin_preview_clients'))
+    session['_admin_backup'] = {k: session.get(k) for k in
+        ('user_id', 'is_admin', 'is_client', 'client_name', 'client_mobile', 'first_login')}
+    session['user_id'] = acct['id']
+    session['is_client'] = True
+    session['is_admin'] = False
+    session['client_name'] = ((acct['first_name'] or '') + ' ' + (acct['last_name'] or '')).strip()
+    session['client_mobile'] = acct['mobile']
+    session['client_preview'] = True
+    session['first_login'] = False
+    return redirect(url_for('client_dashboard'))
+
+
+@app.route('/admin/exit-client-preview')
+def admin_exit_client_preview():
+    """Restore the admin session after a client-dashboard preview."""
+    backup = session.pop('_admin_backup', None)
+    for k in ('client_preview', 'client_name', 'client_mobile'):
+        session.pop(k, None)
+    if backup:
+        for k, v in backup.items():
+            if v is None:
+                session.pop(k, None)
+            else:
+                session[k] = v
+    flash('Exited client preview.', 'success')
+    return redirect(url_for('admin_preview_clients'))
 
 
 @app.route('/admin/pg-selfcheck', methods=['GET'])
@@ -12411,6 +12784,9 @@ def ensure_crm_tables():
             # 1 = PG Doctor. Auto-set when PG is started/completed; also bulk-settable
             # for the founder's list of existing PG doctors.
             ('plab_clients',        'is_pg_doctor', 'INTEGER DEFAULT 0'),
+            # Client dashboard presence: heartbeat updates this while the client has
+            # their dashboard open, so ops can see a live "● Online" badge.
+            ('client_accounts',     'last_seen_at', 'TIMESTAMP'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -29871,6 +30247,12 @@ def ops_academic_edit(rid):
                 conn.execute("UPDATE plab_clients SET is_pg_doctor = 1 WHERE registration_number = ?", (_reg,))
         except Exception:
             pass
+        # Mirror the ops edit back to the client's dashboard academic record.
+        try:
+            from core.academic_sync import sync_ops_academics_to_client
+            sync_ops_academics_to_client(conn, f.get('registration_number'))
+        except Exception as _se:
+            logging.warning(f"plab academic ops->client sync: {_se}")
         conn.commit(); conn.close()
         flash('Academic details updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_academic_list'))

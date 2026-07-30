@@ -310,55 +310,152 @@ def college_edit(college_id):
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
+        is_intl_editor = request.form.get('fee_editor') == '1'
         try:
             city = request.form.get('city', '').strip() or request.form.get('city_text', '').strip()
-            conn.execute('''UPDATE colleges SET name=?, category=?, country=?, state_or_region=?, city=?,
-                established_year=?, university_type=?, medium_of_instruction=?, nmc_approved=?, who_approved=?,
-                indian_passouts=?, description=?, eligibility=?, facilities=?, ranking_info=?, website_url=?,
-                contact_phone=?, contact_email=?, currency=?, full_package_inr_lakhs=?,
-                mess_charges=?, consultancy_fee_inr=?, admin_fee=?, travel_cost_inr=?,
-                hostel_included=?, is_featured=?, logo_url=?, cover_image_url=?,
-                university_name=?, annual_intake=?, counselling_authority=?, opd=?, ipd=?,
-                bond_penalty=?, bed_count=?, prospects_url=?,
-                updated_at=CURRENT_TIMESTAMP WHERE id=?''',
-                (name,
-                 request.form.get('category', 'international'),
-                 request.form.get('country', ''),
-                 request.form.get('state_or_region', ''),
-                 city,
-                 int(request.form.get('established_year') or 0),
-                 request.form.get('university_type', 'Government'),
-                 request.form.get('medium_of_instruction', 'English'),
-                 1 if request.form.get('nmc_approved') else 0,
-                 1 if request.form.get('who_approved') else 0,
-                 request.form.get('indian_passouts', ''),
-                 request.form.get('description', ''),
-                 request.form.get('eligibility', ''),
-                 request.form.get('facilities', ''),
-                 request.form.get('ranking_info', ''),
-                 request.form.get('website_url', ''),
-                 request.form.get('contact_phone', ''),
-                 request.form.get('contact_email', ''),
-                 request.form.get('currency', 'INR'),
-                 float(request.form.get('full_package_inr_lakhs') or 0),
-                 request.form.get('mess_charges', ''),
-                 float(request.form.get('consultancy_fee_inr') or 0),
-                 request.form.get('admin_fee', ''),
-                 float(request.form.get('travel_cost_inr') or 0),
-                 1 if request.form.get('hostel_included') else 0,
-                 1 if request.form.get('is_featured') else 0,
-                 request.form.get('logo_url', ''),
-                 request.form.get('cover_image_url', ''),
-                 request.form.get('university_name', ''),
-                 int(request.form.get('annual_intake') or 0),
-                 request.form.get('counselling_authority', ''),
-                 int(request.form.get('opd') or 0),
-                 int(request.form.get('ipd') or 0),
-                 request.form.get('bond_penalty', ''),
-                 int(request.form.get('bed_count') or 0),
-                 request.form.get('prospects_url', ''),
-                 college_id))
+            if is_intl_editor:
+                # Targeted update — only the fields the smart international editor has,
+                # so unrelated columns (contact, state, intake, counselling, hospital…)
+                # are preserved. Full package is auto-derived from the fee rows below.
+                conn.execute('''UPDATE colleges SET name=?, category='international', country=?, city=?,
+                    established_year=?, university_type=?, medium_of_instruction=?, nmc_approved=?, who_approved=?,
+                    indian_passouts=?, description=?, eligibility=?, website_url=?, currency=?,
+                    mess_charges=?, consultancy_fee_inr=?, admin_fee=?, travel_cost_inr=?,
+                    hostel_included=?, is_featured=?, logo_url=?, cover_image_url=?,
+                    university_name=?, prospects_url=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                    (name,
+                     request.form.get('country', ''), city,
+                     int(request.form.get('established_year') or 0),
+                     request.form.get('university_type', 'Government'),
+                     request.form.get('medium_of_instruction', 'English'),
+                     1 if request.form.get('nmc_approved') else 0,
+                     1 if request.form.get('who_approved') else 0,
+                     request.form.get('indian_passouts', ''),
+                     request.form.get('description', ''),
+                     request.form.get('eligibility', ''),
+                     request.form.get('website_url', ''),
+                     request.form.get('currency', 'INR'),
+                     request.form.get('mess_charges', ''),
+                     float(request.form.get('consultancy_fee_inr') or 0),
+                     request.form.get('admin_fee', ''),
+                     float(request.form.get('travel_cost_inr') or 0),
+                     1 if request.form.get('hostel_included') else 0,
+                     1 if request.form.get('is_featured') else 0,
+                     request.form.get('logo_url', ''),
+                     request.form.get('cover_image_url', ''),
+                     request.form.get('university_name', ''),
+                     request.form.get('prospects_url', ''),
+                     college_id))
+            else:
+                conn.execute('''UPDATE colleges SET name=?, category=?, country=?, state_or_region=?, city=?,
+                    established_year=?, university_type=?, medium_of_instruction=?, nmc_approved=?, who_approved=?,
+                    indian_passouts=?, description=?, eligibility=?, facilities=?, ranking_info=?, website_url=?,
+                    contact_phone=?, contact_email=?, currency=?, full_package_inr_lakhs=?,
+                    mess_charges=?, consultancy_fee_inr=?, admin_fee=?, travel_cost_inr=?,
+                    hostel_included=?, is_featured=?, logo_url=?, cover_image_url=?,
+                    university_name=?, annual_intake=?, counselling_authority=?, opd=?, ipd=?,
+                    bond_penalty=?, bed_count=?, prospects_url=?,
+                    updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                    (name,
+                     request.form.get('category', 'international'),
+                     request.form.get('country', ''),
+                     request.form.get('state_or_region', ''),
+                     city,
+                     int(request.form.get('established_year') or 0),
+                     request.form.get('university_type', 'Government'),
+                     request.form.get('medium_of_instruction', 'English'),
+                     1 if request.form.get('nmc_approved') else 0,
+                     1 if request.form.get('who_approved') else 0,
+                     request.form.get('indian_passouts', ''),
+                     request.form.get('description', ''),
+                     request.form.get('eligibility', ''),
+                     request.form.get('facilities', ''),
+                     request.form.get('ranking_info', ''),
+                     request.form.get('website_url', ''),
+                     request.form.get('contact_phone', ''),
+                     request.form.get('contact_email', ''),
+                     request.form.get('currency', 'INR'),
+                     float(request.form.get('full_package_inr_lakhs') or 0),
+                     request.form.get('mess_charges', ''),
+                     float(request.form.get('consultancy_fee_inr') or 0),
+                     request.form.get('admin_fee', ''),
+                     float(request.form.get('travel_cost_inr') or 0),
+                     1 if request.form.get('hostel_included') else 0,
+                     1 if request.form.get('is_featured') else 0,
+                     request.form.get('logo_url', ''),
+                     request.form.get('cover_image_url', ''),
+                     request.form.get('university_name', ''),
+                     int(request.form.get('annual_intake') or 0),
+                     request.form.get('counselling_authority', ''),
+                     int(request.form.get('opd') or 0),
+                     int(request.form.get('ipd') or 0),
+                     request.form.get('bond_penalty', ''),
+                     int(request.form.get('bed_count') or 0),
+                     request.form.get('prospects_url', ''),
+                     college_id))
             conn.commit()
+
+            # ── Smart international editor: rebuild courses + fee rows, auto-derive full package ──
+            if is_intl_editor:
+                currency = request.form.get('currency', 'INR')
+                rates = _get_exchange_rates()
+                course_ids = [r['id'] for r in conn.execute(
+                    "SELECT id FROM college_courses WHERE college_id = ?", (college_id,)).fetchall()]
+
+                # Update each course's own fields (name / duration / intake)
+                for cid in course_ids:
+                    cn = request.form.get(f'course_name_{cid}')
+                    if cn is not None:
+                        conn.execute(
+                            "UPDATE college_courses SET course_name=?, degree=?, duration_years=?, duration_includes=?, intake_season=? WHERE id=?",
+                            (cn.strip() or 'MBBS', cn.strip() or 'MBBS',
+                             int(request.form.get(f'duration_years_{cid}') or 6),
+                             request.form.get(f'duration_includes_{cid}', 'Including Internship'),
+                             request.form.get(f'intake_season_{cid}', 'Summer'), cid))
+
+                # Replace all fee rows from the submitted table
+                for cid in course_ids:
+                    conn.execute("DELETE FROM college_fee_structure WHERE course_id = ?", (cid,))
+                fcid = request.form.getlist('fee_course_id')
+                fyear = request.form.getlist('fee_year')
+                fsem = request.form.getlist('fee_sem')
+                ftui = request.form.getlist('fee_tuition')
+                fhos = request.form.getlist('fee_hostel')
+                fdoc = request.form.getlist('fee_docs')
+                fvisa = request.form.getlist('fee_visa')
+
+                def _num(lst, i):
+                    try:
+                        return float(lst[i] or 0)
+                    except (ValueError, IndexError):
+                        return 0.0
+
+                grand_inr = 0.0
+                for i in range(len(fcid)):
+                    try:
+                        cid = int(fcid[i])
+                    except (ValueError, TypeError):
+                        continue
+                    if cid not in course_ids:
+                        continue
+                    tui, hos = _num(ftui, i), _num(fhos, i)
+                    doc, visa = _num(fdoc, i), _num(fvisa, i)
+                    total = tui + hos + doc + visa
+                    if total <= 0 and not (fyear[i:i + 1] and fyear[i].strip()):
+                        continue  # skip empty rows
+                    total_inr = _to_inr(total, currency, rates)
+                    grand_inr += total_inr
+                    conn.execute(
+                        "INSERT INTO college_fee_structure (course_id, year_label, semester, tuition_fee, hostel_fee, docs_med_checkup, visa_med_insurance, total, total_inr) VALUES (?,?,?,?,?,?,?,?,?)",
+                        (cid, (fyear[i] if i < len(fyear) else '1st Year'),
+                         (fsem[i] if i < len(fsem) else '1st Sem'),
+                         tui, hos, doc, visa, total, total_inr))
+
+                # Auto-derive the full package (INR lakhs) from the fee rows
+                conn.execute("UPDATE colleges SET full_package_inr_lakhs = ? WHERE id = ?",
+                             (round(grand_inr / 100000, 2), college_id))
+                conn.commit()
+
             flash(f"College '{name}' updated!", "success")
         except Exception as e:
             logging.error(f"College edit error: {e}")
@@ -366,6 +463,23 @@ def college_edit(college_id):
         finally:
             conn.close()
         return redirect(f'/colleges/{college["slug"]}')
+
+    # ── GET: international colleges use the smart profile-style editor ──
+    if college['category'] == 'international':
+        courses = conn.execute(
+            "SELECT * FROM college_courses WHERE college_id = ? AND is_active = TRUE ORDER BY id", (college_id,)
+        ).fetchall()
+        fees_by_course = {}
+        for course in courses:
+            fees_by_course[course['id']] = conn.execute(
+                "SELECT * FROM college_fee_structure WHERE course_id = ? ORDER BY year_label, semester", (course['id'],)
+            ).fetchall()
+        rates = _get_exchange_rates()
+        countries = conn.execute("SELECT id, name FROM countries WHERE is_active = TRUE ORDER BY name").fetchall()
+        conn.close()
+        return render_template('college/college_edit_intl.html', college=college, courses=courses,
+                               fees_by_course=fees_by_course, countries=countries, rates=rates,
+                               currency_sym=_currency_sym, active_section='colleges')
 
     countries = conn.execute("SELECT id, name FROM countries WHERE is_active = TRUE ORDER BY name").fetchall()
     states = conn.execute("SELECT id, name FROM states WHERE is_active = TRUE ORDER BY name").fetchall()

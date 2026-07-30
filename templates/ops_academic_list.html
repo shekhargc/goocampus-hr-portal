@@ -152,6 +152,11 @@ const RECORDS = {
         gap_reason: {{ (record.gap_reason or '')|tojson }},
         working_status: {{ (record.working_status or '')|tojson }},
         working_hospital_name: {{ (record.working_hospital_name or '')|tojson }},
+        pg_done: {{ (record.pg_done or '')|tojson }},
+        pg_type: {{ (record.pg_type or '')|tojson }},
+        pg_specialty: {{ (record.pg_specialty or '')|tojson }},
+        pg_college: {{ (record.pg_college or '')|tojson }},
+        pg_status: {{ (record.pg_status or '')|tojson }},
         additional_info: {{ (record.additional_info or '')|tojson }},
     },
     {% endfor %}
@@ -215,8 +220,17 @@ function openAcademicDetail(id) {
             ${field('Gap Reason', r.gap_reason)}
             ${field('Working Status', r.working_status)}
             ${field('Working Hospital', r.working_hospital_name)}
-            ${field('Additional Info', r.additional_info)}
-    </div>`;
+    </div>
+    <div class="drawer-section"><h4>Postgraduate</h4><div class="drawer-grid">
+            ${field('Done / doing PG?', r.pg_done)}
+            ${field('PG Type', r.pg_type)}
+            ${field('PG Specialty', r.pg_specialty)}
+            ${field('PG College', r.pg_college)}
+            ${field('PG Status', r.pg_status)}
+    </div></div>
+    <div class="drawer-section"><h4>Anything else the client told us</h4><div class="drawer-grid">
+            <div class="drawer-field full"><div class="value">${r.additional_info || '<span style="color:var(--gray-400);">—</span>'}</div></div>
+    </div></div>`;
 
     document.getElementById('academicDrawerBody').innerHTML = html;
     document.getElementById('academicDrawerActions').innerHTML = `
