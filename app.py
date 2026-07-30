@@ -1365,13 +1365,623 @@ def client_manifest():
         "start_url": "/client/dashboard",
         "scope": "/client/",
         "display": "standalone",
+        "orientation": "portrait",
         "background_color": "#0F1B33",
         "theme_color": "#0F1B33",
         "icons": [
-            {"src": "/static/logo.png", "sizes": "192x192", "type": "image/png"},
-            {"src": "/static/logo.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+        "shortcuts": [
+            {"name": "Payments", "url": "/client/dashboard#payments",
+             "icons": [{"src": "/static/icon-192.png", "sizes": "192x192"}]},
+            {"name": "Documents", "url": "/client/dashboard#documents",
+             "icons": [{"src": "/static/icon-192.png", "sizes": "192x192"}]},
+            {"name": "My Profile", "url": "/client/dashboard#profile",
+             "icons": [{"src": "/static/icon-192.png", "sizes": "192x192"}]},
         ],
     })
+
+
+@app.route('/client/sw.js')
+def client_service_worker():
+    """Service worker for the client PWA — served from /client/ so its scope covers
+    the whole client area (needed for Android/Chrome to offer 'Install app').
+    Network-first with a cached shell fallback so the app opens even offline.
+    (founder 2026-07-30)"""
+    js = """
+const CACHE = 'gc-client-v2';
+const SHELL = ['/client/login', '/static/logo-white.png', '/static/icon-192.png'];
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(()=>{}));
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(
+    ks.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;              // never cache POSTs (logins, saves)
+  e.respondWith(
+    fetch(req).then(res => {
+      if (res && res.ok && new URL(req.url).origin === location.origin) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy)).catch(()=>{});
+      }
+      return res;
+    }).catch(() => caches.match(req).then(m => m || caches.match('/client/login')))
+  );
+});
+// ── Push notifications ──
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch(_) { d = { body: (e.data && e.data.text()) || '' }; }
+  const title = d.title || 'GooCampus';
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || '',
+    icon: '/static/icon-192.png',
+    badge: '/static/icon-192.png',
+    data: { url: d.url || '/client/dashboard' },
+    tag: d.tag || 'gc',
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/client/dashboard';
+  e.waitUntil(clients.matchAll({type:'window', includeUncontrolled:true}).then(ws => {
+    for (const w of ws) { if (w.url.includes('/client/') && 'focus' in w) { w.navigate && w.navigate(url); return w.focus(); } }
+    return clients.openWindow(url);
+  }));
+});
+"""
+    resp = make_response(js)
+    resp.mimetype = 'application/javascript'
+    resp.headers['Service-Worker-Allowed'] = '/client/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+# ══ Web Push notifications for the client PWA ══
+# VAPID keys are generated ONCE on the server and stored in push_config — the founder
+# never has to paste a secret. Public key -> the browser's applicationServerKey;
+# private key -> signs each push. (founder 2026-07-30)
+
+def _ensure_push(conn):
+    """Create the push tables + ensure a VAPID keypair exists. Returns
+    (public_b64url, private_b64url), or (None, None) if unavailable."""
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS push_config ("
+                     "id INTEGER PRIMARY KEY, vapid_public TEXT, vapid_private TEXT, "
+                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("CREATE TABLE IF NOT EXISTS client_push_subscriptions ("
+                     "id SERIAL PRIMARY KEY, account_id INTEGER, endpoint TEXT UNIQUE, "
+                     "p256dh TEXT, auth TEXT, user_agent TEXT, "
+                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        row = conn.execute("SELECT vapid_public, vapid_private FROM push_config WHERE id = 1").fetchone()
+        if row and row['vapid_public'] and row['vapid_private']:
+            conn.commit()
+            return row['vapid_public'], row['vapid_private']
+        from cryptography.hazmat.primitives.asymmetric import ec
+        import base64
+        def _b64u(b): return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+        priv = ec.generate_private_key(ec.SECP256R1())
+        priv_b64 = _b64u(priv.private_numbers().private_value.to_bytes(32, 'big'))
+        nums = priv.public_key().public_numbers()
+        pub_b64 = _b64u(b'\x04' + nums.x.to_bytes(32, 'big') + nums.y.to_bytes(32, 'big'))
+        conn.execute("INSERT INTO push_config (id, vapid_public, vapid_private) VALUES (1, ?, ?) "
+                     "ON CONFLICT (id) DO UPDATE SET vapid_public = EXCLUDED.vapid_public, "
+                     "vapid_private = EXCLUDED.vapid_private", (pub_b64, priv_b64))
+        conn.commit()
+        return pub_b64, priv_b64
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("_ensure_push: %s", e)
+        return None, None
+
+
+def send_client_push(conn, account_id, title, body, url='/client/dashboard', tag='gc'):
+    """Best-effort web-push to every device a client has enabled. Prunes dead subs.
+    Returns the number of pushes accepted. Safe to call from any flow (never raises)."""
+    try:
+        _pub, priv = _ensure_push(conn)
+        if not priv:
+            return 0
+        subs = conn.execute(
+            "SELECT endpoint, p256dh, auth FROM client_push_subscriptions WHERE account_id = ?",
+            (account_id,)).fetchall()
+        if not subs:
+            return 0
+        from pywebpush import webpush, WebPushException
+        import json as _json
+        payload = _json.dumps({'title': title, 'body': body, 'url': url, 'tag': tag})
+        sent = 0
+        for s in subs:
+            info = {'endpoint': s['endpoint'], 'keys': {'p256dh': s['p256dh'], 'auth': s['auth']}}
+            try:
+                webpush(subscription_info=info, data=payload, vapid_private_key=priv,
+                        vapid_claims={'sub': 'mailto:info@goocampus.in'})
+                sent += 1
+            except WebPushException as we:
+                code = getattr(getattr(we, 'response', None), 'status_code', None)
+                if code in (404, 410):
+                    try:
+                        conn.execute("DELETE FROM client_push_subscriptions WHERE endpoint = ?", (s['endpoint'],))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                else:
+                    logging.warning("send_client_push endpoint: %s", we)
+        return sent
+    except Exception as e:
+        logging.error("send_client_push: %s", e)
+        return 0
+
+
+@app.route('/client/push/key')
+def client_push_key():
+    """Public VAPID key the browser uses to subscribe."""
+    conn = get_db()
+    try:
+        pub, _priv = _ensure_push(conn)
+        return jsonify({'key': pub})
+    finally:
+        conn.close()
+
+
+@app.route('/client/push/subscribe', methods=['POST'])
+def client_push_subscribe():
+    if not session.get('is_client'):
+        return jsonify({'ok': False}), 401
+    if session.get('client_preview'):
+        return jsonify({'ok': True, 'preview': True})
+    data = request.get_json(silent=True) or {}
+    sub = data.get('subscription') or {}
+    endpoint = sub.get('endpoint')
+    keys = sub.get('keys') or {}
+    if not endpoint:
+        return jsonify({'ok': False, 'error': 'no_endpoint'}), 400
+    conn = get_db()
+    try:
+        _ensure_push(conn)
+        conn.execute("DELETE FROM client_push_subscriptions WHERE endpoint = ?", (endpoint,))
+        conn.execute("INSERT INTO client_push_subscriptions (account_id, endpoint, p256dh, auth, user_agent) "
+                     "VALUES (?, ?, ?, ?, ?)",
+                     (session.get('user_id'), endpoint, keys.get('p256dh'), keys.get('auth'),
+                      (request.headers.get('User-Agent') or '')[:300]))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_push_subscribe: %s", e)
+        return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/client/push/unsubscribe', methods=['POST'])
+def client_push_unsubscribe():
+    if not session.get('is_client'):
+        return jsonify({'ok': False}), 401
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get('endpoint') or ''
+    conn = get_db()
+    try:
+        if endpoint:
+            conn.execute("DELETE FROM client_push_subscriptions WHERE endpoint = ?", (endpoint,))
+        else:
+            conn.execute("DELETE FROM client_push_subscriptions WHERE account_id = ?", (session.get('user_id'),))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/admin/push-test', methods=['GET', 'POST'])
+@login_required
+def admin_push_test():
+    """Send a test notification to a client (by mobile) so the founder can see push
+    working on their installed PWA. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    result = ''
+    if request.method == 'POST':
+        mobile = (request.form.get('mobile') or '').strip()
+        conn = get_db()
+        try:
+            acct = conn.execute("SELECT id FROM client_accounts WHERE mobile = ?", (mobile,)).fetchone()
+            if not acct:
+                result = f"No client account with mobile {mobile}."
+            else:
+                n = send_client_push(conn, acct['id'],
+                                     'GooCampus', 'This is a test notification — your app is connected. 🎉',
+                                     url='/client/dashboard', tag='test')
+                result = (f"Sent to {n} device(s). If you enabled notifications on the installed app, "
+                          "it should appear now.") if n else \
+                         "No devices are subscribed yet — open the installed app and tap 'Turn on notifications' first."
+        finally:
+            conn.close()
+    result_html = ("<p style='color:#065f46'>" + result + "</p>") if result else ''
+    return ("<div style='font-family:system-ui;max-width:560px;margin:30px auto'>"
+            "<h2>Send a test notification</h2>"
+            + result_html +
+            "<form method='POST'>Client mobile: "
+            "<input name='mobile' value='9000000001' style='padding:7px;width:180px'> "
+            "<button style='padding:8px 14px;background:#F57C1F;color:#fff;border:none;border-radius:8px'>Send test</button>"
+            "</form><p style='color:#64748b;font-size:13px'>Tip: on the phone, open the <b>installed</b> app "
+            "(not the browser tab), tap <b>Turn on notifications</b>, allow it, then send the test.</p></div>")
+
+
+# ══ Live chat: client ↔ ops, per-client thread + history, shared ops inbox ══
+# Every client has one running conversation (keyed by account_id). Ops replies are
+# stamped with the employee who sent them, so the whole team sees who replied.
+# (founder 2026-07-30)
+
+def _ensure_chat(conn):
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS client_chat_messages ("
+                     "id SERIAL PRIMARY KEY, account_id INTEGER NOT NULL, "
+                     "sender_type TEXT NOT NULL, sender_id INTEGER, sender_name TEXT, "
+                     "body TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                     "read_by_ops INTEGER DEFAULT 0, read_by_client INTEGER DEFAULT 0)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_account ON client_chat_messages(account_id, id)")
+        conn.execute("ALTER TABLE client_chat_messages ADD COLUMN IF NOT EXISTS is_auto INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE client_accounts ADD COLUMN IF NOT EXISTS last_chat_seen_at TIMESTAMP")
+        conn.execute("CREATE TABLE IF NOT EXISTS chat_autoreply ("
+                     "id INTEGER PRIMARY KEY, enabled INTEGER DEFAULT 0, "
+                     "start_time TEXT DEFAULT '10:00', end_time TEXT DEFAULT '18:00', "
+                     "days TEXT DEFAULT '0,1,2,3,4', message TEXT DEFAULT '', "
+                     "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _maybe_autoreply(conn, account_id):
+    """If the team is outside its configured working hours, drop one auto-reply into
+    the client's thread (rate-limited to once / 30 min). (founder 2026-07-30)"""
+    try:
+        cfg = conn.execute("SELECT * FROM chat_autoreply WHERE id = 1").fetchone()
+        if not cfg or not cfg['enabled']:
+            return
+        import pytz
+        from datetime import datetime as _dt
+        now = _dt.now(pytz.timezone('Asia/Kolkata'))
+        start = (cfg['start_time'] or '10:00'); end = (cfg['end_time'] or '18:00')
+        working_days = set(int(x) for x in (cfg['days'] or '0,1,2,3,4').split(',') if x.strip().isdigit())
+        cur = now.strftime('%H:%M')
+        in_hours = (now.weekday() in working_days) and (start <= cur <= end)
+        if in_hours:
+            return  # team available — no auto-reply
+        recent = conn.execute(
+            "SELECT 1 FROM client_chat_messages WHERE account_id = ? AND is_auto = 1 "
+            "AND created_at > CURRENT_TIMESTAMP - INTERVAL '30 minutes' LIMIT 1", (account_id,)).fetchone()
+        if recent:
+            return
+        msg = (cfg['message'] or '').strip() or \
+            "Thanks for your message! Our team is offline right now — we'll get back to you during working hours."
+        conn.execute("INSERT INTO client_chat_messages (account_id, sender_type, sender_name, body, is_auto) "
+                     "VALUES (?, 'ops', 'GooCampus', ?, 1)", (account_id, msg))
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.warning("autoreply: %s", e)
+
+
+def _ist_str(dt):
+    """Format a stored (UTC) timestamp as IST 'DD Mon, HH:MM am/pm' for display."""
+    if not dt:
+        return ''
+    try:
+        import pytz
+        from datetime import datetime as _dt
+        if isinstance(dt, str):
+            dt = _dt.fromisoformat(dt)
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        return dt.astimezone(pytz.timezone('Asia/Kolkata')).strftime('%d %b, %I:%M %p')
+    except Exception:
+        return ''
+
+
+def _chat_msg_dict(r, viewer):
+    """Shape a chat row for JSON. viewer='client' or 'ops' decides which side is 'me'."""
+    mine = (r['sender_type'] == viewer)
+    default = 'You' if r['sender_type'] == 'client' else 'GooCampus'
+    return {'id': r['id'], 'mine': mine, 'sender_type': r['sender_type'],
+            'name': (r['sender_name'] or default), 'body': r['body'],
+            'time': _ist_str(r['created_at'])}
+
+
+@app.route('/client/chat/messages')
+@client_required
+def client_chat_messages():
+    acct_id = session.get('user_id')
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        rows = conn.execute(
+            "SELECT id, sender_type, sender_name, body, created_at FROM client_chat_messages "
+            "WHERE account_id = ? ORDER BY id", (acct_id,)).fetchall()
+        if not session.get('client_preview'):
+            conn.execute("UPDATE client_chat_messages SET read_by_client = 1 WHERE account_id = ? "
+                         "AND sender_type = 'ops' AND read_by_client = 0", (acct_id,))
+            # Stamp that the client is actively viewing chat right now — ops replies
+            # skip the push notification while this is fresh (they see it live).
+            conn.execute("UPDATE client_accounts SET last_chat_seen_at = CURRENT_TIMESTAMP WHERE id = ?", (acct_id,))
+            conn.commit()
+        return jsonify({'messages': [_chat_msg_dict(r, 'client') for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.route('/client/chat/send', methods=['POST'])
+@client_required
+def client_chat_send():
+    if session.get('client_preview'):
+        return jsonify({'ok': True, 'preview': True})
+    acct_id = session.get('user_id')
+    body = ((request.get_json(silent=True) or {}).get('body') or '').strip()[:2000]
+    if not body:
+        return jsonify({'ok': False}), 400
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        name = session.get('client_name') or 'Client'
+        conn.execute("INSERT INTO client_chat_messages (account_id, sender_type, sender_name, body) "
+                     "VALUES (?, 'client', ?, ?)", (acct_id, name, body))
+        conn.commit()
+        _maybe_autoreply(conn, acct_id)
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_chat_send: %s", e)
+        return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/client/chat/unread')
+@client_required
+def client_chat_unread():
+    acct_id = session.get('user_id')
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        n = conn.execute("SELECT COUNT(*) AS n FROM client_chat_messages WHERE account_id = ? "
+                         "AND sender_type = 'ops' AND read_by_client = 0", (acct_id,)).fetchone()['n']
+        return jsonify({'unread': n})
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat')
+@login_required
+def ops_chat_inbox():
+    """Shared ops inbox — every client conversation, newest first, with unread count
+    and a live online dot."""
+    conn = get_db()
+    _ensure_chat(conn)
+    q = (request.args.get('q') or '').strip()
+    like = f"%{q}%"
+    try:
+        convos = conn.execute(
+            "SELECT ca.id AS account_id, "
+            "  TRIM(COALESCE(ca.first_name,'')||' '||COALESCE(ca.last_name,'')) AS name, ca.mobile, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online, "
+            "  m.body AS last_body, m.created_at AS last_at, m.sender_type AS last_sender, "
+            "  (SELECT COUNT(*) FROM client_chat_messages x WHERE x.account_id = ca.id "
+            "     AND x.sender_type='client' AND x.read_by_ops=0) AS unread "
+            "FROM client_accounts ca "
+            "JOIN LATERAL (SELECT body, created_at, sender_type FROM client_chat_messages cm "
+            "  WHERE cm.account_id = ca.id ORDER BY cm.id DESC LIMIT 1) m ON TRUE "
+            "WHERE (? = '' OR ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ?) "
+            "ORDER BY m.created_at DESC", (q, like, like, like)).fetchall()
+        rows = [{'account_id': c['account_id'], 'name': (c['name'] or 'Client'), 'mobile': c['mobile'],
+                 'online': bool(c['online']), 'unread': c['unread'],
+                 'preview': (('You: ' if c['last_sender'] == 'ops' else '') + (c['last_body'] or ''))[:80],
+                 'time': _ist_str(c['last_at'])} for c in convos]
+        total_unread = sum(r['unread'] for r in rows)
+    except Exception as e:
+        logging.error("ops_chat_inbox: %s", e)
+        rows, total_unread = [], 0
+    finally:
+        conn.close()
+    return render_template('ops_chat_inbox.html', convos=rows, q=q, total_unread=total_unread, active_ops_page='client-chat')
+
+
+def _ops_chat_load(conn, account_id, mark_read=True):
+    acct = conn.execute(
+        "SELECT id, TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, mobile, email, "
+        "(last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
+        "FROM client_accounts WHERE id = ?", (account_id,)).fetchone()
+    if not acct:
+        return None, []
+    rows = conn.execute("SELECT id, sender_type, sender_name, body, created_at FROM client_chat_messages "
+                        "WHERE account_id = ? ORDER BY id", (account_id,)).fetchall()
+    if mark_read:
+        conn.execute("UPDATE client_chat_messages SET read_by_ops = 1 WHERE account_id = ? "
+                     "AND sender_type = 'client' AND read_by_ops = 0", (account_id,))
+        conn.commit()
+    return acct, rows
+
+
+@app.route('/operations/chat/<int:account_id>')
+@login_required
+def ops_chat_thread(account_id):
+    conn = get_db()
+    _ensure_chat(conn)
+    try:
+        acct, rows = _ops_chat_load(conn, account_id)
+        if not acct:
+            flash('Client not found.', 'error')
+            return redirect(url_for('ops_chat_inbox'))
+        msgs = [_chat_msg_dict(r, 'ops') for r in rows]
+        return render_template('ops_chat_thread.html', acct=dict(acct), msgs=msgs, active_ops_page='client-chat')
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat/<int:account_id>/messages')
+@login_required
+def ops_chat_thread_messages(account_id):
+    conn = get_db()
+    _ensure_chat(conn)
+    try:
+        acct, rows = _ops_chat_load(conn, account_id)
+        if not acct:
+            return jsonify({'messages': [], 'online': False})
+        return jsonify({'messages': [_chat_msg_dict(r, 'ops') for r in rows],
+                        'online': bool(acct['online'])})
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat/<int:account_id>/send', methods=['POST'])
+@login_required
+def ops_chat_send(account_id):
+    user = get_user()
+    body = ((request.get_json(silent=True) or {}).get('body') or request.form.get('body') or '').strip()[:2000]
+    if not body:
+        if request.is_json:
+            return jsonify({'ok': False}), 400
+        return redirect(url_for('ops_chat_thread', account_id=account_id))
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        sender_name = (user['name'] if user else 'GooCampus') or 'GooCampus'
+        conn.execute("INSERT INTO client_chat_messages (account_id, sender_type, sender_id, sender_name, body) "
+                     "VALUES (?, 'ops', ?, ?, ?)",
+                     (account_id, (user['id'] if user else None), sender_name, body))
+        conn.commit()
+        # Only push if the client is NOT actively looking at the chat right now.
+        # last_chat_seen_at is stamped by the chat poll (every ~6s while the tab is
+        # open + visible), so a fresh value (<20s) means they'll see it live.
+        try:
+            active = conn.execute(
+                "SELECT (last_chat_seen_at > CURRENT_TIMESTAMP - INTERVAL '20 seconds') AS active "
+                "FROM client_accounts WHERE id = ?", (account_id,)).fetchone()
+            if not (active and active['active']):
+                send_client_push(conn, account_id, f'New message from {sender_name}', body[:120],
+                                 url='/client/dashboard#chat', tag='chat')
+        except Exception:
+            pass
+        if request.is_json:
+            return jsonify({'ok': True})
+        return redirect(url_for('ops_chat_thread', account_id=account_id))
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("ops_chat_send: %s", e)
+        if request.is_json:
+            return jsonify({'ok': False}), 500
+        flash('Could not send the message.', 'error')
+        return redirect(url_for('ops_chat_thread', account_id=account_id))
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat/unread-count')
+@login_required
+def ops_chat_unread_count():
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        n = conn.execute("SELECT COUNT(DISTINCT account_id) AS n FROM client_chat_messages "
+                         "WHERE sender_type = 'client' AND read_by_ops = 0").fetchone()['n']
+        return jsonify({'unread': n})
+    finally:
+        conn.close()
+
+
+@app.route('/admin/chat-settings', methods=['GET', 'POST'])
+@login_required
+def admin_chat_settings():
+    """Configure the chat auto-reply: working hours/days + the off-hours message.
+    Outside those hours, a client's message gets one auto-reply. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+    conn = get_db()
+    saved = ''
+    try:
+        _ensure_chat(conn)
+        if request.method == 'POST':
+            enabled = 1 if request.form.get('enabled') else 0
+            start = (request.form.get('start_time') or '10:00').strip()
+            end = (request.form.get('end_time') or '18:00').strip()
+            days = ','.join([d for d in request.form.getlist('days') if d in '0123456'])
+            message = (request.form.get('message') or '').strip()[:500]
+            conn.execute(
+                "INSERT INTO chat_autoreply (id, enabled, start_time, end_time, days, message, updated_at) "
+                "VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT (id) DO UPDATE SET enabled=EXCLUDED.enabled, start_time=EXCLUDED.start_time, "
+                "end_time=EXCLUDED.end_time, days=EXCLUDED.days, message=EXCLUDED.message, updated_at=CURRENT_TIMESTAMP",
+                (enabled, start, end, days, message))
+            conn.commit()
+            saved = 'Saved.'
+        cfg = conn.execute("SELECT * FROM chat_autoreply WHERE id = 1").fetchone()
+    finally:
+        conn.close()
+    cfg = dict(cfg) if cfg else {}
+    en = cfg.get('enabled'); start = cfg.get('start_time') or '10:00'; end = cfg.get('end_time') or '18:00'
+    daysel = set((cfg.get('days') or '0,1,2,3,4').split(','))
+    msg = cfg.get('message') or "Thanks for your message! Our team is offline right now — we'll get back to you during working hours."
+    daynames = [('0','Mon'),('1','Tue'),('2','Wed'),('3','Thu'),('4','Fri'),('5','Sat'),('6','Sun')]
+    daychecks = ''.join(
+        f"<label style='margin-right:12px'><input type='checkbox' name='days' value='{d}' "
+        f"{'checked' if d in daysel else ''}> {nm}</label>" for d, nm in daynames)
+    saved_html = ("<p style='color:#065f46'>" + saved + "</p>") if saved else ''
+    return ("<div style='font-family:system-ui;max-width:600px;margin:30px auto'>"
+            "<h2>Chat auto-reply</h2>"
+            + saved_html +
+            "<p style='color:#64748b;font-size:14px'>When a client messages <b>outside</b> your working hours, "
+            "they get one automatic reply (max once every 30 min). Inside working hours, no auto-reply — your team answers live.</p>"
+            "<form method='POST' style='display:flex;flex-direction:column;gap:14px'>"
+            f"<label><input type='checkbox' name='enabled' {'checked' if en else ''}> <b>Enable auto-reply</b></label>"
+            "<div>Working hours (IST): "
+            f"<input type='time' name='start_time' value='{esc(start)}'> to "
+            f"<input type='time' name='end_time' value='{esc(end)}'></div>"
+            f"<div>Working days: {daychecks}</div>"
+            "<div>Off-hours message:<br>"
+            f"<textarea name='message' rows='3' style='width:100%;padding:9px;font-size:14px'>{esc(msg)}</textarea></div>"
+            "<button style='padding:10px 18px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:600;width:fit-content'>Save</button>"
+            "</form></div>")
+
+
+@app.route('/operations/presence/by-reg/<path:reg>')
+@login_required
+def ops_presence_by_reg(reg):
+    """Is the client behind this registration number active on their dashboard right
+    now? Drives the '● Online' badge on the ops client profile. (founder 2026-07-30)"""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT ca.last_seen_at, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
+            "FROM client_registrations cr JOIN client_accounts ca ON ca.id = cr.account_id "
+            "WHERE cr.registration_number = ? ORDER BY ca.last_seen_at DESC NULLS LAST LIMIT 1",
+            (reg,)).fetchone()
+        if not row:
+            return jsonify({'online': False, 'seen': ''})
+        return jsonify({'online': bool(row['online']), 'seen': _ist_str(row['last_seen_at'])})
+    except Exception:
+        return jsonify({'online': False, 'seen': ''})
+    finally:
+        conn.close()
 
 
 @app.route('/client/heartbeat', methods=['POST'])
@@ -4598,6 +5208,109 @@ def admin_preview_clients():
             "<th style='padding:6px 10px;text-align:left'>Status</th><th></th></tr>" + rows + "</table></div>")
 
 
+_TEST_CLIENT_MOBILE = '9000000001'
+_TEST_CLIENT_PASSWORD = 'gctest123'
+
+
+@app.route('/admin/test-client', methods=['GET', 'POST'])
+@login_required
+def admin_test_client():
+    """Create (or delete) ONE clearly-marked, dashboard-ready TEST client so the
+    founder can log in on a phone and try the real client login + PWA. It skips the
+    onboarding gates (onboarding_gated=0) and is ops-verified so it never lands in a
+    verification queue, and it has NO plab_clients master so it never shows on a
+    pathway client list. Fully reversible via Delete. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    action = request.form.get('action') if request.method == 'POST' else None
+    msg = ''
+    conn = get_db()
+    try:
+        acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ?", (_TEST_CLIENT_MOBILE,)).fetchone()
+
+        if action == 'delete' and acct:
+            regs = conn.execute("SELECT id FROM client_registrations WHERE account_id = ?", (acct['id'],)).fetchall()
+            for r in regs:
+                conn.execute("DELETE FROM client_academics WHERE registration_id = ?", (r['id'],))
+                conn.execute("DELETE FROM client_documents WHERE registration_id = ?", (r['id'],))
+            conn.execute("DELETE FROM client_agreements WHERE account_id = ?", (acct['id'],))
+            conn.execute("DELETE FROM client_registrations WHERE account_id = ?", (acct['id'],))
+            conn.execute("DELETE FROM client_accounts WHERE id = ?", (acct['id'],))
+            conn.commit()
+            acct = None
+            msg = "<b style='color:#065f46'>Test client deleted.</b> The CRM is clean again."
+
+        elif action in ('create', 'reset'):
+            # A consulting-style product + an employee to make the dashboard look real.
+            prod = conn.execute(
+                "SELECT id, name FROM products_services WHERE COALESCE(pathway,'') IN ('consulting','plab') "
+                "ORDER BY id LIMIT 1").fetchone() or conn.execute(
+                "SELECT id, name FROM products_services ORDER BY id LIMIT 1").fetchone()
+            emp = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY id LIMIT 1").fetchone()
+            pid = prod['id'] if prod else None
+            eid = emp['id'] if emp else None
+            if not acct:
+                acct_id = conn.execute(
+                    "INSERT INTO client_accounts (mobile, email, password_hash, first_name, last_name, is_active) "
+                    "VALUES (?, ?, ?, ?, ?, 1) RETURNING id",
+                    (_TEST_CLIENT_MOBILE, 'test@goocampus.in', hash_password(_TEST_CLIENT_PASSWORD),
+                     'ZZ Test', 'Client')).fetchone()['id']
+            else:
+                acct_id = acct['id']
+                conn.execute("UPDATE client_accounts SET password_hash = ?, first_name='ZZ Test', last_name='Client', is_active = 1 WHERE id = ?",
+                             (hash_password(_TEST_CLIENT_PASSWORD), acct_id))
+                conn.execute("DELETE FROM client_registrations WHERE account_id = ?", (acct_id,))
+            reg_id = conn.execute(
+                "INSERT INTO client_registrations (account_id, product_id, counsellor_id, plan_type, "
+                "prefix, first_name, last_name, dob, mobile, email, city, state, country, "
+                "package_amount, final_package, form_status, client_submitted_at, onboarding_gated, "
+                "sales_completed, ops_status, registration_number, "
+                "inst1_amount, inst1_status, inst1_method, inst2_amount, inst2_status) "
+                "VALUES (?, ?, ?, ?, 'Dr.', 'ZZ Test', 'Client', '1995-01-01', ?, 'test@goocampus.in', "
+                "'Bengaluru', 'Karnataka', 'India', 100000, 100000, 'submitted', CURRENT_TIMESTAMP, 0, "
+                "1, 'verified', 'ZZTEST-001', 50000, 'received', 'UPI', 50000, 'pending') RETURNING id",
+                (acct_id, pid, eid, 'Test Plan', _TEST_CLIENT_MOBILE)).fetchone()['id']
+            conn.execute(
+                "INSERT INTO client_academics (registration_id, country, fmg_medical_college, mbbs_status, "
+                "mbbs_start_date, mbbs_end_date, internship_status, working_status, pg_done) "
+                "VALUES (?, 'India', 'Test Medical College', 'Completed', '2013-08-01', '2018-06-30', "
+                "'Completed', 'No', 'No')", (reg_id,))
+            conn.commit()
+            acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ?", (_TEST_CLIENT_MOBILE,)).fetchone()
+            msg = "<b style='color:#065f46'>Test client ready.</b> Log in with the details below."
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        msg = f"<b style='color:#b91c1c'>Error: {esc(e)}</b>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    exists = bool(acct)
+    login_url = 'https://goocampus-hr-portal-staging.onrender.com/client/login'
+    box = (f"<div style='background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px;margin:14px 0'>"
+           f"<div style='font-size:13px;color:#065f46;margin-bottom:8px'>Test client login</div>"
+           f"<div><b>Mobile:</b> {_TEST_CLIENT_MOBILE}</div><div><b>Password:</b> {_TEST_CLIENT_PASSWORD}</div>"
+           f"<div style='margin-top:8px'><a href='{login_url}' target='_blank' style='color:#F57C1F'>{login_url}</a></div>"
+           f"</div>") if exists else "<p style='color:#64748b'>No test client exists yet.</p>"
+    return ("<div style='font-family:system-ui;max-width:640px;margin:30px auto'>"
+            "<h2>Test client (for mobile / PWA testing)</h2>"
+            f"{('<p>'+msg+'</p>') if msg else ''}"
+            "<p style='color:#64748b;font-size:14px'>A safe, clearly-marked test account ('ZZ Test Client'). "
+            "It skips onboarding gates and is verified, so it never shows in an ops verification queue or a "
+            "pathway client list. <b>Delete it when you're done</b> — this DB is shared with live.</p>"
+            f"{box}"
+            "<form method='POST' style='display:flex;gap:10px;margin-top:8px'>"
+            f"<button name='action' value='{'reset' if exists else 'create'}' "
+            "style='padding:9px 16px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:600'>"
+            f"{'Reset test client' if exists else 'Create test client'}</button>"
+            + ("<button name='action' value='delete' style='padding:9px 16px;background:#fff;color:#b91c1c;"
+               "border:1px solid #FCA5A5;border-radius:8px;font-weight:600'>Delete test client</button>" if exists else "")
+            + "</form></div>")
+
+
 @app.route('/admin/view-as-client/<int:account_id>')
 @login_required
 def admin_view_as_client(account_id):
@@ -6456,6 +7169,16 @@ def admin_client_ops_verify(reg_id):
             "INSERT INTO client_doc_requests (registration_id, doc_type, message, urgency, requested_by) VALUES (?, ?, ?, ?, ?)",
             (reg_id, doc_type, message, urgency, user['id']))
         conn.commit()
+        # PWA push: nudge the client to upload the requested document.
+        try:
+            _acc = conn.execute("SELECT account_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+            if _acc and _acc['account_id']:
+                send_client_push(conn, _acc['account_id'], 'Document requested',
+                                 (f"Your counsellor requested: {doc_type}. Tap to upload." if doc_type
+                                  else "Your counsellor requested a document."),
+                                 url='/client/dashboard#documents', tag='docreq')
+        except Exception:
+            pass
         conn.close()
         # Notify client about doc request
         _notify_doc_request(reg_id, doc_type, message)
@@ -6809,6 +7532,15 @@ def _notify_welcome_call_confirmed(reg_id):
         date_s = reg['wc_scheduled_date'] or ''
         time_s = reg['wc_scheduled_time'] or ''
         wc_by = reg['wc_by'] or ''
+        # PWA push: tell the client their welcome call is confirmed.
+        try:
+            if reg['account_id']:
+                send_client_push(conn, reg['account_id'], 'Welcome call confirmed',
+                                 f"Your welcome call is set for {date_s} at {time_s}"
+                                 + (f" with {wc_by}" if wc_by else "") + ".",
+                                 url='/client/dashboard#call', tag='wc')
+        except Exception:
+            pass
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
         client_email = reg['email']
         product_name = reg['product_name'] or 'your program'
@@ -27781,7 +28513,16 @@ def ops_payment_approve(reg_id, inst_no):
                 " gst_amount, total_amount, payment_method, payment_date, pathway, status, ops_payment_id, reviewed_by, reviewed_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP)",
                 (reg_id, reg_no, inst_no, amount, gst, total, method, pdate, pathway, pay_id, session.get('user_id')))
-        conn.commit(); conn.close()
+        conn.commit()
+        # PWA push: thank the client for the received installment.
+        try:
+            if r['account_id']:
+                send_client_push(conn, r['account_id'], 'Payment received',
+                                 f"We've received your {_INST_ORD[inst_no]} (₹{total:,.0f}). Thank you!",
+                                 url='/client/dashboard#payments', tag='pay')
+        except Exception:
+            pass
+        conn.close()
         flash(f'{_INST_ORD[inst_no]} installment approved and posted to {pathway.title()} Payments', 'success')
     except Exception as e:
         try: conn.rollback(); conn.close()

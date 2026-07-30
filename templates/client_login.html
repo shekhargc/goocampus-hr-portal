@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Client Portal &mdash; GooCampus</title>
+    <!-- PWA: let users install the app right from the login screen -->
+    <link rel="manifest" href="/client/manifest.webmanifest">
+    <meta name="theme-color" content="#0F1B33">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GooCampus">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -290,5 +297,11 @@
         &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd
     </footer>
 
+<script>
+  // PWA: register the service worker so Chrome/Android offers "Install app".
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/client/sw.js', {scope:'/client/'}).catch(()=>{}));
+  }
+</script>
 </body>
 </html>

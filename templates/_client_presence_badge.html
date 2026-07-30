@@ -1,0 +1,25 @@
+{# Live "online" badge for the ops client profile. The including template sets
+   presence_reg to the client's registration_number. Polls every 30s. #}
+{% if presence_reg %}
+<span id="clientPresence" data-reg="{{ presence_reg }}"
+      style="display:none;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:4px 10px;border-radius:20px;background:#F1F5F9"></span>
+<script>
+(function(){
+  var el=document.getElementById('clientPresence'); if(!el) return;
+  var reg=el.getAttribute('data-reg'); if(!reg) return;
+  function poll(){
+    fetch('/operations/presence/by-reg/'+encodeURIComponent(reg)).then(r=>r.json()).then(function(d){
+      el.style.display='inline-flex';
+      if(d.online){
+        el.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:#16A34A;display:inline-block"></span> Online now';
+        el.style.background='#ECFDF5'; el.style.color='#16A34A';
+      } else {
+        el.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:#CBD5E1;display:inline-block"></span> '+(d.seen?('Last seen '+d.seen):'Offline');
+        el.style.background='#F1F5F9'; el.style.color='#94A3B8';
+      }
+    }).catch(function(){});
+  }
+  poll(); setInterval(poll,30000);
+})();
+</script>
+{% endif %}
