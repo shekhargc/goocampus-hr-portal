@@ -653,6 +653,11 @@
       .catch(()=>{ alert('Could not update your photo. Please try again.'); if(box) box.style.opacity='1'; });
   }
 
+  // ── PWA: register the service worker so the app is installable + opens offline ──
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/client/sw.js', {scope:'/client/'}).catch(()=>{}));
+  }
+
   // ── Presence heartbeat: tell ops we're live while the dashboard is open ──
   function beat(){ fetch('/client/heartbeat',{method:'POST',keepalive:true}).catch(()=>{}); }
   beat(); setInterval(beat, 30000);

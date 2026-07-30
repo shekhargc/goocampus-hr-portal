@@ -1365,13 +1365,52 @@ def client_manifest():
         "start_url": "/client/dashboard",
         "scope": "/client/",
         "display": "standalone",
+        "orientation": "portrait",
         "background_color": "#0F1B33",
         "theme_color": "#0F1B33",
         "icons": [
-            {"src": "/static/logo.png", "sizes": "192x192", "type": "image/png"},
-            {"src": "/static/logo.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
     })
+
+
+@app.route('/client/sw.js')
+def client_service_worker():
+    """Service worker for the client PWA — served from /client/ so its scope covers
+    the whole client area (needed for Android/Chrome to offer 'Install app').
+    Network-first with a cached shell fallback so the app opens even offline.
+    (founder 2026-07-30)"""
+    js = """
+const CACHE = 'gc-client-v1';
+const SHELL = ['/client/login', '/static/logo-white.png', '/static/icon-192.png'];
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(()=>{}));
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(
+    ks.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;              // never cache POSTs (logins, saves)
+  e.respondWith(
+    fetch(req).then(res => {
+      if (res && res.ok && new URL(req.url).origin === location.origin) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy)).catch(()=>{});
+      }
+      return res;
+    }).catch(() => caches.match(req).then(m => m || caches.match('/client/login')))
+  );
+});
+"""
+    return Response(js, mimetype='application/javascript',
+                    headers={'Service-Worker-Allowed': '/client/',
+                             'Cache-Control': 'no-cache'})
 
 
 @app.route('/client/heartbeat', methods=['POST'])
