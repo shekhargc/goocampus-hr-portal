@@ -137,18 +137,17 @@ def installment_label_filter(value):
     s = str(value or '').strip()
     if not s:
         return ''
-    low = s.lower()
-    num = None
-    m = re.match(r'^\s*(\d+)', low)
-    if m:
-        num = int(m.group(1))
-    else:
-        for w, nn in (('first', 1), ('second', 2), ('third', 3), ('fourth', 4), ('fifth', 5)):
-            if low.startswith(w):
-                num = nn; break
-    if not num:
+    # Reformat ONLY a value that is PURELY a 1st-4th ordinal (optionally followed by
+    # the word installment/instalment). Anything with extra text — 'a combined 1st and
+    # 2nd', a note, an amount like 1500, '5th', a date — is returned EXACTLY as stored,
+    # so which installment a record was is never changed, only the wording.
+    m = re.match(r'^\s*(?:([1-4])\s*(?:st|nd|rd|th)?|(first|second|third|fourth))'
+                 r'\s*(?:install?ments?)?\s*$', s.strip().lower())
+    if not m:
         return s
-    suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(num, 'th')
+    num = int(m.group(1)) if m.group(1) else \
+        {'first': 1, 'second': 2, 'third': 3, 'fourth': 4}[m.group(2)]
+    suffix = {1: 'st', 2: 'nd', 3: 'rd', 4: 'th'}[num]
     return f"{num}{suffix} Installment"
 
 
@@ -3991,6 +3990,61 @@ def admin_stage_backfill():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+@app.route('/admin/installment-check', methods=['GET'])
+@login_required
+def admin_installment_check():
+    """Read-only proof: the RAW installment value stored on every payment record, per
+    pathway, next to how it now displays — so it's clear no record's installment was
+    changed, only the wording. Also lists the cleaned dropdown menu. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    conn = get_db()
+    blocks = ''
+    try:
+        for pw in ['plab', 'consulting', 'training', 'australia', 'uae', 'portfolio']:
+            rows = ''
+            try:
+                for r in conn.execute(
+                    "SELECT COALESCE(NULLIF(TRIM(instalment),''),'(blank)') AS raw, COUNT(*) AS n "
+                    "FROM ops_payments WHERE COALESCE(pathway,'plab') = ? GROUP BY 1 ORDER BY n DESC",
+                    (pw,)).fetchall():
+                    disp = installment_label_filter(r['raw']) if r['raw'] != '(blank)' else '—'
+                    same = (disp == r['raw']) or r['raw'] == '(blank)'
+                    rows += (f"<tr><td style='padding:4px 10px'><code>{esc(r['raw'])}</code></td>"
+                             f"<td style='padding:4px 10px;text-align:right'>{r['n']}</td>"
+                             f"<td style='padding:4px 10px'>{esc(disp)}"
+                             f"{'' if same else ' <span style=color:#6b7280>(wording only)</span>'}</td></tr>")
+            except Exception:
+                conn.rollback()
+            if rows:
+                blocks += (f"<div style='margin:16px 0'><b style='color:#1e3a5f'>{pw}</b>"
+                           "<table style='border-collapse:collapse;width:100%;font-size:13px;margin-top:4px'>"
+                           "<tr style='background:#f3f4f6'><th style='padding:4px 10px;text-align:left'>Stored value (unchanged)</th>"
+                           "<th style='padding:4px 10px;text-align:right'>Payments</th><th style='padding:4px 10px;text-align:left'>Now shows as</th></tr>"
+                           + rows + "</table></div>")
+        menu = ''
+        try:
+            for r in conn.execute("SELECT COALESCE(pathway,'plab') AS pw, value FROM lookup_options "
+                                  "WHERE category='instalment' ORDER BY pathway, sort_order, value").fetchall():
+                menu += f"<li>{esc(r['pw'])}: {esc(r['value'])}</li>"
+        except Exception:
+            conn.rollback()
+    except Exception as e:
+        blocks = f"<p style='color:#b91c1c'>{esc(e)}</p>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+            "<h2>Installment values — proof nothing was altered</h2>"
+            "<p style='color:#065f46'>The left column is the value <b>actually stored</b> on each payment "
+            "record — untouched. The right column is only how it's now <b>displayed</b>. Same installment, "
+            "cleaner wording.</p>" + blocks
+            + "<h3 style='margin-top:20px'>Dropdown menu (Field Manager · cleaned + de-duplicated)</h3>"
+            "<ul style='font-size:13px'>" + (menu or "<li>none</li>") + "</ul></div>")
 
 
 @app.route('/admin/stage-usage', methods=['GET'])
@@ -35268,21 +35322,26 @@ except Exception as _pg_lk_err:
 # legacy values is handled separately by the installment_label filter.
 try:
     _il_conn = get_db()
-    # Normalise the dropdown menu choices to '1st Installment'…'4th Installment'.
-    # Covers the UK-spelling legacy ('1st Instalment') and the brief 'First Installment'
-    # wording. Only the lookup_options MENU is touched — never a client's payment record.
-    _il_map = {'1st Instalment': '1st Installment', '2nd Instalment': '2nd Installment',
-               '3rd Instalment': '3rd Installment', '4th Instalment': '4th Installment',
-               '5th Instalment': '4th Installment',
-               'First Installment': '1st Installment', 'Second Installment': '2nd Installment',
-               'Third Installment': '3rd Installment', 'Fourth Installment': '4th Installment',
-               'Fifth Installment': '4th Installment'}
-    for _old, _new in _il_map.items():
-        _il_conn.execute("UPDATE lookup_options SET label = ?, value = ? "
-                         "WHERE category = 'instalment' AND value = ?", (_new, _new, _old))
-    # Drop any 5th-installment menu choice (max is 4 per pathway/product).
-    _il_conn.execute("DELETE FROM lookup_options WHERE category = 'instalment' "
-                     "AND (value ILIKE '5th%%' OR value ILIKE 'Fifth%%')")
+    # Clean the instalment DROPDOWN MENU only (never a client's payment record):
+    # normalise every variant to '1st Installment'…'4th Installment', drop the 5th,
+    # and remove duplicates (e.g. '1 st Installment' vs '1st Installment').
+    _il_rows = _il_conn.execute(
+        "SELECT id, value, COALESCE(pathway,'plab') AS pw FROM lookup_options "
+        "WHERE category = 'instalment' ORDER BY id").fetchall()
+    _seen = set()               # (pathway, canonical value) already kept
+    for _r in _il_rows:
+        _canon = installment_label_filter(_r['value'])   # same rule as display
+        _key = (_r['pw'], _canon)
+        # Drop 5th+ and anything that didn't normalise to a clean 1st-4th label,
+        # and drop any duplicate of a value we've already kept for this pathway.
+        _is_clean = _canon.endswith('Installment') and _canon[0] in '1234'
+        if (not _is_clean) or (_key in _seen):
+            _il_conn.execute("DELETE FROM lookup_options WHERE id = ?", (_r['id'],))
+        else:
+            _seen.add(_key)
+            if _canon != _r['value']:
+                _il_conn.execute("UPDATE lookup_options SET value = ?, label = ? WHERE id = ?",
+                                 (_canon, _canon, _r['id']))
     _il_conn.commit(); _il_conn.close()
 except Exception as _il_err:
     logging.error(f"instalment label normalise failed: {_il_err}")
