@@ -86,6 +86,45 @@
   .totrow.big{ font-weight:800; color:var(--navy); font-size:16px; border-top:1px solid var(--line); margin-top:6px; padding-top:12px; }
   .in-field{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px; font-size:14px; font-family:inherit; }
   .in-lbl{ display:block; font-size:12px; font-weight:600; color:var(--navy); margin-bottom:5px; }
+  .btn-sm{ padding:6px 12px; font-size:13px; }
+
+  /* Avatar photo + change badge */
+  .sb-avatar{ position:relative; cursor:pointer; }
+  .avatar-cam{ position:absolute; right:-2px; bottom:-2px; width:22px; height:22px; border-radius:50%;
+               background:var(--orange); color:#fff; display:flex; align-items:center; justify-content:center;
+               font-size:11px; border:2px solid var(--navy); }
+
+  /* Profile tabs */
+  .ptabs{ display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:16px; flex-wrap:wrap; }
+  .ptab{ background:none; border:none; padding:10px 14px; font-size:14px; font-weight:600; color:var(--muted);
+         cursor:pointer; border-bottom:2px solid transparent; font-family:inherit; display:flex; align-items:center; gap:7px; }
+  .ptab:hover{ color:var(--navy); }
+  .ptab.active{ color:var(--orange); border-bottom-color:var(--orange); }
+  .ppane{ display:none; } .ppane.active{ display:block; }
+  .pane-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .pane-head h3{ margin:0; }
+  .edit-hint{ font-size:12.5px; color:var(--muted); margin-bottom:12px; }
+  .edit-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .pedit .grid2 > div{ margin-bottom:4px; }
+  .lock-note{ background:#FFF7ED; border:1px solid #FED7AA; color:#9A3412; border-radius:10px;
+              padding:10px 14px; font-size:13px; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+
+  /* Service delivery */
+  .svc-list{ display:flex; flex-direction:column; gap:10px; }
+  .svc-item{ border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .svc-name{ font-weight:700; font-size:14.5px; color:var(--navy); display:flex; align-items:center; gap:8px; }
+  .svc-qty{ font-size:12px; font-weight:600; color:var(--orange); background:#FFF7ED; padding:1px 8px; border-radius:20px; }
+  .svc-desc{ margin-top:7px; padding-left:24px; }
+  .svc-line{ position:relative; font-size:13.5px; color:var(--ink); line-height:1.5; padding-left:14px; margin-bottom:3px; }
+  .svc-line::before{ content:'•'; position:absolute; left:0; color:var(--orange); }
+  .acc{ border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .acc-head{ width:100%; display:flex; justify-content:space-between; align-items:center; background:#F8FAFC;
+             border:none; padding:13px 15px; font-size:14px; font-weight:700; color:var(--navy); cursor:pointer; font-family:inherit; }
+  .acc-head span{ display:flex; align-items:center; gap:8px; }
+  .acc-chev{ transition:transform .2s; }
+  .acc.open .acc-chev{ transform:rotate(180deg); }
+  .acc-body{ display:none; padding:4px 14px 14px; }
+  .acc.open .acc-body{ display:block; }
 
   @media(max-width:860px){
     .sidebar{ transform:translateX(-100%); box-shadow:0 0 40px rgba(0,0,0,.3); }
@@ -113,14 +152,19 @@
 <aside class="sidebar" id="sidebar">
   <div class="sb-brand"><img src="/static/logo-white.png" alt="GooCampus" onerror="this.style.display='none'"><span style="font-weight:800;font-size:17px;">GooCampus</span></div>
   <div class="sb-user">
-    <div class="sb-avatar">{% if photo_doc %}<img src="/client/doc/{{ photo_doc.id }}/file" alt="">{% else %}{{ _initials }}{% endif %}</div>
-    <div class="sb-name">Dr. {{ _fullname }}</div>
+    <div class="sb-avatar" id="avatarBox" {% if not session.get('client_preview') %}onclick="pickPhoto()" title="Change your photo"{% endif %}>
+      {% if photo_doc %}<img src="{{ photo_doc.url }}" alt="">{% else %}<i class="bi bi-person-fill" style="font-size:30px;color:var(--orange)"></i>{% endif %}
+      {% if not session.get('client_preview') %}<span class="avatar-cam"><i class="bi bi-camera-fill"></i></span>{% endif %}
+    </div>
+    <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="uploadPhoto(this)">
+    <div class="sb-name">Dr. {{ client_name_clean }}</div>
     <div class="sb-sub">{% if reg %}{{ reg.product_name or 'GooCampus Client' }}{% else %}GooCampus Client{% endif %}</div>
   </div>
   <nav class="sb-nav">
     <div class="sb-link active" data-section="overview"><i class="bi bi-grid-1x2-fill"></i> Overview</div>
     <div class="sb-link" data-section="profile"><i class="bi bi-person-vcard"></i> My Profile</div>
     <div class="sb-link" data-section="payments"><i class="bi bi-wallet2"></i> Payments</div>
+    <div class="sb-link" data-section="service"><i class="bi bi-box-seam"></i> Service Delivery</div>
     <div class="sb-link" data-section="documents"><i class="bi bi-folder2-open"></i> Documents</div>
     <div class="sb-link" data-section="agreements"><i class="bi bi-file-earmark-check"></i> Agreements</div>
     <div class="sb-link" data-section="call"><i class="bi bi-telephone-inbound"></i> Welcome Call</div>
@@ -135,7 +179,7 @@
     <button class="hamburger" onclick="openSidebar()"><i class="bi bi-list"></i></button>
     <h1 id="pageTitle">Overview</h1>
     <div class="spacer"></div>
-    <div class="greet">Welcome, Dr. {{ account.first_name }}</div>
+    <div class="greet">Welcome, Doctor</div>
   </div>
 
   <div class="content">
@@ -146,7 +190,7 @@
     <!-- ══ OVERVIEW ══ -->
     <div class="section active" id="sec-overview">
       <div class="card hero">
-        <h2>Welcome{% if first_login %}{% else %} back{% endif %}, Dr. {{ account.first_name }} 👋</h2>
+        <h2>Welcome, Doctor 👋</h2>
         <p>Your GooCampus journey, all in one place. Use the menu to view your details, payments, documents and more.</p>
       </div>
       {% if onboarding_stages %}
@@ -184,41 +228,185 @@
       {% endif %}
     </div>
 
-    <!-- ══ PROFILE ══ -->
+    <!-- ══ PROFILE (tabbed, editable per section) ══ -->
     <div class="section" id="sec-profile">
-      <div class="card"><h3><i class="bi bi-person-vcard"></i> Personal details</h3>
-        {% if reg %}
-        <div class="grid2">
-          <div class="field"><div class="k">Full name</div><div class="v">{{ reg.prefix or 'Dr.' }} {{ reg.first_name }} {{ reg.last_name }}</div></div>
-          <div class="field"><div class="k">Mobile</div><div class="v">{{ reg.mobile or account.mobile or '—' }}</div></div>
-          <div class="field"><div class="k">Email</div><div class="v">{{ reg.email or account.email or '—' }}</div></div>
-          <div class="field"><div class="k">Date of birth</div><div class="v">{{ reg.dob or '—' }}</div></div>
-          <div class="field"><div class="k">City</div><div class="v">{{ reg.city or '—' }}</div></div>
-          <div class="field"><div class="k">State</div><div class="v">{{ reg.state or '—' }}</div></div>
+      {% set ac = reg.academics if reg and reg.academics else {} %}
+      <div class="card" style="padding-top:16px">
+        <div class="ptabs">
+          <button class="ptab active" data-ptab="personal"><i class="bi bi-person-vcard"></i> Personal</button>
+          <button class="ptab" data-ptab="family"><i class="bi bi-people"></i> Parents / Guardian</button>
+          <button class="ptab" data-ptab="academic"><i class="bi bi-mortarboard"></i> Academic</button>
         </div>
-        <p style="margin-top:14px;font-size:12.5px;color:var(--muted)"><i class="bi bi-shield-check"></i> This is what your counsellor recorded at sign-up. If anything looks off, contact them.</p>
-        {% else %}<p style="color:var(--muted)">No profile on file yet.</p>{% endif %}
+        {% if profile_locked %}
+        <div class="lock-note"><i class="bi bi-lock-fill"></i> Your details have been verified, so they're read-only here. Please contact your counsellor for any change.</div>
+        {% endif %}
+
+        <!-- Personal -->
+        <div class="ppane active" id="ppane-personal">
+          <div class="pane-head"><h3><i class="bi bi-person-vcard"></i> Personal details</h3>
+            {% if not profile_locked %}<button class="btn btn-ghost btn-sm" onclick="editPane('personal',true)" id="edit-personal"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
+          </div>
+          <div class="pview" id="view-personal">
+            <div class="grid2">
+              <div class="field"><div class="k">Full name</div><div class="v">Dr. {{ client_name_clean }}</div></div>
+              <div class="field"><div class="k">Mobile (login)</div><div class="v">{{ reg.mobile or account.mobile or '—' }}</div></div>
+              <div class="field"><div class="k">Email</div><div class="v">{{ reg.email or account.email or '—' }}</div></div>
+              <div class="field"><div class="k">Date of birth</div><div class="v">{{ reg.dob or '—' }}</div></div>
+              <div class="field"><div class="k">WhatsApp</div><div class="v">{{ reg.whatsapp or '—' }}</div></div>
+              <div class="field"><div class="k">Address</div><div class="v">{{ reg.address or '—' }}</div></div>
+              <div class="field"><div class="k">City</div><div class="v">{{ reg.city or '—' }}</div></div>
+              <div class="field"><div class="k">State</div><div class="v">{{ reg.state or '—' }}</div></div>
+              <div class="field"><div class="k">Country</div><div class="v">{{ reg.country or '—' }}</div></div>
+            </div>
+          </div>
+          {% if not profile_locked %}
+          <form class="pedit" id="form-personal" method="POST" action="/client/profile/save" style="display:none">
+            <input type="hidden" name="section" value="personal">
+            <p class="edit-hint">Name, date of birth, email and login mobile are fixed — contact your counsellor to change those.</p>
+            <div class="grid2">
+              <div><label class="in-lbl">WhatsApp</label><input class="in-field" name="whatsapp" value="{{ reg.whatsapp or '' }}"></div>
+              <div><label class="in-lbl">Address</label><input class="in-field" name="address" value="{{ reg.address or '' }}"></div>
+              <div><label class="in-lbl">City</label><input class="in-field" name="city" value="{{ reg.city or '' }}"></div>
+              <div><label class="in-lbl">State</label><input class="in-field" name="state" value="{{ reg.state or '' }}"></div>
+              <div><label class="in-lbl">Country</label><input class="in-field" name="country" value="{{ reg.country or '' }}"></div>
+            </div>
+            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('personal',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save</button></div>
+          </form>
+          {% endif %}
+        </div>
+
+        <!-- Parents / Guardian -->
+        <div class="ppane" id="ppane-family">
+          <div class="pane-head"><h3><i class="bi bi-people"></i> Parents / Guardian</h3>
+            {% if not profile_locked %}<button class="btn btn-ghost btn-sm" onclick="editPane('family',true)" id="edit-family"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
+          </div>
+          <div class="pview" id="view-family">
+            {% if reg.guardian_type == 'guardian' %}
+            <div class="grid2">
+              <div class="field"><div class="k">Guardian name</div><div class="v">{{ (reg.guardian_first_name ~ ' ' ~ (reg.guardian_last_name or '')).strip() or '—' }}</div></div>
+              <div class="field"><div class="k">Guardian phone</div><div class="v">{{ reg.guardian_phone or '—' }}</div></div>
+              <div class="field"><div class="k">Guardian email</div><div class="v">{{ reg.guardian_email or '—' }}</div></div>
+            </div>
+            {% else %}
+            <div class="grid2">
+              <div class="field"><div class="k">Father</div><div class="v">{{ (reg.father_first_name ~ ' ' ~ (reg.father_last_name or '')).strip() or reg.father_name or '—' }}</div></div>
+              <div class="field"><div class="k">Father phone</div><div class="v">{{ reg.father_phone or '—' }}</div></div>
+              <div class="field"><div class="k">Father email</div><div class="v">{{ reg.father_email or '—' }}</div></div>
+              <div class="field"><div class="k">Mother</div><div class="v">{{ (reg.mother_first_name ~ ' ' ~ (reg.mother_last_name or '')).strip() or reg.mother_name or '—' }}</div></div>
+              <div class="field"><div class="k">Mother phone</div><div class="v">{{ reg.mother_phone or '—' }}</div></div>
+              <div class="field"><div class="k">Mother email</div><div class="v">{{ reg.mother_email or '—' }}</div></div>
+            </div>
+            {% endif %}
+          </div>
+          {% if not profile_locked %}
+          <form class="pedit" id="form-family" method="POST" action="/client/profile/save" style="display:none">
+            <input type="hidden" name="section" value="family">
+            <label class="in-lbl">Who is your primary contact?</label>
+            <select class="in-field" name="guardian_type" id="guardianType" onchange="toggleGuardian()" style="margin-bottom:14px">
+              <option value="parents" {% if reg.guardian_type != 'guardian' %}selected{% endif %}>Parents</option>
+              <option value="guardian" {% if reg.guardian_type == 'guardian' %}selected{% endif %}>Guardian</option>
+            </select>
+            <div id="parentsFields" style="{% if reg.guardian_type == 'guardian' %}display:none{% endif %}">
+              <div class="grid2">
+                <div><label class="in-lbl">Father — first name</label><input class="in-field" name="father_first_name" value="{{ reg.father_first_name or '' }}"></div>
+                <div><label class="in-lbl">Father — last name</label><input class="in-field" name="father_last_name" value="{{ reg.father_last_name or '' }}"></div>
+                <div><label class="in-lbl">Father — phone</label><input class="in-field" name="father_phone" value="{{ reg.father_phone or '' }}"></div>
+                <div><label class="in-lbl">Father — email</label><input class="in-field" name="father_email" value="{{ reg.father_email or '' }}"></div>
+                <div><label class="in-lbl">Mother — first name</label><input class="in-field" name="mother_first_name" value="{{ reg.mother_first_name or '' }}"></div>
+                <div><label class="in-lbl">Mother — last name</label><input class="in-field" name="mother_last_name" value="{{ reg.mother_last_name or '' }}"></div>
+                <div><label class="in-lbl">Mother — phone</label><input class="in-field" name="mother_phone" value="{{ reg.mother_phone or '' }}"></div>
+                <div><label class="in-lbl">Mother — email</label><input class="in-field" name="mother_email" value="{{ reg.mother_email or '' }}"></div>
+              </div>
+            </div>
+            <div id="guardianFields" style="{% if reg.guardian_type != 'guardian' %}display:none{% endif %}">
+              <div class="grid2">
+                <div><label class="in-lbl">Guardian — first name</label><input class="in-field" name="guardian_first_name" value="{{ reg.guardian_first_name or '' }}"></div>
+                <div><label class="in-lbl">Guardian — last name</label><input class="in-field" name="guardian_last_name" value="{{ reg.guardian_last_name or '' }}"></div>
+                <div><label class="in-lbl">Guardian — phone</label><input class="in-field" name="guardian_phone" value="{{ reg.guardian_phone or '' }}"></div>
+                <div><label class="in-lbl">Guardian — email</label><input class="in-field" name="guardian_email" value="{{ reg.guardian_email or '' }}"></div>
+              </div>
+            </div>
+            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('family',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save</button></div>
+          </form>
+          {% endif %}
+        </div>
+
+        <!-- Academic -->
+        <div class="ppane" id="ppane-academic">
+          <div class="pane-head"><h3><i class="bi bi-mortarboard"></i> Academic details</h3>
+            {% if not profile_locked %}<button class="btn btn-ghost btn-sm" onclick="editPane('academic',true)" id="edit-academic"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
+          </div>
+          <div class="pview" id="view-academic">
+            <div class="grid2">
+              <div class="field"><div class="k">Country of study</div><div class="v">{{ ac.country or '—' }}</div></div>
+              <div class="field"><div class="k">Medical college</div><div class="v">{{ ac.fmg_medical_college or ac.img_medical_college or '—' }}</div></div>
+              <div class="field"><div class="k">MBBS status</div><div class="v">{{ ac.mbbs_status or '—' }}</div></div>
+              <div class="field"><div class="k">Internship status</div><div class="v">{{ ac.internship_status or '—' }}</div></div>
+              <div class="field"><div class="k">Internship hospital</div><div class="v">{{ ac.internship_hospital or '—' }}</div></div>
+              <div class="field"><div class="k">Currently working?</div><div class="v">{{ ac.working_status or '—' }}</div></div>
+              <div class="field"><div class="k">Speciality interest 1</div><div class="v">{{ ac.speciality_interest_1 or '—' }}</div></div>
+              <div class="field"><div class="k">Speciality interest 2</div><div class="v">{{ ac.speciality_interest_2 or '—' }}</div></div>
+            </div>
+            {% if ac.pg_done == 'Yes' or ac.pg_type or ac.pg_specialty %}
+            <div style="margin-top:6px;padding-top:12px;border-top:1px dashed var(--line)">
+              <div class="k" style="text-transform:uppercase;font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">Postgraduate</div>
+              <div class="grid2">
+                <div class="field"><div class="k">PG type</div><div class="v">{{ ac.pg_type or '—' }}</div></div>
+                <div class="field"><div class="k">Specialty</div><div class="v">{{ ac.pg_specialty or '—' }}</div></div>
+                <div class="field"><div class="k">College</div><div class="v">{{ ac.pg_college or '—' }}</div></div>
+                <div class="field"><div class="k">PG status</div><div class="v">{{ ac.pg_status or '—' }}</div></div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+          {% if not profile_locked %}
+          <form class="pedit" id="form-academic" method="POST" action="/client/profile/save" style="display:none">
+            <input type="hidden" name="section" value="academic">
+            <div class="grid2">
+              <div><label class="in-lbl">Country of study</label><input class="in-field" name="country" value="{{ ac.country or '' }}"></div>
+              <div><label class="in-lbl">Medical college</label><input class="in-field" name="fmg_medical_college" value="{{ ac.fmg_medical_college or ac.img_medical_college or '' }}"></div>
+              <div><label class="in-lbl">MBBS status</label><input class="in-field" name="mbbs_status" value="{{ ac.mbbs_status or '' }}"></div>
+              <div><label class="in-lbl">Internship status</label><input class="in-field" name="internship_status" value="{{ ac.internship_status or '' }}"></div>
+              <div><label class="in-lbl">Internship hospital</label><input class="in-field" name="internship_hospital" value="{{ ac.internship_hospital or '' }}"></div>
+              <div><label class="in-lbl">Currently working?</label><input class="in-field" name="working_status" value="{{ ac.working_status or '' }}"></div>
+              <div><label class="in-lbl">Speciality interest 1</label><input class="in-field" name="speciality_interest_1" value="{{ ac.speciality_interest_1 or '' }}"></div>
+              <div><label class="in-lbl">Speciality interest 2</label><input class="in-field" name="speciality_interest_2" value="{{ ac.speciality_interest_2 or '' }}"></div>
+            </div>
+            <div style="margin-top:10px;padding-top:12px;border-top:1px dashed var(--line)">
+              <label class="in-lbl">Have you done / are you doing PG?</label>
+              <select class="in-field" name="pg_done" style="margin-bottom:12px">
+                <option value="" {% if not ac.pg_done %}selected{% endif %}>Not specified</option>
+                <option value="Yes" {% if ac.pg_done == 'Yes' %}selected{% endif %}>Yes</option>
+                <option value="No" {% if ac.pg_done == 'No' %}selected{% endif %}>No</option>
+              </select>
+              <div class="grid2">
+                <div><label class="in-lbl">PG type</label><input class="in-field" name="pg_type" value="{{ ac.pg_type or '' }}" placeholder="NEET PG MD/MS or DNB"></div>
+                <div><label class="in-lbl">Specialty</label><input class="in-field" name="pg_specialty" value="{{ ac.pg_specialty or '' }}"></div>
+                <div><label class="in-lbl">College</label><input class="in-field" name="pg_college" value="{{ ac.pg_college or '' }}"></div>
+                <div><label class="in-lbl">PG status</label><input class="in-field" name="pg_status" value="{{ ac.pg_status or '' }}" placeholder="First/Second/Final year or Completed"></div>
+              </div>
+            </div>
+            <div class="edit-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="editPane('academic',false)">Cancel</button><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> Save</button></div>
+          </form>
+          {% endif %}
+        </div>
       </div>
     </div>
 
-    <!-- ══ PAYMENTS ══ -->
+    <!-- ══ PAYMENTS (payments only — all programmes) ══ -->
     <div class="section" id="sec-payments">
-      {% if reg %}
-      <div class="card"><h3><i class="bi bi-wallet2"></i> Package</h3>
-        <div class="grid2">
-          {% if reg.package_amount %}<div class="field"><div class="k">Package amount</div><div class="v">₹{{ '{:,.0f}'.format(reg.package_amount|float) }}</div></div>{% endif %}
-          {% if reg.final_package %}<div class="field"><div class="k">Final package</div><div class="v">₹{{ '{:,.0f}'.format(reg.final_package|float) }}</div></div>{% endif %}
-        </div>
-        {% if reg.package_services %}
-        <div style="margin-top:14px"><div class="k" style="font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:600">What's included</div>
-          <ul style="margin:8px 0 0 18px;font-size:13.5px;color:var(--ink)">{% for sv in reg.package_services %}<li style="margin-bottom:3px">{{ sv.name if sv.name is defined else sv }}</li>{% endfor %}</ul>
-        </div>{% endif %}
-      </div>
-      <div class="card"><h3><i class="bi bi-receipt"></i> Installments</h3>
-        {% if reg.installments %}
+      {% set ns = namespace(recv=0, due=0, grand=0, any=false) %}
+      {% for r in registrations %}{% if r.installments %}{% set ns.any = true %}
+        {% set ns.recv = ns.recv + r.pay_received_total %}{% set ns.due = ns.due + r.pay_due_total %}{% set ns.grand = ns.grand + r.grand_total %}
+      {% endif %}{% endfor %}
+      {% if ns.any %}
+      {% for r in registrations %}{% if r.installments %}
+      <div class="card">
+        <h3><i class="bi bi-receipt"></i> Installments{% if registrations|length > 1 %} — {{ r.product_name or 'Programme' }}{% endif %}</h3>
+        {% if registrations|length > 1 %}<div class="k" style="margin:-6px 0 12px;font-size:12px;color:var(--muted)">{{ r.registration_number|format_reg if r.registration_number else '' }}{% if r.plan_type %} · {{ r.plan_type }}{% endif %}</div>{% endif %}
         <div style="overflow-x:auto"><table class="pay">
           <tr><th>Installment</th><th>Amount</th><th>GST (18%)</th><th>Total</th><th>Status</th></tr>
-          {% for inst in reg.installments %}
+          {% for inst in r.installments %}
           <tr>
             <td style="font-weight:700;color:var(--navy)">{{ inst.ordinal | installment_label }}</td>
             <td>₹{{ '{:,.0f}'.format(inst.amount) }}</td>
@@ -229,13 +417,67 @@
           {% endfor %}
         </table></div>
         <div style="margin-top:14px">
-          <div class="totrow"><span style="color:var(--muted)">Received</span><span style="font-weight:700;color:var(--ok)">₹{{ '{:,.0f}'.format(reg.pay_received_total) }}</span></div>
-          <div class="totrow"><span style="color:var(--muted)">Balance due</span><span style="font-weight:700;color:var(--warn)">₹{{ '{:,.0f}'.format(reg.pay_due_total) }}</span></div>
-          <div class="totrow big"><span>Total (incl. GST)</span><span>₹{{ '{:,.0f}'.format(reg.grand_total) }}</span></div>
+          <div class="totrow"><span style="color:var(--muted)">Received</span><span style="font-weight:700;color:var(--ok)">₹{{ '{:,.0f}'.format(r.pay_received_total) }}</span></div>
+          <div class="totrow"><span style="color:var(--muted)">Balance due</span><span style="font-weight:700;color:{% if r.pay_due_total %}var(--warn){% else %}var(--muted){% endif %}">₹{{ '{:,.0f}'.format(r.pay_due_total) }}</span></div>
+          <div class="totrow big"><span>Total (incl. GST)</span><span>₹{{ '{:,.0f}'.format(r.grand_total) }}</span></div>
         </div>
-        {% else %}<p style="color:var(--muted)">No installments recorded yet.</p>{% endif %}
       </div>
-      {% else %}<div class="card"><p style="color:var(--muted)">No payment details yet.</p></div>{% endif %}
+      {% endif %}{% endfor %}
+      {% if registrations|length > 1 %}
+      <div class="card" style="background:var(--navy);color:#fff">
+        <h3 style="color:#fff"><i class="bi bi-cash-stack"></i> All programmes — combined</h3>
+        <div class="totrow" style="border-color:rgba(255,255,255,.15)"><span style="color:rgba(255,255,255,.7)">Received</span><span style="font-weight:700">₹{{ '{:,.0f}'.format(ns.recv) }}</span></div>
+        <div class="totrow" style="border-color:rgba(255,255,255,.15)"><span style="color:rgba(255,255,255,.7)">Balance due</span><span style="font-weight:700;color:#FDBA74">₹{{ '{:,.0f}'.format(ns.due) }}</span></div>
+        <div class="totrow big" style="border-color:rgba(255,255,255,.15)"><span>Grand total (incl. GST)</span><span>₹{{ '{:,.0f}'.format(ns.grand) }}</span></div>
+      </div>
+      {% endif %}
+      {% if ns.due > 0 %}<p style="font-size:13px;color:var(--muted);margin-top:4px"><i class="bi bi-info-circle"></i> Any pending amount above is still due. Your counsellor will share payment details for the next installment.</p>{% endif %}
+      {% else %}<div class="card"><p style="color:var(--muted)">No installments recorded yet.</p></div>{% endif %}
+    </div>
+
+    <!-- ══ SERVICE DELIVERY ══ -->
+    <div class="section" id="sec-service">
+      {% set sv = namespace(any=false) %}
+      {% for r in registrations %}
+      {% if r.std_services or r.plan_services %}
+      {% set sv.any = true %}
+      <div class="card">
+        <h3><i class="bi bi-box-seam"></i> What your programme includes{% if registrations|length > 1 %} — {{ r.product_name or 'Programme' }}{% endif %}</h3>
+
+        {% if r.plan_services %}
+        <div class="k" style="text-transform:uppercase;font-size:11px;font-weight:700;color:var(--orange);margin:6px 0 10px">Your plan — {{ r.plan_type or 'included services' }}</div>
+        <div class="svc-list">
+          {% for s in r.plan_services %}
+          <div class="svc-item">
+            <div class="svc-name"><i class="bi bi-check-circle-fill" style="color:var(--ok)"></i> {{ s.service_name }}{% if s.quantity %} <span class="svc-qty">× {{ s.quantity }}</span>{% endif %}</div>
+            {% if s.description %}<div class="svc-desc">{% for line in (s.description|string).replace('\\n','\n').split('\n') %}{% set ln = line.strip().lstrip('•').strip() %}{% if ln %}<div class="svc-line">{{ ln }}</div>{% endif %}{% endfor %}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if r.std_services %}
+        <div class="acc {% if not r.plan_services %}open{% endif %}" style="margin-top:{% if r.plan_services %}16px{% else %}4px{% endif %}">
+          <button type="button" class="acc-head" onclick="toggleAcc(this)">
+            <span><i class="bi bi-list-check"></i> Standard deliverables <span class="svc-qty">({{ r.std_services|length }})</span></span>
+            <i class="bi bi-chevron-down acc-chev"></i>
+          </button>
+          <div class="acc-body">
+            <div class="svc-list" style="padding-top:8px">
+              {% for s in r.std_services %}
+              <div class="svc-item">
+                <div class="svc-name"><i class="bi bi-dot" style="color:var(--muted)"></i> {{ s.service_name }}{% if s.quantity %} <span class="svc-qty">× {{ s.quantity }}</span>{% endif %}</div>
+                {% if s.description %}<div class="svc-desc">{% for line in (s.description|string).replace('\\n','\n').split('\n') %}{% set ln = line.strip().lstrip('•').strip() %}{% if ln %}<div class="svc-line">{{ ln }}</div>{% endif %}{% endfor %}</div>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% if not sv.any %}<div class="card"><p style="color:var(--muted)">Your service deliverables will appear here once your programme is set up.</p></div>{% endif %}
     </div>
 
     <!-- ══ DOCUMENTS ══ -->
@@ -295,7 +537,7 @@
     <div class="section" id="sec-settings">
       <div class="card"><h3><i class="bi bi-person-gear"></i> Account</h3>
         <div class="grid2">
-          <div class="field"><div class="k">Name</div><div class="v">Dr. {{ _fullname }}</div></div>
+          <div class="field"><div class="k">Name</div><div class="v">Dr. {{ client_name_clean }}</div></div>
           <div class="field"><div class="k">Mobile (login)</div><div class="v">{{ account.mobile }}</div></div>
           <div class="field"><div class="k">Email</div><div class="v">{{ account.email or '—' }}</div></div>
         </div>
@@ -319,7 +561,7 @@
 <script>
   const links = document.querySelectorAll('.sb-link');
   const sections = document.querySelectorAll('.section');
-  const titles = {overview:'Overview',profile:'My Profile',payments:'Payments',documents:'Documents',agreements:'Agreements',call:'Welcome Call',settings:'Settings'};
+  const titles = {overview:'Overview',profile:'My Profile',payments:'Payments',service:'Service Delivery',documents:'Documents',agreements:'Agreements',call:'Welcome Call',settings:'Settings'};
   function show(key){
     links.forEach(l=>l.classList.toggle('active', l.dataset.section===key));
     sections.forEach(s=>s.classList.toggle('active', s.id==='sec-'+key));
@@ -333,6 +575,44 @@
 
   function openSidebar(){ document.getElementById('sidebar').classList.add('open'); document.getElementById('backdrop').classList.add('open'); }
   function closeSidebar(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('backdrop').classList.remove('open'); }
+
+  // ── My Profile: tabs + per-section edit toggles ──
+  document.querySelectorAll('.ptab').forEach(t=> t.addEventListener('click', ()=>{
+    const k = t.dataset.ptab;
+    document.querySelectorAll('.ptab').forEach(x=>x.classList.toggle('active', x===t));
+    document.querySelectorAll('.ppane').forEach(p=>p.classList.toggle('active', p.id==='ppane-'+k));
+  }));
+  function editPane(k, on){
+    const v=document.getElementById('view-'+k), f=document.getElementById('form-'+k), e=document.getElementById('edit-'+k);
+    if(!f) return;
+    v.style.display = on ? 'none':'block';
+    f.style.display = on ? 'block':'none';
+    if(e) e.style.display = on ? 'none':'';
+  }
+  function toggleGuardian(){
+    const g = document.getElementById('guardianType').value;
+    document.getElementById('parentsFields').style.display = (g==='guardian')?'none':'block';
+    document.getElementById('guardianFields').style.display = (g==='guardian')?'block':'none';
+  }
+
+  // ── Service Delivery: standard-deliverables accordion ──
+  function toggleAcc(btn){ btn.parentElement.classList.toggle('open'); }
+
+  // ── Profile photo: pick from camera / gallery / files, upload, refresh ──
+  function pickPhoto(){ const i=document.getElementById('photoInput'); if(i) i.click(); }
+  function uploadPhoto(input){
+    if(!input.files || !input.files[0]) return;
+    const box=document.getElementById('avatarBox');
+    if(box) box.style.opacity='.5';
+    const fd=new FormData();
+    fd.append('file', input.files[0]);
+    fd.append('doc_type','Photograph');
+    fd.append('doc_category','personal');
+    fetch('/client/upload-plab-doc',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(d=>{ if(d && d.success){ location.reload(); } else { alert((d&&d.error)||'Could not update your photo. Please try again.'); if(box) box.style.opacity='1'; } })
+      .catch(()=>{ alert('Could not update your photo. Please try again.'); if(box) box.style.opacity='1'; });
+  }
 
   // ── Presence heartbeat: tell ops we're live while the dashboard is open ──
   function beat(){ fetch('/client/heartbeat',{method:'POST',keepalive:true}).catch(()=>{}); }

@@ -1438,6 +1438,95 @@ def client_change_password():
     return redirect(url_for('client_dashboard') + '#settings')
 
 
+# Client-editable fields per My-Profile tab. Whitelisted so a client can only write
+# real, safe columns. Personal + family apply to ALL the client's registrations
+# (combined siblings share them); academic applies per registration's client_academics.
+_CLIENT_PROFILE_PERSONAL = ('address', 'city', 'state', 'country', 'whatsapp')
+_CLIENT_PROFILE_FAMILY = ('guardian_type',
+    'father_first_name', 'father_last_name', 'father_phone', 'father_email',
+    'mother_first_name', 'mother_last_name', 'mother_phone', 'mother_email',
+    'guardian_first_name', 'guardian_last_name', 'guardian_phone', 'guardian_email')
+_CLIENT_PROFILE_ACADEMIC = ('country', 'fmg_medical_college', 'img_medical_college',
+    'mbbs_status', 'mbbs_start_date', 'mbbs_end_date', 'internship_status',
+    'internship_hospital', 'internship_location', 'working_status',
+    'working_hospital_name', 'speciality_interest_1', 'speciality_interest_2',
+    'pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status', 'additional_info')
+
+
+@app.route('/client/profile/save', methods=['POST'])
+def client_profile_save():
+    """Client edits one My-Profile tab (personal | family | academic) and saves.
+    Editable only until operations verifies the record; blocked during admin preview.
+    Personal/family write to every registration the client owns (combined siblings
+    stay in sync); academic writes each registration's client_academics row.
+    (founder 2026-07-30)"""
+    if not session.get('is_client'):
+        return redirect(url_for('client_login_page'))
+    if session.get('client_preview'):
+        flash('Preview mode — edits are disabled here.', 'info')
+        return redirect(url_for('client_dashboard') + '#profile')
+    acct_id = session.get('user_id')
+    section = (request.form.get('section') or '').strip()
+    conn = get_db()
+    try:
+        regs = conn.execute("SELECT id, ops_status FROM client_registrations WHERE account_id = ?",
+                            (acct_id,)).fetchall()
+        if not regs:
+            flash('No registration on file.', 'error')
+            return redirect(url_for('client_dashboard') + '#profile')
+        # Respect the same lock as the registration form: once ops has verified, the
+        # client can no longer self-edit — they contact their counsellor.
+        if any((r['ops_status'] or '').strip().lower() == 'verified' for r in regs):
+            flash('Your details are verified and can no longer be edited here. Please contact your counsellor for changes.', 'error')
+            return redirect(url_for('client_dashboard') + '#profile')
+        reg_ids = [r['id'] for r in regs]
+
+        if section in ('personal', 'family'):
+            cols = _CLIENT_PROFILE_PERSONAL if section == 'personal' else _CLIENT_PROFILE_FAMILY
+            data = {c: (request.form.get(c) or '').strip() for c in cols if c in request.form}
+            if section == 'family':
+                # Keep the legacy flat fields other displays/master-sync read.
+                gtype = data.get('guardian_type', '')
+                data['father_name'] = (data.get('father_first_name', '') + ' ' + data.get('father_last_name', '')).strip()
+                data['mother_name'] = (data.get('mother_first_name', '') + ' ' + data.get('mother_last_name', '')).strip()
+                if gtype == 'guardian':
+                    data['parents_email'] = data.get('guardian_email') or ''
+                else:
+                    data['parents_email'] = data.get('father_email') or data.get('mother_email') or ''
+            if data:
+                sets = ', '.join(f"{c} = ?" for c in data)
+                ph = ','.join(['?'] * len(reg_ids))
+                conn.execute(f"UPDATE client_registrations SET {sets} WHERE id IN ({ph})",
+                             list(data.values()) + reg_ids)
+
+        elif section == 'academic':
+            data = {c: (request.form.get(c) or '').strip() for c in _CLIENT_PROFILE_ACADEMIC if c in request.form}
+            if data:
+                sets = ', '.join(f"{c} = ?" for c in data)
+                for rid in reg_ids:
+                    exists = conn.execute("SELECT 1 FROM client_academics WHERE registration_id = ?", (rid,)).fetchone()
+                    if exists:
+                        conn.execute(f"UPDATE client_academics SET {sets} WHERE registration_id = ?",
+                                     list(data.values()) + [rid])
+                    else:
+                        keys = ['registration_id'] + list(data.keys())
+                        conn.execute(f"INSERT INTO client_academics ({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
+                                     [rid] + list(data.values()))
+        else:
+            flash('Unknown section.', 'error')
+            return redirect(url_for('client_dashboard') + '#profile')
+        conn.commit()
+        flash('Your details have been updated.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_profile_save: %s", e)
+        flash('Could not save your changes right now.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('client_dashboard') + '#profile')
+
+
 # ── Refund Policy: editable policy doc + client digital agreement ──
 
 _DEFAULT_REFUND_POLICY_HTML = '''<p>Cancellations will be considered only if the request is made immediately after enrolment. However, the cancellation request may not be entertained if the services have already been initiated or scheduled on your behalf.</p>
@@ -1976,6 +2065,31 @@ def get_package_services(conn, product_id, plan_type):
     return out
 
 
+def get_package_services_split(conn, product_id, plan_type):
+    """Same data as get_package_services, but kept in two buckets for the client's
+    Service Delivery view: 'standard' (the product's standard contract inclusions,
+    plan_type='__standard__') and 'additional' (the plan-specific extras). Names +
+    descriptions only — never budget/cost to the client. (founder 2026-07-30)"""
+    cols = "service_name, description, quantity, delivery_stage"
+    standard, additional = [], []
+    if not product_id:
+        return {'standard': standard, 'additional': additional}
+    std = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = '__standard__'",
+                       (product_id,)).fetchone()
+    if std:
+        standard = [dict(s) for s in conn.execute(
+            f"SELECT {cols} FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+            (std['id'],)).fetchall()]
+    if plan_type:
+        pp = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+                          (product_id, plan_type)).fetchone()
+        if pp:
+            additional = [dict(s) for s in conn.execute(
+                f"SELECT {cols} FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+                (pp['id'],)).fetchall()]
+    return {'standard': standard, 'additional': additional}
+
+
 def get_plan_package_amount(conn, product_id, plan_type):
     """The gross/sale price defined for a (product, plan) in Packages, or None."""
     if not product_id or not plan_type:
@@ -2289,8 +2403,18 @@ def client_dashboard():
             onboarding_by_reg.get(d.get('registration_number')),
             holidays_set=holidays_set, reg=d)
         # What's included in the client's package (standard + plan-specific).
-        # Names + descriptions only for the client — NEVER budget/cost.
+        # Names + descriptions only for the client — NEVER budget/cost. Kept in two
+        # buckets so Service Delivery shows Standard vs Additional separately.
         d['package_services'] = get_package_services(conn, d.get('product_id'), d.get('plan_type'))
+        _svc = get_package_services_split(conn, d.get('product_id'), d.get('plan_type'))
+        d['std_services'] = _svc['standard']
+        d['plan_services'] = _svc['additional']
+        # This registration's academic record (for the My Profile → Academic tab).
+        try:
+            d['academics'] = dict(conn.execute(
+                "SELECT * FROM client_academics WHERE registration_id = ?", (d['id'],)).fetchone() or {})
+        except Exception:
+            d['academics'] = {}
         registrations.append(d)
 
     # Get doc requests for all registrations
@@ -2354,11 +2478,21 @@ def client_dashboard():
     _primary = registrations[0] if registrations else None
     _onboarded = bool(_primary and (_primary.get('form_status') if hasattr(_primary, 'get')
                                     else _primary['form_status']) == 'submitted')
+    # The client may edit their own details until operations verifies the record;
+    # after that the profile is read-only (matches the client_form lock).
+    _locked = bool(_primary and (_primary.get('ops_status') or '').strip().lower() == 'verified')
+    # Clean display name: the stored name sometimes already carries a "Dr." prefix,
+    # so strip any leading Dr./Dr so the template's single "Dr." never doubles.
+    import re as _re
+    _raw_name = (((account['first_name'] or '') + ' ' + (account['last_name'] or '')).strip()
+                 or account['first_name'] or 'Doctor')
+    _clean_name = _re.sub(r'^\s*(dr\.?|doctor)\s+', '', _raw_name, flags=_re.I).strip() or 'Doctor'
     _tpl = 'client_dashboard.html' if _onboarded else 'client_dashboard_onboarding.html'
     return render_template(_tpl,
         account=account, registrations=registrations, doc_requests=doc_requests,
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
-        photo_doc=photo_doc,
+        photo_doc=photo_doc, profile_locked=_locked, client_name_clean=_clean_name,
+        primary_reg_id=(_primary['id'] if _primary else None),
         onboarding_stages=onboarding_stages,
         first_login=session.get('first_login', False))
 
@@ -2887,6 +3021,8 @@ def admin_serve_client_doc(doc_id):
 @client_required
 def client_upload_plab_doc():
     """Client uploads a document to plab_client_documents for ops review."""
+    if session.get('client_preview'):
+        return jsonify({'error': 'Preview mode — uploads are disabled.'}), 403
     acct_id = session.get('user_id')
     conn = get_db()
     # Find the client's registration. Prefer one that already has a reg number
