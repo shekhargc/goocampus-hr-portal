@@ -84,7 +84,7 @@
   table.pay td{ padding:9px 10px; border-bottom:1px solid #F1F5F9; }
   .totrow{ display:flex; justify-content:space-between; padding:8px 0; font-size:14px; }
   .totrow.big{ font-weight:800; color:var(--navy); font-size:16px; border-top:1px solid var(--line); margin-top:6px; padding-top:12px; }
-  .in-field{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px; font-size:14px; font-family:inherit; }
+  .in-field{ width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:9px; font-size:16px; font-family:inherit; }
   .in-lbl{ display:block; font-size:12px; font-weight:600; color:var(--navy); margin-bottom:5px; }
   .btn-sm{ padding:6px 12px; font-size:13px; }
 
@@ -130,10 +130,21 @@
   .acc-body{ display:none; padding:4px 14px 14px; }
   .acc.open .acc-body{ display:block; }
 
+  /* Mobile bottom tab bar */
+  .botnav{ display:none; position:fixed; bottom:0; left:0; right:0; z-index:70; background:#fff;
+           border-top:1px solid var(--line); padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+           justify-content:space-around; box-shadow:0 -4px 16px rgba(15,27,51,.06); }
+  .botnav .bn{ flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px;
+               padding:4px 2px; color:var(--muted); font-size:10.5px; font-weight:600; cursor:pointer; position:relative; }
+  .botnav .bn i{ font-size:20px; }
+  .botnav .bn.active{ color:var(--orange); }
+  .botnav .bn-dot{ display:none; position:absolute; top:2px; right:calc(50% - 16px); width:8px; height:8px; border-radius:50%; background:#EF4444; }
+
   @media(max-width:860px){
     .sidebar{ transform:translateX(-100%); box-shadow:0 0 40px rgba(0,0,0,.3); }
     .sidebar.open{ transform:none; } .backdrop.open{ display:block; }
-    .main{ margin-left:0; } .hamburger{ display:block; } .content{ padding:16px; }
+    .main{ margin-left:0; } .hamburger{ display:block; } .content{ padding:16px 16px 84px; }
+    .botnav{ display:flex; }
   }
 </style>
 </head>
@@ -589,7 +600,7 @@
           <div id="cchatEmpty" style="margin:auto;color:var(--muted);text-align:center">No messages yet. Send us a message — we're here to help. 👋</div>
         </div>
         <form id="cchatForm" style="display:flex;gap:10px;padding:12px 14px;border-top:1px solid var(--line)">
-          <textarea id="cchatInput" rows="1" placeholder="Type your message…" required style="flex:1;resize:none;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:14px;font-family:inherit;max-height:120px"></textarea>
+          <textarea id="cchatInput" rows="1" placeholder="Type your message…" required style="flex:1;resize:none;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:16px;font-family:inherit;max-height:120px"></textarea>
           <button type="submit" class="btn btn-primary" style="padding:0 20px">Send</button>
         </form>
       </div>
@@ -620,18 +631,30 @@
   </div>
 </div>
 
+<!-- ══ Mobile bottom tab bar (app-style) ══ -->
+<nav class="botnav" id="botnav">
+  <button class="bn" data-section="overview"><i class="bi bi-house-door"></i><span>Home</span></button>
+  <button class="bn" data-section="payments"><i class="bi bi-wallet2"></i><span>Payments</span></button>
+  <button class="bn" data-section="chat"><i class="bi bi-chat-dots"></i><span>Chat</span><span class="bn-dot" id="bnDot"></span></button>
+  <button class="bn" data-section="documents"><i class="bi bi-folder2-open"></i><span>Docs</span></button>
+  <button class="bn" data-section="profile"><i class="bi bi-person"></i><span>Profile</span></button>
+</nav>
+
 <script>
   const links = document.querySelectorAll('.sb-link');
+  const botlinks = document.querySelectorAll('.botnav .bn');
   const sections = document.querySelectorAll('.section');
   const titles = {overview:'Overview',profile:'My Profile',payments:'Payments',service:'Service Delivery',documents:'Documents',agreements:'Agreements',call:'Welcome Call',chat:'Messages',settings:'Settings'};
   function show(key){
     links.forEach(l=>l.classList.toggle('active', l.dataset.section===key));
+    botlinks.forEach(l=>l.classList.toggle('active', l.dataset.section===key));
     sections.forEach(s=>s.classList.toggle('active', s.id==='sec-'+key));
     document.getElementById('pageTitle').textContent = titles[key]||'Overview';
     if(history.replaceState) history.replaceState(null,'','#'+key);
     closeSidebar();
     window.scrollTo({top:0,behavior:'smooth'});
   }
+  botlinks.forEach(l=> l.addEventListener('click', ()=> show(l.dataset.section)));
   links.forEach(l=> l.addEventListener('click', ()=> show(l.dataset.section)));
   const h=(location.hash||'').replace('#',''); if(h && titles[h]) show(h);
 
@@ -763,13 +786,16 @@
       if(added) body.scrollTop=body.scrollHeight;
     }
     function load(){ fetch('/client/chat/messages').then(r=>r.json()).then(d=>render(d.messages||[])).catch(()=>{}); }
-    function unread(){ fetch('/client/chat/unread').then(r=>r.json()).then(d=>{ const n=(d&&d.unread)||0; if(dot){ dot.style.display=(n&&!onChat)?'block':'none'; dot.textContent=n>9?'9+':n; } }).catch(()=>{}); }
+    const bnDot=document.getElementById('bnDot');
+    function unread(){ fetch('/client/chat/unread').then(r=>r.json()).then(d=>{ const n=(d&&d.unread)||0; const showDot=(n&&!onChat);
+      if(dot){ dot.style.display=showDot?'block':'none'; dot.textContent=n>9?'9+':n; }
+      if(bnDot){ bnDot.style.display=showDot?'block':'none'; } }).catch(()=>{}); }
     input.addEventListener('input',()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; });
     input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); form.requestSubmit(); }});
     form.addEventListener('submit',e=>{ e.preventDefault(); const t=input.value.trim(); if(!t) return; input.value=''; input.style.height='auto';
       fetch('/client/chat/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:t})}).then(r=>r.json()).then(()=>load()).catch(()=>{}); });
     // Poll faster while the Messages tab is open; slower otherwise (just the unread dot).
-    document.querySelectorAll('.sb-link').forEach(l=>l.addEventListener('click',()=>{ onChat=(l.dataset.section==='chat'); if(onChat){ load(); if(dot) dot.style.display='none'; }}));
+    document.querySelectorAll('.sb-link, .botnav .bn').forEach(l=>l.addEventListener('click',()=>{ onChat=(l.dataset.section==='chat'); if(onChat){ load(); if(dot) dot.style.display='none'; if(bnDot) bnDot.style.display='none'; }}));
     if((location.hash||'')==='#chat'){ onChat=true; load(); }
     load(); unread();
     setInterval(()=>{ if(document.visibilityState==='visible'){ if(onChat) load(); unread(); } }, 6000);

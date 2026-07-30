@@ -1634,10 +1634,49 @@ def _ensure_chat(conn):
                      "body TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
                      "read_by_ops INTEGER DEFAULT 0, read_by_client INTEGER DEFAULT 0)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_account ON client_chat_messages(account_id, id)")
+        conn.execute("ALTER TABLE client_chat_messages ADD COLUMN IF NOT EXISTS is_auto INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE client_accounts ADD COLUMN IF NOT EXISTS last_chat_seen_at TIMESTAMP")
+        conn.execute("CREATE TABLE IF NOT EXISTS chat_autoreply ("
+                     "id INTEGER PRIMARY KEY, enabled INTEGER DEFAULT 0, "
+                     "start_time TEXT DEFAULT '10:00', end_time TEXT DEFAULT '18:00', "
+                     "days TEXT DEFAULT '0,1,2,3,4', message TEXT DEFAULT '', "
+                     "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         conn.commit()
     except Exception:
         try: conn.rollback()
         except Exception: pass
+
+
+def _maybe_autoreply(conn, account_id):
+    """If the team is outside its configured working hours, drop one auto-reply into
+    the client's thread (rate-limited to once / 30 min). (founder 2026-07-30)"""
+    try:
+        cfg = conn.execute("SELECT * FROM chat_autoreply WHERE id = 1").fetchone()
+        if not cfg or not cfg['enabled']:
+            return
+        import pytz
+        from datetime import datetime as _dt
+        now = _dt.now(pytz.timezone('Asia/Kolkata'))
+        start = (cfg['start_time'] or '10:00'); end = (cfg['end_time'] or '18:00')
+        working_days = set(int(x) for x in (cfg['days'] or '0,1,2,3,4').split(',') if x.strip().isdigit())
+        cur = now.strftime('%H:%M')
+        in_hours = (now.weekday() in working_days) and (start <= cur <= end)
+        if in_hours:
+            return  # team available — no auto-reply
+        recent = conn.execute(
+            "SELECT 1 FROM client_chat_messages WHERE account_id = ? AND is_auto = 1 "
+            "AND created_at > CURRENT_TIMESTAMP - INTERVAL '30 minutes' LIMIT 1", (account_id,)).fetchone()
+        if recent:
+            return
+        msg = (cfg['message'] or '').strip() or \
+            "Thanks for your message! Our team is offline right now — we'll get back to you during working hours."
+        conn.execute("INSERT INTO client_chat_messages (account_id, sender_type, sender_name, body, is_auto) "
+                     "VALUES (?, 'ops', 'GooCampus', ?, 1)", (account_id, msg))
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.warning("autoreply: %s", e)
 
 
 def _ist_str(dt):
@@ -1678,6 +1717,9 @@ def client_chat_messages():
         if not session.get('client_preview'):
             conn.execute("UPDATE client_chat_messages SET read_by_client = 1 WHERE account_id = ? "
                          "AND sender_type = 'ops' AND read_by_client = 0", (acct_id,))
+            # Stamp that the client is actively viewing chat right now — ops replies
+            # skip the push notification while this is fresh (they see it live).
+            conn.execute("UPDATE client_accounts SET last_chat_seen_at = CURRENT_TIMESTAMP WHERE id = ?", (acct_id,))
             conn.commit()
         return jsonify({'messages': [_chat_msg_dict(r, 'client') for r in rows]})
     finally:
@@ -1700,6 +1742,7 @@ def client_chat_send():
         conn.execute("INSERT INTO client_chat_messages (account_id, sender_type, sender_name, body) "
                      "VALUES (?, 'client', ?, ?)", (acct_id, name, body))
         conn.commit()
+        _maybe_autoreply(conn, acct_id)
         return jsonify({'ok': True})
     except Exception as e:
         try: conn.rollback()
@@ -1823,9 +1866,16 @@ def ops_chat_send(account_id):
                      "VALUES (?, 'ops', ?, ?, ?)",
                      (account_id, (user['id'] if user else None), sender_name, body))
         conn.commit()
+        # Only push if the client is NOT actively looking at the chat right now.
+        # last_chat_seen_at is stamped by the chat poll (every ~6s while the tab is
+        # open + visible), so a fresh value (<20s) means they'll see it live.
         try:
-            send_client_push(conn, account_id, f'New message from {sender_name}', body[:120],
-                             url='/client/dashboard#chat', tag='chat')
+            active = conn.execute(
+                "SELECT (last_chat_seen_at > CURRENT_TIMESTAMP - INTERVAL '20 seconds') AS active "
+                "FROM client_accounts WHERE id = ?", (account_id,)).fetchone()
+            if not (active and active['active']):
+                send_client_push(conn, account_id, f'New message from {sender_name}', body[:120],
+                                 url='/client/dashboard#chat', tag='chat')
         except Exception:
             pass
         if request.is_json:
@@ -1854,6 +1904,62 @@ def ops_chat_unread_count():
         return jsonify({'unread': n})
     finally:
         conn.close()
+
+
+@app.route('/admin/chat-settings', methods=['GET', 'POST'])
+@login_required
+def admin_chat_settings():
+    """Configure the chat auto-reply: working hours/days + the off-hours message.
+    Outside those hours, a client's message gets one auto-reply. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+    conn = get_db()
+    saved = ''
+    try:
+        _ensure_chat(conn)
+        if request.method == 'POST':
+            enabled = 1 if request.form.get('enabled') else 0
+            start = (request.form.get('start_time') or '10:00').strip()
+            end = (request.form.get('end_time') or '18:00').strip()
+            days = ','.join([d for d in request.form.getlist('days') if d in '0123456'])
+            message = (request.form.get('message') or '').strip()[:500]
+            conn.execute(
+                "INSERT INTO chat_autoreply (id, enabled, start_time, end_time, days, message, updated_at) "
+                "VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT (id) DO UPDATE SET enabled=EXCLUDED.enabled, start_time=EXCLUDED.start_time, "
+                "end_time=EXCLUDED.end_time, days=EXCLUDED.days, message=EXCLUDED.message, updated_at=CURRENT_TIMESTAMP",
+                (enabled, start, end, days, message))
+            conn.commit()
+            saved = 'Saved.'
+        cfg = conn.execute("SELECT * FROM chat_autoreply WHERE id = 1").fetchone()
+    finally:
+        conn.close()
+    cfg = dict(cfg) if cfg else {}
+    en = cfg.get('enabled'); start = cfg.get('start_time') or '10:00'; end = cfg.get('end_time') or '18:00'
+    daysel = set((cfg.get('days') or '0,1,2,3,4').split(','))
+    msg = cfg.get('message') or "Thanks for your message! Our team is offline right now — we'll get back to you during working hours."
+    daynames = [('0','Mon'),('1','Tue'),('2','Wed'),('3','Thu'),('4','Fri'),('5','Sat'),('6','Sun')]
+    daychecks = ''.join(
+        f"<label style='margin-right:12px'><input type='checkbox' name='days' value='{d}' "
+        f"{'checked' if d in daysel else ''}> {nm}</label>" for d, nm in daynames)
+    saved_html = ("<p style='color:#065f46'>" + saved + "</p>") if saved else ''
+    return ("<div style='font-family:system-ui;max-width:600px;margin:30px auto'>"
+            "<h2>Chat auto-reply</h2>"
+            + saved_html +
+            "<p style='color:#64748b;font-size:14px'>When a client messages <b>outside</b> your working hours, "
+            "they get one automatic reply (max once every 30 min). Inside working hours, no auto-reply — your team answers live.</p>"
+            "<form method='POST' style='display:flex;flex-direction:column;gap:14px'>"
+            f"<label><input type='checkbox' name='enabled' {'checked' if en else ''}> <b>Enable auto-reply</b></label>"
+            "<div>Working hours (IST): "
+            f"<input type='time' name='start_time' value='{esc(start)}'> to "
+            f"<input type='time' name='end_time' value='{esc(end)}'></div>"
+            f"<div>Working days: {daychecks}</div>"
+            "<div>Off-hours message:<br>"
+            f"<textarea name='message' rows='3' style='width:100%;padding:9px;font-size:14px'>{esc(msg)}</textarea></div>"
+            "<button style='padding:10px 18px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:600;width:fit-content'>Save</button>"
+            "</form></div>")
 
 
 @app.route('/operations/presence/by-reg/<path:reg>')
