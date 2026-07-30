@@ -1621,6 +1621,241 @@ def admin_push_test():
             "(not the browser tab), tap <b>Turn on notifications</b>, allow it, then send the test.</p></div>")
 
 
+# ══ Live chat: client ↔ ops, per-client thread + history, shared ops inbox ══
+# Every client has one running conversation (keyed by account_id). Ops replies are
+# stamped with the employee who sent them, so the whole team sees who replied.
+# (founder 2026-07-30)
+
+def _ensure_chat(conn):
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS client_chat_messages ("
+                     "id SERIAL PRIMARY KEY, account_id INTEGER NOT NULL, "
+                     "sender_type TEXT NOT NULL, sender_id INTEGER, sender_name TEXT, "
+                     "body TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                     "read_by_ops INTEGER DEFAULT 0, read_by_client INTEGER DEFAULT 0)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_account ON client_chat_messages(account_id, id)")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _ist_str(dt):
+    """Format a stored (UTC) timestamp as IST 'DD Mon, HH:MM am/pm' for display."""
+    if not dt:
+        return ''
+    try:
+        import pytz
+        from datetime import datetime as _dt
+        if isinstance(dt, str):
+            dt = _dt.fromisoformat(dt)
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        return dt.astimezone(pytz.timezone('Asia/Kolkata')).strftime('%d %b, %I:%M %p')
+    except Exception:
+        return ''
+
+
+def _chat_msg_dict(r, viewer):
+    """Shape a chat row for JSON. viewer='client' or 'ops' decides which side is 'me'."""
+    mine = (r['sender_type'] == viewer)
+    default = 'You' if r['sender_type'] == 'client' else 'GooCampus'
+    return {'id': r['id'], 'mine': mine, 'sender_type': r['sender_type'],
+            'name': (r['sender_name'] or default), 'body': r['body'],
+            'time': _ist_str(r['created_at'])}
+
+
+@app.route('/client/chat/messages')
+@client_required
+def client_chat_messages():
+    acct_id = session.get('user_id')
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        rows = conn.execute(
+            "SELECT id, sender_type, sender_name, body, created_at FROM client_chat_messages "
+            "WHERE account_id = ? ORDER BY id", (acct_id,)).fetchall()
+        if not session.get('client_preview'):
+            conn.execute("UPDATE client_chat_messages SET read_by_client = 1 WHERE account_id = ? "
+                         "AND sender_type = 'ops' AND read_by_client = 0", (acct_id,))
+            conn.commit()
+        return jsonify({'messages': [_chat_msg_dict(r, 'client') for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.route('/client/chat/send', methods=['POST'])
+@client_required
+def client_chat_send():
+    if session.get('client_preview'):
+        return jsonify({'ok': True, 'preview': True})
+    acct_id = session.get('user_id')
+    body = ((request.get_json(silent=True) or {}).get('body') or '').strip()[:2000]
+    if not body:
+        return jsonify({'ok': False}), 400
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        name = session.get('client_name') or 'Client'
+        conn.execute("INSERT INTO client_chat_messages (account_id, sender_type, sender_name, body) "
+                     "VALUES (?, 'client', ?, ?)", (acct_id, name, body))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_chat_send: %s", e)
+        return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/client/chat/unread')
+@client_required
+def client_chat_unread():
+    acct_id = session.get('user_id')
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        n = conn.execute("SELECT COUNT(*) AS n FROM client_chat_messages WHERE account_id = ? "
+                         "AND sender_type = 'ops' AND read_by_client = 0", (acct_id,)).fetchone()['n']
+        return jsonify({'unread': n})
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat')
+@login_required
+def ops_chat_inbox():
+    """Shared ops inbox — every client conversation, newest first, with unread count
+    and a live online dot."""
+    conn = get_db()
+    _ensure_chat(conn)
+    q = (request.args.get('q') or '').strip()
+    like = f"%{q}%"
+    try:
+        convos = conn.execute(
+            "SELECT ca.id AS account_id, "
+            "  TRIM(COALESCE(ca.first_name,'')||' '||COALESCE(ca.last_name,'')) AS name, ca.mobile, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online, "
+            "  m.body AS last_body, m.created_at AS last_at, m.sender_type AS last_sender, "
+            "  (SELECT COUNT(*) FROM client_chat_messages x WHERE x.account_id = ca.id "
+            "     AND x.sender_type='client' AND x.read_by_ops=0) AS unread "
+            "FROM client_accounts ca "
+            "JOIN LATERAL (SELECT body, created_at, sender_type FROM client_chat_messages cm "
+            "  WHERE cm.account_id = ca.id ORDER BY cm.id DESC LIMIT 1) m ON TRUE "
+            "WHERE (? = '' OR ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ?) "
+            "ORDER BY m.created_at DESC", (q, like, like, like)).fetchall()
+        rows = [{'account_id': c['account_id'], 'name': (c['name'] or 'Client'), 'mobile': c['mobile'],
+                 'online': bool(c['online']), 'unread': c['unread'],
+                 'preview': (('You: ' if c['last_sender'] == 'ops' else '') + (c['last_body'] or ''))[:80],
+                 'time': _ist_str(c['last_at'])} for c in convos]
+        total_unread = sum(r['unread'] for r in rows)
+    except Exception as e:
+        logging.error("ops_chat_inbox: %s", e)
+        rows, total_unread = [], 0
+    finally:
+        conn.close()
+    return render_template('ops_chat_inbox.html', convos=rows, q=q, total_unread=total_unread, active_ops_page='client-chat')
+
+
+def _ops_chat_load(conn, account_id, mark_read=True):
+    acct = conn.execute(
+        "SELECT id, TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, mobile, email, "
+        "(last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
+        "FROM client_accounts WHERE id = ?", (account_id,)).fetchone()
+    if not acct:
+        return None, []
+    rows = conn.execute("SELECT id, sender_type, sender_name, body, created_at FROM client_chat_messages "
+                        "WHERE account_id = ? ORDER BY id", (account_id,)).fetchall()
+    if mark_read:
+        conn.execute("UPDATE client_chat_messages SET read_by_ops = 1 WHERE account_id = ? "
+                     "AND sender_type = 'client' AND read_by_ops = 0", (account_id,))
+        conn.commit()
+    return acct, rows
+
+
+@app.route('/operations/chat/<int:account_id>')
+@login_required
+def ops_chat_thread(account_id):
+    conn = get_db()
+    _ensure_chat(conn)
+    try:
+        acct, rows = _ops_chat_load(conn, account_id)
+        if not acct:
+            flash('Client not found.', 'error')
+            return redirect(url_for('ops_chat_inbox'))
+        msgs = [_chat_msg_dict(r, 'ops') for r in rows]
+        return render_template('ops_chat_thread.html', acct=dict(acct), msgs=msgs, active_ops_page='client-chat')
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat/<int:account_id>/messages')
+@login_required
+def ops_chat_thread_messages(account_id):
+    conn = get_db()
+    _ensure_chat(conn)
+    try:
+        acct, rows = _ops_chat_load(conn, account_id)
+        if not acct:
+            return jsonify({'messages': [], 'online': False})
+        return jsonify({'messages': [_chat_msg_dict(r, 'ops') for r in rows],
+                        'online': bool(acct['online'])})
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat/<int:account_id>/send', methods=['POST'])
+@login_required
+def ops_chat_send(account_id):
+    user = get_user()
+    body = ((request.get_json(silent=True) or {}).get('body') or request.form.get('body') or '').strip()[:2000]
+    if not body:
+        if request.is_json:
+            return jsonify({'ok': False}), 400
+        return redirect(url_for('ops_chat_thread', account_id=account_id))
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        sender_name = (user['name'] if user else 'GooCampus') or 'GooCampus'
+        conn.execute("INSERT INTO client_chat_messages (account_id, sender_type, sender_id, sender_name, body) "
+                     "VALUES (?, 'ops', ?, ?, ?)",
+                     (account_id, (user['id'] if user else None), sender_name, body))
+        conn.commit()
+        try:
+            send_client_push(conn, account_id, f'New message from {sender_name}', body[:120],
+                             url='/client/dashboard#chat', tag='chat')
+        except Exception:
+            pass
+        if request.is_json:
+            return jsonify({'ok': True})
+        return redirect(url_for('ops_chat_thread', account_id=account_id))
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("ops_chat_send: %s", e)
+        if request.is_json:
+            return jsonify({'ok': False}), 500
+        flash('Could not send the message.', 'error')
+        return redirect(url_for('ops_chat_thread', account_id=account_id))
+    finally:
+        conn.close()
+
+
+@app.route('/operations/chat/unread-count')
+@login_required
+def ops_chat_unread_count():
+    conn = get_db()
+    try:
+        _ensure_chat(conn)
+        n = conn.execute("SELECT COUNT(DISTINCT account_id) AS n FROM client_chat_messages "
+                         "WHERE sender_type = 'client' AND read_by_ops = 0").fetchone()['n']
+        return jsonify({'unread': n})
+    finally:
+        conn.close()
+
+
 @app.route('/client/heartbeat', methods=['POST'])
 def client_heartbeat():
     """The client dashboard pings this every ~30s while open. Stamps last_seen_at so

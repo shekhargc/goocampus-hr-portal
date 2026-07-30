@@ -390,6 +390,12 @@
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3z"/><path d="M13 21h8V11h-8z"/><path d="M13 3v6h8V3z"/><path d="M3 21h8v-6H3z"/></svg></span>
                 <span class="ops-nav-text">Operations Dashboard</span>
             </a>
+            {# ─── Live client chat (shared inbox) ─── #}
+            <a href="/operations/chat" class="ops-nav-item {% if active_ops_page == 'client-chat' %}active{% endif %}" data-tooltip="Client Chat" style="position:relative">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+                <span class="ops-nav-text">Client Chat</span>
+                <span id="opsChatBadge" style="display:none;position:absolute;top:6px;left:26px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:#EF4444;color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center"></span>
+            </a>
             {# ─── Cross-pathway referrals report (all pathways) ─── #}
             <a href="/operations/referrals" class="ops-nav-item {% if active_ops_page == 'referrals' %}active{% endif %}" data-tooltip="Referrals">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
@@ -1210,6 +1216,21 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape') window.ccC
 (function(){ var m=document.getElementById('ccModal'); if(m) m.addEventListener('click',function(e){ if(e.target===this) window.ccClose(); }); })();
 </script>
 {% block ops_extra_js %}{% endblock %}
+<script>
+  // Live unread badge for the shared Client Chat inbox.
+  (function(){
+    var badge = document.getElementById('opsChatBadge');
+    if (!badge) return;
+    function poll(){
+      fetch('/operations/chat/unread-count').then(r=>r.json()).then(d=>{
+        var n = (d && d.unread) || 0;
+        badge.style.display = n ? 'block' : 'none';
+        badge.textContent = n > 9 ? '9+' : n;
+      }).catch(()=>{});
+    }
+    poll(); setInterval(poll, 20000);
+  })();
+</script>
 {# Clickable column sorting (A→Z / Z→A) on every ops data table — founder 2026-07-18.
    Safe: only tables with a <thead> + 2+ body rows; never reorders until clicked. #}
 <script src="/static/js/ops-table-sort.js?v=1"></script>
