@@ -745,3 +745,57 @@ def api_pg_coupon_validate():
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
+
+
+def _bearer_token():
+    """The doctor's session token from an Authorization: Bearer header — the form
+    goocampus.in's dashboard uses — falling back to X-PG-User-Token / ?token=."""
+    auth = request.headers.get('Authorization') or ''
+    if auth.lower().startswith('bearer '):
+        return auth[7:].strip()
+    return (request.headers.get('X-PG-User-Token') or request.args.get('token') or '').strip()
+
+
+def api_pg_profile():
+    """POST /api/pg/profile — the goocampus.in dashboard saves the doctor's profile
+    here so it lands in the SAME pg_users record the /admin/pg/users screen shows.
+
+    Maps the site's field names to the admin's columns:
+        first_name + last_name -> name   (admin uses one 'name')
+        mbbs_college           -> college
+        email, state, city     -> as-is
+    Auth: X-PG-Key handshake + the doctor's session token (Bearer). (founder 2026-07-30)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    token = _bearer_token()
+    if not token:
+        return jsonify({'ok': False, 'error': 'no_token'}), 401
+    data = request.get_json(silent=True) or {}
+    first = (data.get('first_name') or '').strip()
+    last = (data.get('last_name') or '').strip()
+    name = (first + ' ' + last).strip()
+    email = (data.get('email') or '').strip()
+    state = (data.get('state') or '').strip()
+    city = (data.get('city') or '').strip()
+    college = (data.get('mbbs_college') or data.get('college') or '').strip()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM pg_users WHERE session_token = ? "
+            "AND (token_expires_at IS NULL OR token_expires_at > CURRENT_TIMESTAMP) "
+            "AND COALESCE(is_blocked,0) = 0", (token,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        conn.execute(
+            "UPDATE pg_users SET name = ?, email = ?, state = ?, city = ?, college = ?, "
+            "updated_by = 'goocampus.in', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (name, email, state, city, college, row['id']))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_profile: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
