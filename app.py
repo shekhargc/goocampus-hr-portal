@@ -1856,6 +1856,28 @@ def ops_chat_unread_count():
         conn.close()
 
 
+@app.route('/operations/presence/by-reg/<path:reg>')
+@login_required
+def ops_presence_by_reg(reg):
+    """Is the client behind this registration number active on their dashboard right
+    now? Drives the '● Online' badge on the ops client profile. (founder 2026-07-30)"""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT ca.last_seen_at, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
+            "FROM client_registrations cr JOIN client_accounts ca ON ca.id = cr.account_id "
+            "WHERE cr.registration_number = ? ORDER BY ca.last_seen_at DESC NULLS LAST LIMIT 1",
+            (reg,)).fetchone()
+        if not row:
+            return jsonify({'online': False, 'seen': ''})
+        return jsonify({'online': bool(row['online']), 'seen': _ist_str(row['last_seen_at'])})
+    except Exception:
+        return jsonify({'online': False, 'seen': ''})
+    finally:
+        conn.close()
+
+
 @app.route('/client/heartbeat', methods=['POST'])
 def client_heartbeat():
     """The client dashboard pings this every ~30s while open. Stamps last_seen_at so

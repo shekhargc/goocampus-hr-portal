@@ -75,6 +75,7 @@
           <span style="vertical-align:middle;display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;margin-left:8px;">MBBS Doctor</span>
           {% endif %}
         </h1>
+        <div style="margin:0 0 8px 0">{% set presence_reg = client.registration_number %}{% include '_client_presence_badge.html' %}</div>
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
           Registration #{{ client.registration_number|format_reg }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}
         </p>

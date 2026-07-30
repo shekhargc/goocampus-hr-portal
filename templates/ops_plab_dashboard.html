@@ -74,6 +74,7 @@
         <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
           {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
         </h1>
+        <div style="margin:0 0 8px 0">{% set presence_reg = client.registration_number %}{% include '_client_presence_badge.html' %}</div>
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
           Registration #{{ client.registration_number|format_reg }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}
         </p>
