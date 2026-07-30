@@ -174,7 +174,10 @@
     <div class="sb-link" data-section="call"><i class="bi bi-telephone-inbound"></i> Welcome Call</div>
     <div class="sb-link" data-section="settings"><i class="bi bi-gear"></i> Settings</div>
   </nav>
-  <div class="sb-foot"><a href="/client/logout" class="sb-logout"><i class="bi bi-box-arrow-right"></i> Log out</a></div>
+  <div class="sb-foot">
+    <button id="installBtn" onclick="installApp()" style="display:none;width:100%;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;background:var(--orange);color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;justify-content:center"><i class="bi bi-phone"></i> Install app</button>
+    <a href="/client/logout" class="sb-logout"><i class="bi bi-box-arrow-right"></i> Log out</a>
+  </div>
 </aside>
 <div class="backdrop" id="backdrop" onclick="closeSidebar()"></div>
 
@@ -656,6 +659,32 @@
   // ── PWA: register the service worker so the app is installable + opens offline ──
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/client/sw.js', {scope:'/client/'}).catch(()=>{}));
+  }
+
+  // ── PWA install button (visible, since browsers hide install in a menu) ──
+  let deferredInstall = null;
+  const installBtn = document.getElementById('installBtn');
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Android/Chrome: capture the event and reveal our own button.
+    e.preventDefault(); deferredInstall = e;
+    if (installBtn) installBtn.style.display = 'flex';
+  });
+  // iPhone/Safari never fires the event and has no programmatic install — show the
+  // button anyway and tell the user the Share → Add to Home Screen steps.
+  if (isIOS && !isStandalone && installBtn) installBtn.style.display = 'flex';
+  window.addEventListener('appinstalled', () => { if (installBtn) installBtn.style.display = 'none'; });
+
+  function installApp(){
+    if (deferredInstall) {
+      deferredInstall.prompt();
+      deferredInstall.userChoice.finally(() => { deferredInstall = null; if (installBtn) installBtn.style.display = 'none'; });
+    } else if (isIOS) {
+      alert("To install:\n\n1. Tap the Share button (the square with an ↑) at the bottom of Safari.\n2. Scroll down and tap “Add to Home Screen”.\n3. Tap “Add”.\n\nGooCampus will then open like an app.");
+    } else {
+      alert("To install: open your browser menu (⋮) and choose “Install app” or “Add to Home screen”.");
+    }
   }
 
   // ── Presence heartbeat: tell ops we're live while the dashboard is open ──
