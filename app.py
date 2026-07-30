@@ -6806,6 +6806,16 @@ def admin_client_ops_verify(reg_id):
             "INSERT INTO client_doc_requests (registration_id, doc_type, message, urgency, requested_by) VALUES (?, ?, ?, ?, ?)",
             (reg_id, doc_type, message, urgency, user['id']))
         conn.commit()
+        # PWA push: nudge the client to upload the requested document.
+        try:
+            _acc = conn.execute("SELECT account_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+            if _acc and _acc['account_id']:
+                send_client_push(conn, _acc['account_id'], 'Document requested',
+                                 (f"Your counsellor requested: {doc_type}. Tap to upload." if doc_type
+                                  else "Your counsellor requested a document."),
+                                 url='/client/dashboard#documents', tag='docreq')
+        except Exception:
+            pass
         conn.close()
         # Notify client about doc request
         _notify_doc_request(reg_id, doc_type, message)
@@ -7159,6 +7169,15 @@ def _notify_welcome_call_confirmed(reg_id):
         date_s = reg['wc_scheduled_date'] or ''
         time_s = reg['wc_scheduled_time'] or ''
         wc_by = reg['wc_by'] or ''
+        # PWA push: tell the client their welcome call is confirmed.
+        try:
+            if reg['account_id']:
+                send_client_push(conn, reg['account_id'], 'Welcome call confirmed',
+                                 f"Your welcome call is set for {date_s} at {time_s}"
+                                 + (f" with {wc_by}" if wc_by else "") + ".",
+                                 url='/client/dashboard#call', tag='wc')
+        except Exception:
+            pass
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
         client_email = reg['email']
         product_name = reg['product_name'] or 'your program'
@@ -28131,7 +28150,16 @@ def ops_payment_approve(reg_id, inst_no):
                 " gst_amount, total_amount, payment_method, payment_date, pathway, status, ops_payment_id, reviewed_by, reviewed_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP)",
                 (reg_id, reg_no, inst_no, amount, gst, total, method, pdate, pathway, pay_id, session.get('user_id')))
-        conn.commit(); conn.close()
+        conn.commit()
+        # PWA push: thank the client for the received installment.
+        try:
+            if r['account_id']:
+                send_client_push(conn, r['account_id'], 'Payment received',
+                                 f"We've received your {_INST_ORD[inst_no]} (₹{total:,.0f}). Thank you!",
+                                 url='/client/dashboard#payments', tag='pay')
+        except Exception:
+            pass
+        conn.close()
         flash(f'{_INST_ORD[inst_no]} installment approved and posted to {pathway.title()} Payments', 'success')
     except Exception as e:
         try: conn.rollback(); conn.close()
