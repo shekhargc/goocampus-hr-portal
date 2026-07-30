@@ -1373,6 +1373,14 @@ def client_manifest():
             {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
             {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
+        "shortcuts": [
+            {"name": "Payments", "url": "/client/dashboard#payments",
+             "icons": [{"src": "/static/icon-192.png", "sizes": "192x192"}]},
+            {"name": "Documents", "url": "/client/dashboard#documents",
+             "icons": [{"src": "/static/icon-192.png", "sizes": "192x192"}]},
+            {"name": "My Profile", "url": "/client/dashboard#profile",
+             "icons": [{"src": "/static/icon-192.png", "sizes": "192x192"}]},
+        ],
     })
 
 
@@ -1383,7 +1391,7 @@ def client_service_worker():
     Network-first with a cached shell fallback so the app opens even offline.
     (founder 2026-07-30)"""
     js = """
-const CACHE = 'gc-client-v1';
+const CACHE = 'gc-client-v2';
 const SHELL = ['/client/login', '/static/logo-white.png', '/static/icon-192.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(()=>{}));
@@ -1407,12 +1415,210 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(req).then(m => m || caches.match('/client/login')))
   );
 });
+// ── Push notifications ──
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch(_) { d = { body: (e.data && e.data.text()) || '' }; }
+  const title = d.title || 'GooCampus';
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || '',
+    icon: '/static/icon-192.png',
+    badge: '/static/icon-192.png',
+    data: { url: d.url || '/client/dashboard' },
+    tag: d.tag || 'gc',
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/client/dashboard';
+  e.waitUntil(clients.matchAll({type:'window', includeUncontrolled:true}).then(ws => {
+    for (const w of ws) { if (w.url.includes('/client/') && 'focus' in w) { w.navigate && w.navigate(url); return w.focus(); } }
+    return clients.openWindow(url);
+  }));
+});
 """
     resp = make_response(js)
     resp.mimetype = 'application/javascript'
     resp.headers['Service-Worker-Allowed'] = '/client/'
     resp.headers['Cache-Control'] = 'no-cache'
     return resp
+
+
+# ══ Web Push notifications for the client PWA ══
+# VAPID keys are generated ONCE on the server and stored in push_config — the founder
+# never has to paste a secret. Public key -> the browser's applicationServerKey;
+# private key -> signs each push. (founder 2026-07-30)
+
+def _ensure_push(conn):
+    """Create the push tables + ensure a VAPID keypair exists. Returns
+    (public_b64url, private_b64url), or (None, None) if unavailable."""
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS push_config ("
+                     "id INTEGER PRIMARY KEY, vapid_public TEXT, vapid_private TEXT, "
+                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("CREATE TABLE IF NOT EXISTS client_push_subscriptions ("
+                     "id SERIAL PRIMARY KEY, account_id INTEGER, endpoint TEXT UNIQUE, "
+                     "p256dh TEXT, auth TEXT, user_agent TEXT, "
+                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        row = conn.execute("SELECT vapid_public, vapid_private FROM push_config WHERE id = 1").fetchone()
+        if row and row['vapid_public'] and row['vapid_private']:
+            conn.commit()
+            return row['vapid_public'], row['vapid_private']
+        from cryptography.hazmat.primitives.asymmetric import ec
+        import base64
+        def _b64u(b): return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+        priv = ec.generate_private_key(ec.SECP256R1())
+        priv_b64 = _b64u(priv.private_numbers().private_value.to_bytes(32, 'big'))
+        nums = priv.public_key().public_numbers()
+        pub_b64 = _b64u(b'\x04' + nums.x.to_bytes(32, 'big') + nums.y.to_bytes(32, 'big'))
+        conn.execute("INSERT INTO push_config (id, vapid_public, vapid_private) VALUES (1, ?, ?) "
+                     "ON CONFLICT (id) DO UPDATE SET vapid_public = EXCLUDED.vapid_public, "
+                     "vapid_private = EXCLUDED.vapid_private", (pub_b64, priv_b64))
+        conn.commit()
+        return pub_b64, priv_b64
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("_ensure_push: %s", e)
+        return None, None
+
+
+def send_client_push(conn, account_id, title, body, url='/client/dashboard', tag='gc'):
+    """Best-effort web-push to every device a client has enabled. Prunes dead subs.
+    Returns the number of pushes accepted. Safe to call from any flow (never raises)."""
+    try:
+        _pub, priv = _ensure_push(conn)
+        if not priv:
+            return 0
+        subs = conn.execute(
+            "SELECT endpoint, p256dh, auth FROM client_push_subscriptions WHERE account_id = ?",
+            (account_id,)).fetchall()
+        if not subs:
+            return 0
+        from pywebpush import webpush, WebPushException
+        import json as _json
+        payload = _json.dumps({'title': title, 'body': body, 'url': url, 'tag': tag})
+        sent = 0
+        for s in subs:
+            info = {'endpoint': s['endpoint'], 'keys': {'p256dh': s['p256dh'], 'auth': s['auth']}}
+            try:
+                webpush(subscription_info=info, data=payload, vapid_private_key=priv,
+                        vapid_claims={'sub': 'mailto:info@goocampus.in'})
+                sent += 1
+            except WebPushException as we:
+                code = getattr(getattr(we, 'response', None), 'status_code', None)
+                if code in (404, 410):
+                    try:
+                        conn.execute("DELETE FROM client_push_subscriptions WHERE endpoint = ?", (s['endpoint'],))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                else:
+                    logging.warning("send_client_push endpoint: %s", we)
+        return sent
+    except Exception as e:
+        logging.error("send_client_push: %s", e)
+        return 0
+
+
+@app.route('/client/push/key')
+def client_push_key():
+    """Public VAPID key the browser uses to subscribe."""
+    conn = get_db()
+    try:
+        pub, _priv = _ensure_push(conn)
+        return jsonify({'key': pub})
+    finally:
+        conn.close()
+
+
+@app.route('/client/push/subscribe', methods=['POST'])
+def client_push_subscribe():
+    if not session.get('is_client'):
+        return jsonify({'ok': False}), 401
+    if session.get('client_preview'):
+        return jsonify({'ok': True, 'preview': True})
+    data = request.get_json(silent=True) or {}
+    sub = data.get('subscription') or {}
+    endpoint = sub.get('endpoint')
+    keys = sub.get('keys') or {}
+    if not endpoint:
+        return jsonify({'ok': False, 'error': 'no_endpoint'}), 400
+    conn = get_db()
+    try:
+        _ensure_push(conn)
+        conn.execute("DELETE FROM client_push_subscriptions WHERE endpoint = ?", (endpoint,))
+        conn.execute("INSERT INTO client_push_subscriptions (account_id, endpoint, p256dh, auth, user_agent) "
+                     "VALUES (?, ?, ?, ?, ?)",
+                     (session.get('user_id'), endpoint, keys.get('p256dh'), keys.get('auth'),
+                      (request.headers.get('User-Agent') or '')[:300]))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("client_push_subscribe: %s", e)
+        return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/client/push/unsubscribe', methods=['POST'])
+def client_push_unsubscribe():
+    if not session.get('is_client'):
+        return jsonify({'ok': False}), 401
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get('endpoint') or ''
+    conn = get_db()
+    try:
+        if endpoint:
+            conn.execute("DELETE FROM client_push_subscriptions WHERE endpoint = ?", (endpoint,))
+        else:
+            conn.execute("DELETE FROM client_push_subscriptions WHERE account_id = ?", (session.get('user_id'),))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/admin/push-test', methods=['GET', 'POST'])
+@login_required
+def admin_push_test():
+    """Send a test notification to a client (by mobile) so the founder can see push
+    working on their installed PWA. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    result = ''
+    if request.method == 'POST':
+        mobile = (request.form.get('mobile') or '').strip()
+        conn = get_db()
+        try:
+            acct = conn.execute("SELECT id FROM client_accounts WHERE mobile = ?", (mobile,)).fetchone()
+            if not acct:
+                result = f"No client account with mobile {mobile}."
+            else:
+                n = send_client_push(conn, acct['id'],
+                                     'GooCampus', 'This is a test notification — your app is connected. 🎉',
+                                     url='/client/dashboard', tag='test')
+                result = (f"Sent to {n} device(s). If you enabled notifications on the installed app, "
+                          "it should appear now.") if n else \
+                         "No devices are subscribed yet — open the installed app and tap 'Turn on notifications' first."
+        finally:
+            conn.close()
+    result_html = ("<p style='color:#065f46'>" + result + "</p>") if result else ''
+    return ("<div style='font-family:system-ui;max-width:560px;margin:30px auto'>"
+            "<h2>Send a test notification</h2>"
+            + result_html +
+            "<form method='POST'>Client mobile: "
+            "<input name='mobile' value='9000000001' style='padding:7px;width:180px'> "
+            "<button style='padding:8px 14px;background:#F57C1F;color:#fff;border:none;border-radius:8px'>Send test</button>"
+            "</form><p style='color:#64748b;font-size:13px'>Tip: on the phone, open the <b>installed</b> app "
+            "(not the browser tab), tap <b>Turn on notifications</b>, allow it, then send the test.</p></div>")
 
 
 @app.route('/client/heartbeat', methods=['POST'])

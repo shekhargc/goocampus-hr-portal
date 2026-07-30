@@ -176,6 +176,7 @@
   </nav>
   <div class="sb-foot">
     <button id="installBtn" onclick="installApp()" style="display:none;width:100%;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;background:var(--orange);color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;justify-content:center"><i class="bi bi-phone"></i> Install app</button>
+    <button id="notifyBtn" onclick="enableNotifications()" style="display:none;width:100%;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.15);font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;justify-content:center"><i class="bi bi-bell"></i> Turn on notifications</button>
     <a href="/client/logout" class="sb-logout"><i class="bi bi-box-arrow-right"></i> Log out</a>
   </div>
 </aside>
@@ -685,6 +686,39 @@
     } else {
       alert("To install: open your browser menu (⋮) and choose “Install app” or “Add to Home screen”.");
     }
+  }
+
+  // ── Push notifications: show the button when supported, wire subscribe ──
+  const notifyBtn = document.getElementById('notifyBtn');
+  const pushSupported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  function refreshNotifyBtn(){
+    if (!notifyBtn) return;
+    // iPhone only supports push once installed to the Home Screen (standalone).
+    if (isIOS && !isStandalone) { notifyBtn.style.display='none'; return; }
+    if (!pushSupported) { notifyBtn.style.display='none'; return; }
+    notifyBtn.style.display = 'flex';
+    if (Notification.permission === 'granted') {
+      notifyBtn.innerHTML = '<i class="bi bi-bell-fill"></i> Notifications on';
+      notifyBtn.disabled = true; notifyBtn.style.opacity = '.7'; notifyBtn.style.cursor='default';
+    }
+  }
+  refreshNotifyBtn();
+  function urlB64ToUint8(b){ const pad='='.repeat((4-b.length%4)%4); const s=(b+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(s); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0))); }
+  async function enableNotifications(){
+    if (isIOS && !isStandalone) { alert("On iPhone, first add GooCampus to your Home Screen, then open it from there and turn on notifications."); return; }
+    if (!pushSupported) { alert("This browser doesn't support notifications."); return; }
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { alert("Notifications are blocked. You can enable them in your browser/site settings."); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const r = await fetch('/client/push/key'); const {key} = await r.json();
+      if (!key) { alert("Notifications aren't set up yet — try again shortly."); return; }
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64ToUint8(key) });
+      await fetch('/client/push/subscribe', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({subscription: sub})});
+      refreshNotifyBtn();
+      alert("Notifications are on. You'll get updates about your journey here.");
+    } catch(e) { alert("Could not turn on notifications. Please try again."); }
   }
 
   // ── Presence heartbeat: tell ops we're live while the dashboard is open ──
