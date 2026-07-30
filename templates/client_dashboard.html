@@ -111,7 +111,7 @@
                letter-spacing:.03em; margin:16px 0 8px; }
   .acad-group:first-child{ margin-top:0; }
   .lock-note{ background:#FFF7ED; border:1px solid #FED7AA; color:#9A3412; border-radius:10px;
-              padding:10px 14px; font-size:13px; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+              padding:12px 14px; font-size:13px; line-height:1.5; margin-bottom:14px; }
 
   /* Service delivery */
   .svc-list{ display:flex; flex-direction:column; gap:10px; }
@@ -242,7 +242,10 @@
           <button class="ptab" data-ptab="academic"><i class="bi bi-mortarboard"></i> Academic</button>
         </div>
         {% if profile_locked %}
-        <div class="lock-note"><i class="bi bi-lock-fill"></i> Your <strong>personal &amp; contact details</strong> are verified, so they're read-only — please contact your counsellor to change them. You can still complete or update your <strong>Academic details</strong> anytime.</div>
+        <div class="lock-note">
+          <div style="display:flex;gap:9px;align-items:flex-start"><i class="bi bi-lock-fill" style="margin-top:2px"></i><span><strong>Personal &amp; Parents/Guardian details are locked</strong> — these have been verified by our team. To change anything here, please contact your counsellor.</span></div>
+          <div style="display:flex;gap:9px;align-items:flex-start;margin-top:8px"><i class="bi bi-pencil-fill" style="margin-top:2px"></i><span><strong>Academic details are always open</strong> — you can add or update them here anytime, even now.</span></div>
+        </div>
         {% endif %}
 
         <!-- Personal -->
