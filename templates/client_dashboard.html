@@ -94,7 +94,17 @@
   }
 </style>
 </head>
-<body>
+<body{% if session.get('client_preview') %} style="padding-top:44px"{% endif %}>
+{% if session.get('client_preview') %}
+<div style="position:fixed;top:0;left:0;right:0;height:44px;z-index:200;background:#0F1B33;color:#fff;
+            display:flex;align-items:center;gap:12px;padding:0 16px;font-size:13.5px;
+            font-family:'Inter',-apple-system,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25)">
+  <i class="bi bi-eye-fill" style="color:#F57C1F"></i>
+  <span><strong>Admin preview</strong> — viewing {{ (account.first_name or '') }} {{ (account.last_name or '') }}'s dashboard. Nothing here changes any data.</span>
+  <span style="flex:1"></span>
+  <a href="/admin/exit-client-preview" style="background:#F57C1F;color:#fff;padding:5px 14px;border-radius:6px;font-weight:600">Exit preview</a>
+</div>
+{% endif %}
 {% set reg = registrations[0] if registrations else None %}
 {% set _fullname = ((account.first_name or '') ~ ' ' ~ (account.last_name or '')).strip() or account.first_name or 'Doctor' %}
 {% set _initials = ((account.first_name or 'D')[0] ~ ((account.last_name or ' ')[0])).upper() %}

@@ -1380,6 +1380,9 @@ def client_heartbeat():
     ops can show a live 'Online' badge on the client profile. (founder 2026-07-30)"""
     if not session.get('is_client'):
         return jsonify({'ok': False}), 401
+    if session.get('client_preview'):
+        # Admin previewing — don't mark the real client as online.
+        return jsonify({'ok': True, 'preview': True})
     conn = get_db()
     try:
         conn.execute("UPDATE client_accounts SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -1399,6 +1402,9 @@ def client_change_password():
     the new one (min 6 chars). (founder 2026-07-30)"""
     if not session.get('is_client'):
         return redirect(url_for('client_login_page'))
+    if session.get('client_preview'):
+        flash('Preview mode — password changes are disabled here.', 'info')
+        return redirect(url_for('client_dashboard') + '#settings')
     current = (request.form.get('current_password') or '').strip()
     new = (request.form.get('new_password') or '').strip()
     confirm = (request.form.get('confirm_password') or '').strip()
@@ -4350,6 +4356,96 @@ def admin_pg_seed():
             f"<b>{res.get('registry',0)}</b> Field Manager row(s).</p>"
             + (f"<ul>{errs}</ul>" if errs else "")
             + "<p><a href='/admin/pg-selfcheck'>→ Re-run the self-check</a></p></div>")
+
+
+@app.route('/admin/preview-clients', methods=['GET'])
+@login_required
+def admin_preview_clients():
+    """Pick a client to preview their dashboard exactly as they see it — read-only,
+    no data changed, no fake account needed. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    q = (request.args.get('q') or '').strip()
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    conn = get_db()
+    rows = ''
+    try:
+        like = f"%{q}%"
+        recs = conn.execute(
+            "SELECT ca.id, ca.first_name, ca.last_name, ca.mobile, "
+            "  MAX(cr.registration_number) AS reg, "
+            "  BOOL_OR(cr.form_status = 'submitted') AS onboarded "
+            "FROM client_accounts ca JOIN client_registrations cr ON cr.account_id = ca.id "
+            + ("WHERE ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ? " if q else "")
+            + "GROUP BY ca.id, ca.first_name, ca.last_name, ca.mobile "
+            "ORDER BY ca.id DESC LIMIT 100",
+            ((like, like, like) if q else ())).fetchall()
+        for r in recs:
+            nm = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            badge = ("<span style='color:#065f46;font-weight:600'>onboarded</span>" if r['onboarded']
+                     else "<span style='color:#b45309'>still onboarding</span>")
+            rows += (f"<tr><td style='padding:6px 10px'>{esc(nm)}</td><td style='padding:6px 10px'>{esc(r['mobile'])}</td>"
+                     f"<td style='padding:6px 10px'>{esc(r['reg'])}</td><td style='padding:6px 10px'>{badge}</td>"
+                     f"<td style='padding:6px 10px'><a href='/admin/view-as-client/{r['id']}' "
+                     "style='padding:5px 12px;background:#F57C1F;color:#fff;border-radius:6px;text-decoration:none;font-weight:600'>Preview</a></td></tr>")
+    except Exception as e:
+        rows = f"<tr><td colspan='5' style='color:#b91c1c'>{esc(e)}</td></tr>"
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto'>"
+            "<h2>Preview a client dashboard</h2>"
+            "<p style='color:#065f46'>See exactly what a client sees when they log in — read-only. "
+            "Nothing is changed, no fake account is created. 'Onboarded' clients show the new dashboard.</p>"
+            "<form method='GET'>Search name / mobile: "
+            f"<input name='q' value='{esc(q)}' style='padding:6px;width:260px'> <button>Search</button></form>"
+            "<table style='border-collapse:collapse;width:100%;margin-top:14px;font-size:14px'>"
+            "<tr style='background:#f3f4f6'><th style='padding:6px 10px;text-align:left'>Client</th>"
+            "<th style='padding:6px 10px;text-align:left'>Mobile</th><th style='padding:6px 10px;text-align:left'>Reg</th>"
+            "<th style='padding:6px 10px;text-align:left'>Status</th><th></th></tr>" + rows + "</table></div>")
+
+
+@app.route('/admin/view-as-client/<int:account_id>')
+@login_required
+def admin_view_as_client(account_id):
+    """Enter read-only preview of a client's dashboard. Backs up the admin session,
+    switches to a preview client session, and shows a banner + Exit. Mutating client
+    actions are blocked while previewing. (founder 2026-07-30)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    acct = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (account_id,)).fetchone()
+    conn.close()
+    if not acct:
+        flash('Client account not found.', 'error'); return redirect(url_for('admin_preview_clients'))
+    session['_admin_backup'] = {k: session.get(k) for k in
+        ('user_id', 'is_admin', 'is_client', 'client_name', 'client_mobile', 'first_login')}
+    session['user_id'] = acct['id']
+    session['is_client'] = True
+    session['is_admin'] = False
+    session['client_name'] = ((acct['first_name'] or '') + ' ' + (acct['last_name'] or '')).strip()
+    session['client_mobile'] = acct['mobile']
+    session['client_preview'] = True
+    session['first_login'] = False
+    return redirect(url_for('client_dashboard'))
+
+
+@app.route('/admin/exit-client-preview')
+def admin_exit_client_preview():
+    """Restore the admin session after a client-dashboard preview."""
+    backup = session.pop('_admin_backup', None)
+    for k in ('client_preview', 'client_name', 'client_mobile'):
+        session.pop(k, None)
+    if backup:
+        for k, v in backup.items():
+            if v is None:
+                session.pop(k, None)
+            else:
+                session[k] = v
+    flash('Exited client preview.', 'success')
+    return redirect(url_for('admin_preview_clients'))
 
 
 @app.route('/admin/pg-selfcheck', methods=['GET'])
