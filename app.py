@@ -5836,13 +5836,18 @@ def admin_client_access():
                 "SELECT DISTINCT COALESCE(pathway,'plab') AS p FROM plab_clients ORDER BY p").fetchall()]
         except Exception:
             all_paths = list(_DASHBOARD_PATHWAYS)
+        # This screen is ONLY about clients who could actually get the dashboard, i.e.
+        # In Process / On Hold. Everything else (Completed, Dropped, Switched…) auto-loses
+        # access, so it's deliberately kept OUT of this list. (founder 2026-07-31)
         try:
             all_status = [r['s'] for r in conn.execute(
                 "SELECT DISTINCT account_status AS s FROM plab_clients "
-                "WHERE COALESCE(account_status,'') <> '' ORDER BY s").fetchall()]
+                "WHERE account_status ILIKE ? OR account_status ILIKE ? ORDER BY s",
+                ('%process%', '%hold%')).fetchall()]
         except Exception:
             all_status = []
-        where, params = ["1=1"], []
+        where = ["(pc.account_status ILIKE ? OR pc.account_status ILIKE ?)"]
+        params = ['%process%', '%hold%']
         if q:
             where.append("(pc.first_name ILIKE ? OR pc.last_name ILIKE ? OR pc.mobile ILIKE ? OR pc.registration_number ILIKE ?)")
             params += [like, like, like, like]
@@ -5862,7 +5867,8 @@ def admin_client_access():
             "LEFT JOIN client_registrations cr ON cr.registration_number = pc.registration_number "
             "LEFT JOIN client_accounts ca ON ca.id = cr.account_id "
             f"WHERE {wc} ORDER BY pc.registration_number, ca.id DESC NULLS LAST LIMIT 400", params).fetchall()
-        cnt_where, cnt_params = ["1=1"], []
+        cnt_where = ["(account_status ILIKE ? OR account_status ILIKE ?)"]
+        cnt_params = ['%process%', '%hold%']
         if q:
             cnt_where.append("(first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? OR registration_number ILIKE ?)")
             cnt_params += [like, like, like, like]

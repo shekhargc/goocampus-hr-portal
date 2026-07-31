@@ -50,7 +50,8 @@
   </div>
 
   <div class="ca-card">
-    <h3>Clients <span style="color:#94A3B8;font-weight:500">— showing {{ shown }} of {{ total }}</span></h3>
+    <h3>Clients eligible for access <span style="color:#94A3B8;font-weight:500">(In Process / On Hold only) — showing {{ shown }} of {{ total }}</span></h3>
+    <p class="ca-note" style="margin:-4px 0 12px">Completed, Dropped, Switched and other statuses are hidden here — they lose access automatically, so there's nothing to manage.</p>
     <form method="GET" class="ca-filters">
       <input name="q" value="{{ q }}" placeholder="Search name / mobile / reg">
       <select name="pathway">
