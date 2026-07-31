@@ -1,0 +1,51 @@
+{% extends "staff_base.html" %}
+{% block title %}{{ c.first_name }} {{ c.last_name }} — Profile{% endblock %}
+{% block topbar %}
+<div class="topbar">
+  <a href="javascript:history.back()" class="back">‹</a>
+  <h1>Client Profile</h1>
+</div>
+{% endblock %}
+{% block content %}
+{% macro field(label, value) %}
+<div style="margin-bottom:10px"><div style="font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:600;letter-spacing:.02em">{{ label }}</div>
+<div style="font-size:14.5px;color:var(--ink);margin-top:2px">{{ value if value else '—' }}</div></div>
+{% endmacro %}
+
+<div class="card">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="width:52px;height:52px;border-radius:50%;background:#FFF7ED;color:var(--orange);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px">{{ (c.first_name[:1] or '?')|upper }}</div>
+    <div style="flex:1">
+      <div style="font-weight:800;font-size:18px;color:var(--navy)">{{ c.prefix or '' }} {{ c.first_name }} {{ c.last_name }}</div>
+      <div style="font-size:12.5px;color:var(--muted)">{{ c.registration_number }} · {{ (c.pathway or 'plab')|title }}</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    {% if acct and acct.online %}<span class="chip chip-ok"><span class="dot on"></span> Online now</span>{% endif %}
+    {% if c.account_status %}<span class="chip" style="background:#EFF6FF;color:#1E40AF">{{ c.account_status }}</span>{% endif %}
+    {% if c.current_stage %}<span class="chip" style="background:#F1F5F9;color:#334155">{{ c.current_stage }}</span>{% endif %}
+  </div>
+  {% if acct %}<a href="/staff/chat/{{ acct.id }}" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:10px 16px;border-radius:10px"><i class="bi bi-chat-dots"></i> Message</a>{% endif %}
+</div>
+
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-person-lines-fill" style="color:var(--orange)"></i> Contact</h3>
+  {{ field('Mobile', c.mobile) }}
+  {{ field('WhatsApp', c.whatsapp) }}
+  {{ field('Email', c.email or (acct.email if acct else '')) }}
+  {{ field('City / State', ((c.city or '') ~ (', ' if c.city and c.state else '') ~ (c.state or '')) or '') }}
+  {{ field('Counsellor', counsellor) }}
+</div>
+
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-mortarboard-fill" style="color:var(--orange)"></i> Academic</h3>
+  {{ field('Country of study', acad.get('country')) }}
+  {{ field('Medical college', acad.get('fmg_medical_college') or acad.get('img_medical_college')) }}
+  {{ field('MBBS status', acad.get('mbbs_status')) }}
+  {{ field('Internship status', acad.get('internship_status')) }}
+  {% if acad.get('pg_done') == 'Yes' or acad.get('pg_type') %}
+  {{ field('PG', (acad.get('pg_type') or '') ~ (' · ' if acad.get('pg_specialty') else '') ~ (acad.get('pg_specialty') or '')) }}
+  {{ field('PG status', acad.get('pg_status')) }}
+  {% endif %}
+</div>
+
+<p style="text-align:center;color:var(--muted);font-size:12px;margin-top:4px"><i class="bi bi-lock"></i> Read-only. Use the full portal to edit records.</p>
+{% endblock %}

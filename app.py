@@ -1460,6 +1460,10 @@ def _ensure_push(conn):
                      "id SERIAL PRIMARY KEY, account_id INTEGER, endpoint TEXT UNIQUE, "
                      "p256dh TEXT, auth TEXT, user_agent TEXT, "
                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("CREATE TABLE IF NOT EXISTS employee_push_subscriptions ("
+                     "id SERIAL PRIMARY KEY, employee_id INTEGER, endpoint TEXT UNIQUE, "
+                     "p256dh TEXT, auth TEXT, user_agent TEXT, "
+                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         row = conn.execute("SELECT vapid_public, vapid_private FROM push_config WHERE id = 1").fetchone()
         if row and row['vapid_public'] and row['vapid_private']:
             conn.commit()
@@ -1743,6 +1747,12 @@ def client_chat_send():
                      "VALUES (?, 'client', ?, ?)", (acct_id, name, body))
         conn.commit()
         _maybe_autoreply(conn, acct_id)
+        # Notify the ops team on their phones (GooCampus Ops app).
+        try:
+            send_ops_push(conn, f'New message from {name}', body[:120],
+                          url=f'/staff/chat/{acct_id}', tag=f'c{acct_id}')
+        except Exception:
+            pass
         return jsonify({'ok': True})
     except Exception as e:
         try: conn.rollback()
@@ -1980,6 +1990,261 @@ def ops_presence_by_reg(reg):
         return jsonify({'online': bool(row['online']), 'seen': _ist_str(row['last_seen_at'])})
     except Exception:
         return jsonify({'online': False, 'seen': ''})
+    finally:
+        conn.close()
+
+
+# ══ "GooCampus Ops" — a focused mobile PWA for the ops team: chat + read-only
+#    client profiles only (no CRM editing/admin/money). Same look as the client app.
+#    Access: admins + Operations-dept employees (later: all staff + more sections).
+#    (founder 2026-07-31) ══
+
+def ops_app_required(f):
+    @wraps(f)
+    def _wrap(*args, **kwargs):
+        user = get_user()
+        if not user:
+            return redirect(url_for('login', next=request.path))
+        if not (user['is_admin'] or (user['department'] or '') == 'Operations'):
+            return ("<div style='font-family:system-ui;max-width:420px;margin:60px auto;text-align:center'>"
+                    "<h3>GooCampus Ops</h3><p style='color:#64748b'>This app is for the Operations team. "
+                    "Ask an admin if you need access.</p><a href='/dashboard'>Back to portal</a></div>"), 403
+        return f(*args, **kwargs)
+    return _wrap
+
+
+def send_ops_push(conn, title, body, url='/staff/chat', tag='ops', exclude_employee_id=None):
+    """Web-push to every ops member who enabled notifications (shared inbox). Prunes
+    dead subs. Best-effort; never raises."""
+    try:
+        _pub, priv = _ensure_push(conn)
+        if not priv:
+            return 0
+        rows = conn.execute("SELECT employee_id, endpoint, p256dh, auth FROM employee_push_subscriptions").fetchall()
+        if not rows:
+            return 0
+        from pywebpush import webpush, WebPushException
+        import json as _json
+        payload = _json.dumps({'title': title, 'body': body, 'url': url, 'tag': tag})
+        sent = 0
+        for s in rows:
+            if exclude_employee_id and s['employee_id'] == exclude_employee_id:
+                continue
+            info = {'endpoint': s['endpoint'], 'keys': {'p256dh': s['p256dh'], 'auth': s['auth']}}
+            try:
+                webpush(subscription_info=info, data=payload, vapid_private_key=priv,
+                        vapid_claims={'sub': 'mailto:info@goocampus.in'})
+                sent += 1
+            except WebPushException as we:
+                code = getattr(getattr(we, 'response', None), 'status_code', None)
+                if code in (404, 410):
+                    try:
+                        conn.execute("DELETE FROM employee_push_subscriptions WHERE endpoint = ?", (s['endpoint'],))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+        return sent
+    except Exception as e:
+        logging.error("send_ops_push: %s", e)
+        return 0
+
+
+@app.route('/staff')
+@ops_app_required
+def staff_home():
+    return redirect(url_for('staff_chat'))
+
+
+@app.route('/staff/chat')
+@ops_app_required
+def staff_chat():
+    conn = get_db()
+    _ensure_chat(conn)
+    q = (request.args.get('q') or '').strip()
+    like = f"%{q}%"
+    try:
+        rows = conn.execute(
+            "SELECT ca.id AS account_id, "
+            "  TRIM(COALESCE(ca.first_name,'')||' '||COALESCE(ca.last_name,'')) AS name, ca.mobile, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online, "
+            "  m.body AS last_body, m.created_at AS last_at, m.sender_type AS last_sender, "
+            "  (SELECT COUNT(*) FROM client_chat_messages x WHERE x.account_id = ca.id "
+            "     AND x.sender_type='client' AND x.read_by_ops=0) AS unread "
+            "FROM client_accounts ca "
+            "JOIN LATERAL (SELECT body, created_at, sender_type FROM client_chat_messages cm "
+            "  WHERE cm.account_id = ca.id ORDER BY cm.id DESC LIMIT 1) m ON TRUE "
+            "WHERE (? = '' OR ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ?) "
+            "ORDER BY m.created_at DESC", (q, like, like, like)).fetchall()
+        convos = [{'account_id': c['account_id'], 'name': (c['name'] or 'Client'), 'mobile': c['mobile'],
+                   'online': bool(c['online']), 'unread': c['unread'],
+                   'preview': (('You: ' if c['last_sender'] == 'ops' else '') + (c['last_body'] or ''))[:70],
+                   'time': _ist_str(c['last_at'])} for c in rows]
+    except Exception as e:
+        logging.error("staff_chat: %s", e); convos = []
+    finally:
+        conn.close()
+    return render_template('staff_chat_inbox.html', convos=convos, q=q, tab='chat')
+
+
+@app.route('/staff/chat/<int:account_id>')
+@ops_app_required
+def staff_chat_thread(account_id):
+    conn = get_db()
+    _ensure_chat(conn)
+    try:
+        acct, rows = _ops_chat_load(conn, account_id)
+        if not acct:
+            flash('Client not found.', 'error')
+            return redirect(url_for('staff_chat'))
+        reg = conn.execute("SELECT registration_number FROM client_registrations WHERE account_id = ? "
+                           "AND registration_number IS NOT NULL ORDER BY id DESC LIMIT 1", (account_id,)).fetchone()
+        msgs = [_chat_msg_dict(r, 'ops') for r in rows]
+        return render_template('staff_chat_thread.html', acct=dict(acct), msgs=msgs,
+                               reg=(reg['registration_number'] if reg else ''))
+    finally:
+        conn.close()
+
+
+@app.route('/staff/clients')
+@ops_app_required
+def staff_clients():
+    conn = get_db()
+    q = (request.args.get('q') or '').strip()
+    results = []
+    try:
+        if q:
+            like = f"%{q}%"
+            results = conn.execute(
+                "SELECT registration_number, "
+                "  TRIM(COALESCE(prefix,'')||' '||COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, "
+                "  COALESCE(pathway,'plab') AS pathway, account_status, mobile "
+                "FROM plab_clients WHERE first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? "
+                "OR registration_number ILIKE ? ORDER BY first_name LIMIT 40",
+                (like, like, like, like)).fetchall()
+            results = [dict(r) for r in results]
+    except Exception as e:
+        logging.error("staff_clients: %s", e)
+    finally:
+        conn.close()
+    return render_template('staff_clients.html', results=results, q=q, tab='clients')
+
+
+@app.route('/staff/client/<path:reg>')
+@ops_app_required
+def staff_client_profile(reg):
+    conn = get_db()
+    try:
+        c = conn.execute(
+            "SELECT * FROM plab_clients WHERE registration_number = ? LIMIT 1", (reg,)).fetchone()
+        if not c:
+            flash('Client not found.', 'error')
+            return redirect(url_for('staff_clients'))
+        c = dict(c)
+        counsellor = ''
+        if c.get('counsellor_id'):
+            e = conn.execute("SELECT name FROM employees WHERE id = ?", (c['counsellor_id'],)).fetchone()
+            counsellor = e['name'] if e else ''
+        acct = conn.execute("SELECT id, email, (last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
+                            "FROM client_accounts ca JOIN client_registrations cr ON cr.account_id = ca.id "
+                            "WHERE cr.registration_number = ? LIMIT 1", (reg,)).fetchone()
+        acad = conn.execute("SELECT ca.* FROM client_academics ca JOIN client_registrations cr ON cr.id = ca.registration_id "
+                            "WHERE cr.registration_number = ? LIMIT 1", (reg,)).fetchone()
+        return render_template('staff_client_profile.html', c=c, counsellor=counsellor,
+                               acct=(dict(acct) if acct else None), acad=(dict(acad) if acad else {}), tab='clients')
+    finally:
+        conn.close()
+
+
+@app.route('/staff/settings')
+@ops_app_required
+def staff_settings():
+    user = get_user()
+    return render_template('staff_settings.html', user=user, tab='settings')
+
+
+@app.route('/staff/manifest.webmanifest')
+def staff_manifest():
+    return jsonify({
+        "name": "GooCampus Ops", "short_name": "GC Ops",
+        "start_url": "/staff/chat", "scope": "/staff/", "display": "standalone",
+        "orientation": "portrait", "background_color": "#0F1B33", "theme_color": "#0F1B33",
+        "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    })
+
+
+@app.route('/staff/sw.js')
+def staff_service_worker():
+    js = """
+const CACHE = 'gc-ops-v1';
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => { self.clients.claim(); });
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  e.respondWith(fetch(req).catch(() => caches.match(req)));
+});
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch(_) { d = { body: (e.data && e.data.text()) || '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'GooCampus Ops', {
+    body: d.body || '', icon: '/static/icon-192.png', badge: '/static/icon-192.png',
+    data: { url: d.url || '/staff/chat' }, tag: d.tag || 'ops' }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/staff/chat';
+  e.waitUntil(clients.matchAll({type:'window', includeUncontrolled:true}).then(ws => {
+    for (const w of ws) { if (w.url.includes('/staff/') && 'focus' in w) { w.navigate && w.navigate(url); return w.focus(); } }
+    return clients.openWindow(url);
+  }));
+});
+"""
+    resp = make_response(js)
+    resp.mimetype = 'application/javascript'
+    resp.headers['Service-Worker-Allowed'] = '/staff/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+@app.route('/staff/push/key')
+@ops_app_required
+def staff_push_key():
+    conn = get_db()
+    try:
+        pub, _priv = _ensure_push(conn)
+        return jsonify({'key': pub})
+    finally:
+        conn.close()
+
+
+@app.route('/staff/push/subscribe', methods=['POST'])
+@ops_app_required
+def staff_push_subscribe():
+    user = get_user()
+    data = request.get_json(silent=True) or {}
+    sub = data.get('subscription') or {}
+    endpoint = sub.get('endpoint'); keys = sub.get('keys') or {}
+    if not endpoint:
+        return jsonify({'ok': False}), 400
+    conn = get_db()
+    try:
+        _ensure_push(conn)
+        conn.execute("DELETE FROM employee_push_subscriptions WHERE endpoint = ?", (endpoint,))
+        conn.execute("INSERT INTO employee_push_subscriptions (employee_id, endpoint, p256dh, auth, user_agent) "
+                     "VALUES (?, ?, ?, ?, ?)",
+                     (user['id'], endpoint, keys.get('p256dh'), keys.get('auth'),
+                      (request.headers.get('User-Agent') or '')[:300]))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("staff_push_subscribe: %s", e)
+        return jsonify({'ok': False}), 500
     finally:
         conn.close()
 

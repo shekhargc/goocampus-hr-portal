@@ -1,0 +1,31 @@
+{% extends "staff_base.html" %}
+{% block title %}Chat — GooCampus Ops{% endblock %}
+{% block heading %}Client Chat{% endblock %}
+{% block content %}
+<form class="search" method="GET" action="/staff/chat">
+  <input name="q" value="{{ q }}" placeholder="Search name or mobile">
+  <button class="btn-primary">Go</button>
+</form>
+{% if convos %}
+  {% for c in convos %}
+  <a href="/staff/chat/{{ c.account_id }}" class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+    <div style="width:44px;height:44px;border-radius:50%;background:#FFF7ED;color:var(--orange);display:flex;align-items:center;justify-content:center;font-weight:800;position:relative;flex-shrink:0">
+      {{ (c.name[:1] or '?')|upper }}<span class="dot {{ 'on' if c.online else 'off' }}" style="position:absolute;bottom:-1px;right:-1px;border:2px solid #fff"></span>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;color:var(--navy)">{{ c.name }}{% if c.online %} <span style="color:var(--ok);font-size:11px;font-weight:600">● online</span>{% endif %}</div>
+      <div style="color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.preview }}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <div style="color:#94A3B8;font-size:11px">{{ c.time }}</div>
+      {% if c.unread %}<span style="display:inline-block;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#EF4444;color:#fff;font-size:11px;font-weight:700;line-height:20px;text-align:center;margin-top:5px">{{ c.unread }}</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+{% else %}
+  <div class="empty">No conversations yet. When a client messages from their app, it appears here.</div>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>setInterval(function(){ if(document.visibilityState==='visible') location.reload(); }, 25000);</script>
+{% endblock %}
