@@ -47,5 +47,50 @@
   {% endif %}
 </div>
 
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-box-seam" style="color:var(--orange)"></i> Programme</h3>
+  {{ field('Service', reg.get('product_name')) }}
+  {{ field('Plan', reg.get('plan_type')) }}
+  {{ field('Package', ('₹{:,.0f}'.format(c.package_amount|float)) if c.package_amount else (('₹{:,.0f}'.format(reg.get('package_amount')|float)) if reg.get('package_amount') else '')) }}
+</div>
+
+{% if insts %}
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:10px"><i class="bi bi-receipt" style="color:var(--orange)"></i> Installments</h3>
+  {% for it in insts %}
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:{% if not loop.first %}1px solid #F1F5F9{% else %}none{% endif %}">
+    <div><div style="font-weight:600">{{ it.n }}{{ {1:'st',2:'nd',3:'rd',4:'th'}[it.n] }} Installment</div>
+      {% if it.date %}<div style="font-size:12px;color:var(--muted)">{{ it.date }}</div>{% endif %}</div>
+    <div style="text-align:right"><div style="font-weight:700">₹{{ '{:,.0f}'.format(it.total) }}</div>
+      <span class="chip {{ 'chip-ok' if it.received else '' }}" style="{{ '' if it.received else 'background:#FFFBEB;color:#B45309' }}">{{ 'Received' if it.received else it.status }}</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if payments %}
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:10px"><i class="bi bi-cash-coin" style="color:var(--orange)"></i> Payments received</h3>
+  {% for p in payments %}
+  <div style="display:flex;justify-content:space-between;padding:7px 0;border-top:{% if not loop.first %}1px solid #F1F5F9{% else %}none{% endif %};font-size:13.5px">
+    <span>{{ p.instalment or 'Payment' }}{% if p.payment_date %} · {{ p.payment_date }}{% endif %}</span>
+    <span style="font-weight:700;color:var(--ok)">₹{{ '{:,.0f}'.format(p.total_amount_paid|float) if p.total_amount_paid else '0' }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:10px"><i class="bi bi-telephone-inbound" style="color:var(--orange)"></i> Welcome call</h3>
+  {% if reg.get('wc_confirmed') %}
+    {{ field('Confirmed for', (reg.get('wc_scheduled_date') or '') ~ (' at ' if reg.get('wc_scheduled_time') else '') ~ (reg.get('wc_scheduled_time') or '')) }}
+    {{ field('With', reg.get('wc_by')) }}
+  {% else %}<div style="color:var(--muted);font-size:14px">Not yet confirmed.</div>{% endif %}
+</div>
+
+{% if documents %}
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:10px"><i class="bi bi-folder2-open" style="color:var(--orange)"></i> Documents ({{ documents|length }})</h3>
+  {% for d in documents %}
+  <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13.5px"><i class="bi bi-file-earmark-text" style="color:var(--orange)"></i> {{ d.doc_type or d.file_name }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:4px"><i class="bi bi-lock"></i> Read-only. Use the full portal to edit records.</p>
 {% endblock %}

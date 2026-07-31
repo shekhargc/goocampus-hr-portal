@@ -2,10 +2,35 @@
 {% block title %}Clients — GooCampus Ops{% endblock %}
 {% block heading %}Clients{% endblock %}
 {% block content %}
-<form class="search" method="GET" action="/staff/clients">
-  <input name="q" value="{{ q }}" placeholder="Search name, mobile or reg no." autofocus>
-  <button class="btn-primary">Search</button>
-</form>
+<div style="position:relative;margin-bottom:12px">
+  <input id="csearch" value="{{ q }}" placeholder="Search name, mobile or reg no." autofocus autocomplete="off"
+         style="width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit">
+  <div id="csug" style="display:none;position:absolute;left:0;right:0;top:52px;z-index:30;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(15,27,51,.12);overflow:hidden;max-height:60vh;overflow-y:auto"></div>
+</div>
+<script>
+  (function(){
+    var inp=document.getElementById('csearch'), box=document.getElementById('csug'), t=null;
+    function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+    function hide(){ box.style.display='none'; box.innerHTML=''; }
+    inp.addEventListener('input', function(){
+      var q=inp.value.trim(); clearTimeout(t);
+      if(q.length<2){ hide(); return; }
+      t=setTimeout(function(){
+        fetch('/staff/clients/search?q='+encodeURIComponent(q)).then(r=>r.json()).then(function(d){
+          var rs=(d&&d.results)||[]; if(!rs.length){ hide(); return; }
+          box.innerHTML=rs.map(function(r){
+            return '<a href="/staff/client/'+encodeURIComponent(r.reg)+'" style="display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid #F1F5F9">'
+              +'<span style="width:34px;height:34px;border-radius:50%;background:#EEF2FF;color:#3730A3;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0">'+esc((r.name||'?')[0]).toUpperCase()+'</span>'
+              +'<span style="min-width:0"><span style="font-weight:700;color:var(--navy);display:block">'+esc(r.name)+'</span>'
+              +'<span style="color:var(--muted);font-size:12.5px">'+esc(r.reg)+' · '+esc((r.pathway||''))+'</span></span></a>';
+          }).join('');
+          box.style.display='block';
+        }).catch(hide);
+      }, 220);
+    });
+    document.addEventListener('click', function(e){ if(!box.contains(e.target) && e.target!==inp) hide(); });
+  })();
+</script>
 {% if q %}
   {% if results %}
     {% for r in results %}

@@ -2129,6 +2129,31 @@ def staff_clients():
     return render_template('staff_clients.html', results=results, q=q, tab='clients')
 
 
+@app.route('/staff/clients/search')
+@ops_app_required
+def staff_clients_search():
+    """Type-ahead client search for the ops app (JSON)."""
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify({'results': []})
+    conn = get_db()
+    like = f"%{q}%"
+    try:
+        rows = conn.execute(
+            "SELECT registration_number AS reg, "
+            "  TRIM(COALESCE(prefix,'')||' '||COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, "
+            "  COALESCE(pathway,'plab') AS pathway, mobile "
+            "FROM plab_clients WHERE first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? "
+            "OR registration_number ILIKE ? ORDER BY first_name LIMIT 12",
+            (like, like, like, like)).fetchall()
+        return jsonify({'results': [dict(r) for r in rows]})
+    except Exception as e:
+        logging.error("staff_clients_search: %s", e)
+        return jsonify({'results': []})
+    finally:
+        conn.close()
+
+
 @app.route('/staff/client/<path:reg>')
 @ops_app_required
 def staff_client_profile(reg):
@@ -2149,8 +2174,37 @@ def staff_client_profile(reg):
                             "WHERE cr.registration_number = ? LIMIT 1", (reg,)).fetchone()
         acad = conn.execute("SELECT ca.* FROM client_academics ca JOIN client_registrations cr ON cr.id = ca.registration_id "
                             "WHERE cr.registration_number = ? LIMIT 1", (reg,)).fetchone()
+        regrow = conn.execute(
+            "SELECT cr.*, ps.name AS product_name FROM client_registrations cr "
+            "LEFT JOIN products_services ps ON ps.id = cr.product_id "
+            "WHERE cr.registration_number = ? ORDER BY cr.id DESC LIMIT 1", (reg,)).fetchone()
+        regrow = dict(regrow) if regrow else {}
+        # Installments (base + 18% GST) from the registration.
+        insts = []
+        for i in (1, 2, 3, 4):
+            amt = float(regrow.get(f'inst{i}_amount') or 0)
+            if not amt and not (regrow.get(f'inst{i}_date')):
+                continue
+            gst = round(amt * 0.18); total = round(amt + gst)
+            st = (regrow.get(f'inst{i}_status') or '').strip()
+            insts.append({'n': i, 'total': total, 'received': st.lower() == 'received',
+                          'status': st or 'Pending', 'date': regrow.get(f'inst{i}_date') or ''})
+        try:
+            payments = [dict(p) for p in conn.execute(
+                "SELECT payment_date, total_amount_paid, instalment, payment_method FROM ops_payments "
+                "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) ORDER BY payment_date DESC NULLS LAST LIMIT 20",
+                (reg,)).fetchall()]
+        except Exception:
+            payments = []
+        try:
+            documents = [dict(d) for d in conn.execute(
+                "SELECT id, doc_type, file_name FROM plab_client_documents WHERE client_id = ? "
+                "ORDER BY doc_category, id DESC", (c['id'],)).fetchall()]
+        except Exception:
+            documents = []
         return render_template('staff_client_profile.html', c=c, counsellor=counsellor,
-                               acct=(dict(acct) if acct else None), acad=(dict(acad) if acad else {}), tab='clients')
+                               acct=(dict(acct) if acct else None), acad=(dict(acad) if acad else {}),
+                               reg=regrow, insts=insts, payments=payments, documents=documents, tab='clients')
     finally:
         conn.close()
 
@@ -2167,11 +2221,11 @@ def staff_manifest():
     return jsonify({
         "name": "GooCampus Ops", "short_name": "GC Ops",
         "start_url": "/staff/chat", "scope": "/staff/", "display": "standalone",
-        "orientation": "portrait", "background_color": "#0F1B33", "theme_color": "#0F1B33",
+        "orientation": "portrait", "background_color": "#FFFFFF", "theme_color": "#0F1B33",
         "icons": [
-            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": "/static/icon-ops-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-ops-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-ops-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
     })
 
