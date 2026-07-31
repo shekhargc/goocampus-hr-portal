@@ -1369,9 +1369,9 @@ def client_manifest():
         "background_color": "#0F1B33",
         "theme_color": "#0F1B33",
         "icons": [
-            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": "/static/icon-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-maskable-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
         "shortcuts": [
             {"name": "Payments", "url": "/client/dashboard#payments",
@@ -2224,9 +2224,9 @@ def staff_manifest():
         "start_url": "/staff/chat", "scope": "/staff/", "display": "standalone",
         "orientation": "portrait", "background_color": "#FFFFFF", "theme_color": "#0F1B33",
         "icons": [
-            {"src": "/static/icon-ops-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-ops-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-ops-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": "/static/icon-ops-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-ops-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-ops-maskable-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
     })
 
