@@ -2362,10 +2362,11 @@ def client_heartbeat():
     if session.get('client_preview'):
         # Admin previewing — don't mark the real client as online.
         return jsonify({'ok': True, 'preview': True})
+    plat = 'pwa' if ((request.get_json(silent=True) or {}).get('pwa')) else 'web'
     conn = get_db()
     try:
-        conn.execute("UPDATE client_accounts SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
-                     (session.get('user_id'),))
+        conn.execute("UPDATE client_accounts SET last_seen_at = CURRENT_TIMESTAMP, last_platform = ? WHERE id = ?",
+                     (plat, session.get('user_id')))
         conn.commit()
     except Exception:
         try: conn.rollback()
@@ -3305,6 +3306,12 @@ def client_dashboard():
     acct_id = session.get('user_id')
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    # Pathway rollout: if the client's pathway isn't switched on yet, show a friendly
+    # "coming soon" screen instead of the dashboard. (Admin preview bypasses this.)
+    if not session.get('client_preview') and not _client_dashboard_allowed(conn, acct_id):
+        _nm = (account['first_name'] if account else '') or 'Doctor'
+        conn.close()
+        return render_template('client_dashboard_unavailable.html', name=_nm)
     # Post-submit onboarding gate: lock the dashboard until the client has
     # digitally agreed to their Contract (if one is on file) and the Refund
     # Policy. Redirect to whichever step is still pending.
@@ -5720,6 +5727,152 @@ def admin_exit_client_preview():
                 session[k] = v
     flash('Exited client preview.', 'success')
     return redirect(url_for('admin_preview_clients'))
+
+
+# ══ Client Dashboard Access — per-pathway rollout + per-client on/off + web/PWA ══
+_DASHBOARD_PATHWAYS = ['plab', 'consulting', 'training', 'australia', 'portfolio', 'uae']
+_PATHWAY_LABELS = {'plab': 'PLAB', 'consulting': 'Standard Consulting', 'training': 'Training',
+                   'australia': 'Australia', 'portfolio': 'Portfolio', 'uae': 'UAE'}
+
+
+def _ensure_client_access(conn):
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS client_dashboard_pathways ("
+                     "pathway TEXT PRIMARY KEY, enabled INTEGER DEFAULT 1)")
+        conn.execute("ALTER TABLE client_accounts ADD COLUMN IF NOT EXISTS last_platform TEXT")
+        for p in _DASHBOARD_PATHWAYS:
+            conn.execute("INSERT INTO client_dashboard_pathways (pathway, enabled) VALUES (?, 1) "
+                         "ON CONFLICT (pathway) DO NOTHING", (p,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _client_pathways(conn, acct_id):
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT COALESCE(ps.pathway,'plab') AS pathway FROM client_registrations cr "
+            "LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.account_id = ?",
+            (acct_id,)).fetchall()
+        return [r['pathway'] for r in rows]
+    except Exception:
+        return []
+
+
+def _client_dashboard_allowed(conn, acct_id):
+    """True if the client may use the dashboard: at least one of their pathways is
+    rolled out. (A client with no registration yet is not blocked.)"""
+    _ensure_client_access(conn)
+    paths = _client_pathways(conn, acct_id)
+    if not paths:
+        return True
+    ph = ','.join(['?'] * len(paths))
+    try:
+        row = conn.execute(f"SELECT COUNT(*) AS n FROM client_dashboard_pathways "
+                           f"WHERE pathway IN ({ph}) AND enabled = 1", paths).fetchone()
+        return (row['n'] or 0) > 0
+    except Exception:
+        return True
+
+
+@app.route('/admin/client-access', methods=['GET', 'POST'])
+@login_required
+def admin_client_access():
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    conn = get_db()
+    saved = ''
+    try:
+        _ensure_client_access(conn)
+        if request.method == 'POST' and request.form.get('action') == 'pathways':
+            on = set(request.form.getlist('pathway'))
+            for p in _DASHBOARD_PATHWAYS:
+                conn.execute("UPDATE client_dashboard_pathways SET enabled = ? WHERE pathway = ?",
+                             (1 if p in on else 0, p))
+            conn.commit()
+            saved = 'Pathway rollout saved.'
+        pw = {r['pathway']: r['enabled'] for r in
+              conn.execute("SELECT pathway, enabled FROM client_dashboard_pathways").fetchall()}
+        q = (request.args.get('q') or '').strip()
+        like = f"%{q}%"
+        clients = conn.execute(
+            "SELECT ca.id, ca.first_name, ca.last_name, ca.mobile, ca.is_active, ca.last_login, "
+            "  ca.last_seen_at, ca.last_platform, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online, "
+            "  (SELECT string_agg(DISTINCT COALESCE(ps.pathway,'plab'), ', ') FROM client_registrations cr "
+            "     LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.account_id = ca.id) AS pathways, "
+            "  EXISTS(SELECT 1 FROM client_push_subscriptions s WHERE s.account_id = ca.id) AS has_push "
+            "FROM client_accounts ca "
+            + ("WHERE ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ? " if q else "")
+            + "ORDER BY ca.last_login DESC NULLS LAST, ca.id DESC LIMIT 300",
+            ((like, like, like) if q else ())).fetchall()
+    finally:
+        conn.close()
+
+    # ── Pathway toggle switches ──
+    toggles = ''
+    for p in _DASHBOARD_PATHWAYS:
+        checked = 'checked' if pw.get(p, 1) else ''
+        toggles += (f"<label style='display:inline-flex;align-items:center;gap:7px;margin:0 16px 10px 0;font-weight:600'>"
+                    f"<input type='checkbox' name='pathway' value='{p}' {checked}> {_PATHWAY_LABELS[p]}</label>")
+    # ── Client rows ──
+    rows = ''
+    for c in clients:
+        nm = f"{c['first_name'] or ''} {c['last_name'] or ''}".strip() or '—'
+        active = c['is_active']
+        acc = ("<span style='color:#065f46;font-weight:700'>On</span>" if active
+               else "<span style='color:#b91c1c;font-weight:700'>Off</span>")
+        plat = ('PWA app' if (c['last_platform'] == 'pwa' or c['has_push']) else ('Web' if c['last_login'] else '—'))
+        online = "<span style='color:#16A34A'>● online</span>" if c['online'] else ''
+        ll = str(c['last_login'])[:16] if c['last_login'] else 'never'
+        btn_label = 'Disable' if active else 'Enable'
+        btn_color = '#b91c1c' if active else '#16A34A'
+        rows += (f"<tr style='border-top:1px solid #eef'>"
+                 f"<td style='padding:7px 10px'>{esc(nm)}<br><span style='color:#94a3b8;font-size:12px'>{esc(c['mobile'])}</span></td>"
+                 f"<td style='padding:7px 10px'>{esc(c['pathways'] or '—')}</td>"
+                 f"<td style='padding:7px 10px'>{acc}</td>"
+                 f"<td style='padding:7px 10px'>{esc(plat)} {online}</td>"
+                 f"<td style='padding:7px 10px;color:#64748b;font-size:12.5px'>{esc(ll)}</td>"
+                 f"<td style='padding:7px 10px'><form method='POST' action='/admin/client-access/{c['id']}/toggle' style='margin:0'>"
+                 f"<button style='padding:5px 12px;border:1px solid {btn_color};color:{btn_color};background:#fff;border-radius:7px;font-weight:600;cursor:pointer'>{btn_label}</button></form></td></tr>")
+
+    saved_html = ("<p style='color:#065f46'>" + saved + "</p>") if saved else ''
+    return ("<div style='font-family:system-ui;max-width:960px;margin:26px auto;padding:0 14px'>"
+            "<h2>Client Dashboard Access</h2>" + saved_html +
+            "<div style='background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:18px'>"
+            "<h3 style='margin:0 0 6px'>Pathway rollout</h3>"
+            "<p style='color:#64748b;font-size:13.5px;margin:0 0 12px'>Turn the client dashboard on/off per pathway. "
+            "Clients whose pathway is OFF can still log in but see a “coming soon” screen instead of the dashboard.</p>"
+            "<form method='POST'><input type='hidden' name='action' value='pathways'>" + toggles +
+            "<div><button style='margin-top:6px;padding:9px 18px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:600'>Save rollout</button></div></form></div>"
+            "<h3>Clients (" + str(len(clients)) + ")</h3>"
+            "<form method='GET' style='margin-bottom:10px'><input name='q' value='" + esc(q) +
+            "' placeholder='Search name / mobile' style='padding:7px;width:240px'> <button>Search</button></form>"
+            "<table style='border-collapse:collapse;width:100%;font-size:13.5px'>"
+            "<tr style='background:#f1f5f9;text-align:left'><th style='padding:7px 10px'>Client</th><th style='padding:7px 10px'>Pathway</th>"
+            "<th style='padding:7px 10px'>Access</th><th style='padding:7px 10px'>Using</th><th style='padding:7px 10px'>Last login</th><th></th></tr>"
+            + rows + "</table></div>")
+
+
+@app.route('/admin/client-access/<int:acct_id>/toggle', methods=['POST'])
+@login_required
+def admin_client_access_toggle(acct_id):
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT is_active FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+        if row is not None:
+            conn.execute("UPDATE client_accounts SET is_active = ? WHERE id = ?",
+                         (0 if row['is_active'] else 1, acct_id))
+            conn.commit()
+    finally:
+        conn.close()
+    return redirect(url_for('admin_client_access', q=request.args.get('q', '')))
 
 
 @app.route('/admin/pg-selfcheck', methods=['GET'])

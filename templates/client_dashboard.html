@@ -803,7 +803,7 @@
   })();
 
   // ── Presence heartbeat: tell ops we're live while the dashboard is open ──
-  function beat(){ fetch('/client/heartbeat',{method:'POST',keepalive:true}).catch(()=>{}); }
+  function beat(){ fetch('/client/heartbeat',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({pwa: isStandalone})}).catch(()=>{}); }
   beat(); setInterval(beat, 30000);
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') beat(); });
 </script>
