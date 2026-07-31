@@ -2221,13 +2221,15 @@ def staff_client_profile(reg):
                     "WHERE cr.account_id = ? AND cr.registration_number IS NOT NULL ORDER BY cr.id", (acct['id'],)).fetchall()]
         except Exception:
             pathways = []
-        # Recent call notes (last 10 days; created_at is the reliable clock).
+        # Recent call notes — latest first. (Don't hard-filter to 10 days: many notes
+        # are imported without a timestamp, or older, and would vanish.)
         try:
             call_notes = [dict(n) for n in conn.execute(
                 "SELECT call_date, call_note AS note, added_by, created_at FROM ops_call_notes "
-                "WHERE registration_number = ? AND created_at > CURRENT_TIMESTAMP - INTERVAL '10 days' "
-                "ORDER BY created_at DESC, id DESC LIMIT 20", (reg,)).fetchall()]
-        except Exception:
+                "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) "
+                "ORDER BY created_at DESC NULLS LAST, id DESC LIMIT 12", (reg,)).fetchall()]
+        except Exception as e:
+            logging.error("staff profile call_notes: %s", e)
             call_notes = []
         # Per-pathway service sections that have entries (label: count).
         _SVC_SECTIONS = [
