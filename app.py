@@ -5588,6 +5588,82 @@ _TEST_CLIENT_MOBILE = '9000000001'
 _TEST_CLIENT_PASSWORD = 'gctest123'
 
 
+@app.route('/admin/backfill-closure-dates', methods=['GET', 'POST'])
+@login_required
+def admin_backfill_closure_dates():
+    """Preview-first: set old closures' stored close_date = the lead's Registration
+    Date (expected_close_date), so the Sales Dashboard's month-wise revenue matches the
+    Closures list. Shows exactly what would change; applies ONLY on explicit confirm.
+    Never touches closures whose lead has no Registration Date. (founder 2026-07-31)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;').replace('>', '&gt;')
+    apply = (request.method == 'POST' and request.form.get('action') == 'apply')
+    conn = get_db()
+    done = 0
+    try:
+        # Closures whose stored date differs from the lead's Registration Date.
+        rows = conn.execute(
+            "SELECT c.id, c.client_name, c.close_date, sl.expected_close_date AS new_date, "
+            "  e.name AS owner, ps.name AS product "
+            "FROM sales_closures c "
+            "LEFT JOIN sales_leads sl ON sl.id = c.lead_id "
+            "LEFT JOIN employees e ON e.id = c.employee_id "
+            "LEFT JOIN products_services ps ON ps.id = c.product_id "
+            "WHERE sl.expected_close_date IS NOT NULL "
+            "  AND c.close_date IS DISTINCT FROM sl.expected_close_date "
+            "ORDER BY c.close_date DESC NULLS LAST, c.id DESC").fetchall()
+        # Closures we CAN'T fix (lead missing the Registration Date) — shown for info.
+        no_date = conn.execute(
+            "SELECT COUNT(*) AS n FROM sales_closures c "
+            "LEFT JOIN sales_leads sl ON sl.id = c.lead_id "
+            "WHERE sl.expected_close_date IS NULL").fetchone()['n']
+        if apply:
+            conn.execute(
+                "UPDATE sales_closures c SET close_date = sl.expected_close_date "
+                "FROM sales_leads sl WHERE sl.id = c.lead_id "
+                "AND sl.expected_close_date IS NOT NULL "
+                "AND c.close_date IS DISTINCT FROM sl.expected_close_date")
+            done = len(rows)
+            conn.commit()
+    finally:
+        conn.close()
+
+    if apply:
+        return ("<div style='font-family:system-ui;max-width:700px;margin:30px auto;padding:0 14px'>"
+                f"<h2>Closure dates updated</h2><p style='color:#065f46'>✓ Updated {done} closure(s) to the "
+                "lead's Registration Date. The Sales Dashboard and Closures list now match.</p>"
+                "<a href='/sales/closures'>Go to Closures</a></div>")
+    body = ''
+    for r in rows[:400]:
+        body += (f"<tr><td style='padding:6px 10px'>{esc(r['client_name'])}</td>"
+                 f"<td style='padding:6px 10px'>{esc(r['product'] or '')}</td>"
+                 f"<td style='padding:6px 10px'>{esc(r['owner'] or '')}</td>"
+                 f"<td style='padding:6px 10px;color:#b91c1c'>{esc(str(r['close_date'])[:10] if r['close_date'] else '—')}</td>"
+                 f"<td style='padding:6px 10px;color:#065f46;font-weight:600'>{esc(str(r['new_date'])[:10])}</td></tr>")
+    n = len(rows)
+    return ("<div style='font-family:system-ui;max-width:820px;margin:30px auto;padding:0 14px'>"
+            "<h2>Back-fill closure dates — preview</h2>"
+            f"<p style='color:#334155'>This will change the stored date of <b>{n}</b> old closure(s) from their "
+            "current date to the lead's <b>Registration Date</b> (what your sales team entered). Nothing is changed "
+            "until you click Apply below.</p>"
+            + (f"<p style='color:#b45309'>⚠ {no_date} closure(s) have no Registration Date on their lead — those are "
+               "left untouched.</p>" if no_date else "")
+            + (("<table style='border-collapse:collapse;width:100%;font-size:13px;margin:14px 0'>"
+                "<tr style='background:#f1f5f9;text-align:left'><th style='padding:6px 10px'>Client</th>"
+                "<th style='padding:6px 10px'>Product</th><th style='padding:6px 10px'>Owner</th>"
+                "<th style='padding:6px 10px'>Current date</th><th style='padding:6px 10px'>→ Registration date</th></tr>"
+                + body + "</table>"
+                + (f"<p style='color:#64748b'>Showing first 400 of {n}.</p>" if n > 400 else "")
+                + "<form method='POST'><input type='hidden' name='action' value='apply'>"
+                "<button style='padding:10px 20px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:700' "
+                "onclick=\"return confirm('Update ' + '" + str(n) + "' + ' closure dates to the registration date?')\">"
+                f"Apply — update {n} closure dates</button></form>")
+               if n else "<p style='color:#065f46'>✓ Nothing to change — every closure already matches its lead's Registration Date.</p>")
+            + "</div>")
+
+
 @app.route('/admin/test-client', methods=['GET', 'POST'])
 @login_required
 def admin_test_client():
