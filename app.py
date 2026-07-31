@@ -21670,7 +21670,7 @@ def ensure_ops_tables():
                 'gmc_english_exam': ['OET', 'IELTS'],
                 'gmc_license_status': ['Received', 'Rejected', 'Not Received', 'On Hold'],
                 # Payment
-                'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque', 'Website Link'],
+                'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque', 'Website Link', 'Paid to Balan'],
                 'instalment': ['1st Installment', '2nd Installment', '3rd Installment', '4th Installment'],
                 # Research
                 'research_status': ['Started', 'Research Completed', 'Research Published', 'Scrapped'],
@@ -21788,6 +21788,24 @@ def ensure_ops_tables():
                 conn.execute(
                     "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
                     "VALUES ('payment_method', 'Website Link', 'Website Link', ?, TRUE)", (_mx + 1,))
+                conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        # Add 'Paid to Balan' payment method (2026-07-31): training payments sometimes
+        # go to Balan rather than GooCampus; bank/cash/online already imply GooCampus.
+        # Purely additive — old options and records are untouched. Appears in every ops
+        # payment form (they read this lookup) + Field Manager, and in the sales form.
+        try:
+            _pb = conn.execute(
+                "SELECT id FROM lookup_options WHERE category = 'payment_method' AND value = 'Paid to Balan'").fetchone()
+            if not _pb:
+                _mx = conn.execute(
+                    "SELECT COALESCE(MAX(sort_order),0) AS m FROM lookup_options WHERE category = 'payment_method'").fetchone()['m']
+                conn.execute(
+                    "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                    "VALUES ('payment_method', 'Paid to Balan', 'Paid to Balan', ?, TRUE)", (_mx + 1,))
                 conn.commit()
         except Exception:
             try: conn.rollback()
