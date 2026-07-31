@@ -5761,10 +5761,13 @@ def _client_pathways(conn, acct_id):
 
 
 def _status_blocks_dashboard(status):
-    """Completed and Dropped-Out clients lose dashboard access automatically.
-    In Process / On Hold / Switched Program keep it. (founder 2026-07-31)"""
+    """Dashboard access is granted ONLY for 'In Process' and 'On Hold' (and brand-new
+    clients with no status set yet). Every other status — Completed, Dropped Out,
+    Dropped & Refunded, Switched, etc. — loses access automatically. (founder 2026-07-31)"""
     s = (status or '').strip().lower()
-    return ('drop' in s) or ('complet' in s)
+    if not s:
+        return False   # new / not categorised — allowed
+    return not (('process' in s) or ('hold' in s))
 
 
 def _client_access_state(conn, acct_id, is_active=None):
@@ -5882,7 +5885,7 @@ def admin_client_access():
             elif not pw.get(d['pathway'], 1):
                 d['allowed'], d['reason'] = False, 'Pathway off'
             elif _status_blocks_dashboard(d['status']):
-                d['allowed'], d['reason'] = False, 'Completed / Dropped'
+                d['allowed'], d['reason'] = False, ('Status: ' + (d['status'] or '—'))
             else:
                 d['allowed'], d['reason'] = True, 'Active'
             d['platform'] = ('PWA app' if (d['last_platform'] == 'pwa' or d['has_push'])

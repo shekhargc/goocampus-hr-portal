@@ -24,11 +24,22 @@
   <h2 style="margin:0 0 14px;color:#0F1B33">Client Dashboard Access</h2>
   {% if saved %}<div class="ca-saved">✓ {{ saved }}</div>{% endif %}
 
+  <div class="ca-card" style="background:#F8FAFC">
+    <h3>How a client gets access</h3>
+    <p class="ca-note" style="margin-bottom:0">A client sees the dashboard only when <b>all</b> of these are true:</p>
+    <ol class="ca-note" style="margin:8px 0 0 18px">
+      <li><b>They have a login</b> — created automatically when a client registers through the portal. Old/imported clients don’t have one yet (shown as “No login yet”).</li>
+      <li><b>Their pathway is switched ON</b> below (Pathway rollout).</li>
+      <li><b>Their status is In Process or On Hold.</b> Any other status (Completed, Dropped, Switched…) loses access automatically.</li>
+      <li><b>You haven’t manually disabled them</b> (the Admin column).</li>
+    </ol>
+  </div>
+
   <div class="ca-card">
     <h3>Pathway rollout</h3>
-    <p class="ca-note">Turn the client dashboard on/off per pathway. Saving takes effect immediately — clients of an
-      <b>OFF</b> pathway can log in but see a “coming soon” screen. <b>Completed and Dropped-Out clients lose access
-      automatically</b> (In&nbsp;Process / On&nbsp;Hold / Switched keep it).</p>
+    <p class="ca-note">Master switch per pathway: turn the dashboard <b>on/off for a whole pathway at once</b> (only affects
+      clients who have a login). Saving takes effect immediately — clients of an <b>OFF</b> pathway see a “coming soon”
+      screen instead of the dashboard.</p>
     <form method="POST">
       <input type="hidden" name="action" value="pathways">
       {% for p in pathways %}
