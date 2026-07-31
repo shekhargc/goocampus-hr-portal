@@ -34079,10 +34079,14 @@ def sales_closures_list():
     f_owner = request.args.get('owner')
     f_product = request.args.get('product')
 
-    where = [f'c.employee_id IN ({placeholders})', 'EXTRACT(YEAR FROM c.close_date) = ?']
+    # The Date column shows the lead's "Closed by date" (= the client's registration
+    # date the sales member set), not the record-created date. COALESCE to the stored
+    # close_date for any closure whose lead is missing that date. (founder 2026-07-31)
+    _eff = "COALESCE(sl.expected_close_date, c.close_date)"
+    where = [f'c.employee_id IN ({placeholders})', f'EXTRACT(YEAR FROM {_eff}) = ?']
     params = list(visible_ids) + [year]
     if month_filter and month_filter.isdigit():
-        where.append('EXTRACT(MONTH FROM c.close_date) = ?'); params.append(int(month_filter))
+        where.append(f'EXTRACT(MONTH FROM {_eff}) = ?'); params.append(int(month_filter))
     if f_owner and f_owner.isdigit():
         where.append('c.employee_id = ?'); params.append(int(f_owner))
     if f_product and f_product.isdigit():
@@ -34091,13 +34095,15 @@ def sales_closures_list():
     conn = get_db()
     closures = conn.execute(
         f'''SELECT c.*, e.name AS employee_name, e.photo_url AS emp_photo,
-                  ps.name AS product_name_live, p.name AS project_name
+                  ps.name AS product_name_live, p.name AS project_name,
+                  sl.expected_close_date AS lead_close_date
            FROM sales_closures c
            LEFT JOIN employees e ON c.employee_id = e.id
            LEFT JOIN products_services ps ON c.product_id = ps.id
            LEFT JOIN projects p ON c.project_id = p.id
+           LEFT JOIN sales_leads sl ON sl.id = c.lead_id
            WHERE {' AND '.join(where)}
-           ORDER BY c.close_date DESC, c.id DESC''',
+           ORDER BY {_eff} DESC, c.id DESC''',
         params
     ).fetchall()
     owners = conn.execute(
@@ -34128,6 +34134,8 @@ def sales_closures_list():
         d = dict(c)
         d['photo_src'] = d.get('emp_photo') or ''
         d['display_name'] = d.get('product_name') or d.get('product_name_live') or '—'
+        # Date shown = lead's closed date (client registration date), else stored close_date.
+        d['eff_date'] = d.get('lead_close_date') or d.get('close_date')
         closures_dicts.append(d)
 
     return render_template('sales_closures.html', user=user, closures=closures_dicts,
