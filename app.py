@@ -2203,9 +2203,56 @@ def staff_client_profile(reg):
                 "ORDER BY doc_category, id DESC", (c['id'],)).fetchall()]
         except Exception:
             documents = []
+        # Amount paid (sum of received payments).
+        try:
+            amount_paid = conn.execute(
+                "SELECT COALESCE(SUM(total_amount_paid),0) AS s FROM ops_payments "
+                "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?))", (reg,)).fetchone()['s']
+        except Exception:
+            amount_paid = 0
+        # All pathways this client is registered in (combined enrolment shows both).
+        pathways = []
+        try:
+            if acct:
+                pathways = [dict(p) for p in conn.execute(
+                    "SELECT DISTINCT cr.registration_number AS reg, ps.name AS product, "
+                    "  COALESCE(ps.pathway, 'plab') AS pathway "
+                    "FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id "
+                    "WHERE cr.account_id = ? AND cr.registration_number IS NOT NULL ORDER BY cr.id", (acct['id'],)).fetchall()]
+        except Exception:
+            pathways = []
+        # Recent call notes (last 10 days; created_at is the reliable clock).
+        try:
+            call_notes = [dict(n) for n in conn.execute(
+                "SELECT call_date, call_note AS note, added_by, created_at FROM ops_call_notes "
+                "WHERE registration_number = ? AND created_at > CURRENT_TIMESTAMP - INTERVAL '10 days' "
+                "ORDER BY created_at DESC, id DESC LIMIT 20", (reg,)).fetchall()]
+        except Exception:
+            call_notes = []
+        # Per-pathway service sections that have entries (label: count).
+        _SVC_SECTIONS = [
+            ('ops_coaching', 'Coaching'), ('ops_test_bookings', 'Test Bookings'),
+            ('ops_english_logins', 'English Logins'), ('ops_online_courses', 'Online Courses'),
+            ('ops_online_subscriptions', 'Online Subscriptions'), ('ops_research_publication', 'Research / Publications'),
+            ('ops_webinars_conferences', 'Webinars / Conferences'), ('ops_ngo_activities', 'NGO Activities'),
+            ('ops_mentorship', 'Mentorship'), ('ops_epic_registration', 'EPIC'),
+            ('ops_gmc_registration', 'GMC'), ('ops_job_stage', 'Job Stage'),
+            ('ops_uk_observerships', 'Observerships'), ('ops_uk_visa_travel', 'UK Visa / Travel'),
+        ]
+        services = []
+        for tbl, label in _SVC_SECTIONS:
+            try:
+                n = conn.execute(f"SELECT COUNT(*) AS n FROM {tbl} WHERE registration_number = ?", (reg,)).fetchone()['n']
+                if n:
+                    services.append({'label': label, 'count': n})
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         return render_template('staff_client_profile.html', c=c, counsellor=counsellor,
                                acct=(dict(acct) if acct else None), acad=(dict(acad) if acad else {}),
-                               reg=regrow, insts=insts, payments=payments, documents=documents, tab='clients')
+                               reg=regrow, insts=insts, payments=payments, documents=documents,
+                               amount_paid=float(amount_paid or 0), pathways=pathways,
+                               call_notes=call_notes, services=services, tab='clients')
     finally:
         conn.close()
 

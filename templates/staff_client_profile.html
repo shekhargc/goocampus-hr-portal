@@ -22,10 +22,25 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
     {% if acct and acct.online %}<span class="chip chip-ok"><span class="dot on"></span> Online now</span>{% endif %}
+    {% if c.is_pg_doctor %}<span class="chip" style="background:#FEF3E7;color:#C2410C;border:1px solid #FDBA74">PG Doctor</span>
+    {% else %}<span class="chip" style="background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE">MBBS Doctor</span>{% endif %}
     {% if c.account_status %}<span class="chip" style="background:#EFF6FF;color:#1E40AF">{{ c.account_status }}</span>{% endif %}
     {% if c.current_stage %}<span class="chip" style="background:#F1F5F9;color:#334155">{{ c.current_stage }}</span>{% endif %}
   </div>
   {% if acct %}<a href="/staff/chat/{{ acct.id }}" class="btn-primary" style="display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:10px 16px;border-radius:10px"><i class="bi bi-chat-dots"></i> Message</a>{% endif %}
+</div>
+
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-clipboard-data" style="color:var(--orange)"></i> Snapshot</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
+    {{ field('Registration no.', c.registration_number) }}
+    {{ field('Registration date', c.registration_date) }}
+    {{ field('Current stage', c.current_stage) }}
+    {{ field('Account status', c.account_status) }}
+    {{ field('Joined stage', c.joined_stage) }}
+    {{ field('Counsellor', counsellor) }}
+    {{ field('Package', ('₹{:,.0f}'.format(c.package_amount|float)) if c.package_amount else '') }}
+    {{ field('Amount paid', ('₹{:,.0f}'.format(amount_paid)) if amount_paid else '₹0') }}
+  </div>
 </div>
 
 <div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-person-lines-fill" style="color:var(--orange)"></i> Contact</h3>
@@ -33,8 +48,19 @@
   {{ field('WhatsApp', c.whatsapp) }}
   {{ field('Email', c.email or (acct.email if acct else '')) }}
   {{ field('City / State', ((c.city or '') ~ (', ' if c.city and c.state else '') ~ (c.state or '')) or '') }}
-  {{ field('Counsellor', counsellor) }}
 </div>
+
+{% if pathways and pathways|length > 1 %}
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:10px"><i class="bi bi-signpost-split" style="color:var(--orange)"></i> Pathways registered</h3>
+  {% for p in pathways %}
+  <a href="/staff/client/{{ p.reg|urlencode }}" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:{% if not loop.first %}1px solid #F1F5F9{% else %}none{% endif %}">
+    <div><div style="font-weight:600;color:var(--navy)">{{ p.product or (p.pathway|title) }}</div>
+      <div style="font-size:12px;color:var(--muted)">{{ p.reg }}{% if p.reg == c.registration_number %} · current{% endif %}</div></div>
+    <span class="chip" style="background:#F1F5F9;color:#334155">{{ (p.pathway or 'plab')|title }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-mortarboard-fill" style="color:var(--orange)"></i> Academic</h3>
   {{ field('Country of study', acad.get('country')) }}
@@ -88,6 +114,28 @@
 <div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:10px"><i class="bi bi-folder2-open" style="color:var(--orange)"></i> Documents ({{ documents|length }})</h3>
   {% for d in documents %}
   <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13.5px"><i class="bi bi-file-earmark-text" style="color:var(--orange)"></i> {{ d.doc_type or d.file_name }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if services %}
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-grid-3x3-gap-fill" style="color:var(--orange)"></i> Services / activity</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    {% for s in services %}
+    <span style="display:inline-flex;align-items:center;gap:6px;background:#F8FAFC;border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:13px;font-weight:600;color:var(--navy)">
+      {{ s.label }} <span style="background:var(--orange);color:#fff;border-radius:10px;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;padding:0 4px">{{ s.count }}</span></span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if call_notes %}
+<div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:10px"><i class="bi bi-journal-text" style="color:var(--orange)"></i> Recent call notes</h3>
+  {% for n in call_notes %}
+  <div style="padding:9px 0;border-top:{% if not loop.first %}1px solid #F1F5F9{% else %}none{% endif %}">
+    <div style="font-size:11.5px;color:var(--muted);font-weight:600">{{ n.call_date or '' }}{% if n.added_by %} · {{ n.added_by }}{% endif %}</div>
+    <div style="font-size:14px;color:var(--ink);margin-top:2px;white-space:pre-wrap">{{ n.note }}</div>
+  </div>
   {% endfor %}
 </div>
 {% endif %}
