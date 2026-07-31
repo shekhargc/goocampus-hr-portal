@@ -390,6 +390,18 @@
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3z"/><path d="M13 21h8V11h-8z"/><path d="M13 3v6h8V3z"/><path d="M3 21h8v-6H3z"/></svg></span>
                 <span class="ops-nav-text">Operations Dashboard</span>
             </a>
+            {# ─── Client dashboard access control (admin) ─── #}
+            {% if session.get('is_admin') %}
+            <a href="/admin/client-access" class="ops-nav-item" data-tooltip="Client Dashboard Access — pathway rollout + per-client on/off">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                <span class="ops-nav-text">Dashboard Access</span>
+            </a>
+            {% endif %}
+            {# ─── GooCampus Ops mobile app (chat + read-only profiles) ─── #}
+            <a href="/staff/chat" class="ops-nav-item" data-tooltip="GooCampus Ops app (mobile) — chat + client profiles" target="_blank">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
+                <span class="ops-nav-text">Ops App (mobile)</span>
+            </a>
             {# ─── Live client chat (shared inbox) ─── #}
             <a href="/operations/chat" class="ops-nav-item {% if active_ops_page == 'client-chat' %}active{% endif %}" data-tooltip="Client Chat" style="position:relative">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>

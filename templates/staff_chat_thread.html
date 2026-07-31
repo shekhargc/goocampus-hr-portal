@@ -1,0 +1,53 @@
+{% extends "staff_base.html" %}
+{% block title %}{{ acct.name }} — Chat{% endblock %}
+{% block topbar %}
+<div class="topbar">
+  <a href="/staff/chat" class="back">‹</a>
+  <div style="width:34px;height:34px;border-radius:50%;background:#FFF7ED;color:var(--orange);display:flex;align-items:center;justify-content:center;font-weight:800">{{ (acct.name[:1] or '?')|upper }}</div>
+  <div>
+    <h1 style="font-size:15px">{{ acct.name }}</h1>
+    <div style="font-size:11.5px;color:rgba(255,255,255,.6)" id="onlineTag">{{ 'Online now' if acct.online else 'Offline' }}</div>
+  </div>
+  <div class="spacer"></div>
+  {% if reg %}<a href="/staff/client/{{ reg|urlencode }}" style="color:#fff;font-size:20px" title="View profile"><i class="bi bi-person-vcard"></i></a>{% endif %}
+</div>
+{% endblock %}
+{% block botnav %}{% endblock %}
+{% block content %}
+<div id="ctBody" style="display:flex;flex-direction:column;gap:10px;padding-bottom:80px">
+  {% if not msgs %}<div class="empty" id="emptyNote">No messages yet. Say hello 👋</div>{% endif %}
+</div>
+<form id="ctForm" style="position:fixed;bottom:0;left:0;right:0;display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--line);max-width:760px;margin:0 auto">
+  <textarea id="ctInput" rows="1" placeholder="Type a reply…" required style="flex:1;resize:none;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:16px;font-family:inherit;max-height:120px"></textarea>
+  <button type="submit" class="btn-primary">Send</button>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+  const ACCOUNT_ID = {{ acct.id }};
+  const body=document.getElementById('ctBody'), form=document.getElementById('ctForm'), input=document.getElementById('ctInput');
+  let lastId=0;
+  function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+  function render(msgs){
+    const en=document.getElementById('emptyNote'); if(en && msgs.length) en.remove();
+    let added=false;
+    msgs.forEach(m=>{ if(m.id<=lastId) return; lastId=m.id; added=true;
+      const ops=(m.sender_type==='ops');
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;flex-direction:column;max-width:80%;'+(ops?'align-self:flex-end;align-items:flex-end':'align-self:flex-start;align-items:flex-start');
+      const who=(ops?('<div style="font-size:11px;color:#94A3B8;margin:0 4px 3px;font-weight:600">'+esc(m.name)+'</div>'):'');
+      const bub='padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word;'+(ops?'background:var(--navy);color:#fff;border-bottom-right-radius:4px':'background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px');
+      row.innerHTML=who+'<div style="'+bub+'">'+esc(m.body)+'</div><div style="font-size:11px;color:#94A3B8;margin:3px 6px 0">'+esc(m.time)+'</div>';
+      body.appendChild(row);
+    });
+    if(added) window.scrollTo(0, document.body.scrollHeight);
+  }
+  function poll(){ fetch('/operations/chat/'+ACCOUNT_ID+'/messages').then(r=>r.json()).then(d=>{ render(d.messages||[]);
+    var t=document.getElementById('onlineTag'); if(t) t.textContent=d.online?'Online now':'Offline'; }).catch(()=>{}); }
+  poll(); setInterval(poll,5000);
+  input.addEventListener('input',()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; });
+  input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); form.requestSubmit(); }});
+  form.addEventListener('submit',e=>{ e.preventDefault(); const t=input.value.trim(); if(!t) return; input.value=''; input.style.height='auto';
+    fetch('/operations/chat/'+ACCOUNT_ID+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:t})}).then(r=>r.json()).then(()=>poll()).catch(()=>{}); });
+</script>
+{% endblock %}

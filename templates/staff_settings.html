@@ -1,0 +1,56 @@
+{% extends "staff_base.html" %}
+{% block title %}Settings — GooCampus Ops{% endblock %}
+{% block heading %}Settings{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="font-weight:700;color:var(--navy)">{{ user.name }}</div>
+  <div style="color:var(--muted);font-size:13px">{{ user.department or 'Team' }}{% if user.is_admin %} · Admin{% endif %}</div>
+</div>
+
+<div class="card">
+  <h3 style="font-size:14px;color:var(--navy);margin-bottom:6px"><i class="bi bi-phone" style="color:var(--orange)"></i> App</h3>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Install GooCampus Ops on your phone and turn on notifications to get pinged when a client messages.</p>
+  <button id="installBtn" onclick="installApp()" style="display:none;width:100%;padding:12px;border-radius:10px;background:var(--orange);color:#fff;border:none;font-weight:700;margin-bottom:10px"><i class="bi bi-download"></i> Install app</button>
+  <button id="notifyBtn" onclick="enableNotifications()" style="display:none;width:100%;padding:12px;border-radius:10px;background:#fff;color:var(--navy);border:1px solid var(--line);font-weight:700"><i class="bi bi-bell"></i> Turn on notifications</button>
+</div>
+
+<a href="/logout" class="card" style="display:block;text-align:center;color:#B91C1C;font-weight:700"><i class="bi bi-box-arrow-right"></i> Log out</a>
+{% endblock %}
+{% block extra_js %}
+<script>
+  let deferredInstall=null;
+  const installBtn=document.getElementById('installBtn'), notifyBtn=document.getElementById('notifyBtn');
+  const isStandalone=window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const pushSupported=('serviceWorker' in navigator)&&('PushManager' in window)&&('Notification' in window);
+  window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); deferredInstall=e; if(installBtn) installBtn.style.display='block'; });
+  if(isIOS && !isStandalone && installBtn) installBtn.style.display='block';
+  function installApp(){
+    if(deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.finally(()=>{ deferredInstall=null; if(installBtn) installBtn.style.display='none'; }); }
+    else if(isIOS){ alert("To install:\n\n1. Tap the Share button (square with ↑) in Safari.\n2. Scroll down → “Add to Home Screen”.\n3. Tap “Add”."); }
+    else { alert("Open your browser menu (⋮) → “Install app”."); }
+  }
+  function refreshNotify(){
+    if(!notifyBtn) return;
+    if(isIOS && !isStandalone){ notifyBtn.style.display='none'; return; }
+    if(!pushSupported){ notifyBtn.style.display='none'; return; }
+    notifyBtn.style.display='block';
+    if(Notification.permission==='granted'){ notifyBtn.innerHTML='<i class="bi bi-bell-fill"></i> Notifications on'; notifyBtn.disabled=true; notifyBtn.style.opacity='.7'; }
+  }
+  refreshNotify();
+  function urlB64ToUint8(b){ const pad='='.repeat((4-b.length%4)%4); const s=(b+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(s); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0))); }
+  async function enableNotifications(){
+    if(isIOS && !isStandalone){ alert("On iPhone, first add GooCampus Ops to your Home Screen, then open it and turn on notifications."); return; }
+    if(!pushSupported){ alert("This browser doesn't support notifications."); return; }
+    try{
+      const perm=await Notification.requestPermission(); if(perm!=='granted'){ alert("Notifications are blocked — enable them in settings."); return; }
+      const reg=await navigator.serviceWorker.ready;
+      const r=await fetch('/staff/push/key'); const {key}=await r.json(); if(!key){ alert("Not set up yet — try again shortly."); return; }
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(key)});
+      await fetch('/staff/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:sub})});
+      refreshNotify(); alert("Notifications on. You'll be pinged when a client messages.");
+    }catch(e){ alert("Could not turn on notifications."); }
+  }
+</script>
+{% endblock %}

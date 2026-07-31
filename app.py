@@ -1369,9 +1369,9 @@ def client_manifest():
         "background_color": "#0F1B33",
         "theme_color": "#0F1B33",
         "icons": [
-            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": "/static/icon-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-maskable-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
         "shortcuts": [
             {"name": "Payments", "url": "/client/dashboard#payments",
@@ -1458,6 +1458,10 @@ def _ensure_push(conn):
                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         conn.execute("CREATE TABLE IF NOT EXISTS client_push_subscriptions ("
                      "id SERIAL PRIMARY KEY, account_id INTEGER, endpoint TEXT UNIQUE, "
+                     "p256dh TEXT, auth TEXT, user_agent TEXT, "
+                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("CREATE TABLE IF NOT EXISTS employee_push_subscriptions ("
+                     "id SERIAL PRIMARY KEY, employee_id INTEGER, endpoint TEXT UNIQUE, "
                      "p256dh TEXT, auth TEXT, user_agent TEXT, "
                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         row = conn.execute("SELECT vapid_public, vapid_private FROM push_config WHERE id = 1").fetchone()
@@ -1743,6 +1747,12 @@ def client_chat_send():
                      "VALUES (?, 'client', ?, ?)", (acct_id, name, body))
         conn.commit()
         _maybe_autoreply(conn, acct_id)
+        # Notify the ops team on their phones (GooCampus Ops app).
+        try:
+            send_ops_push(conn, f'New message from {name}', body[:120],
+                          url=f'/staff/chat/{acct_id}', tag=f'c{acct_id}')
+        except Exception:
+            pass
         return jsonify({'ok': True})
     except Exception as e:
         try: conn.rollback()
@@ -1984,6 +1994,365 @@ def ops_presence_by_reg(reg):
         conn.close()
 
 
+# ══ "GooCampus Ops" — a focused mobile PWA for the ops team: chat + read-only
+#    client profiles only (no CRM editing/admin/money). Same look as the client app.
+#    Access: admins + Operations-dept employees (later: all staff + more sections).
+#    (founder 2026-07-31) ══
+
+def ops_app_required(f):
+    @wraps(f)
+    def _wrap(*args, **kwargs):
+        user = get_user()
+        if not user:
+            return redirect(url_for('login', next=request.path))
+        if not (user['is_admin'] or (user['department'] or '') == 'Operations'):
+            return ("<div style='font-family:system-ui;max-width:420px;margin:60px auto;text-align:center'>"
+                    "<h3>GooCampus Ops</h3><p style='color:#64748b'>This app is for the Operations team. "
+                    "Ask an admin if you need access.</p><a href='/dashboard'>Back to portal</a></div>"), 403
+        return f(*args, **kwargs)
+    return _wrap
+
+
+def send_ops_push(conn, title, body, url='/staff/chat', tag='ops', exclude_employee_id=None):
+    """Web-push to every ops member who enabled notifications (shared inbox). Prunes
+    dead subs. Best-effort; never raises."""
+    try:
+        _pub, priv = _ensure_push(conn)
+        if not priv:
+            return 0
+        rows = conn.execute("SELECT employee_id, endpoint, p256dh, auth FROM employee_push_subscriptions").fetchall()
+        if not rows:
+            return 0
+        from pywebpush import webpush, WebPushException
+        import json as _json
+        payload = _json.dumps({'title': title, 'body': body, 'url': url, 'tag': tag})
+        sent = 0
+        for s in rows:
+            if exclude_employee_id and s['employee_id'] == exclude_employee_id:
+                continue
+            info = {'endpoint': s['endpoint'], 'keys': {'p256dh': s['p256dh'], 'auth': s['auth']}}
+            try:
+                webpush(subscription_info=info, data=payload, vapid_private_key=priv,
+                        vapid_claims={'sub': 'mailto:info@goocampus.in'})
+                sent += 1
+            except WebPushException as we:
+                code = getattr(getattr(we, 'response', None), 'status_code', None)
+                if code in (404, 410):
+                    try:
+                        conn.execute("DELETE FROM employee_push_subscriptions WHERE endpoint = ?", (s['endpoint'],))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+        return sent
+    except Exception as e:
+        logging.error("send_ops_push: %s", e)
+        return 0
+
+
+@app.route('/staff')
+@ops_app_required
+def staff_home():
+    return redirect(url_for('staff_chat'))
+
+
+@app.route('/staff/chat')
+@ops_app_required
+def staff_chat():
+    conn = get_db()
+    _ensure_chat(conn)
+    q = (request.args.get('q') or '').strip()
+    like = f"%{q}%"
+    try:
+        rows = conn.execute(
+            "SELECT ca.id AS account_id, "
+            "  TRIM(COALESCE(ca.first_name,'')||' '||COALESCE(ca.last_name,'')) AS name, ca.mobile, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online, "
+            "  m.body AS last_body, m.created_at AS last_at, m.sender_type AS last_sender, "
+            "  (SELECT COUNT(*) FROM client_chat_messages x WHERE x.account_id = ca.id "
+            "     AND x.sender_type='client' AND x.read_by_ops=0) AS unread "
+            "FROM client_accounts ca "
+            "JOIN LATERAL (SELECT body, created_at, sender_type FROM client_chat_messages cm "
+            "  WHERE cm.account_id = ca.id ORDER BY cm.id DESC LIMIT 1) m ON TRUE "
+            "WHERE (? = '' OR ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ?) "
+            "ORDER BY m.created_at DESC", (q, like, like, like)).fetchall()
+        convos = [{'account_id': c['account_id'], 'name': (c['name'] or 'Client'), 'mobile': c['mobile'],
+                   'online': bool(c['online']), 'unread': c['unread'],
+                   'preview': (('You: ' if c['last_sender'] == 'ops' else '') + (c['last_body'] or ''))[:70],
+                   'time': _ist_str(c['last_at'])} for c in rows]
+    except Exception as e:
+        logging.error("staff_chat: %s", e); convos = []
+    finally:
+        conn.close()
+    return render_template('staff_chat_inbox.html', convos=convos, q=q, tab='chat')
+
+
+@app.route('/staff/chat/<int:account_id>')
+@ops_app_required
+def staff_chat_thread(account_id):
+    conn = get_db()
+    _ensure_chat(conn)
+    try:
+        acct, rows = _ops_chat_load(conn, account_id)
+        if not acct:
+            flash('Client not found.', 'error')
+            return redirect(url_for('staff_chat'))
+        reg = conn.execute("SELECT registration_number FROM client_registrations WHERE account_id = ? "
+                           "AND registration_number IS NOT NULL ORDER BY id DESC LIMIT 1", (account_id,)).fetchone()
+        msgs = [_chat_msg_dict(r, 'ops') for r in rows]
+        return render_template('staff_chat_thread.html', acct=dict(acct), msgs=msgs,
+                               reg=(reg['registration_number'] if reg else ''))
+    finally:
+        conn.close()
+
+
+@app.route('/staff/clients')
+@ops_app_required
+def staff_clients():
+    conn = get_db()
+    q = (request.args.get('q') or '').strip()
+    results = []
+    try:
+        if q:
+            like = f"%{q}%"
+            results = conn.execute(
+                "SELECT registration_number, "
+                "  TRIM(COALESCE(prefix,'')||' '||COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, "
+                "  COALESCE(pathway,'plab') AS pathway, account_status, mobile "
+                "FROM plab_clients WHERE first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? "
+                "OR registration_number ILIKE ? ORDER BY first_name LIMIT 40",
+                (like, like, like, like)).fetchall()
+            results = [dict(r) for r in results]
+    except Exception as e:
+        logging.error("staff_clients: %s", e)
+    finally:
+        conn.close()
+    return render_template('staff_clients.html', results=results, q=q, tab='clients')
+
+
+@app.route('/staff/clients/search')
+@ops_app_required
+def staff_clients_search():
+    """Type-ahead client search for the ops app (JSON)."""
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify({'results': []})
+    conn = get_db()
+    like = f"%{q}%"
+    try:
+        rows = conn.execute(
+            "SELECT registration_number AS reg, "
+            "  TRIM(COALESCE(prefix,'')||' '||COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, "
+            "  COALESCE(pathway,'plab') AS pathway, mobile "
+            "FROM plab_clients WHERE first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? "
+            "OR registration_number ILIKE ? ORDER BY first_name LIMIT 12",
+            (like, like, like, like)).fetchall()
+        return jsonify({'results': [dict(r) for r in rows]})
+    except Exception as e:
+        logging.error("staff_clients_search: %s", e)
+        return jsonify({'results': []})
+    finally:
+        conn.close()
+
+
+@app.route('/staff/client/<path:reg>')
+@ops_app_required
+def staff_client_profile(reg):
+    conn = get_db()
+    try:
+        c = conn.execute(
+            "SELECT * FROM plab_clients WHERE registration_number = ? LIMIT 1", (reg,)).fetchone()
+        if not c:
+            flash('Client not found.', 'error')
+            return redirect(url_for('staff_clients'))
+        c = dict(c)
+        counsellor = ''
+        if c.get('counsellor_id'):
+            e = conn.execute("SELECT name FROM employees WHERE id = ?", (c['counsellor_id'],)).fetchone()
+            counsellor = e['name'] if e else ''
+        acct = conn.execute("SELECT ca.id, ca.email, "
+                            "(ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
+                            "FROM client_accounts ca JOIN client_registrations cr ON cr.account_id = ca.id "
+                            "WHERE cr.registration_number = ? LIMIT 1", (reg,)).fetchone()
+        acad = conn.execute("SELECT ca.* FROM client_academics ca JOIN client_registrations cr ON cr.id = ca.registration_id "
+                            "WHERE cr.registration_number = ? LIMIT 1", (reg,)).fetchone()
+        regrow = conn.execute(
+            "SELECT cr.*, ps.name AS product_name FROM client_registrations cr "
+            "LEFT JOIN products_services ps ON ps.id = cr.product_id "
+            "WHERE cr.registration_number = ? ORDER BY cr.id DESC LIMIT 1", (reg,)).fetchone()
+        regrow = dict(regrow) if regrow else {}
+        # Installments (base + 18% GST) from the registration.
+        insts = []
+        for i in (1, 2, 3, 4):
+            amt = float(regrow.get(f'inst{i}_amount') or 0)
+            if not amt and not (regrow.get(f'inst{i}_date')):
+                continue
+            gst = round(amt * 0.18); total = round(amt + gst)
+            st = (regrow.get(f'inst{i}_status') or '').strip()
+            insts.append({'n': i, 'total': total, 'received': st.lower() == 'received',
+                          'status': st or 'Pending', 'date': regrow.get(f'inst{i}_date') or ''})
+        try:
+            payments = [dict(p) for p in conn.execute(
+                "SELECT payment_date, total_amount_paid, instalment, payment_method FROM ops_payments "
+                "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) ORDER BY payment_date DESC NULLS LAST LIMIT 20",
+                (reg,)).fetchall()]
+        except Exception:
+            payments = []
+        try:
+            documents = [dict(d) for d in conn.execute(
+                "SELECT id, doc_type, file_name FROM plab_client_documents WHERE client_id = ? "
+                "ORDER BY doc_category, id DESC", (c['id'],)).fetchall()]
+        except Exception:
+            documents = []
+        # Amount paid (sum of received payments).
+        try:
+            amount_paid = conn.execute(
+                "SELECT COALESCE(SUM(total_amount_paid),0) AS s FROM ops_payments "
+                "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?))", (reg,)).fetchone()['s']
+        except Exception:
+            amount_paid = 0
+        # All pathways this client is registered in (combined enrolment shows both).
+        pathways = []
+        try:
+            if acct:
+                pathways = [dict(p) for p in conn.execute(
+                    "SELECT DISTINCT cr.registration_number AS reg, ps.name AS product, "
+                    "  COALESCE(ps.pathway, 'plab') AS pathway "
+                    "FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id "
+                    "WHERE cr.account_id = ? AND cr.registration_number IS NOT NULL ORDER BY cr.id", (acct['id'],)).fetchall()]
+        except Exception:
+            pathways = []
+        # Recent call notes — latest first. (Don't hard-filter to 10 days: many notes
+        # are imported without a timestamp, or older, and would vanish.)
+        try:
+            call_notes = [dict(n) for n in conn.execute(
+                "SELECT call_date, call_note AS note, added_by, created_at FROM ops_call_notes "
+                "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) "
+                "ORDER BY created_at DESC NULLS LAST, id DESC LIMIT 12", (reg,)).fetchall()]
+        except Exception as e:
+            logging.error("staff profile call_notes: %s", e)
+            call_notes = []
+        # Per-pathway service sections that have entries (label: count).
+        _SVC_SECTIONS = [
+            ('ops_coaching', 'Coaching'), ('ops_test_bookings', 'Test Bookings'),
+            ('ops_english_logins', 'English Logins'), ('ops_online_courses', 'Online Courses'),
+            ('ops_online_subscriptions', 'Online Subscriptions'), ('ops_research_publication', 'Research / Publications'),
+            ('ops_webinars_conferences', 'Webinars / Conferences'), ('ops_ngo_activities', 'NGO Activities'),
+            ('ops_mentorship', 'Mentorship'), ('ops_epic_registration', 'EPIC'),
+            ('ops_gmc_registration', 'GMC'), ('ops_job_stage', 'Job Stage'),
+            ('ops_uk_observerships', 'Observerships'), ('ops_uk_visa_travel', 'UK Visa / Travel'),
+        ]
+        services = []
+        for tbl, label in _SVC_SECTIONS:
+            try:
+                n = conn.execute(f"SELECT COUNT(*) AS n FROM {tbl} WHERE registration_number = ?", (reg,)).fetchone()['n']
+                if n:
+                    services.append({'label': label, 'count': n})
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        return render_template('staff_client_profile.html', c=c, counsellor=counsellor,
+                               acct=(dict(acct) if acct else None), acad=(dict(acad) if acad else {}),
+                               reg=regrow, insts=insts, payments=payments, documents=documents,
+                               amount_paid=float(amount_paid or 0), pathways=pathways,
+                               call_notes=call_notes, services=services, tab='clients')
+    finally:
+        conn.close()
+
+
+@app.route('/staff/settings')
+@ops_app_required
+def staff_settings():
+    user = get_user()
+    return render_template('staff_settings.html', user=user, tab='settings')
+
+
+@app.route('/staff/manifest.webmanifest')
+def staff_manifest():
+    return jsonify({
+        "name": "GooCampus Ops", "short_name": "GC Ops",
+        "start_url": "/staff/chat", "scope": "/staff/", "display": "standalone",
+        "orientation": "portrait", "background_color": "#FFFFFF", "theme_color": "#0F1B33",
+        "icons": [
+            {"src": "/static/icon-ops-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-ops-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icon-ops-maskable-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    })
+
+
+@app.route('/staff/sw.js')
+def staff_service_worker():
+    js = """
+const CACHE = 'gc-ops-v1';
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => { self.clients.claim(); });
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  e.respondWith(fetch(req).catch(() => caches.match(req)));
+});
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch(_) { d = { body: (e.data && e.data.text()) || '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'GooCampus Ops', {
+    body: d.body || '', icon: '/static/icon-192.png', badge: '/static/icon-192.png',
+    data: { url: d.url || '/staff/chat' }, tag: d.tag || 'ops' }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/staff/chat';
+  e.waitUntil(clients.matchAll({type:'window', includeUncontrolled:true}).then(ws => {
+    for (const w of ws) { if (w.url.includes('/staff/') && 'focus' in w) { w.navigate && w.navigate(url); return w.focus(); } }
+    return clients.openWindow(url);
+  }));
+});
+"""
+    resp = make_response(js)
+    resp.mimetype = 'application/javascript'
+    resp.headers['Service-Worker-Allowed'] = '/staff/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+@app.route('/staff/push/key')
+@ops_app_required
+def staff_push_key():
+    conn = get_db()
+    try:
+        pub, _priv = _ensure_push(conn)
+        return jsonify({'key': pub})
+    finally:
+        conn.close()
+
+
+@app.route('/staff/push/subscribe', methods=['POST'])
+@ops_app_required
+def staff_push_subscribe():
+    user = get_user()
+    data = request.get_json(silent=True) or {}
+    sub = data.get('subscription') or {}
+    endpoint = sub.get('endpoint'); keys = sub.get('keys') or {}
+    if not endpoint:
+        return jsonify({'ok': False}), 400
+    conn = get_db()
+    try:
+        _ensure_push(conn)
+        conn.execute("DELETE FROM employee_push_subscriptions WHERE endpoint = ?", (endpoint,))
+        conn.execute("INSERT INTO employee_push_subscriptions (employee_id, endpoint, p256dh, auth, user_agent) "
+                     "VALUES (?, ?, ?, ?, ?)",
+                     (user['id'], endpoint, keys.get('p256dh'), keys.get('auth'),
+                      (request.headers.get('User-Agent') or '')[:300]))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("staff_push_subscribe: %s", e)
+        return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/client/heartbeat', methods=['POST'])
 def client_heartbeat():
     """The client dashboard pings this every ~30s while open. Stamps last_seen_at so
@@ -1993,10 +2362,11 @@ def client_heartbeat():
     if session.get('client_preview'):
         # Admin previewing — don't mark the real client as online.
         return jsonify({'ok': True, 'preview': True})
+    plat = 'pwa' if ((request.get_json(silent=True) or {}).get('pwa')) else 'web'
     conn = get_db()
     try:
-        conn.execute("UPDATE client_accounts SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?",
-                     (session.get('user_id'),))
+        conn.execute("UPDATE client_accounts SET last_seen_at = CURRENT_TIMESTAMP, last_platform = ? WHERE id = ?",
+                     (plat, session.get('user_id')))
         conn.commit()
     except Exception:
         try: conn.rollback()
@@ -2936,6 +3306,12 @@ def client_dashboard():
     acct_id = session.get('user_id')
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    # Pathway rollout: if the client's pathway isn't switched on yet, show a friendly
+    # "coming soon" screen instead of the dashboard. (Admin preview bypasses this.)
+    if not session.get('client_preview') and not _client_dashboard_allowed(conn, acct_id):
+        _nm = (account['first_name'] if account else '') or 'Doctor'
+        conn.close()
+        return render_template('client_dashboard_unavailable.html', name=_nm)
     # Post-submit onboarding gate: lock the dashboard until the client has
     # digitally agreed to their Contract (if one is on file) and the Refund
     # Policy. Redirect to whichever step is still pending.
@@ -5351,6 +5727,201 @@ def admin_exit_client_preview():
                 session[k] = v
     flash('Exited client preview.', 'success')
     return redirect(url_for('admin_preview_clients'))
+
+
+# ══ Client Dashboard Access — per-pathway rollout + per-client on/off + web/PWA ══
+_DASHBOARD_PATHWAYS = ['plab', 'consulting', 'training', 'australia', 'portfolio', 'uae']
+_PATHWAY_LABELS = {'plab': 'PLAB', 'consulting': 'Standard Consulting', 'training': 'Training',
+                   'australia': 'Australia', 'portfolio': 'Portfolio', 'uae': 'UAE'}
+
+
+def _ensure_client_access(conn):
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS client_dashboard_pathways ("
+                     "pathway TEXT PRIMARY KEY, enabled INTEGER DEFAULT 1)")
+        conn.execute("ALTER TABLE client_accounts ADD COLUMN IF NOT EXISTS last_platform TEXT")
+        for p in _DASHBOARD_PATHWAYS:
+            conn.execute("INSERT INTO client_dashboard_pathways (pathway, enabled) VALUES (?, 1) "
+                         "ON CONFLICT (pathway) DO NOTHING", (p,))
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _client_pathways(conn, acct_id):
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT COALESCE(ps.pathway,'plab') AS pathway FROM client_registrations cr "
+            "LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.account_id = ?",
+            (acct_id,)).fetchall()
+        return [r['pathway'] for r in rows]
+    except Exception:
+        return []
+
+
+def _status_blocks_dashboard(status):
+    """Dashboard access is granted ONLY for 'In Process' and 'On Hold' (and brand-new
+    clients with no status set yet). Every other status — Completed, Dropped Out,
+    Dropped & Refunded, Switched, etc. — loses access automatically. (founder 2026-07-31)"""
+    s = (status or '').strip().lower()
+    if not s:
+        return False   # new / not categorised — allowed
+    return not (('process' in s) or ('hold' in s))
+
+
+def _client_access_state(conn, acct_id, is_active=None):
+    """Effective dashboard access for a client. Returns {allowed, reason, statuses,
+    pathways}. Access = admin-enabled AND at least one pathway that is rolled-out AND
+    whose status isn't Completed/Dropped."""
+    _ensure_client_access(conn)
+    if is_active is None:
+        r = conn.execute("SELECT is_active FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+        is_active = (r['is_active'] if r else 1)
+    enabled = {row['pathway']: row['enabled'] for row in
+               conn.execute("SELECT pathway, enabled FROM client_dashboard_pathways").fetchall()}
+    rows = conn.execute(
+        "SELECT COALESCE(ps.pathway,'plab') AS pathway, pc.account_status AS st "
+        "FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id "
+        "LEFT JOIN plab_clients pc ON pc.registration_number = cr.registration_number "
+        "WHERE cr.account_id = ?", (acct_id,)).fetchall()
+    statuses = sorted({(r['st'] or '').strip() for r in rows if (r['st'] or '').strip()})
+    pathways = sorted({r['pathway'] for r in rows})
+    if not is_active:
+        return {'allowed': False, 'reason': 'Disabled by admin', 'statuses': statuses, 'pathways': pathways}
+    if not rows:
+        return {'allowed': True, 'reason': 'Active', 'statuses': statuses, 'pathways': pathways}
+    active = any(enabled.get(r['pathway'], 1) and not _status_blocks_dashboard(r['st']) for r in rows)
+    if active:
+        return {'allowed': True, 'reason': 'Active', 'statuses': statuses, 'pathways': pathways}
+    if all(_status_blocks_dashboard(r['st']) for r in rows):
+        reason = 'Completed / Dropped'
+    elif not any(enabled.get(r['pathway'], 1) for r in rows):
+        reason = 'Pathway off'
+    else:
+        reason = 'No access'
+    return {'allowed': False, 'reason': reason, 'statuses': statuses, 'pathways': pathways}
+
+
+def _client_dashboard_allowed(conn, acct_id):
+    return _client_access_state(conn, acct_id)['allowed']
+
+
+@app.route('/admin/client-access', methods=['GET', 'POST'])
+@login_required
+def admin_client_access():
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    saved = ''
+    try:
+        _ensure_client_access(conn)
+        if request.method == 'POST' and request.form.get('action') == 'pathways':
+            on = set(request.form.getlist('pathway'))
+            for p in _DASHBOARD_PATHWAYS:
+                conn.execute("UPDATE client_dashboard_pathways SET enabled = ? WHERE pathway = ?",
+                             (1 if p in on else 0, p))
+            conn.commit()
+            saved = 'Pathway rollout saved.'
+        pw = {r['pathway']: r['enabled'] for r in
+              conn.execute("SELECT pathway, enabled FROM client_dashboard_pathways").fetchall()}
+        q = (request.args.get('q') or '').strip()
+        fp = (request.args.get('pathway') or '').strip()
+        fs = (request.args.get('status') or '').strip()
+        like = f"%{q}%"
+        # Filter option lists come from the REAL roster (plab_clients), so values match.
+        try:
+            all_paths = [r['p'] for r in conn.execute(
+                "SELECT DISTINCT COALESCE(pathway,'plab') AS p FROM plab_clients ORDER BY p").fetchall()]
+        except Exception:
+            all_paths = list(_DASHBOARD_PATHWAYS)
+        # This screen is ONLY about clients who could actually get the dashboard, i.e.
+        # In Process / On Hold. Everything else (Completed, Dropped, Switched…) auto-loses
+        # access, so it's deliberately kept OUT of this list. (founder 2026-07-31)
+        try:
+            all_status = [r['s'] for r in conn.execute(
+                "SELECT DISTINCT account_status AS s FROM plab_clients "
+                "WHERE account_status ILIKE ? OR account_status ILIKE ? ORDER BY s",
+                ('%process%', '%hold%')).fetchall()]
+        except Exception:
+            all_status = []
+        where = ["(pc.account_status ILIKE ? OR pc.account_status ILIKE ?)"]
+        params = ['%process%', '%hold%']
+        if q:
+            where.append("(pc.first_name ILIKE ? OR pc.last_name ILIKE ? OR pc.mobile ILIKE ? OR pc.registration_number ILIKE ?)")
+            params += [like, like, like, like]
+        if fp:
+            where.append("COALESCE(pc.pathway,'plab') = ?"); params.append(fp)
+        if fs:
+            where.append("pc.account_status = ?"); params.append(fs)
+        wc = " AND ".join(where)
+        # The whole client roster (not just those with logins), one row per client.
+        rows = conn.execute(
+            "SELECT DISTINCT ON (pc.registration_number) pc.registration_number AS reg, "
+            "  pc.first_name, pc.last_name, pc.mobile, COALESCE(pc.pathway,'plab') AS pathway, "
+            "  pc.account_status AS status, ca.id AS acct_id, ca.is_active, ca.last_login, ca.last_platform, "
+            "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online, "
+            "  EXISTS(SELECT 1 FROM client_push_subscriptions s WHERE s.account_id = ca.id) AS has_push "
+            "FROM plab_clients pc "
+            "LEFT JOIN client_registrations cr ON cr.registration_number = pc.registration_number "
+            "LEFT JOIN client_accounts ca ON ca.id = cr.account_id "
+            f"WHERE {wc} ORDER BY pc.registration_number, ca.id DESC NULLS LAST LIMIT 400", params).fetchall()
+        cnt_where = ["(account_status ILIKE ? OR account_status ILIKE ?)"]
+        cnt_params = ['%process%', '%hold%']
+        if q:
+            cnt_where.append("(first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? OR registration_number ILIKE ?)")
+            cnt_params += [like, like, like, like]
+        if fp:
+            cnt_where.append("COALESCE(pathway,'plab') = ?"); cnt_params.append(fp)
+        if fs:
+            cnt_where.append("account_status = ?"); cnt_params.append(fs)
+        try:
+            total = conn.execute(f"SELECT COUNT(*) AS n FROM plab_clients WHERE {' AND '.join(cnt_where)}", cnt_params).fetchone()['n']
+        except Exception:
+            total = len(rows)
+        clients = []
+        for r in rows:
+            d = dict(r)
+            d['has_login'] = d['acct_id'] is not None
+            if not d['has_login']:
+                d['allowed'], d['reason'] = False, 'No login yet'
+            elif not d['is_active']:
+                d['allowed'], d['reason'] = False, 'Disabled by admin'
+            elif not pw.get(d['pathway'], 1):
+                d['allowed'], d['reason'] = False, 'Pathway off'
+            elif _status_blocks_dashboard(d['status']):
+                d['allowed'], d['reason'] = False, ('Status: ' + (d['status'] or '—'))
+            else:
+                d['allowed'], d['reason'] = True, 'Active'
+            d['platform'] = ('PWA app' if (d['last_platform'] == 'pwa' or d['has_push'])
+                             else ('Web' if d['last_login'] else ''))
+            clients.append(d)
+        clients.sort(key=lambda c: ((c['first_name'] or '').lower(), (c['last_name'] or '').lower()))
+    finally:
+        conn.close()
+    return render_template('admin_client_access.html', pathways=_DASHBOARD_PATHWAYS, labels=_PATHWAY_LABELS,
+        pw=pw, clients=clients, total=total, shown=len(clients), q=q, fp=fp, fs=fs,
+        all_paths=all_paths, all_status=all_status, saved=saved, active_ops_page='client-access')
+
+
+@app.route('/admin/client-access/<int:acct_id>/toggle', methods=['POST'])
+@login_required
+def admin_client_access_toggle(acct_id):
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT is_active FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+        if row is not None:
+            conn.execute("UPDATE client_accounts SET is_active = ? WHERE id = ?",
+                         (0 if row['is_active'] else 1, acct_id))
+            conn.commit()
+    finally:
+        conn.close()
+    return redirect(url_for('admin_client_access', q=request.args.get('q', ''),
+                            pathway=request.args.get('pathway', ''), status=request.args.get('status', '')))
 
 
 @app.route('/admin/pg-selfcheck', methods=['GET'])
@@ -21099,7 +21670,7 @@ def ensure_ops_tables():
                 'gmc_english_exam': ['OET', 'IELTS'],
                 'gmc_license_status': ['Received', 'Rejected', 'Not Received', 'On Hold'],
                 # Payment
-                'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque', 'Website Link'],
+                'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque', 'Website Link', 'Paid to Balan'],
                 'instalment': ['1st Installment', '2nd Installment', '3rd Installment', '4th Installment'],
                 # Research
                 'research_status': ['Started', 'Research Completed', 'Research Published', 'Scrapped'],
@@ -21217,6 +21788,24 @@ def ensure_ops_tables():
                 conn.execute(
                     "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
                     "VALUES ('payment_method', 'Website Link', 'Website Link', ?, TRUE)", (_mx + 1,))
+                conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        # Add 'Paid to Balan' payment method (2026-07-31): training payments sometimes
+        # go to Balan rather than GooCampus; bank/cash/online already imply GooCampus.
+        # Purely additive — old options and records are untouched. Appears in every ops
+        # payment form (they read this lookup) + Field Manager, and in the sales form.
+        try:
+            _pb = conn.execute(
+                "SELECT id FROM lookup_options WHERE category = 'payment_method' AND value = 'Paid to Balan'").fetchone()
+            if not _pb:
+                _mx = conn.execute(
+                    "SELECT COALESCE(MAX(sort_order),0) AS m FROM lookup_options WHERE category = 'payment_method'").fetchone()['m']
+                conn.execute(
+                    "INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                    "VALUES ('payment_method', 'Paid to Balan', 'Paid to Balan', ?, TRUE)", (_mx + 1,))
                 conn.commit()
         except Exception:
             try: conn.rollback()
@@ -25007,16 +25596,20 @@ def ops_reports_export():
     # store registration_number (FK), so we join plab_clients to always show the
     # client's NAME beside it in every export (founder rule 2026-07-13).
     name_by_reg = {}
+    stat_by_reg = {}   # reg -> (account_status, current_stage) for the ops-section exports
     try:
         for nr in conn.execute(
             "SELECT registration_number, "
-            "TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm "
+            "TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm, "
+            "account_status, current_stage "
             "FROM plab_clients").fetchall():
             name_by_reg[nr['registration_number']] = ' '.join((nr['nm'] or '').split())
+            stat_by_reg[nr['registration_number']] = (nr['account_status'] or '', nr['current_stage'] or '')
     except Exception:
         try: conn.rollback()
         except Exception: pass
         name_by_reg = {}
+        stat_by_reg = {}
     conn.close()
 
     # Optional field selection (from the section-wise field picker): keep only
@@ -25062,14 +25655,23 @@ def ops_reports_export():
     try:
         wb = Workbook(); ws = wb.active
         ws.title = (label[:28] or 'Export')
-        header = ['Client Name', 'Registration Number'] + [c.replace('_', ' ').title() for c in data_cols]
+        # For ops section exports (e.g. Payments), also show the client's Account
+        # Status + Current Stage (from plab_clients) so reports can be read/filtered
+        # by status + stage. plab_clients already has these as its own columns.
+        add_cs = (table != 'plab_clients')
+        cs_head = ['Account Status', 'Current Stage'] if add_cs else []
+        header = ['Client Name', 'Registration Number'] + cs_head + [c.replace('_', ' ').title() for c in data_cols]
         ws.append(header)
         for cell in ws[1]:
             cell.font = Font(bold=True, color='FFFFFF')
             cell.fill = PatternFill('solid', fgColor='1E3A5F')
         for r in rows:
             reg = r['registration_number'] if 'registration_number' in r else ''
-            ws.append([_clean(_client_name(r)), _clean(reg)] + [_clean(r[c]) for c in data_cols])
+            cs_vals = []
+            if add_cs:
+                _st = stat_by_reg.get(reg, ('', ''))
+                cs_vals = [_clean(_st[0]), _clean(_st[1])]
+            ws.append([_clean(_client_name(r)), _clean(reg)] + cs_vals + [_clean(r[c]) for c in data_cols])
         if not rows:
             ws.append(['No data for this section / pathway.'])
         out = io.BytesIO(); wb.save(out); out.seek(0)
@@ -25078,8 +25680,10 @@ def ops_reports_export():
         flash('Could not generate that export. Please try again or pick fewer fields.', 'error')
         return redirect(url_for('ops_reports', pathway=pathway))
     fname = f"{pathway}_{table.replace('ops_', '')}.xlsx"
-    return send_file(out, as_attachment=True, download_name=fname,
+    resp = send_file(out, as_attachment=True, download_name=fname,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 @app.route('/operations/plab')
@@ -32584,7 +33188,9 @@ def sales_leads_add():
                         fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
-                    cl_close_date = datetime.now().strftime('%Y-%m-%d')
+                    # Closure date = the lead's "Closed by date" (= the client's
+                    # registration date the sales member set), not today. (founder 2026-07-31)
+                    cl_close_date = ecd or datetime.now().strftime('%Y-%m-%d')
                     cl_product_name = ''
                     cl_project_id = None
                     if product_id:
@@ -32610,6 +33216,31 @@ def sales_leads_add():
                             user['id']
                         )
                     )
+                    # Combo (AMC Consulting + Training/AMC 1): also create a SEPARATE
+                    # closure row for the Training add-on so both products show as their
+                    # own line with their own sales revenue. (founder 2026-07-31)
+                    if request.form.get('include_training') in ('on', '1', 'true', 'yes'):
+                        try:
+                            _tp = conn.execute(
+                                "SELECT id, name, project_id FROM products_services WHERE name = 'AMC MCQ' LIMIT 1").fetchone()
+                            if _tp:
+                                def _tn(nm):
+                                    try: return float(request.form.get(nm) or 0)
+                                    except ValueError: return 0.0
+                                _tr_rev, _tr_cost = _closure_revenue_cost(
+                                    conn, _tp['id'], 'AMC 1',
+                                    discount=_tn('training_discount'),
+                                    fallback_revenue=(_tn('training_final') or _tn('training_package')))
+                                conn.execute(
+                                    '''INSERT INTO sales_closures
+                                       (lead_id, employee_id, product_id, product_name, project_id,
+                                        client_name, revenue, cost, margin, currency, close_date, notes, created_by)
+                                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                    (new_lead_id, owner_id, _tp['id'], _tp['name'], _tp['project_id'],
+                                     company_new or lead_name_new, _tr_rev, _tr_cost, _tr_rev - _tr_cost,
+                                     'INR', cl_close_date, f'Auto-closure (Training add-on): {lead_name_new}', user['id']))
+                        except Exception as _tce:
+                            logging.warning(f"combo training closure failed: {_tce}")
                     # 2026-06-02: auto-generate the client invitation +
                     # send the WhatsApp link. Failure here doesn't block
                     # the lead/closure save.
@@ -32897,7 +33528,9 @@ def sales_leads_edit(lead_id):
                         fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
-                    cl_close_date = datetime.now().strftime('%Y-%m-%d')
+                    # Closure date = the lead's "Closed by date" (client registration
+                    # date), falling back to the lead's stored value / today. (founder 2026-07-31)
+                    cl_close_date = ecd or lead['expected_close_date'] or datetime.now().strftime('%Y-%m-%d')
                     # Resolve product name and project
                     cl_product_name = ''
                     cl_project_id = None
@@ -33446,10 +34079,14 @@ def sales_closures_list():
     f_owner = request.args.get('owner')
     f_product = request.args.get('product')
 
-    where = [f'c.employee_id IN ({placeholders})', 'EXTRACT(YEAR FROM c.close_date) = ?']
+    # The Date column shows the lead's "Closed by date" (= the client's registration
+    # date the sales member set), not the record-created date. COALESCE to the stored
+    # close_date for any closure whose lead is missing that date. (founder 2026-07-31)
+    _eff = "COALESCE(sl.expected_close_date, c.close_date)"
+    where = [f'c.employee_id IN ({placeholders})', f'EXTRACT(YEAR FROM {_eff}) = ?']
     params = list(visible_ids) + [year]
     if month_filter and month_filter.isdigit():
-        where.append('EXTRACT(MONTH FROM c.close_date) = ?'); params.append(int(month_filter))
+        where.append(f'EXTRACT(MONTH FROM {_eff}) = ?'); params.append(int(month_filter))
     if f_owner and f_owner.isdigit():
         where.append('c.employee_id = ?'); params.append(int(f_owner))
     if f_product and f_product.isdigit():
@@ -33458,13 +34095,15 @@ def sales_closures_list():
     conn = get_db()
     closures = conn.execute(
         f'''SELECT c.*, e.name AS employee_name, e.photo_url AS emp_photo,
-                  ps.name AS product_name_live, p.name AS project_name
+                  ps.name AS product_name_live, p.name AS project_name,
+                  sl.expected_close_date AS lead_close_date
            FROM sales_closures c
            LEFT JOIN employees e ON c.employee_id = e.id
            LEFT JOIN products_services ps ON c.product_id = ps.id
            LEFT JOIN projects p ON c.project_id = p.id
+           LEFT JOIN sales_leads sl ON sl.id = c.lead_id
            WHERE {' AND '.join(where)}
-           ORDER BY c.close_date DESC, c.id DESC''',
+           ORDER BY {_eff} DESC, c.id DESC''',
         params
     ).fetchall()
     owners = conn.execute(
@@ -33495,6 +34134,8 @@ def sales_closures_list():
         d = dict(c)
         d['photo_src'] = d.get('emp_photo') or ''
         d['display_name'] = d.get('product_name') or d.get('product_name_live') or '—'
+        # Date shown = lead's closed date (client registration date), else stored close_date.
+        d['eff_date'] = d.get('lead_close_date') or d.get('close_date')
         closures_dicts.append(d)
 
     return render_template('sales_closures.html', user=user, closures=closures_dicts,

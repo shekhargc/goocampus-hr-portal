@@ -1,0 +1,99 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Client Dashboard Access{% endblock %}
+{% block section_content %}
+<style>
+  .ca-wrap{ max-width:1080px; }
+  .ca-card{ background:#fff; border:1px solid #E2E8F0; border-radius:12px; padding:18px; margin-bottom:18px; }
+  .ca-card h3{ margin:0 0 6px; font-size:15px; color:#0F1B33; }
+  .ca-note{ color:#64748B; font-size:13px; line-height:1.55; margin:0 0 14px; }
+  .ca-toggle{ display:inline-flex; align-items:center; gap:8px; margin:0 18px 12px 0; font-weight:600; color:#0F1B33; }
+  .ca-btn{ background:#F57C1F; color:#fff; border:none; border-radius:8px; padding:9px 18px; font-weight:600; cursor:pointer; }
+  .ca-saved{ background:#ECFDF5; border:1px solid #A7F3D0; color:#065f46; border-radius:9px; padding:10px 14px; margin-bottom:14px; font-weight:600; }
+  .ca-filters{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .ca-filters input, .ca-filters select{ padding:8px 10px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; }
+  table.ca{ border-collapse:collapse; width:100%; font-size:13.5px; background:#fff; border:1px solid #E2E8F0; border-radius:12px; overflow:hidden; }
+  table.ca th{ background:#F1F5F9; text-align:left; padding:9px 12px; color:#334155; font-weight:700; }
+  table.ca td{ padding:9px 12px; border-top:1px solid #EEF2F7; vertical-align:top; }
+  .pill{ font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px; }
+  .ok{ color:#065f46; font-weight:700; } .no{ color:#B91C1C; font-weight:700; }
+  .muted{ color:#94A3B8; font-size:11.5px; }
+  .togbtn{ padding:5px 12px; border-radius:7px; font-weight:600; cursor:pointer; background:#fff; }
+</style>
+
+<div class="ca-wrap">
+  <h2 style="margin:0 0 14px;color:#0F1B33">Client Dashboard Access</h2>
+  {% if saved %}<div class="ca-saved">✓ {{ saved }}</div>{% endif %}
+
+  <div class="ca-card" style="background:#F8FAFC">
+    <h3>How a client gets access</h3>
+    <p class="ca-note" style="margin-bottom:0">A client sees the dashboard only when <b>all</b> of these are true:</p>
+    <ol class="ca-note" style="margin:8px 0 0 18px">
+      <li><b>They have a login</b> — created automatically when a client registers through the portal. Old/imported clients don’t have one yet (shown as “No login yet”).</li>
+      <li><b>Their pathway is switched ON</b> below (Pathway rollout).</li>
+      <li><b>Their status is In Process or On Hold.</b> Any other status (Completed, Dropped, Switched…) loses access automatically.</li>
+      <li><b>You haven’t manually disabled them</b> (the Admin column).</li>
+    </ol>
+  </div>
+
+  <div class="ca-card">
+    <h3>Pathway rollout</h3>
+    <p class="ca-note">Master switch per pathway: turn the dashboard <b>on/off for a whole pathway at once</b> (only affects
+      clients who have a login). Saving takes effect immediately — clients of an <b>OFF</b> pathway see a “coming soon”
+      screen instead of the dashboard.</p>
+    <form method="POST">
+      <input type="hidden" name="action" value="pathways">
+      {% for p in pathways %}
+      <label class="ca-toggle"><input type="checkbox" name="pathway" value="{{ p }}" {% if pw.get(p, 1) %}checked{% endif %}> {{ labels.get(p, p|title) }}</label>
+      {% endfor %}
+      <div><button class="ca-btn" type="submit">Save rollout</button></div>
+    </form>
+  </div>
+
+  <div class="ca-card">
+    <h3>Clients eligible for access <span style="color:#94A3B8;font-weight:500">(In Process / On Hold only) — showing {{ shown }} of {{ total }}</span></h3>
+    <p class="ca-note" style="margin:-4px 0 12px">Completed, Dropped, Switched and other statuses are hidden here — they lose access automatically, so there's nothing to manage.</p>
+    <form method="GET" class="ca-filters">
+      <input name="q" value="{{ q }}" placeholder="Search name / mobile / reg">
+      <select name="pathway">
+        <option value="">All pathways</option>
+        {% for p in all_paths %}<option value="{{ p }}" {% if fp==p %}selected{% endif %}>{{ labels.get(p, p|title) }}</option>{% endfor %}
+      </select>
+      <select name="status">
+        <option value="">All statuses</option>
+        {% for s in all_status %}<option value="{{ s }}" {% if fs==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+      <button class="ca-btn" style="background:#0F1B33">Filter</button>
+      {% if q or fp or fs %}<a href="/admin/client-access" style="color:#64748B;font-size:13px">Clear</a>{% endif %}
+    </form>
+
+    <div style="overflow-x:auto">
+    <table class="ca">
+      <tr><th>Client</th><th>Pathway</th><th>Status</th><th>Dashboard</th><th>Using</th><th>Last login</th><th>Admin</th></tr>
+      {% for c in clients %}
+      <tr>
+        <td><b>{{ (c.first_name or '') }} {{ (c.last_name or '') }}</b><br><span class="muted">{{ c.mobile }}{% if c.reg %} · {{ c.reg }}{% endif %}</span></td>
+        <td>{{ labels.get(c.pathway, c.pathway|title) }}</td>
+        <td>{{ c.status or '—' }}</td>
+        <td>
+          {% if c.allowed %}<span class="ok">● Has access</span>
+          {% else %}<span class="no">✕ No access</span><br><span class="muted">{{ c.reason }}</span>{% endif %}
+        </td>
+        <td>{{ c.platform or '—' }}{% if c.online %} <span style="color:#16A34A">● online</span>{% endif %}</td>
+        <td class="muted" style="font-size:12.5px">{{ (c.last_login|string)[:16] if c.last_login else '—' }}</td>
+        <td>
+          {% if c.has_login %}
+          <form method="POST" action="/admin/client-access/{{ c.acct_id }}/toggle?q={{ q|urlencode }}&pathway={{ fp|urlencode }}&status={{ fs|urlencode }}" style="margin:0">
+            {% if c.is_active %}<button class="togbtn" style="border:1px solid #B91C1C;color:#B91C1C">Disable</button>
+            {% else %}<button class="togbtn" style="border:1px solid #16A34A;color:#16A34A">Enable</button>{% endif %}
+          </form>
+          {% else %}<span class="muted">no login</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not clients %}<tr><td colspan="7" style="text-align:center;color:#94A3B8;padding:26px">No clients match.</td></tr>{% endif %}
+    </table>
+    </div>
+    {% if total > shown %}<p class="muted" style="margin-top:10px">Showing the first {{ shown }}. Use search / filters to narrow down.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

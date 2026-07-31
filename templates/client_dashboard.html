@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0F1B33">
 <title>My Dashboard — GooCampus</title>
 <link rel="manifest" href="/client/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/icon-192-v2.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="GooCampus">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
@@ -20,8 +20,8 @@
   a{ text-decoration:none; color:inherit; }
 
   /* ── Sidebar ── */
-  .sidebar{ position:fixed; top:0; left:0; bottom:0; width:var(--sidebar); background:var(--navy);
-            color:#fff; display:flex; flex-direction:column; z-index:60; transition:transform .25s ease; }
+  .sidebar{ position:fixed; top:0; left:0; bottom:0; width:var(--sidebar); z-index:120; background:var(--navy);
+            color:#fff; display:flex; flex-direction:column; transition:transform .25s ease; }
   .sb-brand{ display:flex; align-items:center; gap:10px; padding:20px 20px 16px; }
   .sb-brand img{ height:34px; width:auto; }
   .sb-user{ padding:6px 20px 18px; border-bottom:1px solid rgba(255,255,255,.08); }
@@ -37,7 +37,7 @@
   .sb-link i{ font-size:17px; width:20px; text-align:center; }
   .sb-link:hover{ background:rgba(255,255,255,.06); color:#fff; }
   .sb-link.active{ background:var(--orange); color:#fff; box-shadow:0 6px 16px rgba(245,124,31,.3); }
-  .sb-foot{ padding:12px; border-top:1px solid rgba(255,255,255,.08); }
+  .sb-foot{ padding:12px 12px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid rgba(255,255,255,.08); }
   .sb-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px;
               color:rgba(255,255,255,.7); font-size:14px; }
   .sb-logout:hover{ background:rgba(239,68,68,.15); color:#FCA5A5; }
@@ -626,6 +626,7 @@
           <button class="btn btn-primary" type="submit"><i class="bi bi-check2"></i> Update password</button>
         </form>
       </div>
+      <a href="/client/logout" class="card" style="display:flex;align-items:center;justify-content:center;gap:10px;color:#B91C1C;font-weight:700"><i class="bi bi-box-arrow-right"></i> Log out</a>
     </div>
 
   </div>
@@ -802,7 +803,7 @@
   })();
 
   // ── Presence heartbeat: tell ops we're live while the dashboard is open ──
-  function beat(){ fetch('/client/heartbeat',{method:'POST',keepalive:true}).catch(()=>{}); }
+  function beat(){ fetch('/client/heartbeat',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({pwa: isStandalone})}).catch(()=>{}); }
   beat(); setInterval(beat, 30000);
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') beat(); });
 </script>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0F1B33">
+<title>GooCampus</title>
+<link rel="manifest" href="/client/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icon-192-v2.png">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0F1B33;color:#fff;
+       min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}
+  .box{max-width:420px}
+  img{height:40px;margin-bottom:24px}
+  h1{font-size:22px;font-weight:800;margin-bottom:12px}
+  p{color:rgba(255,255,255,.72);font-size:15px;line-height:1.6;margin-bottom:8px}
+  a{display:inline-block;margin-top:22px;color:rgba(255,255,255,.6);font-size:13.5px;text-decoration:underline}
+  .em{font-size:44px;margin-bottom:16px}
+</style>
+</head>
+<body>
+  <div class="box">
+    <img src="/static/logo-white.png" alt="GooCampus" onerror="this.style.display='none'">
+    <div class="em">🚧</div>
+    <h1>Your dashboard is coming soon</h1>
+    <p>Hi Dr. {{ name }} — your online dashboard is being prepared for your programme.</p>
+    <p>Your counsellor will let you know the moment it's ready. Thank you for your patience!</p>
+    <a href="/client/logout">Log out</a>
+  </div>
+</body>
+</html>

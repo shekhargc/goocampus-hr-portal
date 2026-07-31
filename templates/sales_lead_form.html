@@ -192,6 +192,7 @@
                             <option value="Cash Deposit" {% if _mt == 'Cash Deposit' %}selected{% endif %}>Cash Deposit</option>
                             <option value="Online Payment" {% if _mt == 'Online Payment' %}selected{% endif %}>Online Payment</option>
                             <option value="Website Link" {% if _mt == 'Website Link' %}selected{% endif %}>Website Link</option>
+                            <option value="Paid to Balan" {% if _mt == 'Paid to Balan' %}selected{% endif %}>Paid to Balan</option>
                         </select>
                         <select name="inst{{ i }}_status" data-touched="{{ '1' if _st else '0' }}" onchange="this.dataset.touched='1'"
                                style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
@@ -321,6 +322,7 @@
                                 <option value="Cash Deposit" {% if _trm == 'Cash Deposit' %}selected{% endif %}>Cash Deposit</option>
                                 <option value="Online Payment" {% if _trm == 'Online Payment' %}selected{% endif %}>Online Payment</option>
                                 <option value="Website Link" {% if _trm == 'Website Link' %}selected{% endif %}>Website Link</option>
+                                <option value="Paid to Balan" {% if _trm == 'Paid to Balan' %}selected{% endif %}>Paid to Balan</option>
                             </select>
                             <select name="training_inst{{ i }}_status" data-touched="0" onchange="this.dataset.touched='1'" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;background:white;">
                                 <option value="Pending" selected>Pending</option>
