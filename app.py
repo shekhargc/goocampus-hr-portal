@@ -5760,20 +5760,48 @@ def _client_pathways(conn, acct_id):
         return []
 
 
-def _client_dashboard_allowed(conn, acct_id):
-    """True if the client may use the dashboard: at least one of their pathways is
-    rolled out. (A client with no registration yet is not blocked.)"""
+def _status_blocks_dashboard(status):
+    """Completed and Dropped-Out clients lose dashboard access automatically.
+    In Process / On Hold / Switched Program keep it. (founder 2026-07-31)"""
+    s = (status or '').strip().lower()
+    return ('drop' in s) or ('complet' in s)
+
+
+def _client_access_state(conn, acct_id, is_active=None):
+    """Effective dashboard access for a client. Returns {allowed, reason, statuses,
+    pathways}. Access = admin-enabled AND at least one pathway that is rolled-out AND
+    whose status isn't Completed/Dropped."""
     _ensure_client_access(conn)
-    paths = _client_pathways(conn, acct_id)
-    if not paths:
-        return True
-    ph = ','.join(['?'] * len(paths))
-    try:
-        row = conn.execute(f"SELECT COUNT(*) AS n FROM client_dashboard_pathways "
-                           f"WHERE pathway IN ({ph}) AND enabled = 1", paths).fetchone()
-        return (row['n'] or 0) > 0
-    except Exception:
-        return True
+    if is_active is None:
+        r = conn.execute("SELECT is_active FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+        is_active = (r['is_active'] if r else 1)
+    enabled = {row['pathway']: row['enabled'] for row in
+               conn.execute("SELECT pathway, enabled FROM client_dashboard_pathways").fetchall()}
+    rows = conn.execute(
+        "SELECT COALESCE(ps.pathway,'plab') AS pathway, pc.account_status AS st "
+        "FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id "
+        "LEFT JOIN plab_clients pc ON pc.registration_number = cr.registration_number "
+        "WHERE cr.account_id = ?", (acct_id,)).fetchall()
+    statuses = sorted({(r['st'] or '').strip() for r in rows if (r['st'] or '').strip()})
+    pathways = sorted({r['pathway'] for r in rows})
+    if not is_active:
+        return {'allowed': False, 'reason': 'Disabled by admin', 'statuses': statuses, 'pathways': pathways}
+    if not rows:
+        return {'allowed': True, 'reason': 'Active', 'statuses': statuses, 'pathways': pathways}
+    active = any(enabled.get(r['pathway'], 1) and not _status_blocks_dashboard(r['st']) for r in rows)
+    if active:
+        return {'allowed': True, 'reason': 'Active', 'statuses': statuses, 'pathways': pathways}
+    if all(_status_blocks_dashboard(r['st']) for r in rows):
+        reason = 'Completed / Dropped'
+    elif not any(enabled.get(r['pathway'], 1) for r in rows):
+        reason = 'Pathway off'
+    else:
+        reason = 'No access'
+    return {'allowed': False, 'reason': reason, 'statuses': statuses, 'pathways': pathways}
+
+
+def _client_dashboard_allowed(conn, acct_id):
+    return _client_access_state(conn, acct_id)['allowed']
 
 
 @app.route('/admin/client-access', methods=['GET', 'POST'])
@@ -5797,18 +5825,54 @@ def admin_client_access():
         pw = {r['pathway']: r['enabled'] for r in
               conn.execute("SELECT pathway, enabled FROM client_dashboard_pathways").fetchall()}
         q = (request.args.get('q') or '').strip()
+        fp = (request.args.get('pathway') or '').strip()   # filter: pathway
+        fs = (request.args.get('status') or '').strip()    # filter: status
         like = f"%{q}%"
-        clients = conn.execute(
+        base = conn.execute(
             "SELECT ca.id, ca.first_name, ca.last_name, ca.mobile, ca.is_active, ca.last_login, "
-            "  ca.last_seen_at, ca.last_platform, "
+            "  ca.last_platform, "
             "  (ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online, "
-            "  (SELECT string_agg(DISTINCT COALESCE(ps.pathway,'plab'), ', ') FROM client_registrations cr "
-            "     LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.account_id = ca.id) AS pathways, "
             "  EXISTS(SELECT 1 FROM client_push_subscriptions s WHERE s.account_id = ca.id) AS has_push "
             "FROM client_accounts ca "
             + ("WHERE ca.first_name ILIKE ? OR ca.last_name ILIKE ? OR ca.mobile ILIKE ? " if q else "")
-            + "ORDER BY ca.last_login DESC NULLS LAST, ca.id DESC LIMIT 300",
+            + "ORDER BY ca.last_login DESC NULLS LAST, ca.id DESC LIMIT 500",
             ((like, like, like) if q else ())).fetchall()
+        ids = [c['id'] for c in base]
+        pairs = {}
+        if ids:
+            _ph = ','.join(['?'] * len(ids))
+            for r in conn.execute(
+                f"SELECT cr.account_id AS aid, COALESCE(ps.pathway,'plab') AS pathway, pc.account_status AS st "
+                f"FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id "
+                f"LEFT JOIN plab_clients pc ON pc.registration_number = cr.registration_number "
+                f"WHERE cr.account_id IN ({_ph})", ids).fetchall():
+                pairs.setdefault(r['aid'], []).append((r['pathway'], r['st']))
+        # Compute effective access per client + collect status list for the filter.
+        clients, status_set = [], set()
+        for c in base:
+            prs = pairs.get(c['id'], [])
+            paths = sorted({p for p, _ in prs})
+            stses = sorted({(s or '').strip() for _, s in prs if (s or '').strip()})
+            for s in stses: status_set.add(s)
+            if not c['is_active']:
+                allowed, reason = False, 'Disabled by admin'
+            elif not prs:
+                allowed, reason = True, 'Active'
+            elif any(pw.get(p, 1) and not _status_blocks_dashboard(s) for p, s in prs):
+                allowed, reason = True, 'Active'
+            elif all(_status_blocks_dashboard(s) for _, s in prs):
+                allowed, reason = False, 'Completed / Dropped'
+            elif not any(pw.get(p, 1) for p, _ in prs):
+                allowed, reason = False, 'Pathway off'
+            else:
+                allowed, reason = False, 'No access'
+            if fp and fp not in paths:
+                continue
+            if fs and fs not in stses:
+                continue
+            d = dict(c); d['pathways'] = ', '.join(paths); d['statuses'] = ', '.join(stses)
+            d['allowed'] = allowed; d['reason'] = reason
+            clients.append(d)
     finally:
         conn.close()
 
@@ -5822,38 +5886,51 @@ def admin_client_access():
     rows = ''
     for c in clients:
         nm = f"{c['first_name'] or ''} {c['last_name'] or ''}".strip() or '—'
-        active = c['is_active']
-        acc = ("<span style='color:#065f46;font-weight:700'>On</span>" if active
-               else "<span style='color:#b91c1c;font-weight:700'>Off</span>")
+        if c['allowed']:
+            acc = "<span style='color:#065f46;font-weight:700'>● Has access</span>"
+        else:
+            acc = f"<span style='color:#b91c1c;font-weight:700'>✕ No access</span><br><span style='color:#94a3b8;font-size:11.5px'>{esc(c['reason'])}</span>"
         plat = ('PWA app' if (c['last_platform'] == 'pwa' or c['has_push']) else ('Web' if c['last_login'] else '—'))
         online = "<span style='color:#16A34A'>● online</span>" if c['online'] else ''
         ll = str(c['last_login'])[:16] if c['last_login'] else 'never'
-        btn_label = 'Disable' if active else 'Enable'
-        btn_color = '#b91c1c' if active else '#16A34A'
+        # Manual admin switch reflects is_active; status auto-block is separate.
+        btn_label = 'Disable' if c['is_active'] else 'Enable'
+        btn_color = '#b91c1c' if c['is_active'] else '#16A34A'
         rows += (f"<tr style='border-top:1px solid #eef'>"
                  f"<td style='padding:7px 10px'>{esc(nm)}<br><span style='color:#94a3b8;font-size:12px'>{esc(c['mobile'])}</span></td>"
                  f"<td style='padding:7px 10px'>{esc(c['pathways'] or '—')}</td>"
+                 f"<td style='padding:7px 10px'>{esc(c['statuses'] or '—')}</td>"
                  f"<td style='padding:7px 10px'>{acc}</td>"
                  f"<td style='padding:7px 10px'>{esc(plat)} {online}</td>"
                  f"<td style='padding:7px 10px;color:#64748b;font-size:12.5px'>{esc(ll)}</td>"
-                 f"<td style='padding:7px 10px'><form method='POST' action='/admin/client-access/{c['id']}/toggle' style='margin:0'>"
+                 f"<td style='padding:7px 10px'><form method='POST' action='/admin/client-access/{c['id']}/toggle?q={esc(q)}' style='margin:0'>"
                  f"<button style='padding:5px 12px;border:1px solid {btn_color};color:{btn_color};background:#fff;border-radius:7px;font-weight:600;cursor:pointer'>{btn_label}</button></form></td></tr>")
 
+    # Filter dropdowns
+    path_opts = "<option value=''>All pathways</option>" + ''.join(
+        f"<option value='{p}' {'selected' if fp==p else ''}>{_PATHWAY_LABELS[p]}</option>" for p in _DASHBOARD_PATHWAYS)
+    stat_opts = "<option value=''>All statuses</option>" + ''.join(
+        f"<option value='{esc(s)}' {'selected' if fs==s else ''}>{esc(s)}</option>" for s in sorted(status_set))
     saved_html = ("<p style='color:#065f46'>" + saved + "</p>") if saved else ''
-    return ("<div style='font-family:system-ui;max-width:960px;margin:26px auto;padding:0 14px'>"
+    return ("<div style='font-family:system-ui;max-width:1000px;margin:26px auto;padding:0 14px'>"
             "<h2>Client Dashboard Access</h2>" + saved_html +
             "<div style='background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:18px'>"
             "<h3 style='margin:0 0 6px'>Pathway rollout</h3>"
-            "<p style='color:#64748b;font-size:13.5px;margin:0 0 12px'>Turn the client dashboard on/off per pathway. "
-            "Clients whose pathway is OFF can still log in but see a “coming soon” screen instead of the dashboard.</p>"
+            "<p style='color:#64748b;font-size:13.5px;margin:0 0 12px'>Turn the client dashboard on/off per pathway. Saving "
+            "takes effect immediately — clients whose pathway is OFF can still log in but see a “coming soon” screen. "
+            "<b>Completed and Dropped-Out clients lose access automatically</b> (In Process / On Hold / Switched keep it).</p>"
             "<form method='POST'><input type='hidden' name='action' value='pathways'>" + toggles +
             "<div><button style='margin-top:6px;padding:9px 18px;background:#F57C1F;color:#fff;border:none;border-radius:8px;font-weight:600'>Save rollout</button></div></form></div>"
             "<h3>Clients (" + str(len(clients)) + ")</h3>"
-            "<form method='GET' style='margin-bottom:10px'><input name='q' value='" + esc(q) +
-            "' placeholder='Search name / mobile' style='padding:7px;width:240px'> <button>Search</button></form>"
+            "<form method='GET' style='margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap'><input name='q' value='" + esc(q) +
+            "' placeholder='Search name / mobile' style='padding:7px;width:220px'>"
+            "<select name='pathway' style='padding:7px'>" + path_opts + "</select>"
+            "<select name='status' style='padding:7px'>" + stat_opts + "</select>"
+            " <button style='padding:7px 14px'>Filter</button></form>"
             "<table style='border-collapse:collapse;width:100%;font-size:13.5px'>"
             "<tr style='background:#f1f5f9;text-align:left'><th style='padding:7px 10px'>Client</th><th style='padding:7px 10px'>Pathway</th>"
-            "<th style='padding:7px 10px'>Access</th><th style='padding:7px 10px'>Using</th><th style='padding:7px 10px'>Last login</th><th></th></tr>"
+            "<th style='padding:7px 10px'>Status</th><th style='padding:7px 10px'>Dashboard</th><th style='padding:7px 10px'>Using</th>"
+            "<th style='padding:7px 10px'>Last login</th><th style='padding:7px 10px'>Admin</th></tr>"
             + rows + "</table></div>")
 
 
