@@ -25762,6 +25762,76 @@ def ops_reports_export():
     return resp
 
 
+@app.route('/operations/payments/summary')
+@admin_required
+def ops_payment_summary_download():
+    """One-click cumulative payment summary for a pathway: ONE row per client with all
+    their payments added up (Total incl GST, Actual ex-GST, GST), next to their package
+    + balance + status + stage. Button lives on each pathway's Payments page.
+    (founder 2026-07-31)"""
+    import io
+    from decimal import Decimal
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if pathway not in {'plab', 'australia', 'uae', 'consulting', 'portfolio', 'training'}:
+        pathway = 'plab'
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT pc.registration_number AS reg, "
+            "  TRIM(COALESCE(pc.prefix,'')||' '||COALESCE(pc.first_name,'')||' '||COALESCE(pc.last_name,'')) AS name, "
+            "  pc.account_status, pc.current_stage, "
+            "  COALESCE(pc.package_amount,0) AS package, COALESCE(pc.discount_allowed,0) AS discount, "
+            "  COALESCE(SUM(op.total_amount_paid),0) AS tot, "
+            "  COALESCE(SUM(op.amount_paid),0) AS base, "
+            "  COALESCE(SUM(op.gst_paid),0) AS gst "
+            "FROM plab_clients pc "
+            "LEFT JOIN ops_payments op ON UPPER(TRIM(op.registration_number)) = UPPER(TRIM(pc.registration_number)) "
+            "  AND COALESCE(op.pathway,'plab') = ? "
+            "WHERE COALESCE(pc.pathway,'plab') = ? "
+            "GROUP BY pc.id "
+            "ORDER BY pc.first_name, pc.last_name", (pathway, pathway)).fetchall()
+    except Exception as e:
+        logging.error(f"ops_payment_summary {pathway}: {e}")
+        flash('Could not build the payment summary. Please try again.', 'error')
+        return redirect(url_for('ops_reports', pathway=pathway))
+    finally:
+        conn.close()
+
+    def _num(v):
+        try: return round(float(v or 0))
+        except (TypeError, ValueError): return 0
+    def _clean(s):
+        return ILLEGAL_CHARACTERS_RE.sub('', s) if isinstance(s, str) else (s or '')
+
+    try:
+        wb = Workbook(); ws = wb.active
+        ws.title = f"{pathway[:20]} Payment Summary"
+        header = ['Client Name', 'Registration No.', 'Account Status', 'Current Stage',
+                  'Package', 'Total received (incl GST)', 'Actual received (ex-GST)', 'GST received', 'Balance']
+        ws.append(header)
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill('solid', fgColor='1E3A5F')
+        for r in rows:
+            pkg = _num(r['package']) - _num(r['discount'])   # final package (net of discount)
+            base = _num(r['base'])                            # actual received (ex-GST)
+            balance = pkg - base                              # both ex-GST -> true amount still due
+            ws.append([_clean(r['name']), _clean(r['reg']), _clean(r['account_status']),
+                       _clean(r['current_stage']), pkg, _num(r['tot']), base, _num(r['gst']), balance])
+        out = io.BytesIO(); wb.save(out); out.seek(0)
+    except Exception as e:
+        logging.error(f"ops_payment_summary build {pathway}: {e}")
+        flash('Could not build the payment summary.', 'error')
+        return redirect(url_for('ops_reports', pathway=pathway))
+    resp = send_file(out, as_attachment=True, download_name=f"{pathway}_payment_summary.xlsx",
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
 @app.route('/operations/plab')
 @admin_required
 def ops_plab_list():
