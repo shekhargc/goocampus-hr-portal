@@ -25809,17 +25809,17 @@ def ops_payment_summary_download():
     try:
         wb = Workbook(); ws = wb.active
         ws.title = f"{pathway[:20]} Payment Summary"
-        header = ['Client Name', 'Registration No.', 'Account Status', 'Current Stage',
+        header = ['Sl. No.', 'Client Name', 'Registration No.', 'Account Status', 'Current Stage',
                   'Package', 'Total received (incl GST)', 'Actual received (ex-GST)', 'GST received', 'Balance']
         ws.append(header)
         for cell in ws[1]:
             cell.font = Font(bold=True, color='FFFFFF')
             cell.fill = PatternFill('solid', fgColor='1E3A5F')
-        for r in rows:
+        for i, r in enumerate(rows, start=1):
             pkg = _num(r['package']) - _num(r['discount'])   # final package (net of discount)
             base = _num(r['base'])                            # actual received (ex-GST)
             balance = pkg - base                              # both ex-GST -> true amount still due
-            ws.append([_clean(r['name']), _clean(r['reg']), _clean(r['account_status']),
+            ws.append([i, _clean(r['name']), _clean(r['reg']), _clean(r['account_status']),
                        _clean(r['current_stage']), pkg, _num(r['tot']), base, _num(r['gst']), balance])
         out = io.BytesIO(); wb.save(out); out.seek(0)
     except Exception as e:
