@@ -2169,7 +2169,8 @@ def staff_client_profile(reg):
         if c.get('counsellor_id'):
             e = conn.execute("SELECT name FROM employees WHERE id = ?", (c['counsellor_id'],)).fetchone()
             counsellor = e['name'] if e else ''
-        acct = conn.execute("SELECT id, email, (last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
+        acct = conn.execute("SELECT ca.id, ca.email, "
+                            "(ca.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '2 minutes') AS online "
                             "FROM client_accounts ca JOIN client_registrations cr ON cr.account_id = ca.id "
                             "WHERE cr.registration_number = ? LIMIT 1", (reg,)).fetchone()
         acad = conn.execute("SELECT ca.* FROM client_academics ca JOIN client_registrations cr ON cr.id = ca.registration_id "
