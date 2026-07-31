@@ -25596,16 +25596,20 @@ def ops_reports_export():
     # store registration_number (FK), so we join plab_clients to always show the
     # client's NAME beside it in every export (founder rule 2026-07-13).
     name_by_reg = {}
+    stat_by_reg = {}   # reg -> (account_status, current_stage) for the ops-section exports
     try:
         for nr in conn.execute(
             "SELECT registration_number, "
-            "TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm "
+            "TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS nm, "
+            "account_status, current_stage "
             "FROM plab_clients").fetchall():
             name_by_reg[nr['registration_number']] = ' '.join((nr['nm'] or '').split())
+            stat_by_reg[nr['registration_number']] = (nr['account_status'] or '', nr['current_stage'] or '')
     except Exception:
         try: conn.rollback()
         except Exception: pass
         name_by_reg = {}
+        stat_by_reg = {}
     conn.close()
 
     # Optional field selection (from the section-wise field picker): keep only
@@ -25651,14 +25655,23 @@ def ops_reports_export():
     try:
         wb = Workbook(); ws = wb.active
         ws.title = (label[:28] or 'Export')
-        header = ['Client Name', 'Registration Number'] + [c.replace('_', ' ').title() for c in data_cols]
+        # For ops section exports (e.g. Payments), also show the client's Account
+        # Status + Current Stage (from plab_clients) so reports can be read/filtered
+        # by status + stage. plab_clients already has these as its own columns.
+        add_cs = (table != 'plab_clients')
+        cs_head = ['Account Status', 'Current Stage'] if add_cs else []
+        header = ['Client Name', 'Registration Number'] + cs_head + [c.replace('_', ' ').title() for c in data_cols]
         ws.append(header)
         for cell in ws[1]:
             cell.font = Font(bold=True, color='FFFFFF')
             cell.fill = PatternFill('solid', fgColor='1E3A5F')
         for r in rows:
             reg = r['registration_number'] if 'registration_number' in r else ''
-            ws.append([_clean(_client_name(r)), _clean(reg)] + [_clean(r[c]) for c in data_cols])
+            cs_vals = []
+            if add_cs:
+                _st = stat_by_reg.get(reg, ('', ''))
+                cs_vals = [_clean(_st[0]), _clean(_st[1])]
+            ws.append([_clean(_client_name(r)), _clean(reg)] + cs_vals + [_clean(r[c]) for c in data_cols])
         if not rows:
             ws.append(['No data for this section / pathway.'])
         out = io.BytesIO(); wb.save(out); out.seek(0)
@@ -33173,7 +33186,9 @@ def sales_leads_add():
                         fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
-                    cl_close_date = datetime.now().strftime('%Y-%m-%d')
+                    # Closure date = the lead's "Closed by date" (= the client's
+                    # registration date the sales member set), not today. (founder 2026-07-31)
+                    cl_close_date = ecd or datetime.now().strftime('%Y-%m-%d')
                     cl_product_name = ''
                     cl_project_id = None
                     if product_id:
@@ -33199,6 +33214,31 @@ def sales_leads_add():
                             user['id']
                         )
                     )
+                    # Combo (AMC Consulting + Training/AMC 1): also create a SEPARATE
+                    # closure row for the Training add-on so both products show as their
+                    # own line with their own sales revenue. (founder 2026-07-31)
+                    if request.form.get('include_training') in ('on', '1', 'true', 'yes'):
+                        try:
+                            _tp = conn.execute(
+                                "SELECT id, name, project_id FROM products_services WHERE name = 'AMC MCQ' LIMIT 1").fetchone()
+                            if _tp:
+                                def _tn(nm):
+                                    try: return float(request.form.get(nm) or 0)
+                                    except ValueError: return 0.0
+                                _tr_rev, _tr_cost = _closure_revenue_cost(
+                                    conn, _tp['id'], 'AMC 1',
+                                    discount=_tn('training_discount'),
+                                    fallback_revenue=(_tn('training_final') or _tn('training_package')))
+                                conn.execute(
+                                    '''INSERT INTO sales_closures
+                                       (lead_id, employee_id, product_id, product_name, project_id,
+                                        client_name, revenue, cost, margin, currency, close_date, notes, created_by)
+                                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                    (new_lead_id, owner_id, _tp['id'], _tp['name'], _tp['project_id'],
+                                     company_new or lead_name_new, _tr_rev, _tr_cost, _tr_rev - _tr_cost,
+                                     'INR', cl_close_date, f'Auto-closure (Training add-on): {lead_name_new}', user['id']))
+                        except Exception as _tce:
+                            logging.warning(f"combo training closure failed: {_tce}")
                     # 2026-06-02: auto-generate the client invitation +
                     # send the WhatsApp link. Failure here doesn't block
                     # the lead/closure save.
@@ -33486,7 +33526,9 @@ def sales_leads_edit(lead_id):
                         fallback_revenue=(request.form.get('closure_revenue') or ev or 0))
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
-                    cl_close_date = datetime.now().strftime('%Y-%m-%d')
+                    # Closure date = the lead's "Closed by date" (client registration
+                    # date), falling back to the lead's stored value / today. (founder 2026-07-31)
+                    cl_close_date = ecd or lead['expected_close_date'] or datetime.now().strftime('%Y-%m-%d')
                     # Resolve product name and project
                     cl_product_name = ''
                     cl_project_id = None
