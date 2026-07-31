@@ -397,11 +397,6 @@
                 <span class="ops-nav-text">Dashboard Access</span>
             </a>
             {% endif %}
-            {# ─── GooCampus Ops mobile app (chat + read-only profiles) ─── #}
-            <a href="/staff/chat" class="ops-nav-item" data-tooltip="GooCampus Ops app (mobile) — chat + client profiles" target="_blank">
-                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
-                <span class="ops-nav-text">Ops App (mobile)</span>
-            </a>
             {# ─── Live client chat (shared inbox) ─── #}
             <a href="/operations/chat" class="ops-nav-item {% if active_ops_page == 'client-chat' %}active{% endif %}" data-tooltip="Client Chat" style="position:relative">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
