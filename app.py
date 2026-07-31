@@ -25680,8 +25680,10 @@ def ops_reports_export():
         flash('Could not generate that export. Please try again or pick fewer fields.', 'error')
         return redirect(url_for('ops_reports', pathway=pathway))
     fname = f"{pathway}_{table.replace('ops_', '')}.xlsx"
-    return send_file(out, as_attachment=True, download_name=fname,
+    resp = send_file(out, as_attachment=True, download_name=fname,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 @app.route('/operations/plab')
