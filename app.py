@@ -11894,18 +11894,32 @@ def _ensure_employee_onboarding(conn):
 
 
 def _next_emp_code(conn):
-    """Suggest the next sequential GC### code = highest existing GC number + 1."""
+    """Suggest the next sequential GC### code = highest existing GC number + 1.
+    Counts BOTH real employees AND pending (not-yet-approved) onboarding invites,
+    so setting up several new joiners back-to-back keeps incrementing the code
+    instead of suggesting a duplicate."""
     mx = 0
+
+    def _consider(code):
+        nonlocal mx
+        code = (code or '').strip().upper()
+        if code.startswith('GC') and code[2:].isdigit():
+            n = int(code[2:])
+            if n > mx:
+                mx = n
+
     try:
-        rows = conn.execute("SELECT emp_code FROM employees WHERE emp_code IS NOT NULL").fetchall()
-        for r in rows:
-            code = (r['emp_code'] or '').strip().upper()
-            if code.startswith('GC') and code[2:].isdigit():
-                n = int(code[2:])
-                if n > mx:
-                    mx = n
+        for r in conn.execute("SELECT emp_code FROM employees WHERE emp_code IS NOT NULL").fetchall():
+            _consider(r['emp_code'])
     except Exception as e:
-        logging.error(f"_next_emp_code: {e}")
+        logging.error(f"_next_emp_code employees: {e}")
+    try:
+        for r in conn.execute(
+                "SELECT emp_code FROM employee_onboarding WHERE status != 'cancelled' AND emp_code IS NOT NULL").fetchall():
+            _consider(r['emp_code'])
+    except Exception:
+        # employee_onboarding may not exist yet on first ever call — ignore.
+        conn.rollback()
     return f'GC{mx + 1:03d}'
 
 
