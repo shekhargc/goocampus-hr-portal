@@ -34068,6 +34068,111 @@ def sales_team_admin():
 
 
 # ---- Leads -------------------------------------------------------------
+@app.route('/admin/diag/lead-status')
+@admin_required
+def admin_diag_lead_status():
+    """Full audit trace of the client-journey signals behind a lead's Registration
+    badge. ?q=<name | phone | reg number | lead id>. No data changes."""
+    q = (request.args.get('q') or '').strip()
+    conn = get_db()
+
+    def esc(v):
+        s = '' if v is None else str(v)
+        return (s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+
+    def table(title, rows):
+        if not rows:
+            return f"<h3>{esc(title)}</h3><p style='color:#b91c1c;'>— none found —</p>"
+        cols = list(rows[0].keys())
+        head = ''.join(f"<th style='text-align:left;padding:4px 10px;border-bottom:2px solid #ddd;'>{esc(c)}</th>" for c in cols)
+        body = ''
+        for r in rows:
+            body += "<tr>" + ''.join(f"<td style='padding:4px 10px;border-bottom:1px solid #eee;'>{esc(r[c])}</td>" for c in cols) + "</tr>"
+        return f"<h3>{esc(title)}</h3><table style='border-collapse:collapse;font-size:13px;margin-bottom:18px;'><tr>{head}</tr>{body}</table>"
+
+    out = [f"<div style='font-family:system-ui;max-width:1100px;margin:30px auto;padding:0 16px;'>"
+           f"<h2>Lead journey audit</h2>"
+           f"<form method='GET'><input name='q' value='{esc(q)}' placeholder='name / phone / reg / lead id' "
+           f"style='padding:8px;width:320px;'> <button>Trace</button></form>"]
+
+    if q:
+        like = f"%{q.lower()}%"
+        # 1) Matching leads
+        leads = conn.execute(
+            "SELECT id, lead_name, phone, email, product_id, stage_id, owner_employee_id "
+            "FROM sales_leads WHERE LOWER(lead_name) LIKE ? OR phone LIKE ? OR CAST(id AS TEXT) = ? "
+            "ORDER BY id DESC LIMIT 10", (like, f"%{q}%", q)).fetchall()
+        out.append(table("sales_leads (matches)", [dict(r) for r in leads]))
+
+        # Gather candidate phones from matched leads + the raw query
+        phones = set()
+        for l in leads:
+            m = _norm_mobile10(l['phone'])
+            if m: phones.add(m)
+        qm = _norm_mobile10(q)
+        if qm: phones.add(qm)
+
+        # 2) Registrations by name / mobile / reg number
+        regs = conn.execute(
+            "SELECT id, invitation_id, registration_number, product_id, account_id, "
+            "       first_name, last_name, mobile, form_status, "
+            "       COALESCE(sales_completed,0) AS sales_completed, COALESCE(ops_status,'') AS ops_status, "
+            "       client_submitted_at, sales_completed_at, counsellor_id, counsellor_name "
+            "FROM client_registrations "
+            "WHERE LOWER(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) LIKE ? "
+            "   OR mobile LIKE ? OR LOWER(COALESCE(registration_number,'')) LIKE ? "
+            "ORDER BY id DESC LIMIT 20", (like, f"%{q}%", like)).fetchall()
+        out.append(table("client_registrations (by name / mobile / reg)", [dict(r) for r in regs]))
+
+        # 3) Invitations by mobile
+        if phones:
+            ph = ','.join(['?'] * len(phones))
+            invs = conn.execute(
+                f"SELECT id, product_id, client_name, client_mobile, client_email, status, created_at, registered_at "
+                f"FROM client_invitations WHERE client_mobile IN ({ph}) ORDER BY id DESC", list(phones)).fetchall()
+        else:
+            invs = conn.execute(
+                "SELECT id, product_id, client_name, client_mobile, status, created_at FROM client_invitations "
+                "WHERE LOWER(COALESCE(client_name,'')) LIKE ? ORDER BY id DESC LIMIT 20", (like,)).fetchall()
+        out.append(table("client_invitations (by mobile / name)", [dict(r) for r in invs]))
+
+        # 4) plab_clients master(s)
+        lead_ids = [str(l['id']) for l in leads]
+        pcs = conn.execute(
+            "SELECT id, lead_id, registration_number, pathway, account_status, "
+            "       first_name, last_name, mobile "
+            "FROM plab_clients "
+            "WHERE LOWER(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) LIKE ? "
+            "   OR mobile LIKE ? "
+            + (f"   OR lead_id IN ({','.join(['?']*len(lead_ids))}) " if lead_ids else "")
+            + "ORDER BY id DESC LIMIT 20",
+            [like, f"%{q}%"] + lead_ids).fetchall()
+        out.append(table("plab_clients (master by name / mobile / lead_id)", [dict(r) for r in pcs]))
+
+        # 5) Agreements for the found accounts
+        acct_ids = list({str(r['account_id']) for r in regs if r['account_id']})
+        if acct_ids:
+            ph = ','.join(['?'] * len(acct_ids))
+            agr = conn.execute(
+                f"SELECT account_id, agreement_type, agreed_name, created_at FROM client_agreements "
+                f"WHERE account_id IN ({ph}) ORDER BY account_id, agreement_type", acct_ids).fetchall()
+            out.append(table("client_agreements (contract / refund) for those accounts", [dict(r) for r in agr]))
+
+        # 6) Computed badge per matched lead (reuse the real function)
+        verdicts = []
+        smap = _lead_reg_status_map(conn, [dict(l) for l in leads])
+        for l in leads:
+            key = smap.get(l['id'], 'not_invited')
+            verdicts.append({'lead_id': l['id'], 'lead_name': l['lead_name'],
+                             'norm_mobile': _norm_mobile10(l['phone']), 'product_id': l['product_id'],
+                             'computed_badge': REG_STATUS_META.get(key, ('?',))[0], 'key': key})
+        out.append(table("COMPUTED BADGE (what the leads page shows)", verdicts))
+
+    conn.close()
+    out.append("</div>")
+    return "\n".join(out)
+
+
 REG_STATUS_META = {
     'not_invited': ('Not invited',            '#9ca3af'),
     'not_started': ('Invited – not started',  '#d97706'),
