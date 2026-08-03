@@ -1,0 +1,162 @@
+{% extends "hr_sidebar_base.html" %}
+
+{% block title %}Employee Onboarding - GooCampus HR{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .ob-wrap { max-width: 1150px; }
+    .ob-card { background:#fff; border:1px solid var(--gray-200); border-radius:1rem;
+        box-shadow:0 1px 4px rgba(0,0,0,.06); padding:1.75rem; margin-bottom:1.75rem; }
+    .ob-card h2 { margin:0 0 .35rem; color:#1e3a5f; font-size:1.15rem; }
+    .ob-card .sub { color:#6b7280; font-size:.85rem; margin:0 0 1.25rem; }
+    .ob-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:1rem 1.25rem; }
+    .ob-field label { display:block; font-size:.78rem; font-weight:600; color:#374151; margin-bottom:.3rem; }
+    .ob-field input, .ob-field select {
+        width:100%; padding:.6rem .7rem; border:1px solid var(--gray-300,#d1d5db);
+        border-radius:.5rem; font-size:.9rem; box-sizing:border-box; background:#fff; }
+    .ob-field .hint { font-size:.7rem; color:#9ca3af; margin-top:.25rem; }
+    .ob-actions { margin-top:1.25rem; display:flex; gap:.75rem; }
+    .btn-primary { background:#F58220; color:#fff; border:none; padding:.7rem 1.5rem; border-radius:.6rem;
+        font-weight:700; font-size:.9rem; cursor:pointer; }
+    .btn-primary:hover { background:#e0740f; }
+    .ob-table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    .ob-table th { text-align:left; padding:.6rem .7rem; color:#6b7280; font-size:.72rem; text-transform:uppercase;
+        letter-spacing:.03em; border-bottom:2px solid var(--gray-200); }
+    .ob-table td { padding:.75rem .7rem; border-bottom:1px solid var(--gray-100,#f3f4f6); vertical-align:middle; }
+    .ob-table tr:hover td { background:#fafbfc; }
+    .ob-name { font-weight:600; color:#1e3a5f; }
+    .ob-badge { display:inline-block; padding:.2rem .6rem; border-radius:999px; font-size:.72rem; font-weight:700; color:#fff; }
+    .ob-btn { display:inline-block; padding:.4rem .7rem; border-radius:.45rem; font-size:.78rem; font-weight:600;
+        text-decoration:none; border:1px solid transparent; cursor:pointer; background:none; }
+    .ob-btn-blue { background:#eff6ff; color:#2563eb; border-color:#bfdbfe; }
+    .ob-btn-grey { background:#f3f4f6; color:#374151; border-color:#e5e7eb; }
+    .ob-btn-red  { background:#fef2f2; color:#dc2626; border-color:#fecaca; }
+    .ob-empty { text-align:center; color:#9ca3af; padding:2.5rem 1rem; }
+    .ob-muted { color:#9ca3af; font-size:.8rem; }
+    .flash { padding:.8rem 1rem; border-radius:.55rem; margin-bottom:1rem; font-size:.9rem; }
+    .flash.success { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+    .flash.error { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="ob-wrap">
+    <h1 style="color:#1e3a5f; margin:0 0 .3rem;">Employee Onboarding</h1>
+    <p style="color:#6b7280; margin:0 0 1.5rem;">Enter a new hire's basics, email them a secure link, and they fill in the rest. You review &amp; approve to add them to Employees.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ 'error' if category == 'error' else 'success' }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <!-- Create -->
+    <div class="ob-card">
+        <h2>Start a new onboarding</h2>
+        <p class="sub">You fill these basics. The employee fills their personal details, experience, documents &amp; bank via the invite link.</p>
+        <form method="POST" action="/admin/onboarding">
+            <div class="ob-grid">
+                <div class="ob-field">
+                    <label>Employee Name *</label>
+                    <input type="text" name="name" required placeholder="e.g. Priya Sharma">
+                </div>
+                <div class="ob-field">
+                    <label>Email ID *</label>
+                    <input type="email" name="email" required placeholder="name@example.com">
+                    <div class="hint">The invite link is sent here.</div>
+                </div>
+                <div class="ob-field">
+                    <label>Employee Code *</label>
+                    <input type="text" name="emp_code" value="{{ suggested_code }}" required>
+                    <div class="hint">Auto-suggested next code — edit if needed.</div>
+                </div>
+                <div class="ob-field">
+                    <label>Joining Date</label>
+                    <input type="date" name="joining_date">
+                </div>
+                <div class="ob-field">
+                    <label>Designation</label>
+                    <input type="text" name="designation" placeholder="e.g. Sales Associate">
+                </div>
+                <div class="ob-field">
+                    <label>Department</label>
+                    <select name="department">
+                        <option value="">— Select —</option>
+                        {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="ob-field">
+                    <label>Reporting Person</label>
+                    <select name="reporting_to">
+                        <option value="">— Select —</option>
+                        {% for m in managers %}<option value="{{ m.id }}">{{ m.name }}{% if m.emp_code %} ({{ m.emp_code }}){% endif %}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="ob-field">
+                    <label>Official Number</label>
+                    <input type="text" name="official_number" placeholder="e.g. +91 90000 00000">
+                </div>
+            </div>
+            <div class="ob-actions">
+                <button type="submit" class="btn-primary">Create Onboarding</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- List -->
+    <div class="ob-card">
+        <h2>Onboardings</h2>
+        <p class="sub">{{ records|length }} record{{ '' if records|length == 1 else 's' }}.</p>
+        {% if records %}
+        <div style="overflow-x:auto;">
+        <table class="ob-table">
+            <thead><tr>
+                <th>Name</th><th>Code</th><th>Role</th><th>Status</th><th>Invited</th><th style="text-align:right;">Actions</th>
+            </tr></thead>
+            <tbody>
+            {% for r in records %}
+                <tr>
+                    <td>
+                        <div class="ob-name">{{ r.name }}</div>
+                        <div class="ob-muted">{{ r.email }}</div>
+                    </td>
+                    <td>{{ r.emp_code }}</td>
+                    <td>
+                        {{ r.designation or '—' }}
+                        {% if r.department %}<div class="ob-muted">{{ r.department }}</div>{% endif %}
+                    </td>
+                    <td><span class="ob-badge" style="background:{{ r.status_color }};">{{ r.status_label }}</span></td>
+                    <td class="ob-muted">{{ r.invited_at|format_date }}</td>
+                    <td style="text-align:right; white-space:nowrap;">
+                        {% if r.status not in ['completed','cancelled'] %}
+                        <form method="POST" action="/admin/onboarding/{{ r.id }}/send-invite" style="display:inline;">
+                            <button type="submit" class="ob-btn ob-btn-blue">{{ 'Re-send Invite' if r.invited_at else 'Send Invite' }}</button>
+                        </form>
+                        {% endif %}
+                        <a href="/admin/onboarding/{{ r.id }}" class="ob-btn ob-btn-grey">View</a>
+                        <button type="button" class="ob-btn ob-btn-grey" onclick="copyLink('{{ r.token }}')">Copy Link</button>
+                        <form method="POST" action="/admin/onboarding/{{ r.id }}/delete" style="display:inline;"
+                              onsubmit="return confirm('Permanently DELETE onboarding for {{ r.name }}{% if r.employee_id %} and its employee profile{% endif %}? This cannot be undone.');">
+                            <button type="submit" class="ob-btn ob-btn-red">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="ob-empty">No onboardings yet. Create one above to get started.</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function copyLink(token){
+    var url = window.location.origin + '/onboarding/' + token;
+    navigator.clipboard.writeText(url).then(function(){
+        alert('Onboarding link copied:\n' + url);
+    }, function(){ prompt('Copy this link:', url); });
+}
+</script>
+{% endblock %}

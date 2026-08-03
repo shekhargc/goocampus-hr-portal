@@ -1,0 +1,184 @@
+{% extends "hr_sidebar_base.html" %}
+
+{% block title %}{{ o.name }} — Onboarding Review{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .obd-wrap { max-width: 950px; }
+    .obd-top { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.25rem; flex-wrap:wrap; }
+    .obd-back { color:#6b7280; text-decoration:none; font-size:.85rem; }
+    .obd-badge { display:inline-block; padding:.25rem .7rem; border-radius:999px; font-size:.75rem; font-weight:700; color:#fff; }
+    .obd-card { background:#fff; border:1px solid var(--gray-200); border-radius:1rem;
+        box-shadow:0 1px 4px rgba(0,0,0,.06); padding:1.5rem 1.75rem; margin-bottom:1.5rem; }
+    .obd-card h3 { margin:0 0 1rem; color:#1e3a5f; font-size:1.02rem; border-bottom:1px solid var(--gray-100,#f3f4f6); padding-bottom:.6rem; }
+    .obd-dl { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.9rem 1.5rem; }
+    .obd-dl .k { font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; color:#9ca3af; margin-bottom:.15rem; }
+    .obd-dl .v { font-size:.92rem; color:#1f2937; font-weight:500; }
+    .exp-row { border:1px solid var(--gray-200); border-radius:.7rem; padding:1rem 1.15rem; margin-bottom:.9rem; }
+    .exp-row .hd { font-weight:700; color:#1e3a5f; }
+    .exp-row .meta { font-size:.8rem; color:#6b7280; margin:.15rem 0 .5rem; }
+    .exp-row .desc { font-size:.88rem; color:#374151; white-space:pre-wrap; }
+    .doc-item { display:flex; align-items:center; justify-content:space-between; gap:1rem;
+        padding:.65rem .8rem; border:1px solid var(--gray-200); border-radius:.6rem; margin-bottom:.55rem; }
+    .doc-item .nm { font-weight:600; color:#1f2937; font-size:.9rem; }
+    .doc-item .fn { font-size:.75rem; color:#9ca3af; }
+    .doc-dl { background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; padding:.4rem .8rem; border-radius:.45rem;
+        font-size:.8rem; font-weight:600; text-decoration:none; white-space:nowrap; }
+    .btn-approve { background:#16a34a; color:#fff; border:none; padding:.8rem 1.8rem; border-radius:.6rem;
+        font-weight:700; font-size:.95rem; cursor:pointer; }
+    .btn-approve:hover { background:#15803d; }
+    .btn-cancel { background:#fff; color:#dc2626; border:1px solid #fecaca; padding:.8rem 1.5rem; border-radius:.6rem;
+        font-weight:600; font-size:.9rem; cursor:pointer; }
+    .btn-announce { background:#1e3a5f; color:#fff; border:none; padding:.8rem 1.5rem; border-radius:.6rem;
+        font-weight:700; font-size:.9rem; cursor:pointer; }
+    .btn-announce:hover { background:#16304f; }
+    .obd-note { background:#f0f6ff; border-left:4px solid #1e3a5f; padding:.8rem 1rem; border-radius:.4rem;
+        font-size:.85rem; color:#374151; margin-bottom:1.25rem; }
+    .obd-none { color:#9ca3af; font-size:.88rem; }
+    .flash { padding:.8rem 1rem; border-radius:.55rem; margin-bottom:1rem; font-size:.9rem; }
+    .flash.success { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+    .flash.error { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+    .link-box { background:#f9fafb; border:1px dashed #d1d5db; border-radius:.5rem; padding:.6rem .8rem;
+        font-size:.8rem; color:#4b5563; word-break:break-all; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="obd-wrap">
+    <a href="/admin/onboarding" class="obd-back">&larr; Back to Onboarding</a>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ 'error' if category == 'error' else 'success' }}" style="margin-top:1rem;">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="obd-top">
+        <div>
+            <h1 style="color:#1e3a5f; margin:.5rem 0 .3rem;">{{ o.name }}</h1>
+            <div style="color:#6b7280;">{{ o.emp_code }} &middot; {{ o.designation or 'Role not set' }}{% if o.department %} &middot; {{ o.department }}{% endif %}</div>
+        </div>
+        <span class="obd-badge" style="background:{{ o.status_color }};">{{ o.status_label }}</span>
+    </div>
+
+    {% if o.status in ['created','invited','in_progress'] %}
+    <div class="obd-note">
+        {% if o.status == 'created' %}This employee hasn't been invited yet. Go back and click <strong>Send Invite</strong>.
+        {% elif o.status == 'invited' %}Invite sent — waiting for {{ o.name }} to open and fill the form.
+        {% else %}{{ o.name }} has started filling the form but hasn't submitted yet. You'll be able to approve once they submit.{% endif %}
+        <div class="link-box" style="margin-top:.6rem;">{{ public_link }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Basics (HR-entered) -->
+    <div class="obd-card">
+        <h3>Basics (entered by HR)</h3>
+        <div class="obd-dl">
+            <div><div class="k">Email</div><div class="v">{{ o.email or '—' }}</div></div>
+            <div><div class="k">Employee Code</div><div class="v">{{ o.emp_code or '—' }}</div></div>
+            <div><div class="k">Joining Date</div><div class="v">{{ o.joining_date|format_date }}</div></div>
+            <div><div class="k">Designation</div><div class="v">{{ o.designation or '—' }}</div></div>
+            <div><div class="k">Department</div><div class="v">{{ o.department or '—' }}</div></div>
+            <div><div class="k">Reporting Person</div><div class="v">{{ o.reporting_name or '—' }}</div></div>
+            <div><div class="k">Official Number</div><div class="v">{{ o.official_number or '—' }}</div></div>
+        </div>
+    </div>
+
+    <!-- Personal (employee-filled) -->
+    <div class="obd-card">
+        <h3>Personal Details</h3>
+        <div class="obd-dl">
+            <div><div class="k">Date of Birth</div><div class="v">{{ o.dob|format_date }}</div></div>
+            <div><div class="k">Blood Group</div><div class="v">{{ o.blood_group or '—' }}</div></div>
+            <div><div class="k">Personal Phone</div><div class="v">{{ o.personal_phone or '—' }}</div></div>
+            <div style="grid-column:1/-1;"><div class="k">Address</div><div class="v">{{ o.address or '—' }}</div></div>
+            <div><div class="k">Emergency Contact</div><div class="v">{{ o.emergency_contact_name or '—' }}</div></div>
+            <div><div class="k">Emergency Number</div><div class="v">{{ o.emergency_contact_phone or '—' }}</div></div>
+            <div><div class="k">Relation</div><div class="v">{{ o.emergency_contact_relation or '—' }}</div></div>
+            <div style="grid-column:1/-1;"><div class="k">Hobbies</div><div class="v">{{ o.hobbies or '—' }}</div></div>
+        </div>
+    </div>
+
+    <!-- Experience -->
+    <div class="obd-card">
+        <h3>Internship / Work Experience</h3>
+        {% if experience %}
+            {% for e in experience %}
+            <div class="exp-row">
+                <div class="hd">{{ e.designation or 'Role' }}{% if e.company_name %} &middot; {{ e.company_name }}{% endif %}</div>
+                <div class="meta">
+                    {{ e.from_date|format_date }} — {{ e.to_date|format_date }}{% if e.location %} &middot; {{ e.location }}{% endif %}
+                </div>
+                {% if e.role_description %}<div class="desc">{{ e.role_description }}</div>{% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="obd-none">None added.</div>
+        {% endif %}
+    </div>
+
+    <!-- Documents -->
+    <div class="obd-card">
+        <h3>Documents</h3>
+        {% if documents %}
+            {% for d in documents %}
+            <div class="doc-item">
+                <div>
+                    <div class="nm">{{ doc_labels.get(d.doc_type) or d.doc_name or d.doc_type }}{% if d.doc_type == 'other' and d.doc_name %} — {{ d.doc_name }}{% endif %}</div>
+                    <div class="fn">{{ d.filename }}</div>
+                </div>
+                <a href="/admin/onboarding/doc/{{ d.id }}" class="doc-dl" target="_blank">Download</a>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="obd-none">No documents uploaded.</div>
+        {% endif %}
+    </div>
+
+    <!-- Bank -->
+    <div class="obd-card">
+        <h3>Bank Account Details</h3>
+        <div class="obd-dl">
+            <div><div class="k">Bank Name</div><div class="v">{{ o.bank_name or '—' }}</div></div>
+            <div><div class="k">Branch</div><div class="v">{{ o.bank_branch or '—' }}</div></div>
+            <div><div class="k">Account Name</div><div class="v">{{ o.bank_account_name or '—' }}</div></div>
+            <div><div class="k">Account Number</div><div class="v">{{ o.bank_account_number or '—' }}</div></div>
+            <div><div class="k">IFSC Code</div><div class="v">{{ o.bank_ifsc or '—' }}</div></div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="obd-card" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+        {% if o.status == 'completed' %}
+            <div style="color:#16a34a; font-weight:700;">✓ Approved — added to Employees{% if o.approved_at %} on {{ o.approved_at|format_date }}{% endif %}.</div>
+            <form method="POST" action="/admin/onboarding/{{ o.id }}/announce"
+                  onsubmit="return confirm('Send the welcome announcement about {{ o.name }} to ALL {{ active_emp_count }} active employees (plus {{ o.name }})?\n\nThis emails the whole team — only do this for a real new joiner, not a test.');">
+                <button type="submit" class="btn-announce">📣 Send Welcome Announcement to Team</button>
+            </form>
+            <span style="color:#6b7280; font-size:.85rem;">Emails all {{ active_emp_count }} active employees to introduce {{ o.name.split(' ')[0] if o.name else 'them' }}.</span>
+        {% elif o.status == 'submitted' %}
+            <form method="POST" action="/admin/onboarding/{{ o.id }}/approve" onsubmit="return confirm('Approve {{ o.name }} and add them to Employees (code {{ o.emp_code }})?');">
+                <button type="submit" class="btn-approve">✓ Approve &amp; Add to Employees</button>
+            </form>
+            <span style="color:#6b7280; font-size:.85rem;">Creates the employee record with a default login (code + first name).</span>
+        {% else %}
+            <span style="color:#9ca3af;">Approval becomes available once the employee submits their form.</span>
+        {% endif %}
+        {% if o.status not in ['completed','cancelled'] %}
+        <form method="POST" action="/admin/onboarding/{{ o.id }}/cancel" style="margin-left:auto;" onsubmit="return confirm('Cancel this onboarding?');">
+            <button type="submit" class="btn-cancel">Cancel Onboarding</button>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- Danger zone -->
+    <div class="obd-card" style="border-color:#fecaca;">
+        <h3 style="color:#b91c1c;border-color:#fee2e2;">Delete</h3>
+        <p style="color:#6b7280;font-size:.85rem;margin:0 0 1rem;">Permanently removes this onboarding record and its uploaded documents. If it created an employee with no linked history (e.g. a test profile), that employee is deleted too; otherwise the employee is only deactivated to protect real records.</p>
+        <form method="POST" action="/admin/onboarding/{{ o.id }}/delete"
+              onsubmit="return confirm('Permanently DELETE this onboarding for {{ o.name }}{% if o.employee_id %} and its employee profile{% endif %}?\n\nThis cannot be undone.');">
+            <button type="submit" class="btn-cancel">Delete Onboarding{% if o.employee_id %} + Employee{% endif %}</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

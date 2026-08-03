@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GooCampus Onboarding</title>
+<style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+        background:#f1f4f8; color:#1f2937; line-height:1.5; }
+    .topbar { background:#1e3a5f; padding:18px 16px; text-align:center; }
+    .topbar h1 { color:#fff; margin:0; font-size:20px; letter-spacing:.3px; }
+    .topbar .tag { color:#cbd5e1; font-size:12px; margin-top:2px; }
+    .wrap { max-width:760px; margin:0 auto; padding:20px 14px 60px; }
+    .card { background:#fff; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:22px; margin-bottom:18px; }
+    .card h2 { margin:0 0 4px; color:#1e3a5f; font-size:17px; }
+    .card .sub { color:#6b7280; font-size:13px; margin:0 0 18px; }
+    .banner { background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:14px 16px; margin-bottom:18px; }
+    .banner .k { font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#9a6a3a; }
+    .banner .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 18px; margin-top:6px; }
+    .banner .v { font-weight:700; color:#1e3a5f; font-size:14px; }
+    .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px 16px; }
+    .fld { display:flex; flex-direction:column; }
+    .fld.full { grid-column:1/-1; }
+    label { font-size:12.5px; font-weight:600; color:#374151; margin-bottom:5px; }
+    label .req { color:#dc2626; }
+    input, select, textarea { width:100%; padding:11px 12px; border:1px solid #d1d5db; border-radius:9px;
+        font-size:16px; background:#fff; color:#1f2937; font-family:inherit; }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:#F58220; box-shadow:0 0 0 3px rgba(245,130,32,.12); }
+    textarea { resize:vertical; min-height:70px; }
+    .exp-block { border:1px solid #e5e7eb; border-radius:11px; padding:16px; margin-bottom:14px; position:relative; background:#fcfcfd; }
+    .exp-block .del { position:absolute; top:10px; right:10px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca;
+        border-radius:7px; padding:4px 9px; font-size:12px; cursor:pointer; }
+    .addbtn { background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; border-radius:9px; padding:10px 16px;
+        font-size:13.5px; font-weight:600; cursor:pointer; }
+    .doc-fixed { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px 16px; }
+    .doc-have { font-size:12px; color:#16a34a; margin-top:5px; }
+    .file-hint { font-size:11px; color:#9ca3af; margin-top:4px; }
+    .actions { display:flex; gap:12px; flex-wrap:wrap; }
+    .btn-submit { background:#F58220; color:#fff; border:none; padding:14px 30px; border-radius:10px;
+        font-weight:700; font-size:15px; cursor:pointer; flex:1; min-width:180px; }
+    .btn-submit:hover { background:#e0740f; }
+    .btn-save { background:#fff; color:#1e3a5f; border:1.5px solid #1e3a5f; padding:14px 22px; border-radius:10px;
+        font-weight:600; font-size:14px; cursor:pointer; }
+    .flash { padding:12px 15px; border-radius:9px; margin-bottom:16px; font-size:14px; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+    .state { max-width:520px; margin:60px auto; text-align:center; padding:0 20px; }
+    .state .big { font-size:46px; margin-bottom:10px; }
+    .state h2 { color:#1e3a5f; margin:0 0 8px; }
+    .state p { color:#6b7280; }
+</style>
+</head>
+<body>
+<div class="topbar">
+    <h1>GooCampus Edu Solutions</h1>
+    <div class="tag">Employee Onboarding</div>
+</div>
+
+{% if not_found %}
+    <div class="state">
+        <div class="big">🔗</div>
+        <h2>Link not found</h2>
+        <p>This onboarding link is invalid or has expired. Please contact the GooCampus HR team.</p>
+    </div>
+{% elif cancelled %}
+    <div class="state">
+        <div class="big">⚠️</div>
+        <h2>Onboarding cancelled</h2>
+        <p>This onboarding has been cancelled. Please contact the GooCampus HR team if you think this is a mistake.</p>
+    </div>
+{% elif already %}
+    <div class="state">
+        <div class="big">✅</div>
+        <h2>Thank you, {{ o.name.split(' ')[0] if o.name else 'there' }}!</h2>
+        <p>Your onboarding details have been submitted successfully. Our HR team will review them and get back to you. There's nothing more you need to do right now.</p>
+    </div>
+{% else %}
+<form method="POST" action="/onboarding/{{ o.token }}" enctype="multipart/form-data" class="wrap" id="obform">
+
+    {% with messages = get_flashed_messages() %}
+      {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+    {% endwith %}
+
+    <!-- Read-only basics -->
+    <div class="banner">
+        <div class="k">You are onboarding as</div>
+        <div class="grid">
+            <div><div class="v">{{ o.name }}</div><div style="font-size:11px;color:#9a6a3a;">{{ o.emp_code }}</div></div>
+            {% if o.designation %}<div><div class="v">{{ o.designation }}</div><div style="font-size:11px;color:#9a6a3a;">Designation</div></div>{% endif %}
+            {% if o.department %}<div><div class="v">{{ o.department }}</div><div style="font-size:11px;color:#9a6a3a;">Department</div></div>{% endif %}
+            {% if reporting_name %}<div><div class="v">{{ reporting_name }}</div><div style="font-size:11px;color:#9a6a3a;">Reporting to</div></div>{% endif %}
+            {% if o.joining_date %}<div><div class="v">{{ o.joining_date|format_date }}</div><div style="font-size:11px;color:#9a6a3a;">Joining date</div></div>{% endif %}
+        </div>
+    </div>
+
+    <p style="color:#6b7280;font-size:13.5px;margin:0 0 18px;">Please fill in the details below. You can <strong>Save</strong> and come back anytime using the same link, or <strong>Submit</strong> when you're done.</p>
+
+    <!-- Personal -->
+    <div class="card">
+        <h2>Personal Details</h2>
+        <p class="sub">Basic personal information for our records.</p>
+        <div class="row">
+            <div class="fld"><label>Date of Birth</label><input type="date" name="dob" value="{{ o.dob or '' }}"></div>
+            <div class="fld"><label>Blood Group</label>
+                <select name="blood_group">
+                    <option value="">— Select —</option>
+                    {% for bg in ['A+','A-','B+','B-','O+','O-','AB+','AB-'] %}
+                    <option value="{{ bg }}" {{ 'selected' if o.blood_group == bg else '' }}>{{ bg }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fld"><label>Personal Phone</label><input type="text" name="personal_phone" value="{{ o.personal_phone or '' }}" placeholder="Your mobile number"></div>
+            <div class="fld full"><label>Address</label><textarea name="address" placeholder="Current residential address">{{ o.address or '' }}</textarea></div>
+        </div>
+    </div>
+
+    <!-- Emergency -->
+    <div class="card">
+        <h2>Emergency Contact</h2>
+        <p class="sub">Someone we can reach in case of an emergency.</p>
+        <div class="row">
+            <div class="fld"><label>Contact Name</label><input type="text" name="emergency_contact_name" value="{{ o.emergency_contact_name or '' }}"></div>
+            <div class="fld"><label>Contact Number</label><input type="text" name="emergency_contact_phone" value="{{ o.emergency_contact_phone or '' }}"></div>
+            <div class="fld"><label>Relationship</label><input type="text" name="emergency_contact_relation" value="{{ o.emergency_contact_relation or '' }}" placeholder="e.g. Father, Spouse"></div>
+        </div>
+    </div>
+
+    <!-- Experience -->
+    <div class="card">
+        <h2>Internship / Work Experience</h2>
+        <p class="sub">Add any previous work or internships. Leave blank if this is your first job.</p>
+        <div id="expList">
+            {% set exp_rows = experience if experience else [ {} ] %}
+            {% for e in exp_rows %}
+            <div class="exp-block">
+                <button type="button" class="del" onclick="delExp(this)">Remove</button>
+                <div class="row">
+                    <div class="fld"><label>Company Name</label><input type="text" name="exp_company" value="{{ e.company_name or '' }}"></div>
+                    <div class="fld"><label>Designation</label><input type="text" name="exp_designation" value="{{ e.designation or '' }}"></div>
+                    <div class="fld"><label>From Date</label><input type="date" name="exp_from" value="{{ e.from_date or '' }}"></div>
+                    <div class="fld"><label>To Date</label><input type="date" name="exp_to" value="{{ e.to_date or '' }}"></div>
+                    <div class="fld"><label>Location</label><input type="text" name="exp_location" value="{{ e.location or '' }}"></div>
+                    <div class="fld full"><label>Work Role Description</label><textarea name="exp_role">{{ e.role_description or '' }}</textarea></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="button" class="addbtn" onclick="addExp()">+ Add Experience</button>
+    </div>
+
+    <!-- Hobbies -->
+    <div class="card">
+        <h2>Hobbies &amp; Interests</h2>
+        <p class="sub">Tell us a little about what you enjoy.</p>
+        <div class="fld"><textarea name="hobbies" placeholder="e.g. Reading, cricket, painting…">{{ o.hobbies or '' }}</textarea></div>
+    </div>
+
+    <!-- Documents -->
+    <div class="card">
+        <h2>Documents</h2>
+        <p class="sub">Upload clear photos or PDFs. If you've already uploaded one, re-uploading replaces it.</p>
+        {% set have = {} %}
+        {% for d in documents %}{% if d.doc_type != 'other' %}{% set _ = have.update({d.doc_type: d.filename}) %}{% endif %}{% endfor %}
+        <div class="doc-fixed">
+            {% for key, label in doc_types %}
+            <div class="fld">
+                <label>{{ label }}</label>
+                <input type="file" name="doc_{{ key }}" accept=".pdf,.jpg,.jpeg,.png">
+                {% if have.get(key) %}<div class="doc-have">✓ Uploaded: {{ have.get(key) }}</div>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div style="margin-top:18px;">
+            <label style="display:block;margin-bottom:8px;">Other Certificates</label>
+            {% set other_docs = [] %}
+            {% for d in documents %}{% if d.doc_type == 'other' %}{% set _ = other_docs.append(d) %}{% endif %}{% endfor %}
+            {% if other_docs %}
+                <div style="margin-bottom:10px;">
+                {% for d in other_docs %}<div class="doc-have">✓ {{ d.doc_name or 'Certificate' }} — {{ d.filename }}</div>{% endfor %}
+                </div>
+            {% endif %}
+            <div id="otherList"></div>
+            <button type="button" class="addbtn" onclick="addOther()">+ Add Certificate</button>
+        </div>
+    </div>
+
+    <!-- Bank -->
+    <div class="card">
+        <h2>Bank Account Details</h2>
+        <p class="sub">Used for salary payments. Please double-check the account number and IFSC.</p>
+        <div class="row">
+            <div class="fld"><label>Bank Name</label><input type="text" name="bank_name" value="{{ o.bank_name or '' }}"></div>
+            <div class="fld"><label>Branch Name</label><input type="text" name="bank_branch" value="{{ o.bank_branch or '' }}"></div>
+            <div class="fld"><label>Account Holder Name</label><input type="text" name="bank_account_name" value="{{ o.bank_account_name or '' }}"></div>
+            <div class="fld"><label>Account Number</label><input type="text" name="bank_account_number" value="{{ o.bank_account_number or '' }}"></div>
+            <div class="fld"><label>IFSC Code</label><input type="text" name="bank_ifsc" value="{{ o.bank_ifsc or '' }}" style="text-transform:uppercase;"></div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button type="submit" name="action" value="save" class="btn-save">Save &amp; Finish Later</button>
+        <button type="submit" name="action" value="submit" class="btn-submit" onclick="return confirm('Submit your onboarding details for review? You won\'t be able to edit after this.');">Submit for Review</button>
+    </div>
+</form>
+
+<script>
+function delExp(btn){
+    var list = document.getElementById('expList');
+    if (list.querySelectorAll('.exp-block').length <= 1){
+        btn.closest('.exp-block').querySelectorAll('input,textarea').forEach(function(f){ f.value=''; });
+        return;
+    }
+    btn.closest('.exp-block').remove();
+}
+function addExp(){
+    var list = document.getElementById('expList');
+    var b = list.querySelector('.exp-block').cloneNode(true);
+    b.querySelectorAll('input,textarea').forEach(function(f){ f.value=''; });
+    list.appendChild(b);
+}
+function addOther(){
+    var list = document.getElementById('otherList');
+    var div = document.createElement('div');
+    div.className = 'exp-block';
+    div.innerHTML = '<button type="button" class="del" onclick="this.closest(\'.exp-block\').remove()">Remove</button>'
+        + '<div class="row"><div class="fld"><label>Certificate Name</label><input type="text" name="doc_other_name" placeholder="e.g. IELTS Certificate"></div>'
+        + '<div class="fld"><label>File</label><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div></div>';
+    list.appendChild(div);
+}
+</script>
+{% endif %}
+</body>
+</html>

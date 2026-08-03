@@ -133,6 +133,61 @@
             <input type="text" id="emergency_contact_relation" name="emergency_contact_relation" value="{{ employee.emergency_contact_relation or '' }}">
         </div>
 
+        <!-- Additional Details -->
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Additional Details</h2>
+        <div style="display:flex; gap:2rem;">
+            <div style="flex:1;">
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label for="blood_group">Blood Group</label>
+                    <select id="blood_group" name="blood_group">
+                        <option value="">— Select —</option>
+                        {% for bg in ['A+','A-','B+','B-','O+','O-','AB+','AB-'] %}
+                        <option value="{{ bg }}" {% if employee.blood_group == bg %}selected{% endif %}>{{ bg }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="flex:1;">
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label for="official_number">Official Number</label>
+                    <input type="text" id="official_number" name="official_number" value="{{ employee.official_number or '' }}">
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="hobbies">Hobbies &amp; Interests</label>
+            <textarea id="hobbies" name="hobbies">{{ employee.hobbies or '' }}</textarea>
+        </div>
+
+        <!-- Bank Account Details -->
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Bank Account Details</h2>
+        <div class="form-group"><label for="bank_name">Bank Name</label><input type="text" id="bank_name" name="bank_name" value="{{ employee.bank_name or '' }}"></div>
+        <div class="form-group"><label for="bank_branch">Branch Name</label><input type="text" id="bank_branch" name="bank_branch" value="{{ employee.bank_branch or '' }}"></div>
+        <div class="form-group"><label for="bank_account_name">Account Holder Name</label><input type="text" id="bank_account_name" name="bank_account_name" value="{{ employee.bank_account_name or '' }}"></div>
+        <div class="form-group"><label for="bank_account_number">Account Number</label><input type="text" id="bank_account_number" name="bank_account_number" value="{{ employee.bank_account_number or '' }}"></div>
+        <div class="form-group"><label for="bank_ifsc">IFSC Code</label><input type="text" id="bank_ifsc" name="bank_ifsc" value="{{ employee.bank_ifsc or '' }}" style="text-transform:uppercase;"></div>
+
+        <!-- Work Experience -->
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1rem; font-size: 1.2rem; color: var(--navy);">Internship / Work Experience</h2>
+        <div id="expList">
+            {% set exp_rows = experience if experience else [ {} ] %}
+            {% for e in exp_rows %}
+            <div class="exp-block" style="border:1px solid var(--gray-200);border-radius:.6rem;padding:1rem;margin-bottom:1rem;position:relative;">
+                <button type="button" onclick="delExp(this)" style="position:absolute;top:.6rem;right:.6rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:.4rem;padding:.25rem .6rem;font-size:.8rem;cursor:pointer;">Remove</button>
+                <div style="display:flex;gap:1rem;">
+                    <div class="form-group" style="flex:1;"><label>Company Name</label><input type="text" name="exp_company" value="{{ e.company_name or '' }}"></div>
+                    <div class="form-group" style="flex:1;"><label>Designation</label><input type="text" name="exp_designation" value="{{ e.designation or '' }}"></div>
+                </div>
+                <div style="display:flex;gap:1rem;">
+                    <div class="form-group" style="flex:1;"><label>From Date</label><input type="date" name="exp_from" value="{{ e.from_date or '' }}"></div>
+                    <div class="form-group" style="flex:1;"><label>To Date</label><input type="date" name="exp_to" value="{{ e.to_date or '' }}"></div>
+                    <div class="form-group" style="flex:1;"><label>Location</label><input type="text" name="exp_location" value="{{ e.location or '' }}"></div>
+                </div>
+                <div class="form-group"><label>Work Role Description</label><textarea name="exp_role">{{ e.role_description or '' }}</textarea></div>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="button" onclick="addExp()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.6rem 1.1rem;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Experience</button>
+
         <!-- Employment Status & Exit (Phase B) -->
         <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Employment Status &amp; Exit</h2>
         {# is_active is the source of truth: an ACTIVE employee always shows Active,
@@ -177,6 +232,70 @@
         var v = document.getElementById('employment_status').value;
         document.getElementById('exitFields').style.display = (v === 'active') ? 'none' : 'block';
     }
+    function delExp(btn){
+        var list = document.getElementById('expList');
+        if (list.querySelectorAll('.exp-block').length <= 1){
+            btn.closest('.exp-block').querySelectorAll('input,textarea').forEach(function(f){ f.value=''; });
+            return;
+        }
+        btn.closest('.exp-block').remove();
+    }
+    function addExp(){
+        var list = document.getElementById('expList');
+        var b = list.querySelector('.exp-block').cloneNode(true);
+        b.querySelectorAll('input,textarea').forEach(function(f){ f.value=''; });
+        list.appendChild(b);
+    }
+    function addEmpOther(){
+        var list = document.getElementById('empOtherList');
+        var div = document.createElement('div');
+        div.style.cssText = 'display:flex;gap:1rem;margin-bottom:.75rem;';
+        div.innerHTML = '<div class="form-group" style="flex:1;margin-bottom:0;"><input type="text" name="doc_other_name" placeholder="Certificate name"></div>'
+            + '<div class="form-group" style="flex:1;margin-bottom:0;"><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div>';
+        list.appendChild(div);
+    }
     </script>
+</div>
+
+<!-- Documents -->
+<div class="card" id="documents" style="max-width: 700px; margin-bottom: 3rem;">
+    <h2 class="card-title">Documents</h2>
+    {% if documents %}
+    <div style="margin-bottom:1.5rem;">
+        {% for d in documents %}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.6rem .8rem;border:1px solid var(--gray-200);border-radius:.5rem;margin-bottom:.5rem;">
+            <div>
+                <div style="font-weight:600;color:var(--gray-800);">{{ doc_labels.get(d.doc_type) or d.doc_name or d.doc_type }}{% if d.doc_type == 'other' and d.doc_name %} — {{ d.doc_name }}{% endif %}</div>
+                <div style="font-size:.75rem;color:var(--gray-400);">{{ d.filename }}</div>
+            </div>
+            <div style="display:flex;gap:.5rem;">
+                <a href="/admin/employee/{{ employee.id }}/doc/{{ d.id }}" target="_blank" class="button button-small button-secondary">View</a>
+                <form method="POST" action="/admin/employee/{{ employee.id }}/doc/{{ d.id }}/delete" onsubmit="return confirm('Delete this document?');">
+                    <button type="submit" class="button button-small button-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/admin/employee/{{ employee.id }}/docs/upload" enctype="multipart/form-data">
+        <p style="color:var(--gray-500);font-size:.9rem;margin:0 0 1rem;">Upload a document to replace/add. Re-uploading a fixed type replaces the old one.</p>
+        {% for key, label in doc_types %}
+        <div class="form-group">
+            <label>{{ label }}</label>
+            <input type="file" name="doc_{{ key }}" accept=".pdf,.jpg,.jpeg,.png">
+        </div>
+        {% endfor %}
+        <label style="display:block;font-weight:600;margin:1rem 0 .5rem;">Other Certificates</label>
+        <div id="empOtherList">
+            <div style="display:flex;gap:1rem;margin-bottom:.75rem;">
+                <div class="form-group" style="flex:1;margin-bottom:0;"><input type="text" name="doc_other_name" placeholder="Certificate name"></div>
+                <div class="form-group" style="flex:1;margin-bottom:0;"><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div>
+            </div>
+        </div>
+        <button type="button" onclick="addEmpOther()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.5rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Another</button>
+        <div><button type="submit" class="button">Upload Document(s)</button></div>
+    </form>
 </div>
 {% endblock %}
