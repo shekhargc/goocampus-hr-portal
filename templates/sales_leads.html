@@ -40,6 +40,10 @@
             <option value="">All owners</option>
             {% for o in owners %}<option value="{{ o.id }}" {% if f_owner == o.id|string %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
         </select>
+        <select name="regstatus" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            <option value="">All registration status</option>
+            {% for k in (reg_status_order or []) %}<option value="{{ k }}" {% if f_regstatus == k %}selected{% endif %}>{{ reg_status_meta[k][0] }}{% if reg_counts and reg_counts.get(k) is not none %} ({{ reg_counts[k] }}){% endif %}</option>{% endfor %}
+        </select>
         <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;color:var(--gray-700);font-weight:600;">
             <input type="checkbox" name="hot" value="1" {% if f_hot == '1' %}checked{% endif %} /> Hot only
         </label>
@@ -54,6 +58,7 @@
                 <tr style="background:var(--gray-50);text-align:left;">
                     <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Lead</th>
                     <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Stage</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Registration</th>
                     <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Owner</th>
                     <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Product</th>
                     <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Value</th>
@@ -71,6 +76,9 @@
                     </td>
                     <td style="padding:0.7rem 0.6rem;">
                         {% if l.stage_name %}<span style="background:{{ l.stage_color or '#3b82f6' }}22;color:{{ l.stage_color or '#3b82f6' }};padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.74rem;font-weight:700;">{{ l.stage_name }}</span>{% else %}<span style="color:var(--gray-400);">—</span>{% endif %}
+                    </td>
+                    <td style="padding:0.7rem 0.6rem;">
+                        <span style="display:inline-block;background:{{ l.reg_status_color }}1a;color:{{ l.reg_status_color }};padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.72rem;font-weight:700;white-space:nowrap;">{{ l.reg_status_label }}</span>
                     </td>
                     <td style="padding:0.7rem 0.6rem;">
                         <div style="display:flex;align-items:center;gap:0.5rem;">
