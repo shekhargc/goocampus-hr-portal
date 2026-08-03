@@ -34121,17 +34121,24 @@ def _lead_reg_status_map(conn, leads):
         except Exception:
             conn.rollback()
 
-    # 2) Registrations by invitation.
-    reg_by_inv = {}        # inv_id -> {account_id, submitted}
+    # 2) Registrations by invitation — mirror the SALES verification queue's own
+    #    fields so "Registration submitted" == exactly what awaits sales verify,
+    #    and sales_completed=1 (or ops verified) moves it past that.
+    reg_by_inv = {}        # inv_id -> {account_id, submitted, sales_completed, ops_verified}
     inv_ids = [v['id'] for v in inv_by_key.values()]
     if inv_ids:
         ph, vals = _in(inv_ids)
         try:
             for r in conn.execute(
-                    f"SELECT invitation_id, account_id, client_submitted_at "
+                    f"SELECT invitation_id, account_id, client_submitted_at, "
+                    f"       COALESCE(sales_completed,0) AS sales_completed, "
+                    f"       COALESCE(ops_status,'') AS ops_status "
                     f"FROM client_registrations WHERE invitation_id IN ({ph})", vals).fetchall():
                 reg_by_inv[r['invitation_id']] = {
-                    'account_id': r['account_id'], 'submitted': bool(r['client_submitted_at'])}
+                    'account_id': r['account_id'],
+                    'submitted': bool(r['client_submitted_at']),
+                    'sales_completed': bool(r['sales_completed']),
+                    'ops_verified': (r['ops_status'] == 'verified')}
         except Exception:
             conn.rollback()
 
@@ -34168,15 +34175,24 @@ def _lead_reg_status_map(conn, leads):
         pc_present = lid in pc_by_lead
         acct = reg['account_id'] if reg else None
         agrs = agr_by_acct.get(acct, set()) if acct else set()
-        submitted = bool(reg and reg['submitted']) or bool(inv and inv['status'] == 'registered') or pc_present
 
-        if not inv and not pc_present:
+        reg_submitted = bool(reg and reg['submitted'])
+        sales_done = bool(reg and reg['sales_completed'])
+        ops_ok = bool(reg and reg['ops_verified'])
+        # A client is "past submitted" once the form is in AND (sales verified it,
+        # or a master/status exists). Registered-invite / master presence are
+        # fallbacks when a registration row can't be matched.
+        past_submit = reg_submitted or bool(inv and inv['status'] == 'registered') or pc_present
+
+        if not inv and not reg and not pc_present:
             key = 'not_invited'
-        elif not submitted:
+        elif not past_submit:
             key = 'not_started'
-        elif 'contract' in agrs and 'refund_policy' in agrs:
+        elif ('contract' in agrs and 'refund_policy' in agrs):
             key = 'completed'
-        elif pc_present and (pc_by_lead.get(lid) or '').strip():
+        elif sales_done or ops_ok or pc_present:
+            # sales verified, ops verified, or a master already exists (masters are
+            # only created at verification) → past the "awaiting sales verify" step.
             key = 'verified'
         else:
             key = 'submitted'
