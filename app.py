@@ -12,7 +12,7 @@ import secrets
 import random
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file, make_response, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file, make_response, send_from_directory, abort
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from io import BytesIO
 from openpyxl import Workbook
@@ -11703,6 +11703,681 @@ def admin_bulk_leave():
 
     return render_template('admin_bulk_leave.html', user=user, employees=employees, departments=departments,
                     active_section='hr')
+
+# ═══════════════════════════════════════════════════════════════
+#  EMPLOYEE ONBOARDING
+#  HR enters basics -> email invite link -> new hire self-fills
+#  personal / experience / documents / bank -> HR reviews & approves
+#  (approve creates the employees row). Data collection only for now
+#  (no auto-login). Request-time DDL keeps it Render cold-start safe.
+# ═══════════════════════════════════════════════════════════════
+
+ONBOARDING_DOC_TYPES = [
+    ('aadhaar', 'Aadhaar Card'),
+    ('pan', 'PAN Card'),
+    ('degree', 'Final Degree Marks Card'),
+    ('offer_letter', 'Previous Offer Letter'),
+    ('payslip', 'Previous Payslip'),
+]
+
+ONBOARDING_STATUS_META = {
+    'created':     ('Not invited yet', '#6b7280'),
+    'invited':     ('Invited',         '#2563eb'),
+    'in_progress': ('In Progress',     '#d97706'),
+    'submitted':   ('Submitted',       '#7c3aed'),
+    'completed':   ('Completed',       '#16a34a'),
+    'cancelled':   ('Cancelled',       '#9ca3af'),
+}
+
+
+def _ensure_employee_onboarding(conn):
+    """Create onboarding tables + convenience columns on `employees`
+    (idempotent, request-time — survives Render cold starts)."""
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS employee_onboarding (
+                id SERIAL PRIMARY KEY,
+                token TEXT UNIQUE,
+                status TEXT DEFAULT 'created',
+                name TEXT,
+                email TEXT,
+                emp_code TEXT,
+                joining_date TEXT,
+                designation TEXT,
+                department TEXT,
+                reporting_to INTEGER,
+                official_number TEXT,
+                dob TEXT,
+                address TEXT,
+                blood_group TEXT,
+                personal_phone TEXT,
+                emergency_contact_name TEXT,
+                emergency_contact_phone TEXT,
+                emergency_contact_relation TEXT,
+                hobbies TEXT,
+                bank_name TEXT,
+                bank_branch TEXT,
+                bank_account_name TEXT,
+                bank_account_number TEXT,
+                bank_ifsc TEXT,
+                employee_id INTEGER,
+                invited_at TIMESTAMP,
+                submitted_at TIMESTAMP,
+                approved_at TIMESTAMP,
+                approved_by INTEGER,
+                created_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS employee_onboarding_experience (
+                id SERIAL PRIMARY KEY,
+                onboarding_id INTEGER NOT NULL,
+                company_name TEXT,
+                from_date TEXT,
+                to_date TEXT,
+                location TEXT,
+                designation TEXT,
+                role_description TEXT,
+                sort_order INTEGER DEFAULT 0
+            )
+        ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS employee_onboarding_documents (
+                id SERIAL PRIMARY KEY,
+                onboarding_id INTEGER NOT NULL,
+                doc_type TEXT,
+                doc_name TEXT,
+                r2_key TEXT,
+                filename TEXT,
+                content_type TEXT,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"_ensure_employee_onboarding create: {e}")
+    # Convenience columns on employees so an approved profile is self-contained.
+    for col in ('blood_group', 'hobbies', 'official_number', 'bank_name',
+                'bank_branch', 'bank_account_name', 'bank_account_number', 'bank_ifsc'):
+        try:
+            conn.execute(f'ALTER TABLE employees ADD COLUMN IF NOT EXISTS {col} TEXT')
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+
+def _next_emp_code(conn):
+    """Suggest the next sequential GC### code = highest existing GC number + 1."""
+    mx = 0
+    try:
+        rows = conn.execute("SELECT emp_code FROM employees WHERE emp_code IS NOT NULL").fetchall()
+        for r in rows:
+            code = (r['emp_code'] or '').strip().upper()
+            if code.startswith('GC') and code[2:].isdigit():
+                n = int(code[2:])
+                if n > mx:
+                    mx = n
+    except Exception as e:
+        logging.error(f"_next_emp_code: {e}")
+    return f'GC{mx + 1:03d}'
+
+
+def _onboarding_public_link(token):
+    base = (os.environ.get('PORTAL_BASE_URL') or 'https://goocampus.org').rstrip('/')
+    return f"{base}/onboarding/{token}"
+
+
+def _send_onboarding_invite_email(email, name, link, designation='', department=''):
+    """Email a new hire their onboarding form link via Resend. Never raises."""
+    if not email:
+        return False
+    try:
+        from email_utils import send_email
+        role_line = ''
+        if designation or department:
+            bits = ' &middot; '.join([b for b in (designation, department) if b])
+            role_line = (f'<p style="background:#f0f6ff;border-left:4px solid #1e3a5f;'
+                         f'padding:12px 16px;margin:18px 0;border-radius:4px;font-size:14px;">'
+                         f'Role: <strong style="color:#1e3a5f;">{bits}</strong></p>')
+        html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;">
+  <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus Edu Solutions</h1></div>
+  <div style="padding:30px;background-color:white;">
+    <h2 style="color:#1e3a5f;margin-top:0;">Welcome aboard, {name}!</h2>
+    <p style="font-size:16px;">We're delighted to have you join the GooCampus team.</p>
+    <p>To complete your onboarding, please click the button below and fill in your personal details, work experience, documents and bank details. It only takes a few minutes.</p>
+    {role_line}
+    <div style="text-align:center;margin:30px 0;">
+      <a href="{link}" style="background-color:#F58220;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block;">Complete Onboarding</a>
+    </div>
+    <p style="font-size:13px;color:#666;">Or copy this link into your browser:<br><a href="{link}" style="color:#F58220;word-break:break-all;">{link}</a></p>
+    <p style="margin-top:30px;">Warm regards,<br><strong style="color:#1e3a5f;">GooCampus HR Team</strong></p>
+  </div>
+  <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
+</body></html>'''
+        return send_email([email], 'Complete Your GooCampus Onboarding', html,
+                          from_address="GooCampus HR <info@goocampus.in>")
+    except Exception as e:
+        logging.error(f"_send_onboarding_invite_email: {e}")
+        return False
+
+
+def _active_employee_emails(conn):
+    """Distinct email addresses of all active employees (excludes the admin account)."""
+    out = []
+    try:
+        rows = conn.execute(
+            "SELECT email FROM employees WHERE is_active = 1 AND emp_code != 'admin' "
+            "AND email IS NOT NULL AND email != ''").fetchall()
+        for r in rows:
+            e = (r['email'] or '').strip()
+            if e and e not in out:
+                out.append(e)
+    except Exception as e:
+        logging.error(f"_active_employee_emails: {e}")
+    return out
+
+
+def _send_team_welcome_announcement(conn, o):
+    """Email a warm company-wide welcome about a new joiner — to the new
+    member and every active employee. Returns (ok, recipient_count)."""
+    try:
+        from email_utils import send_email
+        recipients = _active_employee_emails(conn)
+        new_email = (o.get('email') or '').strip()
+        if new_email and new_email not in recipients:
+            recipients.append(new_email)
+        if not recipients:
+            return False, 0
+
+        reporting_name = None
+        if o.get('reporting_to'):
+            rm = conn.execute("SELECT name FROM employees WHERE id = ?", (o['reporting_to'],)).fetchone()
+            reporting_name = rm['name'] if rm else None
+
+        rows_html = ''
+        for k, v in [('Department', o.get('department')),
+                     ('Designation', o.get('designation')),
+                     ('Joining Date', format_date_filter(o.get('joining_date')) if o.get('joining_date') else None),
+                     ('Reporting to', reporting_name)]:
+            if v:
+                rows_html += (f'<tr><td style="padding:6px 14px 6px 0;color:#6b7280;font-size:14px;">{k}</td>'
+                              f'<td style="padding:6px 0;color:#1e3a5f;font-weight:600;font-size:14px;">{v}</td></tr>')
+        hobbies_block = ''
+        if (o.get('hobbies') or '').strip():
+            hobbies_block = (f'<p style="margin:18px 0 0;font-size:14px;color:#444;">'
+                             f'<strong style="color:#1e3a5f;">A little about {(o.get("name") or "").split(" ")[0] or "them"}:</strong> '
+                             f'{o.get("hobbies")}</p>')
+
+        first = (o.get('name') or 'our new colleague').split(' ')[0]
+        html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;">
+  <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus Edu Solutions</h1></div>
+  <div style="padding:30px;background-color:white;">
+    <h2 style="color:#1e3a5f;margin-top:0;">Please welcome {o.get('name') or 'our newest team member'}! 🎉</h2>
+    <p style="font-size:16px;">Team, we're excited to share that <strong>{o.get('name') or ''}</strong> has joined GooCampus{(' as our new <strong>' + o.get('designation') + '</strong>') if o.get('designation') else ''}{(' in the <strong>' + o.get('department') + '</strong> team') if o.get('department') else ''}.</p>
+    <table style="border-collapse:collapse;margin:18px 0;">{rows_html}</table>
+    {hobbies_block}
+    <p style="margin-top:22px;font-size:15px;">Please join us in giving {first} a warm welcome. Do say hello and help them settle in!</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong style="color:#1e3a5f;">GooCampus HR Team</strong></p>
+  </div>
+  <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
+</body></html>'''
+        subject = f"Welcome to the team, {o.get('name') or 'new joiner'}!"
+        ok = send_email(recipients, subject, html, from_address="GooCampus HR <info@goocampus.in>")
+        return ok, len(recipients)
+    except Exception as e:
+        logging.error(f"_send_team_welcome_announcement: {e}")
+        return False, 0
+
+
+@app.route('/admin/onboarding', methods=['GET', 'POST'])
+@admin_required
+def admin_onboarding():
+    """List onboarding records + create a new one (HR enters the basics)."""
+    user = get_user()
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        email = (request.form.get('email') or '').strip()
+        emp_code = (request.form.get('emp_code') or '').strip()
+        joining_date = (request.form.get('joining_date') or '').strip()
+        designation = (request.form.get('designation') or '').strip()
+        department = (request.form.get('department') or '').strip()
+        reporting_to = (request.form.get('reporting_to') or '').strip() or None
+        official_number = (request.form.get('official_number') or '').strip()
+
+        if not name or not email or not emp_code:
+            flash('Name, email and employee code are required.', 'error')
+            conn.close()
+            return redirect(url_for('admin_onboarding'))
+
+        # Guard against a code already in use by a real employee or another invite.
+        dup = conn.execute("SELECT 1 FROM employees WHERE emp_code = ?", (emp_code,)).fetchone()
+        dup2 = conn.execute(
+            "SELECT 1 FROM employee_onboarding WHERE emp_code = ? AND status != 'cancelled'",
+            (emp_code,)).fetchone()
+        if dup or dup2:
+            flash(f'Employee code {emp_code} is already in use. Pick a different one.', 'error')
+            conn.close()
+            return redirect(url_for('admin_onboarding'))
+
+        token = secrets.token_urlsafe(24)
+        conn.execute('''
+            INSERT INTO employee_onboarding
+              (token, status, name, email, emp_code, joining_date, designation,
+               department, reporting_to, official_number, created_by)
+            VALUES (?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (token, name, email, emp_code, joining_date or None, designation or None,
+              department or None, reporting_to, official_number or None, user['id']))
+        conn.commit()
+        flash(f'Onboarding created for {name}. Click "Send Invite" to email them the form.', 'success')
+        conn.close()
+        return redirect(url_for('admin_onboarding'))
+
+    rows = conn.execute('''
+        SELECT o.*, m.name AS reporting_name
+        FROM employee_onboarding o
+        LEFT JOIN employees m ON o.reporting_to = m.id
+        ORDER BY o.created_at DESC
+    ''').fetchall()
+    records = []
+    for r in rows:
+        d = dict(r)
+        d['status_label'], d['status_color'] = ONBOARDING_STATUS_META.get(
+            d.get('status') or 'created', ('—', '#6b7280'))
+        records.append(d)
+
+    managers = conn.execute(
+        "SELECT id, name, emp_code, department FROM employees "
+        "WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name"
+    ).fetchall()
+    departments = ['Sales', 'Operations', 'Marketing', 'Admin', 'Senior Management', 'HR', 'Management']
+    suggested_code = _next_emp_code(conn)
+    conn.close()
+
+    return render_template('admin_onboarding.html', user=user, records=records,
+                           managers=managers, departments=departments,
+                           suggested_code=suggested_code, active_section='hr')
+
+
+@app.route('/admin/onboarding/<int:oid>/send-invite', methods=['POST'])
+@admin_required
+def admin_onboarding_send_invite(oid):
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    o = conn.execute("SELECT * FROM employee_onboarding WHERE id = ?", (oid,)).fetchone()
+    if not o:
+        conn.close()
+        flash('Onboarding record not found.', 'error')
+        return redirect(url_for('admin_onboarding'))
+    if o['status'] in ('completed', 'cancelled'):
+        conn.close()
+        flash('This onboarding is already closed.', 'error')
+        return redirect(url_for('admin_onboarding'))
+
+    link = _onboarding_public_link(o['token'])
+    ok = _send_onboarding_invite_email(o['email'], o['name'], link,
+                                       o['designation'] or '', o['department'] or '')
+    # First invite moves 'created' -> 'invited'; a re-send keeps a later status.
+    new_status = 'invited' if (o['status'] or 'created') == 'created' else o['status']
+    conn.execute(
+        "UPDATE employee_onboarding SET status = ?, invited_at = COALESCE(invited_at, ?) WHERE id = ?",
+        (new_status, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), oid))
+    conn.commit()
+    conn.close()
+    if ok:
+        flash(f'Invite emailed to {o["email"]}.', 'success')
+    else:
+        flash(f'Could not send the email (check email settings). Link: {link}', 'error')
+    return redirect(url_for('admin_onboarding'))
+
+
+@app.route('/admin/onboarding/<int:oid>')
+@admin_required
+def admin_onboarding_detail(oid):
+    user = get_user()
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    o = conn.execute('''
+        SELECT o.*, m.name AS reporting_name
+        FROM employee_onboarding o
+        LEFT JOIN employees m ON o.reporting_to = m.id
+        WHERE o.id = ?
+    ''', (oid,)).fetchone()
+    if not o:
+        conn.close()
+        flash('Onboarding record not found.', 'error')
+        return redirect(url_for('admin_onboarding'))
+    o = dict(o)
+    o['status_label'], o['status_color'] = ONBOARDING_STATUS_META.get(
+        o.get('status') or 'created', ('—', '#6b7280'))
+    experience = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_onboarding_experience WHERE onboarding_id = ? ORDER BY sort_order, id",
+        (oid,)).fetchall()]
+    documents = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_onboarding_documents WHERE onboarding_id = ? ORDER BY id",
+        (oid,)).fetchall()]
+    doc_labels = dict(ONBOARDING_DOC_TYPES)
+    active_emp_count = len(_active_employee_emails(conn))
+    conn.close()
+    link = _onboarding_public_link(o['token'])
+    return render_template('admin_onboarding_detail.html', user=user, o=o,
+                           experience=experience, documents=documents,
+                           doc_labels=doc_labels, public_link=link,
+                           active_emp_count=active_emp_count,
+                           active_section='hr')
+
+
+@app.route('/admin/onboarding/<int:oid>/approve', methods=['POST'])
+@admin_required
+def admin_onboarding_approve(oid):
+    """Create the real employees row from a submitted onboarding + mark complete."""
+    user = get_user()
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    o = conn.execute("SELECT * FROM employee_onboarding WHERE id = ?", (oid,)).fetchone()
+    if not o:
+        conn.close()
+        flash('Onboarding record not found.', 'error')
+        return redirect(url_for('admin_onboarding'))
+    if o['status'] == 'completed' and o['employee_id']:
+        conn.close()
+        flash('This onboarding is already approved.', 'error')
+        return redirect(url_for('admin_onboarding_detail', oid=oid))
+
+    # Refuse if the code got taken since the invite was created.
+    dup = conn.execute("SELECT id FROM employees WHERE emp_code = ?", (o['emp_code'],)).fetchone()
+    if dup:
+        conn.close()
+        flash(f'Employee code {o["emp_code"]} already exists — cannot create a duplicate.', 'error')
+        return redirect(url_for('admin_onboarding_detail', oid=oid))
+
+    try:
+        row = conn.execute('''
+            INSERT INTO employees (
+                name, emp_code, password, department, designation, email, phone,
+                is_active, joining_date, dob, address,
+                emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+                reporting_to, blood_group, hobbies, official_number,
+                bank_name, bank_branch, bank_account_name, bank_account_number, bank_ifsc,
+                employment_status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+            RETURNING id
+        ''', (
+            o['name'], o['emp_code'], hash_password((o['name'] or 'user').split()[0].lower()),
+            o['department'], o['designation'], o['email'],
+            o['official_number'] or o['personal_phone'],
+            o['joining_date'], o['dob'], o['address'],
+            o['emergency_contact_name'], o['emergency_contact_phone'], o['emergency_contact_relation'],
+            o['reporting_to'], o['blood_group'], o['hobbies'], o['official_number'],
+            o['bank_name'], o['bank_branch'], o['bank_account_name'],
+            o['bank_account_number'], o['bank_ifsc'],
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        )).fetchone()
+        new_emp_id = row['id']
+        conn.execute(
+            "UPDATE employee_onboarding SET status = 'completed', employee_id = ?, "
+            "approved_at = ?, approved_by = ? WHERE id = ?",
+            (new_emp_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user['id'], oid))
+        conn.commit()
+        flash(f'{o["name"]} approved and added to Employees (code {o["emp_code"]}).', 'success')
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"admin_onboarding_approve: {e}")
+        flash('Could not create the employee record. Please try again.', 'error')
+    conn.close()
+    return redirect(url_for('admin_onboarding_detail', oid=oid))
+
+
+@app.route('/admin/onboarding/<int:oid>/cancel', methods=['POST'])
+@admin_required
+def admin_onboarding_cancel(oid):
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    conn.execute("UPDATE employee_onboarding SET status = 'cancelled' WHERE id = ? AND status != 'completed'", (oid,))
+    conn.commit()
+    conn.close()
+    flash('Onboarding cancelled.', 'success')
+    return redirect(url_for('admin_onboarding'))
+
+
+@app.route('/admin/onboarding/<int:oid>/announce', methods=['POST'])
+@admin_required
+def admin_onboarding_announce(oid):
+    """Send the company-wide 'welcome the new joiner' email to all active
+    employees + the new member. Deliberate button — never auto-fires."""
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    o = conn.execute("SELECT * FROM employee_onboarding WHERE id = ?", (oid,)).fetchone()
+    if not o:
+        conn.close()
+        flash('Onboarding record not found.', 'error')
+        return redirect(url_for('admin_onboarding'))
+    ok, n = _send_team_welcome_announcement(conn, dict(o))
+    conn.close()
+    if ok:
+        flash(f'Welcome announcement emailed to {n} recipient{"" if n == 1 else "s"} (team + new member).', 'success')
+    else:
+        flash('Could not send the welcome announcement (check email settings / that employees have email addresses).', 'error')
+    return redirect(url_for('admin_onboarding_detail', oid=oid))
+
+
+@app.route('/admin/onboarding/<int:oid>/delete', methods=['POST'])
+@admin_required
+def admin_onboarding_delete(oid):
+    """Permanently delete an onboarding record (+ its experience, documents and
+    R2 files). If it created an employee with no linked history (e.g. a test
+    profile), that employee row is hard-deleted too; otherwise it is only
+    deactivated so real history is never orphaned."""
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    o = conn.execute("SELECT * FROM employee_onboarding WHERE id = ?", (oid,)).fetchone()
+    if not o:
+        conn.close()
+        flash('Onboarding record not found.', 'error')
+        return redirect(url_for('admin_onboarding'))
+    o = dict(o)
+
+    # Best-effort R2 cleanup of uploaded documents.
+    try:
+        from core import storage
+        docs = conn.execute("SELECT r2_key FROM employee_onboarding_documents WHERE onboarding_id = ?", (oid,)).fetchall()
+        for d in docs:
+            if d['r2_key']:
+                try:
+                    storage.delete_object(d['r2_key'])
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    conn.execute("DELETE FROM employee_onboarding_documents WHERE onboarding_id = ?", (oid,))
+    conn.execute("DELETE FROM employee_onboarding_experience WHERE onboarding_id = ?", (oid,))
+    conn.execute("DELETE FROM employee_onboarding WHERE id = ?", (oid,))
+    conn.commit()
+
+    emp_msg = ''
+    emp_id = o.get('employee_id')
+    if emp_id:
+        try:
+            # Attempt a clean hard-delete (works for a fresh test profile with
+            # no leads/clients/leave). Any FK reference makes this raise, and we
+            # fall back to deactivation so real history is preserved.
+            conn.execute("DELETE FROM employees WHERE id = ?", (emp_id,))
+            conn.commit()
+            emp_msg = ' The employee profile was permanently deleted.'
+        except Exception:
+            conn.rollback()
+            try:
+                conn.execute("UPDATE employees SET is_active = 0 WHERE id = ?", (emp_id,))
+                conn.commit()
+                emp_msg = ' The employee had linked history, so it was deactivated (not deleted) to keep records intact.'
+            except Exception:
+                conn.rollback()
+    conn.close()
+    flash(f'Onboarding for {o.get("name") or "record"} deleted.{emp_msg}', 'success')
+    return redirect(url_for('admin_onboarding'))
+
+
+@app.route('/admin/onboarding/doc/<int:doc_id>')
+@admin_required
+def admin_onboarding_doc(doc_id):
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    d = conn.execute("SELECT * FROM employee_onboarding_documents WHERE id = ?", (doc_id,)).fetchone()
+    conn.close()
+    if not d or not d['r2_key']:
+        abort(404)
+    from core import storage
+    url = storage.presigned_get_url(d['r2_key'], filename_for_download=d['filename'] or 'document')
+    if url:
+        return redirect(url)
+    abort(404)
+
+
+def _onboarding_save_uploads(conn, oid, form, files):
+    """Persist any uploaded documents for this onboarding. Fixed doc types
+    replace the previous file of that type; 'other' certificates are appended."""
+    from core import storage
+    if not storage.is_configured():
+        return
+    import uuid as _uuid
+    from werkzeug.utils import secure_filename
+
+    def _store(doc_type, doc_name, fs):
+        if not fs or not getattr(fs, 'filename', ''):
+            return
+        raw = fs.read()
+        if not raw:
+            return
+        safe = secure_filename(fs.filename) or 'file'
+        key = f"onboarding/{oid}/{doc_type}/{_uuid.uuid4().hex[:8]}_{safe}"
+        if storage.upload_bytes(key, raw, fs.mimetype or 'application/octet-stream'):
+            conn.execute('''
+                INSERT INTO employee_onboarding_documents
+                  (onboarding_id, doc_type, doc_name, r2_key, filename, content_type)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (oid, doc_type, doc_name, key, safe, fs.mimetype or ''))
+
+    for dtype, label in ONBOARDING_DOC_TYPES:
+        fs = files.get(f'doc_{dtype}')
+        if fs and getattr(fs, 'filename', ''):
+            # Replace any earlier file of the same fixed type.
+            conn.execute("DELETE FROM employee_onboarding_documents WHERE onboarding_id = ? AND doc_type = ?",
+                         (oid, dtype))
+            _store(dtype, label, fs)
+
+    # 'Other certificates' — multiple name+file pairs.
+    other_files = files.getlist('doc_other') if hasattr(files, 'getlist') else []
+    other_names = form.getlist('doc_other_name') if hasattr(form, 'getlist') else []
+    for i, fs in enumerate(other_files):
+        nm = other_names[i] if i < len(other_names) else ''
+        _store('other', (nm or 'Certificate').strip(), fs)
+
+
+@app.route('/onboarding/<token>', methods=['GET', 'POST'])
+def onboarding_public(token):
+    """Public, no-login onboarding form the new hire fills from their email link."""
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    o = conn.execute("SELECT * FROM employee_onboarding WHERE token = ?", (token,)).fetchone()
+    if not o:
+        conn.close()
+        return render_template('onboarding_form.html', not_found=True), 404
+    o = dict(o)
+
+    if o['status'] == 'cancelled':
+        conn.close()
+        return render_template('onboarding_form.html', cancelled=True, o=o)
+
+    already = o['status'] in ('submitted', 'completed')
+
+    if request.method == 'POST' and not already:
+        f = request.form
+        action = f.get('action', 'submit')
+
+        def g(k):
+            return (f.get(k) or '').strip() or None
+
+        conn.execute('''
+            UPDATE employee_onboarding SET
+                dob = ?, address = ?, blood_group = ?, personal_phone = ?,
+                emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
+                hobbies = ?,
+                bank_name = ?, bank_branch = ?, bank_account_name = ?,
+                bank_account_number = ?, bank_ifsc = ?
+            WHERE id = ?
+        ''', (
+            g('dob'), g('address'), g('blood_group'), g('personal_phone'),
+            g('emergency_contact_name'), g('emergency_contact_phone'), g('emergency_contact_relation'),
+            g('hobbies'),
+            g('bank_name'), g('bank_branch'), g('bank_account_name'),
+            g('bank_account_number'), g('bank_ifsc'),
+            o['id'],
+        ))
+
+        # Work experience — rebuild from the submitted rows.
+        conn.execute("DELETE FROM employee_onboarding_experience WHERE onboarding_id = ?", (o['id'],))
+        companies = f.getlist('exp_company')
+        for i, comp in enumerate(companies):
+            comp = (comp or '').strip()
+            frm = (f.getlist('exp_from')[i] if i < len(f.getlist('exp_from')) else '').strip()
+            to = (f.getlist('exp_to')[i] if i < len(f.getlist('exp_to')) else '').strip()
+            loc = (f.getlist('exp_location')[i] if i < len(f.getlist('exp_location')) else '').strip()
+            desig = (f.getlist('exp_designation')[i] if i < len(f.getlist('exp_designation')) else '').strip()
+            role = (f.getlist('exp_role')[i] if i < len(f.getlist('exp_role')) else '').strip()
+            if comp or desig or role:
+                conn.execute('''
+                    INSERT INTO employee_onboarding_experience
+                      (onboarding_id, company_name, from_date, to_date, location, designation, role_description, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (o['id'], comp, frm or None, to or None, loc or None, desig or None, role or None, i))
+
+        try:
+            _onboarding_save_uploads(conn, o['id'], request.form, request.files)
+        except Exception as e:
+            logging.error(f"onboarding uploads: {e}")
+
+        if action == 'submit':
+            new_status = 'submitted'
+            conn.execute(
+                "UPDATE employee_onboarding SET status = 'submitted', submitted_at = ? WHERE id = ?",
+                (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), o['id']))
+        else:
+            new_status = 'in_progress' if o['status'] in ('invited', 'created', 'in_progress') else o['status']
+            conn.execute("UPDATE employee_onboarding SET status = ? WHERE id = ?", (new_status, o['id']))
+        conn.commit()
+        conn.close()
+        if action == 'submit':
+            return redirect(url_for('onboarding_public', token=token))
+        flash('Saved. You can come back and finish anytime using the same link.', 'success')
+        return redirect(url_for('onboarding_public', token=token))
+
+    # First open bumps invited -> in_progress.
+    if o['status'] == 'invited':
+        conn.execute("UPDATE employee_onboarding SET status = 'in_progress' WHERE id = ?", (o['id'],))
+        conn.commit()
+        o['status'] = 'in_progress'
+
+    experience = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_onboarding_experience WHERE onboarding_id = ? ORDER BY sort_order, id",
+        (o['id'],)).fetchall()]
+    documents = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_onboarding_documents WHERE onboarding_id = ? ORDER BY id",
+        (o['id'],)).fetchall()]
+    reporting_name = None
+    if o.get('reporting_to'):
+        rm = conn.execute("SELECT name FROM employees WHERE id = ?", (o['reporting_to'],)).fetchone()
+        reporting_name = rm['name'] if rm else None
+    conn.close()
+
+    return render_template('onboarding_form.html', o=o, experience=experience,
+                           documents=documents, doc_types=ONBOARDING_DOC_TYPES,
+                           reporting_name=reporting_name, already=already)
+
 
 @app.route('/admin/manage-employees', methods=['GET', 'POST'])
 @admin_required
