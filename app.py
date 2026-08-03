@@ -34068,6 +34068,122 @@ def sales_team_admin():
 
 
 # ---- Leads -------------------------------------------------------------
+REG_STATUS_META = {
+    'not_invited': ('Not invited',            '#9ca3af'),
+    'not_started': ('Invited – not started',  '#d97706'),
+    'submitted':   ('Registration submitted', '#7c3aed'),
+    'verified':    ('Verified / In process',  '#2563eb'),
+    'completed':   ('Onboarding completed',    '#16a34a'),
+}
+REG_STATUS_ORDER = ['not_invited', 'not_started', 'submitted', 'verified', 'completed']
+
+
+def _norm_mobile10(s):
+    """Reduce any phone string to a bare 10-digit mobile (India), matching how
+    client_invitations stores client_mobile."""
+    digits = ''.join(ch for ch in (s or '') if ch.isdigit())
+    if digits.startswith('91') and len(digits) == 12:
+        digits = digits[2:]
+    if len(digits) > 10:
+        digits = digits[-10:]
+    return digits if len(digits) == 10 else ''
+
+
+def _lead_reg_status_map(conn, leads):
+    """For a list of sales-lead dicts, work out where each lead sits in the
+    client registration → onboarding journey. Returns {lead_id: status_key}.
+    Uses bulk lookups (no per-lead queries)."""
+    out = {}
+    if not leads:
+        return out
+    lead_ids = [l['id'] for l in leads]
+    lead_key = {}          # lead_id -> (mobile10, product_id)
+    mobiles = set()
+    for l in leads:
+        m = _norm_mobile10(l.get('phone'))
+        lead_key[l['id']] = (m, l.get('product_id'))
+        if m:
+            mobiles.add(m)
+
+    def _in(seq):
+        seq = list(seq)
+        return ','.join(['?'] * len(seq)), seq
+
+    # 1) Invitations by mobile (match product in Python).
+    inv_by_key = {}        # (mobile, product_id) -> {id, status}
+    if mobiles:
+        ph, vals = _in(mobiles)
+        try:
+            for r in conn.execute(
+                    f"SELECT id, client_mobile, product_id, COALESCE(status,'pending') AS status "
+                    f"FROM client_invitations WHERE client_mobile IN ({ph})", vals).fetchall():
+                inv_by_key[(r['client_mobile'], r['product_id'])] = {'id': r['id'], 'status': r['status']}
+        except Exception:
+            conn.rollback()
+
+    # 2) Registrations by invitation.
+    reg_by_inv = {}        # inv_id -> {account_id, submitted}
+    inv_ids = [v['id'] for v in inv_by_key.values()]
+    if inv_ids:
+        ph, vals = _in(inv_ids)
+        try:
+            for r in conn.execute(
+                    f"SELECT invitation_id, account_id, client_submitted_at "
+                    f"FROM client_registrations WHERE invitation_id IN ({ph})", vals).fetchall():
+                reg_by_inv[r['invitation_id']] = {
+                    'account_id': r['account_id'], 'submitted': bool(r['client_submitted_at'])}
+        except Exception:
+            conn.rollback()
+
+    # 3) Agreements (contract / refund) by account.
+    agr_by_acct = {}       # account_id -> set(types)
+    acct_ids = [v['account_id'] for v in reg_by_inv.values() if v['account_id']]
+    if acct_ids:
+        ph, vals = _in(acct_ids)
+        try:
+            for r in conn.execute(
+                    f"SELECT account_id, agreement_type FROM client_agreements "
+                    f"WHERE account_id IN ({ph}) AND agreement_type IN ('contract','refund_policy')",
+                    vals).fetchall():
+                agr_by_acct.setdefault(r['account_id'], set()).add(r['agreement_type'])
+        except Exception:
+            conn.rollback()
+
+    # 4) Master records (plab_clients) by lead_id — presence + account status.
+    pc_by_lead = {}        # lead_id -> account_status (str)
+    ph, vals = _in(lead_ids)
+    try:
+        for r in conn.execute(
+                f"SELECT lead_id, account_status FROM plab_clients WHERE lead_id IN ({ph})", vals).fetchall():
+            if r['lead_id'] not in pc_by_lead or (r['account_status'] and not pc_by_lead[r['lead_id']]):
+                pc_by_lead[r['lead_id']] = (r['account_status'] or '')
+    except Exception:
+        conn.rollback()
+
+    for l in leads:
+        lid = l['id']
+        m, pid = lead_key[lid]
+        inv = inv_by_key.get((m, pid)) if m else None
+        reg = reg_by_inv.get(inv['id']) if inv else None
+        pc_present = lid in pc_by_lead
+        acct = reg['account_id'] if reg else None
+        agrs = agr_by_acct.get(acct, set()) if acct else set()
+        submitted = bool(reg and reg['submitted']) or bool(inv and inv['status'] == 'registered') or pc_present
+
+        if not inv and not pc_present:
+            key = 'not_invited'
+        elif not submitted:
+            key = 'not_started'
+        elif 'contract' in agrs and 'refund_policy' in agrs:
+            key = 'completed'
+        elif pc_present and (pc_by_lead.get(lid) or '').strip():
+            key = 'verified'
+        else:
+            key = 'submitted'
+        out[lid] = key
+    return out
+
+
 @app.route('/sales/leads')
 @login_required
 @sales_crm_required
@@ -34077,6 +34193,7 @@ def sales_leads_list():
     visible_ids = get_visible_sales_employee_ids(user)
     if not visible_ids:
         return render_template('sales_leads.html', user=user, leads=[], stages=[], owners=[], role=role,
+                    reg_status_meta=REG_STATUS_META, reg_status_order=REG_STATUS_ORDER, reg_counts={},
                     active_section='sales')
     placeholders = ','.join(['?'] * len(visible_ids))
     f_stage = request.args.get('stage')
@@ -34115,15 +34232,40 @@ def sales_leads_list():
         f'SELECT id, name, photo_url FROM employees WHERE id IN ({placeholders}) ORDER BY name',
         visible_ids
     ).fetchall()
-    conn.close()
     leads_dicts = []
     for l in leads:
         d = dict(l)
         d['photo_src'] = d.get('owner_photo') or ''
         leads_dicts.append(d)
+
+    # Registration → onboarding status per lead (client-journey visibility).
+    try:
+        status_map = _lead_reg_status_map(conn, leads_dicts)
+    except Exception as e:
+        logging.error(f"sales lead reg-status: {e}")
+        status_map = {}
+    for d in leads_dicts:
+        key = status_map.get(d['id'], 'not_invited')
+        d['reg_status_key'] = key
+        d['reg_status_label'], d['reg_status_color'] = REG_STATUS_META.get(key, ('—', '#9ca3af'))
+    conn.close()
+
+    f_regstatus = request.args.get('regstatus')
+    if f_regstatus in REG_STATUS_META:
+        leads_dicts = [d for d in leads_dicts if d['reg_status_key'] == f_regstatus]
+
+    # Counts per status for the filter chips (whole visible set, pre-filter view).
+    reg_counts = {k: 0 for k in REG_STATUS_META}
+    for key in status_map.values():
+        reg_counts[key] = reg_counts.get(key, 0) + 1
+
     return render_template('sales_leads.html', user=user, leads=leads_dicts,
                            stages=stages, owners=owners, role=role,
                            f_stage=f_stage, f_owner=f_owner, f_hot=f_hot,
+                           f_regstatus=f_regstatus,
+                           reg_status_meta=REG_STATUS_META,
+                           reg_status_order=REG_STATUS_ORDER,
+                           reg_counts=reg_counts,
                     active_section='sales')
 
 
