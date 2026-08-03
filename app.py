@@ -34231,29 +34231,27 @@ def _lead_reg_status_map(conn, leads):
         except Exception:
             conn.rollback()
 
-    # 2) Registrations by mobile+product — the SAME authoritative match the lead
-    #    detail page (sales_leads_view) uses. form_status='submitted' is the real
-    #    "registration submitted" signal — NOT the invitation being 'registered'
-    #    (which flips the moment the client merely opens the link and a draft row
-    #    is created). Keyed on last-10 digits of the reg's own mobile.
-    reg_by_key = {}        # (mobile10, product_id) -> {account_id, submitted, sales_completed, ops_verified}
-    if mobiles:
-        ph, vals = _in(mobiles)
+    # 2) Registrations via the INVITATION link (reliable — the reg's own product
+    #    can differ from the lead's, e.g. combos, so we can't key on product).
+    #    'Submitted' = the client actually submitted the form (client_submitted_at
+    #    is set at submit and never cleared) — NOT the invitation flipping to
+    #    'registered', which happens the moment the client merely opens the link.
+    reg_by_inv = {}        # inv_id -> {account_id, submitted, sales_completed, ops_verified}
+    inv_ids = [v['id'] for v in inv_by_key.values()]
+    if inv_ids:
+        ph, vals = _in(inv_ids)
         try:
             for r in conn.execute(
-                    f"SELECT RIGHT(regexp_replace(mobile,'[^0-9]','','g'),10) AS m10, product_id, "
-                    f"       account_id, COALESCE(form_status,'') AS form_status, client_submitted_at, "
+                    f"SELECT invitation_id, account_id, client_submitted_at, "
+                    f"       COALESCE(form_status,'') AS form_status, "
                     f"       COALESCE(sales_completed,0) AS sales_completed, "
                     f"       COALESCE(ops_status,'') AS ops_status "
-                    f"FROM client_registrations "
-                    f"WHERE RIGHT(regexp_replace(mobile,'[^0-9]','','g'),10) IN ({ph}) "
-                    f"ORDER BY id DESC", vals).fetchall():
-                k = (r['m10'], r['product_id'])
-                if k in reg_by_key:
-                    continue  # keep the latest (id DESC), like the lead view's LIMIT 1
-                reg_by_key[k] = {
+                    f"FROM client_registrations WHERE invitation_id IN ({ph}) ORDER BY id DESC", vals).fetchall():
+                if r['invitation_id'] in reg_by_inv:
+                    continue
+                reg_by_inv[r['invitation_id']] = {
                     'account_id': r['account_id'],
-                    'submitted': (r['form_status'] == 'submitted') or bool(r['client_submitted_at']),
+                    'submitted': bool(r['client_submitted_at']) or (r['form_status'] == 'submitted'),
                     'sales_completed': bool(r['sales_completed']),
                     'ops_verified': (r['ops_status'] == 'verified')}
         except Exception:
@@ -34261,7 +34259,7 @@ def _lead_reg_status_map(conn, leads):
 
     # 3) Agreements (contract / refund) by account.
     agr_by_acct = {}       # account_id -> set(types)
-    acct_ids = [v['account_id'] for v in reg_by_key.values() if v['account_id']]
+    acct_ids = [v['account_id'] for v in reg_by_inv.values() if v['account_id']]
     if acct_ids:
         ph, vals = _in(acct_ids)
         try:
@@ -34277,7 +34275,7 @@ def _lead_reg_status_map(conn, leads):
         lid = l['id']
         m, pid = lead_key[lid]
         inv = inv_by_key.get((m, pid)) if m else None
-        reg = reg_by_key.get((m, pid)) if m else None
+        reg = reg_by_inv.get(inv['id']) if inv else None
         acct = reg['account_id'] if reg else None
         agrs = agr_by_acct.get(acct, set()) if acct else set()
 
