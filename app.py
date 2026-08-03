@@ -11393,6 +11393,18 @@ def admin_employee_detail(emp_id):
     days_taken = _tb['total_taken']
     available = _tb['total_balance']
 
+    # Onboarding profile sections (experience + documents + reporting manager).
+    _ensure_employee_onboarding(conn)
+    experience = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_experience WHERE employee_id = ? ORDER BY sort_order, id", (emp_id,)).fetchall()]
+    documents = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY id", (emp_id,)).fetchall()]
+    doc_labels = dict(ONBOARDING_DOC_TYPES)
+    reporting_name = None
+    if employee['reporting_to']:
+        rm = conn.execute("SELECT name FROM employees WHERE id = ?", (employee['reporting_to'],)).fetchone()
+        reporting_name = rm['name'] if rm else None
+
     conn.close()
 
     return render_template('admin_employee_detail.html',
@@ -11402,6 +11414,10 @@ def admin_employee_detail(emp_id):
                          total_allocation=total_allocation,
                          days_taken=days_taken,
                          available_balance=max(0, available),
+                         experience=experience,
+                         documents=documents,
+                         doc_labels=doc_labels,
+                         reporting_name=reporting_name,
                     active_section='hr')
 
 @app.route('/admin/employee/<int:emp_id>/edit', methods=['GET', 'POST'])
@@ -11409,6 +11425,7 @@ def admin_employee_detail(emp_id):
 def admin_employee_edit(emp_id):
     user = get_user()
     conn = get_db()
+    _ensure_employee_onboarding(conn)
 
     employee = conn.execute('SELECT * FROM employees WHERE id = ?', (emp_id,)).fetchone()
     if not employee:
@@ -11439,6 +11456,16 @@ def admin_employee_edit(emp_id):
         emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip()
         emergency_contact_relation = request.form.get('emergency_contact_relation', '').strip()
 
+        # New onboarding-profile fields (columns ensured at route top).
+        blood_group = request.form.get('blood_group', '').strip()
+        official_number = request.form.get('official_number', '').strip()
+        hobbies = request.form.get('hobbies', '').strip()
+        bank_name = request.form.get('bank_name', '').strip()
+        bank_branch = request.form.get('bank_branch', '').strip()
+        bank_account_name = request.form.get('bank_account_name', '').strip()
+        bank_account_number = request.form.get('bank_account_number', '').strip()
+        bank_ifsc = request.form.get('bank_ifsc', '').strip()
+
         # Phase B — employment status / exit process. Anything other than
         # 'active' flips is_active=0 so the employee can no longer log in.
         employment_status = (request.form.get('employment_status') or 'active').strip().lower()
@@ -11458,11 +11485,32 @@ def admin_employee_edit(emp_id):
             SET name = ?, email = ?, phone = ?, dob = ?, address = ?, department = ?,
                 designation = ?, joining_date = ?, carry_forward = ?, reporting_to = ?,
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
+                blood_group = ?, official_number = ?, hobbies = ?,
+                bank_name = ?, bank_branch = ?, bank_account_name = ?, bank_account_number = ?, bank_ifsc = ?,
                 employment_status = ?, is_active = ?, last_working_day = ?, exit_reason = ?, exit_notes = ?
             WHERE id = ?
         ''', (name, email, phone, dob, address, department, designation, joining_date, carry_forward,
               reporting_to, emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+              blood_group or None, official_number or None, hobbies or None,
+              bank_name or None, bank_branch or None, bank_account_name or None,
+              bank_account_number or None, bank_ifsc or None,
               employment_status, is_active, last_working_day, exit_reason, exit_notes, emp_id))
+
+        # Rebuild work experience from the submitted rows.
+        conn.execute("DELETE FROM employee_experience WHERE employee_id = ?", (emp_id,))
+        _companies = request.form.getlist('exp_company')
+        for _i, _comp in enumerate(_companies):
+            _comp = (_comp or '').strip()
+            def _gi(k, i=_i):
+                lst = request.form.getlist(k)
+                return (lst[i].strip() if i < len(lst) else '')
+            _desig = _gi('exp_designation'); _role = _gi('exp_role')
+            if _comp or _desig or _role:
+                conn.execute('''INSERT INTO employee_experience
+                    (employee_id, company_name, from_date, to_date, location, designation, role_description, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (emp_id, _comp or None, _gi('exp_from') or None, _gi('exp_to') or None,
+                     _gi('exp_location') or None, _desig or None, _role or None, _i))
         conn.commit()
         conn.close()
 
@@ -11473,6 +11521,12 @@ def admin_employee_edit(emp_id):
     # Get all active employees as potential managers (exclude the employee being edited)
     managers = conn.execute('SELECT id, name, emp_code FROM employees WHERE is_active = 1 AND id != ? ORDER BY name', (emp_id,)).fetchall()
 
+    experience = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_experience WHERE employee_id = ? ORDER BY sort_order, id", (emp_id,)).fetchall()]
+    documents = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY id", (emp_id,)).fetchall()]
+    doc_labels = dict(ONBOARDING_DOC_TYPES)
+
     conn.close()
 
     departments = ['Sales', 'Operations', 'Marketing', 'Admin', 'Senior Management', 'HR', 'Management']
@@ -11482,6 +11536,10 @@ def admin_employee_edit(emp_id):
                          employee=employee,
                          departments=departments,
                          managers=managers,
+                         experience=experience,
+                         documents=documents,
+                         doc_types=ONBOARDING_DOC_TYPES,
+                         doc_labels=doc_labels,
                     active_section='hr')
 
 @app.route('/admin/employee/<int:emp_id>/upload-photo', methods=['POST'])
@@ -11786,6 +11844,33 @@ def _ensure_employee_onboarding(conn):
             CREATE TABLE IF NOT EXISTS employee_onboarding_documents (
                 id SERIAL PRIMARY KEY,
                 onboarding_id INTEGER NOT NULL,
+                doc_type TEXT,
+                doc_name TEXT,
+                r2_key TEXT,
+                filename TEXT,
+                content_type TEXT,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Employee-keyed profile tables (used by BOTH onboarded and old
+        # employees so every employee profile shows the same sections).
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS employee_experience (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL,
+                company_name TEXT,
+                from_date TEXT,
+                to_date TEXT,
+                location TEXT,
+                designation TEXT,
+                role_description TEXT,
+                sort_order INTEGER DEFAULT 0
+            )
+        ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS employee_documents (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL,
                 doc_type TEXT,
                 doc_name TEXT,
                 r2_key TEXT,
@@ -12118,6 +12203,19 @@ def admin_onboarding_approve(oid):
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         )).fetchone()
         new_emp_id = row['id']
+        # Copy the rich data into employee-keyed tables so it shows on the
+        # employee profile (same tables old employees use).
+        for e in conn.execute("SELECT * FROM employee_onboarding_experience WHERE onboarding_id = ? ORDER BY sort_order, id", (oid,)).fetchall():
+            conn.execute('''INSERT INTO employee_experience
+                (employee_id, company_name, from_date, to_date, location, designation, role_description, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (new_emp_id, e['company_name'], e['from_date'], e['to_date'], e['location'],
+                 e['designation'], e['role_description'], e['sort_order']))
+        for d in conn.execute("SELECT * FROM employee_onboarding_documents WHERE onboarding_id = ? ORDER BY id", (oid,)).fetchall():
+            conn.execute('''INSERT INTO employee_documents
+                (employee_id, doc_type, doc_name, r2_key, filename, content_type)
+                VALUES (?, ?, ?, ?, ?, ?)''',
+                (new_emp_id, d['doc_type'], d['doc_name'], d['r2_key'], d['filename'], d['content_type']))
         conn.execute(
             "UPDATE employee_onboarding SET status = 'completed', employee_id = ?, "
             "approved_at = ?, approved_by = ? WHERE id = ?",
@@ -12276,6 +12374,96 @@ def _onboarding_save_uploads(conn, oid, form, files):
     for i, fs in enumerate(other_files):
         nm = other_names[i] if i < len(other_names) else ''
         _store('other', (nm or 'Certificate').strip(), fs)
+
+
+def _employee_save_uploads(conn, emp_id, form, files):
+    """Upload documents for an employee into employee_documents (keyed by
+    employee_id). Fixed doc types replace the same type; 'other' appends."""
+    from core import storage
+    if not storage.is_configured():
+        return
+    import uuid as _uuid
+    from werkzeug.utils import secure_filename
+
+    def _store(doc_type, doc_name, fs):
+        if not fs or not getattr(fs, 'filename', ''):
+            return
+        raw = fs.read()
+        if not raw:
+            return
+        safe = secure_filename(fs.filename) or 'file'
+        key = f"employee/{emp_id}/{doc_type}/{_uuid.uuid4().hex[:8]}_{safe}"
+        if storage.upload_bytes(key, raw, fs.mimetype or 'application/octet-stream'):
+            conn.execute('''
+                INSERT INTO employee_documents
+                  (employee_id, doc_type, doc_name, r2_key, filename, content_type)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (emp_id, doc_type, doc_name, key, safe, fs.mimetype or ''))
+
+    for dtype, label in ONBOARDING_DOC_TYPES:
+        fs = files.get(f'doc_{dtype}')
+        if fs and getattr(fs, 'filename', ''):
+            conn.execute("DELETE FROM employee_documents WHERE employee_id = ? AND doc_type = ?", (emp_id, dtype))
+            _store(dtype, label, fs)
+
+    other_files = files.getlist('doc_other') if hasattr(files, 'getlist') else []
+    other_names = form.getlist('doc_other_name') if hasattr(form, 'getlist') else []
+    for i, fs in enumerate(other_files):
+        nm = other_names[i] if i < len(other_names) else ''
+        _store('other', (nm or 'Certificate').strip(), fs)
+
+
+@app.route('/admin/employee/<int:emp_id>/docs/upload', methods=['POST'])
+@admin_required
+def admin_employee_docs_upload(emp_id):
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    try:
+        _employee_save_uploads(conn, emp_id, request.form, request.files)
+        conn.commit()
+        flash('Document(s) uploaded.', 'success')
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"admin_employee_docs_upload: {e}")
+        flash('Could not upload the document(s).', 'error')
+    conn.close()
+    return redirect(url_for('admin_employee_edit', emp_id=emp_id) + '#documents')
+
+
+@app.route('/admin/employee/<int:emp_id>/doc/<int:doc_id>')
+@admin_required
+def admin_employee_doc(emp_id, doc_id):
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    d = conn.execute("SELECT * FROM employee_documents WHERE id = ? AND employee_id = ?", (doc_id, emp_id)).fetchone()
+    conn.close()
+    if not d or not d['r2_key']:
+        abort(404)
+    from core import storage
+    url = storage.presigned_get_url(d['r2_key'], filename_for_download=d['filename'] or 'document')
+    if url:
+        return redirect(url)
+    abort(404)
+
+
+@app.route('/admin/employee/<int:emp_id>/doc/<int:doc_id>/delete', methods=['POST'])
+@admin_required
+def admin_employee_doc_delete(emp_id, doc_id):
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    d = conn.execute("SELECT * FROM employee_documents WHERE id = ? AND employee_id = ?", (doc_id, emp_id)).fetchone()
+    if d:
+        if d['r2_key']:
+            try:
+                from core import storage
+                storage.delete_object(d['r2_key'])
+            except Exception:
+                pass
+        conn.execute("DELETE FROM employee_documents WHERE id = ?", (doc_id,))
+        conn.commit()
+        flash('Document deleted.', 'success')
+    conn.close()
+    return redirect(url_for('admin_employee_edit', emp_id=emp_id) + '#documents')
 
 
 @app.route('/onboarding/<token>', methods=['GET', 'POST'])

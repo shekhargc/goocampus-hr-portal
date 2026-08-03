@@ -142,4 +142,72 @@
         {% endif %}
     </div>
 </div>
+
+<!-- ═══ Onboarding profile sections ═══ -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
+    <!-- Personal Details -->
+    <div class="card">
+        <h2 class="card-title">Personal Details</h2>
+        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem 1.25rem; font-size: 0.95rem;">
+            <dt style="font-weight:600;color:var(--navy);">Date of Birth:</dt><dd style="color:var(--gray-700);">{{ employee.dob|format_date }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Blood Group:</dt><dd style="color:var(--gray-700);">{{ employee.blood_group or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Official Number:</dt><dd style="color:var(--gray-700);">{{ employee.official_number or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Reporting To:</dt><dd style="color:var(--gray-700);">{{ reporting_name or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Address:</dt><dd style="color:var(--gray-700);">{{ employee.address or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Hobbies:</dt><dd style="color:var(--gray-700);">{{ employee.hobbies or '-' }}</dd>
+        </dl>
+        <h3 style="margin:1.5rem 0 .75rem;font-size:1rem;color:var(--navy);">Emergency Contact</h3>
+        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem 1.25rem; font-size: 0.95rem;">
+            <dt style="font-weight:600;color:var(--navy);">Name:</dt><dd style="color:var(--gray-700);">{{ employee.emergency_contact_name or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Number:</dt><dd style="color:var(--gray-700);">{{ employee.emergency_contact_phone or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Relation:</dt><dd style="color:var(--gray-700);">{{ employee.emergency_contact_relation or '-' }}</dd>
+        </dl>
+    </div>
+
+    <!-- Bank Details -->
+    <div class="card">
+        <h2 class="card-title">Bank Account Details</h2>
+        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem 1.25rem; font-size: 0.95rem;">
+            <dt style="font-weight:600;color:var(--navy);">Bank Name:</dt><dd style="color:var(--gray-700);">{{ employee.bank_name or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Branch:</dt><dd style="color:var(--gray-700);">{{ employee.bank_branch or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Account Name:</dt><dd style="color:var(--gray-700);">{{ employee.bank_account_name or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Account Number:</dt><dd style="color:var(--gray-700);">{{ employee.bank_account_number or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">IFSC:</dt><dd style="color:var(--gray-700);">{{ employee.bank_ifsc or '-' }}</dd>
+        </dl>
+    </div>
+</div>
+
+<!-- Work Experience -->
+<div class="card" style="margin-bottom:2rem;">
+    <h2 class="card-title">Internship / Work Experience</h2>
+    {% if experience %}
+        {% for e in experience %}
+        <div style="border:1px solid var(--gray-200);border-radius:.7rem;padding:1rem 1.15rem;margin-bottom:.9rem;">
+            <div style="font-weight:700;color:var(--navy);">{{ e.designation or 'Role' }}{% if e.company_name %} · {{ e.company_name }}{% endif %}</div>
+            <div style="font-size:.85rem;color:var(--gray-500);margin:.15rem 0 .5rem;">{{ e.from_date|format_date }} — {{ e.to_date|format_date }}{% if e.location %} · {{ e.location }}{% endif %}</div>
+            {% if e.role_description %}<div style="font-size:.9rem;color:var(--gray-700);white-space:pre-wrap;">{{ e.role_description }}</div>{% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="color: var(--gray-500); padding: 1.5rem; text-align: center;">No work experience recorded.</p>
+    {% endif %}
+</div>
+
+<!-- Documents -->
+<div class="card" style="margin-bottom:2rem;">
+    <h2 class="card-title">Documents</h2>
+    {% if documents %}
+        {% for d in documents %}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem .8rem;border:1px solid var(--gray-200);border-radius:.6rem;margin-bottom:.55rem;">
+            <div>
+                <div style="font-weight:600;color:var(--gray-800);">{{ doc_labels.get(d.doc_type) or d.doc_name or d.doc_type }}{% if d.doc_type == 'other' and d.doc_name %} — {{ d.doc_name }}{% endif %}</div>
+                <div style="font-size:.75rem;color:var(--gray-400);">{{ d.filename }}</div>
+            </div>
+            <a href="/admin/employee/{{ employee.id }}/doc/{{ d.id }}" target="_blank" class="button button-small">Download</a>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="color: var(--gray-500); padding: 1.5rem; text-align: center;">No documents uploaded. Add them from <a href="/admin/employee/{{ employee.id }}/edit#documents">Edit Employee</a>.</p>
+    {% endif %}
+</div>
 {% endblock %}
