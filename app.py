@@ -12030,6 +12030,41 @@ def _send_team_welcome_announcement(conn, o):
         return False, 0
 
 
+@app.route('/admin/diag/config')
+@admin_required
+def admin_diag_config():
+    """Show which integrations are configured on THIS server (no secrets shown).
+    Handy to spot env drift between live and staging (e.g. email key missing)."""
+    def _set(k):
+        return bool((os.environ.get(k) or '').strip())
+    try:
+        from core import storage
+        r2_ok = storage.is_configured()
+    except Exception:
+        r2_ok = False
+    checks = [
+        ('Email — Resend (RESEND_API_KEY)', _set('RESEND_API_KEY')),
+        ('Cloudflare R2 storage', r2_ok),
+        ('WhatsApp — Infobip (INFOBIP_API_KEY)', _set('INFOBIP_API_KEY')),
+        ('Database (DATABASE_URL)', _set('DATABASE_URL')),
+    ]
+    rows = ''.join(
+        f'<tr><td style="padding:10px 16px;border-bottom:1px solid #eee;">{name}</td>'
+        f'<td style="padding:10px 16px;border-bottom:1px solid #eee;font-weight:700;'
+        f'color:{"#16a34a" if ok else "#dc2626"};">{"✓ Configured" if ok else "✗ Not configured"}</td></tr>'
+        for name, ok in checks)
+    host = request.host
+    html = (
+        f'<div style="font-family:Arial,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;">'
+        f'<h2 style="color:#1e3a5f;">Server configuration — <span style="color:#F58220;">{host}</span></h2>'
+        f'<p style="color:#6b7280;">Whether each integration is set up on this specific server. '
+        f'No secret values are shown. If email shows “Not configured” here, invite emails won’t send from this server.</p>'
+        f'<table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;">{rows}</table>'
+        f'<p style="margin-top:20px;"><a href="/admin/onboarding" style="color:#F58220;">← Back to Onboarding</a></p>'
+        f'</div>')
+    return html
+
+
 @app.route('/admin/onboarding', methods=['GET', 'POST'])
 @admin_required
 def admin_onboarding():
