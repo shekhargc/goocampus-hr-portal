@@ -34181,12 +34181,11 @@ def admin_diag_lead_status():
 
 REG_STATUS_META = {
     'not_invited': ('Not invited',            '#9ca3af'),
-    'not_started': ('Invited – not started',  '#d97706'),
+    'not_started': ('Not submitted',          '#d97706'),
     'submitted':   ('Registration submitted', '#7c3aed'),
-    'verified':    ('Verified / In process',  '#2563eb'),
     'completed':   ('Onboarding completed',    '#16a34a'),
 }
-REG_STATUS_ORDER = ['not_invited', 'not_started', 'submitted', 'verified', 'completed']
+REG_STATUS_ORDER = ['not_invited', 'not_started', 'submitted', 'completed']
 
 
 def _norm_mobile10(s):
@@ -34272,20 +34271,19 @@ def _lead_reg_status_map(conn, leads):
         sales_done = bool(reg and reg['sales_completed'])
         ops_ok = bool(reg and reg['ops_verified'])
 
-        # Strictly follow the internal verification pipeline, in order.
-        # "Onboarding completed" = BOTH sales AND ops have verified (founder
-        # 2026-08-04). The client-side contract/refund agreement is part of the
-        # client's own submission and does NOT count here.
+        # Simplest 3-stage model (founder 2026-08-04):
+        #   form not submitted            -> Not submitted
+        #   submitted, verify pending     -> Registration submitted (sales OR ops pending)
+        #   sales AND ops verified        -> Onboarding completed
+        # Read-only: this only labels; it never changes any client data/status.
         if not inv and not reg:
             key = 'not_invited'
         elif not submitted:
-            key = 'not_started'         # invited / link opened / form still a draft
-        elif not sales_done:
-            key = 'submitted'           # submitted → on the Sales-verification queue
-        elif ops_ok:
-            key = 'completed'           # sales + ops both verified
+            key = 'not_started'
+        elif sales_done and ops_ok:
+            key = 'completed'
         else:
-            key = 'verified'            # sales verified, awaiting ops verification
+            key = 'submitted'
         out[lid] = key
     return out
 
