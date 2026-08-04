@@ -11956,7 +11956,7 @@ def _send_onboarding_invite_email(email, name, link, designation='', department=
   <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
 </body></html>'''
         return send_email([email], 'Complete Your GooCampus Onboarding', html,
-                          from_address="GooCampus HR <info@goocampus.in>")
+                          from_address="GooCampus <info@goocampus.in>")
     except Exception as e:
         logging.error(f"_send_onboarding_invite_email: {e}")
         return False
@@ -12023,7 +12023,7 @@ def _send_team_welcome_announcement(conn, o):
   <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
 </body></html>'''
         subject = f"Welcome to the team, {o.get('name') or 'new joiner'}!"
-        ok = send_email(recipients, subject, html, from_address="GooCampus HR <info@goocampus.in>")
+        ok = send_email(recipients, subject, html, from_address="GooCampus <info@goocampus.in>")
         return ok, len(recipients)
     except Exception as e:
         logging.error(f"_send_team_welcome_announcement: {e}")
@@ -12060,9 +12060,53 @@ def admin_diag_config():
         f'<p style="color:#6b7280;">Whether each integration is set up on this specific server. '
         f'No secret values are shown. If email shows “Not configured” here, invite emails won’t send from this server.</p>'
         f'<table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;">{rows}</table>'
-        f'<p style="margin-top:20px;"><a href="/admin/onboarding" style="color:#F58220;">← Back to Onboarding</a></p>'
+        f'<p style="margin-top:14px;"><a href="/admin/diag/email-test" style="color:#F58220;">Run a live email send test →</a></p>'
+        f'<p style="margin-top:8px;"><a href="/admin/onboarding" style="color:#F58220;">← Back to Onboarding</a></p>'
         f'</div>')
     return html
+
+
+@app.route('/admin/diag/email-test')
+@admin_required
+def admin_diag_email_test():
+    """Attempt a real Resend send and show the EXACT outcome (success id or the
+    actual error), so we can tell a missing key from a Resend rejection.
+    ?to=<email> (defaults to the logged-in admin's email). Sends one email."""
+    user = get_user()
+    to = (request.args.get('to') or (user.get('email') if user else '') or '').strip()
+
+    def esc(v):
+        s = '' if v is None else str(v)
+        return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    key_set = bool((os.environ.get('RESEND_API_KEY') or '').strip())
+    parts = [f"<div style='font-family:system-ui;max-width:720px;margin:30px auto;padding:0 16px;'>",
+             f"<h2>Email send test — {esc(request.host)}</h2>",
+             f"<p>RESEND_API_KEY present on this server: "
+             f"<b style='color:{'#16a34a' if key_set else '#dc2626'}'>{'YES' if key_set else 'NO'}</b></p>",
+             f"<form method='GET'>Send test to: <input name='to' value='{esc(to)}' style='padding:7px;width:280px'> "
+             f"<button>Send test</button></form>"]
+    if not to:
+        parts.append("<p style='color:#b91c1c;'>Enter a recipient email above and click Send test.</p>")
+    elif not key_set:
+        parts.append("<p style='color:#b91c1c;font-size:15px;'>❌ This server has no email key, so it cannot send email. "
+                     "Fix: in Render → this service → <b>Environment</b>, add <b>RESEND_API_KEY</b> "
+                     "(copy the value your other services use), then redeploy.</p>")
+    else:
+        try:
+            import resend as _r
+            _r.api_key = os.environ['RESEND_API_KEY']
+            res = _r.Emails.send({'from': 'GooCampus <info@goocampus.in>', 'to': [to],
+                                  'subject': 'GooCampus email test',
+                                  'html': '<p>✅ Test successful — Resend email is working from this server.</p>'})
+            rid = res.get('id') if isinstance(res, dict) else getattr(res, 'id', '?')
+            parts.append(f"<p style='color:#16a34a;font-size:15px;'>✅ SENT — Resend id <code>{esc(rid)}</code>. "
+                         f"Check <b>{esc(to)}</b> (and spam). If it arrives, email works and onboarding invites will send.</p>")
+        except Exception as e:
+            parts.append(f"<p style='color:#b91c1c;font-size:15px;'>❌ Resend REJECTED the send. Exact error:</p>"
+                         f"<pre style='background:#fef2f2;border:1px solid #fecaca;padding:12px;border-radius:8px;white-space:pre-wrap;'>{esc(e)}</pre>")
+    parts.append("<p style='margin-top:16px;'><a href='/admin/diag/config' style='color:#F58220;'>← Config check</a></p></div>")
+    return "\n".join(parts)
 
 
 @app.route('/admin/onboarding', methods=['GET', 'POST'])
