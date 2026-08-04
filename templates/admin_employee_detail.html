@@ -152,6 +152,7 @@
             <dt style="font-weight:600;color:var(--navy);">Date of Birth:</dt><dd style="color:var(--gray-700);">{{ employee.dob|format_date }}</dd>
             <dt style="font-weight:600;color:var(--navy);">Blood Group:</dt><dd style="color:var(--gray-700);">{{ employee.blood_group or '-' }}</dd>
             <dt style="font-weight:600;color:var(--navy);">Official Number:</dt><dd style="color:var(--gray-700);">{{ employee.official_number or '-' }}</dd>
+            <dt style="font-weight:600;color:var(--navy);">Personal Email:</dt><dd style="color:var(--gray-700);">{{ employee.personal_email or '-' }}</dd>
             <dt style="font-weight:600;color:var(--navy);">Reporting To:</dt><dd style="color:var(--gray-700);">{{ reporting_name or '-' }}</dd>
             <dt style="font-weight:600;color:var(--navy);">Address:</dt><dd style="color:var(--gray-700);">{{ employee.address or '-' }}</dd>
             <dt style="font-weight:600;color:var(--navy);">Hobbies:</dt><dd style="color:var(--gray-700);">{{ employee.hobbies or '-' }}</dd>
@@ -195,7 +196,15 @@
 
 <!-- Documents -->
 <div class="card" style="margin-bottom:2rem;">
-    <h2 class="card-title">Documents</h2>
+    <h2 class="card-title" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">Documents
+        {% if missing_docs %}
+        <span style="background:#fff7ed;color:#b45309;border:1px solid #fed7aa;padding:.15rem .6rem;border-radius:999px;font-size:.72rem;font-weight:700;">
+            ⬤ Pending: {% for k, lbl in missing_docs %}{{ lbl }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </span>
+        {% else %}
+        <span style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:.15rem .6rem;border-radius:999px;font-size:.72rem;font-weight:700;">✓ Key documents on file</span>
+        {% endif %}
+    </h2>
     {% if documents %}
         {% for d in documents %}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem .8rem;border:1px solid var(--gray-200);border-radius:.6rem;margin-bottom:.55rem;">

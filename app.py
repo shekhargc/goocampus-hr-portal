@@ -11390,6 +11390,7 @@ def admin_employee_detail(emp_id):
     documents = [dict(x) for x in conn.execute(
         "SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY id", (emp_id,)).fetchall()]
     doc_labels = dict(ONBOARDING_DOC_TYPES)
+    missing_docs = _missing_required_docs([d['doc_type'] for d in documents])
     reporting_name = None
     if employee['reporting_to']:
         rm = conn.execute("SELECT name FROM employees WHERE id = ?", (employee['reporting_to'],)).fetchone()
@@ -11398,6 +11399,7 @@ def admin_employee_detail(emp_id):
     conn.close()
 
     return render_template('admin_employee_detail.html',
+                         missing_docs=missing_docs,
                          user=user,
                          employee=employee,
                          leaves=leaves,
@@ -11449,6 +11451,7 @@ def admin_employee_edit(emp_id):
         # New onboarding-profile fields (columns ensured at route top).
         blood_group = request.form.get('blood_group', '').strip()
         official_number = request.form.get('official_number', '').strip()
+        personal_email = request.form.get('personal_email', '').strip()
         hobbies = request.form.get('hobbies', '').strip()
         bank_name = request.form.get('bank_name', '').strip()
         bank_branch = request.form.get('bank_branch', '').strip()
@@ -11475,13 +11478,13 @@ def admin_employee_edit(emp_id):
             SET name = ?, email = ?, phone = ?, dob = ?, address = ?, department = ?,
                 designation = ?, joining_date = ?, carry_forward = ?, reporting_to = ?,
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
-                blood_group = ?, official_number = ?, hobbies = ?,
+                blood_group = ?, official_number = ?, personal_email = ?, hobbies = ?,
                 bank_name = ?, bank_branch = ?, bank_account_name = ?, bank_account_number = ?, bank_ifsc = ?,
                 employment_status = ?, is_active = ?, last_working_day = ?, exit_reason = ?, exit_notes = ?
             WHERE id = ?
         ''', (name, email, phone, dob, address, department, designation, joining_date, carry_forward,
               reporting_to, emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
-              blood_group or None, official_number or None, hobbies or None,
+              blood_group or None, official_number or None, personal_email or None, hobbies or None,
               bank_name or None, bank_branch or None, bank_account_name or None,
               bank_account_number or None, bank_ifsc or None,
               employment_status, is_active, last_working_day, exit_reason, exit_notes, emp_id))
@@ -11812,6 +11815,17 @@ ONBOARDING_DOC_TYPES = [
     ('offer_letter', 'Previous Offer Letter'),
     ('payslip', 'Previous Payslip'),
 ]
+# These 3 must eventually be on file. Not required to submit/approve, but their
+# absence shows a persistent orange "Documents pending" mark on the profile.
+ONBOARDING_REQUIRED_DOCS = ['aadhaar', 'pan', 'degree']
+
+
+def _missing_required_docs(present_types):
+    """Return [(key,label), ...] of required docs still missing, given the doc
+    types already uploaded."""
+    present = set(present_types or [])
+    labels = dict(ONBOARDING_DOC_TYPES)
+    return [(k, labels.get(k, k)) for k in ONBOARDING_REQUIRED_DOCS if k not in present]
 
 ONBOARDING_STATUS_META = {
     'created':     ('Not invited yet', '#6b7280'),
@@ -11920,18 +11934,20 @@ def _ensure_employee_onboarding(conn):
         logging.error(f"_ensure_employee_onboarding create: {e}")
     # Convenience columns on employees so an approved profile is self-contained.
     for col in ('blood_group', 'hobbies', 'official_number', 'bank_name',
-                'bank_branch', 'bank_account_name', 'bank_account_number', 'bank_ifsc'):
+                'bank_branch', 'bank_account_name', 'bank_account_number', 'bank_ifsc',
+                'personal_email'):
         try:
             conn.execute(f'ALTER TABLE employees ADD COLUMN IF NOT EXISTS {col} TEXT')
             conn.commit()
         except Exception:
             conn.rollback()
-    # Profile photo filename captured during onboarding (stored in R2).
-    try:
-        conn.execute("ALTER TABLE employee_onboarding ADD COLUMN IF NOT EXISTS photo_filename TEXT")
-        conn.commit()
-    except Exception:
-        conn.rollback()
+    # Onboarding extras: profile photo (R2) + personal email.
+    for col in ('photo_filename', 'personal_email'):
+        try:
+            conn.execute(f"ALTER TABLE employee_onboarding ADD COLUMN IF NOT EXISTS {col} TEXT")
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
 
 def _next_emp_code(conn):
@@ -12280,12 +12296,14 @@ def admin_onboarding_detail(oid):
         "SELECT * FROM employee_onboarding_documents WHERE onboarding_id = ? ORDER BY id",
         (oid,)).fetchall()]
     doc_labels = dict(ONBOARDING_DOC_TYPES)
+    missing_docs = _missing_required_docs([d['doc_type'] for d in documents])
     active_emp_count = len(_active_employee_emails(conn))
     conn.close()
     link = _onboarding_public_link(o['token'])
     return render_template('admin_onboarding_detail.html', user=user, o=o,
                            experience=experience, documents=documents,
                            doc_labels=doc_labels, public_link=link,
+                           missing_docs=missing_docs,
                            active_emp_count=active_emp_count,
                            active_section='hr')
 
@@ -12320,10 +12338,10 @@ def admin_onboarding_approve(oid):
                 name, emp_code, password, department, designation, email, phone,
                 is_active, joining_date, dob, address,
                 emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
-                reporting_to, blood_group, hobbies, official_number,
+                reporting_to, blood_group, hobbies, official_number, personal_email,
                 bank_name, bank_branch, bank_account_name, bank_account_number, bank_ifsc,
                 photo_url, employment_status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
             RETURNING id
         ''', (
             o['name'], o['emp_code'], hash_password((o['name'] or 'user').split()[0].lower()),
@@ -12331,7 +12349,7 @@ def admin_onboarding_approve(oid):
             o['official_number'] or o['personal_phone'],
             o['joining_date'], o['dob'], o['address'],
             o['emergency_contact_name'], o['emergency_contact_phone'], o['emergency_contact_relation'],
-            o['reporting_to'], o['blood_group'], o['hobbies'], o['official_number'],
+            o['reporting_to'], o['blood_group'], o['hobbies'], o['official_number'], o.get('personal_email'),
             o['bank_name'], o['bank_branch'], o['bank_account_name'],
             o['bank_account_number'], o['bank_ifsc'],
             o.get('photo_filename'),
@@ -12357,6 +12375,14 @@ def admin_onboarding_approve(oid):
             (new_emp_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user['id'], oid))
         conn.commit()
         flash(f'{o["name"]} approved and added to Employees (code {o["emp_code"]}).', 'success')
+        # Remind if the 3 key documents aren't on file (doesn't block approval).
+        _present = [d['doc_type'] for d in conn.execute(
+            "SELECT doc_type FROM employee_documents WHERE employee_id = ?", (new_emp_id,)).fetchall()]
+        _miss = _missing_required_docs(_present)
+        if _miss:
+            flash('⚠️ Documents still pending: ' + ', '.join(lbl for _k, lbl in _miss)
+                  + '. Their profile will show a "Documents pending" mark until these are uploaded '
+                    '(you can upload them from Edit Employee).', 'error')
     except Exception as e:
         conn.rollback()
         logging.error(f"admin_onboarding_approve: {e}")
@@ -12627,14 +12653,14 @@ def onboarding_public(token):
 
         conn.execute('''
             UPDATE employee_onboarding SET
-                dob = ?, address = ?, blood_group = ?, personal_phone = ?,
+                dob = ?, address = ?, blood_group = ?, personal_phone = ?, personal_email = ?,
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
                 hobbies = ?,
                 bank_name = ?, bank_branch = ?, bank_account_name = ?,
                 bank_account_number = ?, bank_ifsc = ?
             WHERE id = ?
         ''', (
-            g('dob'), g('address'), g('blood_group'), g('personal_phone'),
+            g('dob'), g('address'), g('blood_group'), g('personal_phone'), g('personal_email'),
             g('emergency_contact_name'), g('emergency_contact_phone'), g('emergency_contact_relation'),
             g('hobbies'),
             g('bank_name'), g('bank_branch'), g('bank_account_name'),
@@ -12676,7 +12702,24 @@ def onboarding_public(token):
             logging.error(f"onboarding photo: {e}")
 
         if action == 'submit':
-            new_status = 'submitted'
+            # Mandatory fields for submission (Save-for-later stays lenient).
+            _required = [
+                ('personal_phone', 'Personal mobile number'),
+                ('dob', 'Date of birth'),
+                ('personal_email', 'Personal email ID'),
+                ('emergency_contact_name', 'Emergency contact name'),
+                ('emergency_contact_phone', 'Emergency contact number'),
+                ('emergency_contact_relation', 'Emergency contact relationship'),
+            ]
+            _missing = [lbl for k, lbl in _required if not g(k)]
+            if _missing:
+                # Keep the data (already saved above), stay in progress, tell them what's needed.
+                conn.execute("UPDATE employee_onboarding SET status = 'in_progress' WHERE id = ? "
+                             "AND status NOT IN ('submitted','completed','cancelled')", (o['id'],))
+                conn.commit()
+                conn.close()
+                flash('Please complete these required fields before submitting: ' + ', '.join(_missing), 'error')
+                return redirect(url_for('onboarding_public', token=token))
             conn.execute(
                 "UPDATE employee_onboarding SET status = 'submitted', submitted_at = ? WHERE id = ?",
                 (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), o['id']))
