@@ -11566,27 +11566,72 @@ def admin_upload_photo(emp_id):
     if file and allowed_file(file.filename):
         ext = file.filename.rsplit('.', 1)[1].lower()
         filename = f"{employee['emp_code']}.{ext}"
-        filepath = os.path.join(PHOTO_FOLDER, filename)
-
-        # Remove old photos with different extensions
-        for old_ext in ALLOWED_EXTENSIONS:
-            old_path = os.path.join(PHOTO_FOLDER, f"{employee['emp_code']}.{old_ext}")
-            if os.path.exists(old_path) and old_path != filepath:
-                os.remove(old_path)
-
-        file.save(filepath)
-
-        # Update photo_url in database
+        # Store in R2 (Render's disk is ephemeral — disk-saved photos vanish on
+        # every deploy). Served back via the /static/photos/<filename> override.
+        _save_employee_photo_bytes(filename, employee['emp_code'], ext, file.read())
         conn.execute('UPDATE employees SET photo_url = ? WHERE id = ?', (filename, emp_id))
         conn.commit()
         conn.close()
-
         flash('Photo uploaded successfully', 'success')
         return redirect(url_for('admin_employee_edit', emp_id=emp_id))
     else:
         flash('Invalid file type. Allowed: png, jpg, jpeg, gif, webp', 'error')
         conn.close()
         return redirect(url_for('admin_employee_edit', emp_id=emp_id))
+
+
+def _save_employee_photo_bytes(filename, emp_code, ext, raw):
+    """Store an employee profile photo in R2 (permanent) at
+    employee_photos/<filename>. Falls back to the local disk if R2 isn't
+    configured (local dev). Clears stale on-disk copies with other extensions."""
+    if not raw:
+        return False
+    ct = 'image/jpeg' if ext in ('jpg', 'jpeg') else f'image/{ext}'
+    stored = False
+    try:
+        from core import storage
+        if storage.is_configured():
+            stored = storage.upload_bytes(f"employee_photos/{filename}", raw, ct)
+    except Exception as e:
+        logging.error(f"_save_employee_photo_bytes R2: {e}")
+    if not stored:
+        try:
+            os.makedirs(PHOTO_FOLDER, exist_ok=True)
+            with open(os.path.join(PHOTO_FOLDER, filename), 'wb') as fh:
+                fh.write(raw)
+        except Exception as e:
+            logging.error(f"_save_employee_photo_bytes disk: {e}")
+    # Remove stale disk copies with a different extension for this emp_code.
+    for oe in ALLOWED_EXTENSIONS:
+        if oe != ext:
+            op = os.path.join(PHOTO_FOLDER, f"{emp_code}.{oe}")
+            if os.path.exists(op):
+                try: os.remove(op)
+                except Exception: pass
+    return True
+
+
+@app.route('/static/photos/<path:filename>')
+def serve_employee_photo(filename):
+    """Serve employee photos from R2 (permanent) — Render's disk is ephemeral so
+    disk-saved photos are wiped on every deploy. This overrides Flask's default
+    /static serving ONLY for /static/photos/, so every screen that shows an
+    employee photo works unchanged. Falls back to any legacy on-disk file."""
+    if '..' in filename or filename.startswith('/'):
+        abort(404)
+    try:
+        from core import storage
+        if storage.is_configured():
+            url = storage.presigned_get_url(f"employee_photos/{filename}")
+            if url:
+                return redirect(url)
+    except Exception as e:
+        logging.error(f"serve_employee_photo: {e}")
+    try:
+        return send_from_directory(PHOTO_FOLDER, filename)
+    except Exception:
+        abort(404)
+
 
 @app.route('/admin/add-leave', methods=['GET', 'POST'])
 @admin_required
@@ -11891,6 +11936,12 @@ def _ensure_employee_onboarding(conn):
             conn.commit()
         except Exception:
             conn.rollback()
+    # Profile photo filename captured during onboarding (stored in R2).
+    try:
+        conn.execute("ALTER TABLE employee_onboarding ADD COLUMN IF NOT EXISTS photo_filename TEXT")
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
 
 def _next_emp_code(conn):
@@ -12281,8 +12332,8 @@ def admin_onboarding_approve(oid):
                 emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
                 reporting_to, blood_group, hobbies, official_number,
                 bank_name, bank_branch, bank_account_name, bank_account_number, bank_ifsc,
-                employment_status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+                photo_url, employment_status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
             RETURNING id
         ''', (
             o['name'], o['emp_code'], hash_password((o['name'] or 'user').split()[0].lower()),
@@ -12293,6 +12344,7 @@ def admin_onboarding_approve(oid):
             o['reporting_to'], o['blood_group'], o['hobbies'], o['official_number'],
             o['bank_name'], o['bank_branch'], o['bank_account_name'],
             o['bank_account_number'], o['bank_ifsc'],
+            o.get('photo_filename'),
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         )).fetchone()
         new_emp_id = row['id']
@@ -12621,6 +12673,17 @@ def onboarding_public(token):
             _onboarding_save_uploads(conn, o['id'], request.form, request.files)
         except Exception as e:
             logging.error(f"onboarding uploads: {e}")
+
+        # Profile photo → R2 (employee_photos/<emp_code>.<ext>); shows immediately.
+        try:
+            pf = request.files.get('profile_photo')
+            if pf and getattr(pf, 'filename', '') and allowed_file(pf.filename):
+                pext = pf.filename.rsplit('.', 1)[1].lower()
+                pfname = f"{(o.get('emp_code') or ('OB' + str(o['id']))).replace('/', '_')}.{pext}"
+                _save_employee_photo_bytes(pfname, o.get('emp_code') or ('OB' + str(o['id'])), pext, pf.read())
+                conn.execute("UPDATE employee_onboarding SET photo_filename = ? WHERE id = ?", (pfname, o['id']))
+        except Exception as e:
+            logging.error(f"onboarding photo: {e}")
 
         if action == 'submit':
             new_status = 'submitted'

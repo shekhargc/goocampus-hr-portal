@@ -54,9 +54,15 @@
     {% endwith %}
 
     <div class="obd-top">
-        <div>
-            <h1 style="color:#1e3a5f; margin:.5rem 0 .3rem;">{{ o.name }}</h1>
-            <div style="color:#6b7280;">{{ o.emp_code }} &middot; {{ o.designation or 'Role not set' }}{% if o.department %} &middot; {{ o.department }}{% endif %}</div>
+        <div style="display:flex; align-items:center; gap:1rem;">
+            {% if o.photo_filename %}
+            <img src="/static/photos/{{ o.photo_filename }}" alt="{{ o.name }}"
+                 style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid #1e3a5f;">
+            {% endif %}
+            <div>
+                <h1 style="color:#1e3a5f; margin:.5rem 0 .3rem;">{{ o.name }}</h1>
+                <div style="color:#6b7280;">{{ o.emp_code }} &middot; {{ o.designation or 'Role not set' }}{% if o.department %} &middot; {{ o.department }}{% endif %}</div>
+            </div>
         </div>
         <span class="obd-badge" style="background:{{ o.status_color }};">{{ o.status_label }}</span>
     </div>
