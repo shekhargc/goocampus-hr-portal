@@ -9725,10 +9725,27 @@ def profile():
             update_fields += ', joining_date = ?'
             params.append(joining_date)
 
+        # Onboarding-completion fields — fill only if currently blank (lock once set),
+        # so the employee can complete what they left blank without changing set values.
+        _ensure_employee_onboarding(conn)
+        for col in ('personal_email', 'blood_group', 'hobbies', 'bank_name', 'bank_branch',
+                    'bank_account_name', 'bank_account_number', 'bank_ifsc'):
+            val = request.form.get(col, '').strip()
+            if val and not (user.get(col) or '').strip():
+                update_fields += f', {col} = ?'
+                params.append(val)
+
         update_fields += ' WHERE id = ?'
         params.append(user['id'])
 
         conn.execute(update_fields, tuple(params))
+
+        # Documents — upload any the employee hasn't provided yet (don't replace on-file docs).
+        try:
+            _employee_save_uploads(conn, user['id'], request.form, request.files, only_missing=True)
+        except Exception as e:
+            logging.error(f"profile docs upload: {e}")
+
         conn.commit()
         conn.close()
 
@@ -9742,8 +9759,16 @@ def profile():
         if mgr:
             reporting_manager = mgr['name']
 
+    # Onboarding-completion: their documents + which key ones are still missing.
+    _ensure_employee_onboarding(conn)
+    documents = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY id", (user['id'],)).fetchall()]
+    missing_docs = _missing_required_docs([d['doc_type'] for d in documents])
+
     conn.close()
     return render_template('employee_profile.html', user=user, reporting_manager=reporting_manager,
+                    documents=documents, missing_docs=missing_docs, doc_types=ONBOARDING_DOC_TYPES,
+                    doc_labels=dict(ONBOARDING_DOC_TYPES),
                     active_section='hr')
 
 
@@ -12565,12 +12590,18 @@ def _sync_onboarding_docs_to_employee(conn, oid, emp_id):
         fixed_present.add(d['doc_type'])
 
 
-def _employee_save_uploads(conn, emp_id, form, files):
+def _employee_save_uploads(conn, emp_id, form, files, only_missing=False):
     """Upload documents for an employee into employee_documents (keyed by
-    employee_id). Fixed doc types replace the same type; 'other' appends."""
+    employee_id). Fixed doc types replace the same type; 'other' appends.
+    only_missing=True (employee self-service) → don't replace a fixed type
+    that's already on file."""
     from core import storage
     if not storage.is_configured():
         return
+    have = set()
+    if only_missing:
+        have = {r['doc_type'] for r in conn.execute(
+            "SELECT DISTINCT doc_type FROM employee_documents WHERE employee_id = ?", (emp_id,)).fetchall()}
     import uuid as _uuid
     from werkzeug.utils import secure_filename
 
@@ -12590,6 +12621,8 @@ def _employee_save_uploads(conn, emp_id, form, files):
             ''', (emp_id, doc_type, doc_name, key, safe, fs.mimetype or ''))
 
     for dtype, label in ONBOARDING_DOC_TYPES:
+        if only_missing and dtype in have:
+            continue
         fs = files.get(f'doc_{dtype}')
         if fs and getattr(fs, 'filename', ''):
             conn.execute("DELETE FROM employee_documents WHERE employee_id = ? AND doc_type = ?", (emp_id, dtype))

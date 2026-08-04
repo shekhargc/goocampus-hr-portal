@@ -136,7 +136,7 @@
         </div>
     </div>
 
-    <form method="POST" action="/profile">
+    <form method="POST" action="/profile" enctype="multipart/form-data">
         <!-- Work Information -->
         <div class="profile-section">
             <div class="profile-section-header">
@@ -211,6 +211,21 @@
                         <div class="field-label">Phone</div>
                         <input type="tel" name="phone" class="field-input" value="{{ user.phone or '' }}" placeholder="+91 XXXXX XXXXX">
                     </div>
+                    <div>
+                        <div class="field-label">Personal Email {% if user.personal_email %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                        {% if not user.personal_email %}
+                        <input type="email" name="personal_email" class="field-input" value="" placeholder="you@example.com">
+                        {% else %}<div class="field-value">{{ user.personal_email }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <div class="field-label">Blood Group {% if user.blood_group %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                        {% if not user.blood_group %}
+                        <select name="blood_group" class="field-input">
+                            <option value="">— Select —</option>
+                            {% for bg in ['A+','A-','B+','B-','O+','O-','AB+','AB-'] %}<option value="{{ bg }}">{{ bg }}</option>{% endfor %}
+                        </select>
+                        {% else %}<div class="field-value">{{ user.blood_group }}</div>{% endif %}
+                    </div>
                     <div class="field-full">
                         <div class="field-label">Address</div>
                         <textarea name="address" class="field-input" placeholder="Your full address">{{ user.address or '' }}</textarea>
@@ -240,6 +255,65 @@
                     <div>
                         <div class="field-label">Phone Number</div>
                         <input type="tel" name="emergency_contact_phone" class="field-input" value="{{ user.emergency_contact_phone or '' }}" placeholder="+91 XXXXX XXXXX">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank Details -->
+        <div class="profile-section">
+            <div class="profile-section-header">
+                <div class="profile-section-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                    Bank Details
+                </div>
+            </div>
+            <div class="profile-section-body">
+                <div class="field-grid">
+                    {% for col, lbl in [('bank_name','Bank Name'),('bank_branch','Branch'),('bank_account_name','Account Holder Name'),('bank_account_number','Account Number'),('bank_ifsc','IFSC Code')] %}
+                    <div>
+                        <div class="field-label">{{ lbl }} {% if user[col] %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                        {% if not user[col] %}
+                        <input type="text" name="{{ col }}" class="field-input" value="" {% if col == 'bank_ifsc' %}style="text-transform:uppercase;"{% endif %}>
+                        {% else %}<div class="field-value">{{ user[col] }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents -->
+        <div class="profile-section">
+            <div class="profile-section-header">
+                <div class="profile-section-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Documents
+                    {% if missing_docs %}
+                    <span style="background:#fff7ed;color:#b45309;border:1px solid #fed7aa;padding:.1rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;margin-left:.5rem;">⬤ Pending: {% for k, lbl in missing_docs %}{{ lbl }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+                    {% else %}
+                    <span style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:.1rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;margin-left:.5rem;">✓ Key documents on file</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="profile-section-body">
+                <p style="color:var(--gray-600);font-size:.85rem;margin:0 0 1rem;">Upload any document you haven't provided yet. Uploaded ones are locked; contact HR to change them.</p>
+                {% set have = {} %}
+                {% for d in documents %}{% if d.doc_type != 'other' %}{% set _ = have.update({d.doc_type: d.filename}) %}{% endif %}{% endfor %}
+                <div class="field-grid">
+                    {% for key, label in doc_types %}
+                    <div>
+                        <div class="field-label">{{ label }}{% if have.get(key) %} <span title="On file">🔒</span>{% endif %}</div>
+                        {% if have.get(key) %}
+                        <div class="field-value" style="color:#047857;">✓ Uploaded</div>
+                        {% else %}
+                        <input type="file" name="doc_{{ key }}" class="field-input" accept=".pdf,.jpg,.jpeg,.png">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    <div>
+                        <div class="field-label">Other Certificate</div>
+                        <input type="text" name="doc_other_name" class="field-input" placeholder="Certificate name" style="margin-bottom:6px;">
+                        <input type="file" name="doc_other" class="field-input" accept=".pdf,.jpg,.jpeg,.png">
                     </div>
                 </div>
             </div>
