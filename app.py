@@ -34283,17 +34283,21 @@ def _lead_reg_status_map(conn, leads):
         sales_done = bool(reg and reg['sales_completed'])
         ops_ok = bool(reg and reg['ops_verified'])
 
+        # Follow the INTERNAL pipeline stage, in order. Clients agree to the
+        # contract/refund on their dashboard right after submitting — BEFORE
+        # sales/ops verify — so those agreements must NOT jump a lead to
+        # verified/completed while it's still awaiting sales verification.
         if not inv and not reg:
             key = 'not_invited'
         elif not submitted:
             # invited / link opened / form still a draft — not yet submitted.
             key = 'not_started'
+        elif not sales_done:
+            key = 'submitted'   # submitted, still on the sales-verification queue
         elif ('contract' in agrs and 'refund_policy' in agrs):
-            key = 'completed'
-        elif sales_done or ops_ok:
-            key = 'verified'
+            key = 'completed'   # sales-verified AND client agreed contract + refund
         else:
-            key = 'submitted'   # submitted, awaiting sales verification
+            key = 'verified'    # sales-verified / in process (ops or agreements pending)
         out[lid] = key
     return out
 
