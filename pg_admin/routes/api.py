@@ -756,42 +756,94 @@ def _bearer_token():
     return (request.headers.get('X-PG-User-Token') or request.args.get('token') or '').strip()
 
 
-def api_pg_profile():
-    """POST /api/pg/profile — the goocampus.in dashboard saves the doctor's profile
-    here so it lands in the SAME pg_users record the /admin/pg/users screen shows.
+# ── Doctor profile field blueprint ──────────────────────────────────────────
+# SINGLE source of truth for what the doctor's profile is, shared by BOTH the
+# goocampus.org admin (pg_users) and the goocampus.in Edit Profile. GET returns
+# this blueprint + the doctor's current values so the site renders the form
+# dynamically — add a field here (and its pg_users column) and it auto-appears on
+# goocampus.in with no change on their side. 'editable': False = show read-only.
+PG_PROFILE_BLUEPRINT = [
+    {'key': 'name',              'label': 'Full Name',         'type': 'text',   'editable': True,  'required': True},
+    {'key': 'email',             'label': 'Email',             'type': 'email',  'editable': True},
+    {'key': 'mobile',            'label': 'Mobile',            'type': 'tel',    'editable': False},
+    {'key': 'neet_pg_year',      'label': 'NEET-PG Year',      'type': 'text',   'editable': True},
+    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank',      'type': 'number', 'editable': True},
+    {'key': 'target_speciality', 'label': 'Target Speciality', 'type': 'text',   'editable': True},
+    {'key': 'college',           'label': 'MBBS College',      'type': 'text',   'editable': True},
+    {'key': 'state',             'label': 'State',             'type': 'text',   'editable': True},
+    {'key': 'city',              'label': 'City',              'type': 'text',   'editable': True},
+    {'key': 'photo_url',         'label': 'Profile Photo',     'type': 'image',  'editable': True},
+]
+_PG_INT_FIELDS = {'neet_pg_rank'}
 
-    Maps the site's field names to the admin's columns:
-        first_name + last_name -> name   (admin uses one 'name')
-        mbbs_college           -> college
-        email, state, city     -> as-is
-    Auth: X-PG-Key handshake + the doctor's session token (Bearer). (founder 2026-07-30)"""
+
+def _pg_user_by_token(conn, token):
+    return conn.execute(
+        "SELECT * FROM pg_users WHERE session_token = ? "
+        "AND (token_expires_at IS NULL OR token_expires_at > CURRENT_TIMESTAMP) "
+        "AND COALESCE(is_blocked,0) = 0", (token,)).fetchone()
+
+
+def api_pg_profile():
+    """Two-way doctor profile sync with the goocampus.in dashboard, on the SAME
+    pg_users record the /admin/pg/users screen shows — so the two always match.
+
+      GET  /api/pg/profile → {ok, fields:[blueprint], values:{key:value}}  (render the form)
+      POST /api/pg/profile → saves the editable fields (whitelisted to the blueprint)
+
+    Auth: X-PG-Key handshake + the doctor's session token (Bearer).
+    Back-compat: old payloads with first_name/last_name/mbbs_college still work."""
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     token = _bearer_token()
     if not token:
         return jsonify({'ok': False, 'error': 'no_token'}), 401
-    data = request.get_json(silent=True) or {}
-    first = (data.get('first_name') or '').strip()
-    last = (data.get('last_name') or '').strip()
-    name = (first + ' ' + last).strip()
-    email = (data.get('email') or '').strip()
-    state = (data.get('state') or '').strip()
-    city = (data.get('city') or '').strip()
-    college = (data.get('mbbs_college') or data.get('college') or '').strip()
     conn = get_db()
     try:
-        row = conn.execute(
-            "SELECT id FROM pg_users WHERE session_token = ? "
-            "AND (token_expires_at IS NULL OR token_expires_at > CURRENT_TIMESTAMP) "
-            "AND COALESCE(is_blocked,0) = 0", (token,)).fetchone()
+        row = _pg_user_by_token(conn, token)
         if not row:
             return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        row = as_dict(row)
+
+        if request.method == 'GET':
+            values = {}
+            for f in PG_PROFILE_BLUEPRINT:
+                v = row.get(f['key'])
+                values[f['key']] = '' if v is None else v
+            return jsonify({'ok': True, 'fields': PG_PROFILE_BLUEPRINT, 'values': values})
+
+        # POST — save the doctor's edits.
+        data = request.get_json(silent=True) or {}
+        # Back-compat aliases from the old goocampus.in payload shape.
+        if 'name' not in data and (data.get('first_name') or data.get('last_name')):
+            data['name'] = ((data.get('first_name') or '') + ' ' + (data.get('last_name') or '')).strip()
+        if 'college' not in data and data.get('mbbs_college'):
+            data['college'] = data.get('mbbs_college')
+
+        sets, params = [], []
+        for f in PG_PROFILE_BLUEPRINT:
+            if not f.get('editable') or f['key'] not in data:
+                continue
+            k = f['key']
+            val = data.get(k)
+            if k in _PG_INT_FIELDS:
+                s = str(val).strip() if val is not None else ''
+                try:
+                    val = int(s) if s != '' else None
+                except (ValueError, TypeError):
+                    val = None
+            else:
+                val = (str(val).strip() if val is not None else '')
+            sets.append(f"{k} = ?")
+            params.append(val)
+        if not sets:
+            return jsonify({'ok': True, 'updated': 0})
+        params.append(row['id'])
         conn.execute(
-            "UPDATE pg_users SET name = ?, email = ?, state = ?, city = ?, college = ?, "
-            "updated_by = 'goocampus.in', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (name, email, state, city, college, row['id']))
+            f"UPDATE pg_users SET {', '.join(sets)}, updated_by = 'goocampus.in', "
+            f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", params)
         conn.commit()
-        return jsonify({'ok': True})
+        return jsonify({'ok': True, 'updated': len(sets)})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
