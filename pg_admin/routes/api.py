@@ -851,3 +851,203 @@ def api_pg_profile():
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
+
+
+# ── Razorpay checkout ────────────────────────────────────────────────────────
+# Payment lives on the portal (server-side) so the Razorpay SECRET never touches
+# the goocampus.in browser. Flow: create-order (server makes a Razorpay order for
+# the plan price − coupon) → the site opens Razorpay Checkout with the public
+# key_id → verify (server checks the signature, starts the subscription, burns the
+# coupon). No SDK needed: REST via `requests`, signature via stdlib HMAC.
+
+def _razorpay_creds():
+    return ((os.environ.get('RAZORPAY_KEY_ID') or '').strip(),
+            (os.environ.get('RAZORPAY_KEY_SECRET') or '').strip())
+
+
+def _ensure_pg_orders(conn):
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_orders (
+            id SERIAL PRIMARY KEY,
+            razorpay_order_id TEXT UNIQUE,
+            user_id INTEGER,
+            plan_id INTEGER,
+            amount NUMERIC(12,2) DEFAULT 0,
+            discount NUMERIC(12,2) DEFAULT 0,
+            payable NUMERIC(12,2) DEFAULT 0,
+            coupon_code TEXT DEFAULT '',
+            coupon_id INTEGER,
+            status TEXT DEFAULT 'created',
+            razorpay_payment_id TEXT DEFAULT '',
+            subscription_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP
+        )''')
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+
+def _start_pg_subscription(conn, user_id, plan, price_paid, discount, coupon_code, payment_ref, source):
+    """Insert an active subscription for the plan; returns its id."""
+    from datetime import datetime as _dt, timedelta as _td
+    exp = None
+    if plan.get('duration_days'):
+        try:
+            exp = (_dt.utcnow() + _td(days=int(plan['duration_days']))).strftime('%Y-%m-%d %H:%M:%S')
+        except (ValueError, TypeError):
+            exp = None
+    row = conn.execute(
+        "INSERT INTO pg_subscriptions (user_id, plan_id, status, expires_at, price_paid, "
+        " discount_amount, coupon_code, payment_ref, source) "
+        "VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?) RETURNING id",
+        (user_id, plan['id'], exp, float(price_paid or 0), float(discount or 0),
+         coupon_code or '', payment_ref or '', source)).fetchone()
+    return row['id']
+
+
+def api_pg_checkout_create_order():
+    """POST /api/pg/checkout/create-order {plan_id, coupon_code?} → a Razorpay order
+    for the plan price minus any coupon. Auth: X-PG-Key + the doctor's login token.
+    If a coupon makes it free, the subscription is started immediately (no payment)."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    key_id, key_secret = _razorpay_creds()
+    if not (key_id and key_secret):
+        return jsonify({'ok': False, 'error': 'payments_not_configured'}), 503
+    token = _bearer_token()
+    if not token:
+        return jsonify({'ok': False, 'error': 'login_required'}), 401
+    from pg_admin.data import coupons as coupon_lib
+    data = request.get_json(silent=True) or {}
+    plan_id = data.get('plan_id')
+    code = (data.get('coupon_code') or '').strip()
+    conn = get_db()
+    try:
+        _ensure_pg_orders(conn)
+        user = as_dict(_pg_user_by_token(conn, token) or {})
+        if not user:
+            return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        uid = user['id']
+        plan = conn.execute("SELECT * FROM pg_plans WHERE id = ? AND COALESCE(is_active,1) = 1", (plan_id,)).fetchone()
+        if not plan:
+            return jsonify({'ok': False, 'error': 'plan_not_found'}), 404
+        plan = as_dict(plan)
+        amount = float(plan.get('price') or 0)
+        if (plan.get('plan_kind') or 'paid') == 'free' or amount <= 0:
+            return jsonify({'ok': False, 'error': 'plan_is_free'}), 400
+
+        discount = 0.0
+        coupon_id = None
+        coupon_code = ''
+        if code:
+            ok, res = coupon_lib.validate(conn, code, plan_id=plan_id, user_id=uid)
+            if not ok:
+                return jsonify({'ok': False, 'error': res.get('error') or 'invalid_coupon'}), 400
+            discount = float(res.get('discount') or 0)
+            coupon_id = res.get('coupon_id')
+            coupon_code = res.get('code') or code
+        payable = round(amount - discount, 2)
+
+        # Fully covered by the coupon → activate now, no Razorpay charge.
+        if payable <= 0:
+            sub_id = _start_pg_subscription(conn, uid, plan, 0, discount, coupon_code, '', 'coupon_free')
+            if coupon_id:
+                coupon_lib.redeem(conn, coupon_id, user_id=uid, plan_id=plan['id'],
+                                  subscription_id=sub_id, order_amount=amount,
+                                  discount_amount=discount, code=coupon_code)
+            conn.commit()
+            return jsonify({'ok': True, 'free': True, 'subscription_id': sub_id, 'plan_id': plan['id']})
+
+        paise = int(round(payable * 100))
+        import requests as _rq
+        try:
+            rr = _rq.post('https://api.razorpay.com/v1/orders',
+                          auth=(key_id, key_secret),
+                          json={'amount': paise, 'currency': (plan.get('currency') or 'INR'),
+                                'receipt': f'pg_{uid}_{plan_id}',
+                                'notes': {'user_id': str(uid), 'plan_id': str(plan_id)}},
+                          timeout=20)
+        except Exception as e:
+            logging.error("razorpay order request: %s", e)
+            return jsonify({'ok': False, 'error': 'gateway_error'}), 502
+        if rr.status_code not in (200, 201):
+            logging.error("razorpay order %s: %s", rr.status_code, rr.text[:300])
+            return jsonify({'ok': False, 'error': 'gateway_error'}), 502
+        order = rr.json()
+        conn.execute(
+            "INSERT INTO pg_orders (razorpay_order_id, user_id, plan_id, amount, discount, "
+            " payable, coupon_code, coupon_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created')",
+            (order['id'], uid, plan_id, amount, discount, payable, coupon_code, coupon_id))
+        conn.commit()
+        return jsonify({'ok': True, 'order_id': order['id'], 'amount': paise,
+                        'currency': order.get('currency', 'INR'), 'key_id': key_id,
+                        'plan_name': plan.get('name') or '',
+                        'prefill': {'name': user.get('name') or '',
+                                    'email': user.get('email') or '',
+                                    'contact': user.get('mobile') or ''}})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_checkout_create_order: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_checkout_verify():
+    """POST /api/pg/checkout/verify {razorpay_order_id, razorpay_payment_id,
+    razorpay_signature} → verify the signature, start the subscription, burn the
+    coupon. Auth: X-PG-Key + the doctor's login token. Idempotent."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    key_id, key_secret = _razorpay_creds()
+    if not key_secret:
+        return jsonify({'ok': False, 'error': 'payments_not_configured'}), 503
+    token = _bearer_token()
+    if not token:
+        return jsonify({'ok': False, 'error': 'login_required'}), 401
+    data = request.get_json(silent=True) or {}
+    oid = (data.get('razorpay_order_id') or '').strip()
+    pid = (data.get('razorpay_payment_id') or '').strip()
+    sig = (data.get('razorpay_signature') or '').strip()
+    if not (oid and pid and sig):
+        return jsonify({'ok': False, 'error': 'missing_fields'}), 400
+    import hmac as _hmac, hashlib as _hl
+    expected = _hmac.new(key_secret.encode(), f"{oid}|{pid}".encode(), _hl.sha256).hexdigest()
+    if not _hmac.compare_digest(expected, sig):
+        return jsonify({'ok': False, 'error': 'signature_mismatch'}), 400
+    from pg_admin.data import coupons as coupon_lib
+    conn = get_db()
+    try:
+        _ensure_pg_orders(conn)
+        user = as_dict(_pg_user_by_token(conn, token) or {})
+        if not user:
+            return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        order = conn.execute("SELECT * FROM pg_orders WHERE razorpay_order_id = ?", (oid,)).fetchone()
+        if not order:
+            return jsonify({'ok': False, 'error': 'order_not_found'}), 404
+        order = as_dict(order)
+        if order.get('user_id') != user['id']:
+            return jsonify({'ok': False, 'error': 'order_mismatch'}), 403
+        if order.get('status') == 'paid':
+            return jsonify({'ok': True, 'already': True, 'subscription_id': order.get('subscription_id'),
+                            'plan_id': order.get('plan_id')})
+        plan = as_dict(conn.execute("SELECT * FROM pg_plans WHERE id = ?", (order['plan_id'],)).fetchone() or {})
+        sub_id = _start_pg_subscription(conn, user['id'], plan, order.get('payable'),
+                                        order.get('discount'), order.get('coupon_code'), pid, 'razorpay')
+        if order.get('coupon_id'):
+            coupon_lib.redeem(conn, order['coupon_id'], user_id=user['id'], plan_id=order['plan_id'],
+                              subscription_id=sub_id, order_amount=order.get('amount'),
+                              discount_amount=order.get('discount'), code=order.get('coupon_code') or '')
+        conn.execute("UPDATE pg_orders SET status='paid', razorpay_payment_id=?, subscription_id=?, "
+                     "paid_at=CURRENT_TIMESTAMP WHERE id=?", (pid, sub_id, order['id']))
+        conn.commit()
+        return jsonify({'ok': True, 'subscription_id': sub_id, 'plan_id': order['plan_id']})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_checkout_verify: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
