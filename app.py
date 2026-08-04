@@ -34271,19 +34271,21 @@ def _lead_reg_status_map(conn, leads):
         submitted = bool(reg and reg['submitted'])       # form actually submitted
         sales_done = bool(reg and reg['sales_completed'])
         ops_ok = bool(reg and reg['ops_verified'])
-        wc_ok = bool(reg and reg['wc_confirmed'])
 
-        # Strictly follow the internal pipeline stage, in order:
+        # Strictly follow the internal verification pipeline, in order.
+        # "Onboarding completed" = BOTH sales AND ops have verified (founder
+        # 2026-08-04). The client-side contract/refund agreement is part of the
+        # client's own submission and does NOT count here.
         if not inv and not reg:
             key = 'not_invited'
         elif not submitted:
             key = 'not_started'         # invited / link opened / form still a draft
         elif not sales_done:
             key = 'submitted'           # submitted → on the Sales-verification queue
-        elif ops_ok and wc_ok:
-            key = 'completed'           # sales+ops verified AND welcome call done (off both queues)
+        elif ops_ok:
+            key = 'completed'           # sales + ops both verified
         else:
-            key = 'verified'            # sales-verified, still in process (ops or welcome call pending)
+            key = 'verified'            # sales verified, awaiting ops verification
         out[lid] = key
     return out
 
