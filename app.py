@@ -34128,6 +34128,7 @@ def admin_diag_lead_status():
             "SELECT id, invitation_id, registration_number, product_id, account_id, "
             "       first_name, last_name, mobile, form_status, "
             "       COALESCE(sales_completed,0) AS sales_completed, COALESCE(ops_status,'') AS ops_status, "
+            "       COALESCE(wc_confirmed,0) AS wc_confirmed, "
             "       client_submitted_at, counsellor_id, counsellor_name "
             "FROM client_registrations "
             "WHERE LOWER(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) LIKE ? "
@@ -34180,12 +34181,11 @@ def admin_diag_lead_status():
 
 REG_STATUS_META = {
     'not_invited': ('Not invited',            '#9ca3af'),
-    'not_started': ('Invited – not started',  '#d97706'),
+    'not_started': ('Not submitted',          '#d97706'),
     'submitted':   ('Registration submitted', '#7c3aed'),
-    'verified':    ('Verified / In process',  '#2563eb'),
     'completed':   ('Onboarding completed',    '#16a34a'),
 }
-REG_STATUS_ORDER = ['not_invited', 'not_started', 'submitted', 'verified', 'completed']
+REG_STATUS_ORDER = ['not_invited', 'not_started', 'submitted', 'completed']
 
 
 def _norm_mobile10(s):
@@ -34236,38 +34236,28 @@ def _lead_reg_status_map(conn, leads):
     #    'Submitted' = the client actually submitted the form (client_submitted_at
     #    is set at submit and never cleared) — NOT the invitation flipping to
     #    'registered', which happens the moment the client merely opens the link.
-    reg_by_inv = {}        # inv_id -> {account_id, submitted, sales_completed, ops_verified}
+    #    Track the INTERNAL verification pipeline (same fields the Sales/Ops
+    #    verification queues use). The client-side contract/refund agreement is
+    #    part of the client's own submission and is deliberately NOT used here.
+    reg_by_inv = {}        # inv_id -> {submitted, sales_completed, ops_verified, wc_confirmed}
     inv_ids = [v['id'] for v in inv_by_key.values()]
     if inv_ids:
         ph, vals = _in(inv_ids)
         try:
             for r in conn.execute(
-                    f"SELECT invitation_id, account_id, client_submitted_at, "
+                    f"SELECT invitation_id, client_submitted_at, "
                     f"       COALESCE(form_status,'') AS form_status, "
                     f"       COALESCE(sales_completed,0) AS sales_completed, "
-                    f"       COALESCE(ops_status,'') AS ops_status "
+                    f"       COALESCE(ops_status,'') AS ops_status, "
+                    f"       COALESCE(wc_confirmed,0) AS wc_confirmed "
                     f"FROM client_registrations WHERE invitation_id IN ({ph}) ORDER BY id DESC", vals).fetchall():
                 if r['invitation_id'] in reg_by_inv:
                     continue
                 reg_by_inv[r['invitation_id']] = {
-                    'account_id': r['account_id'],
                     'submitted': bool(r['client_submitted_at']) or (r['form_status'] == 'submitted'),
                     'sales_completed': bool(r['sales_completed']),
-                    'ops_verified': (r['ops_status'] == 'verified')}
-        except Exception:
-            conn.rollback()
-
-    # 3) Agreements (contract / refund) by account.
-    agr_by_acct = {}       # account_id -> set(types)
-    acct_ids = [v['account_id'] for v in reg_by_inv.values() if v['account_id']]
-    if acct_ids:
-        ph, vals = _in(acct_ids)
-        try:
-            for r in conn.execute(
-                    f"SELECT account_id, agreement_type FROM client_agreements "
-                    f"WHERE account_id IN ({ph}) AND agreement_type IN ('contract','refund_policy')",
-                    vals).fetchall():
-                agr_by_acct.setdefault(r['account_id'], set()).add(r['agreement_type'])
+                    'ops_verified': (r['ops_status'] == 'verified'),
+                    'wc_confirmed': bool(r['wc_confirmed'])}
         except Exception:
             conn.rollback()
 
@@ -34276,24 +34266,24 @@ def _lead_reg_status_map(conn, leads):
         m, pid = lead_key[lid]
         inv = inv_by_key.get((m, pid)) if m else None
         reg = reg_by_inv.get(inv['id']) if inv else None
-        acct = reg['account_id'] if reg else None
-        agrs = agr_by_acct.get(acct, set()) if acct else set()
 
         submitted = bool(reg and reg['submitted'])       # form actually submitted
         sales_done = bool(reg and reg['sales_completed'])
         ops_ok = bool(reg and reg['ops_verified'])
 
+        # Simplest 3-stage model (founder 2026-08-04):
+        #   form not submitted            -> Not submitted
+        #   submitted, verify pending     -> Registration submitted (sales OR ops pending)
+        #   sales AND ops verified        -> Onboarding completed
+        # Read-only: this only labels; it never changes any client data/status.
         if not inv and not reg:
             key = 'not_invited'
         elif not submitted:
-            # invited / link opened / form still a draft — not yet submitted.
             key = 'not_started'
-        elif ('contract' in agrs and 'refund_policy' in agrs):
+        elif sales_done and ops_ok:
             key = 'completed'
-        elif sales_done or ops_ok:
-            key = 'verified'
         else:
-            key = 'submitted'   # submitted, awaiting sales verification
+            key = 'submitted'
         out[lid] = key
     return out
 
