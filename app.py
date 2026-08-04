@@ -12497,14 +12497,21 @@ def admin_onboarding_doc(doc_id):
     abort(404)
 
 
-def _onboarding_save_uploads(conn, oid, form, files):
+def _onboarding_save_uploads(conn, oid, form, files, only_missing=False):
     """Persist any uploaded documents for this onboarding. Fixed doc types
-    replace the previous file of that type; 'other' certificates are appended."""
+    replace the previous file of that type; 'other' certificates are appended.
+    only_missing=True (post-submit fill-gaps) → skip fixed types already on file
+    (never overwrite what was already provided)."""
     from core import storage
     if not storage.is_configured():
         return
     import uuid as _uuid
     from werkzeug.utils import secure_filename
+
+    have = set()
+    if only_missing:
+        have = {r['doc_type'] for r in conn.execute(
+            "SELECT DISTINCT doc_type FROM employee_onboarding_documents WHERE onboarding_id = ?", (oid,)).fetchall()}
 
     def _store(doc_type, doc_name, fs):
         if not fs or not getattr(fs, 'filename', ''):
@@ -12522,6 +12529,8 @@ def _onboarding_save_uploads(conn, oid, form, files):
             ''', (oid, doc_type, doc_name, key, safe, fs.mimetype or ''))
 
     for dtype, label in ONBOARDING_DOC_TYPES:
+        if only_missing and dtype in have:
+            continue  # already on file — don't let a post-submit upload replace it
         fs = files.get(f'doc_{dtype}')
         if fs and getattr(fs, 'filename', ''):
             # Replace any earlier file of the same fixed type.
@@ -12535,6 +12544,25 @@ def _onboarding_save_uploads(conn, oid, form, files):
     for i, fs in enumerate(other_files):
         nm = other_names[i] if i < len(other_names) else ''
         _store('other', (nm or 'Certificate').strip(), fs)
+
+
+def _sync_onboarding_docs_to_employee(conn, oid, emp_id):
+    """Copy onboarding documents not yet on the employee record into
+    employee_documents — used when the hire fills document gaps AFTER approval so
+    the profile's 'Documents pending' mark clears."""
+    emp_docs = conn.execute("SELECT doc_type, filename FROM employee_documents WHERE employee_id = ?", (emp_id,)).fetchall()
+    fixed_present = {r['doc_type'] for r in emp_docs if r['doc_type'] != 'other'}
+    other_present = {(r['doc_type'], r['filename']) for r in emp_docs}
+    for d in conn.execute("SELECT * FROM employee_onboarding_documents WHERE onboarding_id = ?", (oid,)).fetchall():
+        if d['doc_type'] != 'other' and d['doc_type'] in fixed_present:
+            continue
+        if d['doc_type'] == 'other' and (d['doc_type'], d['filename']) in other_present:
+            continue
+        conn.execute('''INSERT INTO employee_documents
+            (employee_id, doc_type, doc_name, r2_key, filename, content_type)
+            VALUES (?, ?, ?, ?, ?, ?)''',
+            (emp_id, d['doc_type'], d['doc_name'], d['r2_key'], d['filename'], d['content_type']))
+        fixed_present.add(d['doc_type'])
 
 
 def _employee_save_uploads(conn, emp_id, form, files):
@@ -12642,67 +12670,101 @@ def onboarding_public(token):
         conn.close()
         return render_template('onboarding_form.html', cancelled=True, o=o)
 
-    already = o['status'] in ('submitted', 'completed')
+    # Once submitted/approved, the hire can return and fill ONLY what they left
+    # blank (incl. missing documents) — already-entered fields stay locked.
+    post_submit = o['status'] in ('submitted', 'completed')
+    ONB_SCALARS = ['dob', 'address', 'blood_group', 'personal_phone', 'personal_email',
+                   'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
+                   'hobbies', 'bank_name', 'bank_branch', 'bank_account_name', 'bank_account_number', 'bank_ifsc']
+    ONB_TO_EMP = {'dob': 'dob', 'address': 'address', 'blood_group': 'blood_group',
+                  'personal_email': 'personal_email', 'hobbies': 'hobbies',
+                  'bank_name': 'bank_name', 'bank_branch': 'bank_branch', 'bank_account_name': 'bank_account_name',
+                  'bank_account_number': 'bank_account_number', 'bank_ifsc': 'bank_ifsc',
+                  'emergency_contact_name': 'emergency_contact_name', 'emergency_contact_phone': 'emergency_contact_phone',
+                  'emergency_contact_relation': 'emergency_contact_relation'}
+    # Fields that already hold a value — locked once the form is submitted.
+    locked = {k: bool((o.get(k) or '').strip()) for k in ONB_SCALARS}
 
-    if request.method == 'POST' and not already:
+    if request.method == 'POST':
         f = request.form
         action = f.get('action', 'submit')
 
         def g(k):
             return (f.get(k) or '').strip() or None
 
-        conn.execute('''
-            UPDATE employee_onboarding SET
-                dob = ?, address = ?, blood_group = ?, personal_phone = ?, personal_email = ?,
-                emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
-                hobbies = ?,
-                bank_name = ?, bank_branch = ?, bank_account_name = ?,
-                bank_account_number = ?, bank_ifsc = ?
-            WHERE id = ?
-        ''', (
-            g('dob'), g('address'), g('blood_group'), g('personal_phone'), g('personal_email'),
-            g('emergency_contact_name'), g('emergency_contact_phone'), g('emergency_contact_relation'),
-            g('hobbies'),
-            g('bank_name'), g('bank_branch'), g('bank_account_name'),
-            g('bank_account_number'), g('bank_ifsc'),
-            o['id'],
-        ))
+        # Writable = everything (pre-submit) or only-the-blanks (post-submit fill-gaps).
+        writable = [k for k in ONB_SCALARS if (not post_submit) or (not locked[k])]
+        if writable:
+            sets = ", ".join(f"{k} = ?" for k in writable)
+            conn.execute(f"UPDATE employee_onboarding SET {sets} WHERE id = ?",
+                         [g(k) for k in writable] + [o['id']])
 
-        # Work experience — rebuild from the submitted rows.
-        conn.execute("DELETE FROM employee_onboarding_experience WHERE onboarding_id = ?", (o['id'],))
-        companies = f.getlist('exp_company')
-        for i, comp in enumerate(companies):
-            comp = (comp or '').strip()
-            frm = (f.getlist('exp_from')[i] if i < len(f.getlist('exp_from')) else '').strip()
-            to = (f.getlist('exp_to')[i] if i < len(f.getlist('exp_to')) else '').strip()
-            loc = (f.getlist('exp_location')[i] if i < len(f.getlist('exp_location')) else '').strip()
-            desig = (f.getlist('exp_designation')[i] if i < len(f.getlist('exp_designation')) else '').strip()
-            role = (f.getlist('exp_role')[i] if i < len(f.getlist('exp_role')) else '').strip()
-            if comp or desig or role:
-                conn.execute('''
-                    INSERT INTO employee_onboarding_experience
-                      (onboarding_id, company_name, from_date, to_date, location, designation, role_description, sort_order)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (o['id'], comp, frm or None, to or None, loc or None, desig or None, role or None, i))
+        # Work experience — (re)build unless it's post-submit and already has rows.
+        _has_exp = conn.execute("SELECT 1 FROM employee_onboarding_experience WHERE onboarding_id = ? LIMIT 1", (o['id'],)).fetchone()
+        if (not post_submit) or (not _has_exp):
+            conn.execute("DELETE FROM employee_onboarding_experience WHERE onboarding_id = ?", (o['id'],))
+            companies = f.getlist('exp_company')
+            for i, comp in enumerate(companies):
+                comp = (comp or '').strip()
+                def _gl(k, i=i):
+                    lst = f.getlist(k)
+                    return (lst[i].strip() if i < len(lst) else '')
+                desig = _gl('exp_designation'); role = _gl('exp_role')
+                if comp or desig or role:
+                    conn.execute('''INSERT INTO employee_onboarding_experience
+                          (onboarding_id, company_name, from_date, to_date, location, designation, role_description, sort_order)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (o['id'], comp, _gl('exp_from') or None, _gl('exp_to') or None,
+                         _gl('exp_location') or None, desig or None, role or None, i))
 
+        # Documents — post-submit only ADDS missing types (never overwrites).
         try:
-            _onboarding_save_uploads(conn, o['id'], request.form, request.files)
+            _onboarding_save_uploads(conn, o['id'], request.form, request.files, only_missing=post_submit)
         except Exception as e:
             logging.error(f"onboarding uploads: {e}")
 
-        # Profile photo → R2 (employee_photos/<emp_code>.<ext>); shows immediately.
-        try:
-            pf = request.files.get('profile_photo')
-            if pf and getattr(pf, 'filename', '') and allowed_file(pf.filename):
-                pext = pf.filename.rsplit('.', 1)[1].lower()
-                pfname = f"{(o.get('emp_code') or ('OB' + str(o['id']))).replace('/', '_')}.{pext}"
-                _save_employee_photo_bytes(pfname, o.get('emp_code') or ('OB' + str(o['id'])), pext, pf.read())
-                conn.execute("UPDATE employee_onboarding SET photo_filename = ? WHERE id = ?", (pfname, o['id']))
-        except Exception as e:
-            logging.error(f"onboarding photo: {e}")
+        # Profile photo — post-submit keeps the existing one.
+        if (not post_submit) or (not o.get('photo_filename')):
+            try:
+                pf = request.files.get('profile_photo')
+                if pf and getattr(pf, 'filename', '') and allowed_file(pf.filename):
+                    pext = pf.filename.rsplit('.', 1)[1].lower()
+                    pfname = f"{(o.get('emp_code') or ('OB' + str(o['id']))).replace('/', '_')}.{pext}"
+                    _save_employee_photo_bytes(pfname, o.get('emp_code') or ('OB' + str(o['id'])), pext, pf.read())
+                    conn.execute("UPDATE employee_onboarding SET photo_filename = ? WHERE id = ?", (pfname, o['id']))
+            except Exception as e:
+                logging.error(f"onboarding photo: {e}")
 
+        # ── POST-SUBMIT (fill-gaps): save additions, keep status, and if already
+        #    approved push the new values/docs onto the live employee record. ──
+        if post_submit:
+            if o.get('employee_id'):
+                emp_sets = {ONB_TO_EMP[k]: g(k) for k in writable if g(k) and k in ONB_TO_EMP}
+                if emp_sets:
+                    try:
+                        _cols = ", ".join(f"{c} = ?" for c in emp_sets)
+                        conn.execute(f"UPDATE employees SET {_cols} WHERE id = ?",
+                                     list(emp_sets.values()) + [o['employee_id']])
+                    except Exception as e:
+                        logging.error(f"gap->employee scalars: {e}")
+                try:
+                    _sync_onboarding_docs_to_employee(conn, o['id'], o['employee_id'])
+                except Exception as e:
+                    logging.error(f"gap->employee docs: {e}")
+                _nf = conn.execute("SELECT photo_filename FROM employee_onboarding WHERE id = ?", (o['id'],)).fetchone()
+                if _nf and _nf['photo_filename']:
+                    try:
+                        conn.execute("UPDATE employees SET photo_url = COALESCE(NULLIF(photo_url,''), ?) WHERE id = ?",
+                                     (_nf['photo_filename'], o['employee_id']))
+                    except Exception:
+                        pass
+            conn.commit()
+            conn.close()
+            flash('Thank you — your additional details have been saved.', 'success')
+            return redirect(url_for('onboarding_public', token=token))
+
+        # ── PRE-SUBMIT (first fill): submit / save-for-later ──
         if action == 'submit':
-            # Mandatory fields for submission (Save-for-later stays lenient).
             _required = [
                 ('personal_phone', 'Personal mobile number'),
                 ('dob', 'Date of birth'),
@@ -12713,7 +12775,6 @@ def onboarding_public(token):
             ]
             _missing = [lbl for k, lbl in _required if not g(k)]
             if _missing:
-                # Keep the data (already saved above), stay in progress, tell them what's needed.
                 conn.execute("UPDATE employee_onboarding SET status = 'in_progress' WHERE id = ? "
                              "AND status NOT IN ('submitted','completed','cancelled')", (o['id'],))
                 conn.commit()
@@ -12745,6 +12806,7 @@ def onboarding_public(token):
     documents = [dict(x) for x in conn.execute(
         "SELECT * FROM employee_onboarding_documents WHERE onboarding_id = ? ORDER BY id",
         (o['id'],)).fetchall()]
+    missing_docs = _missing_required_docs([d['doc_type'] for d in documents])
     reporting_name = None
     if o.get('reporting_to'):
         rm = conn.execute("SELECT name FROM employees WHERE id = ?", (o['reporting_to'],)).fetchone()
@@ -12753,7 +12815,8 @@ def onboarding_public(token):
 
     return render_template('onboarding_form.html', o=o, experience=experience,
                            documents=documents, doc_types=ONBOARDING_DOC_TYPES,
-                           reporting_name=reporting_name, already=already)
+                           reporting_name=reporting_name, post_submit=post_submit,
+                           locked=locked, missing_docs=missing_docs)
 
 
 @app.route('/admin/manage-employees', methods=['GET', 'POST'])
