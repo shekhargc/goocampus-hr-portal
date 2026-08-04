@@ -94,6 +94,28 @@
 
     <p style="color:#6b7280;font-size:13.5px;margin:0 0 18px;">Please fill in the details below. You can <strong>Save</strong> and come back anytime using the same link, or <strong>Submit</strong> when you're done.</p>
 
+    <!-- Profile Photo -->
+    <div class="card">
+        <h2>Profile Photo</h2>
+        <p class="sub">Add a clear photo of yourself — it becomes your profile picture.</p>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            {% if o.photo_filename %}
+            <img id="photoPreview" src="/static/photos/{{ o.photo_filename }}" alt="Profile photo"
+                 style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid #F58220;">
+            {% else %}
+            <div id="photoPlaceholder" style="width:96px;height:96px;border-radius:50%;background:#1e3a5f;color:#fff;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:700;">
+                {{ (o.name or '?')[0]|upper }}
+            </div>
+            <img id="photoPreview" src="" alt="Profile photo" style="display:none;width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid #F58220;">
+            {% endif %}
+            <div class="fld" style="flex:1;min-width:200px;">
+                <label>Upload / change photo</label>
+                <input type="file" name="profile_photo" accept="image/*" onchange="previewPhoto(this)">
+                <div class="file-hint">JPG or PNG. Save or Submit to store it.</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Personal -->
     <div class="card">
         <h2>Personal Details</h2>
@@ -203,6 +225,14 @@
 </form>
 
 <script>
+function previewPhoto(input){
+    if (!input.files || !input.files[0]) return;
+    var img = document.getElementById('photoPreview');
+    var ph = document.getElementById('photoPlaceholder');
+    var url = URL.createObjectURL(input.files[0]);
+    if (img){ img.src = url; img.style.display = 'block'; }
+    if (ph){ ph.style.display = 'none'; }
+}
 function delExp(btn){
     var list = document.getElementById('expList');
     if (list.querySelectorAll('.exp-block').length <= 1){
