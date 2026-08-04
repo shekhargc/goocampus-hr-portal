@@ -9765,22 +9765,12 @@ def profile_upload_photo():
     if file and allowed_file(file.filename):
         ext = file.filename.rsplit('.', 1)[1].lower()
         filename = f"{user['emp_code']}.{ext}"
-        filepath = os.path.join(PHOTO_FOLDER, filename)
-
-        # Remove old photos with different extensions
-        for old_ext in ALLOWED_EXTENSIONS:
-            old_path = os.path.join(PHOTO_FOLDER, f"{user['emp_code']}.{old_ext}")
-            if os.path.exists(old_path) and old_path != filepath:
-                os.remove(old_path)
-
-        file.save(filepath)
-
-        # Update photo_url in database
+        # Store in R2 (permanent) — see _save_employee_photo_bytes.
+        _save_employee_photo_bytes(filename, user['emp_code'], ext, file.read())
         conn = get_db()
         conn.execute('UPDATE employees SET photo_url = ? WHERE id = ?', (filename, user['id']))
         conn.commit()
         conn.close()
-
         flash('Photo updated successfully', 'success')
     else:
         flash('Invalid file type. Allowed: png, jpg, jpeg, gif, webp', 'error')
