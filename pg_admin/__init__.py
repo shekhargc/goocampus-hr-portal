@@ -83,9 +83,10 @@ def register_pg_admin(app):
                      api.api_pg_otp_send, methods=['POST'])
     app.add_url_rule('/api/pg/otp/verify', 'api_pg_otp_verify',
                      api.api_pg_otp_verify, methods=['POST'])
-    # Doctor saves their profile on goocampus.in -> lands in pg_users (admin screen).
+    # Doctor loads (GET) + saves (POST) their profile on goocampus.in -> the SAME
+    # pg_users record the admin screen shows. Blueprint-driven so fields stay in sync.
     app.add_url_rule('/api/pg/profile', 'api_pg_profile',
-                     api.api_pg_profile, methods=['POST'])
+                     api.api_pg_profile, methods=['GET', 'POST'])
 
     # ── Pricing & Plans admin ──────────────────────────────────────────────
     app.add_url_rule('/admin/pg/plans', 'pg_plans_admin',
