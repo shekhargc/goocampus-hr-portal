@@ -145,3 +145,9 @@ def register_pg_admin(app):
                      api.api_pg_entitlement_consume, methods=['POST'])
     app.add_url_rule('/api/pg/coupons/validate', 'api_pg_coupon_validate',
                      api.api_pg_coupon_validate, methods=['POST'])
+    # Razorpay checkout: server makes the order (secret stays here) + verifies the
+    # payment, starts the subscription and burns the coupon.
+    app.add_url_rule('/api/pg/checkout/create-order', 'api_pg_checkout_create_order',
+                     api.api_pg_checkout_create_order, methods=['POST'])
+    app.add_url_rule('/api/pg/checkout/verify', 'api_pg_checkout_verify',
+                     api.api_pg_checkout_verify, methods=['POST'])
