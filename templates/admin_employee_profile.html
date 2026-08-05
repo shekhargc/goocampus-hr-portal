@@ -2,421 +2,367 @@
 
 {% block title %}Edit Employee - GooCampus HR Portal{% endblock %}
 
+{% block section_extra_css %}
+<style>
+  .pf-wrap { max-width: 1120px; margin: 0 auto; }
+  .pf-back { display:inline-block; color: var(--orange); font-weight:600; font-size:.85rem; text-decoration:none; margin-bottom:1rem; }
+  .pf-grid { display: grid; grid-template-columns: 300px 1fr; gap: 1.4rem; align-items: start; }
+  @media (max-width: 900px){ .pf-grid { grid-template-columns: 1fr; } }
+
+  .pf-rail { background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; position: sticky; top: 1rem; }
+  .pf-rail-head { background: linear-gradient(160deg, var(--navy), #274c78); padding: 1.7rem 1.2rem 1.4rem; text-align: center; color: #fff; }
+  .pf-photo, .pf-photo-init { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff55; margin: 0 auto .7rem; display:block; }
+  .pf-photo-init { background: #ffffff22; color: #fff; font-size: 2.1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .pf-rail-head h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+  .pf-role { margin: .2rem 0 .3rem; font-size: .82rem; color: #ffffffcf; }
+  .pf-photo-upload { padding: .9rem 1.1rem; border-bottom: 1px solid var(--gray-100); }
+  .pf-photo-upload label { font-size:.72rem; font-weight:600; color:var(--gray-500); display:block; margin-bottom:.35rem; }
+  .pf-facts { padding: .3rem 1.1rem 1rem; }
+  .pf-fact { display:flex; justify-content:space-between; gap:.6rem; padding:.5rem 0; border-bottom:1px solid var(--gray-100); font-size:.84rem; }
+  .pf-fact:last-child { border-bottom:0; } .pf-fact .k{ color:var(--gray-500); } .pf-fact .v{ color:var(--navy); font-weight:600; text-align:right; }
+  .pf-rail-cta { padding: 0 1.1rem 1.2rem; display:flex; flex-direction:column; gap:.5rem; }
+  .pf-btn { display:block; width:100%; text-align:center; border:0; border-radius:.55rem; padding:.7rem; font-family:inherit; font-weight:600; font-size:.86rem; cursor:pointer; text-decoration:none; box-sizing:border-box; }
+  .pf-btn-primary { background: var(--orange); color:#fff; } .pf-btn-primary:hover{ background:var(--orange-dark); }
+  .pf-btn-ghost { background: var(--gray-50); color: var(--navy); border:1px solid var(--gray-200); }
+
+  .pf-panel { background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; }
+  .pf-tabs { display:flex; gap:2px; padding:.4rem .5rem 0; border-bottom:1px solid var(--gray-200); overflow-x:auto; }
+  .pf-tabs::-webkit-scrollbar{ display:none; }
+  .pf-tab { border:0; background:transparent; color:var(--gray-500); font:inherit; font-size:.9rem; font-weight:600; white-space:nowrap; padding:.8rem .9rem; cursor:pointer; border-bottom:2.5px solid transparent; margin-bottom:-1px; }
+  .pf-tab:hover{ color:var(--navy); } .pf-tab.on{ color:var(--navy); border-bottom-color:var(--orange); }
+  .pf-body { padding: 1.5rem 1.6rem 1.7rem; }
+  .etab-pane { display:none; } .etab-pane.on { display:block; }
+  .pf-sec { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--gray-400); font-weight:700; margin:0 0 1rem; }
+  .pf-sec.mt { margin-top: 1.6rem; }
+  .grid2 { display:flex; gap:1rem; flex-wrap:wrap; } .grid2 > * { flex:1; min-width:180px; }
+  .age-out { color:var(--navy); font-weight:600; font-size:.78rem; display:block; margin-top:3px; }
+  .save-bar { display:flex; gap:1rem; margin-top:1.6rem; padding-top:1.2rem; border-top:1px solid var(--gray-200); }
+  .doc-list-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.6rem .8rem; border:1px solid var(--gray-200); border-radius:.5rem; margin-bottom:.5rem; }
+</style>
+{% endblock %}
+
 {% block section_content %}
-<div style="margin-bottom: 2rem;">
-    <a href="/admin/employee/{{ employee.id }}" class="button button-secondary" style="margin-bottom: 1.5rem;">← Back to Employee</a>
-    <h1 style="font-size: 2rem;">Edit Employee: {{ employee.name }}</h1>
-</div>
+{% set cst = employee.confirmation_status or 'permanent' %}
+{% set estatus = ('active' if employee.is_active else (employee.employment_status or 'resigned')) %}
+{% set _spouse = (dependents | selectattr('relation','equalto','spouse') | list | first) %}
+{% set _children = (dependents | selectattr('relation','equalto','child') | list) %}
+{% set _father = (dependents | selectattr('relation','equalto','father') | list | first) %}
+{% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
+<div class="pf-wrap">
+  <a href="/admin/employee/{{ employee.id }}" class="pf-back">← Back to Employee</a>
+  <div class="pf-grid">
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 1000px; margin-bottom: 3rem;">
-
-<!-- Photo Upload Card -->
-<div class="card" style="text-align: center;">
-    <h2 class="card-title">Employee Photo</h2>
-    <div style="margin-bottom: 1.5rem;">
+    <!-- LEFT RAIL -->
+    <aside class="pf-rail">
+      <div class="pf-rail-head">
         {% if employee.photo_url %}
-        <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" alt="{{ employee.name }}" style="width: 160px; height: 160px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
-        {% else %}
-        <div style="width: 160px; height: 160px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; font-weight: 700; margin: 0 auto;">
-            {{ employee.name[0] }}
-        </div>
-        {% endif %}
-    </div>
-    <form method="POST" action="/admin/employee/{{ employee.id }}/upload-photo" enctype="multipart/form-data">
-        <div class="form-group">
-            <input type="file" name="photo" accept="image/*" style="font-size: 0.9rem;">
-        </div>
-        <button type="submit" class="button" style="width: 100%;">Upload Photo</button>
-    </form>
-</div>
+        <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" class="pf-photo" alt="{{ employee.name }}">
+        {% else %}<div class="pf-photo-init">{{ employee.name[0] }}</div>{% endif %}
+        <h1>{{ employee.name }}</h1>
+        <div class="pf-role">{{ employee.emp_code }} · {{ employee.department or '—' }}</div>
+      </div>
+      <div class="pf-photo-upload">
+        <form method="POST" action="/admin/employee/{{ employee.id }}/upload-photo" enctype="multipart/form-data">
+          <label>Change photo</label>
+          <input type="file" name="photo" accept="image/*" style="font-size:.82rem;width:100%;">
+          <button type="submit" class="pf-btn pf-btn-ghost" style="margin-top:.5rem;">Upload Photo</button>
+        </form>
+      </div>
+      <div class="pf-facts">
+        <div class="pf-fact"><span class="k">Designation</span><span class="v">{{ employee.designation or '—' }}</span></div>
+        <div class="pf-fact"><span class="k">Joined</span><span class="v">{{ employee.joining_date|format_date if employee.joining_date else '—' }}</span></div>
+        <div class="pf-fact"><span class="k">Status</span><span class="v">{% if cst == 'probation' %}Probation{% else %}Permanent{% endif %}</span></div>
+      </div>
+      <div class="pf-rail-cta">
+        <button type="submit" form="empEditForm" class="pf-btn pf-btn-primary">Save Changes</button>
+        <a href="/admin/employee/{{ employee.id }}" class="pf-btn pf-btn-ghost">Cancel</a>
+      </div>
+    </aside>
 
-<!-- Employee Info -->
-<div class="card">
-    <h2 class="card-title">Current Information</h2>
-    <div style="font-size: 0.95rem; color: var(--gray-600);">
-        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Code:</strong> {{ employee.emp_code }}</p>
-        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Department:</strong> {{ employee.department or '-' }}</p>
-        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Designation:</strong> {{ employee.designation or '-' }}</p>
-        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Joined:</strong> {{ employee.joining_date or '-' }}</p>
-        <p style="margin-bottom: 0;"><strong style="color: var(--navy);">Email:</strong> {{ employee.email or '-' }}</p>
-    </div>
-</div>
+    <!-- RIGHT: TABBED EDIT -->
+    <section class="pf-panel">
+      <div class="pf-tabs" role="tablist">
+        <button type="button" class="pf-tab on" onclick="etab('personal',this)">Personal</button>
+        <button type="button" class="pf-tab" onclick="etab('family',this)">Family &amp; Insurance</button>
+        <button type="button" class="pf-tab" onclick="etab('bank',this)">Bank &amp; PF</button>
+        <button type="button" class="pf-tab" onclick="etab('confirm',this)">Confirmation</button>
+        <button type="button" class="pf-tab" onclick="etab('work',this)">Experience</button>
+        <button type="button" class="pf-tab" onclick="etab('employment',this)">Employment</button>
+        <button type="button" class="pf-tab" onclick="etab('docs',this)">Documents</button>
+      </div>
+      <div class="pf-body">
 
-</div>
-
-<div class="card" style="max-width: 700px; margin-bottom: 3rem;">
-    <h2 class="card-title">Personal Information</h2>
-    <form method="POST">
-        <div class="form-group">
-            <label for="name">Full Name</label>
-            <input type="text" id="name" name="name" value="{{ employee.name }}" required>
-        </div>
-
-        <div class="form-group">
-            <label>Employee Code</label>
-            <input type="text" value="{{ employee.emp_code }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
-        </div>
-
-        <div class="form-group">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" value="{{ employee.email or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label for="phone">Phone</label>
-            <input type="tel" id="phone" name="phone" value="{{ employee.phone or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label for="dob">Date of Birth</label>
-            <input type="date" id="dob" name="dob" value="{{ employee.dob or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label for="address">Address</label>
-            <textarea id="address" name="address">{{ employee.address or '' }}</textarea>
-        </div>
-
-        <div style="display: flex; gap: 2rem; margin: 2rem 0;">
-            <div style="flex: 1;">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="department">Department</label>
-                    <select id="department" name="department">
-                        {% for dept in departments %}
-                        <option value="{{ dept }}" {% if employee.department == dept %}selected{% endif %}>{{ dept }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+        <form method="POST" id="empEditForm">
+          <!-- PERSONAL -->
+          <div class="etab-pane on" data-pane="personal">
+            <div class="pf-sec">Personal information</div>
+            <div class="form-group"><label for="name">Full Name</label><input type="text" id="name" name="name" value="{{ employee.name }}" required></div>
+            <div class="form-group"><label>Employee Code</label><input type="text" value="{{ employee.emp_code }}" disabled style="background:var(--gray-100);color:var(--gray-500);"></div>
+            <div class="grid2">
+              <div class="form-group"><label for="email">Work Email</label><input type="email" id="email" name="email" value="{{ employee.email or '' }}"></div>
+              <div class="form-group"><label for="phone">Phone</label><input type="tel" id="phone" name="phone" value="{{ employee.phone or '' }}"></div>
             </div>
-            <div style="flex: 1;">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label for="designation">Designation</label>
-                    <input type="text" id="designation" name="designation" value="{{ employee.designation or '' }}">
-                </div>
+            <div class="grid2">
+              <div class="form-group"><label for="dob">Date of Birth</label><input type="date" id="dob" name="dob" value="{{ employee.dob or '' }}"></div>
+              <div class="form-group"><label for="personal_email">Personal Email</label><input type="email" id="personal_email" name="personal_email" value="{{ employee.personal_email or '' }}"></div>
             </div>
-        </div>
-
-        <div class="form-group">
-            <label for="joining_date">Joining Date</label>
-            <input type="date" id="joining_date" name="joining_date" value="{{ employee.joining_date or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label for="reporting_to">Reporting To</label>
-            <select id="reporting_to" name="reporting_to">
-                <option value="">-- None --</option>
-                {% for mgr in managers %}
-                <option value="{{ mgr.id }}" {% if employee.reporting_to == mgr.id %}selected{% endif %}>{{ mgr.name }} ({{ mgr.emp_code }})</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="carry_forward">Carry Forward</label>
-            <input type="number" id="carry_forward" name="carry_forward" value="{{ employee.carry_forward or 0 }}" step="0.5" min="0">
-        </div>
-
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Emergency Contact</h2>
-
-        <div class="form-group">
-            <label for="emergency_contact_name">Name</label>
-            <input type="text" id="emergency_contact_name" name="emergency_contact_name" value="{{ employee.emergency_contact_name or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label for="emergency_contact_phone">Phone</label>
-            <input type="tel" id="emergency_contact_phone" name="emergency_contact_phone" value="{{ employee.emergency_contact_phone or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label for="emergency_contact_relation">Relation</label>
-            <input type="text" id="emergency_contact_relation" name="emergency_contact_relation" value="{{ employee.emergency_contact_relation or '' }}">
-        </div>
-
-        <!-- Additional Details -->
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Additional Details</h2>
-        <div style="display:flex; gap:2rem;">
-            <div style="flex:1;">
-                <div class="form-group" style="margin-bottom:1rem;">
-                    <label for="blood_group">Blood Group</label>
-                    <select id="blood_group" name="blood_group">
-                        <option value="">— Select —</option>
-                        {% for bg in ['A+','A-','B+','B-','O+','O-','AB+','AB-'] %}
-                        <option value="{{ bg }}" {% if employee.blood_group == bg %}selected{% endif %}>{{ bg }}</option>{% endfor %}
-                    </select>
-                </div>
+            <div class="grid2">
+              <div class="form-group"><label for="department">Department</label><select id="department" name="department">{% for dept in departments %}<option value="{{ dept }}" {% if employee.department == dept %}selected{% endif %}>{{ dept }}</option>{% endfor %}</select></div>
+              <div class="form-group"><label for="designation">Designation</label><input type="text" id="designation" name="designation" value="{{ employee.designation or '' }}"></div>
             </div>
-            <div style="flex:1;">
-                <div class="form-group" style="margin-bottom:1rem;">
-                    <label for="official_number">Official Number</label>
-                    <input type="text" id="official_number" name="official_number" value="{{ employee.official_number or '' }}">
-                </div>
+            <div class="grid2">
+              <div class="form-group"><label for="joining_date">Joining Date</label><input type="date" id="joining_date" name="joining_date" value="{{ employee.joining_date or '' }}"></div>
+              <div class="form-group"><label for="reporting_to">Reporting To</label><select id="reporting_to" name="reporting_to"><option value="">-- None --</option>{% for mgr in managers %}<option value="{{ mgr.id }}" {% if employee.reporting_to == mgr.id %}selected{% endif %}>{{ mgr.name }} ({{ mgr.emp_code }})</option>{% endfor %}</select></div>
             </div>
-        </div>
-        <div class="form-group">
-            <label for="personal_email">Personal Email</label>
-            <input type="email" id="personal_email" name="personal_email" value="{{ employee.personal_email or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="hobbies">Hobbies &amp; Interests</label>
-            <textarea id="hobbies" name="hobbies">{{ employee.hobbies or '' }}</textarea>
-        </div>
-
-        <!-- Bank Account Details -->
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Bank Account Details</h2>
-        <div class="form-group"><label for="bank_name">Bank Name</label><input type="text" id="bank_name" name="bank_name" value="{{ employee.bank_name or '' }}"></div>
-        <div class="form-group"><label for="bank_branch">Branch Name</label><input type="text" id="bank_branch" name="bank_branch" value="{{ employee.bank_branch or '' }}"></div>
-        <div class="form-group"><label for="bank_account_name">Account Holder Name</label><input type="text" id="bank_account_name" name="bank_account_name" value="{{ employee.bank_account_name or '' }}"></div>
-        <div class="form-group"><label for="bank_account_number">Account Number</label><input type="text" id="bank_account_number" name="bank_account_number" value="{{ employee.bank_account_number or '' }}"></div>
-        <div class="form-group"><label for="bank_ifsc">IFSC Code</label><input type="text" id="bank_ifsc" name="bank_ifsc" value="{{ employee.bank_ifsc or '' }}" style="text-transform:uppercase;"></div>
-
-        <!-- Confirmation (Probation → Permanent) -->
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Confirmation Status</h2>
-        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-            <div class="form-group" style="flex:1;min-width:200px;">
-                <label for="confirmation_status">Status</label>
-                <select id="confirmation_status" name="confirmation_status">
-                    {% set cst = employee.confirmation_status or 'permanent' %}
-                    <option value="probation" {{ 'selected' if cst == 'probation' else '' }}>Probation</option>
-                    <option value="permanent" {{ 'selected' if cst == 'permanent' else '' }}>Permanent</option>
-                </select>
+            <div class="grid2">
+              <div class="form-group"><label for="blood_group">Blood Group</label><select id="blood_group" name="blood_group"><option value="">— Select —</option>{% for bg in ['A+','A-','B+','B-','O+','O-','AB+','AB-'] %}<option value="{{ bg }}" {% if employee.blood_group == bg %}selected{% endif %}>{{ bg }}</option>{% endfor %}</select></div>
+              <div class="form-group"><label for="official_number">Official Number</label><input type="text" id="official_number" name="official_number" value="{{ employee.official_number or '' }}"></div>
             </div>
-            <div class="form-group" style="flex:1;min-width:200px;"><label for="probation_end_date">Probation Ends</label><input type="date" id="probation_end_date" name="probation_end_date" value="{{ employee.probation_end_date or '' }}"></div>
-        </div>
-        {% if employee.confirmed_at %}<p style="color:#16a34a;font-size:.85rem;margin:-.5rem 0 1rem;">✓ Confirmed permanent on {{ employee.confirmed_at|format_date }}.</p>{% endif %}
+            <div class="form-group"><label for="carry_forward">Leave Carry Forward</label><input type="number" id="carry_forward" name="carry_forward" value="{{ employee.carry_forward or 0 }}" step="0.5" min="0"></div>
+            <div class="form-group"><label for="address">Address</label><textarea id="address" name="address">{{ employee.address or '' }}</textarea></div>
+            <div class="form-group"><label for="hobbies">Hobbies &amp; Interests</label><textarea id="hobbies" name="hobbies">{{ employee.hobbies or '' }}</textarea></div>
+            <div class="pf-sec mt">Emergency contact</div>
+            <div class="grid2">
+              <div class="form-group"><label for="emergency_contact_name">Name</label><input type="text" id="emergency_contact_name" name="emergency_contact_name" value="{{ employee.emergency_contact_name or '' }}"></div>
+              <div class="form-group"><label for="emergency_contact_phone">Phone</label><input type="tel" id="emergency_contact_phone" name="emergency_contact_phone" value="{{ employee.emergency_contact_phone or '' }}"></div>
+              <div class="form-group"><label for="emergency_contact_relation">Relation</label><input type="text" id="emergency_contact_relation" name="emergency_contact_relation" value="{{ employee.emergency_contact_relation or '' }}"></div>
+            </div>
+          </div>
 
-        <!-- Provident Fund (PF) -->
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Provident Fund (PF)</h2>
-        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-            <div class="form-group" style="flex:1;min-width:200px;"><label for="pf_number">PF Number</label><input type="text" id="pf_number" name="pf_number" value="{{ employee.pf_number or '' }}"></div>
-            <div class="form-group" style="flex:1;min-width:200px;"><label for="pf_start_date">PF Start Date</label><input type="date" id="pf_start_date" name="pf_start_date" value="{{ employee.pf_start_date or '' }}"></div>
-        </div>
-
-        <!-- Health Insurance policy + dependents -->
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Health Insurance &amp; Dependents</h2>
-        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-            <div class="form-group" style="flex:1;min-width:180px;"><label for="insurance_number">Policy / UHID Number</label><input type="text" id="insurance_number" name="insurance_number" value="{{ employee.insurance_number or '' }}"></div>
-            <div class="form-group" style="flex:1;min-width:180px;"><label for="insurance_provider">Insurance Provider</label><input type="text" id="insurance_provider" name="insurance_provider" value="{{ employee.insurance_provider or '' }}"></div>
-            <div class="form-group" style="flex:1;min-width:180px;"><label for="insurance_activation_date">Activation Date</label><input type="date" id="insurance_activation_date" name="insurance_activation_date" value="{{ employee.insurance_activation_date or '' }}"></div>
-        </div>
-        {% set _spouse = (dependents | selectattr('relation','equalto','spouse') | list | first) %}
-        {% set _children = (dependents | selectattr('relation','equalto','child') | list) %}
-        {% set _father = (dependents | selectattr('relation','equalto','father') | list | first) %}
-        {% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
-        <input type="hidden" name="dep_section_present" value="1">
-        <div class="form-group" style="max-width:280px;"><label for="maritalStatus">Marital Status</label>
-            <select id="maritalStatus" name="marital_status" onchange="depToggle()">
+          <!-- FAMILY & INSURANCE -->
+          <div class="etab-pane" data-pane="family">
+            <div class="pf-sec">Health insurance policy</div>
+            <div class="grid2">
+              <div class="form-group"><label for="insurance_number">Policy / UHID Number</label><input type="text" id="insurance_number" name="insurance_number" value="{{ employee.insurance_number or '' }}"></div>
+              <div class="form-group"><label for="insurance_provider">Insurance Provider</label><input type="text" id="insurance_provider" name="insurance_provider" value="{{ employee.insurance_provider or '' }}"></div>
+              <div class="form-group"><label for="insurance_activation_date">Activation Date</label><input type="date" id="insurance_activation_date" name="insurance_activation_date" value="{{ employee.insurance_activation_date or '' }}"></div>
+            </div>
+            <input type="hidden" name="dep_section_present" value="1">
+            <div class="pf-sec mt">Dependents</div>
+            <div class="form-group" style="max-width:280px;"><label for="maritalStatus">Marital Status</label>
+              <select id="maritalStatus" name="marital_status" onchange="depToggle()">
                 <option value="">— Select —</option>
                 <option value="married" {{ 'selected' if employee.marital_status == 'married' else '' }}>Married</option>
                 <option value="unmarried" {{ 'selected' if employee.marital_status == 'unmarried' else '' }}>Unmarried</option>
-            </select>
-        </div>
-        <div id="depMarried" style="display:none;">
-            <h3 style="font-size:1rem;color:var(--navy);margin:.4rem 0;">Spouse</h3>
-            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-                <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_spouse_first_name" value="{{ _spouse.first_name if _spouse else '' }}"></div>
-                <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_spouse_last_name" value="{{ _spouse.last_name if _spouse else '' }}"></div>
-                <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_spouse_dob" value="{{ _spouse.dob if _spouse else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+              </select>
             </div>
-            <h3 style="font-size:1rem;color:var(--navy);margin:.8rem 0 .4rem;">Children</h3>
-            <div id="childList">
+            <div id="depMarried" style="display:none;">
+              <h3 style="font-size:1rem;color:var(--navy);margin:.4rem 0;">Spouse</h3>
+              <div class="grid2">
+                <div class="form-group"><label>First Name</label><input type="text" name="dep_spouse_first_name" value="{{ _spouse.first_name if _spouse else '' }}"></div>
+                <div class="form-group"><label>Last Name</label><input type="text" name="dep_spouse_last_name" value="{{ _spouse.last_name if _spouse else '' }}"></div>
+                <div class="form-group"><label>Date of Birth</label><input type="date" name="dep_spouse_dob" value="{{ _spouse.dob if _spouse else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+              </div>
+              <h3 style="font-size:1rem;color:var(--navy);margin:.8rem 0 .4rem;">Children</h3>
+              <div id="childList">
                 {% set child_rows = _children if _children else [ {} ] %}
                 {% for c in child_rows %}
                 <div class="exp-block" style="border:1px solid var(--gray-200);border-radius:.6rem;padding:1rem;margin-bottom:1rem;position:relative;">
-                    <button type="button" onclick="delChild(this)" style="position:absolute;top:.6rem;right:.6rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:.4rem;padding:.25rem .6rem;font-size:.8rem;cursor:pointer;">Remove</button>
-                    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-                        <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_child_first_name" value="{{ c.first_name or '' }}"></div>
-                        <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_child_last_name" value="{{ c.last_name or '' }}"></div>
-                        <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_child_dob" value="{{ c.dob or '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
-                    </div>
+                  <button type="button" onclick="delChild(this)" style="position:absolute;top:.6rem;right:.6rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:.4rem;padding:.25rem .6rem;font-size:.8rem;cursor:pointer;">Remove</button>
+                  <div class="grid2">
+                    <div class="form-group"><label>First Name</label><input type="text" name="dep_child_first_name" value="{{ c.first_name or '' }}"></div>
+                    <div class="form-group"><label>Last Name</label><input type="text" name="dep_child_last_name" value="{{ c.last_name or '' }}"></div>
+                    <div class="form-group"><label>Date of Birth</label><input type="date" name="dep_child_dob" value="{{ c.dob or '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+                  </div>
                 </div>
                 {% endfor %}
+              </div>
+              <button type="button" onclick="addChild()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.5rem 1rem;font-size:.88rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Child</button>
             </div>
-            <button type="button" onclick="addChild()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.5rem 1rem;font-size:.88rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Child</button>
-        </div>
-        <div id="depUnmarried" style="display:none;">
-            <h3 style="font-size:1rem;color:var(--navy);margin:.4rem 0;">Father</h3>
-            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-                <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_father_first_name" value="{{ _father.first_name if _father else '' }}"></div>
-                <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_father_last_name" value="{{ _father.last_name if _father else '' }}"></div>
-                <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_father_dob" value="{{ _father.dob if _father else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+            <div id="depUnmarried" style="display:none;">
+              <h3 style="font-size:1rem;color:var(--navy);margin:.4rem 0;">Father</h3>
+              <div class="grid2">
+                <div class="form-group"><label>First Name</label><input type="text" name="dep_father_first_name" value="{{ _father.first_name if _father else '' }}"></div>
+                <div class="form-group"><label>Last Name</label><input type="text" name="dep_father_last_name" value="{{ _father.last_name if _father else '' }}"></div>
+                <div class="form-group"><label>Date of Birth</label><input type="date" name="dep_father_dob" value="{{ _father.dob if _father else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+              </div>
+              <h3 style="font-size:1rem;color:var(--navy);margin:.8rem 0 .4rem;">Mother</h3>
+              <div class="grid2">
+                <div class="form-group"><label>First Name</label><input type="text" name="dep_mother_first_name" value="{{ _mother.first_name if _mother else '' }}"></div>
+                <div class="form-group"><label>Last Name</label><input type="text" name="dep_mother_last_name" value="{{ _mother.last_name if _mother else '' }}"></div>
+                <div class="form-group"><label>Date of Birth</label><input type="date" name="dep_mother_dob" value="{{ _mother.dob if _mother else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+              </div>
             </div>
-            <h3 style="font-size:1rem;color:var(--navy);margin:.8rem 0 .4rem;">Mother</h3>
-            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-                <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_mother_first_name" value="{{ _mother.first_name if _mother else '' }}"></div>
-                <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_mother_last_name" value="{{ _mother.last_name if _mother else '' }}"></div>
-                <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_mother_dob" value="{{ _mother.dob if _mother else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
-            </div>
-        </div>
+          </div>
 
-        <!-- Work Experience -->
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1rem; font-size: 1.2rem; color: var(--navy);">Internship / Work Experience</h2>
-        <div id="expList">
-            {% set exp_rows = experience if experience else [ {} ] %}
-            {% for e in exp_rows %}
-            <div class="exp-block" style="border:1px solid var(--gray-200);border-radius:.6rem;padding:1rem;margin-bottom:1rem;position:relative;">
+          <!-- BANK & PF (data-pane bank; two sections show together) -->
+          <div class="etab-pane" data-pane="bank">
+            <div class="pf-sec">Bank account</div>
+            <div class="form-group"><label for="bank_name">Bank Name</label><input type="text" id="bank_name" name="bank_name" value="{{ employee.bank_name or '' }}"></div>
+            <div class="form-group"><label for="bank_branch">Branch Name</label><input type="text" id="bank_branch" name="bank_branch" value="{{ employee.bank_branch or '' }}"></div>
+            <div class="form-group"><label for="bank_account_name">Account Holder Name</label><input type="text" id="bank_account_name" name="bank_account_name" value="{{ employee.bank_account_name or '' }}"></div>
+            <div class="form-group"><label for="bank_account_number">Account Number</label><input type="text" id="bank_account_number" name="bank_account_number" value="{{ employee.bank_account_number or '' }}"></div>
+            <div class="form-group"><label for="bank_ifsc">IFSC Code</label><input type="text" id="bank_ifsc" name="bank_ifsc" value="{{ employee.bank_ifsc or '' }}" style="text-transform:uppercase;"></div>
+            <div class="pf-sec mt">Provident fund</div>
+            <div class="grid2">
+              <div class="form-group"><label for="pf_number">PF Number</label><input type="text" id="pf_number" name="pf_number" value="{{ employee.pf_number or '' }}"></div>
+              <div class="form-group"><label for="pf_start_date">PF Start Date</label><input type="date" id="pf_start_date" name="pf_start_date" value="{{ employee.pf_start_date or '' }}"></div>
+            </div>
+          </div>
+
+          <!-- CONFIRMATION -->
+          <div class="etab-pane" data-pane="confirm">
+            <div class="pf-sec">Confirmation status</div>
+            <div class="grid2">
+              <div class="form-group"><label for="confirmation_status">Status</label>
+                <select id="confirmation_status" name="confirmation_status">
+                  <option value="probation" {{ 'selected' if cst == 'probation' else '' }}>Probation</option>
+                  <option value="permanent" {{ 'selected' if cst == 'permanent' else '' }}>Permanent</option>
+                </select>
+              </div>
+              <div class="form-group"><label for="probation_end_date">Probation Ends</label><input type="date" id="probation_end_date" name="probation_end_date" value="{{ employee.probation_end_date or '' }}"></div>
+            </div>
+            {% if employee.confirmed_at %}<p style="color:#16a34a;font-size:.85rem;">✓ Confirmed permanent on {{ employee.confirmed_at|format_date }}.</p>{% endif %}
+          </div>
+
+          <!-- EXPERIENCE -->
+          <div class="etab-pane" data-pane="work">
+            <div class="pf-sec">Internship / work experience</div>
+            <div id="expList">
+              {% set exp_rows = experience if experience else [ {} ] %}
+              {% for e in exp_rows %}
+              <div class="exp-block" style="border:1px solid var(--gray-200);border-radius:.6rem;padding:1rem;margin-bottom:1rem;position:relative;">
                 <button type="button" onclick="delExp(this)" style="position:absolute;top:.6rem;right:.6rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:.4rem;padding:.25rem .6rem;font-size:.8rem;cursor:pointer;">Remove</button>
-                <div style="display:flex;gap:1rem;">
-                    <div class="form-group" style="flex:1;"><label>Company Name</label><input type="text" name="exp_company" value="{{ e.company_name or '' }}"></div>
-                    <div class="form-group" style="flex:1;"><label>Designation</label><input type="text" name="exp_designation" value="{{ e.designation or '' }}"></div>
+                <div class="grid2">
+                  <div class="form-group"><label>Company Name</label><input type="text" name="exp_company" value="{{ e.company_name or '' }}"></div>
+                  <div class="form-group"><label>Designation</label><input type="text" name="exp_designation" value="{{ e.designation or '' }}"></div>
                 </div>
-                <div style="display:flex;gap:1rem;">
-                    <div class="form-group" style="flex:1;"><label>From Date</label><input type="date" name="exp_from" value="{{ e.from_date or '' }}"></div>
-                    <div class="form-group" style="flex:1;"><label>To Date</label><input type="date" name="exp_to" value="{{ e.to_date or '' }}"></div>
-                    <div class="form-group" style="flex:1;"><label>Location</label><input type="text" name="exp_location" value="{{ e.location or '' }}"></div>
+                <div class="grid2">
+                  <div class="form-group"><label>From Date</label><input type="date" name="exp_from" value="{{ e.from_date or '' }}"></div>
+                  <div class="form-group"><label>To Date</label><input type="date" name="exp_to" value="{{ e.to_date or '' }}"></div>
+                  <div class="form-group"><label>Location</label><input type="text" name="exp_location" value="{{ e.location or '' }}"></div>
                 </div>
                 <div class="form-group"><label>Work Role Description</label><textarea name="exp_role">{{ e.role_description or '' }}</textarea></div>
+              </div>
+              {% endfor %}
             </div>
-            {% endfor %}
-        </div>
-        <button type="button" onclick="addExp()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.6rem 1.1rem;font-size:.9rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Experience</button>
+            <button type="button" onclick="addExp()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.6rem 1.1rem;font-size:.9rem;font-weight:600;cursor:pointer;">+ Add Experience</button>
+          </div>
 
-        <!-- Employment Status & Exit (Phase B) -->
-        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Employment Status &amp; Exit</h2>
-        {# is_active is the source of truth: an ACTIVE employee always shows Active,
-           so a normal profile save never silently deactivates them from a stale
-           employment_status value. Only a genuinely inactive employee shows its
-           exit status. #}
-        {% set estatus = ('active' if employee.is_active else (employee.employment_status or 'resigned')) %}
-        <div class="form-group">
-            <label for="employment_status">Status</label>
-            <select id="employment_status" name="employment_status" onchange="toggleExitFields()">
+          <!-- EMPLOYMENT / EXIT -->
+          <div class="etab-pane" data-pane="employment">
+            <div class="pf-sec">Employment status &amp; exit</div>
+            <div class="form-group">
+              <label for="employment_status">Status</label>
+              <select id="employment_status" name="employment_status" onchange="toggleExitFields()">
                 <option value="active"     {% if estatus == 'active' %}selected{% endif %}>Active</option>
                 <option value="resigned"   {% if estatus == 'resigned' %}selected{% endif %}>Resigned</option>
                 <option value="terminated" {% if estatus == 'terminated' %}selected{% endif %}>Terminated</option>
                 <option value="absconded"  {% if estatus == 'absconded' %}selected{% endif %}>Absconded</option>
                 <option value="retired"    {% if estatus == 'retired' %}selected{% endif %}>Retired</option>
-            </select>
-            <small style="color:var(--gray-500);">Setting anything other than Active runs the exit process — the employee can no longer log in.</small>
-        </div>
-        <div id="exitFields" style="display:{% if estatus != 'active' %}block{% else %}none{% endif %};padding:1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:.5rem;">
-            <div class="form-group">
-                <label for="last_working_day">Last Working Day / Exit Date</label>
-                <input type="date" id="last_working_day" name="last_working_day" value="{{ employee.last_working_day or '' }}">
-                <small style="color:var(--gray-500);">Leave blank if not known — status still applies.</small>
+              </select>
+              <small style="color:var(--gray-500);">Setting anything other than Active runs the exit process — the employee can no longer log in.</small>
             </div>
-            <div class="form-group">
-                <label for="exit_reason">Exit Reason</label>
-                <input type="text" id="exit_reason" name="exit_reason" value="{{ employee.exit_reason or '' }}" placeholder="e.g. Personal reasons, Better opportunity, Performance">
+            <div id="exitFields" style="display:{% if estatus != 'active' %}block{% else %}none{% endif %};padding:1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:.5rem;">
+              <div class="form-group"><label for="last_working_day">Last Working Day / Exit Date</label><input type="date" id="last_working_day" name="last_working_day" value="{{ employee.last_working_day or '' }}"><small style="color:var(--gray-500);">Leave blank if not known — status still applies.</small></div>
+              <div class="form-group"><label for="exit_reason">Exit Reason</label><input type="text" id="exit_reason" name="exit_reason" value="{{ employee.exit_reason or '' }}" placeholder="e.g. Personal reasons, Better opportunity"></div>
+              <div class="form-group"><label for="exit_notes">Exit Notes</label><textarea id="exit_notes" name="exit_notes" placeholder="Any additional notes about the exit">{{ employee.exit_notes or '' }}</textarea></div>
             </div>
-            <div class="form-group">
-                <label for="exit_notes">Exit Notes</label>
-                <textarea id="exit_notes" name="exit_notes" placeholder="Any additional notes about the exit">{{ employee.exit_notes or '' }}</textarea>
+          </div>
+
+          <div class="save-bar" data-save="1">
+            <button type="submit" class="pf-btn pf-btn-primary" style="width:auto;padding:.7rem 1.8rem;">Save Changes</button>
+            <a href="/admin/employee/{{ employee.id }}" class="pf-btn pf-btn-ghost" style="width:auto;padding:.7rem 1.8rem;">Cancel</a>
+          </div>
+        </form>
+
+        <!-- DOCUMENTS (separate forms — own pane) -->
+        <div class="etab-pane" data-pane="docs" id="documents">
+          <div class="pf-sec">Uploaded documents</div>
+          {% if documents %}
+            {% for d in documents %}
+            <div class="doc-list-row">
+              <div><div style="font-weight:600;color:var(--navy);">{{ doc_labels.get(d.doc_type) or d.doc_name or d.doc_type }}{% if d.doc_type == 'other' and d.doc_name %} — {{ d.doc_name }}{% endif %}</div><div style="font-size:.75rem;color:var(--gray-400);">{{ d.filename }}</div></div>
+              <div style="display:flex;gap:.5rem;">
+                <a href="/admin/employee/{{ employee.id }}/doc/{{ d.id }}" target="_blank" class="pf-btn pf-btn-ghost" style="width:auto;padding:.4rem .8rem;font-size:.8rem;">View</a>
+                <form method="POST" action="/admin/employee/{{ employee.id }}/doc/{{ d.id }}/delete" onsubmit="return confirm('Delete this document?');" style="margin:0;"><button type="submit" class="pf-btn" style="width:auto;padding:.4rem .8rem;font-size:.8rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;">Delete</button></form>
+              </div>
             </div>
+            {% endfor %}
+          {% else %}<p style="color:var(--gray-500);">No documents uploaded yet.</p>{% endif %}
+          <div class="pf-sec mt">Upload documents</div>
+          <form method="POST" action="/admin/employee/{{ employee.id }}/docs/upload" enctype="multipart/form-data">
+            <p style="color:var(--gray-500);font-size:.85rem;margin:0 0 1rem;">Re-uploading a fixed type replaces the old one.</p>
+            {% for key, label in doc_types %}
+            <div class="form-group"><label>{{ label }}</label><input type="file" name="doc_{{ key }}" accept=".pdf,.jpg,.jpeg,.png"></div>
+            {% endfor %}
+            <label style="display:block;font-weight:600;margin:1rem 0 .5rem;">Other Certificates</label>
+            <div id="empOtherList">
+              <div class="grid2" style="margin-bottom:.75rem;">
+                <div class="form-group" style="margin-bottom:0;"><input type="text" name="doc_other_name" placeholder="Certificate name"></div>
+                <div class="form-group" style="margin-bottom:0;"><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div>
+              </div>
+            </div>
+            <button type="button" onclick="addEmpOther()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.5rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Another</button>
+            <div><button type="submit" class="pf-btn pf-btn-primary" style="width:auto;padding:.6rem 1.4rem;">Upload Document(s)</button></div>
+          </form>
         </div>
 
-        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-            <button type="submit" class="button">Save Changes</button>
-            <a href="/admin/employee/{{ employee.id }}" class="button button-secondary">Cancel</a>
-        </div>
-    </form>
-    <script>
-    function toggleExitFields() {
-        var v = document.getElementById('employment_status').value;
-        document.getElementById('exitFields').style.display = (v === 'active') ? 'none' : 'block';
-    }
-    function delExp(btn){
-        var list = document.getElementById('expList');
-        if (list.querySelectorAll('.exp-block').length <= 1){
-            btn.closest('.exp-block').querySelectorAll('input,textarea').forEach(function(f){ f.value=''; });
-            return;
-        }
-        btn.closest('.exp-block').remove();
-    }
-    function addExp(){
-        var list = document.getElementById('expList');
-        var b = list.querySelector('.exp-block').cloneNode(true);
-        b.querySelectorAll('input,textarea').forEach(function(f){ f.value=''; });
-        list.appendChild(b);
-    }
-    function addEmpOther(){
-        var list = document.getElementById('empOtherList');
-        var div = document.createElement('div');
-        div.style.cssText = 'display:flex;gap:1rem;margin-bottom:.75rem;';
-        div.innerHTML = '<div class="form-group" style="flex:1;margin-bottom:0;"><input type="text" name="doc_other_name" placeholder="Certificate name"></div>'
-            + '<div class="form-group" style="flex:1;margin-bottom:0;"><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div>';
-        list.appendChild(div);
-    }
-    // ── Insurance / dependents ──
-    function depToggle(){
-        var ms = document.getElementById('maritalStatus');
-        var m = document.getElementById('depMarried');
-        var u = document.getElementById('depUnmarried');
-        var v = ms ? ms.value : '';
-        if (m) m.style.display = (v === 'married') ? 'block' : 'none';
-        if (u) u.style.display = (v === 'unmarried') ? 'block' : 'none';
-    }
-    function calcAge(input){
-        var out = input.parentNode.querySelector('.age-out');
-        if (!out) return;
-        if (!input.value){ out.textContent=''; return; }
-        var d = new Date(input.value); if (isNaN(d)){ out.textContent=''; return; }
-        var t = new Date(); var age = t.getFullYear()-d.getFullYear();
-        var mm = t.getMonth()-d.getMonth();
-        if (mm<0 || (mm===0 && t.getDate()<d.getDate())) age--;
-        out.textContent = (age>=0 ? 'Age: '+age+' years' : '');
-        out.style.cssText='color:#1e3a5f;font-weight:600;display:block;margin-top:3px;';
-    }
-    function delChild(btn){
-        var list=document.getElementById('childList');
-        if (list.querySelectorAll('.exp-block').length<=1){
-            btn.closest('.exp-block').querySelectorAll('input').forEach(function(f){f.value='';});
-            var o=btn.closest('.exp-block').querySelector('.age-out'); if(o)o.textContent=''; return;
-        }
-        btn.closest('.exp-block').remove();
-    }
-    function addChild(){
-        var list=document.getElementById('childList');
-        var b=list.querySelector('.exp-block').cloneNode(true);
-        b.querySelectorAll('input').forEach(function(f){f.value='';});
-        var o=b.querySelector('.age-out'); if(o)o.textContent=''; list.appendChild(b);
-    }
-    document.addEventListener('DOMContentLoaded', function(){
-        depToggle();
-        document.querySelectorAll('input[data-age]').forEach(function(i){ if(i.value) calcAge(i); });
-    });
-    </script>
+      </div>
+    </section>
+  </div>
 </div>
 
-<!-- Documents -->
-<div class="card" id="documents" style="max-width: 700px; margin-bottom: 3rem;">
-    <h2 class="card-title">Documents</h2>
-    {% if documents %}
-    <div style="margin-bottom:1.5rem;">
-        {% for d in documents %}
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.6rem .8rem;border:1px solid var(--gray-200);border-radius:.5rem;margin-bottom:.5rem;">
-            <div>
-                <div style="font-weight:600;color:var(--gray-800);">{{ doc_labels.get(d.doc_type) or d.doc_name or d.doc_type }}{% if d.doc_type == 'other' and d.doc_name %} — {{ d.doc_name }}{% endif %}</div>
-                <div style="font-size:.75rem;color:var(--gray-400);">{{ d.filename }}</div>
-            </div>
-            <div style="display:flex;gap:.5rem;">
-                <a href="/admin/employee/{{ employee.id }}/doc/{{ d.id }}" target="_blank" class="button button-small button-secondary">View</a>
-                <form method="POST" action="/admin/employee/{{ employee.id }}/doc/{{ d.id }}/delete" onsubmit="return confirm('Delete this document?');">
-                    <button type="submit" class="button button-small button-danger">Delete</button>
-                </form>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <form method="POST" action="/admin/employee/{{ employee.id }}/docs/upload" enctype="multipart/form-data">
-        <p style="color:var(--gray-500);font-size:.9rem;margin:0 0 1rem;">Upload a document to replace/add. Re-uploading a fixed type replaces the old one.</p>
-        {% for key, label in doc_types %}
-        <div class="form-group">
-            <label>{{ label }}</label>
-            <input type="file" name="doc_{{ key }}" accept=".pdf,.jpg,.jpeg,.png">
-        </div>
-        {% endfor %}
-        <label style="display:block;font-weight:600;margin:1rem 0 .5rem;">Other Certificates</label>
-        <div id="empOtherList">
-            <div style="display:flex;gap:1rem;margin-bottom:.75rem;">
-                <div class="form-group" style="flex:1;margin-bottom:0;"><input type="text" name="doc_other_name" placeholder="Certificate name"></div>
-                <div class="form-group" style="flex:1;margin-bottom:0;"><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div>
-            </div>
-        </div>
-        <button type="button" onclick="addEmpOther()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.5rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Another</button>
-        <div><button type="submit" class="button">Upload Document(s)</button></div>
-    </form>
-</div>
+<script>
+  function etab(name, el){
+    document.querySelectorAll('.pf-tab').forEach(t => t.classList.remove('on'));
+    el.classList.add('on');
+    document.querySelectorAll('.etab-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+    // hide the main Save bar on the Documents tab (Documents has its own upload button)
+    var sb = document.querySelector('[data-save]'); if (sb) sb.style.display = (name === 'docs') ? 'none' : 'flex';
+  }
+  function toggleExitFields() {
+    var v = document.getElementById('employment_status').value;
+    document.getElementById('exitFields').style.display = (v === 'active') ? 'none' : 'block';
+  }
+  function delExp(btn){
+    var list = document.getElementById('expList');
+    if (list.querySelectorAll('.exp-block').length <= 1){ btn.closest('.exp-block').querySelectorAll('input,textarea').forEach(function(f){ f.value=''; }); return; }
+    btn.closest('.exp-block').remove();
+  }
+  function addExp(){
+    var list = document.getElementById('expList');
+    var b = list.querySelector('.exp-block').cloneNode(true);
+    b.querySelectorAll('input,textarea').forEach(function(f){ f.value=''; });
+    list.appendChild(b);
+  }
+  function addEmpOther(){
+    var list = document.getElementById('empOtherList');
+    var div = document.createElement('div');
+    div.className = 'grid2'; div.style.marginBottom = '.75rem';
+    div.innerHTML = '<div class="form-group" style="margin-bottom:0;"><input type="text" name="doc_other_name" placeholder="Certificate name"></div>'
+      + '<div class="form-group" style="margin-bottom:0;"><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div>';
+    list.appendChild(div);
+  }
+  function depToggle(){
+    var ms = document.getElementById('maritalStatus');
+    var v = ms ? ms.value : '';
+    var m = document.getElementById('depMarried'), u = document.getElementById('depUnmarried');
+    if (m) m.style.display = (v === 'married') ? 'block' : 'none';
+    if (u) u.style.display = (v === 'unmarried') ? 'block' : 'none';
+  }
+  function calcAge(input){
+    var out = input.parentNode.querySelector('.age-out'); if (!out) return;
+    if (!input.value){ out.textContent=''; return; }
+    var d = new Date(input.value); if (isNaN(d)){ out.textContent=''; return; }
+    var t = new Date(), age = t.getFullYear()-d.getFullYear(), mm = t.getMonth()-d.getMonth();
+    if (mm<0 || (mm===0 && t.getDate()<d.getDate())) age--;
+    out.textContent = (age>=0 ? 'Age: '+age+' years' : '');
+  }
+  function delChild(btn){
+    var list=document.getElementById('childList');
+    if (list.querySelectorAll('.exp-block').length<=1){ btn.closest('.exp-block').querySelectorAll('input').forEach(function(f){f.value='';}); var o=btn.closest('.exp-block').querySelector('.age-out'); if(o)o.textContent=''; return; }
+    btn.closest('.exp-block').remove();
+  }
+  function addChild(){
+    var list=document.getElementById('childList');
+    var b=list.querySelector('.exp-block').cloneNode(true);
+    b.querySelectorAll('input').forEach(function(f){f.value='';});
+    var o=b.querySelector('.age-out'); if(o)o.textContent=''; list.appendChild(b);
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    depToggle();
+    document.querySelectorAll('input[data-age]').forEach(function(i){ if(i.value) calcAge(i); });
+  });
+</script>
 {% endblock %}

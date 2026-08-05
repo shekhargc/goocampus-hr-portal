@@ -9809,6 +9809,15 @@ def profile():
         except Exception as e:
             logging.error(f"profile docs upload: {e}")
 
+        # Insurance: employees manage their own family/dependents freely.
+        if request.form.get('dep_section_present'):
+            _ms = request.form.get('marital_status', '').strip()
+            try:
+                conn.execute("UPDATE employees SET marital_status = ? WHERE id = ?", (_ms or None, user['id']))
+                _save_dependents(conn, employee_id=user['id'], marital_status=_ms, form=request.form)
+            except Exception as e:
+                logging.error(f"profile dependents: {e}")
+
         conn.commit()
         conn.close()
 
@@ -9827,11 +9836,15 @@ def profile():
     documents = [dict(x) for x in conn.execute(
         "SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY id", (user['id'],)).fetchall()]
     missing_docs = _missing_required_docs([d['doc_type'] for d in documents])
+    experience = [dict(x) for x in conn.execute(
+        "SELECT * FROM employee_experience WHERE employee_id = ? ORDER BY sort_order, id", (user['id'],)).fetchall()]
+    dependents = _load_dependents(conn, employee_id=user['id'])
 
     conn.close()
     return render_template('employee_profile.html', user=user, reporting_manager=reporting_manager,
                     documents=documents, missing_docs=missing_docs, doc_types=ONBOARDING_DOC_TYPES,
                     doc_labels=dict(ONBOARDING_DOC_TYPES),
+                    experience=experience, dependents=dependents,
                     active_section='hr')
 
 
