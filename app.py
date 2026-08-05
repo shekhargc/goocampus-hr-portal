@@ -35053,13 +35053,14 @@ def sales_leads_add():
         ).fetchall()
     else:
         owners = []
+    _pc = _phone_countries_list(conn)   # while conn is still open
     conn.close()
     return render_template('sales_lead_form.html', user=user, lead=None, mode='add',
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
                            already_has_closure=False,
                            lead_sources=get_lookup_options('lead_source'),
-                           phone_countries=_phone_countries_list(conn),
+                           phone_countries=_pc,
                     active_section='sales')
 
 
