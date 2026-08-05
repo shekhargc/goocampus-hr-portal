@@ -18,17 +18,17 @@
       body{background:var(--ground);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden;}
       a{color:inherit;}
 
-      header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 26px;max-width:1200px;margin:0 auto;width:100%;flex-wrap:wrap;}
+      header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 26px 4px;max-width:1200px;margin:0 auto;width:100%;flex-wrap:wrap;}
       .brand{display:inline-flex;align-items:center;text-decoration:none;}
-      .brand-logo{height:46px;width:auto;display:block;}
-      @media(max-width:520px){.brand-logo{height:38px;}}
-      nav{display:flex;gap:9px;align-items:center;}
-      .nav-btn{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:.85rem;font-weight:600;padding:9px 15px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;}
-      .nav-btn:hover{border-color:var(--navy);color:var(--navy);}
+      .brand-logo{height:56px;width:auto;display:block;}
+      @media(max-width:520px){.brand-logo{height:44px;}}
+      nav{display:inline-flex;gap:3px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:0 1px 3px rgba(16,32,64,.05);}
+      .nav-btn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:.85rem;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;}
+      .nav-btn:hover{background:var(--field);color:var(--navy);}
       .nav-btn svg{width:15px;height:15px;}
 
-      main{flex:1 0 auto;display:flex;align-items:center;justify-content:center;padding:6px 26px 18px;}
-      @media(max-width:520px){main{padding:6px 16px 14px;}}
+      main{flex:1 0 auto;display:flex;align-items:center;justify-content:center;padding:0 26px 16px;}
+      @media(max-width:520px){main{padding:0 16px 14px;}}
       .hero-card{display:grid;grid-template-columns:1.02fr .98fr;background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 24px 60px -30px rgba(16,32,64,.4);max-width:1040px;width:100%;}
       @media(max-width:860px){.hero-card{grid-template-columns:1fr;}}
 
