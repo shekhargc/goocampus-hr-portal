@@ -18,7 +18,9 @@
       body{background:var(--ground);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden;}
       a{color:inherit;}
 
-      header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 26px 4px;max-width:1200px;margin:0 auto;width:100%;flex-wrap:wrap;}
+      /* max-width = hero card (1040) + main side padding (2×26) so the logo lines up
+         with the card's left edge and the nav's right edge lines up with the card's right edge. */
+      header{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:10px 26px 2px;max-width:1092px;margin:0 auto;width:100%;flex-wrap:wrap;}
       .brand{display:inline-flex;align-items:center;text-decoration:none;}
       .brand-logo{height:56px;width:auto;display:block;}
       @media(max-width:520px){.brand-logo{height:44px;}}
