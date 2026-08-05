@@ -4,280 +4,371 @@
 
 {% block section_extra_css %}
 <style>
-    .profile-page { max-width: 850px; margin: 0 auto; }
+    .pf-wrap { max-width: 1120px; margin: 0 auto; }
 
-    /* Photo Section */
-    .profile-header {
-        display: flex; align-items: center; gap: 1.75rem; padding: 2rem;
-        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 1.5rem;
-    }
-    .profile-photo-wrap { position: relative; flex-shrink: 0; }
-    .profile-photo {
-        width: 110px; height: 110px; border-radius: 50%; object-fit: cover;
-        border: 3px solid var(--gray-200);
-    }
-    .profile-photo-init {
-        width: 110px; height: 110px; border-radius: 50%;
-        background: var(--navy); color: white; font-size: 2.5rem; font-weight: 700;
-        display: flex; align-items: center; justify-content: center;
-        border: 3px solid var(--gray-200);
-    }
-    .photo-upload-btn {
-        position: absolute; bottom: 2px; right: 2px;
-        width: 32px; height: 32px; border-radius: 50%;
-        background: var(--orange); color: white; border: 2px solid white;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; transition: background 0.15s;
-    }
-    .photo-upload-btn:hover { background: var(--orange-dark); }
-    .photo-upload-btn input { display: none; }
-    .profile-header-info h1 { font-size: 1.4rem; font-weight: 700; color: var(--navy); margin: 0 0 0.25rem; }
-    .profile-header-meta { font-size: 0.88rem; color: var(--gray-500); display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
-    .profile-header-meta span { display: flex; align-items: center; gap: 0.3rem; }
-    .profile-badge {
-        display: inline-block; padding: 0.15rem 0.55rem; border-radius: 0.3rem;
-        font-size: 0.72rem; font-weight: 600;
-    }
-    .profile-badge.admin { background: rgba(239,68,68,0.1); color: #dc2626; }
-    .profile-badge.mgmt { background: rgba(59,130,246,0.1); color: #2563eb; }
-    .profile-badge.emp { background: rgba(16,185,129,0.1); color: #059669; }
+    /* top banner: blue box (left) + details (right) */
+    .pf-banner { display: flex; flex-wrap: wrap; background: var(--white); border: 1px solid var(--gray-200);
+        border-radius: 0.9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; margin-bottom: 1.4rem; }
+    .pf-bluebox { background: linear-gradient(160deg, var(--navy), #274c78); color: #fff; padding: 1.7rem 1.6rem;
+        width: 270px; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    @media (max-width: 720px){ .pf-bluebox { width: 100%; } }
+    .pf-photo-wrap { position: relative; width: 96px; height: 96px; margin: 0 auto .8rem; }
+    .pf-photo, .pf-photo-init { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff55; }
+    .pf-photo-init { background: #ffffff22; color: #fff; font-size: 2.1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .pf-cam { position: absolute; bottom: 0; right: 0; width: 30px; height: 30px; border-radius: 50%;
+        background: var(--orange); color: #fff; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .pf-cam input { display: none; }
+    .pf-bluebox h1 { margin: 0; font-size: 1.2rem; font-weight: 700; }
+    .pf-role { margin: .2rem 0 .8rem; font-size: .82rem; color: #ffffffcf; }
+    .pf-pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; padding: .25rem .7rem; border-radius: 999px; }
+    .pf-pill.warn { background: #fef3c7; color: #92400e; }
+    .pf-pill.good { background: #dcfce7; color: #166534; }
 
-    /* Section Cards */
-    .profile-section {
-        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 1.25rem; overflow: hidden;
-    }
-    .profile-section-header {
-        padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200);
-        display: flex; justify-content: space-between; align-items: center;
-        background: var(--gray-50);
-    }
-    .profile-section-title { font-weight: 600; font-size: 0.95rem; color: var(--navy); display: flex; align-items: center; gap: 0.5rem; }
-    .profile-section-body { padding: 1.25rem 1.5rem; }
+    .pf-banner-right { flex: 1; min-width: 280px; padding: 1.5rem 1.7rem; display: flex; flex-direction: column; justify-content: center; gap: 1.2rem; }
+    .pf-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem 1.8rem; }
+    .pf-fact .k { color: var(--gray-500); font-size: .72rem; margin-bottom: .18rem; }
+    .pf-fact .v { color: var(--navy); font-weight: 600; font-size: .92rem; word-break: break-word; }
+    .pf-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+    .pf-btn { display: inline-block; text-align: center; border: 0; border-radius: .55rem; padding: .65rem 1.4rem; font-family: inherit; font-weight: 600; font-size: .88rem; cursor: pointer; text-decoration: none; }
+    .pf-btn-primary { background: var(--orange); color: #fff; }
+    .pf-btn-primary:hover { background: var(--orange-dark); }
+    .pf-btn-ghost { background: var(--gray-50); color: var(--navy); border: 1px solid var(--gray-200); }
 
-    /* Field Grid */
-    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    /* full-width panel below the banner */
+    .pf-panel { background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.9rem;
+        box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; }
+    .pf-tabs { display: flex; gap: 2px; padding: .4rem .5rem 0; border-bottom: 1px solid var(--gray-200); overflow-x: auto; }
+    .pf-tabs::-webkit-scrollbar { display: none; }
+    .pf-tab { border: 0; background: transparent; color: var(--gray-500); font: inherit; font-size: .9rem; font-weight: 600;
+        white-space: nowrap; padding: .8rem .9rem; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; display: flex; align-items: center; gap: .45rem; }
+    .pf-tab:hover { color: var(--navy); }
+    .pf-tab.on { color: var(--navy); border-bottom-color: var(--orange); }
+    .pf-tab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); }
+    .pf-body { padding: 1.5rem 1.6rem 1.7rem; }
+    .pf-pane { display: none; }
+    .pf-pane.on { display: block; }
+    .pf-sec { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--gray-400); font-weight: 700; margin: 0 0 .9rem; }
+    .pf-divider { height: 1px; background: var(--gray-200); margin: 1.4rem 0; }
+
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem 1.4rem; }
     .field-grid .field-full { grid-column: 1 / -1; }
-    .field-label { font-size: 0.78rem; font-weight: 600; color: var(--gray-500); margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.03em; }
-    .field-value { font-size: 0.92rem; color: var(--navy); line-height: 1.5; }
-    .field-value.empty { color: var(--gray-400); font-style: italic; }
+    @media (max-width: 560px){ .field-grid { grid-template-columns: 1fr; } }
+    .field-label { font-size: .74rem; font-weight: 600; color: var(--gray-500); margin-bottom: .28rem; }
+    .field-value { font-size: .92rem; color: var(--navy); font-weight: 600; line-height: 1.5; }
+    .field-value.empty { color: var(--gray-400); font-style: italic; font-weight: 500; }
+    .field-input { width: 100%; padding: .55rem .75rem; border: 1px solid var(--gray-300); border-radius: .45rem;
+        font-size: .88rem; font-family: 'Inter', sans-serif; box-sizing: border-box; }
+    .field-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(74,122,181,.12); }
+    textarea.field-input { min-height: 68px; resize: vertical; }
+    .field-lock-icon { color: var(--gray-400); font-size: .72rem; margin-left: .25rem; }
+    .field-hint { font-size: .7rem; color: var(--gray-400); margin-top: .2rem; }
+    .age-out { color: var(--navy); font-weight: 600; font-size: .78rem; display: block; margin-top: .2rem; }
 
-    /* Editable Fields */
-    .field-input {
-        width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--gray-300);
-        border-radius: 0.45rem; font-size: 0.88rem; font-family: 'Inter', sans-serif;
-        transition: border-color 0.15s; box-sizing: border-box;
-    }
-    .field-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(74,122,181,0.1); }
-    .field-input:disabled, .field-input[readonly] {
-        background: var(--gray-50); color: var(--gray-500); cursor: not-allowed;
-    }
-    textarea.field-input { min-height: 70px; resize: vertical; }
-    .field-lock-icon { color: var(--gray-400); font-size: 0.75rem; margin-left: 0.3rem; }
-    .field-hint { font-size: 0.7rem; color: var(--gray-400); margin-top: 0.2rem; }
+    .callout { display: flex; gap: .7rem; background: #fff7ed; color: #b45309; border: 1px solid #fed7aa;
+        border-radius: .6rem; padding: .8rem 1rem; font-size: .85rem; margin-bottom: 1.2rem; }
+    .callout.ok { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
 
-    /* Buttons */
-    .profile-save-btn {
-        background: var(--orange); color: white; border: none; padding: 0.65rem 1.75rem;
-        border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; cursor: pointer;
-        font-family: 'Inter', sans-serif; transition: background 0.15s;
-    }
-    .profile-save-btn:hover { background: var(--orange-dark); }
-    .profile-cancel-btn {
-        background: transparent; color: var(--gray-500); border: 1px solid var(--gray-300);
-        padding: 0.65rem 1.75rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600;
-        cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.15s;
-        text-decoration: none; display: inline-flex; align-items: center;
-    }
-    .profile-cancel-btn:hover { background: var(--gray-50); }
+    .dep-block { border: 1px solid var(--gray-200); border-radius: .6rem; padding: 1rem; margin-bottom: .8rem; position: relative; }
+    .dep-del { position: absolute; top: .6rem; right: .6rem; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
+        border-radius: .4rem; padding: .2rem .55rem; font-size: .78rem; cursor: pointer; }
+    .add-btn { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: .5rem; padding: .5rem 1rem; font-size: .85rem; font-weight: 600; cursor: pointer; }
 
-    @media (max-width: 768px) {
-        .profile-header { flex-direction: column; text-align: center; }
-        .field-grid { grid-template-columns: 1fr; }
-    }
+    .doc-row { display: flex; align-items: center; gap: .8rem; padding: .7rem .9rem; border: 1px solid var(--gray-200);
+        border-radius: .6rem; margin-bottom: .6rem; background: var(--gray-50); }
+    .doc-row.pending { border-style: dashed; background: transparent; }
+    .doc-ic { width: 32px; height: 32px; border-radius: .5rem; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; font-size: .9rem; }
+    .doc-row.pending .doc-ic { background: #fef3c7; color: #92400e; }
+    .doc-nm { font-weight: 600; font-size: .88rem; color: var(--navy); }
+    .doc-mt { font-size: .74rem; color: var(--gray-500); }
+
+    .exp-card { border: 1px solid var(--gray-200); border-radius: .7rem; padding: 1rem 1.1rem; margin-bottom: .8rem; }
+    .exp-card h4 { margin: 0 0 .1rem; font-size: .95rem; color: var(--navy); }
+    .exp-card .co { color: var(--gray-500); font-size: .82rem; margin-bottom: .4rem; }
+    .exp-card p { margin: 0; font-size: .85rem; color: var(--gray-700); }
 </style>
 {% endblock %}
 
 {% block section_content %}
-<div class="profile-page">
+{% set cst = user.confirmation_status or 'permanent' %}
+{% set _spouse = (dependents | selectattr('relation','equalto','spouse') | list | first) %}
+{% set _children = (dependents | selectattr('relation','equalto','child') | list) %}
+{% set _father = (dependents | selectattr('relation','equalto','father') | list | first) %}
+{% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
+<div class="pf-wrap">
 
-    <!-- Profile Header with Photo -->
-    <div class="profile-header">
-        <div class="profile-photo-wrap">
-            {% if user.photo_url %}
-            <img src="{{ user.photo_url if user.photo_url.startswith('http') else '/static/photos/' ~ user.photo_url }}" class="profile-photo" alt="{{ user.name }}">
-            {% else %}
-            <div class="profile-photo-init">{{ user.name[0] }}</div>
-            {% endif %}
-            <form id="photo-form" method="POST" action="/profile/upload-photo" enctype="multipart/form-data">
-                <label class="photo-upload-btn" title="Change photo">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                    <input type="file" name="photo" accept="image/*" onchange="document.getElementById('photo-form').submit();">
-                </label>
-            </form>
+    <!-- TOP BANNER: blue box (left) + details (right) -->
+    <div class="pf-banner">
+      <div class="pf-bluebox">
+        <div class="pf-photo-wrap">
+          {% if user.photo_url %}
+          <img src="{{ user.photo_url if user.photo_url.startswith('http') else '/static/photos/' ~ user.photo_url }}" class="pf-photo" alt="{{ user.name }}">
+          {% else %}
+          <div class="pf-photo-init">{{ user.name[0] }}</div>
+          {% endif %}
+          <form id="photo-form" method="POST" action="/profile/upload-photo" enctype="multipart/form-data">
+            <label class="pf-cam" title="Change photo">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <input type="file" name="photo" accept="image/*" onchange="document.getElementById('photo-form').submit();">
+            </label>
+          </form>
         </div>
-        <div class="profile-header-info">
-            <h1>{{ user.name }}</h1>
-            <div class="profile-header-meta">
-                <span>{{ user.emp_code }}</span>
-                <span>&middot;</span>
-                <span>{{ user.designation or 'No Designation' }}</span>
-                <span>&middot;</span>
-                <span>{{ user.department or 'No Department' }}</span>
-                {% if user.is_admin %}
-                <span class="profile-badge admin">Admin</span>
-                {% elif user.emp_code in ['GC001','GC002','GC003'] %}
-                <span class="profile-badge mgmt">Management</span>
-                {% else %}
-                <span class="profile-badge emp">Employee</span>
-                {% endif %}
-            </div>
+        <h1>{{ user.name }}</h1>
+        <div class="pf-role">{{ user.designation or 'No Designation' }}</div>
+        {% if cst == 'probation' %}<span class="pf-pill warn">● On Probation</span>
+        {% else %}<span class="pf-pill good">● Permanent</span>{% endif %}
+      </div>
+      <div class="pf-banner-right">
+        <div class="pf-facts-grid">
+          <div class="pf-fact"><div class="k">Employee code</div><div class="v">{{ user.emp_code }}</div></div>
+          <div class="pf-fact"><div class="k">Department</div><div class="v">{{ user.department or '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Joined</div><div class="v">{{ user.joining_date|format_date if user.joining_date else '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Reports to</div><div class="v">{{ reporting_manager or '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Work email</div><div class="v">{{ user.email or '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Phone</div><div class="v">{{ user.phone or '—' }}</div></div>
+          {% if cst == 'probation' and user.probation_end_date %}
+          <div class="pf-fact"><div class="k">Confirmation due</div><div class="v">{{ user.probation_end_date|format_date }}</div></div>
+          {% endif %}
+          <div class="pf-fact"><div class="k">Account</div><div class="v">{% if user.is_active == 1 %}<span style="color:#059669;">Active</span>{% else %}<span style="color:var(--danger);">Inactive</span>{% endif %}</div></div>
         </div>
+        <div class="pf-actions">
+          <button type="submit" form="profileForm" class="pf-btn pf-btn-primary">Save Changes</button>
+          <a href="/dashboard" class="pf-btn pf-btn-ghost">Back to Dashboard</a>
+        </div>
+      </div>
     </div>
 
-    <form method="POST" action="/profile">
-        <!-- Work Information -->
-        <div class="profile-section">
-            <div class="profile-section-header">
-                <div class="profile-section-title">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
-                    Work Information
-                </div>
-            </div>
-            <div class="profile-section-body">
-                <div class="field-grid">
-                    <div>
-                        <div class="field-label">Employee Code</div>
-                        <div class="field-value">{{ user.emp_code }}</div>
-                    </div>
-                    <div>
-                        <div class="field-label">Employee ID</div>
-                        <div class="field-value {% if not user.employee_id_number %}empty{% endif %}">{{ user.employee_id_number or 'Not assigned' }}</div>
-                    </div>
-                    <div>
-                        <div class="field-label">Department</div>
-                        <div class="field-value {% if not user.department %}empty{% endif %}">{{ user.department or 'Not assigned' }}</div>
-                    </div>
-                    <div>
-                        <div class="field-label">Designation {% if user.designation %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
-                        {% if not user.designation %}
-                        <input type="text" name="designation" class="field-input" value="" placeholder="Enter your designation">
-                        <div class="field-hint">You can set this once. It will be locked after saving.</div>
-                        {% else %}
-                        <div class="field-value">{{ user.designation }}</div>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <div class="field-label">Date of Joining {% if user.joining_date %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
-                        {% if not user.joining_date %}
-                        <input type="date" name="joining_date" class="field-input" value="">
-                        <div class="field-hint">You can set this once. It will be locked after saving.</div>
-                        {% else %}
-                        <div class="field-value">{{ user.joining_date }}</div>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <div class="field-label">Reporting To</div>
-                        <div class="field-value {% if not reporting_manager %}empty{% endif %}">{{ reporting_manager or 'Not assigned' }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <!-- FULL-WIDTH TABBED FORM -->
+    <section class="pf-panel">
+      <div class="pf-tabs" role="tablist">
+        <button type="button" class="pf-tab on" onclick="pfTab('personal',this)">Personal</button>
+        <button type="button" class="pf-tab" onclick="pfTab('family',this)">Family &amp; Insurance</button>
+        <button type="button" class="pf-tab" onclick="pfTab('bank',this)">Bank &amp; PF</button>
+        <button type="button" class="pf-tab" onclick="pfTab('work',this)">Experience</button>
+        <button type="button" class="pf-tab" onclick="pfTab('docs',this)">Documents {% if missing_docs %}<span class="dot" title="Documents pending"></span>{% endif %}</button>
+      </div>
 
-        <!-- Personal Information -->
-        <div class="profile-section">
-            <div class="profile-section-header">
-                <div class="profile-section-title">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    Personal Information
-                </div>
-            </div>
-            <div class="profile-section-body">
-                <div class="field-grid">
-                    <div>
-                        <div class="field-label">Full Name</div>
-                        <div class="field-value">{{ user.name }}</div>
-                    </div>
-                    <div>
-                        <div class="field-label">Date of Birth</div>
-                        <input type="date" name="dob" class="field-input" value="{{ user.dob or '' }}">
-                    </div>
-                    <div>
-                        <div class="field-label">Email</div>
-                        <input type="email" name="email" class="field-input" value="{{ user.email or '' }}" placeholder="your.email@goocampus.in">
-                    </div>
-                    <div>
-                        <div class="field-label">Phone</div>
-                        <input type="tel" name="phone" class="field-input" value="{{ user.phone or '' }}" placeholder="+91 XXXXX XXXXX">
-                    </div>
-                    <div class="field-full">
-                        <div class="field-label">Address</div>
-                        <textarea name="address" class="field-input" placeholder="Your full address">{{ user.address or '' }}</textarea>
-                    </div>
-                </div>
-            </div>
-        </div>
+      <form id="profileForm" method="POST" action="/profile" enctype="multipart/form-data">
+        <div class="pf-body">
 
-        <!-- Emergency Contact -->
-        <div class="profile-section">
-            <div class="profile-section-header">
-                <div class="profile-section-title">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-                    Emergency Contact
-                </div>
+          <!-- PERSONAL -->
+          <div class="pf-pane on" data-pane="personal">
+            <div class="pf-sec">Work information</div>
+            <div class="field-grid">
+              <div><div class="field-label">Employee Code</div><div class="field-value">{{ user.emp_code }}</div></div>
+              <div><div class="field-label">Department</div><div class="field-value {% if not user.department %}empty{% endif %}">{{ user.department or 'Not assigned' }}</div></div>
+              <div>
+                <div class="field-label">Designation {% if user.designation %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                {% if not user.designation %}<input type="text" name="designation" class="field-input" value="" placeholder="Enter your designation"><div class="field-hint">Set once, then locked.</div>
+                {% else %}<div class="field-value">{{ user.designation }}</div>{% endif %}
+              </div>
+              <div>
+                <div class="field-label">Date of Joining {% if user.joining_date %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                {% if not user.joining_date %}<input type="date" name="joining_date" class="field-input" value=""><div class="field-hint">Set once, then locked.</div>
+                {% else %}<div class="field-value">{{ user.joining_date|format_date }}</div>{% endif %}
+              </div>
+              <div><div class="field-label">Reporting To</div><div class="field-value {% if not reporting_manager %}empty{% endif %}">{{ reporting_manager or 'Not assigned' }}</div></div>
             </div>
-            <div class="profile-section-body">
-                <div class="field-grid">
-                    <div>
-                        <div class="field-label">Contact Name</div>
-                        <input type="text" name="emergency_contact_name" class="field-input" value="{{ user.emergency_contact_name or '' }}" placeholder="Contact person name">
-                    </div>
-                    <div>
-                        <div class="field-label">Relation</div>
-                        <input type="text" name="emergency_contact_relation" class="field-input" value="{{ user.emergency_contact_relation or '' }}" placeholder="e.g. Spouse, Parent">
-                    </div>
-                    <div>
-                        <div class="field-label">Phone Number</div>
-                        <input type="tel" name="emergency_contact_phone" class="field-input" value="{{ user.emergency_contact_phone or '' }}" placeholder="+91 XXXXX XXXXX">
-                    </div>
-                </div>
+            <div class="pf-divider"></div>
+            <div class="pf-sec">Personal details</div>
+            <div class="field-grid">
+              <div><div class="field-label">Full Name</div><div class="field-value">{{ user.name }}</div></div>
+              <div><div class="field-label">Date of Birth</div><input type="date" name="dob" class="field-input" value="{{ user.dob or '' }}"></div>
+              <div><div class="field-label">Work Email</div><input type="email" name="email" class="field-input" value="{{ user.email or '' }}" placeholder="your.email@goocampus.in"></div>
+              <div><div class="field-label">Phone</div><input type="tel" name="phone" class="field-input" value="{{ user.phone or '' }}" placeholder="+91 XXXXX XXXXX"></div>
+              <div>
+                <div class="field-label">Personal Email {% if user.personal_email %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                {% if not user.personal_email %}<input type="email" name="personal_email" class="field-input" value="" placeholder="you@example.com">
+                {% else %}<div class="field-value">{{ user.personal_email }}</div>{% endif %}
+              </div>
+              <div>
+                <div class="field-label">Blood Group {% if user.blood_group %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                {% if not user.blood_group %}<select name="blood_group" class="field-input"><option value="">— Select —</option>{% for bg in ['A+','A-','B+','B-','O+','O-','AB+','AB-'] %}<option value="{{ bg }}">{{ bg }}</option>{% endfor %}</select>
+                {% else %}<div class="field-value">{{ user.blood_group }}</div>{% endif %}
+              </div>
+              <div class="field-full"><div class="field-label">Address</div><textarea name="address" class="field-input" placeholder="Your full address">{{ user.address or '' }}</textarea></div>
             </div>
-        </div>
+            <div class="pf-divider"></div>
+            <div class="pf-sec">Emergency contact</div>
+            <div class="field-grid">
+              <div><div class="field-label">Contact Name</div><input type="text" name="emergency_contact_name" class="field-input" value="{{ user.emergency_contact_name or '' }}" placeholder="Contact person name"></div>
+              <div><div class="field-label">Relationship</div><input type="text" name="emergency_contact_relation" class="field-input" value="{{ user.emergency_contact_relation or '' }}" placeholder="e.g. Spouse, Parent"></div>
+              <div><div class="field-label">Phone Number</div><input type="tel" name="emergency_contact_phone" class="field-input" value="{{ user.emergency_contact_phone or '' }}" placeholder="+91 XXXXX XXXXX"></div>
+            </div>
+          </div>
 
-        <!-- Leave Information -->
-        <div class="profile-section">
-            <div class="profile-section-header">
-                <div class="profile-section-title">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    Leave Information
-                </div>
+          <!-- FAMILY & INSURANCE -->
+          <div class="pf-pane" data-pane="family">
+            <div class="callout">We provide health insurance (activates 3 months after joining). Add the family members to be covered — age is calculated automatically.</div>
+            <input type="hidden" name="dep_section_present" value="1">
+            <div class="pf-sec">Insurance policy</div>
+            <div class="field-grid">
+              <div><div class="field-label">Policy / UHID Number</div><div class="field-value {% if not user.insurance_number %}empty{% endif %}">{{ user.insurance_number or 'Added by HR after activation' }}</div></div>
+              <div><div class="field-label">Provider</div><div class="field-value {% if not user.insurance_provider %}empty{% endif %}">{{ user.insurance_provider or '—' }}</div></div>
+              <div><div class="field-label">Active From</div><div class="field-value {% if not user.insurance_activation_date %}empty{% endif %}">{{ user.insurance_activation_date|format_date if user.insurance_activation_date else '—' }}</div></div>
+              <div>
+                <div class="field-label">Marital Status</div>
+                <select id="maritalStatus" name="marital_status" class="field-input" onchange="depToggle()">
+                  <option value="">— Select —</option>
+                  <option value="married" {{ 'selected' if user.marital_status == 'married' else '' }}>Married</option>
+                  <option value="unmarried" {{ 'selected' if user.marital_status == 'unmarried' else '' }}>Unmarried</option>
+                </select>
+              </div>
             </div>
-            <div class="profile-section-body">
-                <div class="field-grid">
-                    <div>
-                        <div class="field-label">Carry Forward</div>
-                        <div class="field-value">{{ user.carry_forward or 0 }} days</div>
-                    </div>
-                    <div>
-                        <div class="field-label">Account Status</div>
-                        <div class="field-value">
-                            {% if user.is_active == 1 %}
-                            <span style="color: #059669; font-weight: 600;">Active</span>
-                            {% else %}
-                            <span style="color: var(--danger); font-weight: 600;">Inactive</span>
-                            {% endif %}
-                        </div>
-                    </div>
+            <div class="pf-divider"></div>
+            <div class="pf-sec">Dependents covered</div>
+            <div id="depMarried" style="display:none;">
+              <div class="field-label" style="font-size:.85rem;color:var(--navy);margin-bottom:.4rem;">Spouse</div>
+              <div class="field-grid">
+                <div><div class="field-label">First Name</div><input type="text" name="dep_spouse_first_name" class="field-input" value="{{ _spouse.first_name if _spouse else '' }}"></div>
+                <div><div class="field-label">Last Name</div><input type="text" name="dep_spouse_last_name" class="field-input" value="{{ _spouse.last_name if _spouse else '' }}"></div>
+                <div><div class="field-label">Date of Birth</div><input type="date" name="dep_spouse_dob" class="field-input" value="{{ _spouse.dob if _spouse else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+              </div>
+              <div class="field-label" style="font-size:.85rem;color:var(--navy);margin:1rem 0 .4rem;">Children</div>
+              <div id="childList">
+                {% set child_rows = _children if _children else [ {} ] %}
+                {% for c in child_rows %}
+                <div class="dep-block">
+                  <button type="button" class="dep-del" onclick="delChild(this)">Remove</button>
+                  <div class="field-grid">
+                    <div><div class="field-label">First Name</div><input type="text" name="dep_child_first_name" class="field-input" value="{{ c.first_name or '' }}"></div>
+                    <div><div class="field-label">Last Name</div><input type="text" name="dep_child_last_name" class="field-input" value="{{ c.last_name or '' }}"></div>
+                    <div><div class="field-label">Date of Birth</div><input type="date" name="dep_child_dob" class="field-input" value="{{ c.dob or '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+                  </div>
                 </div>
+                {% endfor %}
+              </div>
+              <button type="button" class="add-btn" onclick="addChild()">+ Add Child</button>
             </div>
-        </div>
+            <div id="depUnmarried" style="display:none;">
+              <div class="field-label" style="font-size:.85rem;color:var(--navy);margin-bottom:.4rem;">Father</div>
+              <div class="field-grid">
+                <div><div class="field-label">First Name</div><input type="text" name="dep_father_first_name" class="field-input" value="{{ _father.first_name if _father else '' }}"></div>
+                <div><div class="field-label">Last Name</div><input type="text" name="dep_father_last_name" class="field-input" value="{{ _father.last_name if _father else '' }}"></div>
+                <div><div class="field-label">Date of Birth</div><input type="date" name="dep_father_dob" class="field-input" value="{{ _father.dob if _father else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+              </div>
+              <div class="field-label" style="font-size:.85rem;color:var(--navy);margin:1rem 0 .4rem;">Mother</div>
+              <div class="field-grid">
+                <div><div class="field-label">First Name</div><input type="text" name="dep_mother_first_name" class="field-input" value="{{ _mother.first_name if _mother else '' }}"></div>
+                <div><div class="field-label">Last Name</div><input type="text" name="dep_mother_last_name" class="field-input" value="{{ _mother.last_name if _mother else '' }}"></div>
+                <div><div class="field-label">Date of Birth</div><input type="date" name="dep_mother_dob" class="field-input" value="{{ _mother.dob if _mother else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+              </div>
+            </div>
+            <p id="depNone" style="color:var(--gray-500);font-size:.88rem;">Select your marital status above to add dependents.</p>
+          </div>
 
-        <!-- Save -->
-        <div style="display: flex; gap: 1rem; margin-top: 0.5rem; margin-bottom: 2rem;">
-            <button type="submit" class="profile-save-btn">Save Changes</button>
-            <a href="/dashboard" class="profile-cancel-btn">Cancel</a>
+          <!-- BANK & PF -->
+          <div class="pf-pane" data-pane="bank">
+            <div class="pf-sec">Bank account</div>
+            <div class="field-grid">
+              {% for col, lbl in [('bank_name','Bank Name'),('bank_branch','Branch'),('bank_account_name','Account Holder Name'),('bank_account_number','Account Number'),('bank_ifsc','IFSC Code')] %}
+              <div>
+                <div class="field-label">{{ lbl }} {% if user[col] %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                {% if not user[col] %}<input type="text" name="{{ col }}" class="field-input" value="" {% if col == 'bank_ifsc' %}style="text-transform:uppercase;"{% endif %}>
+                {% else %}<div class="field-value">{{ user[col] }}</div>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            <div class="pf-divider"></div>
+            <div class="pf-sec">Provident fund</div>
+            <div class="field-grid">
+              <div><div class="field-label">PF Number</div><div class="field-value {% if not user.pf_number %}empty{% endif %}">{{ user.pf_number or 'Assigned after 3 months' }}</div></div>
+              <div><div class="field-label">PF Start Date</div><div class="field-value {% if not user.pf_start_date %}empty{% endif %}">{{ user.pf_start_date|format_date if user.pf_start_date else '—' }}</div></div>
+            </div>
+          </div>
+
+          <!-- EXPERIENCE -->
+          <div class="pf-pane" data-pane="work">
+            <div class="pf-sec">Internship / work experience</div>
+            {% if experience %}
+              {% for e in experience %}
+              <div class="exp-card">
+                <h4>{{ e.designation or 'Role' }}</h4>
+                <div class="co">{{ e.company_name or '' }}{% if e.location %} · {{ e.location }}{% endif %}{% if e.from_date or e.to_date %} · {{ e.from_date|format_date if e.from_date else '' }} – {{ e.to_date|format_date if e.to_date else 'Present' }}{% endif %}</div>
+                {% if e.role_description %}<p>{{ e.role_description }}</p>{% endif %}
+              </div>
+              {% endfor %}
+            {% else %}
+              <p style="color:var(--gray-500);font-size:.9rem;">No work experience on record. Contact HR to add previous experience.</p>
+            {% endif %}
+          </div>
+
+          <!-- DOCUMENTS -->
+          <div class="pf-pane" data-pane="docs">
+            {% if missing_docs %}
+            <div class="callout">Still pending: {% for k, lbl in missing_docs %}{{ lbl }}{% if not loop.last %}, {% endif %}{% endfor %}. Please upload below.</div>
+            {% else %}
+            <div class="callout ok">✓ All key documents are on file.</div>
+            {% endif %}
+            {% set have = {} %}
+            {% for d in documents %}{% if d.doc_type != 'other' %}{% set _ = have.update({d.doc_type: d.filename}) %}{% endif %}{% endfor %}
+            <div class="pf-sec">Your documents</div>
+            {% for key, label in doc_types %}
+              {% if have.get(key) %}
+              <div class="doc-row"><span class="doc-ic">✓</span><div><div class="doc-nm">{{ label }}</div><div class="doc-mt">On file · locked (contact HR to change)</div></div></div>
+              {% else %}
+              <div class="doc-row pending"><span class="doc-ic">!</span>
+                <div style="flex:1;"><div class="doc-nm">{{ label }}</div><div class="doc-mt">Not uploaded yet</div>
+                  <input type="file" name="doc_{{ key }}" class="field-input" accept=".pdf,.jpg,.jpeg,.png" style="margin-top:.4rem;max-width:340px;">
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+            <div class="pf-divider"></div>
+            <div class="pf-sec">Add another certificate</div>
+            <div class="field-grid">
+              <div><div class="field-label">Certificate Name</div><input type="text" name="doc_other_name" class="field-input" placeholder="e.g. IELTS Certificate"></div>
+              <div><div class="field-label">File</div><input type="file" name="doc_other" class="field-input" accept=".pdf,.jpg,.jpeg,.png"></div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:1rem;margin-top:1.6rem;">
+            <button type="submit" class="pf-btn pf-btn-primary" style="width:auto;padding:.7rem 1.8rem;">Save Changes</button>
+            <a href="/dashboard" class="pf-btn pf-btn-ghost" style="width:auto;padding:.7rem 1.8rem;margin-top:0;">Cancel</a>
+          </div>
         </div>
-    </form>
+      </form>
+    </section>
 </div>
+
+<script>
+  function pfTab(name, el){
+    document.querySelectorAll('.pf-tab').forEach(t => t.classList.remove('on'));
+    el.classList.add('on');
+    document.querySelectorAll('.pf-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+  }
+  function depToggle(){
+    var ms = document.getElementById('maritalStatus');
+    var v = ms ? ms.value : '';
+    var m = document.getElementById('depMarried'), u = document.getElementById('depUnmarried'), n = document.getElementById('depNone');
+    if (m) m.style.display = (v === 'married') ? 'block' : 'none';
+    if (u) u.style.display = (v === 'unmarried') ? 'block' : 'none';
+    if (n) n.style.display = v ? 'none' : 'block';
+  }
+  function calcAge(input){
+    var out = input.parentNode.querySelector('.age-out'); if (!out) return;
+    if (!input.value){ out.textContent=''; return; }
+    var d = new Date(input.value); if (isNaN(d)){ out.textContent=''; return; }
+    var t = new Date(), age = t.getFullYear()-d.getFullYear(), mm = t.getMonth()-d.getMonth();
+    if (mm<0 || (mm===0 && t.getDate()<d.getDate())) age--;
+    out.textContent = (age>=0 ? 'Age: '+age+' years' : '');
+  }
+  function delChild(btn){
+    var list=document.getElementById('childList');
+    if (list.querySelectorAll('.dep-block').length<=1){
+      btn.closest('.dep-block').querySelectorAll('input').forEach(function(f){f.value='';});
+      var o=btn.closest('.dep-block').querySelector('.age-out'); if(o)o.textContent=''; return;
+    }
+    btn.closest('.dep-block').remove();
+  }
+  function addChild(){
+    var list=document.getElementById('childList');
+    var b=list.querySelector('.dep-block').cloneNode(true);
+    b.querySelectorAll('input').forEach(function(f){f.value='';});
+    var o=b.querySelector('.age-out'); if(o)o.textContent=''; list.appendChild(b);
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    depToggle();
+    document.querySelectorAll('input[data-age]').forEach(function(i){ if(i.value) calcAge(i); });
+  });
+</script>
 {% endblock %}

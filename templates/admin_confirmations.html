@@ -1,0 +1,86 @@
+{% extends "hr_sidebar_base.html" %}
+
+{% block title %}Employee Confirmations - GooCampus HR{% endblock %}
+
+{% block section_extra_css %}
+<style>
+  .cf-wrap { max-width: 1050px; }
+  .cf-card { background:#fff; border:1px solid var(--gray-200); border-radius:1rem; padding:1.4rem 1.6rem; margin-bottom:1.4rem; }
+  .cf-card h2 { color:#1e3a5f; font-size:1.05rem; margin:0 0 .3rem; }
+  .cf-sub { color:var(--gray-500); font-size:.85rem; margin:0 0 1rem; }
+  table.cf { width:100%; border-collapse:collapse; font-size:.9rem; }
+  table.cf th { text-align:left; color:var(--gray-600); font-weight:600; font-size:.78rem; text-transform:uppercase; padding:.5rem .6rem; border-bottom:2px solid var(--gray-200); }
+  table.cf td { padding:.7rem .6rem; border-bottom:1px solid var(--gray-100); vertical-align:middle; }
+  .pill { display:inline-block; padding:.15rem .6rem; border-radius:1rem; font-size:.72rem; font-weight:700; }
+  .pill-due { background:#fef3c7; color:#92400e; }
+  .pill-ok { background:#dcfce7; color:#166534; }
+  .btn-confirm { background:#16a34a; color:#fff; border:none; padding:.5rem 1rem; border-radius:.5rem; font-weight:600; cursor:pointer; font-size:.85rem; }
+  .btn-confirm:hover { background:#15803d; }
+  .empty { color:var(--gray-500); font-size:.9rem; padding:.8rem 0; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="cf-wrap">
+  <h1 style="color:#1e3a5f; margin:0 0 .3rem;">Employee Confirmations</h1>
+  <p style="color:var(--gray-500); margin:0 0 1.4rem;">Confirm employees as permanent after their 3-month probation. {% if not user['is_admin'] %}Showing your direct reports.{% endif %}</p>
+
+  <div class="cf-card">
+    <h2>Due for confirmation <span class="pill pill-due">{{ due|length }}</span></h2>
+    <p class="cf-sub">Probation period completed — ready to be confirmed as permanent.</p>
+    {% if due %}
+    <table class="cf">
+      <thead><tr><th>Employee</th><th>Code</th><th>Department</th><th>Joined</th><th>Probation ended</th><th>Manager</th><th></th></tr></thead>
+      <tbody>
+        {% for e in due %}
+        <tr>
+          <td><strong>{{ e.name }}</strong></td>
+          <td>{{ e.emp_code or '—' }}</td>
+          <td>{{ e.department or '—' }}</td>
+          <td>{{ e.joining_date |format_date if e.joining_date else '—' }}</td>
+          <td>{{ e.probation_end_date |format_date if e.probation_end_date else '—' }}</td>
+          <td>{{ e.manager_name or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('admin_confirm_permanent', emp_id=e.id) }}" onsubmit="return confirm('Confirm {{ e.name }} as a permanent employee?');" style="margin:0;">
+              <button type="submit" class="btn-confirm">✓ Confirm Permanent</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">Nothing due right now. 🎉</div>
+    {% endif %}
+  </div>
+
+  <div class="cf-card">
+    <h2>On probation (upcoming) <span class="pill pill-ok">{{ upcoming|length }}</span></h2>
+    <p class="cf-sub">Still within the 3-month probation window.</p>
+    {% if upcoming %}
+    <table class="cf">
+      <thead><tr><th>Employee</th><th>Code</th><th>Department</th><th>Joined</th><th>Probation ends</th><th>Manager</th><th></th></tr></thead>
+      <tbody>
+        {% for e in upcoming %}
+        <tr>
+          <td><strong>{{ e.name }}</strong></td>
+          <td>{{ e.emp_code or '—' }}</td>
+          <td>{{ e.department or '—' }}</td>
+          <td>{{ e.joining_date |format_date if e.joining_date else '—' }}</td>
+          <td>{{ e.probation_end_date |format_date if e.probation_end_date else '—' }}</td>
+          <td>{{ e.manager_name or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('admin_confirm_permanent', emp_id=e.id) }}" onsubmit="return confirm('Confirm {{ e.name }} as permanent now, before probation ends?');" style="margin:0;">
+              <button type="submit" class="btn-confirm" style="background:#64748b;">Confirm early</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No one is currently on probation.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

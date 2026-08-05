@@ -67,12 +67,6 @@
         <h2>Onboarding cancelled</h2>
         <p>This onboarding has been cancelled. Please contact the GooCampus HR team if you think this is a mistake.</p>
     </div>
-{% elif already %}
-    <div class="state">
-        <div class="big">✅</div>
-        <h2>Thank you, {{ o.name.split(' ')[0] if o.name else 'there' }}!</h2>
-        <p>Your onboarding details have been submitted successfully. Our HR team will review them and get back to you. There's nothing more you need to do right now.</p>
-    </div>
 {% else %}
 <form method="POST" action="/onboarding/{{ o.token }}" enctype="multipart/form-data" class="wrap" id="obform">
 
@@ -92,7 +86,14 @@
         </div>
     </div>
 
+    {% if post_submit %}
+    <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:14px 16px;margin:0 0 18px;color:#065f46;font-size:14px;">
+        ✅ Your onboarding details are already submitted. You can still <strong>add anything you left blank</strong> below (including any pending documents). What you've already entered is locked and can't be changed here — contact HR for any correction.
+        {% if missing_docs %}<div style="margin-top:8px;color:#b45309;">Still needed: {% for k, lbl in missing_docs %}{{ lbl }}{% if not loop.last %}, {% endif %}{% endfor %}.</div>{% endif %}
+    </div>
+    {% else %}
     <p style="color:#6b7280;font-size:13.5px;margin:0 0 18px;">Please fill in the details below. You can <strong>Save</strong> and come back anytime using the same link, or <strong>Submit</strong> when you're done.</p>
+    {% endif %}
 
     <!-- Profile Photo -->
     <div class="card">
@@ -110,8 +111,8 @@
             {% endif %}
             <div class="fld" style="flex:1;min-width:200px;">
                 <label>Upload / change photo</label>
-                <input type="file" name="profile_photo" accept="image/*" onchange="previewPhoto(this)">
-                <div class="file-hint">JPG or PNG. Save or Submit to store it.</div>
+                <input type="file" name="profile_photo" accept="image/*" onchange="previewPhoto(this)" {{ 'disabled' if post_submit and o.photo_filename }}>
+                <div class="file-hint">{% if post_submit and o.photo_filename %}Photo already on file.{% else %}JPG or PNG. Save or Submit to store it.{% endif %}</div>
             </div>
         </div>
     </div>
@@ -119,60 +120,62 @@
     <!-- Personal -->
     <div class="card">
         <h2>Personal Details</h2>
-        <p class="sub">Basic personal information for our records.</p>
+        <p class="sub">Fields marked <span style="color:#dc2626;">*</span> are required to submit.</p>
         <div class="row">
-            <div class="fld"><label>Date of Birth</label><input type="date" name="dob" value="{{ o.dob or '' }}"></div>
+            <div class="fld"><label>Date of Birth <span class="req">*</span></label><input type="date" name="dob" value="{{ o.dob or '' }}" {% if not post_submit %}required{% endif %} {{ 'disabled' if post_submit and locked.dob }}></div>
+            <div class="fld"><label>Personal Mobile Number <span class="req">*</span></label><input type="text" name="personal_phone" value="{{ o.personal_phone or '' }}" placeholder="Your mobile number" {% if not post_submit %}required{% endif %} {{ 'disabled' if post_submit and locked.personal_phone }}></div>
+            <div class="fld"><label>Personal Email <span class="req">*</span></label><input type="email" name="personal_email" value="{{ o.personal_email or '' }}" placeholder="you@example.com" {% if not post_submit %}required{% endif %} {{ 'disabled' if post_submit and locked.personal_email }}></div>
             <div class="fld"><label>Blood Group</label>
-                <select name="blood_group">
+                <select name="blood_group" {{ 'disabled' if post_submit and locked.blood_group }}>
                     <option value="">— Select —</option>
                     {% for bg in ['A+','A-','B+','B-','O+','O-','AB+','AB-'] %}
                     <option value="{{ bg }}" {{ 'selected' if o.blood_group == bg else '' }}>{{ bg }}</option>{% endfor %}
                 </select>
             </div>
-            <div class="fld"><label>Personal Phone</label><input type="text" name="personal_phone" value="{{ o.personal_phone or '' }}" placeholder="Your mobile number"></div>
-            <div class="fld full"><label>Address</label><textarea name="address" placeholder="Current residential address">{{ o.address or '' }}</textarea></div>
+            <div class="fld full"><label>Address</label><textarea name="address" placeholder="Current residential address" {{ 'disabled' if post_submit and locked.address }}>{{ o.address or '' }}</textarea></div>
         </div>
     </div>
 
     <!-- Emergency -->
     <div class="card">
         <h2>Emergency Contact</h2>
-        <p class="sub">Someone we can reach in case of an emergency.</p>
+        <p class="sub">Someone we can reach in case of an emergency. <span style="color:#dc2626;">*</span> required.</p>
         <div class="row">
-            <div class="fld"><label>Contact Name</label><input type="text" name="emergency_contact_name" value="{{ o.emergency_contact_name or '' }}"></div>
-            <div class="fld"><label>Contact Number</label><input type="text" name="emergency_contact_phone" value="{{ o.emergency_contact_phone or '' }}"></div>
-            <div class="fld"><label>Relationship</label><input type="text" name="emergency_contact_relation" value="{{ o.emergency_contact_relation or '' }}" placeholder="e.g. Father, Spouse"></div>
+            <div class="fld"><label>Contact Name <span class="req">*</span></label><input type="text" name="emergency_contact_name" value="{{ o.emergency_contact_name or '' }}" {% if not post_submit %}required{% endif %} {{ 'disabled' if post_submit and locked.emergency_contact_name }}></div>
+            <div class="fld"><label>Contact Number <span class="req">*</span></label><input type="text" name="emergency_contact_phone" value="{{ o.emergency_contact_phone or '' }}" {% if not post_submit %}required{% endif %} {{ 'disabled' if post_submit and locked.emergency_contact_phone }}></div>
+            <div class="fld"><label>Relationship <span class="req">*</span></label><input type="text" name="emergency_contact_relation" value="{{ o.emergency_contact_relation or '' }}" placeholder="e.g. Father, Spouse" {% if not post_submit %}required{% endif %} {{ 'disabled' if post_submit and locked.emergency_contact_relation }}></div>
         </div>
     </div>
 
     <!-- Experience -->
+    {% set exp_locked = post_submit and experience %}
     <div class="card">
         <h2>Internship / Work Experience</h2>
-        <p class="sub">Add any previous work or internships. Leave blank if this is your first job.</p>
+        <p class="sub">{% if exp_locked %}Already provided (locked).{% else %}Add any previous work or internships. Leave blank if this is your first job.{% endif %}</p>
         <div id="expList">
             {% set exp_rows = experience if experience else [ {} ] %}
             {% for e in exp_rows %}
             <div class="exp-block">
-                <button type="button" class="del" onclick="delExp(this)">Remove</button>
+                {% if not exp_locked %}<button type="button" class="del" onclick="delExp(this)">Remove</button>{% endif %}
                 <div class="row">
-                    <div class="fld"><label>Company Name</label><input type="text" name="exp_company" value="{{ e.company_name or '' }}"></div>
-                    <div class="fld"><label>Designation</label><input type="text" name="exp_designation" value="{{ e.designation or '' }}"></div>
-                    <div class="fld"><label>From Date</label><input type="date" name="exp_from" value="{{ e.from_date or '' }}"></div>
-                    <div class="fld"><label>To Date</label><input type="date" name="exp_to" value="{{ e.to_date or '' }}"></div>
-                    <div class="fld"><label>Location</label><input type="text" name="exp_location" value="{{ e.location or '' }}"></div>
-                    <div class="fld full"><label>Work Role Description</label><textarea name="exp_role">{{ e.role_description or '' }}</textarea></div>
+                    <div class="fld"><label>Company Name</label><input type="text" name="exp_company" value="{{ e.company_name or '' }}" {{ 'disabled' if exp_locked }}></div>
+                    <div class="fld"><label>Designation</label><input type="text" name="exp_designation" value="{{ e.designation or '' }}" {{ 'disabled' if exp_locked }}></div>
+                    <div class="fld"><label>From Date</label><input type="date" name="exp_from" value="{{ e.from_date or '' }}" {{ 'disabled' if exp_locked }}></div>
+                    <div class="fld"><label>To Date</label><input type="date" name="exp_to" value="{{ e.to_date or '' }}" {{ 'disabled' if exp_locked }}></div>
+                    <div class="fld"><label>Location</label><input type="text" name="exp_location" value="{{ e.location or '' }}" {{ 'disabled' if exp_locked }}></div>
+                    <div class="fld full"><label>Work Role Description</label><textarea name="exp_role" {{ 'disabled' if exp_locked }}>{{ e.role_description or '' }}</textarea></div>
                 </div>
             </div>
             {% endfor %}
         </div>
-        <button type="button" class="addbtn" onclick="addExp()">+ Add Experience</button>
+        {% if not exp_locked %}<button type="button" class="addbtn" onclick="addExp()">+ Add Experience</button>{% endif %}
     </div>
 
     <!-- Hobbies -->
     <div class="card">
         <h2>Hobbies &amp; Interests</h2>
         <p class="sub">Tell us a little about what you enjoy.</p>
-        <div class="fld"><textarea name="hobbies" placeholder="e.g. Reading, cricket, painting…">{{ o.hobbies or '' }}</textarea></div>
+        <div class="fld"><textarea name="hobbies" placeholder="e.g. Reading, cricket, painting…" {{ 'disabled' if post_submit and locked.hobbies }}>{{ o.hobbies or '' }}</textarea></div>
     </div>
 
     <!-- Documents -->
@@ -185,7 +188,7 @@
             {% for key, label in doc_types %}
             <div class="fld">
                 <label>{{ label }}</label>
-                <input type="file" name="doc_{{ key }}" accept=".pdf,.jpg,.jpeg,.png">
+                <input type="file" name="doc_{{ key }}" accept=".pdf,.jpg,.jpeg,.png" {{ 'disabled' if post_submit and have.get(key) }}>
                 {% if have.get(key) %}<div class="doc-have">✓ Uploaded: {{ have.get(key) }}</div>{% endif %}
             </div>
             {% endfor %}
@@ -210,17 +213,82 @@
         <h2>Bank Account Details</h2>
         <p class="sub">Used for salary payments. Please double-check the account number and IFSC.</p>
         <div class="row">
-            <div class="fld"><label>Bank Name</label><input type="text" name="bank_name" value="{{ o.bank_name or '' }}"></div>
-            <div class="fld"><label>Branch Name</label><input type="text" name="bank_branch" value="{{ o.bank_branch or '' }}"></div>
-            <div class="fld"><label>Account Holder Name</label><input type="text" name="bank_account_name" value="{{ o.bank_account_name or '' }}"></div>
-            <div class="fld"><label>Account Number</label><input type="text" name="bank_account_number" value="{{ o.bank_account_number or '' }}"></div>
-            <div class="fld"><label>IFSC Code</label><input type="text" name="bank_ifsc" value="{{ o.bank_ifsc or '' }}" style="text-transform:uppercase;"></div>
+            <div class="fld"><label>Bank Name</label><input type="text" name="bank_name" value="{{ o.bank_name or '' }}" {{ 'disabled' if post_submit and locked.bank_name }}></div>
+            <div class="fld"><label>Branch Name</label><input type="text" name="bank_branch" value="{{ o.bank_branch or '' }}" {{ 'disabled' if post_submit and locked.bank_branch }}></div>
+            <div class="fld"><label>Account Holder Name</label><input type="text" name="bank_account_name" value="{{ o.bank_account_name or '' }}" {{ 'disabled' if post_submit and locked.bank_account_name }}></div>
+            <div class="fld"><label>Account Number</label><input type="text" name="bank_account_number" value="{{ o.bank_account_number or '' }}" {{ 'disabled' if post_submit and locked.bank_account_number }}></div>
+            <div class="fld"><label>IFSC Code</label><input type="text" name="bank_ifsc" value="{{ o.bank_ifsc or '' }}" style="text-transform:uppercase;" {{ 'disabled' if post_submit and locked.bank_ifsc }}></div>
+        </div>
+    </div>
+
+    <!-- Insurance / Dependents -->
+    {% set _spouse = (dependents | selectattr('relation','equalto','spouse') | list | first) %}
+    {% set _children = (dependents | selectattr('relation','equalto','child') | list) %}
+    {% set _father = (dependents | selectattr('relation','equalto','father') | list | first) %}
+    {% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
+    <div class="card">
+        <h2>Health Insurance &amp; Dependents</h2>
+        <p class="sub">{% if deps_locked %}Already provided (locked).{% else %}We provide health insurance to employees (activates after 3 months). Please add the family members to be covered. Age is calculated automatically from the date of birth.{% endif %}</p>
+        <input type="hidden" name="dep_section_present" value="1">
+        <div class="row">
+            <div class="fld"><label>Marital Status</label>
+                <select name="marital_status" id="maritalStatus" onchange="depToggle()" {{ 'disabled' if deps_locked }}>
+                    <option value="">— Select —</option>
+                    <option value="married" {{ 'selected' if o.marital_status == 'married' else '' }}>Married</option>
+                    <option value="unmarried" {{ 'selected' if o.marital_status == 'unmarried' else '' }}>Unmarried</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Married → spouse + children -->
+        <div id="depMarried" style="display:none;margin-top:10px;">
+            <h3 style="font-size:15px;color:#1e3a5f;margin:6px 0;">Spouse</h3>
+            <div class="row">
+                <div class="fld"><label>First Name</label><input type="text" name="dep_spouse_first_name" value="{{ _spouse.first_name if _spouse else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Last Name</label><input type="text" name="dep_spouse_last_name" value="{{ _spouse.last_name if _spouse else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Date of Birth</label><input type="date" name="dep_spouse_dob" value="{{ _spouse.dob if _spouse else '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+            </div>
+            <h3 style="font-size:15px;color:#1e3a5f;margin:14px 0 6px;">Children</h3>
+            <div id="childList">
+                {% set child_rows = _children if _children else [ {} ] %}
+                {% for c in child_rows %}
+                <div class="exp-block">
+                    {% if not deps_locked %}<button type="button" class="del" onclick="delChild(this)">Remove</button>{% endif %}
+                    <div class="row">
+                        <div class="fld"><label>First Name</label><input type="text" name="dep_child_first_name" value="{{ c.first_name or '' }}" {{ 'disabled' if deps_locked }}></div>
+                        <div class="fld"><label>Last Name</label><input type="text" name="dep_child_last_name" value="{{ c.last_name or '' }}" {{ 'disabled' if deps_locked }}></div>
+                        <div class="fld"><label>Date of Birth</label><input type="date" name="dep_child_dob" value="{{ c.dob or '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% if not deps_locked %}<button type="button" class="addbtn" onclick="addChild()">+ Add Child</button>{% endif %}
+        </div>
+
+        <!-- Unmarried → parents -->
+        <div id="depUnmarried" style="display:none;margin-top:10px;">
+            <h3 style="font-size:15px;color:#1e3a5f;margin:6px 0;">Father</h3>
+            <div class="row">
+                <div class="fld"><label>First Name</label><input type="text" name="dep_father_first_name" value="{{ _father.first_name if _father else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Last Name</label><input type="text" name="dep_father_last_name" value="{{ _father.last_name if _father else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Date of Birth</label><input type="date" name="dep_father_dob" value="{{ _father.dob if _father else '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+            </div>
+            <h3 style="font-size:15px;color:#1e3a5f;margin:14px 0 6px;">Mother</h3>
+            <div class="row">
+                <div class="fld"><label>First Name</label><input type="text" name="dep_mother_first_name" value="{{ _mother.first_name if _mother else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Last Name</label><input type="text" name="dep_mother_last_name" value="{{ _mother.last_name if _mother else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Date of Birth</label><input type="date" name="dep_mother_dob" value="{{ _mother.dob if _mother else '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+            </div>
         </div>
     </div>
 
     <div class="actions">
-        <button type="submit" name="action" value="save" class="btn-save">Save &amp; Finish Later</button>
+        {% if post_submit %}
+        <button type="submit" name="action" value="save" class="btn-submit" formnovalidate>Save Additions</button>
+        {% else %}
+        <button type="submit" name="action" value="save" class="btn-save" formnovalidate>Save &amp; Finish Later</button>
         <button type="submit" name="action" value="submit" class="btn-submit" onclick="return confirm('Submit your onboarding details for review? You won\'t be able to edit after this.');">Submit for Review</button>
+        {% endif %}
     </div>
 </form>
 
@@ -256,6 +324,49 @@ function addOther(){
         + '<div class="fld"><label>File</label><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div></div>';
     list.appendChild(div);
 }
+// ── Insurance / dependents ──
+function depToggle(){
+    var ms = document.getElementById('maritalStatus');
+    var m = document.getElementById('depMarried');
+    var u = document.getElementById('depUnmarried');
+    var v = ms ? ms.value : '';
+    if (m) m.style.display = (v === 'married') ? 'block' : 'none';
+    if (u) u.style.display = (v === 'unmarried') ? 'block' : 'none';
+}
+function calcAge(input){
+    var out = input.parentNode.querySelector('.age-out');
+    if (!out) return;
+    if (!input.value){ out.textContent = ''; return; }
+    var d = new Date(input.value);
+    if (isNaN(d)){ out.textContent = ''; return; }
+    var t = new Date();
+    var age = t.getFullYear() - d.getFullYear();
+    var mm = t.getMonth() - d.getMonth();
+    if (mm < 0 || (mm === 0 && t.getDate() < d.getDate())) age--;
+    out.textContent = (age >= 0 ? 'Age: ' + age + ' years' : '');
+    out.style.cssText = 'color:#1e3a5f;font-weight:600;display:block;margin-top:3px;';
+}
+function delChild(btn){
+    var list = document.getElementById('childList');
+    if (list.querySelectorAll('.exp-block').length <= 1){
+        btn.closest('.exp-block').querySelectorAll('input').forEach(function(f){ f.value=''; });
+        var o = btn.closest('.exp-block').querySelector('.age-out'); if (o) o.textContent='';
+        return;
+    }
+    btn.closest('.exp-block').remove();
+}
+function addChild(){
+    var list = document.getElementById('childList');
+    var b = list.querySelector('.exp-block').cloneNode(true);
+    b.querySelectorAll('input').forEach(function(f){ f.value=''; });
+    var o = b.querySelector('.age-out'); if (o) o.textContent='';
+    list.appendChild(b);
+}
+// initialise on load: show the right block + compute ages for prefilled DOBs
+document.addEventListener('DOMContentLoaded', function(){
+    depToggle();
+    document.querySelectorAll('input[data-age]').forEach(function(inp){ if (inp.value) calcAge(inp); });
+});
 </script>
 {% endif %}
 </body>

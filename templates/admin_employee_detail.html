@@ -2,212 +2,252 @@
 
 {% block title %}{{ employee.name }} - GooCampus HR Portal{% endblock %}
 
+{% block section_extra_css %}
+<style>
+  .pf-wrap { max-width: 1120px; margin: 0 auto; }
+  .pf-back { display:inline-block; color: var(--orange); font-weight:600; font-size:.85rem; text-decoration:none; margin-bottom:1rem; }
+
+  .pf-banner { display:flex; flex-wrap:wrap; background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; margin-bottom: 1.4rem; }
+  .pf-bluebox { background: linear-gradient(160deg, var(--navy), #274c78); color: #fff; padding: 1.7rem 1.6rem; width: 270px; flex: 0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  @media (max-width: 720px){ .pf-bluebox { width: 100%; } }
+  .pf-photo, .pf-photo-init { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff55; margin: 0 auto .7rem; display:block; }
+  .pf-photo-init { background: #ffffff22; color: #fff; font-size: 2.1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .pf-bluebox h1 { margin: 0; font-size: 1.2rem; font-weight: 700; }
+  .pf-role { margin: .2rem 0 .7rem; font-size: .82rem; color: #ffffffcf; }
+  .pf-pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; padding: .25rem .7rem; border-radius: 999px; margin: 0 .15rem; }
+  .pf-pill.warn { background: #fef3c7; color: #92400e; } .pf-pill.good { background: #dcfce7; color: #166534; } .pf-pill.bad { background: #fee2e2; color: #b91c1c; }
+
+  .pf-banner-right { flex:1; min-width:280px; padding:1.5rem 1.7rem; display:flex; flex-direction:column; justify-content:center; gap:1.2rem; }
+  .pf-facts-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:1rem 1.8rem; }
+  .pf-fact .k { color: var(--gray-500); font-size:.72rem; margin-bottom:.18rem; } .pf-fact .v { color: var(--navy); font-weight: 600; font-size:.92rem; word-break: break-word; }
+  .pf-actions { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+  .pf-btn { display:inline-block; text-align:center; border:0; border-radius:.55rem; padding:.6rem 1.3rem; font-family:inherit; font-weight:600; font-size:.86rem; cursor:pointer; text-decoration:none; box-sizing:border-box; }
+  .pf-btn-primary { background: var(--orange); color:#fff; } .pf-btn-primary:hover{ background:var(--orange-dark); }
+  .pf-btn-ghost { background: var(--gray-50); color: var(--navy); border:1px solid var(--gray-200); }
+  .pf-btn-green { background:#16a34a; color:#fff; } .pf-btn-danger { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+
+  .pf-panel { background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; }
+  .pf-tabs { display:flex; gap:2px; padding:.4rem .5rem 0; border-bottom:1px solid var(--gray-200); overflow-x:auto; }
+  .pf-tabs::-webkit-scrollbar{ display:none; }
+  .pf-tab { border:0; background:transparent; color:var(--gray-500); font:inherit; font-size:.9rem; font-weight:600; white-space:nowrap; padding:.8rem .9rem; cursor:pointer; border-bottom:2.5px solid transparent; margin-bottom:-1px; display:flex; align-items:center; gap:.45rem; }
+  .pf-tab:hover{ color:var(--navy); } .pf-tab.on{ color:var(--navy); border-bottom-color:var(--orange); }
+  .pf-tab .dot{ width:7px;height:7px;border-radius:50%;background:var(--orange); }
+  .pf-body { padding: 1.5rem 1.6rem 1.7rem; }
+  .pf-pane { display:none; } .pf-pane.on { display:block; }
+  .pf-sec { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--gray-400); font-weight:700; margin:0 0 .9rem; }
+  .pf-divider { height:1px; background:var(--gray-200); margin:1.4rem 0; }
+  .dl2 { display:grid; grid-template-columns:1fr 1fr; gap:1.1rem 1.6rem; } @media(max-width:560px){ .dl2{ grid-template-columns:1fr; } }
+  .kv .k { font-size:.74rem; color:var(--gray-500); margin-bottom:.2rem; } .kv .v { font-size:.92rem; color:var(--navy); font-weight:600; } .kv .v.empty{ color:var(--gray-400); font-weight:500; font-style:italic; }
+  .stat-row { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.2rem; }
+  .stat { flex:1; min-width:120px; background:var(--gray-50); border:1px solid var(--gray-200); border-radius:.7rem; padding:1rem; text-align:center; }
+  .stat .n { font-size:1.6rem; font-weight:700; color:var(--navy); } .stat .l { font-size:.75rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:.04em; }
+  table.rows { width:100%; border-collapse:collapse; font-size:.88rem; }
+  table.rows th { text-align:left; font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--gray-400); font-weight:700; padding:0 .5rem .6rem; border-bottom:1px solid var(--gray-200); }
+  table.rows td { padding:.7rem .5rem; border-bottom:1px solid var(--gray-100); color:var(--navy); vertical-align:middle; }
+  .badge { padding:.15rem .55rem; border-radius:999px; font-size:.72rem; font-weight:700; }
+  .badge-pending{ background:#fef3c7;color:#92400e; } .badge-approved{ background:#dcfce7;color:#166534; } .badge-rejected{ background:#fee2e2;color:#b91c1c; }
+  .doc-row { display:flex; align-items:center; gap:.8rem; padding:.7rem .9rem; border:1px solid var(--gray-200); border-radius:.6rem; margin-bottom:.6rem; background:var(--gray-50); }
+  .doc-ic { width:32px;height:32px;border-radius:.5rem;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:.9rem; }
+  .callout { display:flex; gap:.7rem; background:#fff7ed; color:#b45309; border:1px solid #fed7aa; border-radius:.6rem; padding:.8rem 1rem; font-size:.85rem; margin-bottom:1.2rem; }
+  .callout.ok { background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
+  .exp-card { border:1px solid var(--gray-200); border-radius:.7rem; padding:1rem 1.1rem; margin-bottom:.8rem; }
+  .exp-card h4{ margin:0 0 .1rem; font-size:.95rem; color:var(--navy); } .exp-card .co{ color:var(--gray-500); font-size:.82rem; margin-bottom:.4rem; } .exp-card p{ margin:0; font-size:.85rem; color:var(--gray-700); white-space:pre-wrap; }
+</style>
+{% endblock %}
+
 {% block section_content %}
-<div style="margin-bottom: 2rem;">
-    <a href="/admin/manage-employees" class="button button-secondary" style="margin-bottom: 1.5rem;">← Back to Employees</a>
-    <div style="display: flex; align-items: center; gap: 2rem; margin-top: 1.5rem;">
-        {% if employee.photo_url %}
-        <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" alt="{{ employee.name }}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
-        {% else %}
-        <div style="width: 100px; height: 100px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 700; flex-shrink: 0;">
-            {{ employee.name[0] }}
-        </div>
+{% set cst = employee.confirmation_status or 'permanent' %}
+{% set est = employee.employment_status or ('active' if employee.is_active else 'resigned') %}
+<div class="pf-wrap">
+  <a href="/admin/manage-employees" class="pf-back">← Back to Employees</a>
+
+  <!-- TOP BANNER -->
+  <div class="pf-banner">
+    <div class="pf-bluebox">
+      {% if employee.photo_url %}
+      <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" class="pf-photo" alt="{{ employee.name }}">
+      {% else %}<div class="pf-photo-init">{{ employee.name[0] }}</div>{% endif %}
+      <h1>{{ employee.name }}</h1>
+      <div class="pf-role">{{ employee.designation or 'No Designation' }}</div>
+      <div>
+        {% if est == 'active' %}<span class="pf-pill good">● Active</span>{% else %}<span class="pf-pill bad" style="text-transform:capitalize;">● {{ est }}</span>{% endif %}
+        {% if cst == 'probation' %}<span class="pf-pill warn">● Probation</span>{% else %}<span class="pf-pill good">● Permanent</span>{% endif %}
+      </div>
+    </div>
+    <div class="pf-banner-right">
+      <div class="pf-facts-grid">
+        <div class="pf-fact"><div class="k">Employee code</div><div class="v">{{ employee.emp_code }}</div></div>
+        <div class="pf-fact"><div class="k">Department</div><div class="v">{{ employee.department or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Joined</div><div class="v">{{ employee.joining_date|format_date if employee.joining_date else '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Reports to</div><div class="v">{{ reporting_name or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Email</div><div class="v">{{ employee.email or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Phone</div><div class="v">{{ employee.phone or '—' }}</div></div>
+        {% if cst == 'probation' and employee.probation_end_date %}<div class="pf-fact"><div class="k">Confirmation due</div><div class="v">{{ employee.probation_end_date|format_date }}</div></div>{% endif %}
+      </div>
+      <div class="pf-actions">
+        {% if cst == 'probation' %}
+        <form method="POST" action="{{ url_for('admin_confirm_permanent', emp_id=employee.id) }}" onsubmit="return confirm('Confirm {{ employee.name }} as a permanent employee?');" style="margin:0;">
+          <button type="submit" class="pf-btn pf-btn-green">✓ Confirm as Permanent</button>
+        </form>
         {% endif %}
-        <div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">{{ employee.name }}</h1>
-            <p style="color: var(--gray-600); margin-bottom: 0.35rem; font-size: 1rem;">{{ employee.emp_code }} - {{ employee.department }}</p>
-            <p style="color: var(--gray-500); font-size: 0.95rem;">{{ employee.designation or '' }}</p>
-        </div>
+        <a href="/admin/employee/{{ employee.id }}/edit" class="pf-btn pf-btn-primary">Edit Employee</a>
+        {% if est == 'active' %}<a href="/admin/employee/{{ employee.id }}/edit#exitFields" class="pf-btn pf-btn-danger">Run Exit Process</a>{% endif %}
+      </div>
     </div>
-</div>
+  </div>
 
-<div class="summary-cards">
-    <div class="summary-card">
-        <div class="summary-card-value">{{ total_allocation }}</div>
-        <div class="summary-card-label">Total Allocation</div>
-    </div>
-    <div class="summary-card">
-        <div class="summary-card-value">{{ days_taken }}</div>
-        <div class="summary-card-label">Days Taken</div>
-    </div>
-    <div class="summary-card">
-        <div class="summary-card-value">{{ available_balance }}</div>
-        <div class="summary-card-label">Available Balance</div>
-    </div>
-</div>
+  <!-- FULL-WIDTH TABS -->
+  <section class="pf-panel">
+      <div class="pf-tabs" role="tablist">
+        <button type="button" class="pf-tab on" onclick="pfTab('overview',this)">Overview</button>
+        <button type="button" class="pf-tab" onclick="pfTab('personal',this)">Personal</button>
+        <button type="button" class="pf-tab" onclick="pfTab('family',this)">Family &amp; Insurance</button>
+        <button type="button" class="pf-tab" onclick="pfTab('bank',this)">Bank &amp; PF</button>
+        <button type="button" class="pf-tab" onclick="pfTab('work',this)">Experience</button>
+        <button type="button" class="pf-tab" onclick="pfTab('docs',this)">Documents {% if missing_docs %}<span class="dot" title="Documents pending"></span>{% endif %}</button>
+      </div>
+      <div class="pf-body">
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
-    <div class="card">
-        <h2 class="card-title">Employee Information</h2>
-        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1.25rem; font-size: 0.95rem;">
-            <dt style="font-weight: 600; color: var(--navy);">Employee Code:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.emp_code }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Email:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.email or '-' }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Phone:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.phone or '-' }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Department:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.department or '-' }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Designation:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.designation or '-' }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Joining Date:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.joining_date or '-' }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Carry Forward:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.carry_forward }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Employment Status:</dt>
-            <dd style="color: var(--gray-700);text-transform:capitalize;">
-                {% set est = employee.employment_status or ('active' if employee.is_active else 'resigned') %}
-                {% if est == 'active' %}<span style="color: var(--success);font-weight:600;">Active</span>
-                {% else %}<span style="color: var(--danger);font-weight:600;">{{ est }}</span>{% endif %}
-            </dd>
-
-            {% set est = employee.employment_status or ('active' if employee.is_active else 'resigned') %}
-            {% if est != 'active' %}
-            <dt style="font-weight: 600; color: var(--navy);">Last Working Day:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.last_working_day or 'Not recorded' }}</dd>
-
-            <dt style="font-weight: 600; color: var(--navy);">Exit Reason:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.exit_reason or '-' }}</dd>
-
-            {% if employee.exit_notes %}
-            <dt style="font-weight: 600; color: var(--navy);">Exit Notes:</dt>
-            <dd style="color: var(--gray-700);">{{ employee.exit_notes }}</dd>
-            {% endif %}
-            {% endif %}
-        </dl>
-
-        <div style="margin-top: 2rem;display:flex;gap:1rem;">
-            <a href="/admin/employee/{{ employee.id }}/edit" class="button">Edit Employee</a>
-            {% if est == 'active' %}
-            <a href="/admin/employee/{{ employee.id }}/edit#exitFields" class="button" style="background:var(--danger);">Run Exit Process</a>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="card">
-        <h2 class="card-title">Recent Leave History</h2>
-        {% if leaves %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Duration</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
+        <!-- OVERVIEW: leave -->
+        <div class="pf-pane on" data-pane="overview">
+          <div class="pf-sec">Leave balance (this financial year)</div>
+          <div class="stat-row">
+            <div class="stat"><div class="n">{{ total_allocation }}</div><div class="l">Total Allocation</div></div>
+            <div class="stat"><div class="n">{{ days_taken }}</div><div class="l">Days Taken</div></div>
+            <div class="stat"><div class="n">{{ available_balance }}</div><div class="l">Available</div></div>
+          </div>
+          <div class="pf-divider"></div>
+          <div class="pf-sec">Recent leave history</div>
+          {% if leaves %}
+          <table class="rows">
+            <thead><tr><th>Date</th><th>Type</th><th>Duration</th><th>Status</th><th></th></tr></thead>
             <tbody>
-                {% for leave in leaves[:10] %}
-                <tr>
-                    <td style="white-space: nowrap;">
-                        {% if leave.date_from == leave.date_to %}
-                            {{ leave.date_from|format_date }}
-                        {% else %}
-                            {{ leave.date_from|format_date }}<br><span style="color:var(--gray-400);font-size:0.75rem;">to</span> {{ leave.date_to|format_date }}
-                        {% endif %}
-                    </td>
-                    <td>{{ leave.leave_type.capitalize() }}</td>
-                    <td>
-                        {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
-                        {% if leave.group_count == 1 and leave.day_portion in ['first_half', 'second_half'] %}(Half){% endif %}
-                    </td>
-                    <td>
-                        {% if leave.status == 'pending' %}
-                        <span class="badge badge-pending">Pending</span>
-                        {% elif leave.status == 'approved' %}
-                        <span class="badge badge-approved">Approved</span>
-                        {% else %}
-                        <span class="badge badge-rejected">Rejected</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <form method="POST" action="/admin/delete-leave/{{ leave.id }}{% if leave.group_count > 1 %}?group_id={{ leave.group_id }}{% endif %}" style="display: inline;">
-                            <button type="submit" class="button button-danger button-small" onclick="return confirm('Delete this leave record{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}?');">Delete</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
+              {% for leave in leaves[:10] %}
+              <tr>
+                <td style="white-space:nowrap;">{% if leave.date_from == leave.date_to %}{{ leave.date_from|format_date }}{% else %}{{ leave.date_from|format_date }} <span style="color:var(--gray-400);">–</span> {{ leave.date_to|format_date }}{% endif %}</td>
+                <td>{{ leave.leave_type.capitalize() }}</td>
+                <td>{{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}{% if leave.group_count == 1 and leave.day_portion in ['first_half','second_half'] %} (Half){% endif %}</td>
+                <td>{% if leave.status == 'pending' %}<span class="badge badge-pending">Pending</span>{% elif leave.status == 'approved' %}<span class="badge badge-approved">Approved</span>{% else %}<span class="badge badge-rejected">Rejected</span>{% endif %}</td>
+                <td><form method="POST" action="/admin/delete-leave/{{ leave.id }}{% if leave.group_count > 1 %}?group_id={{ leave.group_id }}{% endif %}" style="display:inline;"><button type="submit" class="pf-btn pf-btn-danger" style="width:auto;padding:.3rem .7rem;font-size:.75rem;" onclick="return confirm('Delete this leave record{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}?');">Delete</button></form></td>
+              </tr>
+              {% endfor %}
             </tbody>
-        </table>
-        {% else %}
-        <p style="color: var(--gray-500); padding: 2rem; text-align: center;">No leave records found.</p>
-        {% endif %}
-    </div>
-</div>
-
-<!-- ═══ Onboarding profile sections ═══ -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
-    <!-- Personal Details -->
-    <div class="card">
-        <h2 class="card-title">Personal Details</h2>
-        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem 1.25rem; font-size: 0.95rem;">
-            <dt style="font-weight:600;color:var(--navy);">Date of Birth:</dt><dd style="color:var(--gray-700);">{{ employee.dob|format_date }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Blood Group:</dt><dd style="color:var(--gray-700);">{{ employee.blood_group or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Official Number:</dt><dd style="color:var(--gray-700);">{{ employee.official_number or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Reporting To:</dt><dd style="color:var(--gray-700);">{{ reporting_name or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Address:</dt><dd style="color:var(--gray-700);">{{ employee.address or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Hobbies:</dt><dd style="color:var(--gray-700);">{{ employee.hobbies or '-' }}</dd>
-        </dl>
-        <h3 style="margin:1.5rem 0 .75rem;font-size:1rem;color:var(--navy);">Emergency Contact</h3>
-        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem 1.25rem; font-size: 0.95rem;">
-            <dt style="font-weight:600;color:var(--navy);">Name:</dt><dd style="color:var(--gray-700);">{{ employee.emergency_contact_name or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Number:</dt><dd style="color:var(--gray-700);">{{ employee.emergency_contact_phone or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Relation:</dt><dd style="color:var(--gray-700);">{{ employee.emergency_contact_relation or '-' }}</dd>
-        </dl>
-    </div>
-
-    <!-- Bank Details -->
-    <div class="card">
-        <h2 class="card-title">Bank Account Details</h2>
-        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem 1.25rem; font-size: 0.95rem;">
-            <dt style="font-weight:600;color:var(--navy);">Bank Name:</dt><dd style="color:var(--gray-700);">{{ employee.bank_name or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Branch:</dt><dd style="color:var(--gray-700);">{{ employee.bank_branch or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Account Name:</dt><dd style="color:var(--gray-700);">{{ employee.bank_account_name or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">Account Number:</dt><dd style="color:var(--gray-700);">{{ employee.bank_account_number or '-' }}</dd>
-            <dt style="font-weight:600;color:var(--navy);">IFSC:</dt><dd style="color:var(--gray-700);">{{ employee.bank_ifsc or '-' }}</dd>
-        </dl>
-    </div>
-</div>
-
-<!-- Work Experience -->
-<div class="card" style="margin-bottom:2rem;">
-    <h2 class="card-title">Internship / Work Experience</h2>
-    {% if experience %}
-        {% for e in experience %}
-        <div style="border:1px solid var(--gray-200);border-radius:.7rem;padding:1rem 1.15rem;margin-bottom:.9rem;">
-            <div style="font-weight:700;color:var(--navy);">{{ e.designation or 'Role' }}{% if e.company_name %} · {{ e.company_name }}{% endif %}</div>
-            <div style="font-size:.85rem;color:var(--gray-500);margin:.15rem 0 .5rem;">{{ e.from_date|format_date }} — {{ e.to_date|format_date }}{% if e.location %} · {{ e.location }}{% endif %}</div>
-            {% if e.role_description %}<div style="font-size:.9rem;color:var(--gray-700);white-space:pre-wrap;">{{ e.role_description }}</div>{% endif %}
+          </table>
+          {% else %}<p style="color:var(--gray-500);">No leave records found.</p>{% endif %}
         </div>
-        {% endfor %}
-    {% else %}
-        <p style="color: var(--gray-500); padding: 1.5rem; text-align: center;">No work experience recorded.</p>
-    {% endif %}
-</div>
 
-<!-- Documents -->
-<div class="card" style="margin-bottom:2rem;">
-    <h2 class="card-title">Documents</h2>
-    {% if documents %}
-        {% for d in documents %}
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem .8rem;border:1px solid var(--gray-200);border-radius:.6rem;margin-bottom:.55rem;">
-            <div>
-                <div style="font-weight:600;color:var(--gray-800);">{{ doc_labels.get(d.doc_type) or d.doc_name or d.doc_type }}{% if d.doc_type == 'other' and d.doc_name %} — {{ d.doc_name }}{% endif %}</div>
-                <div style="font-size:.75rem;color:var(--gray-400);">{{ d.filename }}</div>
+        <!-- PERSONAL -->
+        <div class="pf-pane" data-pane="personal">
+          <div class="pf-sec">Personal details</div>
+          <div class="dl2">
+            <div class="kv"><div class="k">Date of Birth</div><div class="v {% if not employee.dob %}empty{% endif %}">{{ employee.dob|format_date if employee.dob else '—' }}</div></div>
+            <div class="kv"><div class="k">Blood Group</div><div class="v {% if not employee.blood_group %}empty{% endif %}">{{ employee.blood_group or '—' }}</div></div>
+            <div class="kv"><div class="k">Official Number</div><div class="v {% if not employee.official_number %}empty{% endif %}">{{ employee.official_number or '—' }}</div></div>
+            <div class="kv"><div class="k">Personal Email</div><div class="v {% if not employee.personal_email %}empty{% endif %}">{{ employee.personal_email or '—' }}</div></div>
+            <div class="kv"><div class="k">Marital Status</div><div class="v {% if not employee.marital_status %}empty{% endif %}">{{ (employee.marital_status or '—')|capitalize }}</div></div>
+            <div class="kv"><div class="k">Reporting To</div><div class="v {% if not reporting_name %}empty{% endif %}">{{ reporting_name or '—' }}</div></div>
+            <div class="kv" style="grid-column:1/-1;"><div class="k">Address</div><div class="v {% if not employee.address %}empty{% endif %}">{{ employee.address or '—' }}</div></div>
+            <div class="kv" style="grid-column:1/-1;"><div class="k">Hobbies</div><div class="v {% if not employee.hobbies %}empty{% endif %}">{{ employee.hobbies or '—' }}</div></div>
+          </div>
+          <div class="pf-divider"></div>
+          <div class="pf-sec">Emergency contact</div>
+          <div class="dl2">
+            <div class="kv"><div class="k">Name</div><div class="v {% if not employee.emergency_contact_name %}empty{% endif %}">{{ employee.emergency_contact_name or '—' }}</div></div>
+            <div class="kv"><div class="k">Number</div><div class="v {% if not employee.emergency_contact_phone %}empty{% endif %}">{{ employee.emergency_contact_phone or '—' }}</div></div>
+            <div class="kv"><div class="k">Relationship</div><div class="v {% if not employee.emergency_contact_relation %}empty{% endif %}">{{ employee.emergency_contact_relation or '—' }}</div></div>
+          </div>
+          {% if est != 'active' %}
+          <div class="pf-divider"></div>
+          <div class="pf-sec">Exit</div>
+          <div class="dl2">
+            <div class="kv"><div class="k">Last Working Day</div><div class="v">{{ employee.last_working_day|format_date if employee.last_working_day else 'Not recorded' }}</div></div>
+            <div class="kv"><div class="k">Reason</div><div class="v">{{ employee.exit_reason or '—' }}</div></div>
+            {% if employee.exit_notes %}<div class="kv" style="grid-column:1/-1;"><div class="k">Notes</div><div class="v">{{ employee.exit_notes }}</div></div>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- FAMILY & INSURANCE -->
+        <div class="pf-pane" data-pane="family">
+          <div class="pf-sec">Insurance policy</div>
+          <div class="dl2">
+            <div class="kv"><div class="k">Status</div><div class="v">{% if cst == 'probation' %}<span class="badge badge-pending">Probation{% if employee.probation_end_date %} · ends {{ employee.probation_end_date|format_date }}{% endif %}</span>{% else %}<span class="badge badge-approved">Permanent{% if employee.confirmed_at %} · confirmed {{ employee.confirmed_at|format_date }}{% endif %}</span>{% endif %}</div></div>
+            <div class="kv"><div class="k">Marital Status</div><div class="v {% if not employee.marital_status %}empty{% endif %}">{{ (employee.marital_status or '—')|capitalize }}</div></div>
+            <div class="kv"><div class="k">Policy / UHID Number</div><div class="v {% if not employee.insurance_number %}empty{% endif %}">{{ employee.insurance_number or '—' }}</div></div>
+            <div class="kv"><div class="k">Provider</div><div class="v {% if not employee.insurance_provider %}empty{% endif %}">{{ employee.insurance_provider or '—' }}</div></div>
+            <div class="kv"><div class="k">Active From</div><div class="v {% if not employee.insurance_activation_date %}empty{% endif %}">{{ employee.insurance_activation_date|format_date if employee.insurance_activation_date else '—' }}</div></div>
+          </div>
+          <div class="pf-divider"></div>
+          <div class="pf-sec">Insurance dependents</div>
+          {% if dependents %}
+          <table class="rows">
+            <thead><tr><th>Relation</th><th>Name</th><th>Date of Birth</th><th>Age</th></tr></thead>
+            <tbody>
+            {% for d in dependents %}
+              <tr><td style="text-transform:capitalize;">{{ d.relation }}</td><td>{{ (d.first_name or '') ~ ' ' ~ (d.last_name or '') }}</td><td>{{ d.dob|format_date if d.dob else '—' }}</td><td>{{ (d.age ~ ' yrs') if d.age is not none else '—' }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          {% else %}<p style="color:var(--gray-500);">No dependents recorded.</p>{% endif %}
+        </div>
+
+        <!-- BANK & PF -->
+        <div class="pf-pane" data-pane="bank">
+          <div class="pf-sec">Bank account</div>
+          <div class="dl2">
+            <div class="kv"><div class="k">Bank Name</div><div class="v {% if not employee.bank_name %}empty{% endif %}">{{ employee.bank_name or '—' }}</div></div>
+            <div class="kv"><div class="k">Branch</div><div class="v {% if not employee.bank_branch %}empty{% endif %}">{{ employee.bank_branch or '—' }}</div></div>
+            <div class="kv"><div class="k">Account Holder</div><div class="v {% if not employee.bank_account_name %}empty{% endif %}">{{ employee.bank_account_name or '—' }}</div></div>
+            <div class="kv"><div class="k">Account Number</div><div class="v {% if not employee.bank_account_number %}empty{% endif %}">{{ employee.bank_account_number or '—' }}</div></div>
+            <div class="kv"><div class="k">IFSC</div><div class="v {% if not employee.bank_ifsc %}empty{% endif %}">{{ employee.bank_ifsc or '—' }}</div></div>
+          </div>
+          <div class="pf-divider"></div>
+          <div class="pf-sec">Provident fund</div>
+          <div class="dl2">
+            <div class="kv"><div class="k">PF Number</div><div class="v {% if not employee.pf_number %}empty{% endif %}">{{ employee.pf_number or '—' }}</div></div>
+            <div class="kv"><div class="k">PF Start Date</div><div class="v {% if not employee.pf_start_date %}empty{% endif %}">{{ employee.pf_start_date|format_date if employee.pf_start_date else '—' }}</div></div>
+          </div>
+        </div>
+
+        <!-- EXPERIENCE -->
+        <div class="pf-pane" data-pane="work">
+          <div class="pf-sec">Internship / work experience</div>
+          {% if experience %}
+            {% for e in experience %}
+            <div class="exp-card">
+              <h4>{{ e.designation or 'Role' }}{% if e.company_name %} · {{ e.company_name }}{% endif %}</h4>
+              <div class="co">{{ e.from_date|format_date if e.from_date else '' }} – {{ e.to_date|format_date if e.to_date else 'Present' }}{% if e.location %} · {{ e.location }}{% endif %}</div>
+              {% if e.role_description %}<p>{{ e.role_description }}</p>{% endif %}
             </div>
-            <a href="/admin/employee/{{ employee.id }}/doc/{{ d.id }}" target="_blank" class="button button-small">Download</a>
+            {% endfor %}
+          {% else %}<p style="color:var(--gray-500);">No work experience recorded.</p>{% endif %}
         </div>
-        {% endfor %}
-    {% else %}
-        <p style="color: var(--gray-500); padding: 1.5rem; text-align: center;">No documents uploaded. Add them from <a href="/admin/employee/{{ employee.id }}/edit#documents">Edit Employee</a>.</p>
-    {% endif %}
+
+        <!-- DOCUMENTS -->
+        <div class="pf-pane" data-pane="docs">
+          {% if missing_docs %}<div class="callout">Pending: {% for k, lbl in missing_docs %}{{ lbl }}{% if not loop.last %}, {% endif %}{% endfor %}. Upload from Edit Employee.</div>
+          {% else %}<div class="callout ok">✓ Key documents on file.</div>{% endif %}
+          <div class="pf-sec">Uploaded documents</div>
+          {% if documents %}
+            {% for d in documents %}
+            <div class="doc-row">
+              <span class="doc-ic">📄</span>
+              <div style="flex:1;"><div style="font-weight:600;color:var(--navy);">{{ doc_labels.get(d.doc_type) or d.doc_name or d.doc_type }}{% if d.doc_type == 'other' and d.doc_name %} — {{ d.doc_name }}{% endif %}</div><div style="font-size:.74rem;color:var(--gray-400);">{{ d.filename }}</div></div>
+              <a href="/admin/employee/{{ employee.id }}/doc/{{ d.id }}" target="_blank" class="pf-btn pf-btn-ghost" style="width:auto;padding:.4rem .9rem;font-size:.8rem;">Download</a>
+            </div>
+            {% endfor %}
+          {% else %}<p style="color:var(--gray-500);">No documents uploaded. Add them from <a href="/admin/employee/{{ employee.id }}/edit#documents" style="color:var(--orange);">Edit Employee</a>.</p>{% endif %}
+        </div>
+
+      </div>
+    </section>
 </div>
+
+<script>
+  function pfTab(name, el){
+    document.querySelectorAll('.pf-tab').forEach(t => t.classList.remove('on'));
+    el.classList.add('on');
+    document.querySelectorAll('.pf-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+  }
+</script>
 {% endblock %}

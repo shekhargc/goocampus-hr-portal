@@ -97,6 +97,7 @@
             <div><div class="k">Date of Birth</div><div class="v">{{ o.dob|format_date }}</div></div>
             <div><div class="k">Blood Group</div><div class="v">{{ o.blood_group or '—' }}</div></div>
             <div><div class="k">Personal Phone</div><div class="v">{{ o.personal_phone or '—' }}</div></div>
+            <div><div class="k">Personal Email</div><div class="v">{{ o.personal_email or '—' }}</div></div>
             <div style="grid-column:1/-1;"><div class="k">Address</div><div class="v">{{ o.address or '—' }}</div></div>
             <div><div class="k">Emergency Contact</div><div class="v">{{ o.emergency_contact_name or '—' }}</div></div>
             <div><div class="k">Emergency Number</div><div class="v">{{ o.emergency_contact_phone or '—' }}</div></div>
@@ -125,7 +126,13 @@
 
     <!-- Documents -->
     <div class="obd-card">
-        <h3>Documents</h3>
+        <h3 style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">Documents
+            {% if missing_docs %}
+            <span style="background:#fff7ed;color:#b45309;border:1px solid #fed7aa;padding:.1rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;">⬤ Pending: {% for k, lbl in missing_docs %}{{ lbl }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+            {% else %}
+            <span style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:.1rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;">✓ Key documents on file</span>
+            {% endif %}
+        </h3>
         {% if documents %}
             {% for d in documents %}
             <div class="doc-item">
@@ -151,6 +158,36 @@
             <div><div class="k">Account Number</div><div class="v">{{ o.bank_account_number or '—' }}</div></div>
             <div><div class="k">IFSC Code</div><div class="v">{{ o.bank_ifsc or '—' }}</div></div>
         </div>
+    </div>
+
+    <!-- Insurance / Dependents -->
+    <div class="obd-card">
+        <h3>Health Insurance &amp; Dependents</h3>
+        <div class="obd-dl">
+            <div><div class="k">Marital Status</div><div class="v">{{ (o.marital_status or '—')|capitalize }}</div></div>
+        </div>
+        {% if dependents %}
+        <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-top:.6rem;">
+            <thead><tr>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Relation</th>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Name</th>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Date of Birth</th>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Age</th>
+            </tr></thead>
+            <tbody>
+            {% for d in dependents %}
+                <tr>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;text-transform:capitalize;">{{ d.relation }}</td>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;">{{ (d.first_name or '') ~ ' ' ~ (d.last_name or '') }}</td>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;">{{ d.dob|format_date if d.dob else '—' }}</td>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;">{{ (d.age ~ ' yrs') if d.age is not none else '—' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color:#6b7280;font-size:.9rem;margin:.4rem 0 0;">No dependents entered.</p>
+        {% endif %}
     </div>
 
     <!-- Actions -->
