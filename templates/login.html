@@ -3,1032 +3,325 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GooCampus Edu Solutions Pvt Ltd &mdash; CRM Portal</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>GooCampus Edu Solutions &mdash; Portal Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --orange: #F58220;
-            --orange-dark: #D96E0E;
-            --orange-light: #FFF3E6;
-            --blue: #4A7AB5;
-            --blue-dark: #3A6299;
-            --blue-light: #E8F0FA;
-            --navy: #1B2A4A;
-            --navy-dark: #0F1B33;
-            --navy-light: #2A3F66;
-            --white: #FFFFFF;
-            --gray-50: #F8FAFC;
-            --gray-100: #F1F5F9;
-            --gray-200: #E2E8F0;
-            --gray-300: #CBD5E1;
-            --gray-400: #94A3B8;
-            --gray-500: #64748B;
-            --gray-600: #475569;
-            --gray-700: #334155;
-            --gray-800: #1E293B;
-            --gray-900: #0F172A;
-            --success: #10B981;
-            --danger: #EF4444;
-            --warning: #F59E0B;
-        }
+      :root{
+        --navy:#1B2A4A; --navy-2:#2A3F66; --orange:#F58220; --orange-d:#D96E0E;
+        --ground:#eef2f7; --card:#ffffff; --line:#e3e9f1;
+        --ink:#1e2836; --muted:#5f6f82; --faint:#9aa8ba; --field:#f6f9fc;
+        --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+        --good:#16a34a; --err:#dc2626;
+      }
+      *{box-sizing:border-box;}
+      html,body{margin:0;padding:0;}
+      body{background:var(--ground);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;overflow-x:hidden;}
+      a{color:inherit;}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+      /* max-width = hero card (1040) + main side padding (2×26) so the logo lines up
+         with the card's left edge and the nav's right edge lines up with the card's right edge. */
+      header{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;padding:10px 26px 2px;max-width:1092px;margin:0 auto;width:100%;flex-wrap:wrap;}
+      .brand{display:inline-flex;align-items:center;text-decoration:none;}
+      .brand-logo{height:56px;width:auto;display:block;}
+      @media(max-width:520px){.brand-logo{height:44px;}}
+      nav{display:inline-flex;gap:3px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:0 1px 3px rgba(16,32,64,.05);}
+      .nav-btn{border:0;background:transparent;color:var(--muted);font:inherit;font-size:.85rem;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;}
+      .nav-btn:hover{background:var(--field);color:var(--navy);}
+      .nav-btn svg{width:15px;height:15px;}
 
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--gray-50);
-            color: var(--gray-800);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
+      main{flex:1 0 auto;display:flex;align-items:center;justify-content:center;padding:0 26px 16px;}
+      @media(max-width:520px){main{padding:0 16px 14px;}}
+      .hero-card{display:grid;grid-template-columns:1.02fr .98fr;background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 24px 60px -30px rgba(16,32,64,.4);max-width:1040px;width:100%;}
+      @media(max-width:860px){.hero-card{grid-template-columns:1fr;}}
 
-        /* ===== TOP BAR ===== */
-        .top-bar {
-            background: var(--navy-dark);
-            color: rgba(255,255,255,0.6);
-            font-size: 0.78rem;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
-        }
-        .top-bar-inner {
-            max-width: 1920px;
-            margin: 0 auto;
-            padding: 0 3rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .top-bar a {
-            color: rgba(255,255,255,0.6);
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-        .top-bar a:hover { color: var(--orange); }
-        .top-bar-right {
-            display: flex;
-            gap: 1.5rem;
-            align-items: center;
-        }
-        .top-bar-right span {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-        }
+      .visual{position:relative;background:linear-gradient(155deg,var(--navy),var(--navy-2) 62%,#16304f);color:#fff;padding:34px 40px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;}
+      @media(max-width:860px){.visual{display:none;}}
+      .visual::after{content:"";position:absolute;right:-90px;bottom:-90px;width:290px;height:290px;border-radius:50%;background:radial-gradient(circle,rgba(245,130,32,.32),transparent 70%);}
+      .visual h1{font-size:2rem;line-height:1.16;margin:0;font-weight:800;letter-spacing:-.5px;position:relative;z-index:1;}
+      .visual p{margin:14px 0 0;color:#dbe6f4;font-size:1rem;max-width:34ch;position:relative;z-index:1;}
+      .visual .art{position:relative;z-index:1;margin:24px 0;align-self:center;}
+      .visual .chips{display:flex;gap:8px;flex-wrap:wrap;position:relative;z-index:1;}
+      .chip{background:#ffffff1f;border:1px solid #ffffff33;color:#eaf1fb;font-size:.72rem;font-weight:600;padding:5px 11px;border-radius:999px;}
 
-        /* ===== NAVBAR ===== */
-        .navbar {
-            background: var(--navy);
-            box-shadow: 0 2px 16px rgba(0,0,0,0.18);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        .navbar-inner {
-            max-width: 1920px;
-            margin: 0 auto;
-            padding: 0 3rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 70px;
-        }
-        .navbar-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            text-decoration: none;
-            color: white;
-        }
-        .navbar-brand-text {
-            font-weight: 700;
-            font-size: 1.25rem;
-            line-height: 1.2;
-            color: white;
-        }
-        .navbar-brand-text .goo { color: var(--orange); }
-        .navbar-brand-sub {
-            font-size: 0.65rem;
-            opacity: 0.5;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            font-weight: 400;
-            color: white;
-        }
-        .navbar-nav {
-            display: flex;
-            gap: 0.25rem;
-            align-items: center;
-            list-style: none;
-        }
-        .navbar-nav a {
-            color: rgba(255,255,255,0.75);
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 500;
-            padding: 0.55rem 1.1rem;
-            border-radius: 0.5rem;
-            transition: all 0.2s;
-        }
-        .navbar-nav a:hover {
-            color: white;
-            background: rgba(255,255,255,0.1);
-        }
-        .navbar-nav .nav-login {
-            background: var(--orange);
-            color: white;
-            font-weight: 600;
-        }
-        .navbar-nav .nav-login:hover {
-            background: var(--orange-dark);
-        }
-        .navbar-nav .nav-partner-login {
-            background: var(--blue);
-            border: 2px solid var(--blue);
-            color: white;
-            padding: 0.45rem 1.1rem;
-            font-weight: 600;
-        }
-        .navbar-nav .nav-partner-login:hover {
-            background: var(--blue-dark);
-            border-color: var(--blue-dark);
-            color: white;
-        }
+      .loginside{padding:28px 44px;display:flex;flex-direction:column;justify-content:center;}
+      @media(max-width:520px){.loginside{padding:26px 24px;}}
+      .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--orange);}
+      .loginside h2{font-size:1.45rem;margin:.3rem 0 .15rem;color:var(--ink);font-weight:800;letter-spacing:-.3px;}
+      .loginside .sub{color:var(--muted);font-size:.88rem;margin:0 0 14px;}
+      label{display:block;font-size:.75rem;font-weight:600;color:var(--muted);margin:0 0 5px;}
+      .inp{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:11px;background:var(--field);font:inherit;font-size:.95rem;color:var(--ink);margin-bottom:12px;}
+      .inp:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,42,74,.12);}
+      .btn{width:100%;border:0;border-radius:11px;padding:13px;font:inherit;font-weight:700;font-size:.95rem;cursor:pointer;}
+      .btn-primary{background:var(--orange);color:#fff;}
+      .btn-primary:hover{background:var(--orange-d);}
+      .btn-wa{width:100%;background:var(--field);border:1px solid var(--line);color:var(--navy);border-radius:11px;padding:12px;font:inherit;font-weight:600;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+      .btn-wa:hover{border-color:#25d366;color:#128c3e;}
+      .seg{display:flex;background:var(--field);border:1px solid var(--line);border-radius:11px;padding:4px;margin-bottom:13px;}
+      .seg button{flex:1;border:0;background:transparent;font:inherit;font-size:.82rem;font-weight:600;color:var(--muted);padding:8px;border-radius:8px;cursor:pointer;}
+      .seg button.on{background:var(--card);color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.09);}
+      .link{color:var(--orange);text-decoration:none;font-weight:600;font-size:.82rem;display:inline-block;margin-top:12px;cursor:pointer;}
+      .foot-note{margin-top:11px;font-size:.8rem;color:var(--muted);}
+      .msg{font-size:.85rem;margin-top:10px;text-align:center;min-height:1em;}
+      .appbox{display:flex;gap:12px;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);}
+      .appqr{width:64px;height:64px;flex:0 0 auto;border:1px solid var(--line);border-radius:9px;background:#fff;padding:3px;}
+      .appt{font-weight:700;color:var(--navy);font-size:.9rem;margin-bottom:2px;}
+      .applink{color:var(--orange);text-decoration:none;font-weight:600;font-size:.82rem;}
+      .appbtn{display:none;width:100%;text-align:center;background:var(--field);border:1px solid var(--line);color:var(--navy);border-radius:11px;padding:12px;font-weight:600;font-size:.9rem;text-decoration:none;}
+      @media(max-width:560px){ .appqr,.appmeta{display:none;} .appbtn{display:block;} .appbox{border-top:1px solid var(--line);} }
 
-        /* ===== HERO ===== */
-        .hero {
-            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 60%, var(--blue-dark) 100%);
-            color: white;
-            position: relative;
-            overflow: hidden;
-        }
-        .hero::before {
-            content: '';
-            position: absolute;
-            top: -40%;
-            right: -10%;
-            width: 700px;
-            height: 700px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(245,130,32,0.1) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .hero::after {
-            content: '';
-            position: absolute;
-            bottom: -30%;
-            left: -5%;
-            width: 500px;
-            height: 500px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(74,122,181,0.08) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .hero-inner {
-            max-width: 1920px;
-            margin: 0 auto;
-            padding: 4rem 3rem;
-            display: grid;
-            grid-template-columns: 1fr 420px;
-            gap: 4rem;
-            align-items: center;
-            position: relative;
-            z-index: 2;
-        }
-        .hero-content h1 {
-            font-size: 2.75rem;
-            font-weight: 800;
-            line-height: 1.15;
-            margin-bottom: 1.25rem;
-        }
-        .hero-content h1 .highlight {
-            color: var(--orange);
-        }
-        .hero-content p {
-            font-size: 1.1rem;
-            line-height: 1.7;
-            color: rgba(255,255,255,0.75);
-            max-width: 520px;
-            margin-bottom: 2rem;
-        }
-        .hero-stats {
-            display: flex;
-            gap: 2.5rem;
-        }
-        .hero-stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--orange);
-        }
-        .hero-stat-label {
-            font-size: 0.82rem;
-            color: rgba(255,255,255,0.55);
-            margin-top: 0.2rem;
-        }
+      .flash{max-width:1040px;width:100%;margin:0 auto 12px;}
+      .flash .toast{padding:11px 15px;border-radius:11px;font-size:.88rem;font-weight:600;margin-bottom:8px;}
+      .flash .success{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;}
+      .flash .error{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;}
+      .flash .info{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
 
-        /* ===== LOGIN CARD (in hero) ===== */
-        .login-card {
-            background: var(--white);
-            border-radius: 1rem;
-            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
-            padding: 2.5rem;
-        }
-        .login-card-header {
-            margin-bottom: 2rem;
-        }
-        .login-card-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 0.35rem;
-        }
-        .login-card-subtitle {
-            font-size: 0.92rem;
-            color: var(--gray-500);
-        }
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--gray-700);
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-        }
-        .form-input {
-            width: 100%;
-            padding: 0.85rem 1.1rem;
-            border: 2px solid var(--gray-200);
-            border-radius: 0.6rem;
-            font-family: inherit;
-            font-size: 0.95rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            background: var(--gray-50);
-        }
-        .form-input::placeholder { color: var(--gray-400); }
-        .form-input:focus {
-            outline: none;
-            border-color: var(--orange);
-            box-shadow: 0 0 0 3px rgba(245,130,32,0.15);
-            background: var(--white);
-        }
-        .login-btn {
-            width: 100%;
-            padding: 1rem;
-            background: linear-gradient(135deg, var(--orange), var(--orange-dark));
-            color: var(--white);
-            border: none;
-            border-radius: 0.6rem;
-            cursor: pointer;
-            font-size: 0.95rem;
-            font-weight: 600;
-            font-family: inherit;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 6px 20px rgba(245,130,32,0.3);
-            letter-spacing: 0.3px;
-            text-transform: uppercase;
-        }
-        .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 28px rgba(245,130,32,0.4);
-        }
-        .login-btn:active { transform: translateY(0); }
-
-        /* ===== LOGIN TABS ===== */
-        .login-tabs {
-            display: flex;
-            border-bottom: 2px solid var(--gray-200);
-            margin-bottom: 1.5rem;
-        }
-        .login-tab {
-            flex: 1;
-            padding: 0.75rem 0.5rem;
-            text-align: center;
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--gray-400);
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            margin-bottom: -2px;
-            transition: all 0.2s;
-            background: none;
-            border-top: none;
-            border-left: none;
-            border-right: none;
-            font-family: inherit;
-        }
-        .login-tab:hover { color: var(--gray-700); }
-        .login-tab.active {
-            color: var(--orange);
-            border-bottom-color: var(--orange);
-        }
-        .login-form-panel { display: none; }
-        .login-form-panel.active { display: block; }
-        .forgot-link {
-            display: block;
-            text-align: center;
-            margin-top: 1rem;
-            color: var(--gray-500);
-            font-size: 0.85rem;
-            text-decoration: none;
-        }
-        .forgot-link:hover { color: var(--orange); }
-
-        .alert {
-            padding: 0.85rem 1.1rem;
-            margin-bottom: 1.5rem;
-            border-radius: 0.6rem;
-            border-left: 4px solid;
-            font-size: 0.9rem;
-        }
-        .alert-error {
-            background: #FEF2F2;
-            border-color: var(--danger);
-            color: #991B1B;
-        }
-        .alert-success {
-            background: #ECFDF5;
-            border-color: var(--success);
-            color: #065F46;
-        }
-
-        /* ===== FEATURES ===== */
-        .features {
-            padding: 5rem 0;
-            background: var(--white);
-        }
-        .features-inner {
-            max-width: 1920px;
-            margin: 0 auto;
-            padding: 0 3rem;
-        }
-        .features-header {
-            text-align: center;
-            margin-bottom: 3.5rem;
-        }
-        .features-header h2 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 0.75rem;
-        }
-        .features-header p {
-            font-size: 1.05rem;
-            color: var(--gray-500);
-            max-width: 560px;
-            margin: 0 auto;
-        }
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 2rem;
-        }
-        .feature-card {
-            background: var(--gray-50);
-            border: 1px solid var(--gray-200);
-            border-radius: 1rem;
-            padding: 2rem;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .feature-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 32px rgba(0,0,0,0.08);
-        }
-        .feature-icon {
-            width: 52px;
-            height: 52px;
-            border-radius: 0.75rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1.25rem;
-        }
-        .feature-icon.orange { background: var(--orange-light); }
-        .feature-icon.blue { background: var(--blue-light); }
-        .feature-icon.green { background: #ECFDF5; }
-        .feature-card h3 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--navy);
-            margin-bottom: 0.6rem;
-        }
-        .feature-card p {
-            font-size: 0.9rem;
-            color: var(--gray-500);
-            line-height: 1.6;
-        }
-
-        /* ===== ABOUT SECTION ===== */
-        .about {
-            padding: 5rem 0;
-            background: var(--gray-50);
-        }
-        .about-inner {
-            max-width: 1920px;
-            margin: 0 auto;
-            padding: 0 3rem;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4rem;
-            align-items: center;
-        }
-        .about-content h2 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 1rem;
-        }
-        .about-content p {
-            font-size: 1rem;
-            color: var(--gray-600);
-            line-height: 1.7;
-            margin-bottom: 1.5rem;
-        }
-        .about-highlights {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.25rem;
-        }
-        .about-highlight {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.75rem;
-        }
-        .about-highlight-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 0.5rem;
-            background: var(--orange-light);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            margin-top: 0.1rem;
-        }
-        .about-highlight h4 {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--navy);
-            margin-bottom: 0.2rem;
-        }
-        .about-highlight p {
-            font-size: 0.82rem;
-            color: var(--gray-500);
-            line-height: 1.5;
-            margin-bottom: 0;
-        }
-        .about-visual {
-            background: linear-gradient(135deg, var(--navy), var(--navy-light));
-            border-radius: 1rem;
-            padding: 3rem;
-            color: white;
-            position: relative;
-            overflow: hidden;
-        }
-        .about-visual::before {
-            content: '';
-            position: absolute;
-            top: -30%;
-            right: -20%;
-            width: 300px;
-            height: 300px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(245,130,32,0.15) 0%, transparent 70%);
-        }
-        .about-visual-item {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1.25rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            position: relative;
-            z-index: 1;
-        }
-        .about-visual-item:last-child { border-bottom: none; }
-        .about-visual-num {
-            width: 44px;
-            height: 44px;
-            border-radius: 0.6rem;
-            background: rgba(245,130,32,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: var(--orange);
-            font-size: 1.1rem;
-            flex-shrink: 0;
-        }
-        .about-visual-text h4 {
-            font-size: 0.95rem;
-            font-weight: 600;
-            margin-bottom: 0.2rem;
-        }
-        .about-visual-text p {
-            font-size: 0.82rem;
-            color: rgba(255,255,255,0.55);
-            line-height: 1.4;
-        }
-
-        /* ===== FOOTER ===== */
-        .site-footer {
-            background: var(--navy-dark);
-            color: rgba(255,255,255,0.5);
-            margin-top: auto;
-        }
-        .site-footer-inner {
-            max-width: 1920px;
-            margin: 0 auto;
-            padding: 2.5rem 3rem;
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 3rem;
-        }
-        .footer-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.65rem;
-            margin-bottom: 1rem;
-        }
-        .footer-brand-text {
-            font-weight: 700;
-            font-size: 1.15rem;
-            color: white;
-        }
-        .footer-brand-text .goo { color: var(--orange); }
-        .footer-desc {
-            font-size: 0.85rem;
-            line-height: 1.6;
-            max-width: 380px;
-            color: rgba(255,255,255,0.45);
-        }
-        .footer-heading {
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: rgba(255,255,255,0.65);
-            margin-bottom: 1rem;
-        }
-        .footer-links { list-style: none; }
-        .footer-links li { margin-bottom: 0.55rem; }
-        .footer-links a {
-            color: rgba(255,255,255,0.45);
-            text-decoration: none;
-            font-size: 0.85rem;
-            transition: color 0.2s;
-        }
-        .footer-links a:hover { color: var(--orange); }
-        .footer-bottom {
-            border-top: 1px solid rgba(255,255,255,0.08);
-            padding: 1.25rem 3rem;
-            text-align: center;
-            font-size: 0.78rem;
-            color: rgba(255,255,255,0.35);
-        }
-        .footer-bottom span { color: var(--orange); }
-        .footer-bottom-inner {
-            max-width: 1920px;
-            margin: 0 auto;
-        }
-
-        /* ===== RESPONSIVE ===== */
-        @media (max-width: 1024px) {
-            .hero-inner { grid-template-columns: 1fr; gap: 3rem; padding: 3rem 2rem; }
-            .login-card { max-width: 420px; }
-            .hero-content h1 { font-size: 2.25rem; }
-            .features-inner, .about-inner { padding: 0 2rem; }
-            .features-grid { grid-template-columns: repeat(2, 1fr); }
-            .about-inner { grid-template-columns: 1fr; gap: 2.5rem; }
-            .site-footer-inner { padding: 2rem 1.5rem; grid-template-columns: 1fr 1fr; gap: 2rem; }
-            .footer-bottom { padding: 1rem 1.5rem; }
-            .top-bar-inner { padding: 0 2rem; }
-            .navbar-inner { padding: 0 2rem; }
-        }
-        @media (max-width: 768px) {
-            .top-bar { display: none; }
-            .navbar-inner { height: 60px; padding: 0 1rem; }
-            .navbar-nav a { padding: 0.4rem 0.7rem; font-size: 0.82rem; }
-            .hero-inner { padding: 2.5rem 1.25rem; }
-            .hero-content h1 { font-size: 1.75rem; }
-            .hero-stats { gap: 1.5rem; }
-            .hero-stat-value { font-size: 1.5rem; }
-            .login-card { padding: 2rem; max-width: 100%; }
-            .features { padding: 3rem 0; }
-            .features-grid { grid-template-columns: 1fr; }
-            .features-inner { padding: 0 1.25rem; }
-            .about { padding: 3rem 0; }
-            .about-inner { padding: 0 1.25rem; }
-            .about-highlights { grid-template-columns: 1fr; }
-            .site-footer-inner { grid-template-columns: 1fr; gap: 1.5rem; }
-            .navbar-brand-sub { display: none; }
-        }
-        /* Toast Notifications */
-        .toast-container { position:fixed; top:1rem; right:1rem; z-index:99999; display:flex; flex-direction:column; gap:0.6rem; pointer-events:none; max-width:400px; }
-        .toast { pointer-events:auto; padding:0.85rem 1.2rem; border-radius:10px; border-left:4px solid; font-size:0.88rem; font-weight:500; display:flex; align-items:center; gap:0.6rem; box-shadow:0 4px 16px rgba(0,0,0,0.12); animation:toastIn 0.35s ease-out; transition:opacity 0.3s ease, transform 0.3s ease; min-width:280px; }
-        .toast.toast-hide { opacity:0; transform:translateX(60px); }
-        .toast-success { background:#F0FDF4; border-color:#22C55E; color:#065F46; }
-        .toast-error { background:#FEF2F2; border-color:#EF4444; color:#991B1B; }
-        .toast-info { background:#EFF6FF; border-color:#3B82F6; color:#1E40AF; }
-        .toast-warning { background:#FFFBEB; border-color:#F59E0B; color:#92400E; }
-        .toast-close { margin-left:auto; cursor:pointer; opacity:0.5; font-size:1.1rem; background:none; border:none; color:inherit; padding:0 0 0 0.5rem; line-height:1; }
-        .toast-close:hover { opacity:1; }
-        @keyframes toastIn { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }
+      /* modal */
+      .modal-back{position:fixed;inset:0;background:rgba(15,24,40,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:50;}
+      .modal-back.open{display:flex;}
+      .modal{background:var(--card);border-radius:18px;max-width:410px;width:100%;padding:30px 32px;box-shadow:0 30px 70px -20px rgba(0,0,0,.5);position:relative;}
+      .modal h3{margin:0 0 3px;font-size:1.25rem;color:var(--navy);font-weight:800;}
+      .modal .msub{color:var(--muted);font-size:.86rem;margin:0 0 18px;}
+      .modal .x{position:absolute;top:14px;right:16px;border:0;background:transparent;font-size:1.4rem;line-height:1;color:var(--faint);cursor:pointer;}
+      .pagefoot{flex-shrink:0;text-align:center;color:var(--faint);font-size:.78rem;padding:8px 0 14px;}
     </style>
 </head>
 <body>
 
-    <!-- Top info bar -->
-    <div class="top-bar">
-        <div class="top-bar-inner">
-            <span>GSTIN: 29AAHCG2048J1ZE</span>
-            <div class="top-bar-right">
-                <span>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                    <a href="mailto:info@goocampus.in">info@goocampus.in</a>
-                </span>
-                <span>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    Bangalore, India
-                </span>
-            </div>
-        </div>
+<header>
+  <a class="brand" href="/login"><img src="/static/logo-full.png" alt="GooCampus Edu Solutions" class="brand-logo"></a>
+  <nav>
+    <button class="nav-btn" onclick="openModal('employeeModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg> Employee Login</button>
+    <button class="nav-btn" onclick="openModal('partnerModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Partner Login</button>
+  </nav>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash">
+    {% for cat, m in messages %}<div class="toast {{ cat }}">{{ m }}</div>{% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+<main>
+  <div class="hero-card">
+    <!-- LEFT VISUAL -->
+    <div class="visual">
+      <div>
+        <h1>Your global medical career, in one place.</h1>
+        <p>Track your journey, documents, payments and every milestone — from registration to licensing abroad.</p>
+      </div>
+      <div class="art" aria-hidden="true">
+        <svg width="220" height="140" viewBox="0 0 230 150" fill="none">
+          <circle cx="115" cy="75" r="60" stroke="#ffffff40" stroke-width="1.5"/>
+          <circle cx="115" cy="75" r="42" stroke="#ffffff30" stroke-width="1.5"/>
+          <path d="M55 75h120M115 15v120" stroke="#ffffff22" stroke-width="1"/>
+          <path d="M75 95c14-4 18-22 30-22s18 20 32 16" stroke="#F58220" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <circle cx="75" cy="95" r="5" fill="#F58220"/>
+          <circle cx="169" cy="87" r="6" fill="#fff"/>
+          <path d="M96 52a10 10 0 1120 0v6a14 14 0 01-28 0" stroke="#fff" stroke-width="2.5" fill="none"/>
+          <circle cx="106" cy="82" r="4" fill="none" stroke="#fff" stroke-width="2.5"/>
+        </svg>
+      </div>
+      <div class="chips"><span class="chip">USMLE</span><span class="chip">PLAB · UK</span><span class="chip">AMC · Australia</span><span class="chip">UAE</span></div>
     </div>
 
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="navbar-inner">
-            <a href="/" class="navbar-brand">
-                <img src="/static/logo-white.png" alt="GooCampus" style="height: 52px; object-fit: contain;">
-            </a>
-            <ul class="navbar-nav">
-                <li><a href="#features">Features</a></li>
-                <li><a href="#about">About</a></li>
-                <li><a href="#login" class="nav-login" onclick="setTimeout(function(){switchLoginTab('employee')},400)">Employee Login</a></li>
-                <li><a href="#login" class="nav-login nav-partner-login" onclick="setTimeout(function(){switchLoginTab('partner')},400)">Partner Login</a></li>
-            </ul>
+    <!-- RIGHT: CLIENT LOGIN -->
+    <div class="loginside">
+      <div class="eyebrow">Client Portal</div>
+      <h2>Hello Doctor 👋</h2>
+      <p class="sub">Sign in to your GooCampus client portal.</p>
+
+      <div class="seg">
+        <button type="button" class="on" id="clsegpw" onclick="clSeg('pw')">Password</button>
+        <button type="button" id="clsegotp" onclick="clSeg('otp')">WhatsApp OTP</button>
+      </div>
+
+      <div id="clPw">
+        <form method="POST" action="/client/login">
+          <label for="mobile">Mobile Number</label>
+          <input class="inp" id="mobile" type="tel" name="mobile" placeholder="Your 10-digit mobile number" pattern="[0-9]{10}" maxlength="10" required>
+          <label for="password">Password</label>
+          <input class="inp" id="password" type="password" name="password" placeholder="Enter your password" required>
+          <button class="btn btn-primary" type="submit">Sign In</button>
+        </form>
+      </div>
+
+      <div id="clOtp" style="display:none;">
+        <label for="clOtpMobile">Mobile Number</label>
+        <input class="inp" id="clOtpMobile" type="tel" placeholder="Your registered 10-digit mobile" pattern="[0-9]{10}" maxlength="10">
+        <div id="clOtpEntry" style="display:none;">
+          <label for="clOtpInput">WhatsApp OTP</label>
+          <input class="inp" id="clOtpInput" type="text" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
         </div>
-    </nav>
+        <button class="btn-wa" type="button" id="clOtpBtn" onclick="clOtpAction()"><svg width="16" height="16" viewBox="0 0 24 24" fill="#25d366"><path d="M12 2a10 10 0 00-8.5 15.3L2 22l4.8-1.5A10 10 0 1012 2z"/></svg> Send WhatsApp OTP</button>
+        <div class="msg" id="clOtpMsg"></div>
+      </div>
 
-    <!-- Hero with Login -->
-    <section class="hero" id="login">
-        <div class="hero-inner">
-            <div class="hero-content">
-                <h1>Your Complete <span class="highlight">CRM Portal</span> for GooCampus</h1>
-                <p>A unified platform for Sales, HR, and Operations &mdash; manage meetings, track projects, handle leave approvals, and run company workflows from a single dashboard.</p>
-                <div class="hero-stats">
-                    <div>
-                        <div class="hero-stat-value">3</div>
-                        <div class="hero-stat-label">Departments</div>
-                    </div>
-                    <div>
-                        <div class="hero-stat-value">Sales</div>
-                        <div class="hero-stat-label">CRM & Meetings</div>
-                    </div>
-                    <div>
-                        <div class="hero-stat-value">HR</div>
-                        <div class="hero-stat-label">Leave & People</div>
-                    </div>
-                </div>
-            </div>
+      <div class="foot-note">New here? Use the invitation link your counsellor shared to register.</div>
 
-            <!-- Login Form -->
-            <div class="login-card">
-                <div class="login-card-header">
-                    <h2 class="login-card-title">Sign In</h2>
-                    <p class="login-card-subtitle">Access your GooCampus portal</p>
-                </div>
-
-                <!-- Login Tabs -->
-                <div class="login-tabs">
-                    <button class="login-tab {% if not active_tab or active_tab == 'employee' %}active{% endif %}" onclick="switchLoginTab('employee')">GC Team</button>
-                    <button class="login-tab {% if active_tab == 'partner' %}active{% endif %}" onclick="switchLoginTab('partner')">Partners</button>
-                </div>
-
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                <div class="toast-container" id="toast-container">
-                    {% for category, message in messages %}
-                    <div class="toast toast-{{ category }}">
-                        <span>{% if category == 'success' %}&#10003;{% elif category == 'error' %}&#10007;{% else %}&#8505;{% endif %}</span>
-                        <span>{{ message }}</span>
-                        <button class="toast-close" onclick="this.parentElement.classList.add('toast-hide');setTimeout(()=>this.parentElement.remove(),300)">&times;</button>
-                    </div>
-                    {% endfor %}
-                </div>
-                <script>
-                (function(){
-                    var toasts = document.querySelectorAll('#toast-container .toast');
-                    toasts.forEach(function(t, i) {
-                        setTimeout(function() {
-                            t.classList.add('toast-hide');
-                            setTimeout(function() { t.remove(); }, 300);
-                        }, 4000 + i * 500);
-                    });
-                })();
-                </script>
-                {% endif %}
-                {% endwith %}
-
-                <!-- GC Team Login -->
-                <div id="panel-employee" class="login-form-panel {% if not active_tab or active_tab == 'employee' %}active{% endif %}">
-                    <form method="POST" action="/login">
-                        <div class="form-group">
-                            <label for="emp_code">Employee Code</label>
-                            <input type="text" id="emp_code" name="emp_code" class="form-input" placeholder="Enter your employee code" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="password">Password</label>
-                            <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
-                        </div>
-                        <button type="submit" class="login-btn">Sign In</button>
-                    </form>
-                    <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
-                </div>
-
-                <!-- Partner Login -->
-                <div id="panel-partner" class="login-form-panel {% if active_tab == 'partner' %}active{% endif %}">
-
-                    <!-- Primary: Mobile + WhatsApp OTP (no password needed) -->
-                    <div id="partnerOtpMode">
-                        <div class="form-group">
-                            <label for="partnerLoginPhone">Mobile Number</label>
-                            <input type="tel" id="partnerLoginPhone" class="form-input" placeholder="10-digit mobile number" autocomplete="tel">
-                        </div>
-                        <div class="form-group" id="partnerOtpEntry" style="display:none;">
-                            <label for="partnerLoginOtp">WhatsApp OTP</label>
-                            <input type="text" id="partnerLoginOtp" class="form-input" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
-                        </div>
-                        <button type="button" class="login-btn" id="partnerOtpBtn" onclick="partnerOtpAction()">
-                            <i class="fab fa-whatsapp"></i> Send WhatsApp OTP
-                        </button>
-                        <div id="partnerOtpMsg" style="font-size:0.85rem;margin-top:10px;text-align:center;"></div>
-                        <a href="#" class="forgot-link" onclick="togglePartnerMode('pw');return false;">Sign in with email &amp; password instead</a>
-                    </div>
-
-                    <!-- Fallback: Email + Password -->
-                    <div id="partnerPwMode" style="display:none;">
-                        <form method="POST" action="/partner-login">
-                            <div class="form-group">
-                                <label for="partner_email">Email Address</label>
-                                <input type="email" id="partner_email" name="partner_email" class="form-input" placeholder="Enter your partner email">
-                            </div>
-                            <div class="form-group">
-                                <label for="partner_password">Password</label>
-                                <input type="password" id="partner_password" name="partner_password" class="form-input" placeholder="Enter your password">
-                            </div>
-                            <button type="submit" class="login-btn">Partner Sign In</button>
-                        </form>
-                        <a href="#" class="forgot-link" onclick="togglePartnerMode('otp');return false;">Sign in with mobile &amp; OTP instead</a>
-                        <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
-                    </div>
-
-                    <script>
-                        function togglePartnerMode(mode) {
-                            document.getElementById('partnerOtpMode').style.display = (mode === 'otp') ? '' : 'none';
-                            document.getElementById('partnerPwMode').style.display  = (mode === 'pw')  ? '' : 'none';
-                        }
-                        let _partnerOtpSent = false;
-                        function _pMsg(t, ok) {
-                            const m = document.getElementById('partnerOtpMsg');
-                            m.style.color = ok ? '#16a34a' : '#b91c1c'; m.textContent = t || '';
-                        }
-                        async function partnerOtpAction() {
-                            const phone = document.getElementById('partnerLoginPhone').value.trim();
-                            const btn = document.getElementById('partnerOtpBtn');
-                            if (!_partnerOtpSent) {
-                                if (!/^[\d\s\-\+\(\)]{10,}$/.test(phone)) { _pMsg('Enter a valid 10-digit mobile number.', false); return; }
-                                btn.disabled = true; _pMsg('Sending OTP…', true);
-                                try {
-                                    const r = await fetch('/partner/login/send-otp', {
-                                        method:'POST', headers:{'Content-Type':'application/json'},
-                                        body: JSON.stringify({ phone })
-                                    });
-                                    const d = await r.json();
-                                    if (r.ok && d.success) {
-                                        _partnerOtpSent = true;
-                                        document.getElementById('partnerOtpEntry').style.display = '';
-                                        btn.innerHTML = 'Verify &amp; Sign In';
-                                        _pMsg('OTP sent to your WhatsApp.', true);
-                                    } else { _pMsg(d.error || 'Could not send OTP.', false); }
-                                } catch (e) { _pMsg('Network error. Please try again.', false); }
-                                btn.disabled = false;
-                            } else {
-                                const otp = document.getElementById('partnerLoginOtp').value.trim();
-                                if (!otp) { _pMsg('Enter the 6-digit OTP.', false); return; }
-                                btn.disabled = true; _pMsg('Verifying…', true);
-                                try {
-                                    const r = await fetch('/partner/login/verify-otp', {
-                                        method:'POST', headers:{'Content-Type':'application/json'},
-                                        body: JSON.stringify({ phone, otp })
-                                    });
-                                    const d = await r.json();
-                                    if (r.ok && d.success) { _pMsg('Success! Redirecting…', true); window.location.href = d.redirect || '/partner/dashboard'; }
-                                    else { _pMsg(d.error || 'Invalid OTP.', false); btn.disabled = false; }
-                                } catch (e) { _pMsg('Network error. Please try again.', false); btn.disabled = false; }
-                            }
-                        }
-                    </script>
-                </div>
-            </div>
+      <div class="appbox">
+        <img class="appqr" src="/get-app/qr.svg" alt="Scan to install the app" onerror="this.style.display='none'">
+        <div class="appmeta">
+          <div class="appt">📱 Use GooCampus as an app</div>
+          <a class="applink" href="/get-app">Scan the code, or see install steps →</a>
         </div>
-    </section>
+        <a class="appbtn" href="/get-app">📱 Get the app on your phone</a>
+      </div>
+    </div>
+  </div>
+</main>
 
-    <!-- Features -->
-    <section class="features" id="features">
-        <div class="features-inner">
-            <div class="features-header">
-                <h2>Everything You Need in One Place</h2>
-                <p>Our CRM portal brings together Sales, HR, and Operations into a single platform for managing employees, meetings, projects, and company workflows.</p>
-            </div>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon orange">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                    </div>
-                    <h3>Sales Dashboard</h3>
-                    <p>Track meetings, manage client relationships, monitor team performance, and view project progress from a personalised sales dashboard.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon blue">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3A6299" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                    </div>
-                    <h3>Meeting Management</h3>
-                    <p>Schedule online and face-to-face meetings, track city and outstation visits, log client interactions, and record outcomes.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon green">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    </div>
-                    <h3>Leave &amp; Attendance</h3>
-                    <p>Apply for leave, track balances, manage approvals, and generate monthly reports with salary deduction calculations.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon orange">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                    </div>
-                    <h3>Project Tracking</h3>
-                    <p>Manage active projects, assign teams, link meetings to projects, and track progress across the organisation.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon blue">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3A6299" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                    </div>
-                    <h3>Employee Directory</h3>
-                    <p>Browse the full team with department filters, role information, org chart view, and reporting hierarchies at a glance.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon green">
-                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                    </div>
-                    <h3>Reports &amp; Analytics</h3>
-                    <p>Monthly, quarterly, and annual reports for HR. Sales news and performance dashboards for the sales team.</p>
-                </div>
-            </div>
-        </div>
-    </section>
+<div class="pagefoot">© 2026 GooCampus Edu Solutions Pvt Ltd · goocampus.org</div>
 
-    <!-- About -->
-    <section class="about" id="about">
-        <div class="about-inner">
-            <div class="about-content">
-                <h2>About GooCampus Edu Solutions</h2>
-                <p>GooCampus Edu Solutions Pvt Ltd is a Bangalore-based education services company helping students navigate global medical education pathways. Our CRM portal supports the internal team with modern tools for sales, HR, and operations management.</p>
-                <div class="about-highlights">
-                    <div class="about-highlight">
-                        <div class="about-highlight-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                        </div>
-                        <div>
-                            <h4>Sales CRM</h4>
-                            <p>Meetings, projects, client tracking, and sales team performance.</p>
-                        </div>
-                    </div>
-                    <div class="about-highlight">
-                        <div class="about-highlight-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                        </div>
-                        <div>
-                            <h4>HR Management</h4>
-                            <p>Leave approvals, attendance, employee records, and payroll reports.</p>
-                        </div>
-                    </div>
-                    <div class="about-highlight">
-                        <div class="about-highlight-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        </div>
-                        <div>
-                            <h4>Role-Based Access</h4>
-                            <p>Admin, management, and employee views with module-level access control.</p>
-                        </div>
-                    </div>
-                    <div class="about-highlight">
-                        <div class="about-highlight-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                        </div>
-                        <div>
-                            <h4>Fully Responsive</h4>
-                            <p>Works seamlessly on desktops, tablets, and mobile devices.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="about-visual">
-                <div class="about-visual-item">
-                    <div class="about-visual-num">1</div>
-                    <div class="about-visual-text">
-                        <h4>Log in to your dashboard</h4>
-                        <p>See company-wide stats, quick links, and announcements</p>
-                    </div>
-                </div>
-                <div class="about-visual-item">
-                    <div class="about-visual-num">2</div>
-                    <div class="about-visual-text">
-                        <h4>Manage sales meetings &amp; clients</h4>
-                        <p>Schedule city or outstation meetings and track outcomes</p>
-                    </div>
-                </div>
-                <div class="about-visual-item">
-                    <div class="about-visual-num">3</div>
-                    <div class="about-visual-text">
-                        <h4>Handle HR &amp; leave workflows</h4>
-                        <p>Apply for leave, get approvals, and manage employee records</p>
-                    </div>
-                </div>
-                <div class="about-visual-item">
-                    <div class="about-visual-num">4</div>
-                    <div class="about-visual-text">
-                        <h4>Generate reports &amp; insights</h4>
-                        <p>Sales performance, leave reports, and operational analytics</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+<!-- ══ EMPLOYEE MODAL ══ -->
+<div class="modal-back" id="employeeModal">
+  <div class="modal">
+    <button class="x" onclick="closeModal('employeeModal')">&times;</button>
+    <h3>Employee Login</h3>
+    <p class="msub">GooCampus team members.</p>
+    <div class="seg">
+      <button type="button" class="on" id="empsegpw" onclick="empSeg('pw')">Password</button>
+      <button type="button" id="empsegotp" onclick="empSeg('otp')">WhatsApp OTP</button>
+    </div>
+    <div id="empPw">
+      <form method="POST" action="/login">
+        <label>Employee Code</label>
+        <input class="inp" type="text" name="emp_code" placeholder="Enter your employee code" required>
+        <label>Password</label>
+        <input class="inp" type="password" name="password" placeholder="Enter your password" required>
+        <button class="btn btn-primary" type="submit">Sign In</button>
+      </form>
+      <a class="link" href="/forgot-password">Forgot Password?</a>
+    </div>
+    <div id="empOtp" style="display:none;">
+      <label>Employee Code</label>
+      <input class="inp" id="empOtpCode" type="text" placeholder="Enter your employee code">
+      <div id="empOtpEntry" style="display:none;">
+        <label>WhatsApp OTP</label>
+        <input class="inp" id="empOtpInput" type="text" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
+      </div>
+      <button class="btn-wa" type="button" id="empOtpBtn" onclick="empOtpAction()"><svg width="16" height="16" viewBox="0 0 24 24" fill="#25d366"><path d="M12 2a10 10 0 00-8.5 15.3L2 22l4.8-1.5A10 10 0 1012 2z"/></svg> Send WhatsApp OTP</button>
+      <div class="msg" id="empOtpMsg"></div>
+    </div>
+  </div>
+</div>
 
-    <!-- Footer -->
-    <footer class="site-footer">
-        <div class="site-footer-inner">
-            <div>
-                <div class="footer-brand">
-                    <img src="/static/logo-white.png" alt="GooCampus" style="height: 50px; object-fit: contain;">
-                </div>
-                <p class="footer-desc">Company CRM portal for GooCampus Edu Solutions Pvt Ltd. Bringing together Sales, HR, and Operations into one unified platform.</p>
-            </div>
-            <div>
-                <h4 class="footer-heading">Quick Links</h4>
-                <ul class="footer-links">
-                    <li><a href="#features">Features</a></li>
-                    <li><a href="#about">About</a></li>
-                    <li><a href="#login">Employee Login</a></li>
-                    <li><a href="#login" onclick="setTimeout(function(){switchLoginTab('partner')},400)">Partner Login</a></li>
-                    <li><a href="mailto:info@goocampus.in">Contact Us</a></li>
-                </ul>
-            </div>
-            <div>
-                <h4 class="footer-heading">Contact</h4>
-                <ul class="footer-links">
-                    <li><a href="mailto:info@goocampus.in">info@goocampus.in</a></li>
-                    <li><a href="https://goocampus.in" target="_blank">goocampus.in</a></li>
-                    <li><a href="#">Bangalore, India</a></li>
-                </ul>
-            </div>
-        </div>
-        <div class="footer-bottom">
-            <div class="footer-bottom-inner">
-                &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &nbsp;&middot;&nbsp; GSTIN: 29AAHCG2048J1ZE &nbsp;&middot;&nbsp; All rights reserved
-            </div>
-        </div>
-    </footer>
+<!-- ══ PARTNER MODAL ══ -->
+<div class="modal-back" id="partnerModal">
+  <div class="modal">
+    <button class="x" onclick="closeModal('partnerModal')">&times;</button>
+    <h3>Partner Login</h3>
+    <p class="msub">Referral &amp; channel partners.</p>
+    <div class="seg">
+      <button type="button" class="on" id="prsegotp" onclick="prSeg('otp')">WhatsApp OTP</button>
+      <button type="button" id="prsegpw" onclick="prSeg('pw')">Email &amp; Password</button>
+    </div>
+    <div id="prOtp">
+      <label>Mobile Number</label>
+      <input class="inp" id="prOtpMobile" type="tel" placeholder="10-digit mobile number">
+      <div id="prOtpEntry" style="display:none;">
+        <label>WhatsApp OTP</label>
+        <input class="inp" id="prOtpInput" type="text" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
+      </div>
+      <button class="btn-wa" type="button" id="prOtpBtn" onclick="prOtpAction()"><svg width="16" height="16" viewBox="0 0 24 24" fill="#25d366"><path d="M12 2a10 10 0 00-8.5 15.3L2 22l4.8-1.5A10 10 0 1012 2z"/></svg> Send WhatsApp OTP</button>
+      <div class="msg" id="prOtpMsg"></div>
+    </div>
+    <div id="prPw" style="display:none;">
+      <form method="POST" action="/partner-login">
+        <label>Email Address</label>
+        <input class="inp" type="email" name="partner_email" placeholder="Your partner email">
+        <label>Password</label>
+        <input class="inp" type="password" name="partner_password" placeholder="Enter your password">
+        <button class="btn btn-primary" type="submit">Partner Sign In</button>
+      </form>
+      <a class="link" href="/forgot-password">Forgot Password?</a>
+    </div>
+  </div>
+</div>
 
-    <script>
-        // Tab switching
-        function switchLoginTab(tab) {
-            document.querySelectorAll('.login-tab').forEach(function(t) { t.classList.remove('active'); });
-            document.querySelectorAll('.login-form-panel').forEach(function(p) { p.classList.remove('active'); });
-            document.getElementById('panel-' + tab).classList.add('active');
-            // Highlight the clicked tab
-            var tabs = document.querySelectorAll('.login-tab');
-            if (tab === 'employee') tabs[0].classList.add('active');
-            else tabs[1].classList.add('active');
-            // Focus first input
-            var firstInput = document.querySelector('#panel-' + tab + ' input');
-            if (firstInput) firstInput.focus();
-        }
+<script>
+  // PWA: register the client service worker so returning clients can install the app.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/client/sw.js', {scope:'/client/'}).catch(()=>{}));
+  }
 
-        // Smooth scroll for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
-            anchor.addEventListener('click', function(e) {
-                e.preventDefault();
-                var target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            });
-        });
-    </script>
+  function openModal(id){ document.getElementById(id).classList.add('open'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-back').forEach(mb => mb.addEventListener('click', e => { if (e.target === mb) mb.classList.remove('open'); }));
 
+  // ── segmented toggles ──
+  function clSeg(m){ document.getElementById('clsegpw').classList.toggle('on',m==='pw'); document.getElementById('clsegotp').classList.toggle('on',m==='otp'); document.getElementById('clPw').style.display=m==='pw'?'':'none'; document.getElementById('clOtp').style.display=m==='otp'?'':'none'; }
+  function empSeg(m){ document.getElementById('empsegpw').classList.toggle('on',m==='pw'); document.getElementById('empsegotp').classList.toggle('on',m==='otp'); document.getElementById('empPw').style.display=m==='pw'?'':'none'; document.getElementById('empOtp').style.display=m==='otp'?'':'none'; }
+  function prSeg(m){ document.getElementById('prsegotp').classList.toggle('on',m==='otp'); document.getElementById('prsegpw').classList.toggle('on',m==='pw'); document.getElementById('prOtp').style.display=m==='otp'?'':'none'; document.getElementById('prPw').style.display=m==='pw'?'':'none'; }
+
+  function _msg(el, t, ok){ const m=document.getElementById(el); m.style.color=ok?'#16a34a':'#b91c1c'; m.textContent=t||''; }
+
+  // ── Client OTP ──
+  let _clSent=false;
+  async function clOtpAction(){
+    const mobile=document.getElementById('clOtpMobile').value.trim(), btn=document.getElementById('clOtpBtn');
+    if(!_clSent){
+      if(!/^\d{10}$/.test(mobile)){ _msg('clOtpMsg','Enter your registered 10-digit mobile.',false); return; }
+      btn.disabled=true; _msg('clOtpMsg','Sending OTP…',true);
+      try{ const r=await fetch('/client/login/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mobile})}); const d=await r.json();
+        if(r.ok&&d.success){ _clSent=true; document.getElementById('clOtpEntry').style.display=''; btn.textContent='Verify & Sign In'; _msg('clOtpMsg',d.message||'OTP sent on WhatsApp.',true); }
+        else _msg('clOtpMsg',d.error||'Could not send OTP.',false);
+      }catch(e){ _msg('clOtpMsg','Network error. Try again.',false); } btn.disabled=false;
+    } else {
+      const otp=document.getElementById('clOtpInput').value.trim(); if(!otp){ _msg('clOtpMsg','Enter the 6-digit OTP.',false); return; }
+      btn.disabled=true; _msg('clOtpMsg','Verifying…',true);
+      try{ const r=await fetch('/client/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mobile,otp})}); const d=await r.json();
+        if(r.ok&&d.success){ _msg('clOtpMsg','Success! Redirecting…',true); window.location.href=d.redirect||'/client/dashboard'; }
+        else { _msg('clOtpMsg',d.error||'Invalid OTP.',false); btn.disabled=false; }
+      }catch(e){ _msg('clOtpMsg','Network error. Try again.',false); btn.disabled=false; }
+    }
+  }
+
+  // ── Employee OTP ──
+  let _empSent=false;
+  async function empOtpAction(){
+    const code=document.getElementById('empOtpCode').value.trim(), btn=document.getElementById('empOtpBtn');
+    if(!_empSent){
+      if(!code){ _msg('empOtpMsg','Enter your employee code.',false); return; }
+      btn.disabled=true; _msg('empOtpMsg','Sending OTP…',true);
+      try{ const r=await fetch('/login/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emp_code:code})}); const d=await r.json();
+        if(r.ok&&d.success){ _empSent=true; document.getElementById('empOtpEntry').style.display=''; btn.textContent='Verify & Sign In'; _msg('empOtpMsg',d.message||'OTP sent on WhatsApp.',true); }
+        else _msg('empOtpMsg',d.error||'Could not send OTP.',false);
+      }catch(e){ _msg('empOtpMsg','Network error. Try again.',false); } btn.disabled=false;
+    } else {
+      const otp=document.getElementById('empOtpInput').value.trim(); if(!otp){ _msg('empOtpMsg','Enter the 6-digit OTP.',false); return; }
+      btn.disabled=true; _msg('empOtpMsg','Verifying…',true);
+      try{ const r=await fetch('/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emp_code:code,otp})}); const d=await r.json();
+        if(r.ok&&d.success){ _msg('empOtpMsg','Success! Redirecting…',true); window.location.href=d.redirect||'/'; }
+        else { _msg('empOtpMsg',d.error||'Invalid OTP.',false); btn.disabled=false; }
+      }catch(e){ _msg('empOtpMsg','Network error. Try again.',false); btn.disabled=false; }
+    }
+  }
+
+  // ── Partner OTP ──
+  let _prSent=false;
+  async function prOtpAction(){
+    const phone=document.getElementById('prOtpMobile').value.trim(), btn=document.getElementById('prOtpBtn');
+    if(!_prSent){
+      if(!/^[\d\s\-\+\(\)]{10,}$/.test(phone)){ _msg('prOtpMsg','Enter a valid 10-digit mobile.',false); return; }
+      btn.disabled=true; _msg('prOtpMsg','Sending OTP…',true);
+      try{ const r=await fetch('/partner/login/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})}); const d=await r.json();
+        if(r.ok&&d.success){ _prSent=true; document.getElementById('prOtpEntry').style.display=''; btn.textContent='Verify & Sign In'; _msg('prOtpMsg','OTP sent on WhatsApp.',true); }
+        else _msg('prOtpMsg',d.error||'Could not send OTP.',false);
+      }catch(e){ _msg('prOtpMsg','Network error. Try again.',false); } btn.disabled=false;
+    } else {
+      const otp=document.getElementById('prOtpInput').value.trim(); if(!otp){ _msg('prOtpMsg','Enter the 6-digit OTP.',false); return; }
+      btn.disabled=true; _msg('prOtpMsg','Verifying…',true);
+      try{ const r=await fetch('/partner/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,otp})}); const d=await r.json();
+        if(r.ok&&d.success){ _msg('prOtpMsg','Success! Redirecting…',true); window.location.href=d.redirect||'/partner/dashboard'; }
+        else { _msg('prOtpMsg',d.error||'Invalid OTP.',false); btn.disabled=false; }
+      }catch(e){ _msg('prOtpMsg','Network error. Try again.',false); btn.disabled=false; }
+    }
+  }
+
+  // Auto-open the right modal after a failed employee/partner login.
+  {% if active_login == 'employee' %}openModal('employeeModal');{% elif active_login == 'partner' %}openModal('partnerModal');{% endif %}
+</script>
 </body>
 </html>

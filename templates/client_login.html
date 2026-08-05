@@ -274,21 +274,39 @@
             {% endif %}
             {% endwith %}
 
-            <form method="POST" action="/client/login">
+            <!-- Password mode (default) -->
+            <div id="clPwMode">
+                <form method="POST" action="/client/login">
+                    <div class="form-group">
+                        <label for="mobile">Mobile Number</label>
+                        <input type="tel" id="mobile" name="mobile" class="form-input"
+                               placeholder="Enter your mobile number"
+                               pattern="[0-9]{10}" maxlength="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" class="form-input"
+                               placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="login-btn">Sign In</button>
+                </form>
+                <a href="#" class="forgot-link" onclick="toggleClMode('otp');return false;">📱 Forgot password? Sign in with WhatsApp OTP</a>
+            </div>
+
+            <!-- WhatsApp OTP mode -->
+            <div id="clOtpMode" style="display:none;">
                 <div class="form-group">
-                    <label for="mobile">Mobile Number</label>
-                    <input type="tel" id="mobile" name="mobile" class="form-input"
-                           placeholder="Enter your mobile number"
-                           pattern="[0-9]{10}" maxlength="10" required>
+                    <label for="clOtpMobile">Mobile Number</label>
+                    <input type="tel" id="clOtpMobile" class="form-input" placeholder="Your registered 10-digit mobile" pattern="[0-9]{10}" maxlength="10">
                 </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" class="form-input"
-                           placeholder="Enter your password" required>
+                <div class="form-group" id="clOtpEntry" style="display:none;">
+                    <label for="clOtpInput">WhatsApp OTP</label>
+                    <input type="text" id="clOtpInput" class="form-input" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
                 </div>
-                <button type="submit" class="login-btn">Sign In</button>
-            </form>
-            <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                <button type="button" class="login-btn" id="clOtpBtn" onclick="clOtpAction()">Send WhatsApp OTP</button>
+                <div id="clOtpMsg" style="font-size:0.85rem;margin-top:10px;text-align:center;"></div>
+                <a href="#" class="forgot-link" onclick="toggleClMode('pw');return false;">Sign in with password instead</a>
+            </div>
         </div>
     </div>
 
@@ -301,6 +319,43 @@
   // PWA: register the service worker so Chrome/Android offers "Install app".
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/client/sw.js', {scope:'/client/'}).catch(()=>{}));
+  }
+
+  // ── WhatsApp OTP login ──
+  function toggleClMode(mode){
+    document.getElementById('clPwMode').style.display  = (mode === 'pw')  ? '' : 'none';
+    document.getElementById('clOtpMode').style.display = (mode === 'otp') ? '' : 'none';
+  }
+  let _clOtpSent = false;
+  function _cMsg(t, ok){ const m = document.getElementById('clOtpMsg'); m.style.color = ok ? '#16a34a' : '#b91c1c'; m.textContent = t || ''; }
+  async function clOtpAction(){
+    const mobile = document.getElementById('clOtpMobile').value.trim();
+    const btn = document.getElementById('clOtpBtn');
+    if (!_clOtpSent){
+      if (!/^\d{10}$/.test(mobile)){ _cMsg('Enter your registered 10-digit mobile number.', false); return; }
+      btn.disabled = true; _cMsg('Sending OTP…', true);
+      try {
+        const r = await fetch('/client/login/send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mobile }) });
+        const d = await r.json();
+        if (r.ok && d.success){
+          _clOtpSent = true;
+          document.getElementById('clOtpEntry').style.display = '';
+          btn.textContent = 'Verify & Sign In';
+          _cMsg(d.message || 'OTP sent on WhatsApp.', true);
+        } else { _cMsg(d.error || 'Could not send OTP.', false); }
+      } catch(e){ _cMsg('Network error. Please try again.', false); }
+      btn.disabled = false;
+    } else {
+      const otp = document.getElementById('clOtpInput').value.trim();
+      if (!otp){ _cMsg('Enter the 6-digit OTP.', false); return; }
+      btn.disabled = true; _cMsg('Verifying…', true);
+      try {
+        const r = await fetch('/client/login/verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ mobile, otp }) });
+        const d = await r.json();
+        if (r.ok && d.success){ _cMsg('Success! Redirecting…', true); window.location.href = d.redirect || '/client/dashboard'; }
+        else { _cMsg(d.error || 'Invalid OTP.', false); btn.disabled = false; }
+      } catch(e){ _cMsg('Network error. Please try again.', false); btn.disabled = false; }
+    }
   }
 </script>
 </body>
