@@ -602,7 +602,7 @@ def login():
 
         if not emp_code or not password:
             flash('Employee code and password required', 'error')
-            return render_template('login.html')
+            return render_template('login.html', active_login='employee')
 
         conn = get_db()
         user = conn.execute('SELECT * FROM employees WHERE emp_code = ? AND is_active = 1', (emp_code,)).fetchone()
@@ -622,6 +622,7 @@ def login():
             return redirect(url_for('index'))
         else:
             flash('Invalid credentials or account inactive', 'error')
+            return render_template('login.html', active_login='employee')
 
     return render_template('login.html')
 
@@ -881,7 +882,7 @@ def partner_login():
 
     if not email or not password:
         flash('Email and password are required', 'error')
-        return render_template('login.html', active_tab='partner')
+        return render_template('login.html', active_login='partner')
 
     conn = get_db()
     partner = conn.execute(
@@ -900,7 +901,7 @@ def partner_login():
         return redirect(url_for('partner_dashboard_view'))
     else:
         flash('Invalid credentials or account inactive', 'error')
-        return render_template('login.html', active_tab='partner')
+        return render_template('login.html', active_login='partner')
 
 
 def get_partner_visible_sections(partner_id):
@@ -1155,7 +1156,7 @@ def client_login_page():
         password = request.form.get('password', '').strip()
         if not mobile or not password:
             flash('Mobile and password are required', 'error')
-            return render_template('client_login.html')
+            return render_template('login.html')
         # Normalize mobile: strip +91 or leading 91 for 10-digit
         clean = mobile.lstrip('+').lstrip('0')
         if clean.startswith('91') and len(clean) == 12:
@@ -1181,8 +1182,8 @@ def client_login_page():
             return redirect(url_for('client_dashboard'))
         else:
             flash('Invalid mobile number or password', 'error')
-            return render_template('client_login.html')
-    return render_template('client_login.html')
+            return render_template('login.html')
+    return render_template('login.html')
 
 
 @app.route('/client/login/send-otp', methods=['POST'])
@@ -1256,7 +1257,7 @@ def client_register(token):
     if not inv:
         conn.close()
         flash('This invitation link is invalid or has already been used.', 'error')
-        return render_template('client_login.html')
+        return render_template('login.html')
 
     product = conn.execute("SELECT id, name FROM products_services WHERE id = ?", (inv['product_id'],)).fetchone()
 
