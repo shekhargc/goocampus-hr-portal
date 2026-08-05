@@ -518,12 +518,21 @@
                India (+91) enforces exactly 10 digits; other countries digits-only,
                no max. JS (initPhoneFields) fills the code list, parses the saved
                value, and combines code+number into the hidden field on input. #}
+            {# For the primary mobile, seed the country code the sales rep picked
+               (carried on reg.country_code, default +91) so the dropdown opens on
+               the right country. Only when the saved value has no explicit +code
+               yet — once the client saves, the value already carries its code. #}
+            {% set _seed = value or '' %}
+            {% if f.field_name == 'mobile' and _seed and not _seed.startswith('+')
+                  and reg.country_code and reg.country_code != '+91' %}
+                {% set _seed = reg.country_code ~ _seed %}
+            {% endif %}
             <div class="gc-phone" style="display:flex;gap:8px;align-items:stretch;">
                 <select class="gc-cc" aria-label="Country code" style="max-width:190px;flex:0 0 auto;"{% if ro %} disabled{% endif %}></select>
                 <input type="tel" class="gc-num" inputmode="numeric" value="" placeholder="{{ f.placeholder or 'Phone number' }}"
                        style="flex:1 1 auto;min-width:0;"{% if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
             </div>
-            <input type="hidden" name="{{ f.field_name }}" value="{{ value or '' }}">
+            <input type="hidden" name="{{ f.field_name }}" value="{{ _seed }}">
         {% elif f.field_type == 'select' %}
             <select name="{{ f.field_name }}"{% if f.field_name == 'state' %} id="state-select" onchange="loadCities()"{% elif f.field_name == 'city' %} id="city-select" data-current="{{ value or '' }}"{% endif %}{% if f.is_required %} required{% endif %}{% if ro %} disabled{% endif %}>
                 <option value="">Select…</option>

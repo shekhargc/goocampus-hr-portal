@@ -1106,6 +1106,7 @@ def client_login_page():
 @app.route('/client/register/<token>', methods=['GET', 'POST'])
 def client_register(token):
     conn = get_db()
+    _ensure_country_code_cols(conn)
     inv = conn.execute("SELECT * FROM client_invitations WHERE token = ? AND status = 'pending'", (token,)).fetchone()
     if not inv:
         conn.close()
@@ -1121,13 +1122,18 @@ def client_register(token):
         first_name = request.form.get('first_name', '').strip()
         last_name = request.form.get('last_name', '').strip()
 
+        # Country code the sales rep picked (default +91). India keeps the strict
+        # 10-digit rule; other countries only need a plausibly-real length.
+        inv_cc = _norm_country_code(inv['country_code'] if 'country_code' in inv.keys() else '+91')
         # Normalize mobile
         clean = mobile.lstrip('+').lstrip('0')
-        if clean.startswith('91') and len(clean) == 12:
+        if inv_cc == '+91' and clean.startswith('91') and len(clean) == 12:
             clean = clean[2:]
 
-        if not clean or len(clean) != 10:
-            flash('Please enter a valid 10-digit mobile number', 'error')
+        _cc_is_india = (inv_cc == '+91')
+        if not clean or (_cc_is_india and len(clean) != 10) or (not _cc_is_india and len(clean) < 6):
+            flash('Please enter a valid 10-digit mobile number' if _cc_is_india
+                  else 'Please enter a valid mobile number', 'error')
             conn.close()
             return render_template('client_register.html', invitation=inv, product=product)
 
@@ -1216,7 +1222,7 @@ def client_register(token):
 
         conn.execute('''INSERT INTO client_registrations
             (account_id, invitation_id, product_id, registration_number,
-             first_name, last_name, mobile, email,
+             first_name, last_name, mobile, email, country_code,
              counsellor_id, counsellor_name,
              plan_type, package_amount, discount_allowed, final_package,
              inst1_amount, inst1_date, inst1_note, inst1_method, inst1_status,
@@ -1226,14 +1232,14 @@ def client_register(token):
              lead_source, additional_notes, ops_notes,
              contract_path, onboarding_gated,
              form_status, current_step)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, 1, 'draft', 1)''',
             (acct_id, inv['id'], inv['product_id'], reg_num,
-             first_name, last_name, clean, inv['client_email'] or '',
+             first_name, last_name, clean, inv['client_email'] or '', inv_cc,
              counsellor_id, counsellor_name,
              plan_type, package_amount, discount_allowed, final_package,
              inst_amts[0], inst_dts[0], inst_nts[0], inst_mts[0], inst_sts[0],
@@ -7182,8 +7188,55 @@ def _seed_client_welcome_kit_from_template(conn, registration_id):
     return inserted
 
 
+def _ensure_country_code_cols(conn):
+    """Add the `country_code` dial-code column (default '+91') to the three
+    tables the sales→invite→registration mobile flows through. Called at
+    request time so it survives a Render cold-start that skipped boot DDL.
+    Idempotent; safe to call on every relevant request."""
+    for _tbl in ('sales_leads', 'client_invitations', 'client_registrations'):
+        try:
+            conn.execute(
+                f"ALTER TABLE {_tbl} ADD COLUMN IF NOT EXISTS country_code TEXT DEFAULT '+91'")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+
+def _norm_country_code(raw, default='+91'):
+    """Normalise a submitted dial code to `+<digits>` form; fall back to +91."""
+    s = (raw or '').strip()
+    if not s:
+        return default
+    digits = ''.join(ch for ch in s if ch.isdigit())
+    return ('+' + digits) if digits else default
+
+
+def _phone_countries_list(conn=None):
+    """[{'name','dial','region'}] from the central countries table (dial codes
+    only), India pinned first — the same source the client form uses. Opens its
+    own short-lived connection when one isn't supplied. Never raises."""
+    own = conn is None
+    try:
+        if own:
+            conn = get_db()
+        rows = conn.execute(
+            "SELECT name, dial_code, region FROM countries "
+            "WHERE is_active = TRUE ORDER BY name").fetchall()
+        out = [{'name': r['name'], 'dial': r['dial_code'], 'region': r['region']}
+               for r in rows if (r['dial_code'] or '').strip()]
+    except Exception:
+        out = [{'name': 'India', 'dial': '+91', 'region': 'South Asia'}]
+    finally:
+        if own and conn is not None:
+            try: conn.close()
+            except Exception: pass
+    return out
+
+
 def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
-                              client_email, invited_by, closure_data=None):
+                              client_email, invited_by, closure_data=None,
+                              country_code='+91'):
     """Create a client_invitations row tied to a fresh closure and send the
     WhatsApp invite. Used by the sales -> closure auto-flow so the closing
     rep doesn't have to manually generate the invite.
@@ -7202,10 +7255,15 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
     import uuid, json
     if not client_name or not client_mobile:
         return None
+    _ensure_country_code_cols(conn)
+    cc = _norm_country_code(country_code)
     mobile = client_mobile.lstrip('+').lstrip('0')
-    if mobile.startswith('91') and len(mobile) == 12:
+    if cc == '+91' and mobile.startswith('91') and len(mobile) == 12:
         mobile = mobile[2:]
-    if not mobile or len(mobile) < 10:
+    # India stays a strict 10-digit rule; other countries only need a
+    # plausibly-real length (national numbers run ~6-14 digits).
+    _min_len = 10 if cc == '+91' else 6
+    if not mobile or len(mobile) < _min_len:
         return None
     try:
         existing = conn.execute(
@@ -7242,9 +7300,10 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
                 "UPDATE client_invitations "
                 "   SET closure_metadata = COALESCE(?, closure_metadata), "
                 "       client_email = COALESCE(NULLIF(?, ''), client_email), "
-                "       invited_by = COALESCE(?, invited_by) "
+                "       invited_by = COALESCE(?, invited_by), "
+                "       country_code = ? "
                 " WHERE token = ?",
-                (closure_json, client_email or '', invited_by, token),
+                (closure_json, client_email or '', invited_by, cc, token),
             )
             conn.commit()
         except Exception as e:
@@ -7257,10 +7316,10 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
             conn.execute(
                 "INSERT INTO client_invitations "
                 "(token, product_id, client_name, client_mobile, client_email, "
-                " invited_by, closure_metadata) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " invited_by, closure_metadata, country_code) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (token, product_id, client_name, mobile, client_email,
-                 invited_by, closure_json),
+                 invited_by, closure_json, cc),
             )
         except Exception as e:
             logging.warning(f"_auto_invite_from_closure: insert failed: {e}")
@@ -7271,7 +7330,7 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
     # back the row.
     try:
         invite_url = f"https://goocampus.org/client/register/{token}"
-        _send_client_invite_wa(mobile, client_name, invite_url)
+        _send_client_invite_wa(mobile, client_name, invite_url, country_code=cc)
     except Exception as e:
         logging.warning(f"_auto_invite_from_closure: WA send failed: {e}")
     # Email the registration link too. Previously the client invite only sent
@@ -7383,7 +7442,7 @@ def _send_client_invite_email(email, name, link, service_name='', counsellor_nam
         return False
 
 
-def _send_client_invite_wa(mobile, name, link):
+def _send_client_invite_wa(mobile, name, link, country_code='+91'):
     """Send WhatsApp template message with invitation link.
 
     Returns True if Infobip accepted the message, False otherwise. Unlike the
@@ -7398,7 +7457,11 @@ def _send_client_invite_wa(mobile, name, link):
         logging.error("WA invite NOT sent: INFOBIP_API_KEY / INFOBIP_BASE_URL "
                       "not configured on this service")
         return False
-    phone = mobile if mobile.startswith('91') else f'91{mobile}'
+    # Build the full international MSISDN from the sales-picked country code
+    # (default +91). `mobile` is stored as the bare national number, so we always
+    # prepend the code's digits — correct for India and every other country.
+    _cc_digits = ''.join(ch for ch in (country_code or '+91') if ch.isdigit()) or '91'
+    phone = mobile if mobile.startswith(_cc_digits) and len(mobile) > 10 else f'{_cc_digits}{mobile}'
     url = f"https://{infobip_base}/whatsapp/1/message/template"
     headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
     payload = {
@@ -22390,6 +22453,15 @@ def ensure_ops_tables():
         except Exception:
             try: conn.rollback()
             except Exception: pass
+        # 2026-08: dial country code the sales rep picked for the client's
+        # mobile (default +91 India). Rides from the lead → invitation →
+        # registration so the client's form opens on the right country code.
+        try:
+            conn.execute("ALTER TABLE client_invitations ADD COLUMN IF NOT EXISTS country_code TEXT DEFAULT '+91'")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # ── Client Registrations (main client data per product) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_registrations (
@@ -22476,6 +22548,14 @@ def ensure_ops_tables():
         # keep the default 0 so they are never locked out of their dashboard.
         try:
             conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS onboarding_gated INTEGER DEFAULT 0")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        # 2026-08: country_code carried from the sales lead so the client's
+        # mobile field opens on the code sales picked (default +91 India).
+        try:
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS country_code TEXT DEFAULT '+91'")
             conn.commit()
         except Exception:
             try: conn.rollback()
@@ -33663,7 +33743,8 @@ def ensure_sales_crm_tables():
         for _c, _t in (('amc_plan_type', 'TEXT'), ('amc_currency', 'TEXT'), ('amc_aud_amount', 'NUMERIC(12,2)'),
                        ('amc_fx_rate', 'NUMERIC(10,4)'), ('amc_fx_markup', 'NUMERIC(5,2)'),
                        ('amc_fx_effective', 'NUMERIC(10,4)'), ('amc_inr_amount', 'NUMERIC(14,2)'),
-                       ('amc_fx_locked_at', 'TIMESTAMP'), ('amc_payment_route', 'TEXT')):
+                       ('amc_fx_locked_at', 'TIMESTAMP'), ('amc_payment_route', 'TEXT'),
+                       ('country_code', "TEXT DEFAULT '+91'")):
             try:
                 conn.execute(f"ALTER TABLE sales_leads ADD COLUMN IF NOT EXISTS {_c} {_t}")
                 conn.commit()
@@ -34644,11 +34725,14 @@ def sales_leads_add():
         ecd = request.form.get('expected_close_date') or None
         lead_name_new = (request.form.get('lead_name') or '').strip() or 'Untitled lead'
         company_new = (request.form.get('company') or '').strip()
+        _ensure_country_code_cols(conn)
+        country_code_new = _norm_country_code(request.form.get('country_code'))
         conn.execute(
             '''INSERT INTO sales_leads
                (lead_name, company, phone, email, source, product_id, stream_id, stage_id,
-                owner_employee_id, expected_value, expected_close_date, is_hot, notes, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                owner_employee_id, expected_value, expected_close_date, is_hot, notes, created_by,
+                country_code)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (
                 lead_name_new, company_new,
                 (request.form.get('phone') or '').strip(),
@@ -34657,7 +34741,7 @@ def sales_leads_add():
                 product_id, stream_id, stage_id, owner_id, ev, ecd,
                 0,  # is_hot retired with the "hot lead" UI cleanup
                 (request.form.get('notes') or '').strip(),
-                user['id']
+                user['id'], country_code_new
             )
         )
         # If stage is Won, auto-create closure for the newly added lead
@@ -34912,6 +34996,7 @@ def sales_leads_add():
                             client_email=(request.form.get('email') or '').strip(),
                             invited_by=_counsellor_id,
                             closure_data=closure_data,
+                            country_code=country_code_new,
                         )
                         if token:
                             flash('Closed client recorded and invitation sent on WhatsApp', 'success')
@@ -34974,6 +35059,7 @@ def sales_leads_add():
                            role=role, won_stage_ids=won_stage_ids,
                            already_has_closure=False,
                            lead_sources=get_lookup_options('lead_source'),
+                           phone_countries=_phone_countries_list(conn),
                     active_section='sales')
 
 
@@ -35021,11 +35107,14 @@ def sales_leads_edit(lead_id):
         ecd = request.form.get('expected_close_date') or None
         lead_name_new = (request.form.get('lead_name') or '').strip() or lead['lead_name']
         company_new = (request.form.get('company') or '').strip()
+        _ensure_country_code_cols(conn)
+        country_code_new = _norm_country_code(request.form.get('country_code'))
         conn.execute(
             '''UPDATE sales_leads SET
                lead_name = ?, company = ?, phone = ?, email = ?, source = ?,
                product_id = ?, stream_id = ?, stage_id = ?, owner_employee_id = ?,
                expected_value = ?, expected_close_date = ?, is_hot = ?, notes = ?,
+               country_code = ?,
                updated_at = CURRENT_TIMESTAMP
                WHERE id = ?''',
             (
@@ -35036,6 +35125,7 @@ def sales_leads_edit(lead_id):
                 product_id, stream_id, stage_id, owner_id, ev, ecd,
                 1 if request.form.get('is_hot') else 0,
                 (request.form.get('notes') or '').strip(),
+                country_code_new,
                 lead_id
             )
         )
@@ -35162,8 +35252,8 @@ def sales_leads_edit(lead_id):
                     except Exception:
                         _base = {}
                     _merged = {**_base, **edited}
-                    conn.execute("UPDATE client_invitations SET closure_metadata = ? WHERE id = ?",
-                                 (_json.dumps({k: v for k, v in _merged.items() if v not in (None, '')}), inv['id']))
+                    conn.execute("UPDATE client_invitations SET closure_metadata = ?, country_code = ? WHERE id = ?",
+                                 (_json.dumps({k: v for k, v in _merged.items() if v not in (None, '')}), country_code_new, inv['id']))
                 reg = conn.execute(
                     "SELECT id FROM client_registrations "
                     "WHERE regexp_replace(mobile, '[^0-9]', '', 'g') LIKE ? AND product_id = ? "
@@ -35172,7 +35262,7 @@ def sales_leads_edit(lead_id):
                 if reg:
                     conn.execute('''UPDATE client_registrations SET
                         plan_type = ?, package_amount = ?, discount_allowed = ?, final_package = ?,
-                        additional_notes = ?,
+                        additional_notes = ?, country_code = ?,
                         inst1_amount = ?, inst1_date = ?, inst1_note = ?, inst1_method = ?, inst1_status = ?,
                         inst2_amount = ?, inst2_date = ?, inst2_note = ?, inst2_method = ?, inst2_status = ?,
                         inst3_amount = ?, inst3_date = ?, inst3_note = ?, inst3_method = ?, inst3_status = ?,
@@ -35180,7 +35270,7 @@ def sales_leads_edit(lead_id):
                         updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?''',
                         (edited['plan_type'], edited['package_amount'], edited['discount_allowed'],
-                         edited['final_package'], edited['additional_notes'],
+                         edited['final_package'], edited['additional_notes'], country_code_new,
                          edited['inst1_amount'], edited['inst1_date'], edited['inst1_note'], edited['inst1_method'], edited['inst1_status'],
                          edited['inst2_amount'], edited['inst2_date'], edited['inst2_note'], edited['inst2_method'], edited['inst2_status'],
                          edited['inst3_amount'], edited['inst3_date'], edited['inst3_note'], edited['inst3_method'], edited['inst3_status'],
@@ -35294,6 +35384,7 @@ def sales_leads_edit(lead_id):
                            already_has_closure=already_has_closure,
                            closure=closure,
                            lead_sources=get_lookup_options('lead_source'),
+                           phone_countries=_phone_countries_list(),
                     active_section='sales')
 
 

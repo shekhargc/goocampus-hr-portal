@@ -25,8 +25,12 @@
                     <input type="text" name="lead_name" required maxlength="120" value="{{ lead.lead_name if lead else '' }}" class="slf-inp" />
                 </div>
                 <div>
-                    <label class="slf-lbl">WhatsApp number * <span style="color:var(--gray-500);font-weight:400;">(10-digit Indian)</span></label>
-                    <input type="tel" name="phone" required pattern="[6-9][0-9]{9}" maxlength="10" value="{{ lead.phone if lead else '' }}" placeholder="9XXXXXXXXX" class="slf-inp" />
+                    <label class="slf-lbl">WhatsApp number * <span style="color:var(--gray-500);font-weight:400;">(pick country code)</span></label>
+                    <div style="display:flex;gap:8px;align-items:stretch;">
+                        <select name="country_code" id="slf-cc" class="slf-inp" style="max-width:200px;flex:0 0 auto;background:white;"></select>
+                        <input type="tel" name="phone" id="slf-phone" required value="{{ lead.phone if lead else '' }}" placeholder="9XXXXXXXXX" class="slf-inp" style="flex:1 1 auto;min-width:0;" />
+                    </div>
+                    <div id="slf-cc-hint" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.25rem;"></div>
                 </div>
             </div>
 
@@ -675,6 +679,54 @@
                 {% if closure and closure.include_training %}if (cb) cb.checked = true;{% endif %}
                 if (cb && cb.checked) toggleTraining();
             })();
+        })();
+        </script>
+
+        {# ── Country code for the WhatsApp number (default +91 India) ── #}
+        <script>
+        (function(){
+          var COUNTRIES = {{ phone_countries|tojson }};
+          if(!COUNTRIES || !COUNTRIES.length){ COUNTRIES = [{name:'India', dial:'+91', region:'South Asia'}]; }
+          var saved = {{ (lead.country_code if lead and lead.country_code else '+91')|tojson }};
+          var cc = document.getElementById('slf-cc');
+          var num = document.getElementById('slf-phone');
+          var hint = document.getElementById('slf-cc-hint');
+          if(!cc || !num) return;
+          // Build the options, India pinned first, then grouped by region.
+          var india = null, byRegion = {}, order = [];
+          COUNTRIES.forEach(function(c){
+            if(!c.dial) return;
+            if(c.name === 'India'){ india = c; return; }
+            if(!byRegion[c.region]){ byRegion[c.region] = []; order.push(c.region); }
+            byRegion[c.region].push(c);
+          });
+          var html = '';
+          if(india) html += '<option value="'+india.dial+'">'+india.name+' ('+india.dial+')</option>';
+          order.forEach(function(rg){
+            html += '<optgroup label="'+(rg||'Other')+'">';
+            byRegion[rg].forEach(function(c){ html += '<option value="'+c.dial+'">'+c.name+' ('+c.dial+')</option>'; });
+            html += '</optgroup>';
+          });
+          cc.innerHTML = html;
+          cc.value = saved || '+91';
+          if(cc.selectedIndex < 0) cc.value = '+91';
+          function applyRule(){
+            if(cc.value === '+91'){
+              num.setAttribute('pattern','[6-9][0-9]{9}');
+              num.setAttribute('maxlength','10');
+              num.setAttribute('placeholder','9XXXXXXXXX');
+              if(hint) hint.textContent = 'India: 10-digit number.';
+            } else {
+              num.removeAttribute('pattern');
+              num.removeAttribute('maxlength');
+              num.setAttribute('placeholder','Number without country code');
+              if(hint) hint.textContent = 'Enter the number WITHOUT the ' + cc.value + ' country code — just the local digits.';
+            }
+            num.value = (num.value||'').replace(/[^0-9]/g,'');
+          }
+          num.addEventListener('input', function(){ num.value = (num.value||'').replace(/[^0-9]/g,''); });
+          cc.addEventListener('change', applyRule);
+          applyRule();
         })();
         </script>
     </div>
