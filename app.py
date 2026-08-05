@@ -1249,6 +1249,42 @@ def client_login_verify_otp():
     return jsonify({'success': True, 'redirect': url_for('client_dashboard')})
 
 
+def _app_base_url():
+    base = (os.environ.get('PORTAL_BASE_URL') or '').rstrip('/')
+    if base:
+        return base
+    try:
+        return request.host_url.rstrip('/')
+    except Exception:
+        return 'https://goocampus.org'
+
+
+@app.route('/get-app')
+def get_app():
+    """Client-facing 'install the app' guide (Android + iPhone), with the QR."""
+    return render_template('get_app.html', app_url=_app_base_url() + '/client/login')
+
+
+@app.route('/get-app/qr.svg')
+def get_app_qr():
+    """QR code (SVG) pointing at the install guide, generated server-side (segno)."""
+    target = _app_base_url() + '/get-app'
+    try:
+        import io, segno
+        qr = segno.make(target, error='m')
+        buf = io.BytesIO()
+        qr.save(buf, kind='svg', scale=6, border=2, dark='#1B2A4A', light='#ffffff')
+        from flask import Response
+        return Response(buf.getvalue(), mimetype='image/svg+xml',
+                        headers={'Cache-Control': 'public, max-age=86400'})
+    except Exception as e:
+        logging.warning(f"get_app_qr: {e}")
+        # Graceful fallback so the page never breaks if segno isn't installed yet.
+        from flask import Response
+        return Response('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+                        mimetype='image/svg+xml'), 200
+
+
 @app.route('/client/register/<token>', methods=['GET', 'POST'])
 def client_register(token):
     conn = get_db()
