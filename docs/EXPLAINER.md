@@ -102,7 +102,10 @@ each one is for.
 Where reps live day to day. They manage **leads**, record **closures**, track **targets**,
 and — the key action — run the **closure form** that turns a won lead into a registered
 client. There's also a **Revenue Report** that shows how much actual sales revenue each team
-member has generated (their packages, minus cost, minus discounts they gave).
+member has generated (their packages, minus cost, minus discounts they gave). The Leads list
+now shows a **Registration status** per lead — *Not submitted → Registration submitted →
+Onboarding completed* — so sales can see, at a glance, which closed clients have finished
+their form and cleared sales + ops verification.
 
 ### Operations
 The biggest and busiest section. It handles the **six pathways** — PLAB, Australia,
@@ -134,6 +137,16 @@ monthly salary-deduction calculation), **attendance** (imported from the biometr
 machine), **work-from-home** and **official travel** requests, **holidays**, and the
 **employee directory**. The company's leave year runs April to March.
 
+**Employee Onboarding** (HR → *Onboarding*): a self-service way to bring on a new hire.
+HR enters just the basics (name, email, an auto-suggested employee code, joining date,
+designation, reporting person), clicks **Send Invite**, and the hire gets a secure email
+link to fill in the rest themselves — personal details, work experience, documents and
+bank details — with a live photo. HR reviews and **approves**, which creates the real
+employee record. Aadhaar/PAN/Degree stay optional but show an **orange "Documents
+pending"** mark until uploaded, and the hire can come back (via the link or by logging in
+→ *My Profile*) to fill any blanks and add missing documents. All uploads are stored
+permanently in cloud storage (R2). Full walkthrough: **[employee-onboarding.md](sections/employee-onboarding.md)**.
+
 ### KRA
 Performance management. Managers set **goals** (KRAs) per role, assign them for the year,
 and each month the employee rates themselves and the manager rates them. It feeds appraisals.
@@ -151,6 +164,23 @@ mini-portal to submit and track leads, and the company sees all partner activity
 A knowledge and lead-gen area: a **college directory**, an **MBBS cut-off predictor**, and a
 public **NEET-PG document portal** where prospective students can request exam PDFs (and
 become leads).
+
+### goocampus.in — the doctor platform
+A **separate public website** (not this portal) for Indian doctors preparing for NEET-PG:
+a mentor directory, a rank predictor, a PDF library, and **paid plans**. It has its own
+codebase but **no brain of its own** — all the data and rules live here on the portal
+(the `pg_admin` area), and the website just calls the portal's APIs.
+
+Doctors sign in with a **WhatsApp OTP**. What you (admin) control here: **plans and
+prices**, **coupons**, and each plan's **features** (e.g. "3 PDFs", "predictor for 1
+state"). A doctor's **profile** edits on goocampus.in and the admin's *Registered Doctors*
+screen are the **same record** — change a field in either place and it shows in the other,
+and any new profile field you add appears on the website automatically.
+
+**Payments are live (Razorpay).** A doctor buys a plan, an optional coupon is applied, they
+pay in the Razorpay popup, and their plan activates instantly. The payment secret stays on
+the portal — the website never sees it. Full writeup + flowcharts:
+**[goocampus-in.md](sections/goocampus-in.md)**.
 
 ### WhatsApp
 Bulk messaging: campaigns, contact lists, and message templates — sent through the same
@@ -204,7 +234,9 @@ There are three kinds of login: **staff** (employees), **clients** (the doctors)
   and staff use, and a **staging** one for testing changes before they go live. Both share
   one database.
 - The live site is **goocampus.org**. (Note: goocampus.in is a *different*, separate
-  marketing website — the portal is always goocampus.org.)
+  website — the doctor-facing NEET-PG platform. It shares this portal's brain via the
+  `/api/pg/*` APIs; see [sections/goocampus-in.md](sections/goocampus-in.md). The portal
+  itself is always goocampus.org.)
 - It sends **email** through Resend and **WhatsApp** through Infobip, and stores documents on
   Cloudflare's file storage.
 - New database fields and tables are created automatically when the app starts up, so

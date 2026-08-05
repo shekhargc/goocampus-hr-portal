@@ -48,6 +48,14 @@ erDiagram
 | `states`, `cities` | geo master | |
 | `internal_transfers`, `internal_transfer_items` | cross-pathway moves | |
 | `installment_approvals`, `refunds`, `ops_payments` | money | |
+| `employee_onboarding` | new-hire staging (HR basics + hire's fields) | employee_id, employee_code, personal/emergency fields, bank_*, photo_filename, personal_email, status, invite_token, timestamps |
+| `employee_onboarding_experience`, `employee_onboarding_documents` | onboarding sub-rows | onboarding_id, (experience fields) / (doc_type, r2_key, filename) |
+| `employee_experience`, `employee_documents` | **employee-keyed** profile data (all staff) | employee_id, … / employee_id, doc_type, r2_key |
+| `pg_users` | goocampus.in doctor record | mobile (unique), name, email, neet_pg_year/rank, target_speciality, college, state/city, photo, session_token |
+| `pg_plans`, `pg_plan_features` | .in plans + plan×feature matrix | price, compare_at, badges / plan_id, feature_key, value |
+| `pg_subscriptions` | doctor's active plan | pg_user_id, plan_id, status, expires_at, price_paid, coupon, payment_ref, source |
+| `pg_orders` | Razorpay order ledger | pg_user_id, plan_id, razorpay_order_id, amount, coupon, status, payment_id, subscription_id |
+| `pg_coupons`, `pg_coupon_redemptions`, `pg_usage_items` | .in coupons + usage quotas | (see [goocampus-in.md](sections/goocampus-in.md)) |
 
 ## Conventions & gotchas
 

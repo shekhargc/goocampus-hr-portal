@@ -24,7 +24,10 @@ Use this to jump straight to the code for any area **without scanning `app.py`**
 | **HR** — leave | `/apply-leave` `/approve` `/admin/monthly-report` | app.py L186–430 (calc), L4135–7400 | leave_records, holidays, employees | [hr](sections/hr-leave-attendance.md) |
 | HR — attendance | `/admin/upload-attendance` `/time-log` | app.py L30317+ | attendance_logs | [hr](sections/hr-leave-attendance.md) |
 | HR — WFH / travel | `/wfh/*` `/official-travel/*` | app.py L8743+, L9009+ | wfh_requests, official_travel_requests | [hr](sections/hr-leave-attendance.md) |
-| HR — employees | `/admin/manage-employees` `/admin/employee/<id>` | app.py L5685–6220 | employees | [hr](sections/hr-leave-attendance.md) |
+| HR — employees | `/admin/manage-employees` `/admin/employee/<id>` (view/edit/docs) | app.py L5685–6220 | employees, employee_experience, employee_documents | [hr](sections/hr-leave-attendance.md) |
+| **Employee onboarding** | `/admin/onboarding*` `/onboarding/<token>` `/profile` | app.py (`_ensure_employee_onboarding`, `onboarding_public`, `_send_onboarding_invite_email`, `_missing_required_docs`), `onboarding_form.html`, `admin_onboarding*.html` | employee_onboarding, employee_onboarding_experience/documents, employee_experience, employee_documents | [employee-onboarding](sections/employee-onboarding.md) |
+| Employee photos (R2) | `/static/photos/<file>` `/profile/upload-photo` `/admin/employee/<id>/upload-photo` | app.py (`serve_employee_photo`, `_save_employee_photo_bytes`) | (R2 `employee_photos/`) | [employee-onboarding](sections/employee-onboarding.md) |
+| Sales — lead reg status | `/sales/leads` `/admin/diag/lead-status` | app.py (`_lead_reg_status_map`, `REG_STATUS_META`) | sales_leads, client_invitations, client_registrations | [sales](sections/sales.md) |
 | **KRA** | `/kra/*` | app.py L11218–11923 | kra_templates, kra_assignments, kra_monthly_ratings | [hr](sections/hr-leave-attendance.md) |
 | **Finance** — budget | `/finance/budget*` | app.py L12276–13800 | budget_entries, budget_categories | [finance](sections/finance.md) |
 | Finance — salaries/subscriptions | `/finance/salaries` `/finance/subscriptions` | app.py L13878–14300 | salary_items, subscription_items | [finance](sections/finance.md) |
@@ -42,6 +45,10 @@ Use this to jump straight to the code for any area **without scanning `app.py`**
 | **Company** — holidays/locations/announcements/email templates | `/company/*` `/admin/holidays` | app.py | holidays, states, cities, email_templates, announcements | [hr](sections/hr-leave-attendance.md) |
 | Reports (Excel exports) | `/reports/*` | app.py | (various) | — |
 | Lookups (dropdowns) | `/admin/...lookups` | `core/lookups.py`, app.py | lookup_options | — |
+| **goocampus.in** admin (plans/coupons/doctors) | `/admin/pg/*` | `pg_admin/` module | pg_plans, pg_plan_features, pg_coupons, pg_users, pg_usage_items | [goocampus-in](sections/goocampus-in.md) |
+| goocampus.in service APIs | `/api/pg/*` | `pg_admin/routes/api.py` | pg_users, pg_plans, pg_subscriptions | [goocampus-in](sections/goocampus-in.md) |
+| goocampus.in — profile sync | `/api/pg/profile` (GET/POST) | `pg_admin/routes/api.py` (`PG_PROFILE_BLUEPRINT`, `api_pg_profile`) | pg_users | [goocampus-in](sections/goocampus-in.md) |
+| goocampus.in — Razorpay checkout | `/api/pg/checkout/create-order` `/api/pg/checkout/verify` | `pg_admin/routes/api.py` (`_razorpay_creds`, `_ensure_pg_orders`) | pg_orders, pg_subscriptions, pg_coupons | [goocampus-in](sections/goocampus-in.md) |
 | Storage (R2) | — | `core/storage.py` | (files) | [deploy](DEPLOY.md) |
 | Email | — | `email_utils.py` | email_templates | [feedback](sections/feedback.md) |
 | Reg-number generator | — | `core/registration.py` | plab_clients, client_registrations | [operations](sections/operations.md) |

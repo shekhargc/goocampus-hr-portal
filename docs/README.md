@@ -26,6 +26,8 @@ work can jump straight to the right code.
 | [feedback.md](sections/feedback.md) | Stage-wise feedback + WhatsApp/email + delivery report |
 | [packages-products.md](sections/packages-products.md) | Product catalogue + per-plan packages/services |
 | [hr-leave-attendance.md](sections/hr-leave-attendance.md) | Leave, attendance, WFH, travel, employees, KRA |
+| [employee-onboarding.md](sections/employee-onboarding.md) | New-hire onboarding: HR invite → self-fill → approve → profile; docs-pending; R2 photos |
+| [goocampus-in.md](sections/goocampus-in.md) | The goocampus.in doctor platform: plans/coupons/entitlements, profile sync, **Razorpay checkout** |
 | [finance.md](sections/finance.md) | Budget, revenue streams, product economics, salaries, subscriptions |
 | [access-permissions.md](sections/access-permissions.md) | Login, roles, **Access Master** (the security backbone), navigation |
 | [partners-college.md](sections/partners-college.md) | Partner portal + College module (predictor, NEET-PG) |
