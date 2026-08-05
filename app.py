@@ -10187,7 +10187,7 @@ def _leave_action_allowed(user, leave, conn):
     leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
     if leave['employee_id'] == user['id']:
         return True, leave_emp
-    if user.get('is_admin'):
+    if user['is_admin']:
         return True, leave_emp
     if leave_emp:
         try:
@@ -10274,7 +10274,7 @@ def cancel_leave(leave_id):
     # A manager or admin may also cancel a PAST (date-passed) leave — e.g. a
     # team member who forgot to cancel a leave they didn't actually take. The
     # employee themselves can still only cancel upcoming leaves.
-    allow_past = bool(user.get('is_admin') or owner_id != user['id'])
+    allow_past = bool(user['is_admin'] or owner_id != user['id'])
     cancellable = [r for r in rows
                    if r['status'] in ('pending', 'approved')
                    and (allow_past or str(r['leave_date']) >= today_str)]
@@ -10473,7 +10473,7 @@ def modify_leave(leave_id):
     owner_id = leave['employee_id']
     # Where to send the actor back after a successful modify.
     _back = url_for('my_leave_report') if owner_id == user['id'] else (
-        url_for('admin_leave_applications') if user.get('is_admin') else url_for('team_leave_applications'))
+        url_for('admin_leave_applications') if user['is_admin'] else url_for('team_leave_applications'))
 
     if leave['status'] in ('retrieved', 'modified', 'cancelled'):
         flash('This leave has already been retrieved, modified or cancelled', 'error')
@@ -10611,7 +10611,7 @@ def edit_leave(leave_id):
     # Authorization: applicant, reporting manager, or admin
     is_owner = (leave['employee_id'] == user['id'])
     is_reporting = (leave['reporting_to'] == user['id'])
-    is_admin_user = bool(user.get('is_admin'))
+    is_admin_user = bool(user['is_admin'])
     if not (is_owner or is_reporting or is_admin_user):
         flash('You are not authorised to edit this leave', 'error')
         conn.close()
@@ -11479,6 +11479,7 @@ def admin_employee_detail(emp_id):
         "SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY id", (emp_id,)).fetchall()]
     doc_labels = dict(ONBOARDING_DOC_TYPES)
     missing_docs = _missing_required_docs([d['doc_type'] for d in documents])
+    dependents = _load_dependents(conn, employee_id=emp_id)
     reporting_name = None
     if employee['reporting_to']:
         rm = conn.execute("SELECT name FROM employees WHERE id = ?", (employee['reporting_to'],)).fetchone()
@@ -11497,6 +11498,7 @@ def admin_employee_detail(emp_id):
                          experience=experience,
                          documents=documents,
                          doc_labels=doc_labels,
+                         dependents=dependents,
                          reporting_name=reporting_name,
                     active_section='hr')
 
@@ -11547,6 +11549,17 @@ def admin_employee_edit(emp_id):
         bank_account_number = request.form.get('bank_account_number', '').strip()
         bank_ifsc = request.form.get('bank_ifsc', '').strip()
 
+        # Insurance / PF / confirmation (2026-08). Marital status also drives the
+        # dependents section (spouse+children vs parents).
+        marital_status = request.form.get('marital_status', '').strip()
+        pf_number = request.form.get('pf_number', '').strip()
+        pf_start_date = request.form.get('pf_start_date', '').strip()
+        insurance_number = request.form.get('insurance_number', '').strip()
+        insurance_provider = request.form.get('insurance_provider', '').strip()
+        insurance_activation_date = request.form.get('insurance_activation_date', '').strip()
+        confirmation_status = (request.form.get('confirmation_status') or '').strip().lower() or None
+        probation_end_date = request.form.get('probation_end_date', '').strip()
+
         # Phase B — employment status / exit process. Anything other than
         # 'active' flips is_active=0 so the employee can no longer log in.
         employment_status = (request.form.get('employment_status') or 'active').strip().lower()
@@ -11568,6 +11581,9 @@ def admin_employee_edit(emp_id):
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
                 blood_group = ?, official_number = ?, personal_email = ?, hobbies = ?,
                 bank_name = ?, bank_branch = ?, bank_account_name = ?, bank_account_number = ?, bank_ifsc = ?,
+                marital_status = ?, pf_number = ?, pf_start_date = ?,
+                insurance_number = ?, insurance_provider = ?, insurance_activation_date = ?,
+                confirmation_status = COALESCE(?, confirmation_status), probation_end_date = ?,
                 employment_status = ?, is_active = ?, last_working_day = ?, exit_reason = ?, exit_notes = ?
             WHERE id = ?
         ''', (name, email, phone, dob, address, department, designation, joining_date, carry_forward,
@@ -11575,7 +11591,22 @@ def admin_employee_edit(emp_id):
               blood_group or None, official_number or None, personal_email or None, hobbies or None,
               bank_name or None, bank_branch or None, bank_account_name or None,
               bank_account_number or None, bank_ifsc or None,
+              marital_status or None, pf_number or None, pf_start_date or None,
+              insurance_number or None, insurance_provider or None, insurance_activation_date or None,
+              confirmation_status, probation_end_date or None,
               employment_status, is_active, last_working_day, exit_reason, exit_notes, emp_id))
+
+        # If admin flipped the employee to permanent here, stamp the confirmation.
+        if confirmation_status == 'permanent' and (employee['confirmation_status'] or 'permanent') != 'permanent':
+            try:
+                conn.execute("UPDATE employees SET confirmed_at = ?, confirmed_by = ? WHERE id = ?",
+                             (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user['id'], emp_id))
+            except Exception:
+                pass
+
+        # Insurance dependents (spouse+children or parents) — replace from the form.
+        _save_dependents(conn, employee_id=emp_id,
+                         marital_status=marital_status, form=request.form)
 
         # Rebuild work experience from the submitted rows.
         conn.execute("DELETE FROM employee_experience WHERE employee_id = ?", (emp_id,))
@@ -11607,6 +11638,7 @@ def admin_employee_edit(emp_id):
     documents = [dict(x) for x in conn.execute(
         "SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY id", (emp_id,)).fetchall()]
     doc_labels = dict(ONBOARDING_DOC_TYPES)
+    dependents = _load_dependents(conn, employee_id=emp_id)
 
     conn.close()
 
@@ -11621,6 +11653,7 @@ def admin_employee_edit(emp_id):
                          documents=documents,
                          doc_types=ONBOARDING_DOC_TYPES,
                          doc_labels=doc_labels,
+                         dependents=dependents,
                     active_section='hr')
 
 @app.route('/admin/employee/<int:emp_id>/upload-photo', methods=['POST'])
@@ -12023,19 +12056,147 @@ def _ensure_employee_onboarding(conn):
     # Convenience columns on employees so an approved profile is self-contained.
     for col in ('blood_group', 'hobbies', 'official_number', 'bank_name',
                 'bank_branch', 'bank_account_name', 'bank_account_number', 'bank_ifsc',
-                'personal_email'):
+                'personal_email',
+                # Insurance / PF / marital status (2026-08 onboarding additions)
+                'marital_status', 'insurance_number', 'insurance_provider',
+                'insurance_activation_date', 'pf_number', 'pf_start_date',
+                'probation_end_date'):
         try:
             conn.execute(f'ALTER TABLE employees ADD COLUMN IF NOT EXISTS {col} TEXT')
             conn.commit()
         except Exception:
             conn.rollback()
-    # Onboarding extras: profile photo (R2) + personal email.
-    for col in ('photo_filename', 'personal_email'):
+    # Confirmation (probation→permanent) status. Existing staff default to
+    # 'permanent' (they're past probation); only new onboarded hires are set to
+    # 'probation' at approval. confirmed_by is an employee id; the rest are stamps.
+    try:
+        conn.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS confirmation_status TEXT DEFAULT 'permanent'")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    for col, typ in (('confirmed_at', 'TIMESTAMP'), ('confirmed_by', 'INTEGER'),
+                     ('confirmation_reminder_sent_at', 'TIMESTAMP')):
+        try:
+            conn.execute(f'ALTER TABLE employees ADD COLUMN IF NOT EXISTS {col} {typ}')
+            conn.commit()
+        except Exception:
+            conn.rollback()
+    # Onboarding extras: profile photo (R2) + personal email + marital status.
+    for col in ('photo_filename', 'personal_email', 'marital_status'):
         try:
             conn.execute(f"ALTER TABLE employee_onboarding ADD COLUMN IF NOT EXISTS {col} TEXT")
             conn.commit()
         except Exception:
             conn.rollback()
+    # Dependents / insurance nominees — keyed by onboarding_id (pre-approval) and
+    # employee_id (after). relation ∈ spouse|child|father|mother. Age is computed
+    # from dob at display time, never stored. Used by BOTH the onboarding form and
+    # every employee profile (so all staff can hold insurance dependents).
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS employee_dependents (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER,
+                onboarding_id INTEGER,
+                relation TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                dob TEXT,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+
+def _calc_age(dob):
+    """Whole-years age from a 'YYYY-MM-DD' string, or None if unparseable."""
+    try:
+        from datetime import date
+        parts = str(dob)[:10].split('-')
+        y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+        today = date.today()
+        return today.year - y - ((today.month, today.day) < (m, d))
+    except Exception:
+        return None
+
+
+def _add_months(date_str, months):
+    """Return 'YYYY-MM-DD' `months` after the given date string (clamped to
+    month end). Used for probation end (join + 3) and insurance activation."""
+    try:
+        from datetime import date
+        parts = str(date_str)[:10].split('-')
+        y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+        nm = m - 1 + months
+        ny = y + nm // 12
+        nm = nm % 12 + 1
+        # clamp day to the target month's length
+        import calendar
+        last = calendar.monthrange(ny, nm)[1]
+        return date(ny, nm, min(d, last)).strftime('%Y-%m-%d')
+    except Exception:
+        return None
+
+
+def _collect_dependents_from_form(form, marital_status):
+    """Parse insurance dependents from a submitted form. Married → spouse +
+    children (add-multiple); otherwise → father + mother. Blank people dropped."""
+    out = []
+    ms = (marital_status or '').strip().lower()
+
+    def add(relation, fn, ln, dob):
+        fn = (fn or '').strip(); ln = (ln or '').strip(); dob = (dob or '').strip()
+        if fn or ln or dob:
+            out.append({'relation': relation, 'first_name': fn, 'last_name': ln, 'dob': dob})
+
+    if ms == 'married':
+        add('spouse', form.get('dep_spouse_first_name'), form.get('dep_spouse_last_name'), form.get('dep_spouse_dob'))
+        fns = form.getlist('dep_child_first_name'); lns = form.getlist('dep_child_last_name'); dobs = form.getlist('dep_child_dob')
+        for i in range(max(len(fns), len(lns), len(dobs))):
+            add('child', fns[i] if i < len(fns) else '', lns[i] if i < len(lns) else '', dobs[i] if i < len(dobs) else '')
+    else:
+        add('father', form.get('dep_father_first_name'), form.get('dep_father_last_name'), form.get('dep_father_dob'))
+        add('mother', form.get('dep_mother_first_name'), form.get('dep_mother_last_name'), form.get('dep_mother_dob'))
+    return out
+
+
+def _save_dependents(conn, *, employee_id=None, onboarding_id=None, marital_status='', form=None):
+    """Replace the dependents for one owner (employee OR onboarding) from a form.
+    Only called when the insurance section was actually rendered (hidden flag),
+    so it never wipes data on a partial 'fill-the-blanks' save."""
+    key_col = 'employee_id' if employee_id is not None else 'onboarding_id'
+    key_val = employee_id if employee_id is not None else onboarding_id
+    deps = _collect_dependents_from_form(form, marital_status)
+    try:
+        conn.execute(f"DELETE FROM employee_dependents WHERE {key_col} = ?", (key_val,))
+        for i, d in enumerate(deps):
+            conn.execute(
+                "INSERT INTO employee_dependents (employee_id, onboarding_id, relation, first_name, last_name, dob, sort_order) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (employee_id, onboarding_id, d['relation'], d['first_name'], d['last_name'], d['dob'], i))
+    except Exception as e:
+        logging.warning(f"_save_dependents: {e}")
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _load_dependents(conn, *, employee_id=None, onboarding_id=None):
+    """Dependents for one owner, each with a computed `age`, grouped-friendly."""
+    key_col = 'employee_id' if employee_id is not None else 'onboarding_id'
+    key_val = employee_id if employee_id is not None else onboarding_id
+    out = []
+    try:
+        for r in conn.execute(
+                f"SELECT * FROM employee_dependents WHERE {key_col} = ? ORDER BY sort_order, id",
+                (key_val,)).fetchall():
+            d = dict(r); d['age'] = _calc_age(r['dob']); out.append(d)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    return out
 
 
 def _next_emp_code(conn):
@@ -12104,6 +12265,47 @@ def _send_onboarding_invite_email(email, name, link, designation='', department=
                           from_address="GooCampus <info@goocampus.in>")
     except Exception as e:
         logging.error(f"_send_onboarding_invite_email: {e}")
+        return False
+
+
+def _send_employee_welcome_email(o):
+    """Warm personal welcome email to a newly-approved hire (to THEM, not the
+    whole team). Sent on approval. `o` is the onboarding dict. Never raises."""
+    email = (o.get('email') or '').strip()
+    if not email:
+        return False
+    try:
+        from email_utils import send_email
+        name = o.get('name') or 'there'
+        first = name.split()[0] if name else 'there'
+        bits = ' &middot; '.join([b for b in (o.get('designation'), o.get('department')) if b])
+        role_line = (f'<p style="background:#f0f6ff;border-left:4px solid #1e3a5f;padding:12px 16px;'
+                     f'margin:18px 0;border-radius:4px;font-size:14px;">Your role: '
+                     f'<strong style="color:#1e3a5f;">{bits}</strong></p>') if bits else ''
+        code = (o.get('emp_code') or '').strip()
+        login_line = ''
+        if code:
+            login_line = (f'<p style="font-size:14px;">You can sign in to the GooCampus portal at '
+                          f'<a href="https://goocampus.org" style="color:#F58220;">goocampus.org</a> '
+                          f'using your employee code <strong>{code}</strong> and the password shared with you '
+                          f'(your first name in lowercase) — please change it after your first login.</p>')
+        html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;">
+  <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus Edu Solutions</h1></div>
+  <div style="padding:30px;background-color:white;">
+    <h2 style="color:#1e3a5f;margin-top:0;">Welcome to the team, {first}! 🎉</h2>
+    <p style="font-size:16px;">We're thrilled to have you on board at <strong>GooCampus Edu Solutions</strong>. Your onboarding is complete and your employee profile is now active.</p>
+    {role_line}
+    <p>Over your first few days, your reporting manager will help you settle in. If you have any questions about HR, leave, or your setup, the HR team is always here to help.</p>
+    {login_line}
+    <p style="font-size:13px;color:#666;">A quick note: your first three months are a probation period, after which you'll be confirmed as a permanent team member. Your health insurance and PF also begin after this period.</p>
+    <p style="margin-top:30px;">Warm regards,<br><strong style="color:#1e3a5f;">The GooCampus HR Team</strong></p>
+  </div>
+  <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
+</body></html>'''
+        return send_email([email], 'Welcome to GooCampus Edu Solutions! 🎉', html,
+                          from_address="GooCampus <info@goocampus.in>")
+    except Exception as e:
+        logging.error(f"_send_employee_welcome_email: {e}")
         return False
 
 
@@ -12386,6 +12588,7 @@ def admin_onboarding_detail(oid):
     doc_labels = dict(ONBOARDING_DOC_TYPES)
     missing_docs = _missing_required_docs([d['doc_type'] for d in documents])
     active_emp_count = len(_active_employee_emails(conn))
+    dependents = _load_dependents(conn, onboarding_id=oid)
     conn.close()
     link = _onboarding_public_link(o['token'])
     return render_template('admin_onboarding_detail.html', user=user, o=o,
@@ -12393,6 +12596,7 @@ def admin_onboarding_detail(oid):
                            doc_labels=doc_labels, public_link=link,
                            missing_docs=missing_docs,
                            active_emp_count=active_emp_count,
+                           dependents=dependents,
                            active_section='hr')
 
 
@@ -12420,6 +12624,10 @@ def admin_onboarding_approve(oid):
         flash(f'Employee code {o["emp_code"]} already exists — cannot create a duplicate.', 'error')
         return redirect(url_for('admin_onboarding_detail', oid=oid))
 
+    # Probation runs 3 months from joining; health insurance activates at the
+    # same 3-month mark (founder 2026-08). New hires start on probation.
+    _prob_end = _add_months(o['joining_date'], 3) if o['joining_date'] else None
+    _ins_active = _prob_end
     try:
         row = conn.execute('''
             INSERT INTO employees (
@@ -12428,8 +12636,11 @@ def admin_onboarding_approve(oid):
                 emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
                 reporting_to, blood_group, hobbies, official_number, personal_email,
                 bank_name, bank_branch, bank_account_name, bank_account_number, bank_ifsc,
-                photo_url, employment_status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+                photo_url, employment_status,
+                marital_status, confirmation_status, probation_end_date, insurance_activation_date,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active',
+                      ?, 'probation', ?, ?, ?)
             RETURNING id
         ''', (
             o['name'], o['emp_code'], hash_password((o['name'] or 'user').split()[0].lower()),
@@ -12441,9 +12652,20 @@ def admin_onboarding_approve(oid):
             o['bank_name'], o['bank_branch'], o['bank_account_name'],
             o['bank_account_number'], o['bank_ifsc'],
             o.get('photo_filename'),
+            o.get('marital_status'),
+            _prob_end, _ins_active,
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         )).fetchone()
         new_emp_id = row['id']
+        # Carry the insurance dependents the hire entered onto the employee record.
+        try:
+            for dp in conn.execute("SELECT * FROM employee_dependents WHERE onboarding_id = ? ORDER BY sort_order, id", (oid,)).fetchall():
+                conn.execute(
+                    "INSERT INTO employee_dependents (employee_id, relation, first_name, last_name, dob, sort_order) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (new_emp_id, dp['relation'], dp['first_name'], dp['last_name'], dp['dob'], dp['sort_order']))
+        except Exception as _de:
+            logging.warning(f"approve: copy dependents: {_de}")
         # Copy the rich data into employee-keyed tables so it shows on the
         # employee profile (same tables old employees use).
         for e in conn.execute("SELECT * FROM employee_onboarding_experience WHERE onboarding_id = ? ORDER BY sort_order, id", (oid,)).fetchall():
@@ -12471,6 +12693,13 @@ def admin_onboarding_approve(oid):
             flash('⚠️ Documents still pending: ' + ', '.join(lbl for _k, lbl in _miss)
                   + '. Their profile will show a "Documents pending" mark until these are uploaded '
                     '(you can upload them from Edit Employee).', 'error')
+        # Warm personal welcome email to the new hire (separate from the
+        # all-staff announcement, which is still a deliberate button).
+        try:
+            if _send_employee_welcome_email(dict(o)):
+                flash(f'Welcome email sent to {o["name"]}.', 'success')
+        except Exception as _we:
+            logging.warning(f"approve welcome email: {_we}")
     except Exception as e:
         conn.rollback()
         logging.error(f"admin_onboarding_approve: {e}")
@@ -12813,6 +13042,24 @@ def onboarding_public(token):
                         (o['id'], comp, _gl('exp_from') or None, _gl('exp_to') or None,
                          _gl('exp_location') or None, desig or None, role or None, i))
 
+        # Insurance dependents + marital status. Save when the section was shown
+        # AND (first fill, OR post-submit but none stored yet — keeps locked ones).
+        _has_deps = conn.execute("SELECT 1 FROM employee_dependents WHERE onboarding_id = ? LIMIT 1", (o['id'],)).fetchone()
+        if f.get('dep_section_present') and ((not post_submit) or (not _has_deps)):
+            _ms = g('marital_status')
+            try:
+                conn.execute("UPDATE employee_onboarding SET marital_status = ? WHERE id = ?", (_ms, o['id']))
+                _save_dependents(conn, onboarding_id=o['id'], marital_status=_ms, form=f)
+                # If already approved, mirror onto the live employee too.
+                if post_submit and o.get('employee_id'):
+                    conn.execute("UPDATE employees SET marital_status = ? WHERE id = ?", (_ms, o['employee_id']))
+                    conn.execute("DELETE FROM employee_dependents WHERE employee_id = ?", (o['employee_id'],))
+                    for _dp in conn.execute("SELECT * FROM employee_dependents WHERE onboarding_id = ? ORDER BY sort_order, id", (o['id'],)).fetchall():
+                        conn.execute("INSERT INTO employee_dependents (employee_id, relation, first_name, last_name, dob, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+                                     (o['employee_id'], _dp['relation'], _dp['first_name'], _dp['last_name'], _dp['dob'], _dp['sort_order']))
+            except Exception as e:
+                logging.error(f"onboarding dependents: {e}")
+
         # Documents — post-submit only ADDS missing types (never overwrites).
         try:
             _onboarding_save_uploads(conn, o['id'], request.form, request.files, only_missing=post_submit)
@@ -12907,12 +13154,162 @@ def onboarding_public(token):
     if o.get('reporting_to'):
         rm = conn.execute("SELECT name FROM employees WHERE id = ?", (o['reporting_to'],)).fetchone()
         reporting_name = rm['name'] if rm else None
+    dependents = _load_dependents(conn, onboarding_id=o['id'])
+    deps_locked = post_submit and bool(dependents)
     conn.close()
 
     return render_template('onboarding_form.html', o=o, experience=experience,
                            documents=documents, doc_types=ONBOARDING_DOC_TYPES,
                            reporting_name=reporting_name, post_submit=post_submit,
-                           locked=locked, missing_docs=missing_docs)
+                           locked=locked, missing_docs=missing_docs,
+                           dependents=dependents, deps_locked=deps_locked)
+
+
+def _admin_emails(conn):
+    out = []
+    try:
+        for r in conn.execute("SELECT email FROM employees WHERE is_admin = 1 AND is_active = 1 "
+                              "AND email IS NOT NULL AND email != ''").fetchall():
+            e = (r['email'] or '').strip()
+            if e and e not in out:
+                out.append(e)
+    except Exception:
+        pass
+    return out
+
+
+def _probation_employees(conn, user):
+    """Employees still on probation, visible to `user` (admin → all; otherwise
+    only their direct reports). Each annotated with is_due + manager name."""
+    _ensure_employee_onboarding(conn)
+    today = datetime.now().strftime('%Y-%m-%d')
+    rows = []
+    try:
+        base = ("SELECT e.*, m.name AS manager_name FROM employees e "
+                "LEFT JOIN employees m ON m.id = e.reporting_to "
+                "WHERE COALESCE(e.confirmation_status,'permanent') = 'probation' AND e.is_active = 1 ")
+        if user['is_admin']:
+            rows = conn.execute(base + "ORDER BY e.probation_end_date NULLS LAST, e.name").fetchall()
+        else:
+            rows = conn.execute(base + "AND e.reporting_to = ? ORDER BY e.probation_end_date NULLS LAST, e.name",
+                                (user['id'],)).fetchall()
+    except Exception as e:
+        logging.warning(f"_probation_employees: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    out = []
+    for r in rows:
+        d = dict(r)
+        pend = (d.get('probation_end_date') or '')
+        d['is_due'] = bool(pend) and pend <= today
+        out.append(d)
+    return out
+
+
+def _run_probation_reminders(conn):
+    """Email the reporting manager + admins for each probation employee whose
+    3 months are up and who hasn't been reminded yet. Idempotent (stamps
+    confirmation_reminder_sent_at). Safe to call often. Returns count sent."""
+    _ensure_employee_onboarding(conn)
+    today = datetime.now().strftime('%Y-%m-%d')
+    sent = 0
+    try:
+        due = conn.execute(
+            "SELECT * FROM employees WHERE COALESCE(confirmation_status,'permanent') = 'probation' "
+            "AND is_active = 1 AND probation_end_date IS NOT NULL AND probation_end_date <> '' "
+            "AND probation_end_date <= ? AND confirmation_reminder_sent_at IS NULL", (today,)).fetchall()
+    except Exception:
+        return 0
+    admins = _admin_emails(conn)
+    for e in due:
+        recips = list(admins)
+        if e['reporting_to']:
+            rm = conn.execute("SELECT email FROM employees WHERE id = ?", (e['reporting_to'],)).fetchone()
+            if rm and (rm['email'] or '').strip() and rm['email'] not in recips:
+                recips.append(rm['email'])
+        if recips:
+            try:
+                from email_utils import send_email
+                link = "https://goocampus.org/admin/confirmations"
+                html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;">
+  <div style="background:#1e3a5f;padding:18px;text-align:center;"><h2 style="color:#fff;margin:0;">GooCampus HR</h2></div>
+  <div style="padding:26px;">
+    <h3 style="color:#1e3a5f;">Probation confirmation due</h3>
+    <p><strong>{e['name']}</strong> ({e.get('emp_code') or ''}) has completed the 3-month probation period
+       (ended {format_date_filter(e['probation_end_date']) if e['probation_end_date'] else ''}).</p>
+    <p>Please review and confirm them as a permanent employee.</p>
+    <div style="text-align:center;margin:24px 0;"><a href="{link}" style="background:#F58220;color:#fff;padding:12px 26px;text-decoration:none;border-radius:6px;font-weight:bold;">Review &amp; Confirm</a></div>
+    <p style="font-size:12px;color:#888;">GooCampus Edu Solutions</p>
+  </div></body></html>'''
+                send_email(recips, f'Confirm {e["name"]} as permanent — probation complete', html,
+                           from_address="GooCampus <info@goocampus.in>")
+            except Exception as _ex:
+                logging.warning(f"probation reminder email: {_ex}")
+        try:
+            conn.execute("UPDATE employees SET confirmation_reminder_sent_at = ? WHERE id = ?",
+                         (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), e['id']))
+            conn.commit()
+            sent += 1
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    return sent
+
+
+def _probation_reminder_job():
+    """Daily scheduler entry: email due probation confirmations. Own connection."""
+    try:
+        conn = get_db()
+        n = _run_probation_reminders(conn)
+        conn.close()
+        if n:
+            logging.info(f"probation reminders: {n} sent")
+    except Exception as e:
+        logging.warning(f"_probation_reminder_job: {e}")
+
+
+@app.route('/admin/confirmations')
+@login_required
+def admin_confirmations():
+    """Probation → permanent confirmation queue. Admin sees all; a reporting
+    manager sees their own reports. Opportunistically fires due reminders."""
+    user = get_user()
+    conn = get_db()
+    try:
+        _run_probation_reminders(conn)
+    except Exception:
+        pass
+    people = _probation_employees(conn, user)
+    conn.close()
+    due = [p for p in people if p['is_due']]
+    upcoming = [p for p in people if not p['is_due']]
+    return render_template('admin_confirmations.html', user=user,
+                           due=due, upcoming=upcoming,
+                           can_manage=True, active_section='hr')
+
+
+@app.route('/admin/confirmations/<int:emp_id>/confirm', methods=['POST'])
+@login_required
+def admin_confirm_permanent(emp_id):
+    user = get_user()
+    conn = get_db()
+    _ensure_employee_onboarding(conn)
+    emp = conn.execute("SELECT * FROM employees WHERE id = ?", (emp_id,)).fetchone()
+    if not emp:
+        conn.close()
+        flash('Employee not found.', 'error')
+        return redirect(url_for('admin_confirmations'))
+    # Only the admin or the employee's reporting manager may confirm.
+    if not user['is_admin'] and emp['reporting_to'] != user['id']:
+        conn.close()
+        flash('You can only confirm employees who report to you.', 'error')
+        return redirect(url_for('admin_confirmations'))
+    conn.execute("UPDATE employees SET confirmation_status = 'permanent', confirmed_at = ?, confirmed_by = ? WHERE id = ?",
+                 (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user['id'], emp_id))
+    conn.commit()
+    conn.close()
+    flash(f'{emp["name"]} confirmed as a permanent employee. 🎉', 'success')
+    return redirect(url_for('admin_confirmations'))
 
 
 @app.route('/admin/manage-employees', methods=['GET', 'POST'])
@@ -16385,7 +16782,7 @@ def cancel_official_travel(oot_id):
 
     is_owner = oot['employee_id'] == user['id']
     is_mgmt = user['emp_code'] in MANAGEMENT_CODES
-    is_admin_user = user.get('is_admin') == 1
+    is_admin_user = user['is_admin'] == 1
     if not (is_owner or is_mgmt or is_admin_user):
         flash('You are not allowed to cancel this request', 'error')
         conn.close()
@@ -23803,7 +24200,7 @@ def ops_main_dashboard():
     (australia) and Standard Consulting. Each pathway card is shown only
     if the user has dashboard access to it (admins see all)."""
     user = get_user()
-    is_admin = bool(user and user.get('is_admin'))
+    is_admin = bool(user and user['is_admin'])
 
     def can(section):
         return is_admin or (user and has_section_permission(user, section, 'dashboard', 'view'))
@@ -47289,6 +47686,14 @@ def start_neetpg_scheduler():
             process_thirty_day_checkins,
             CronTrigger(hour=9, minute=0, timezone=ist),
             id='thirty_day_checkin_daily',
+        )
+        # Probation → permanent confirmation reminders, 09:15 AM IST daily.
+        # Idempotent (stamps confirmation_reminder_sent_at); also fires on-demand
+        # whenever the Confirmations page is opened, so it works without the cron.
+        scheduler.add_job(
+            _probation_reminder_job,
+            CronTrigger(hour=9, minute=15, timezone=ist),
+            id='probation_confirmation_daily',
         )
         scheduler.start()
         logging.info(

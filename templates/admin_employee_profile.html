@@ -170,6 +170,85 @@
         <div class="form-group"><label for="bank_account_number">Account Number</label><input type="text" id="bank_account_number" name="bank_account_number" value="{{ employee.bank_account_number or '' }}"></div>
         <div class="form-group"><label for="bank_ifsc">IFSC Code</label><input type="text" id="bank_ifsc" name="bank_ifsc" value="{{ employee.bank_ifsc or '' }}" style="text-transform:uppercase;"></div>
 
+        <!-- Confirmation (Probation → Permanent) -->
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Confirmation Status</h2>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:200px;">
+                <label for="confirmation_status">Status</label>
+                <select id="confirmation_status" name="confirmation_status">
+                    {% set cst = employee.confirmation_status or 'permanent' %}
+                    <option value="probation" {{ 'selected' if cst == 'probation' else '' }}>Probation</option>
+                    <option value="permanent" {{ 'selected' if cst == 'permanent' else '' }}>Permanent</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex:1;min-width:200px;"><label for="probation_end_date">Probation Ends</label><input type="date" id="probation_end_date" name="probation_end_date" value="{{ employee.probation_end_date or '' }}"></div>
+        </div>
+        {% if employee.confirmed_at %}<p style="color:#16a34a;font-size:.85rem;margin:-.5rem 0 1rem;">✓ Confirmed permanent on {{ employee.confirmed_at|format_date }}.</p>{% endif %}
+
+        <!-- Provident Fund (PF) -->
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Provident Fund (PF)</h2>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:200px;"><label for="pf_number">PF Number</label><input type="text" id="pf_number" name="pf_number" value="{{ employee.pf_number or '' }}"></div>
+            <div class="form-group" style="flex:1;min-width:200px;"><label for="pf_start_date">PF Start Date</label><input type="date" id="pf_start_date" name="pf_start_date" value="{{ employee.pf_start_date or '' }}"></div>
+        </div>
+
+        <!-- Health Insurance policy + dependents -->
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Health Insurance &amp; Dependents</h2>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:180px;"><label for="insurance_number">Policy / UHID Number</label><input type="text" id="insurance_number" name="insurance_number" value="{{ employee.insurance_number or '' }}"></div>
+            <div class="form-group" style="flex:1;min-width:180px;"><label for="insurance_provider">Insurance Provider</label><input type="text" id="insurance_provider" name="insurance_provider" value="{{ employee.insurance_provider or '' }}"></div>
+            <div class="form-group" style="flex:1;min-width:180px;"><label for="insurance_activation_date">Activation Date</label><input type="date" id="insurance_activation_date" name="insurance_activation_date" value="{{ employee.insurance_activation_date or '' }}"></div>
+        </div>
+        {% set _spouse = (dependents | selectattr('relation','equalto','spouse') | list | first) %}
+        {% set _children = (dependents | selectattr('relation','equalto','child') | list) %}
+        {% set _father = (dependents | selectattr('relation','equalto','father') | list | first) %}
+        {% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
+        <input type="hidden" name="dep_section_present" value="1">
+        <div class="form-group" style="max-width:280px;"><label for="maritalStatus">Marital Status</label>
+            <select id="maritalStatus" name="marital_status" onchange="depToggle()">
+                <option value="">— Select —</option>
+                <option value="married" {{ 'selected' if employee.marital_status == 'married' else '' }}>Married</option>
+                <option value="unmarried" {{ 'selected' if employee.marital_status == 'unmarried' else '' }}>Unmarried</option>
+            </select>
+        </div>
+        <div id="depMarried" style="display:none;">
+            <h3 style="font-size:1rem;color:var(--navy);margin:.4rem 0;">Spouse</h3>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_spouse_first_name" value="{{ _spouse.first_name if _spouse else '' }}"></div>
+                <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_spouse_last_name" value="{{ _spouse.last_name if _spouse else '' }}"></div>
+                <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_spouse_dob" value="{{ _spouse.dob if _spouse else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+            </div>
+            <h3 style="font-size:1rem;color:var(--navy);margin:.8rem 0 .4rem;">Children</h3>
+            <div id="childList">
+                {% set child_rows = _children if _children else [ {} ] %}
+                {% for c in child_rows %}
+                <div class="exp-block" style="border:1px solid var(--gray-200);border-radius:.6rem;padding:1rem;margin-bottom:1rem;position:relative;">
+                    <button type="button" onclick="delChild(this)" style="position:absolute;top:.6rem;right:.6rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:.4rem;padding:.25rem .6rem;font-size:.8rem;cursor:pointer;">Remove</button>
+                    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                        <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_child_first_name" value="{{ c.first_name or '' }}"></div>
+                        <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_child_last_name" value="{{ c.last_name or '' }}"></div>
+                        <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_child_dob" value="{{ c.dob or '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <button type="button" onclick="addChild()" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:.5rem;padding:.5rem 1rem;font-size:.88rem;font-weight:600;cursor:pointer;margin-bottom:1rem;">+ Add Child</button>
+        </div>
+        <div id="depUnmarried" style="display:none;">
+            <h3 style="font-size:1rem;color:var(--navy);margin:.4rem 0;">Father</h3>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_father_first_name" value="{{ _father.first_name if _father else '' }}"></div>
+                <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_father_last_name" value="{{ _father.last_name if _father else '' }}"></div>
+                <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_father_dob" value="{{ _father.dob if _father else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+            </div>
+            <h3 style="font-size:1rem;color:var(--navy);margin:.8rem 0 .4rem;">Mother</h3>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                <div class="form-group" style="flex:1;min-width:160px;"><label>First Name</label><input type="text" name="dep_mother_first_name" value="{{ _mother.first_name if _mother else '' }}"></div>
+                <div class="form-group" style="flex:1;min-width:160px;"><label>Last Name</label><input type="text" name="dep_mother_last_name" value="{{ _mother.last_name if _mother else '' }}"></div>
+                <div class="form-group" style="flex:1;min-width:160px;"><label>Date of Birth</label><input type="date" name="dep_mother_dob" value="{{ _mother.dob if _mother else '' }}" onchange="calcAge(this)" data-age><small class="age-out"></small></div>
+            </div>
+        </div>
+
         <!-- Work Experience -->
         <h2 style="margin-top: 2.5rem; margin-bottom: 1rem; font-size: 1.2rem; color: var(--navy);">Internship / Work Experience</h2>
         <div id="expList">
@@ -258,6 +337,44 @@
             + '<div class="form-group" style="flex:1;margin-bottom:0;"><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div>';
         list.appendChild(div);
     }
+    // ── Insurance / dependents ──
+    function depToggle(){
+        var ms = document.getElementById('maritalStatus');
+        var m = document.getElementById('depMarried');
+        var u = document.getElementById('depUnmarried');
+        var v = ms ? ms.value : '';
+        if (m) m.style.display = (v === 'married') ? 'block' : 'none';
+        if (u) u.style.display = (v === 'unmarried') ? 'block' : 'none';
+    }
+    function calcAge(input){
+        var out = input.parentNode.querySelector('.age-out');
+        if (!out) return;
+        if (!input.value){ out.textContent=''; return; }
+        var d = new Date(input.value); if (isNaN(d)){ out.textContent=''; return; }
+        var t = new Date(); var age = t.getFullYear()-d.getFullYear();
+        var mm = t.getMonth()-d.getMonth();
+        if (mm<0 || (mm===0 && t.getDate()<d.getDate())) age--;
+        out.textContent = (age>=0 ? 'Age: '+age+' years' : '');
+        out.style.cssText='color:#1e3a5f;font-weight:600;display:block;margin-top:3px;';
+    }
+    function delChild(btn){
+        var list=document.getElementById('childList');
+        if (list.querySelectorAll('.exp-block').length<=1){
+            btn.closest('.exp-block').querySelectorAll('input').forEach(function(f){f.value='';});
+            var o=btn.closest('.exp-block').querySelector('.age-out'); if(o)o.textContent=''; return;
+        }
+        btn.closest('.exp-block').remove();
+    }
+    function addChild(){
+        var list=document.getElementById('childList');
+        var b=list.querySelector('.exp-block').cloneNode(true);
+        b.querySelectorAll('input').forEach(function(f){f.value='';});
+        var o=b.querySelector('.age-out'); if(o)o.textContent=''; list.appendChild(b);
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+        depToggle();
+        document.querySelectorAll('input[data-age]').forEach(function(i){ if(i.value) calcAge(i); });
+    });
     </script>
 </div>
 

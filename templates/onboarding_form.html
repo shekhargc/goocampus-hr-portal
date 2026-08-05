@@ -221,6 +221,67 @@
         </div>
     </div>
 
+    <!-- Insurance / Dependents -->
+    {% set _spouse = (dependents | selectattr('relation','equalto','spouse') | list | first) %}
+    {% set _children = (dependents | selectattr('relation','equalto','child') | list) %}
+    {% set _father = (dependents | selectattr('relation','equalto','father') | list | first) %}
+    {% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
+    <div class="card">
+        <h2>Health Insurance &amp; Dependents</h2>
+        <p class="sub">{% if deps_locked %}Already provided (locked).{% else %}We provide health insurance to employees (activates after 3 months). Please add the family members to be covered. Age is calculated automatically from the date of birth.{% endif %}</p>
+        <input type="hidden" name="dep_section_present" value="1">
+        <div class="row">
+            <div class="fld"><label>Marital Status</label>
+                <select name="marital_status" id="maritalStatus" onchange="depToggle()" {{ 'disabled' if deps_locked }}>
+                    <option value="">— Select —</option>
+                    <option value="married" {{ 'selected' if o.marital_status == 'married' else '' }}>Married</option>
+                    <option value="unmarried" {{ 'selected' if o.marital_status == 'unmarried' else '' }}>Unmarried</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Married → spouse + children -->
+        <div id="depMarried" style="display:none;margin-top:10px;">
+            <h3 style="font-size:15px;color:#1e3a5f;margin:6px 0;">Spouse</h3>
+            <div class="row">
+                <div class="fld"><label>First Name</label><input type="text" name="dep_spouse_first_name" value="{{ _spouse.first_name if _spouse else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Last Name</label><input type="text" name="dep_spouse_last_name" value="{{ _spouse.last_name if _spouse else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Date of Birth</label><input type="date" name="dep_spouse_dob" value="{{ _spouse.dob if _spouse else '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+            </div>
+            <h3 style="font-size:15px;color:#1e3a5f;margin:14px 0 6px;">Children</h3>
+            <div id="childList">
+                {% set child_rows = _children if _children else [ {} ] %}
+                {% for c in child_rows %}
+                <div class="exp-block">
+                    {% if not deps_locked %}<button type="button" class="del" onclick="delChild(this)">Remove</button>{% endif %}
+                    <div class="row">
+                        <div class="fld"><label>First Name</label><input type="text" name="dep_child_first_name" value="{{ c.first_name or '' }}" {{ 'disabled' if deps_locked }}></div>
+                        <div class="fld"><label>Last Name</label><input type="text" name="dep_child_last_name" value="{{ c.last_name or '' }}" {{ 'disabled' if deps_locked }}></div>
+                        <div class="fld"><label>Date of Birth</label><input type="date" name="dep_child_dob" value="{{ c.dob or '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% if not deps_locked %}<button type="button" class="addbtn" onclick="addChild()">+ Add Child</button>{% endif %}
+        </div>
+
+        <!-- Unmarried → parents -->
+        <div id="depUnmarried" style="display:none;margin-top:10px;">
+            <h3 style="font-size:15px;color:#1e3a5f;margin:6px 0;">Father</h3>
+            <div class="row">
+                <div class="fld"><label>First Name</label><input type="text" name="dep_father_first_name" value="{{ _father.first_name if _father else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Last Name</label><input type="text" name="dep_father_last_name" value="{{ _father.last_name if _father else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Date of Birth</label><input type="date" name="dep_father_dob" value="{{ _father.dob if _father else '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+            </div>
+            <h3 style="font-size:15px;color:#1e3a5f;margin:14px 0 6px;">Mother</h3>
+            <div class="row">
+                <div class="fld"><label>First Name</label><input type="text" name="dep_mother_first_name" value="{{ _mother.first_name if _mother else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Last Name</label><input type="text" name="dep_mother_last_name" value="{{ _mother.last_name if _mother else '' }}" {{ 'disabled' if deps_locked }}></div>
+                <div class="fld"><label>Date of Birth</label><input type="date" name="dep_mother_dob" value="{{ _mother.dob if _mother else '' }}" onchange="calcAge(this)" data-age {{ 'disabled' if deps_locked }}><small class="age-out"></small></div>
+            </div>
+        </div>
+    </div>
+
     <div class="actions">
         {% if post_submit %}
         <button type="submit" name="action" value="save" class="btn-submit" formnovalidate>Save Additions</button>
@@ -263,6 +324,49 @@ function addOther(){
         + '<div class="fld"><label>File</label><input type="file" name="doc_other" accept=".pdf,.jpg,.jpeg,.png"></div></div>';
     list.appendChild(div);
 }
+// ── Insurance / dependents ──
+function depToggle(){
+    var ms = document.getElementById('maritalStatus');
+    var m = document.getElementById('depMarried');
+    var u = document.getElementById('depUnmarried');
+    var v = ms ? ms.value : '';
+    if (m) m.style.display = (v === 'married') ? 'block' : 'none';
+    if (u) u.style.display = (v === 'unmarried') ? 'block' : 'none';
+}
+function calcAge(input){
+    var out = input.parentNode.querySelector('.age-out');
+    if (!out) return;
+    if (!input.value){ out.textContent = ''; return; }
+    var d = new Date(input.value);
+    if (isNaN(d)){ out.textContent = ''; return; }
+    var t = new Date();
+    var age = t.getFullYear() - d.getFullYear();
+    var mm = t.getMonth() - d.getMonth();
+    if (mm < 0 || (mm === 0 && t.getDate() < d.getDate())) age--;
+    out.textContent = (age >= 0 ? 'Age: ' + age + ' years' : '');
+    out.style.cssText = 'color:#1e3a5f;font-weight:600;display:block;margin-top:3px;';
+}
+function delChild(btn){
+    var list = document.getElementById('childList');
+    if (list.querySelectorAll('.exp-block').length <= 1){
+        btn.closest('.exp-block').querySelectorAll('input').forEach(function(f){ f.value=''; });
+        var o = btn.closest('.exp-block').querySelector('.age-out'); if (o) o.textContent='';
+        return;
+    }
+    btn.closest('.exp-block').remove();
+}
+function addChild(){
+    var list = document.getElementById('childList');
+    var b = list.querySelector('.exp-block').cloneNode(true);
+    b.querySelectorAll('input').forEach(function(f){ f.value=''; });
+    var o = b.querySelector('.age-out'); if (o) o.textContent='';
+    list.appendChild(b);
+}
+// initialise on load: show the right block + compute ages for prefilled DOBs
+document.addEventListener('DOMContentLoaded', function(){
+    depToggle();
+    document.querySelectorAll('input[data-age]').forEach(function(inp){ if (inp.value) calcAge(inp); });
+});
 </script>
 {% endif %}
 </body>

@@ -160,6 +160,36 @@
         </div>
     </div>
 
+    <!-- Insurance / Dependents -->
+    <div class="obd-card">
+        <h3>Health Insurance &amp; Dependents</h3>
+        <div class="obd-dl">
+            <div><div class="k">Marital Status</div><div class="v">{{ (o.marital_status or '—')|capitalize }}</div></div>
+        </div>
+        {% if dependents %}
+        <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-top:.6rem;">
+            <thead><tr>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Relation</th>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Name</th>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Date of Birth</th>
+                <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #e5e7eb;">Age</th>
+            </tr></thead>
+            <tbody>
+            {% for d in dependents %}
+                <tr>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;text-transform:capitalize;">{{ d.relation }}</td>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;">{{ (d.first_name or '') ~ ' ' ~ (d.last_name or '') }}</td>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;">{{ d.dob|format_date if d.dob else '—' }}</td>
+                    <td style="padding:.5rem;border-bottom:1px solid #f1f5f9;">{{ (d.age ~ ' yrs') if d.age is not none else '—' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color:#6b7280;font-size:.9rem;margin:.4rem 0 0;">No dependents entered.</p>
+        {% endif %}
+    </div>
+
     <!-- Actions -->
     <div class="obd-card" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
         {% if o.status == 'completed' %}

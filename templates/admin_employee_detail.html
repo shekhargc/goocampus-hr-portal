@@ -178,6 +178,50 @@
     </div>
 </div>
 
+<!-- Confirmation / PF / Insurance -->
+<div class="card" style="margin-bottom:2rem;">
+    <h2 class="card-title">Confirmation, PF &amp; Insurance</h2>
+    {% set cst = employee.confirmation_status or 'permanent' %}
+    <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem 1.25rem; font-size: 0.95rem;">
+        <dt style="font-weight:600;color:var(--navy);">Status:</dt>
+        <dd>
+            {% if cst == 'probation' %}<span style="background:#fef3c7;color:#92400e;padding:.15rem .6rem;border-radius:1rem;font-size:.8rem;font-weight:700;">Probation</span>
+            {% else %}<span style="background:#dcfce7;color:#166534;padding:.15rem .6rem;border-radius:1rem;font-size:.8rem;font-weight:700;">Permanent</span>{% endif %}
+            {% if cst == 'probation' and employee.probation_end_date %} &nbsp;·&nbsp; ends {{ employee.probation_end_date|format_date }}{% endif %}
+            {% if employee.confirmed_at %} &nbsp;·&nbsp; confirmed {{ employee.confirmed_at|format_date }}{% endif %}
+        </dd>
+        <dt style="font-weight:600;color:var(--navy);">PF Number:</dt><dd style="color:var(--gray-700);">{{ employee.pf_number or '-' }}</dd>
+        <dt style="font-weight:600;color:var(--navy);">PF Start Date:</dt><dd style="color:var(--gray-700);">{{ employee.pf_start_date|format_date if employee.pf_start_date else '-' }}</dd>
+        <dt style="font-weight:600;color:var(--navy);">Insurance Policy/UHID:</dt><dd style="color:var(--gray-700);">{{ employee.insurance_number or '-' }}</dd>
+        <dt style="font-weight:600;color:var(--navy);">Provider:</dt><dd style="color:var(--gray-700);">{{ employee.insurance_provider or '-' }}</dd>
+        <dt style="font-weight:600;color:var(--navy);">Insurance Active From:</dt><dd style="color:var(--gray-700);">{{ employee.insurance_activation_date|format_date if employee.insurance_activation_date else '-' }}</dd>
+        <dt style="font-weight:600;color:var(--navy);">Marital Status:</dt><dd style="color:var(--gray-700);">{{ (employee.marital_status or '-')|capitalize }}</dd>
+    </dl>
+    <h3 style="margin:1.5rem 0 .75rem;font-size:1rem;color:var(--navy);">Insurance Dependents</h3>
+    {% if dependents %}
+    <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+        <thead><tr>
+            <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid var(--gray-200);">Relation</th>
+            <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid var(--gray-200);">Name</th>
+            <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid var(--gray-200);">Date of Birth</th>
+            <th style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid var(--gray-200);">Age</th>
+        </tr></thead>
+        <tbody>
+        {% for d in dependents %}
+            <tr>
+                <td style="padding:.5rem;border-bottom:1px solid var(--gray-100);text-transform:capitalize;">{{ d.relation }}</td>
+                <td style="padding:.5rem;border-bottom:1px solid var(--gray-100);">{{ (d.first_name or '') ~ ' ' ~ (d.last_name or '') }}</td>
+                <td style="padding:.5rem;border-bottom:1px solid var(--gray-100);">{{ d.dob|format_date if d.dob else '-' }}</td>
+                <td style="padding:.5rem;border-bottom:1px solid var(--gray-100);">{{ (d.age ~ ' yrs') if d.age is not none else '-' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--gray-500);font-size:.9rem;">No dependents recorded.</p>
+    {% endif %}
+</div>
+
 <!-- Work Experience -->
 <div class="card" style="margin-bottom:2rem;">
     <h2 class="card-title">Internship / Work Experience</h2>
