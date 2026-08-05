@@ -625,6 +625,88 @@ def login():
 
     return render_template('login.html')
 
+
+def _digits_only(s):
+    return ''.join(c for c in (s or '') if c.isdigit())
+
+
+def _india_mobile10(raw):
+    """Return a valid 10-digit Indian mobile (starts 6-9) from any format, else None."""
+    d = _digits_only(raw)
+    if len(d) >= 10:
+        d10 = d[-10:]
+        if d10 and d10[0] in '6789':
+            return d10
+    return None
+
+
+def _employee_otp_number(emp):
+    """OTP destination for an employee: office number if it's a WhatsApp-capable
+    mobile, otherwise their personal mobile. (founder 2026-08-05)"""
+    return _india_mobile10(emp.get('official_number')) or _india_mobile10(emp.get('phone'))
+
+
+def _mask_mobile(m10):
+    return ('••••••' + m10[-2:]) if m10 and len(m10) >= 2 else '••••••'
+
+
+@app.route('/login/send-otp', methods=['POST'])
+def login_send_otp():
+    """Employee password-less login: WhatsApp OTP to the office (or personal)
+    mobile. Keyed by employee code; password login stays available."""
+    data = request.get_json(silent=True) or {}
+    emp_code = (data.get('emp_code') or '').strip()
+    if not emp_code:
+        return jsonify({'error': 'Please enter your employee code.'}), 400
+    conn = get_db()
+    emp = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (emp_code,)).fetchone()
+    conn.close()
+    if not emp:
+        return jsonify({'error': 'No active employee found with that code.'}), 404
+    num = _employee_otp_number(dict(emp))
+    if not num:
+        return jsonify({'error': 'No WhatsApp-capable mobile is on file for your account. Please use your password, or contact HR.'}), 400
+    otp_code = str(random.randint(100000, 999999))
+    session['emp_login_otp'] = otp_code
+    session['emp_login_code'] = emp_code
+    session['emp_login_num'] = num
+    session['emp_login_time'] = datetime.now().isoformat()
+    ok, err = _send_whatsapp_otp(num, otp_code)
+    if not ok:
+        return jsonify({'error': err or 'Could not send the OTP.'}), 500
+    return jsonify({'success': True, 'masked': _mask_mobile(num),
+                    'message': f'OTP sent on WhatsApp to {_mask_mobile(num)}.'})
+
+
+@app.route('/login/verify-otp', methods=['POST'])
+def login_verify_otp():
+    data = request.get_json(silent=True) or {}
+    emp_code = (data.get('emp_code') or '').strip()
+    otp = (data.get('otp') or '').strip()
+    stored = session.get('emp_login_otp')
+    t = session.get('emp_login_time')
+    if not stored or not t or session.get('emp_login_code') != emp_code:
+        return jsonify({'error': 'Please request an OTP first.'}), 400
+    try:
+        if (datetime.now() - datetime.fromisoformat(t)).total_seconds() > 600:
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+    if otp != stored:
+        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    conn = get_db()
+    user = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (emp_code,)).fetchone()
+    conn.close()
+    if not user:
+        return jsonify({'error': 'Account not found or inactive.'}), 404
+    session.clear()
+    session.permanent = True
+    session['user_id'] = user['id']
+    session['is_admin'] = user['is_admin']
+    session['emp_code'] = user['emp_code']
+    return jsonify({'success': True, 'redirect': url_for('index')})
+
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -1101,6 +1183,69 @@ def client_login_page():
             flash('Invalid mobile number or password', 'error')
             return render_template('client_login.html')
     return render_template('client_login.html')
+
+
+@app.route('/client/login/send-otp', methods=['POST'])
+def client_login_send_otp():
+    """Client password-less login: WhatsApp OTP to their registered mobile
+    (the number they log in with). Password login stays available."""
+    data = request.get_json(silent=True) or {}
+    clean = _india_mobile10(data.get('mobile'))
+    if not clean:
+        # allow any 10-digit even if not 6-9 leading (be lenient for login id)
+        d = _digits_only(data.get('mobile'))
+        clean = d[-10:] if len(d) >= 10 else None
+    if not clean:
+        return jsonify({'error': 'Please enter your registered 10-digit mobile number.'}), 400
+    conn = get_db()
+    acct = conn.execute("SELECT id FROM client_accounts WHERE mobile = ? AND is_active = 1", (clean,)).fetchone()
+    conn.close()
+    if not acct:
+        return jsonify({'error': 'No account found for this mobile number. Please check, or use your password.'}), 404
+    otp_code = str(random.randint(100000, 999999))
+    session['client_login_otp'] = otp_code
+    session['client_login_num'] = clean
+    session['client_login_time'] = datetime.now().isoformat()
+    ok, err = _send_whatsapp_otp(clean, otp_code)
+    if not ok:
+        return jsonify({'error': err or 'Could not send the OTP.'}), 500
+    return jsonify({'success': True, 'masked': _mask_mobile(clean),
+                    'message': f'OTP sent on WhatsApp to {_mask_mobile(clean)}.'})
+
+
+@app.route('/client/login/verify-otp', methods=['POST'])
+def client_login_verify_otp():
+    data = request.get_json(silent=True) or {}
+    clean = _digits_only(data.get('mobile'))
+    clean = clean[-10:] if len(clean) >= 10 else clean
+    otp = (data.get('otp') or '').strip()
+    stored = session.get('client_login_otp')
+    t = session.get('client_login_time')
+    if not stored or not t or session.get('client_login_num') != clean:
+        return jsonify({'error': 'Please request an OTP first.'}), 400
+    try:
+        if (datetime.now() - datetime.fromisoformat(t)).total_seconds() > 600:
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+    if otp != stored:
+        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    conn = get_db()
+    acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ? AND is_active = 1", (clean,)).fetchone()
+    if not acct:
+        conn.close()
+        return jsonify({'error': 'Account not found or inactive.'}), 404
+    session.clear()
+    session.permanent = True
+    session['user_id'] = acct['id']
+    session['is_client'] = True
+    session['client_name'] = (acct['first_name'] or '') + ' ' + (acct['last_name'] or '')
+    session['client_mobile'] = acct['mobile']
+    session['first_login'] = (acct['last_login'] is None)
+    conn.execute("UPDATE client_accounts SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (acct['id'],))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'redirect': url_for('client_dashboard')})
 
 
 @app.route('/client/register/<token>', methods=['GET', 'POST'])

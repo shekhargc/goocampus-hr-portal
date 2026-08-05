@@ -734,18 +734,78 @@
 
                 <!-- GC Team Login -->
                 <div id="panel-employee" class="login-form-panel {% if not active_tab or active_tab == 'employee' %}active{% endif %}">
-                    <form method="POST" action="/login">
+
+                    <!-- Password mode (default) -->
+                    <div id="empPwMode">
+                        <form method="POST" action="/login">
+                            <div class="form-group">
+                                <label for="emp_code">Employee Code</label>
+                                <input type="text" id="emp_code" name="emp_code" class="form-input" placeholder="Enter your employee code" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Password</label>
+                                <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
+                            </div>
+                            <button type="submit" class="login-btn">Sign In</button>
+                        </form>
+                        <a href="#" class="forgot-link" onclick="toggleEmpMode('otp');return false;"><i class="fab fa-whatsapp"></i> Sign in with WhatsApp OTP instead</a>
+                        <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                    </div>
+
+                    <!-- WhatsApp OTP mode -->
+                    <div id="empOtpMode" style="display:none;">
                         <div class="form-group">
-                            <label for="emp_code">Employee Code</label>
-                            <input type="text" id="emp_code" name="emp_code" class="form-input" placeholder="Enter your employee code" required>
+                            <label for="empOtpCode">Employee Code</label>
+                            <input type="text" id="empOtpCode" class="form-input" placeholder="Enter your employee code">
                         </div>
-                        <div class="form-group">
-                            <label for="password">Password</label>
-                            <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
+                        <div class="form-group" id="empOtpEntry" style="display:none;">
+                            <label for="empOtpInput">WhatsApp OTP</label>
+                            <input type="text" id="empOtpInput" class="form-input" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
                         </div>
-                        <button type="submit" class="login-btn">Sign In</button>
-                    </form>
-                    <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                        <button type="button" class="login-btn" id="empOtpBtn" onclick="empOtpAction()">
+                            <i class="fab fa-whatsapp"></i> Send WhatsApp OTP
+                        </button>
+                        <div id="empOtpMsg" style="font-size:0.85rem;margin-top:10px;text-align:center;"></div>
+                        <a href="#" class="forgot-link" onclick="toggleEmpMode('pw');return false;">Sign in with password instead</a>
+                    </div>
+
+                    <script>
+                        function toggleEmpMode(mode){
+                            document.getElementById('empPwMode').style.display  = (mode === 'pw')  ? '' : 'none';
+                            document.getElementById('empOtpMode').style.display = (mode === 'otp') ? '' : 'none';
+                        }
+                        let _empOtpSent = false;
+                        function _eMsg(t, ok){ const m = document.getElementById('empOtpMsg'); m.style.color = ok ? '#16a34a' : '#b91c1c'; m.textContent = t || ''; }
+                        async function empOtpAction(){
+                            const code = document.getElementById('empOtpCode').value.trim();
+                            const btn = document.getElementById('empOtpBtn');
+                            if (!_empOtpSent){
+                                if (!code){ _eMsg('Enter your employee code.', false); return; }
+                                btn.disabled = true; _eMsg('Sending OTP…', true);
+                                try {
+                                    const r = await fetch('/login/send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ emp_code: code }) });
+                                    const d = await r.json();
+                                    if (r.ok && d.success){
+                                        _empOtpSent = true;
+                                        document.getElementById('empOtpEntry').style.display = '';
+                                        btn.innerHTML = 'Verify &amp; Sign In';
+                                        _eMsg(d.message || 'OTP sent on WhatsApp.', true);
+                                    } else { _eMsg(d.error || 'Could not send OTP.', false); }
+                                } catch(e){ _eMsg('Network error. Please try again.', false); }
+                                btn.disabled = false;
+                            } else {
+                                const otp = document.getElementById('empOtpInput').value.trim();
+                                if (!otp){ _eMsg('Enter the 6-digit OTP.', false); return; }
+                                btn.disabled = true; _eMsg('Verifying…', true);
+                                try {
+                                    const r = await fetch('/login/verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ emp_code: code, otp }) });
+                                    const d = await r.json();
+                                    if (r.ok && d.success){ _eMsg('Success! Redirecting…', true); window.location.href = d.redirect || '/'; }
+                                    else { _eMsg(d.error || 'Invalid OTP.', false); btn.disabled = false; }
+                                } catch(e){ _eMsg('Network error. Please try again.', false); btn.disabled = false; }
+                            }
+                        }
+                    </script>
                 </div>
 
                 <!-- Partner Login -->
