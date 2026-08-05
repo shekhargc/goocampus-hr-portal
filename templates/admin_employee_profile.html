@@ -6,22 +6,21 @@
 <style>
   .pf-wrap { max-width: 1120px; margin: 0 auto; }
   .pf-back { display:inline-block; color: var(--orange); font-weight:600; font-size:.85rem; text-decoration:none; margin-bottom:1rem; }
-  .pf-grid { display: grid; grid-template-columns: 300px 1fr; gap: 1.4rem; align-items: start; }
-  @media (max-width: 900px){ .pf-grid { grid-template-columns: 1fr; } }
 
-  .pf-rail { background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; position: sticky; top: 1rem; }
-  .pf-rail-head { background: linear-gradient(160deg, var(--navy), #274c78); padding: 1.7rem 1.2rem 1.4rem; text-align: center; color: #fff; }
+  .pf-banner { display:flex; flex-wrap:wrap; background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; margin-bottom: 1.4rem; }
+  .pf-bluebox { background: linear-gradient(160deg, var(--navy), #274c78); color:#fff; padding: 1.7rem 1.6rem; width: 270px; flex:0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  @media (max-width: 720px){ .pf-bluebox { width: 100%; } }
   .pf-photo, .pf-photo-init { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff55; margin: 0 auto .7rem; display:block; }
   .pf-photo-init { background: #ffffff22; color: #fff; font-size: 2.1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .pf-rail-head h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
-  .pf-role { margin: .2rem 0 .3rem; font-size: .82rem; color: #ffffffcf; }
-  .pf-photo-upload { padding: .9rem 1.1rem; border-bottom: 1px solid var(--gray-100); }
-  .pf-photo-upload label { font-size:.72rem; font-weight:600; color:var(--gray-500); display:block; margin-bottom:.35rem; }
-  .pf-facts { padding: .3rem 1.1rem 1rem; }
-  .pf-fact { display:flex; justify-content:space-between; gap:.6rem; padding:.5rem 0; border-bottom:1px solid var(--gray-100); font-size:.84rem; }
-  .pf-fact:last-child { border-bottom:0; } .pf-fact .k{ color:var(--gray-500); } .pf-fact .v{ color:var(--navy); font-weight:600; text-align:right; }
-  .pf-rail-cta { padding: 0 1.1rem 1.2rem; display:flex; flex-direction:column; gap:.5rem; }
-  .pf-btn { display:block; width:100%; text-align:center; border:0; border-radius:.55rem; padding:.7rem; font-family:inherit; font-weight:600; font-size:.86rem; cursor:pointer; text-decoration:none; box-sizing:border-box; }
+  .pf-bluebox h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+  .pf-role { margin: .2rem 0 0; font-size: .82rem; color: #ffffffcf; }
+  .pf-banner-right { flex:1; min-width:280px; padding:1.4rem 1.7rem; display:flex; flex-direction:column; justify-content:center; gap:1rem; }
+  .pf-facts-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:.9rem 1.8rem; }
+  .pf-fact .k{ color:var(--gray-500); font-size:.72rem; margin-bottom:.18rem; } .pf-fact .v{ color:var(--navy); font-weight:600; font-size:.92rem; }
+  .pf-photo-upload { display:flex; align-items:flex-end; gap:.6rem; flex-wrap:wrap; }
+  .pf-photo-upload label { font-size:.72rem; font-weight:600; color:var(--gray-500); display:block; margin-bottom:.3rem; }
+  .pf-actions { display:flex; gap:.6rem; flex-wrap:wrap; }
+  .pf-btn { display:inline-block; text-align:center; border:0; border-radius:.55rem; padding:.6rem 1.3rem; font-family:inherit; font-weight:600; font-size:.86rem; cursor:pointer; text-decoration:none; box-sizing:border-box; }
   .pf-btn-primary { background: var(--orange); color:#fff; } .pf-btn-primary:hover{ background:var(--orange-dark); }
   .pf-btn-ghost { background: var(--gray-50); color: var(--navy); border:1px solid var(--gray-200); }
 
@@ -50,37 +49,39 @@
 {% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
 <div class="pf-wrap">
   <a href="/admin/employee/{{ employee.id }}" class="pf-back">← Back to Employee</a>
-  <div class="pf-grid">
 
-    <!-- LEFT RAIL -->
-    <aside class="pf-rail">
-      <div class="pf-rail-head">
-        {% if employee.photo_url %}
-        <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" class="pf-photo" alt="{{ employee.name }}">
-        {% else %}<div class="pf-photo-init">{{ employee.name[0] }}</div>{% endif %}
-        <h1>{{ employee.name }}</h1>
-        <div class="pf-role">{{ employee.emp_code }} · {{ employee.department or '—' }}</div>
+  <!-- TOP BANNER -->
+  <div class="pf-banner">
+    <div class="pf-bluebox">
+      {% if employee.photo_url %}
+      <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" class="pf-photo" alt="{{ employee.name }}">
+      {% else %}<div class="pf-photo-init">{{ employee.name[0] }}</div>{% endif %}
+      <h1>{{ employee.name }}</h1>
+      <div class="pf-role">Editing profile</div>
+    </div>
+    <div class="pf-banner-right">
+      <div class="pf-facts-grid">
+        <div class="pf-fact"><div class="k">Employee code</div><div class="v">{{ employee.emp_code }}</div></div>
+        <div class="pf-fact"><div class="k">Department</div><div class="v">{{ employee.department or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Designation</div><div class="v">{{ employee.designation or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Joined</div><div class="v">{{ employee.joining_date|format_date if employee.joining_date else '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Status</div><div class="v">{% if cst == 'probation' %}Probation{% else %}Permanent{% endif %}</div></div>
       </div>
       <div class="pf-photo-upload">
-        <form method="POST" action="/admin/employee/{{ employee.id }}/upload-photo" enctype="multipart/form-data">
-          <label>Change photo</label>
-          <input type="file" name="photo" accept="image/*" style="font-size:.82rem;width:100%;">
-          <button type="submit" class="pf-btn pf-btn-ghost" style="margin-top:.5rem;">Upload Photo</button>
+        <form method="POST" action="/admin/employee/{{ employee.id }}/upload-photo" enctype="multipart/form-data" style="display:flex;align-items:flex-end;gap:.6rem;flex-wrap:wrap;">
+          <div><label>Change photo</label><input type="file" name="photo" accept="image/*" style="font-size:.82rem;"></div>
+          <button type="submit" class="pf-btn pf-btn-ghost">Upload Photo</button>
         </form>
       </div>
-      <div class="pf-facts">
-        <div class="pf-fact"><span class="k">Designation</span><span class="v">{{ employee.designation or '—' }}</span></div>
-        <div class="pf-fact"><span class="k">Joined</span><span class="v">{{ employee.joining_date|format_date if employee.joining_date else '—' }}</span></div>
-        <div class="pf-fact"><span class="k">Status</span><span class="v">{% if cst == 'probation' %}Probation{% else %}Permanent{% endif %}</span></div>
-      </div>
-      <div class="pf-rail-cta">
+      <div class="pf-actions">
         <button type="submit" form="empEditForm" class="pf-btn pf-btn-primary">Save Changes</button>
         <a href="/admin/employee/{{ employee.id }}" class="pf-btn pf-btn-ghost">Cancel</a>
       </div>
-    </aside>
+    </div>
+  </div>
 
-    <!-- RIGHT: TABBED EDIT -->
-    <section class="pf-panel">
+  <!-- FULL-WIDTH TABBED EDIT -->
+  <section class="pf-panel">
       <div class="pf-tabs" role="tablist">
         <button type="button" class="pf-tab on" onclick="etab('personal',this)">Personal</button>
         <button type="button" class="pf-tab" onclick="etab('family',this)">Family &amp; Insurance</button>
@@ -300,7 +301,6 @@
 
       </div>
     </section>
-  </div>
 </div>
 
 <script>

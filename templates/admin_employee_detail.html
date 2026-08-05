@@ -6,22 +6,22 @@
 <style>
   .pf-wrap { max-width: 1120px; margin: 0 auto; }
   .pf-back { display:inline-block; color: var(--orange); font-weight:600; font-size:.85rem; text-decoration:none; margin-bottom:1rem; }
-  .pf-grid { display: grid; grid-template-columns: 310px 1fr; gap: 1.4rem; align-items: start; }
-  @media (max-width: 900px){ .pf-grid { grid-template-columns: 1fr; } }
 
-  .pf-rail { background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; position: sticky; top: 1rem; }
-  .pf-rail-head { background: linear-gradient(160deg, var(--navy), #274c78); padding: 1.7rem 1.2rem 1.4rem; text-align: center; color: #fff; }
-  .pf-photo, .pf-photo-init { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff55; margin: 0 auto .8rem; display:block; }
+  .pf-banner { display:flex; flex-wrap:wrap; background: var(--white); border: 1px solid var(--gray-200); border-radius: .9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; margin-bottom: 1.4rem; }
+  .pf-bluebox { background: linear-gradient(160deg, var(--navy), #274c78); color: #fff; padding: 1.7rem 1.6rem; width: 270px; flex: 0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  @media (max-width: 720px){ .pf-bluebox { width: 100%; } }
+  .pf-photo, .pf-photo-init { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff55; margin: 0 auto .7rem; display:block; }
   .pf-photo-init { background: #ffffff22; color: #fff; font-size: 2.1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .pf-rail-head h1 { margin: 0; font-size: 1.2rem; font-weight: 700; }
-  .pf-role { margin: .2rem 0 .8rem; font-size: .82rem; color: #ffffffcf; }
+  .pf-bluebox h1 { margin: 0; font-size: 1.2rem; font-weight: 700; }
+  .pf-role { margin: .2rem 0 .7rem; font-size: .82rem; color: #ffffffcf; }
   .pf-pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; padding: .25rem .7rem; border-radius: 999px; margin: 0 .15rem; }
   .pf-pill.warn { background: #fef3c7; color: #92400e; } .pf-pill.good { background: #dcfce7; color: #166534; } .pf-pill.bad { background: #fee2e2; color: #b91c1c; }
-  .pf-facts { padding: .8rem 1.1rem 1rem; }
-  .pf-fact { display: flex; justify-content: space-between; gap: .6rem; padding: .55rem 0; border-bottom: 1px solid var(--gray-100); font-size: .84rem; }
-  .pf-fact:last-child { border-bottom: 0; } .pf-fact .k { color: var(--gray-500); } .pf-fact .v { color: var(--navy); font-weight: 600; text-align: right; word-break: break-word; }
-  .pf-rail-cta { padding: 0 1.1rem 1.2rem; display:flex; flex-direction:column; gap:.5rem; }
-  .pf-btn { display:block; width:100%; text-align:center; border:0; border-radius:.55rem; padding:.7rem; font-family:inherit; font-weight:600; font-size:.86rem; cursor:pointer; text-decoration:none; box-sizing:border-box; }
+
+  .pf-banner-right { flex:1; min-width:280px; padding:1.5rem 1.7rem; display:flex; flex-direction:column; justify-content:center; gap:1.2rem; }
+  .pf-facts-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:1rem 1.8rem; }
+  .pf-fact .k { color: var(--gray-500); font-size:.72rem; margin-bottom:.18rem; } .pf-fact .v { color: var(--navy); font-weight: 600; font-size:.92rem; word-break: break-word; }
+  .pf-actions { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+  .pf-btn { display:inline-block; text-align:center; border:0; border-radius:.55rem; padding:.6rem 1.3rem; font-family:inherit; font-weight:600; font-size:.86rem; cursor:pointer; text-decoration:none; box-sizing:border-box; }
   .pf-btn-primary { background: var(--orange); color:#fff; } .pf-btn-primary:hover{ background:var(--orange-dark); }
   .pf-btn-ghost { background: var(--gray-50); color: var(--navy); border:1px solid var(--gray-200); }
   .pf-btn-green { background:#16a34a; color:#fff; } .pf-btn-danger { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
@@ -60,30 +60,31 @@
 {% set est = employee.employment_status or ('active' if employee.is_active else 'resigned') %}
 <div class="pf-wrap">
   <a href="/admin/manage-employees" class="pf-back">← Back to Employees</a>
-  <div class="pf-grid">
 
-    <!-- LEFT RAIL -->
-    <aside class="pf-rail">
-      <div class="pf-rail-head">
-        {% if employee.photo_url %}
-        <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" class="pf-photo" alt="{{ employee.name }}">
-        {% else %}<div class="pf-photo-init">{{ employee.name[0] }}</div>{% endif %}
-        <h1>{{ employee.name }}</h1>
-        <div class="pf-role">{{ employee.designation or 'No Designation' }} · {{ employee.department or '—' }}</div>
-        <div>
-          {% if est == 'active' %}<span class="pf-pill good">● Active</span>{% else %}<span class="pf-pill bad" style="text-transform:capitalize;">● {{ est }}</span>{% endif %}
-          {% if cst == 'probation' %}<span class="pf-pill warn">● Probation</span>{% else %}<span class="pf-pill good">● Permanent</span>{% endif %}
-        </div>
+  <!-- TOP BANNER -->
+  <div class="pf-banner">
+    <div class="pf-bluebox">
+      {% if employee.photo_url %}
+      <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" class="pf-photo" alt="{{ employee.name }}">
+      {% else %}<div class="pf-photo-init">{{ employee.name[0] }}</div>{% endif %}
+      <h1>{{ employee.name }}</h1>
+      <div class="pf-role">{{ employee.designation or 'No Designation' }}</div>
+      <div>
+        {% if est == 'active' %}<span class="pf-pill good">● Active</span>{% else %}<span class="pf-pill bad" style="text-transform:capitalize;">● {{ est }}</span>{% endif %}
+        {% if cst == 'probation' %}<span class="pf-pill warn">● Probation</span>{% else %}<span class="pf-pill good">● Permanent</span>{% endif %}
       </div>
-      <div class="pf-facts">
-        <div class="pf-fact"><span class="k">Employee code</span><span class="v">{{ employee.emp_code }}</span></div>
-        <div class="pf-fact"><span class="k">Joined</span><span class="v">{{ employee.joining_date|format_date if employee.joining_date else '—' }}</span></div>
-        {% if cst == 'probation' and employee.probation_end_date %}<div class="pf-fact"><span class="k">Confirmation due</span><span class="v">{{ employee.probation_end_date|format_date }}</span></div>{% endif %}
-        <div class="pf-fact"><span class="k">Reports to</span><span class="v">{{ reporting_name or '—' }}</span></div>
-        <div class="pf-fact"><span class="k">Email</span><span class="v">{{ employee.email or '—' }}</span></div>
-        <div class="pf-fact"><span class="k">Phone</span><span class="v">{{ employee.phone or '—' }}</span></div>
+    </div>
+    <div class="pf-banner-right">
+      <div class="pf-facts-grid">
+        <div class="pf-fact"><div class="k">Employee code</div><div class="v">{{ employee.emp_code }}</div></div>
+        <div class="pf-fact"><div class="k">Department</div><div class="v">{{ employee.department or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Joined</div><div class="v">{{ employee.joining_date|format_date if employee.joining_date else '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Reports to</div><div class="v">{{ reporting_name or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Email</div><div class="v">{{ employee.email or '—' }}</div></div>
+        <div class="pf-fact"><div class="k">Phone</div><div class="v">{{ employee.phone or '—' }}</div></div>
+        {% if cst == 'probation' and employee.probation_end_date %}<div class="pf-fact"><div class="k">Confirmation due</div><div class="v">{{ employee.probation_end_date|format_date }}</div></div>{% endif %}
       </div>
-      <div class="pf-rail-cta">
+      <div class="pf-actions">
         {% if cst == 'probation' %}
         <form method="POST" action="{{ url_for('admin_confirm_permanent', emp_id=employee.id) }}" onsubmit="return confirm('Confirm {{ employee.name }} as a permanent employee?');" style="margin:0;">
           <button type="submit" class="pf-btn pf-btn-green">✓ Confirm as Permanent</button>
@@ -92,10 +93,11 @@
         <a href="/admin/employee/{{ employee.id }}/edit" class="pf-btn pf-btn-primary">Edit Employee</a>
         {% if est == 'active' %}<a href="/admin/employee/{{ employee.id }}/edit#exitFields" class="pf-btn pf-btn-danger">Run Exit Process</a>{% endif %}
       </div>
-    </aside>
+    </div>
+  </div>
 
-    <!-- RIGHT: TABS -->
-    <section class="pf-panel">
+  <!-- FULL-WIDTH TABS -->
+  <section class="pf-panel">
       <div class="pf-tabs" role="tablist">
         <button type="button" class="pf-tab on" onclick="pfTab('overview',this)">Overview</button>
         <button type="button" class="pf-tab" onclick="pfTab('personal',this)">Personal</button>
@@ -239,7 +241,6 @@
 
       </div>
     </section>
-  </div>
 </div>
 
 <script>

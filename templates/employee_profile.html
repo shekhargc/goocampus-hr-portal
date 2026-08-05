@@ -4,37 +4,37 @@
 
 {% block section_extra_css %}
 <style>
-    .pf-wrap { max-width: 1080px; margin: 0 auto; }
-    .pf-grid { display: grid; grid-template-columns: 300px 1fr; gap: 1.4rem; align-items: start; }
-    @media (max-width: 860px){ .pf-grid { grid-template-columns: 1fr; } }
+    .pf-wrap { max-width: 1120px; margin: 0 auto; }
 
-    /* left rail */
-    .pf-rail { background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.9rem;
-        box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; position: sticky; top: 1rem; }
-    .pf-rail-head { background: linear-gradient(160deg, var(--navy), #274c78); padding: 1.6rem 1.2rem 1.3rem; text-align: center; color: #fff; }
+    /* top banner: blue box (left) + details (right) */
+    .pf-banner { display: flex; flex-wrap: wrap; background: var(--white); border: 1px solid var(--gray-200);
+        border-radius: 0.9rem; box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; margin-bottom: 1.4rem; }
+    .pf-bluebox { background: linear-gradient(160deg, var(--navy), #274c78); color: #fff; padding: 1.7rem 1.6rem;
+        width: 270px; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    @media (max-width: 720px){ .pf-bluebox { width: 100%; } }
     .pf-photo-wrap { position: relative; width: 96px; height: 96px; margin: 0 auto .8rem; }
     .pf-photo, .pf-photo-init { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #ffffff55; }
     .pf-photo-init { background: #ffffff22; color: #fff; font-size: 2.1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
     .pf-cam { position: absolute; bottom: 0; right: 0; width: 30px; height: 30px; border-radius: 50%;
         background: var(--orange); color: #fff; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .pf-cam input { display: none; }
-    .pf-rail-head h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+    .pf-bluebox h1 { margin: 0; font-size: 1.2rem; font-weight: 700; }
     .pf-role { margin: .2rem 0 .8rem; font-size: .82rem; color: #ffffffcf; }
     .pf-pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; padding: .25rem .7rem; border-radius: 999px; }
     .pf-pill.warn { background: #fef3c7; color: #92400e; }
     .pf-pill.good { background: #dcfce7; color: #166534; }
-    .pf-facts { padding: .8rem 1.1rem 1rem; }
-    .pf-fact { display: flex; justify-content: space-between; gap: .6rem; padding: .55rem 0; border-bottom: 1px solid var(--gray-100); font-size: .84rem; }
-    .pf-fact:last-child { border-bottom: 0; }
-    .pf-fact .k { color: var(--gray-500); }
-    .pf-fact .v { color: var(--navy); font-weight: 600; text-align: right; }
-    .pf-rail-cta { padding: 0 1.1rem 1.2rem; }
-    .pf-btn { display: block; width: 100%; text-align: center; border: 0; border-radius: .55rem; padding: .7rem; font-family: inherit; font-weight: 600; font-size: .88rem; cursor: pointer; }
+
+    .pf-banner-right { flex: 1; min-width: 280px; padding: 1.5rem 1.7rem; display: flex; flex-direction: column; justify-content: center; gap: 1.2rem; }
+    .pf-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem 1.8rem; }
+    .pf-fact .k { color: var(--gray-500); font-size: .72rem; margin-bottom: .18rem; }
+    .pf-fact .v { color: var(--navy); font-weight: 600; font-size: .92rem; word-break: break-word; }
+    .pf-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+    .pf-btn { display: inline-block; text-align: center; border: 0; border-radius: .55rem; padding: .65rem 1.4rem; font-family: inherit; font-weight: 600; font-size: .88rem; cursor: pointer; text-decoration: none; }
     .pf-btn-primary { background: var(--orange); color: #fff; }
     .pf-btn-primary:hover { background: var(--orange-dark); }
-    .pf-btn-ghost { background: var(--gray-50); color: var(--navy); border: 1px solid var(--gray-200); text-decoration: none; display: block; margin-top: .5rem; }
+    .pf-btn-ghost { background: var(--gray-50); color: var(--navy); border: 1px solid var(--gray-200); }
 
-    /* right panel */
+    /* full-width panel below the banner */
     .pf-panel { background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.9rem;
         box-shadow: 0 1px 3px rgba(16,32,64,.06); overflow: hidden; }
     .pf-tabs { display: flex; gap: 2px; padding: .4rem .5rem 0; border-bottom: 1px solid var(--gray-200); overflow-x: auto; }
@@ -95,11 +95,10 @@
 {% set _father = (dependents | selectattr('relation','equalto','father') | list | first) %}
 {% set _mother = (dependents | selectattr('relation','equalto','mother') | list | first) %}
 <div class="pf-wrap">
-  <div class="pf-grid">
 
-    <!-- LEFT SUMMARY RAIL -->
-    <aside class="pf-rail">
-      <div class="pf-rail-head">
+    <!-- TOP BANNER: blue box (left) + details (right) -->
+    <div class="pf-banner">
+      <div class="pf-bluebox">
         <div class="pf-photo-wrap">
           {% if user.photo_url %}
           <img src="{{ user.photo_url if user.photo_url.startswith('http') else '/static/photos/' ~ user.photo_url }}" class="pf-photo" alt="{{ user.name }}">
@@ -114,26 +113,31 @@
           </form>
         </div>
         <h1>{{ user.name }}</h1>
-        <div class="pf-role">{{ user.designation or 'No Designation' }} · {{ user.department or 'No Department' }}</div>
+        <div class="pf-role">{{ user.designation or 'No Designation' }}</div>
         {% if cst == 'probation' %}<span class="pf-pill warn">● On Probation</span>
         {% else %}<span class="pf-pill good">● Permanent</span>{% endif %}
       </div>
-      <div class="pf-facts">
-        <div class="pf-fact"><span class="k">Employee code</span><span class="v">{{ user.emp_code }}</span></div>
-        <div class="pf-fact"><span class="k">Joined</span><span class="v">{{ user.joining_date|format_date if user.joining_date else '—' }}</span></div>
-        {% if cst == 'probation' and user.probation_end_date %}
-        <div class="pf-fact"><span class="k">Confirmation due</span><span class="v">{{ user.probation_end_date|format_date }}</span></div>
-        {% endif %}
-        <div class="pf-fact"><span class="k">Reports to</span><span class="v">{{ reporting_manager or '—' }}</span></div>
-        <div class="pf-fact"><span class="k">Account</span><span class="v">{% if user.is_active == 1 %}<span style="color:#059669;">Active</span>{% else %}<span style="color:var(--danger);">Inactive</span>{% endif %}</span></div>
+      <div class="pf-banner-right">
+        <div class="pf-facts-grid">
+          <div class="pf-fact"><div class="k">Employee code</div><div class="v">{{ user.emp_code }}</div></div>
+          <div class="pf-fact"><div class="k">Department</div><div class="v">{{ user.department or '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Joined</div><div class="v">{{ user.joining_date|format_date if user.joining_date else '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Reports to</div><div class="v">{{ reporting_manager or '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Work email</div><div class="v">{{ user.email or '—' }}</div></div>
+          <div class="pf-fact"><div class="k">Phone</div><div class="v">{{ user.phone or '—' }}</div></div>
+          {% if cst == 'probation' and user.probation_end_date %}
+          <div class="pf-fact"><div class="k">Confirmation due</div><div class="v">{{ user.probation_end_date|format_date }}</div></div>
+          {% endif %}
+          <div class="pf-fact"><div class="k">Account</div><div class="v">{% if user.is_active == 1 %}<span style="color:#059669;">Active</span>{% else %}<span style="color:var(--danger);">Inactive</span>{% endif %}</div></div>
+        </div>
+        <div class="pf-actions">
+          <button type="submit" form="profileForm" class="pf-btn pf-btn-primary">Save Changes</button>
+          <a href="/dashboard" class="pf-btn pf-btn-ghost">Back to Dashboard</a>
+        </div>
       </div>
-      <div class="pf-rail-cta">
-        <button type="submit" form="profileForm" class="pf-btn pf-btn-primary">Save Changes</button>
-        <a href="/dashboard" class="pf-btn pf-btn-ghost">Back to Dashboard</a>
-      </div>
-    </aside>
+    </div>
 
-    <!-- RIGHT: TABBED FORM -->
+    <!-- FULL-WIDTH TABBED FORM -->
     <section class="pf-panel">
       <div class="pf-tabs" role="tablist">
         <button type="button" class="pf-tab on" onclick="pfTab('personal',this)">Personal</button>
@@ -324,7 +328,6 @@
         </div>
       </form>
     </section>
-  </div>
 </div>
 
 <script>
