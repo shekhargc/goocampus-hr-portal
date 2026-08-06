@@ -18,10 +18,19 @@
 
   .table-wrap{overflow-x:auto;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
   table.summary{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap;}
-  table.summary thead th{position:sticky;top:0;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:10px 12px;text-align:center;border-bottom:2px solid #0F1B33;}
+  table.summary thead th{position:sticky;top:0;z-index:4;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:10px 12px;text-align:center;border-bottom:2px solid #0F1B33;}
   table.summary thead th.lft{text-align:left;}
   table.summary tbody td{padding:9px 12px;border-bottom:1px solid var(--gray-100);text-align:center;color:var(--navy);}
   table.summary tbody td.lft{text-align:left;}
+  /* Freeze the # and Name columns so the client stays visible while scrolling right */
+  table.summary th.col-sn,  table.summary td.col-sn  {position:sticky;left:0;box-sizing:border-box;width:44px;min-width:44px;max-width:44px;}
+  table.summary th.col-name,table.summary td.col-name{position:sticky;left:44px;min-width:180px;}
+  table.summary td.col-sn,  table.summary td.col-name{z-index:2;background:#fff;}
+  table.summary tbody tr:nth-child(even) td.col-sn, table.summary tbody tr:nth-child(even) td.col-name{background:#fcfdff;}
+  table.summary tbody tr:hover td.col-sn, table.summary tbody tr:hover td.col-name{background:#f8fafc;}
+  table.summary thead th.col-sn, table.summary thead th.col-name{z-index:6;}
+  table.summary td.col-name{border-right:2px solid var(--gray-200);}
+  table.summary th.col-name{border-right:2px solid #24344f;}
   table.summary tbody tr:hover{background:#f8fafc;}
   table.summary tbody tr:nth-child(even){background:#fcfdff;}
   table.summary tbody tr:nth-child(even):hover{background:#f8fafc;}
@@ -72,8 +81,8 @@
   <table class="summary">
     <thead>
       <tr>
-        <th>#</th>
-        <th class="lft">Client Name</th>
+        <th class="col-sn">#</th>
+        <th class="lft col-name">Client Name</th>
         <th class="lft">Reg No</th>
         <th>Reg Date</th>
         <th>Account Status</th>
@@ -88,8 +97,8 @@
     <tbody>
       {% for r in rows %}
       <tr>
-        <td class="cnum">{{ loop.index }}</td>
-        <td class="lft cname"><a href="/operations/australia/clients/{{ r.id }}">{{ r.name }}</a></td>
+        <td class="cnum col-sn">{{ loop.index }}</td>
+        <td class="lft cname col-name"><a href="/operations/australia/clients/{{ r.id }}">{{ r.name }}</a></td>
         <td class="lft creg">{{ r.registration_number }}</td>
         <td>{{ r.registration_date or '—' }}</td>
         <td>
