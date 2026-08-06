@@ -259,21 +259,27 @@ def _leave_parse_ym(v):
     return None
 
 
-def _leave_accrual_meta(confirmation_status, confirmed_at, fy_start_year):
+def _leave_accrual_meta(emp, fy_start_year):
     """How leave accrues for an employee in the FY starting April `fy_start_year`.
 
-    Probation-period staff (not yet confirmed permanent) accrue NOTHING — so any
-    leave they take is unpaid (LOP). A newly-permanent employee accrues only from
-    the month HR confirmed them permanent (that whole month onward). Legacy /
-    already-permanent staff (no confirmation stamp, or confirmed in an earlier FY)
-    accrue the full year, exactly as before. (founder 2026-08-06)
+    IMPORTANT (founder 2026-08-06): the probation / pro-ration rule applies ONLY to
+    genuine NEW joinees onboarded through the HR onboarding flow — identified by a
+    `probation_end_date` on their record. EVERY existing / old employee (no probation
+    record) keeps the FULL pre-existing allotment, completely untouched — regardless
+    of any confirmation date that may sit on their profile.
+
+    For a new joinee: while on probation (not yet confirmed permanent) they accrue
+    NOTHING — any leave taken is unpaid (LOP). Once HR confirms them permanent, they
+    accrue from that whole month onward (pro-rated to FY-end).
     """
-    status = (confirmation_status or 'permanent').strip().lower()
+    if not emp or not emp.get('probation_end_date'):
+        return {'mode': 'full'}               # existing/old employee — old rule, never affected
+    status = (emp.get('confirmation_status') or 'permanent').strip().lower()
     if status != 'permanent':
-        return {'mode': 'none'}
-    ym = _leave_parse_ym(confirmed_at)
+        return {'mode': 'none'}               # new joinee still on probation → 0
+    ym = _leave_parse_ym(emp.get('confirmed_at'))
     if not ym:
-        return {'mode': 'full'}               # legacy permanent — no confirmation date
+        return {'mode': 'full'}               # confirmed permanent but no date — don't penalise
     fy_start = (fy_start_year, 4)             # April of the FY
     fy_end = (fy_start_year + 1, 3)           # the following March
     if ym <= fy_start:
@@ -299,7 +305,7 @@ def _fetch_leave_emp(conn, employee_id):
     columns don't exist yet on a cold start (falls back to carry_forward only)."""
     try:
         row = conn.execute(
-            "SELECT carry_forward, confirmation_status, confirmed_at FROM employees WHERE id = ?",
+            "SELECT carry_forward, confirmation_status, confirmed_at, probation_end_date FROM employees WHERE id = ?",
             (employee_id,)).fetchone()
     except Exception:
         try: conn.rollback()
@@ -317,8 +323,7 @@ def _leave_annual_entitlement(employee_id, fy_start_year):
     try:
         emp = _fetch_leave_emp(conn, employee_id)
         cf = float(emp['carry_forward'] or 0) if emp else 0.0
-        meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
-                                   emp.get('confirmed_at') if emp else None, fy_start_year)
+        meta = _leave_accrual_meta(emp, fy_start_year)
         total = cf
         for offset in range(12):
             rm = ((offset + 3) % 12) + 1
@@ -347,8 +352,7 @@ def leave_type_balances(employee_id, year):
     conn = get_db()
     emp = _fetch_leave_emp(conn, employee_id)
     cf = float(emp['carry_forward'] or 0) if emp else 0.0
-    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
-                               emp.get('confirmed_at') if emp else None, year)
+    meta = _leave_accrual_meta(emp, year)
     paid = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
     taken = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
     total_deduction = 0.0
@@ -557,8 +561,7 @@ def calculate_monthly_balance(employee_id, year, month):
     # Get carry forward + probation/permanency accrual gate
     emp = _fetch_leave_emp(conn, employee_id)
     carry_forward = float(emp['carry_forward'] or 0) if emp else 0.0
-    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
-                               emp.get('confirmed_at') if emp else None, year)
+    meta = _leave_accrual_meta(emp, year)
 
     # Calculate balance up to and including the given month
     # Carry forward is added as starting balance; monthly alloc: April=3, others=2
@@ -585,8 +588,7 @@ def get_available_balance(employee_id, year, month):
 
     emp = _fetch_leave_emp(conn, employee_id)
     carry_forward = float(emp['carry_forward'] or 0) if emp else 0.0
-    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
-                               emp.get('confirmed_at') if emp else None, year)
+    meta = _leave_accrual_meta(emp, year)
 
     # Get balance from start of FY to end of previous month
     # Carry forward added as starting balance; monthly alloc: April=3, others=2
@@ -629,8 +631,7 @@ def leave_month_figures(employee_id, year, month):
     emp = _fetch_leave_emp(conn, employee_id)
     carried = float(emp['carry_forward'] or 0) if emp else 0.0
     fy_start_year = year if month >= 4 else year - 1
-    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
-                               emp.get('confirmed_at') if emp else None, fy_start_year)
+    meta = _leave_accrual_meta(emp, fy_start_year)
     cy, cm = fy_start_year, 4
     result = None
     while True:
