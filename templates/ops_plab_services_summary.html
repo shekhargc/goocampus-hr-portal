@@ -16,7 +16,10 @@
   .filter-bar .btn-apply{background:var(--orange);color:#fff;}
   .filter-bar .btn-clear{background:var(--gray-100);color:var(--gray-600);text-decoration:none;}
 
-  .table-wrap{overflow-x:auto;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
+  /* The table-wrap is the ONLY horizontal scroller; clip ops-main horizontally so a
+     wide table can never push the whole page (nav/sidebar) sideways. */
+  .ops-main{overflow-x:hidden;}
+  .table-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
   table.summary{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap;}
   table.summary thead th{position:sticky;top:0;z-index:4;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:10px 12px;text-align:center;border-bottom:2px solid #0F1B33;}
   table.summary thead th.lft{text-align:left;}
