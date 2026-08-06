@@ -41760,6 +41760,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'Australia (AMC) Pathway operational sub-areas. Grant these to staff supporting Australia clients.',
         'sub_sections': [
             ('dashboard',     'Pathway Dashboard',       'Overview stats for Australia clients'),
+            ('services_summary','Services Summary',      'Per-client AMC services-rendered overview + Excel export'),
             ('registration',  'Registration',            'Australia client registration list + full profile'),
             ('documents',     'Documents',               'Australia client document upload + verification'),
             ('call_notes',    'Call Notes',              'Australia call notes + tracker + not-contacted view'),
@@ -45483,6 +45484,9 @@ ACCESS_ROUTE_MAP = {
     'ops_training_call_notes_add':          _ap('training_pathway', 'call_notes', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
+    'ops_australia_services_summary':          _ap('australia_pathway', 'services_summary'),
+    'ops_australia_services_summary_download': _ap('australia_pathway', 'services_summary'),
+    'ops_australia_welcome_kit_toggle':        _ap('australia_pathway', 'registration', 'edit'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
     'ops_australia_client_detail':          _ap('australia_pathway', 'registration'),
     'ops_australia_client_edit_page':       _ap('australia_pathway', 'registration', 'edit'),

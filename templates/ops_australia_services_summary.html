@@ -1,0 +1,117 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}AMC Services Summary &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1.1rem;}
+  .page-head h1{margin:0;font-size:1.5rem;color:var(--navy);font-weight:700;}
+  .page-head .sub{font-size:.85rem;color:var(--gray-500);margin-top:.25rem;}
+  .page-head .badge{display:inline-block;background:var(--orange);color:#fff;padding:.2rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;margin-left:.4rem;vertical-align:middle;}
+  .dl-btn{display:inline-flex;align-items:center;gap:7px;background:#0F1B33;color:#fff;border:0;border-radius:.55rem;padding:.6rem 1.1rem;font-size:.86rem;font-weight:600;text-decoration:none;cursor:pointer;}
+  .dl-btn:hover{background:#1B2A4A;}
+  .filter-bar{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.8rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.1rem;}
+  .filter-bar input,.filter-bar select{padding:.5rem .65rem;font-size:.88rem;border:1px solid var(--gray-300);border-radius:.4rem;background:#fff;color:var(--navy);}
+  .filter-bar input[type=text]{min-width:240px;}
+  .filter-bar .btn{padding:.5rem .9rem;font-size:.85rem;font-weight:600;border:0;border-radius:.4rem;cursor:pointer;}
+  .filter-bar .btn-apply{background:var(--orange);color:#fff;}
+  .filter-bar .btn-clear{background:var(--gray-100);color:var(--gray-600);text-decoration:none;}
+
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
+  table.summary{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap;}
+  table.summary thead th{position:sticky;top:0;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:10px 12px;text-align:center;border-bottom:2px solid #0F1B33;}
+  table.summary thead th.lft{text-align:left;}
+  table.summary tbody td{padding:9px 12px;border-bottom:1px solid var(--gray-100);text-align:center;color:var(--navy);}
+  table.summary tbody td.lft{text-align:left;}
+  table.summary tbody tr:hover{background:#f8fafc;}
+  table.summary tbody tr:nth-child(even){background:#fcfdff;}
+  table.summary tbody tr:nth-child(even):hover{background:#f8fafc;}
+  .cnum{color:var(--gray-400);font-weight:600;}
+  .cname a{color:var(--navy);font-weight:700;text-decoration:none;}
+  .cname a:hover{color:var(--orange);}
+  .creg{color:var(--gray-500);font-weight:600;font-size:12px;}
+  .st-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;}
+  .st-inprocess{background:#dbeafe;color:#1d4ed8;} .st-onhold{background:#fef3c7;color:#b45309;}
+  .st-dropped{background:#fee2e2;color:#b91c1c;} .st-completed{background:#dcfce7;color:#15803d;}
+  .st-other{background:var(--gray-100);color:var(--gray-600);}
+  .yes{color:#15803d;font-weight:700;} .no{color:var(--gray-400);font-weight:600;}
+  .yesk{background:#dcfce7;color:#15803d;font-weight:700;padding:2px 8px;border-radius:6px;}
+  .nok{color:var(--gray-400);font-weight:600;}
+  .empty{padding:3rem 1rem;text-align:center;color:var(--gray-500);}
+  .legend{margin-top:.7rem;font-size:12px;color:var(--gray-500);}
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+  <div>
+    <h1>Services Summary <span class="badge">AMC</span></h1>
+    <div class="sub">Which services have been delivered to each AMC client — <strong>Yes (n)</strong> shows how many times. Live from all AMC sections.</div>
+  </div>
+  <a class="dl-btn" href="/operations/australia/services-summary/download?q={{ q|urlencode }}&status={{ status_filter|urlencode }}&stage={{ stage_filter|urlencode }}">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+    Download Excel
+  </a>
+</div>
+
+<form class="filter-bar" method="GET" action="/operations/australia/services-summary">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name, reg no, mobile, email…">
+  <select name="status">
+    <option value="">All account statuses</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="stage">
+    <option value="">All stages</option>
+    {% for s in stages %}<option value="{{ s }}" {% if s == stage_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <button class="btn btn-apply" type="submit">Apply</button>
+  <a class="btn btn-clear" href="/operations/australia/services-summary">Clear</a>
+  <span style="margin-left:auto;color:var(--gray-500);font-size:.82rem;font-weight:600;">{{ rows|length }} client{{ '' if rows|length == 1 else 's' }}</span>
+</form>
+
+<div class="table-wrap">
+  <table class="summary">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th class="lft">Client Name</th>
+        <th class="lft">Reg No</th>
+        <th>Reg Date</th>
+        <th>Account Status</th>
+        <th>Current Stage</th>
+        {% for key, label, tables in service_columns %}<th>{{ label }}</th>{% endfor %}
+        <th>Welcome Email</th>
+        <th>Welcome Kit</th>
+        <th>Agreement</th>
+        <th>Refund Policy</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="cnum">{{ loop.index }}</td>
+        <td class="lft cname"><a href="/operations/australia/clients/{{ r.id }}">{{ r.name }}</a></td>
+        <td class="lft creg">{{ r.registration_number }}</td>
+        <td>{{ r.registration_date or '—' }}</td>
+        <td>
+          {% set s = r.account_status %}
+          {% set cls = 'st-inprocess' if s=='In Process' else 'st-onhold' if s=='On Hold' else 'st-completed' if s=='Completed' else 'st-dropped' if 'Drop' in s else 'st-other' %}
+          {% if s %}<span class="st-pill {{ cls }}">{{ s }}</span>{% else %}<span class="no">—</span>{% endif %}
+        </td>
+        <td>{{ r.current_stage or '—' }}</td>
+        {% for key, label, tables in service_columns %}
+          {% set n = r.services.get(key, 0) %}
+          <td>{% if n %}<span class="yes">Yes ({{ n }})</span>{% else %}<span class="no">No</span>{% endif %}</td>
+        {% endfor %}
+        <td>{% if r.welcome_email %}<span class="yes">Yes</span>{% else %}<span class="no">No</span>{% endif %}</td>
+        <td>{% if r.welcome_kit %}<span class="yesk">Yes</span>{% else %}<span class="nok">No</span>{% endif %}</td>
+        <td>{% if r.agreement %}<span class="yes">&#10003;</span>{% else %}<span class="no">No</span>{% endif %}</td>
+        <td>{% if r.refund_policy %}<span class="yes">&#10003;</span>{% else %}<span class="no">No</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ 10 + service_columns|length }}" class="empty">No AMC clients match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="legend">Tip: <strong>Yes (n)</strong> = service delivered n times · Welcome Kit is editable from each client's profile → Onboarding tab · use the filters, then <strong>Download Excel</strong> to export exactly what you see.</div>
+{% endblock %}
