@@ -27832,8 +27832,35 @@ def ops_plab_dashboard(client_id):
         logging.error(f"Referral query error for client {client_id}: {e}")
         referred_clients = []
     referred_count = len(referred_clients)
+
+    # ── Onboarding sync (founder 2026-08-06). Welcome Call/Email/Refund Policy
+    #    are standard for every PLAB client → always Yes. Service Agreement stays
+    #    real (Yes once a contract is uploaded/signed). Welcome Kit defaults Given.
+    onboarding = {'welcome_call': True, 'welcome_email': True,
+                  'agreement': False, 'refund_policy': True, 'welcome_kit': True}
+    try:
+        from routes.operations.australia import _yn_flag, _ensure_welcome_kit_col, _kit_given
+        _ensure_welcome_kit_col(conn)
+        krow = conn.execute("SELECT welcome_kit_given FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+        onboarding['welcome_kit'] = _kit_given(krow['welcome_kit_given'] if krow else None)
+        rnu = (reg or '').strip().upper()
+        contract_signed = False
+        rowreg = conn.execute(
+            "SELECT id, account_id FROM client_registrations "
+            "WHERE UPPER(TRIM(registration_number)) = ? AND client_submitted_at IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1", (rnu,)).fetchone()
+        if rowreg:
+            contract_signed = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+                "AND agreement_type = 'contract' LIMIT 1", (rowreg['account_id'], rowreg['id'])).fetchone())
+        onboarding['agreement'] = _yn_flag(client['service_agreement']) or bool(client['contract_path']) or contract_signed
+    except Exception as e:
+        logging.warning(f"PLAB onboarding sync ({reg}): {e}")
+        try: conn.rollback()
+        except Exception: pass
+
     conn.close()
-    return render_template('ops_plab_dashboard.html', client=client,
+    return render_template('ops_plab_dashboard.html', client=client, onboarding=onboarding,
                            referred_clients=referred_clients, referred_count=referred_count,
                            amount_paid=amount_paid, gst_paid=gst_paid,
                            total_paid=total_paid, balance=balance, payment_pct=payment_pct,
@@ -27868,6 +27895,237 @@ def ops_plab_by_reg(reg):
         flash(f'PLAB client {reg} not found.', 'error')
         return redirect(url_for('ops_plab_list'))
     return redirect(url_for('ops_plab_dashboard', client_id=row['id']))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PLAB / UK "Services Summary" — clone of the AMC sheet (founder 2026-08-06).
+# Spreadsheet-style, one row per PLAB client, Yes(n)/No per service rendered,
+# + Welcome Email / Welcome Kit / Agreement / Refund Policy. Reads live from
+# all PLAB (pathway='plab') ops tables. Reuses the AMC helpers.
+# ══════════════════════════════════════════════════════════════════════════
+
+PLAB_SERVICE_COLUMNS = [
+    ('gmc',             'GMC Registration',       ['ops_gmc_registration']),
+    ('epic',            'EPIC Registration',      ['ops_epic_registration']),
+    ('coaching',        'Coaching & Training',    ['ops_coaching']),
+    ('test_bookings',   'Test Bookings',          ['ops_test_bookings']),
+    ('english_logins',  'English Logins',         ['ops_english_logins']),
+    ('online_courses',  'Online Courses',         ['ops_online_courses']),
+    ('subscriptions',   'Online Subscriptions',   ['ops_online_subscriptions']),
+    ('research',        'Research & Publication', ['ops_research_publication']),
+    ('webinars',        'Webinars & Conferences', ['ops_webinars_conferences']),
+    ('mentorship',      'Mentorship',             ['ops_mentorship']),
+    ('job_stage',       'Job Stage',              ['ops_job_stage']),
+    ('uk_visa',         'UK Visa & Travel',       ['ops_uk_visa_travel']),
+    ('uk_cab',          'UK Cab Bookings',        ['ops_uk_cab_bookings']),
+    ('uk_observerships','UK Observerships',       ['ops_uk_observerships']),
+    ('ngo',             'NGO Activities',         ['ops_ngo_activities']),
+    ('certificates',    'Certificates',           []),  # special: plab_client_documents
+]
+
+
+def _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefix):
+    """Shared styled-xlsx builder for the per-pathway Services Summary export."""
+    import io
+    from datetime import datetime
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
+    def _xs(v):
+        return ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
+
+    wb = Workbook(); ws = wb.active; ws.title = sheet_title[:31]
+    headers = ['#', 'Client Name', 'Registration Number', 'Registration Date',
+               'Account Status', 'Current Stage']
+    headers += [label for _k, label, _t in service_columns]
+    headers += ['Welcome Email', 'Welcome Kit', 'Agreement', 'Refund Policy']
+    ws.append(headers)
+    for i, r in enumerate(rows, 1):
+        line = [i, _xs(r['name']), _xs(r['registration_number']), _xs(r['registration_date']),
+                _xs(r['account_status']), _xs(r['current_stage'])]
+        for key, _label, _t in service_columns:
+            n = r['services'].get(key, 0)
+            line.append(f"Yes ({n})" if n else "No")
+        line += ['Yes' if r['welcome_email'] else 'No', 'Yes' if r['welcome_kit'] else 'No',
+                 'Yes' if r['agreement'] else 'No', 'Yes' if r['refund_policy'] else 'No']
+        ws.append(line)
+    navy = PatternFill('solid', fgColor='0F1B33')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = navy
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.freeze_panes = 'C2'
+    ws.auto_filter.ref = ws.dimensions
+    widths = [5, 26, 20, 15, 14, 20] + [15] * len(service_columns) + [14, 12, 12, 12]
+    for idx, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = w
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    fn = f"{fn_prefix}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=fn)
+
+
+def _plab_services_summary_data(conn, search='', status_filter='', stage_filter=''):
+    """Return (rows, statuses, stages) for the PLAB/UK Services Summary + export."""
+    from routes.operations.australia import _yn_flag, _ensure_welcome_kit_col, _kit_given
+    _ensure_welcome_kit_col(conn)
+
+    sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='plab' "
+    params = []
+    if status_filter:
+        sql += " AND account_status = ? "; params.append(status_filter)
+    if stage_filter:
+        sql += " AND current_stage = ? "; params.append(stage_filter)
+    if search:
+        sql += (" AND (first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+                " OR mobile ILIKE ? OR email ILIKE ? "
+                " OR (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?) ")
+        params.extend([f'%{search}%'] * 6)
+    sql += (" ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''),'[^0-9]','','g'),'')"
+            "::bigint DESC NULLS LAST, id DESC ")
+    clients = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    def _norm(s):
+        return (s or '').strip().upper()
+
+    service_counts = {}
+    for key, _label, tables in PLAB_SERVICE_COLUMNS:
+        if not tables:
+            continue
+        merged = {}
+        for table in tables:
+            try:
+                for r in conn.execute(
+                    f"""SELECT UPPER(TRIM(registration_number)) AS k, COUNT(*) AS c
+                          FROM {table} WHERE COALESCE(pathway,'plab')='plab'
+                         GROUP BY UPPER(TRIM(registration_number))""").fetchall():
+                    if r['k']:
+                        merged[r['k']] = merged.get(r['k'], 0) + int(r['c'])
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        service_counts[key] = merged
+
+    # Certificates (special) — count of certificate documents per client (by id).
+    cert_counts = {}
+    try:
+        for r in conn.execute(
+            "SELECT client_id AS cid, COUNT(*) AS c FROM plab_client_documents "
+            "WHERE LOWER(COALESCE(doc_category,'')) = 'certificate' GROUP BY client_id").fetchall():
+            if r['cid'] is not None:
+                cert_counts[r['cid']] = int(r['c'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    # Service Agreement from the real record (uploaded contract / digital sign).
+    contract_regs = set()
+    try:
+        for r in conn.execute(
+            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
+                 FROM client_agreements ca
+                 JOIN client_registrations cr ON cr.id = ca.registration_id
+                WHERE ca.agreement_type = 'contract'""").fetchall():
+            if r['rn']: contract_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    rows = []
+    for c in clients:
+        rn = _norm(c.get('registration_number'))
+        name = ' '.join(f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".split())
+        services = {}
+        for key, _l, tables in PLAB_SERVICE_COLUMNS:
+            services[key] = cert_counts.get(c.get('id'), 0) if key == 'certificates' else service_counts.get(key, {}).get(rn, 0)
+        rows.append({
+            'id': c.get('id'),
+            'registration_number': c.get('registration_number') or '',
+            'name': name or '—',
+            'registration_date': c.get('registration_date') or '',
+            'account_status': c.get('account_status') or '',
+            'current_stage': c.get('current_stage') or '',
+            'services': services,
+            # Standard for every PLAB client → always Yes (refund policy goes with the kit).
+            'welcome_email': True,
+            'refund_policy': True,
+            'welcome_kit': _kit_given(c.get('welcome_kit_given')),
+            # Agreement reflects real data — an ops-uploaded contract flips it to Yes.
+            'agreement': _yn_flag(c.get('service_agreement')) or bool(c.get('contract_path')) or (rn in contract_regs),
+        })
+
+    statuses = sorted({r['account_status'] for r in rows if r['account_status']})
+    stages = sorted({r['current_stage'] for r in rows if r['current_stage']})
+    return rows, statuses, stages
+
+
+@app.route('/operations/plab/services-summary')
+@admin_required
+def ops_plab_services_summary():
+    """PLAB/UK Services Summary — per-client services-rendered sheet."""
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    rows, statuses, stages = [], [], []
+    try:
+        rows, statuses, stages = _plab_services_summary_data(conn, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_summary: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    return render_template(
+        'ops_plab_services_summary.html',
+        rows=rows, statuses=statuses, stages=stages,
+        service_columns=PLAB_SERVICE_COLUMNS,
+        q=search, status_filter=status_filter, stage_filter=stage_filter,
+        pathway_name='UK / PLAB Pathway',
+        active_ops_page='plab-services-summary',
+    )
+
+
+@app.route('/operations/plab/services-summary/download')
+@admin_required
+def ops_plab_services_summary_download():
+    """Excel download of the PLAB/UK Services Summary (respects current filters)."""
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    try:
+        rows, _s, _g = _plab_services_summary_data(conn, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_summary_download: {e}")
+        rows = []
+    conn.close()
+    return _services_summary_xlsx_response(rows, PLAB_SERVICE_COLUMNS, 'PLAB Services', 'PLAB_UK_Services_Summary')
+
+
+@app.route('/operations/plab/clients/<int:client_id>/welcome-kit', methods=['POST'])
+@admin_required
+def ops_plab_welcome_kit_toggle(client_id):
+    """Toggle a PLAB client's Welcome-Kit given/not-given flag (from the profile)."""
+    from routes.operations.australia import _ensure_welcome_kit_col
+    conn = get_db()
+    _ensure_welcome_kit_col(conn)
+    val = 1 if (request.form.get('given') == '1') else 0
+    try:
+        conn.execute(
+            "UPDATE plab_clients SET welcome_kit_given = ? "
+            "WHERE id = ? AND COALESCE(pathway,'plab')='plab'", (val, client_id))
+        conn.commit()
+        flash('Welcome kit marked as ' + ('Given.' if val else 'Not given.'), 'success')
+    except Exception as e:
+        logging.warning(f"ops_plab_welcome_kit_toggle: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not update welcome kit status.', 'error')
+    conn.close()
+    nxt = request.form.get('next') or url_for('ops_plab_dashboard', client_id=client_id)
+    return redirect(nxt)
 
 
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
@@ -41729,6 +41987,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'PLAB / UK Pathway operational sub-areas. Grant these to staff supporting PLAB clients.',
         'sub_sections': [
             ('dashboard',         'Pathway Dashboard',       'Overview stats for PLAB clients'),
+            ('services_summary',  'Services Summary',        'Per-client PLAB/UK services-rendered overview + Excel export'),
             ('registration',      'Registration',            'PLAB client registration list + full profile'),
             ('onboarding',        'Onboarding',              'Welcome kit + onboarding workflow'),
             ('call_notes',        'Call Notes',              'PLAB call notes + follow-up tracker'),
@@ -45563,6 +45822,9 @@ ACCESS_ROUTE_MAP = {
     'ops_referrals_report':         _ap('plab_pathway', 'registration'),
 
     # ── Operations: PLAB Pathway ──────────────────────────────────────────
+    'ops_plab_services_summary':          _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_summary_download': _ap('plab_pathway', 'services_summary'),
+    'ops_plab_welcome_kit_toggle':        _ap('plab_pathway', 'registration', 'edit'),
     'ops_plab_list':                _ap('plab_pathway', 'registration'),
     'ops_plab_dashboard':           _ap('plab_pathway', 'registration'),
     'ops_plab_add':                 _ap('plab_pathway', 'registration', 'add'),

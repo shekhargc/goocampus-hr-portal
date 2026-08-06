@@ -961,6 +961,12 @@
                 <span class="ops-nav-text">Pathway Dashboard</span>
             </a>
             {% endif %}
+            {% if can_access('plab_pathway','services_summary','view') %}
+            <a href="/operations/plab/services-summary" class="ops-nav-item {% if active_ops_page == 'plab-services-summary' %}active{% endif %}" data-tooltip="Services Summary">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H3v10h6V11zM15 3H9v18h6V3zM21 7h-6v14h6V7z"/></svg></span>
+                <span class="ops-nav-text">Services Summary</span>
+            </a>
+            {% endif %}
 
             <!-- Client Management -->
             <div class="ops-nav-group-label">Client Management</div>
