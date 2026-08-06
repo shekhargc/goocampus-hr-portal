@@ -492,35 +492,28 @@ def ops_australia_client_detail(client_id):
     except Exception:
         package_services = []
 
-    # ── Onboarding sync: reflect the client's REAL agreement/policy/email/kit
-    #    status, not just the legacy Zoho columns. (founder 2026-08-06)
-    onboarding = {'welcome_call': False, 'welcome_email': False,
-                  'agreement': False, 'refund_policy': False, 'welcome_kit': True}
+    # ── Onboarding sync (founder 2026-08-06). For AMC, Welcome Call, Welcome
+    #    Email and Refund Policy are standard for every client → always Yes
+    #    (refund policy is issued with the welcome kit). Service Agreement stays
+    #    real: Yes only when there's a signed/uploaded contract — so an
+    #    ops-uploaded agreement flips it to Yes. Welcome Kit defaults Given.
+    onboarding = {'welcome_call': True, 'welcome_email': True,
+                  'agreement': False, 'refund_policy': True, 'welcome_kit': True}
     try:
         _ensure_welcome_kit_col(conn)
         krow = conn.execute("SELECT welcome_kit_given FROM plab_clients WHERE id = ?", (client['id'],)).fetchone()
         onboarding['welcome_kit'] = _kit_given(krow['welcome_kit_given'] if krow else None)
         rn = (reg or '').strip().upper()
+        contract_signed = False
         rowreg = conn.execute(
             "SELECT id, account_id FROM client_registrations "
             "WHERE UPPER(TRIM(registration_number)) = ? AND client_submitted_at IS NOT NULL "
             "ORDER BY id DESC LIMIT 1", (rn,)).fetchone()
-        contract_signed = refund_signed = False
         if rowreg:
             contract_signed = bool(conn.execute(
                 "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
                 "AND agreement_type = 'contract' LIMIT 1", (rowreg['account_id'], rowreg['id'])).fetchone())
-            refund_signed = bool(conn.execute(
-                "SELECT 1 FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' LIMIT 1",
-                (rowreg['account_id'],)).fetchone())
         onboarding['agreement'] = _yn_flag(client.get('service_agreement')) or bool(client.get('contract_path')) or contract_signed
-        onboarding['refund_policy'] = _yn_flag(client.get('refund_policy')) or refund_signed
-        orow = conn.execute(
-            "SELECT welcome_email_sent, welcome_call_confirmed FROM client_onboarding WHERE client_id = ? LIMIT 1",
-            (client['id'],)).fetchone()
-        onboarding['welcome_email'] = _yn_flag(client.get('welcome_mail')) or bool(orow['welcome_email_sent'] if orow else False)
-        onboarding['welcome_call'] = (_yn_flag(client.get('welcome_call_date')) or _yn_flag(client.get('welcome_call_by'))
-                                      or bool(orow['welcome_call_confirmed'] if orow else False))
     except Exception as e:
         logging.warning(f"AMC onboarding sync ({reg}): {e}")
         try: conn.rollback()
@@ -864,9 +857,10 @@ def _amc_services_summary_data(conn, search='', status_filter='', stage_filter='
                 except Exception: pass
         service_counts[key] = merged
 
-    # ── Agreement / refund policy from the REAL digital-sign data (not just the
-    #    legacy Zoho columns), keyed by registration_number.
-    contract_regs, refund_regs = set(), set()
+    # ── Service Agreement from the REAL data (legacy column, an uploaded
+    #    contract file, or the digital-sign record) so an ops-uploaded agreement
+    #    flips this to Yes. Keyed by registration_number.
+    contract_regs = set()
     try:
         for r in conn.execute(
             """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
@@ -874,28 +868,6 @@ def _amc_services_summary_data(conn, search='', status_filter='', stage_filter='
                  JOIN client_registrations cr ON cr.id = ca.registration_id
                 WHERE ca.agreement_type = 'contract'""").fetchall():
             if r['rn']: contract_regs.add(r['rn'])
-    except Exception:
-        try: conn.rollback()
-        except Exception: pass
-    try:
-        for r in conn.execute(
-            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
-                 FROM client_agreements ca
-                 JOIN client_registrations cr ON cr.account_id = ca.account_id
-                WHERE ca.agreement_type = 'refund_policy'""").fetchall():
-            if r['rn']: refund_regs.add(r['rn'])
-    except Exception:
-        try: conn.rollback()
-        except Exception: pass
-
-    # ── Welcome email from the live onboarding table (fallback: legacy column)
-    onb_email = set()
-    try:
-        for r in conn.execute(
-            """SELECT UPPER(TRIM(p.registration_number)) AS rn, o.welcome_email_sent AS em
-                 FROM client_onboarding o JOIN plab_clients p ON p.id = o.client_id
-                WHERE COALESCE(p.pathway,'plab')='australia'""").fetchall():
-            if r['rn'] and r['em']: onb_email.add(r['rn'])
     except Exception:
         try: conn.rollback()
         except Exception: pass
@@ -913,10 +885,14 @@ def _amc_services_summary_data(conn, search='', status_filter='', stage_filter='
             'account_status': c.get('account_status') or '',
             'current_stage': c.get('current_stage') or '',
             'services': services,
-            'welcome_email': _yn_flag(c.get('welcome_mail')) or (rn in onb_email),
+            # Welcome Email & Refund Policy are standard for every AMC client
+            # (refund policy goes out with the welcome kit) → always Yes.
+            'welcome_email': True,
+            'refund_policy': True,
+            # Welcome Kit defaults Given; ops toggles off exceptions.
             'welcome_kit': _kit_given(c.get('welcome_kit_given')),
+            # Agreement reflects real data — an ops-uploaded contract flips it to Yes.
             'agreement': _yn_flag(c.get('service_agreement')) or bool(c.get('contract_path')) or (rn in contract_regs),
-            'refund_policy': _yn_flag(c.get('refund_policy')) or (rn in refund_regs),
         })
 
     statuses = sorted({r['account_status'] for r in rows if r['account_status']})
