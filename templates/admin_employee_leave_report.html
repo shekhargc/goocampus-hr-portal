@@ -210,7 +210,7 @@
             {% endfor %}
             <tr style="background: var(--navy); color: white;">
                 <td style="font-weight: 700; color: white; border: none;">FY Total</td>
-                <td style="text-align: center; font-weight: 700; color: white; border: none;">25/yr</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ monthly_leave_data|sum(attribute='monthly_alloc') }}/yr</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_annual }}</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_sick }}</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_casual }}</td>

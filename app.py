@@ -11349,10 +11349,11 @@ def my_leave_report():
     monthly_leave_data = []
     running_balance = float(carry_forward or 0)  # accumulated surplus (>= 0)
     current_available = running_balance
+    _acc_meta = _leave_accrual_meta(_fetch_leave_emp(conn, user['id']), fy_year)  # probation gate
     for m in range(12):
         report_month = ((m + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
-        m_alloc = get_monthly_alloc(report_month)
+        m_alloc = _emp_month_alloc(_acc_meta, report_year, report_month)
 
         month_data = conn.execute('''
             SELECT SUM(days) as total_days,
@@ -14994,6 +14995,9 @@ def admin_employee_leave_report():
         if selected_emp:
             carry_forward = selected_emp['carry_forward'] or 0
             total_allocation = _leave_annual_entitlement(selected_emp_id, fy_year)
+            # Same probation/permanency gate as the accrual functions, so the
+            # month-wise breakdown matches the 0-during-probation headline.
+            _acc_meta = _leave_accrual_meta(dict(selected_emp), fy_year)
 
             pending_count = conn.execute(
                 "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
@@ -15008,7 +15012,7 @@ def admin_employee_leave_report():
             for m in range(12):
                 report_month = ((m + 3) % 12) + 1
                 report_year = fy_year if report_month >= 4 else fy_year + 1
-                m_alloc = get_monthly_alloc(report_month)
+                m_alloc = _emp_month_alloc(_acc_meta, report_year, report_month)
 
                 month_data = conn.execute('''
                     SELECT SUM(days) as total_days,
@@ -15399,10 +15403,11 @@ def reports_quarterly():
     current_available = running_balance
     annual_total = sick_total = casual_total = 0
     total_deduction = 0.0
+    _acc_meta = _leave_accrual_meta(_fetch_leave_emp(conn, user['id']), fy_year)  # probation gate
 
     for qdef in quarter_defs:
         q_annual = q_sick = q_casual = q_total = q_deduction = 0
-        q_alloc = sum(get_monthly_alloc(m) for m in qdef['months'])
+        q_alloc = sum(_emp_month_alloc(_acc_meta, fy_year if m >= 4 else fy_year + 1, m) for m in qdef['months'])
         month_details = []
 
         for m in qdef['months']:
@@ -15423,7 +15428,7 @@ def reports_quarterly():
             m_casual = mdata['casual'] or 0
 
             # Per-month accrual + accumulation; deficit never carries.
-            available_this = running_balance + get_monthly_alloc(m)
+            available_this = running_balance + _emp_month_alloc(_acc_meta, yr, m)
             m_deduction = max(0.0, m_total - available_this)
             running_balance = round(max(0.0, available_this - m_total), 2)
             if (yr, m) <= (today.year, today.month):
@@ -15498,10 +15503,11 @@ def reports_annual():
     monthly_leave_data = []
     running_balance = float(carry_forward or 0)
     current_available = running_balance
+    _acc_meta = _leave_accrual_meta(_fetch_leave_emp(conn, user['id']), fy_year)  # probation gate
     for m_idx in range(12):
         report_month = ((m_idx + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
-        m_alloc = get_monthly_alloc(report_month)
+        m_alloc = _emp_month_alloc(_acc_meta, report_year, report_month)
 
         month_data = conn.execute('''
             SELECT SUM(days) as total_days,
