@@ -27924,8 +27924,9 @@ PLAB_SERVICE_COLUMNS = [
 ]
 
 
-def _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefix):
-    """Shared styled-xlsx builder for the per-pathway Services Summary export."""
+def _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefix, include_kit=True):
+    """Shared styled-xlsx builder for the per-pathway Services Summary export.
+    include_kit=False omits the Welcome Kit column (Consulting/UAE/Portfolio have no kit)."""
     import io
     from datetime import datetime
     from openpyxl import Workbook
@@ -27937,10 +27938,11 @@ def _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefi
         return ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
 
     wb = Workbook(); ws = wb.active; ws.title = sheet_title[:31]
+    tail_headers = ['Welcome Email'] + (['Welcome Kit'] if include_kit else []) + ['Agreement', 'Refund Policy']
     headers = ['#', 'Client Name', 'Registration Number', 'Registration Date',
                'Account Status', 'Current Stage']
     headers += [label for _k, label, _t in service_columns]
-    headers += ['Welcome Email', 'Welcome Kit', 'Agreement', 'Refund Policy']
+    headers += tail_headers
     ws.append(headers)
     for i, r in enumerate(rows, 1):
         line = [i, _xs(r['name']), _xs(r['registration_number']), _xs(r['registration_date']),
@@ -27948,8 +27950,10 @@ def _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefi
         for key, _label, _t in service_columns:
             n = r['services'].get(key, 0)
             line.append(f"Yes ({n})" if n else "No")
-        line += ['Yes' if r['welcome_email'] else 'No', 'Yes' if r['welcome_kit'] else 'No',
-                 'Yes' if r['agreement'] else 'No', 'Yes' if r['refund_policy'] else 'No']
+        line.append('Yes' if r['welcome_email'] else 'No')
+        if include_kit:
+            line.append('Yes' if r.get('welcome_kit') else 'No')
+        line += ['Yes' if r['agreement'] else 'No', 'Yes' if r['refund_policy'] else 'No']
         ws.append(line)
     navy = PatternFill('solid', fgColor='0F1B33')
     for cell in ws[1]:
@@ -27958,7 +27962,7 @@ def _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefi
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     ws.freeze_panes = 'C2'
     ws.auto_filter.ref = ws.dimensions
-    widths = [5, 26, 20, 15, 14, 20] + [15] * len(service_columns) + [14, 12, 12, 12]
+    widths = [5, 26, 20, 15, 14, 20] + [15] * len(service_columns) + [12] * len(tail_headers)
     for idx, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(idx)].width = w
     out = io.BytesIO(); wb.save(out); out.seek(0)
@@ -28126,6 +28130,239 @@ def ops_plab_welcome_kit_toggle(client_id):
     conn.close()
     nxt = request.form.get('next') or url_for('ops_plab_dashboard', client_id=client_id)
     return redirect(nxt)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Generic Services Summary for the kit-LESS pathways — Consulting, UAE,
+# Portfolio (founder 2026-08-06). No Welcome Kit column. OLD (Zoho-imported)
+# clients show Welcome Email/Refund = Yes; NEW (portal-registered) clients show
+# the real live signals. Agreement is always the real record (upload syncs).
+# ══════════════════════════════════════════════════════════════════════════
+
+CONSULTING_SERVICE_COLUMNS = [
+    ('gmc',              'GMC Registration',       ['ops_gmc_registration']),
+    ('epic',             'EPIC Verification',      ['ops_epic_registration']),
+    ('amc_registration', 'AMC Registration',       ['ops_amc_registration']),
+    ('mentorship',       'Mentorship',             ['ops_mentorship']),
+    ('training',         'Training',               ['ops_coaching']),
+    ('test_bookings',    'Test Bookings',          ['ops_test_bookings']),
+    ('online_courses',   'Online Courses',         ['ops_online_courses']),
+    ('online_subscriptions', 'Online Subscriptions', ['ops_online_subscriptions']),
+    ('research',         'Research & Publication', ['ops_research_publication']),
+    ('webinars',         'Webinars & Conferences', ['ops_webinars_conferences']),
+]
+UAE_SERVICE_COLUMNS = [
+    ('self_assessment',    'Self Assessment',    ['ops_self_assessment']),
+    ('eligibility_letter', 'Eligibility Letter', ['ops_eligibility_letter']),
+    ('data_flow',          'Data Flow',          ['ops_data_flow']),
+]
+PORTFOLIO_SERVICE_COLUMNS = [
+    ('research', 'Research & Publications',  ['ops_research_publication']),
+    ('courses',  'Courses & Certifications', ['ops_online_courses']),
+    ('webinars', 'Webinars & Conferences',   ['ops_webinars_conferences']),
+]
+
+
+def _pathway_services_summary_data(conn, pathway, service_columns, search='', status_filter='', stage_filter=''):
+    """Generic per-client services summary for the kit-less pathways.
+
+    Old (Zoho) clients → Welcome Email/Refund Policy = Yes (assume done, as PLAB/AMC).
+    New (portal-registered) clients → real live signals. Agreement always real.
+    `pathway` is a trusted internal constant (consulting/uae/portfolio), inlined safely.
+    """
+    from routes.operations.australia import _yn_flag
+    p = pathway
+
+    sql = f"SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='{p}' "
+    params = []
+    if status_filter:
+        sql += " AND account_status = ? "; params.append(status_filter)
+    if stage_filter:
+        sql += " AND current_stage = ? "; params.append(stage_filter)
+    if search:
+        sql += (" AND (first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+                " OR mobile ILIKE ? OR email ILIKE ? "
+                " OR (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?) ")
+        params.extend([f'%{search}%'] * 6)
+    sql += (" ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''),'[^0-9]','','g'),'')"
+            "::bigint DESC NULLS LAST, id DESC ")
+    clients = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    def _norm(s):
+        return (s or '').strip().upper()
+
+    service_counts = {}
+    for key, _label, tables in service_columns:
+        if not tables:
+            continue
+        merged = {}
+        for table in tables:
+            try:
+                for r in conn.execute(
+                    f"""SELECT UPPER(TRIM(registration_number)) AS k, COUNT(*) AS c
+                          FROM {table} WHERE COALESCE(pathway,'plab')='{p}'
+                         GROUP BY UPPER(TRIM(registration_number))""").fetchall():
+                    if r['k']:
+                        merged[r['k']] = merged.get(r['k'], 0) + int(r['c'])
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        service_counts[key] = merged
+
+    # NEW (portal) clients = reg numbers with a submitted portal registration.
+    new_regs = set()
+    try:
+        for r in conn.execute(
+            "SELECT DISTINCT UPPER(TRIM(registration_number)) AS rn FROM client_registrations "
+            "WHERE client_submitted_at IS NOT NULL").fetchall():
+            if r['rn']: new_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    # Real Agreement / Refund signatures (digital sign), by registration_number.
+    contract_regs, refund_regs = set(), set()
+    try:
+        for r in conn.execute(
+            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
+                 FROM client_agreements ca JOIN client_registrations cr ON cr.id = ca.registration_id
+                WHERE ca.agreement_type = 'contract'""").fetchall():
+            if r['rn']: contract_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    try:
+        for r in conn.execute(
+            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
+                 FROM client_agreements ca JOIN client_registrations cr ON cr.account_id = ca.account_id
+                WHERE ca.agreement_type = 'refund_policy'""").fetchall():
+            if r['rn']: refund_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    # Live welcome email (and call) from the onboarding table, for this pathway.
+    onb_email = set()
+    try:
+        for r in conn.execute(
+            f"""SELECT UPPER(TRIM(p2.registration_number)) AS rn, o.welcome_email_sent AS em
+                  FROM client_onboarding o JOIN plab_clients p2 ON p2.id = o.client_id
+                 WHERE COALESCE(p2.pathway,'plab')='{p}'""").fetchall():
+            if r['rn'] and r['em']: onb_email.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    rows = []
+    for c in clients:
+        rn = _norm(c.get('registration_number'))
+        name = ' '.join(f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".split())
+        services = {key: service_counts.get(key, {}).get(rn, 0) for key, _l, _t in service_columns}
+        is_new = rn in new_regs
+        agreement = _yn_flag(c.get('service_agreement')) or bool(c.get('contract_path')) or (rn in contract_regs)
+        if is_new:
+            # New portal client → reflect reality (live sync)
+            welcome_email = _yn_flag(c.get('welcome_mail')) or (rn in onb_email)
+            refund_policy = _yn_flag(c.get('refund_policy')) or (rn in refund_regs)
+        else:
+            # Legacy Zoho client → standard-done
+            welcome_email = True
+            refund_policy = True
+        rows.append({
+            'id': c.get('id'),
+            'registration_number': c.get('registration_number') or '',
+            'name': name or '—',
+            'registration_date': c.get('registration_date') or '',
+            'account_status': c.get('account_status') or '',
+            'current_stage': c.get('current_stage') or '',
+            'services': services,
+            'welcome_email': welcome_email,
+            'agreement': agreement,
+            'refund_policy': refund_policy,
+            'is_new': is_new,
+        })
+
+    statuses = sorted({r['account_status'] for r in rows if r['account_status']})
+    stages = sorted({r['current_stage'] for r in rows if r['current_stage']})
+    return rows, statuses, stages
+
+
+def _render_pathway_summary(pathway_slug, pathway_name, badge, service_columns, active_slug):
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    rows, statuses, stages = [], [], []
+    try:
+        rows, statuses, stages = _pathway_services_summary_data(conn, pathway_slug, service_columns, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"services summary ({pathway_slug}): {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    return render_template(
+        'ops_pathway_services_summary.html',
+        rows=rows, statuses=statuses, stages=stages, service_columns=service_columns,
+        q=search, status_filter=status_filter, stage_filter=stage_filter,
+        pathway_slug=pathway_slug, pathway_name=pathway_name, pathway_badge=badge,
+        active_pathway=pathway_slug, active_ops_page=active_slug,
+    )
+
+
+def _download_pathway_summary(pathway_slug, service_columns, fn_prefix, sheet_title):
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    try:
+        rows, _s, _g = _pathway_services_summary_data(conn, pathway_slug, service_columns, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"services summary download ({pathway_slug}): {e}")
+        rows = []
+    conn.close()
+    return _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefix, include_kit=False)
+
+
+@app.route('/operations/consulting/services-summary')
+@admin_required
+def ops_consulting_services_summary():
+    return _render_pathway_summary('consulting', 'Standard Consulting', 'Consulting',
+                                   CONSULTING_SERVICE_COLUMNS, 'consulting-services-summary')
+
+
+@app.route('/operations/consulting/services-summary/download')
+@admin_required
+def ops_consulting_services_summary_download():
+    return _download_pathway_summary('consulting', CONSULTING_SERVICE_COLUMNS,
+                                     'Consulting_Services_Summary', 'Consulting Services')
+
+
+@app.route('/operations/uae/services-summary')
+@admin_required
+def ops_uae_services_summary():
+    return _render_pathway_summary('uae', 'UAE Pathway', 'UAE',
+                                   UAE_SERVICE_COLUMNS, 'uae-services-summary')
+
+
+@app.route('/operations/uae/services-summary/download')
+@admin_required
+def ops_uae_services_summary_download():
+    return _download_pathway_summary('uae', UAE_SERVICE_COLUMNS,
+                                     'UAE_Services_Summary', 'UAE Services')
+
+
+@app.route('/operations/portfolio/services-summary')
+@admin_required
+def ops_portfolio_services_summary():
+    return _render_pathway_summary('portfolio', 'Portfolio Pathway', 'Portfolio',
+                                   PORTFOLIO_SERVICE_COLUMNS, 'portfolio-services-summary')
+
+
+@app.route('/operations/portfolio/services-summary/download')
+@admin_required
+def ops_portfolio_services_summary_download():
+    return _download_pathway_summary('portfolio', PORTFOLIO_SERVICE_COLUMNS,
+                                     'Portfolio_Services_Summary', 'Portfolio Services')
 
 
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
@@ -42042,6 +42279,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'Standard Consulting operational sub-areas. Houses AMC / UAE / USA / UK Consulting clients in one pathway. Grant these to staff supporting consulting clients.',
         'sub_sections': [
             ('dashboard',         'Pathway Dashboard',  'Overview stats for consulting clients'),
+            ('services_summary',  'Services Summary',   'Per-client Consulting services-rendered overview + Excel export'),
             ('registration',      'Registration',       'Consulting client registration list + full profile'),
             ('academic',          'Academic Details',   'Consulting client academic records'),
             ('documents',         'Documents',          'Consulting client document tracker'),
@@ -42067,6 +42305,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'UAE Pathway operational sub-areas. Houses UAE Services clients (reg prefix GCUAE). Grant these to staff supporting UAE clients.',
         'sub_sections': [
             ('dashboard',        'Pathway Dashboard',  'Overview stats for UAE clients'),
+            ('services_summary', 'Services Summary',   'Per-client UAE services-rendered overview + Excel export'),
             ('registration',     'Registration',       'UAE client registration list + full profile'),
             ('documents',        'Documents',          'UAE client document tracker'),
             ('payments',         'Payments',           'UAE payment records'),
@@ -42083,6 +42322,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'Portfolio Pathway operational sub-areas (lightweight). Houses Portfolio Services clients. Grant these to staff supporting portfolio clients.',
         'sub_sections': [
             ('dashboard',     'Pathway Dashboard',  'Overview stats for portfolio clients'),
+            ('services_summary','Services Summary', 'Per-client Portfolio services-rendered overview + Excel export'),
             ('registration',  'Registration',       'Portfolio client registration list + full profile'),
             ('payments',      'Payments',           'Portfolio payment records'),
             ('documents',     'Documents',          'Portfolio client document tracker'),
@@ -45555,6 +45795,8 @@ ACCESS_ROUTE_MAP = {
     'internal_transfer_return_to_sales':            _ap('clients', 'internal_transfers', 'edit'),
     # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
     'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
+    'ops_consulting_services_summary':              _ap('consulting_pathway', 'services_summary'),
+    'ops_consulting_services_summary_download':     _ap('consulting_pathway', 'services_summary'),
     'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
     'ops_consulting_client_detail':                 _ap('consulting_pathway', 'registration'),
     'ops_consulting_client_edit_page':              _ap('consulting_pathway', 'registration', 'edit'),
@@ -45641,6 +45883,8 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_research_add_save':             _ap('consulting_pathway', 'research', 'edit'),
     # ── Operations: UAE Pathway (mirrors Portfolio + 3 new sections) ──
     'ops_uae_pathway':                      _ap('uae_pathway', 'dashboard'),
+    'ops_uae_services_summary':             _ap('uae_pathway', 'services_summary'),
+    'ops_uae_services_summary_download':    _ap('uae_pathway', 'services_summary'),
     'ops_uae_clients_list':                 _ap('uae_pathway', 'registration'),
     'ops_uae_client_detail':                _ap('uae_pathway', 'registration'),
     'ops_uae_client_by_reg':                _ap('uae_pathway', 'registration'),
@@ -45680,6 +45924,8 @@ ACCESS_ROUTE_MAP = {
     'ops_uae_data_flow_add_save':           _ap('uae_pathway', 'data_flow', 'edit'),
     # ── Operations: Portfolio Pathway (Phase 4 lightweight) ────────────
     'ops_portfolio_pathway':                _ap('portfolio_pathway', 'dashboard'),
+    'ops_portfolio_services_summary':          _ap('portfolio_pathway', 'services_summary'),
+    'ops_portfolio_services_summary_download': _ap('portfolio_pathway', 'services_summary'),
     'ops_portfolio_clients_list':           _ap('portfolio_pathway', 'registration'),
     'ops_portfolio_client_detail':          _ap('portfolio_pathway', 'registration'),
     'ops_portfolio_client_by_reg':          _ap('portfolio_pathway', 'registration'),

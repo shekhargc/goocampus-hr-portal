@@ -585,6 +585,12 @@
                 <span class="ops-nav-text">Pathway Dashboard</span>
             </a>
             {% endif %}
+            {% if can_access('consulting_pathway','services_summary','view') %}
+            <a href="/operations/consulting/services-summary" class="ops-nav-item {% if active_ops_page == 'consulting-services-summary' %}active{% endif %}" data-tooltip="Services Summary">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H3v10h6V11zM15 3H9v18h6V3zM21 7h-6v14h6V7z"/></svg></span>
+                <span class="ops-nav-text">Services Summary</span>
+            </a>
+            {% endif %}
 
             <!-- Client Management -->
             <div class="ops-nav-group-label">Client Management</div>
@@ -725,6 +731,12 @@
                 <span class="ops-nav-text">Pathway Dashboard</span>
             </a>
             {% endif %}
+            {% if can_access('uae_pathway','services_summary','view') %}
+            <a href="/operations/uae/services-summary" class="ops-nav-item {% if active_ops_page == 'uae-services-summary' %}active{% endif %}" data-tooltip="Services Summary">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H3v10h6V11zM15 3H9v18h6V3zM21 7h-6v14h6V7z"/></svg></span>
+                <span class="ops-nav-text">Services Summary</span>
+            </a>
+            {% endif %}
 
             <!-- Client Management -->
             <div class="ops-nav-group-label">Client Management</div>
@@ -803,6 +815,12 @@
             <a href="/operations/portfolio" class="ops-nav-item {% if active_ops_page == 'portfolio' %}active{% endif %}" data-tooltip="Dashboard">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
                 <span class="ops-nav-text">Pathway Dashboard</span>
+            </a>
+            {% endif %}
+            {% if can_access('portfolio_pathway','services_summary','view') %}
+            <a href="/operations/portfolio/services-summary" class="ops-nav-item {% if active_ops_page == 'portfolio-services-summary' %}active{% endif %}" data-tooltip="Services Summary">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H3v10h6V11zM15 3H9v18h6V3zM21 7h-6v14h6V7z"/></svg></span>
+                <span class="ops-nav-text">Services Summary</span>
             </a>
             {% endif %}
 
