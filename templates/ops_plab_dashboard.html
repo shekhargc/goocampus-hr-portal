@@ -457,12 +457,12 @@
       <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Onboarding Status</h4>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;max-width:640px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;font-weight:700;">{% if client.welcome_mail %}✓{% else %}—{% endif %}</span>
-          <span style="color:{% if client.welcome_mail %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Welcome Mail</span>
+          <span style="font-size:16px;font-weight:700;">{% if onboarding.welcome_email %}✓{% else %}—{% endif %}</span>
+          <span style="color:{% if onboarding.welcome_email %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Welcome Email</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;font-weight:700;">{% if client.welcome_call_by %}✓{% else %}—{% endif %}</span>
-          <span style="color:{% if client.welcome_call_by %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Welcome Call{% if client.welcome_call_by %} ({{ client.welcome_call_by }}){% endif %}</span>
+          <span style="font-size:16px;font-weight:700;">{% if onboarding.welcome_call %}✓{% else %}—{% endif %}</span>
+          <span style="color:{% if onboarding.welcome_call %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Welcome Call{% if client.welcome_call_by %} ({{ client.welcome_call_by }}){% endif %}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:16px;font-weight:700;">{% if client.english_book %}✓{% else %}—{% endif %}</span>
@@ -481,14 +481,33 @@
           <span style="color:{% if client.ceo_letter %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">CEO Letter</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;font-weight:700;">{% if client.refund_policy %}✓{% else %}—{% endif %}</span>
-          <span style="color:{% if client.refund_policy %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Refund Policy</span>
+          <span style="font-size:16px;font-weight:700;">{% if onboarding.refund_policy %}✓{% else %}—{% endif %}</span>
+          <span style="color:{% if onboarding.refund_policy %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Refund Policy</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;font-weight:700;">{% if client.service_agreement %}✓{% else %}—{% endif %}</span>
-          <span style="color:{% if client.service_agreement %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Service Agreement</span>
+          <span style="font-size:16px;font-weight:700;">{% if onboarding.agreement %}✓{% else %}—{% endif %}</span>
+          <span style="color:{% if onboarding.agreement %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Service Agreement</span>
         </div>
       </div>
+
+      <!-- Welcome Kit toggle (default Given; switch off exceptions) -->
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-200);max-width:640px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <span style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <span style="font-size:16px;font-weight:700;">{% if onboarding.welcome_kit %}✓{% else %}—{% endif %}</span>
+          <span style="color:{% if onboarding.welcome_kit %}#059669{% else %}var(--gray-500){% endif %};font-weight:600;">Welcome Kit {% if onboarding.welcome_kit %}Given{% else %}Not Given{% endif %}</span>
+        </span>
+        <form method="POST" action="/operations/plab/clients/{{ client.id }}/welcome-kit" style="margin:0;">
+          <input type="hidden" name="next" value="/operations/plab/{{ client.id }}?tab=onboarding">
+          {% if onboarding.welcome_kit %}
+            <input type="hidden" name="given" value="0">
+            <button type="submit" style="background:#fff;border:1px solid #fca5a5;color:#b91c1c;font-weight:600;font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;">Mark as Not Given</button>
+          {% else %}
+            <input type="hidden" name="given" value="1">
+            <button type="submit" style="background:#fff;border:1px solid #86efac;color:#15803d;font-weight:600;font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;">Mark as Given</button>
+          {% endif %}
+        </form>
+      </div>
+      <p style="margin:12px 0 0;font-size:11.5px;color:var(--gray-400);max-width:640px;">Welcome Call, Welcome Email &amp; Refund Policy are standard for every PLAB client. Service Agreement shows ✓ once a contract is uploaded (<em>Upload Contract</em> at the top) or digitally signed. These feed the <a href="/operations/plab/services-summary" style="color:var(--orange);font-weight:600;text-decoration:none;">Services Summary</a>.</p>
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-200);max-width:640px;">
         <p style="margin:0 0 8px 0;color:var(--gray-600);font-weight:500;font-size:12px;">Goodies Received:</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;">
@@ -655,6 +674,13 @@ function showDtab(id, btn) {
     btn.style.fontWeight = '700';
   }
 }
+// Reopen a specific tab when linked with ?tab=... (e.g. after the Welcome Kit toggle).
+(function(){
+  try {
+    var t = new URLSearchParams(window.location.search).get('tab');
+    if (t) { var b = document.getElementById('dtbtn-' + t); if (b) b.click(); }
+  } catch (e) {}
+})();
 
 function verifyPlabDoc(docId, status) {
   fetch('/operations/plab/doc/' + docId + '/verify', {

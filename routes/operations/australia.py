@@ -491,10 +491,39 @@ def ops_australia_client_detail(client_id):
             conn, client.get('product_id'), client.get('plan_type'))
     except Exception:
         package_services = []
+
+    # ── Onboarding sync (founder 2026-08-06). For AMC, Welcome Call, Welcome
+    #    Email and Refund Policy are standard for every client → always Yes
+    #    (refund policy is issued with the welcome kit). Service Agreement stays
+    #    real: Yes only when there's a signed/uploaded contract — so an
+    #    ops-uploaded agreement flips it to Yes. Welcome Kit defaults Given.
+    onboarding = {'welcome_call': True, 'welcome_email': True,
+                  'agreement': False, 'refund_policy': True, 'welcome_kit': True}
+    try:
+        _ensure_welcome_kit_col(conn)
+        krow = conn.execute("SELECT welcome_kit_given FROM plab_clients WHERE id = ?", (client['id'],)).fetchone()
+        onboarding['welcome_kit'] = _kit_given(krow['welcome_kit_given'] if krow else None)
+        rn = (reg or '').strip().upper()
+        contract_signed = False
+        rowreg = conn.execute(
+            "SELECT id, account_id FROM client_registrations "
+            "WHERE UPPER(TRIM(registration_number)) = ? AND client_submitted_at IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1", (rn,)).fetchone()
+        if rowreg:
+            contract_signed = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+                "AND agreement_type = 'contract' LIMIT 1", (rowreg['account_id'], rowreg['id'])).fetchone())
+        onboarding['agreement'] = _yn_flag(client.get('service_agreement')) or bool(client.get('contract_path')) or contract_signed
+    except Exception as e:
+        logging.warning(f"AMC onboarding sync ({reg}): {e}")
+        try: conn.rollback()
+        except Exception: pass
+
     conn.close()
 
     return render_template(
         'ops_australia_client_detail.html',
+        onboarding=onboarding,
         documents=documents,
         plab_doc_types=PLAB_DOC_TYPES,
         user=user,
@@ -744,12 +773,267 @@ def ops_australia_documents_list():
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# AMC "Services Summary" — one spreadsheet-style sheet showing, per client,
+# which services have been rendered (Yes (n) / No) + onboarding flags.
+# Reads live from the AMC (pathway='australia') ops tables so it stays in sync.
+# ══════════════════════════════════════════════════════════════════════════
+
+# Each service column → the ops record table(s) whose per-client row count
+# gives the "Yes (n)" value. Multiple tables are summed into one column.
+AMC_SERVICE_COLUMNS = [
+    ('research',        'Research & Publication', ['ops_research_publication']),
+    ('epic',            'EPIC Registration',      ['ops_epic_registration']),
+    ('amc_registration','AMC Registration',       ['ops_amc_registration']),
+    ('mentorship',      'Mentorship',             ['ops_mentorship']),
+    ('webinars',        'Webinars & Conferences', ['ops_webinars_conferences']),
+    ('training',        'Training',               ['ops_coaching']),
+    ('online_courses',  'Online Courses',         ['ops_online_courses', 'ops_online_subscriptions']),
+    ('test_bookings',   'Test Bookings',          ['ops_test_bookings']),
+]
+
+
+def _yn_flag(v):
+    """Loose truthiness for messy legacy Yes/No/1/0/blank columns."""
+    if v is None:
+        return False
+    s = str(v).strip().lower()
+    return s not in ('', '0', '0.0', 'no', 'none', 'n', 'false', '-', 'nil', 'na', 'n/a', 'pending', 'not sent')
+
+
+def _ensure_welcome_kit_col(conn):
+    """Per-client Welcome-Kit toggle lives on plab_clients. Default 1 = 'Given'
+    (founder 2026-08-06: sync all AMC clients to kit-given, ops toggles off the
+    few who didn't get one). Guarded here for Render cold-start safety."""
+    try:
+        conn.execute("ALTER TABLE plab_clients ADD COLUMN IF NOT EXISTS welcome_kit_given INTEGER DEFAULT 1")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _kit_given(v):
+    """Interpret the welcome_kit_given column: NULL/anything-but-0 => Given."""
+    return (v is None) or (str(v).strip() not in ('0', '0.0', 'False', 'false'))
+
+
+def _amc_services_summary_data(conn, search='', status_filter='', stage_filter=''):
+    """Return (rows, statuses, stages) for the AMC Services Summary + export."""
+    _ensure_welcome_kit_col(conn)
+
+    sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='australia' "
+    params = []
+    if status_filter:
+        sql += " AND account_status = ? "; params.append(status_filter)
+    if stage_filter:
+        sql += " AND current_stage = ? "; params.append(stage_filter)
+    if search:
+        sql += (" AND (first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+                " OR mobile ILIKE ? OR email ILIKE ? "
+                " OR (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?) ")
+        params.extend([f'%{search}%'] * 6)
+    sql += (" ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''),'[^0-9]','','g'),'')"
+            "::bigint DESC NULLS LAST, id DESC ")
+    clients = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    def _norm(s):
+        return (s or '').strip().upper()
+
+    # ── Per-service counts: one grouped query per table, summed into the column
+    service_counts = {}
+    for key, _label, tables in AMC_SERVICE_COLUMNS:
+        merged = {}
+        for table in tables:
+            try:
+                for r in conn.execute(
+                    f"""SELECT UPPER(TRIM(registration_number)) AS k, COUNT(*) AS c
+                          FROM {table} WHERE COALESCE(pathway,'plab')='australia'
+                         GROUP BY UPPER(TRIM(registration_number))""").fetchall():
+                    if r['k']:
+                        merged[r['k']] = merged.get(r['k'], 0) + int(r['c'])
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        service_counts[key] = merged
+
+    # ── Service Agreement from the REAL data (legacy column, an uploaded
+    #    contract file, or the digital-sign record) so an ops-uploaded agreement
+    #    flips this to Yes. Keyed by registration_number.
+    contract_regs = set()
+    try:
+        for r in conn.execute(
+            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
+                 FROM client_agreements ca
+                 JOIN client_registrations cr ON cr.id = ca.registration_id
+                WHERE ca.agreement_type = 'contract'""").fetchall():
+            if r['rn']: contract_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    rows = []
+    for c in clients:
+        rn = _norm(c.get('registration_number'))
+        name = ' '.join(f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".split())
+        services = {key: service_counts.get(key, {}).get(rn, 0) for key, _l, _t in AMC_SERVICE_COLUMNS}
+        rows.append({
+            'id': c.get('id'),
+            'registration_number': c.get('registration_number') or '',
+            'name': name or '—',
+            'registration_date': c.get('registration_date') or '',
+            'account_status': c.get('account_status') or '',
+            'current_stage': c.get('current_stage') or '',
+            'services': services,
+            # Welcome Email & Refund Policy are standard for every AMC client
+            # (refund policy goes out with the welcome kit) → always Yes.
+            'welcome_email': True,
+            'refund_policy': True,
+            # Welcome Kit defaults Given; ops toggles off exceptions.
+            'welcome_kit': _kit_given(c.get('welcome_kit_given')),
+            # Agreement reflects real data — an ops-uploaded contract flips it to Yes.
+            'agreement': _yn_flag(c.get('service_agreement')) or bool(c.get('contract_path')) or (rn in contract_regs),
+        })
+
+    statuses = sorted({r['account_status'] for r in rows if r['account_status']})
+    stages = sorted({r['current_stage'] for r in rows if r['current_stage']})
+    return rows, statuses, stages
+
+
+@admin_required
+def ops_australia_services_summary():
+    """AMC Services Summary — spreadsheet-style per-client services-rendered sheet."""
+    user = get_user()
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    rows, statuses, stages = [], [], []
+    try:
+        rows, statuses, stages = _amc_services_summary_data(conn, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"ops_australia_services_summary: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    return render_template(
+        'ops_australia_services_summary.html',
+        user=user, rows=rows, statuses=statuses, stages=stages,
+        service_columns=AMC_SERVICE_COLUMNS,
+        q=search, status_filter=status_filter, stage_filter=stage_filter,
+        pathway_name='AMC Pathway',
+        active_pathway='australia',
+        active_ops_page='australia-services-summary',
+    )
+
+
+@admin_required
+def ops_australia_services_summary_download():
+    """Excel download of the AMC Services Summary (respects current filters)."""
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    try:
+        rows, _statuses, _stages = _amc_services_summary_data(conn, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"ops_australia_services_summary_download: {e}")
+        rows = []
+    conn.close()
+
+    import io
+    from datetime import datetime
+    from flask import send_file
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
+    def _xs(v):
+        return ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
+
+    wb = Workbook(); ws = wb.active; ws.title = 'AMC Services'
+    headers = ['#', 'Client Name', 'Registration Number', 'Registration Date',
+               'Account Status', 'Current Stage']
+    headers += [label for _k, label, _t in AMC_SERVICE_COLUMNS]
+    headers += ['Welcome Email', 'Welcome Kit', 'Agreement', 'Refund Policy']
+    ws.append(headers)
+
+    for i, r in enumerate(rows, 1):
+        line = [i, _xs(r['name']), _xs(r['registration_number']), _xs(r['registration_date']),
+                _xs(r['account_status']), _xs(r['current_stage'])]
+        for key, _label, _t in AMC_SERVICE_COLUMNS:
+            n = r['services'].get(key, 0)
+            line.append(f"Yes ({n})" if n else "No")
+        line.append('Yes' if r['welcome_email'] else 'No')
+        line.append('Yes' if r['welcome_kit'] else 'No')
+        line.append('Yes' if r['agreement'] else 'No')
+        line.append('Yes' if r['refund_policy'] else 'No')
+        ws.append(line)
+
+    navy = PatternFill('solid', fgColor='0F1B33')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = navy
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.freeze_panes = 'C2'
+    ws.auto_filter.ref = ws.dimensions
+    widths = [5, 26, 20, 15, 14, 20] + [15] * len(AMC_SERVICE_COLUMNS) + [14, 12, 12, 12]
+    for idx, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = w
+
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    fn = f"AMC_Services_Summary_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=fn)
+
+
+@admin_required
+def ops_australia_welcome_kit_toggle(client_id):
+    """Toggle a client's Welcome-Kit given/not-given flag (from the profile)."""
+    conn = get_db()
+    _ensure_welcome_kit_col(conn)
+    val = 1 if (request.form.get('given') == '1') else 0
+    try:
+        conn.execute(
+            "UPDATE plab_clients SET welcome_kit_given = ? "
+            "WHERE id = ? AND COALESCE(pathway,'plab')='australia'", (val, client_id))
+        conn.commit()
+        flash('Welcome kit marked as ' + ('Given.' if val else 'Not given.'), 'success')
+    except Exception as e:
+        logging.warning(f"ops_australia_welcome_kit_toggle: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not update welcome kit status.', 'error')
+    conn.close()
+    nxt = request.form.get('next') or url_for('ops_australia_client_detail', client_id=client_id)
+    return redirect(nxt)
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app.
 
     Uses app.add_url_rule to preserve endpoint names — keeps existing
     url_for('ops_australia_pathway') call sites working unchanged.
     """
+    app.add_url_rule(
+        '/operations/australia/services-summary',
+        endpoint='ops_australia_services_summary',
+        view_func=ops_australia_services_summary,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/services-summary/download',
+        endpoint='ops_australia_services_summary_download',
+        view_func=ops_australia_services_summary_download,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/clients/<int:client_id>/welcome-kit',
+        endpoint='ops_australia_welcome_kit_toggle',
+        view_func=ops_australia_welcome_kit_toggle,
+        methods=['POST'],
+    )
     app.add_url_rule(
         '/operations/australia-pathway',
         endpoint='ops_australia_pathway',

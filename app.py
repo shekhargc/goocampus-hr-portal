@@ -244,6 +244,92 @@ def get_monthly_alloc(month_num):
 LEAVE_TYPE_ALLOC = {'annual': 13, 'sick': 6, 'casual': 6}
 
 
+def _leave_parse_ym(v):
+    """(year, month) from a TIMESTAMP / date / 'YYYY-MM-DD…' value, or None."""
+    if not v:
+        return None
+    try:
+        if hasattr(v, 'year') and hasattr(v, 'month'):
+            return (int(v.year), int(v.month))
+        parts = str(v).strip()[:10].split('-')
+        if len(parts) >= 2:
+            return (int(parts[0]), int(parts[1]))
+    except Exception:
+        return None
+    return None
+
+
+def _leave_accrual_meta(confirmation_status, confirmed_at, fy_start_year):
+    """How leave accrues for an employee in the FY starting April `fy_start_year`.
+
+    Probation-period staff (not yet confirmed permanent) accrue NOTHING — so any
+    leave they take is unpaid (LOP). A newly-permanent employee accrues only from
+    the month HR confirmed them permanent (that whole month onward). Legacy /
+    already-permanent staff (no confirmation stamp, or confirmed in an earlier FY)
+    accrue the full year, exactly as before. (founder 2026-08-06)
+    """
+    status = (confirmation_status or 'permanent').strip().lower()
+    if status != 'permanent':
+        return {'mode': 'none'}
+    ym = _leave_parse_ym(confirmed_at)
+    if not ym:
+        return {'mode': 'full'}               # legacy permanent — no confirmation date
+    fy_start = (fy_start_year, 4)             # April of the FY
+    fy_end = (fy_start_year + 1, 3)           # the following March
+    if ym <= fy_start:
+        return {'mode': 'full'}               # already permanent when this FY began
+    if ym > fy_end:
+        return {'mode': 'none'}               # not permanent until a later FY
+    return {'mode': 'from', 'start': ym}      # pro-rate from the confirmation month
+
+
+def _emp_month_alloc(meta, ry, rm):
+    """This employee's leave allocation for calendar (ry, rm), honouring probation."""
+    mode = (meta or {}).get('mode', 'full')
+    if mode == 'none':
+        return 0
+    if mode == 'from' and (ry, rm) < meta['start']:
+        return 0
+    return get_monthly_alloc(rm)
+
+
+def _fetch_leave_emp(conn, employee_id):
+    """Fetch carry_forward + confirmation fields as a plain dict (so .get works on
+    both Postgres RealDictRow and sqlite3.Row); resilient if the confirmation
+    columns don't exist yet on a cold start (falls back to carry_forward only)."""
+    try:
+        row = conn.execute(
+            "SELECT carry_forward, confirmation_status, confirmed_at FROM employees WHERE id = ?",
+            (employee_id,)).fetchone()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        row = conn.execute("SELECT carry_forward FROM employees WHERE id = ?", (employee_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def _leave_annual_entitlement(employee_id, fy_start_year):
+    """Total leave entitlement for the FY (pro-rated for probation/permanency) +
+    carry_forward. Replaces the old flat `25 + carry_forward` headline so a
+    probation employee shows 0, a mid-year-confirmed one shows only their months.
+    Opens its own short-lived connection so call sites needn't have `conn` handy."""
+    conn = get_db()
+    try:
+        emp = _fetch_leave_emp(conn, employee_id)
+        cf = float(emp['carry_forward'] or 0) if emp else 0.0
+        meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                                   emp.get('confirmed_at') if emp else None, fy_start_year)
+        total = cf
+        for offset in range(12):
+            rm = ((offset + 3) % 12) + 1
+            ry = fy_start_year if rm >= 4 else fy_start_year + 1
+            total += _emp_month_alloc(meta, ry, rm)
+        return round(total, 2)
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def leave_type_balances(employee_id, year):
     """Per-type leave balances for the FY starting April `year`.
 
@@ -259,16 +345,21 @@ def leave_type_balances(employee_id, year):
     Returns a dict with per-type alloc/taken/paid/balance plus totals.
     """
     conn = get_db()
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
+    emp = _fetch_leave_emp(conn, employee_id)
     cf = float(emp['carry_forward'] or 0) if emp else 0.0
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, year)
     paid = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
     taken = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
     total_deduction = 0.0
+    accrued_monthly = 0.0
     carried = cf
     for offset in range(12):
         rm = ((offset + 3) % 12) + 1
         ry = year if rm >= 4 else year + 1
-        available = carried + get_monthly_alloc(rm)
+        month_alloc = _emp_month_alloc(meta, ry, rm)
+        accrued_monthly += month_alloc
+        available = carried + month_alloc
         rows = conn.execute('''
             SELECT leave_type, days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -287,9 +378,14 @@ def leave_type_balances(employee_id, year):
             total_deduction += (d - paid_portion)
         carried = available  # always >= 0
     conn.close()
-    alloc = {'annual': LEAVE_TYPE_ALLOC['annual'] + cf,
-             'sick': LEAVE_TYPE_ALLOC['sick'],
-             'casual': LEAVE_TYPE_ALLOC['casual']}
+    # Entitlement is pro-rated to what actually accrued this FY (probation = 0,
+    # newly-permanent = only months since confirmation, else the full 25). The
+    # 13/6/6 type split is scaled by the same ratio so the cards still sum to the
+    # real total balance; carry_forward stays on the Annual bucket.
+    scale = (accrued_monthly / 25.0) if accrued_monthly else 0.0
+    alloc = {'annual': round(LEAVE_TYPE_ALLOC['annual'] * scale, 2) + cf,
+             'sick': round(LEAVE_TYPE_ALLOC['sick'] * scale, 2),
+             'casual': round(LEAVE_TYPE_ALLOC['casual'] * scale, 2)}
     bal = {k: alloc[k] - paid[k] for k in alloc}
     # A type can read negative if its PAID usage exceeded its own share while
     # the overall monthly pool still had capacity. Borrow the overdraft from a
@@ -458,18 +554,18 @@ def calculate_monthly_balance(employee_id, year, month):
     """Calculate running balance for a given month"""
     conn = get_db()
 
-    # Get carry forward
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
-    carry_forward = emp['carry_forward'] if emp else 0
-
-    # Total annual allocation = 25 + carry_forward
-    total_allocation = 25 + carry_forward
+    # Get carry forward + probation/permanency accrual gate
+    emp = _fetch_leave_emp(conn, employee_id)
+    carry_forward = float(emp['carry_forward'] or 0) if emp else 0.0
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, year)
 
     # Calculate balance up to and including the given month
     # Carry forward is added as starting balance; monthly alloc: April=3, others=2
+    # (0 during probation / before permanency).
     balance = carry_forward
     for m in range(4, month + 1):  # FY starts April (month 4)
-        balance += get_monthly_alloc(m)
+        balance += _emp_month_alloc(meta, year, m)
         # Subtract approved leaves in this month
         leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
@@ -487,16 +583,17 @@ def get_available_balance(employee_id, year, month):
     """Get available balance at the start of a month"""
     conn = get_db()
 
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
-    carry_forward = emp['carry_forward'] if emp else 0
-
-    total_allocation = 25 + carry_forward
+    emp = _fetch_leave_emp(conn, employee_id)
+    carry_forward = float(emp['carry_forward'] or 0) if emp else 0.0
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, year)
 
     # Get balance from start of FY to end of previous month
     # Carry forward added as starting balance; monthly alloc: April=3, others=2
+    # (0 during probation / before permanency).
     balance = carry_forward
     for m in range(4, month):
-        balance += get_monthly_alloc(m)
+        balance += _emp_month_alloc(meta, year, m)
         leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -529,9 +626,11 @@ def leave_month_figures(employee_id, year, month):
     balance_available, days_taken, deduction, balance_end (carried out).
     """
     conn = get_db()
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
+    emp = _fetch_leave_emp(conn, employee_id)
     carried = float(emp['carry_forward'] or 0) if emp else 0.0
     fy_start_year = year if month >= 4 else year - 1
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, fy_start_year)
     cy, cm = fy_start_year, 4
     result = None
     while True:
@@ -541,7 +640,7 @@ def leave_month_figures(employee_id, year, month):
             AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
         ''', (employee_id, str(cy), str(cm).zfill(2))).fetchone()
         taken_m = float(leaves['total_days'] or 0)
-        alloc_m = get_monthly_alloc(cm)
+        alloc_m = _emp_month_alloc(meta, cy, cm)
         carried_in = carried
         available = carried_in + alloc_m
         deduction = max(0.0, taken_m - available)
@@ -564,7 +663,7 @@ def leave_month_figures(employee_id, year, month):
             break
     conn.close()
     if result is None:
-        alloc_m = get_monthly_alloc(month)
+        alloc_m = _emp_month_alloc(meta, year, month)
         result = {'balance_start': 0.0, 'monthly_alloc': alloc_m,
                   'balance_available': alloc_m, 'days_taken': 0.0,
                   'deduction': 0.0, 'balance_end': alloc_m}
@@ -9680,7 +9779,7 @@ def dashboard():
     mgmt_leave_data = {}
     if user['emp_code'] != 'admin':
         carry_forward = user['carry_forward'] or 0
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(user['id'], (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
         leaves_taken = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -11206,7 +11305,7 @@ def leave_info():
     conn = get_db()
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
     conn.close()
 
     return render_template('leave_info.html',
@@ -11234,7 +11333,7 @@ def my_leave_report():
     # Total balance and carry forward
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     # Pending requests count
     pending_count = conn.execute(
@@ -11474,7 +11573,7 @@ def hr_dashboard():
     if is_management:
         fy_year = now.year if now.month >= 4 else now.year - 1
         carry_forward = user['carry_forward'] or 0
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(user['id'], fy_year)
         leaves_taken = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -11658,7 +11757,7 @@ def admin_employee_detail(emp_id):
     # Calculate balance
     emp_data = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (emp_id,)).fetchone()
     carry_forward = emp_data['carry_forward'] if emp_data else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(emp_id, (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
 
     # FY leave balance = entitlement − PAID leaves taken (consistent with reports)
     _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
@@ -14223,7 +14322,7 @@ def api_balance():
         return jsonify({'error': 'Employee not found'}), 404
 
     carry_forward = emp['carry_forward']
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(emp_id, (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
 
     _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
     _tb = leave_type_balances(emp_id, _fy)
@@ -14275,7 +14374,7 @@ def api_employee_profile(emp_id):
 
     # Leave summary — FY balance = entitlement − PAID leaves taken
     carry_forward = emp['carry_forward'] if emp.get('carry_forward') else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(emp['id'], (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
     _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
     _tb = leave_type_balances(emp_id, _fy)
     days_taken = _tb['total_taken']
@@ -14746,7 +14845,7 @@ def admin_annual_report():
     report_data = []
     for emp in employees:
         carry_forward = emp['carry_forward']
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(emp['id'], year)
         # Shared rule: balance = entitlement − PAID leaves taken (unpaid/LOP
         # days don't reduce it). Consistent with every other leave report.
         _tb = leave_type_balances(emp['id'], year)
@@ -14814,7 +14913,7 @@ def admin_annual_report_download():
 
     for emp in employees:
         carry_forward = emp['carry_forward']
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(emp['id'], year)
         # Shared rule: balance = entitlement − PAID leaves taken.
         _tb = leave_type_balances(emp['id'], year)
         total_taken = _tb['total_taken']
@@ -14893,7 +14992,7 @@ def admin_employee_leave_report():
         selected_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (selected_emp_id,)).fetchone()
         if selected_emp:
             carry_forward = selected_emp['carry_forward'] or 0
-            total_allocation = 25 + carry_forward
+            total_allocation = _leave_annual_entitlement(selected_emp_id, fy_year)
 
             pending_count = conn.execute(
                 "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
@@ -15149,7 +15248,7 @@ def reports_monthly():
     # Total allocation
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     # FY total taken
     fy_leaves = conn.execute('''
@@ -15278,7 +15377,7 @@ def reports_quarterly():
     conn = get_db()
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     pending_count = conn.execute(
         'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
@@ -15385,7 +15484,7 @@ def reports_annual():
     conn = get_db()
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     pending_count = conn.execute(
         'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
@@ -27832,8 +27931,35 @@ def ops_plab_dashboard(client_id):
         logging.error(f"Referral query error for client {client_id}: {e}")
         referred_clients = []
     referred_count = len(referred_clients)
+
+    # ── Onboarding sync (founder 2026-08-06). Welcome Call/Email/Refund Policy
+    #    are standard for every PLAB client → always Yes. Service Agreement stays
+    #    real (Yes once a contract is uploaded/signed). Welcome Kit defaults Given.
+    onboarding = {'welcome_call': True, 'welcome_email': True,
+                  'agreement': False, 'refund_policy': True, 'welcome_kit': True}
+    try:
+        from routes.operations.australia import _yn_flag, _ensure_welcome_kit_col, _kit_given
+        _ensure_welcome_kit_col(conn)
+        krow = conn.execute("SELECT welcome_kit_given FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+        onboarding['welcome_kit'] = _kit_given(krow['welcome_kit_given'] if krow else None)
+        rnu = (reg or '').strip().upper()
+        contract_signed = False
+        rowreg = conn.execute(
+            "SELECT id, account_id FROM client_registrations "
+            "WHERE UPPER(TRIM(registration_number)) = ? AND client_submitted_at IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1", (rnu,)).fetchone()
+        if rowreg:
+            contract_signed = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+                "AND agreement_type = 'contract' LIMIT 1", (rowreg['account_id'], rowreg['id'])).fetchone())
+        onboarding['agreement'] = _yn_flag(client['service_agreement']) or bool(client['contract_path']) or contract_signed
+    except Exception as e:
+        logging.warning(f"PLAB onboarding sync ({reg}): {e}")
+        try: conn.rollback()
+        except Exception: pass
+
     conn.close()
-    return render_template('ops_plab_dashboard.html', client=client,
+    return render_template('ops_plab_dashboard.html', client=client, onboarding=onboarding,
                            referred_clients=referred_clients, referred_count=referred_count,
                            amount_paid=amount_paid, gst_paid=gst_paid,
                            total_paid=total_paid, balance=balance, payment_pct=payment_pct,
@@ -27868,6 +27994,474 @@ def ops_plab_by_reg(reg):
         flash(f'PLAB client {reg} not found.', 'error')
         return redirect(url_for('ops_plab_list'))
     return redirect(url_for('ops_plab_dashboard', client_id=row['id']))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# PLAB / UK "Services Summary" — clone of the AMC sheet (founder 2026-08-06).
+# Spreadsheet-style, one row per PLAB client, Yes(n)/No per service rendered,
+# + Welcome Email / Welcome Kit / Agreement / Refund Policy. Reads live from
+# all PLAB (pathway='plab') ops tables. Reuses the AMC helpers.
+# ══════════════════════════════════════════════════════════════════════════
+
+PLAB_SERVICE_COLUMNS = [
+    ('gmc',             'GMC Registration',       ['ops_gmc_registration']),
+    ('epic',            'EPIC Registration',      ['ops_epic_registration']),
+    ('coaching',        'Coaching & Training',    ['ops_coaching']),
+    ('test_bookings',   'Test Bookings',          ['ops_test_bookings']),
+    ('english_logins',  'English Logins',         ['ops_english_logins']),
+    ('online_courses',  'Online Courses',         ['ops_online_courses']),
+    ('subscriptions',   'Online Subscriptions',   ['ops_online_subscriptions']),
+    ('research',        'Research & Publication', ['ops_research_publication']),
+    ('webinars',        'Webinars & Conferences', ['ops_webinars_conferences']),
+    ('mentorship',      'Mentorship',             ['ops_mentorship']),
+    ('job_stage',       'Job Stage',              ['ops_job_stage']),
+    ('uk_visa',         'UK Visa & Travel',       ['ops_uk_visa_travel']),
+    ('uk_cab',          'UK Cab Bookings',        ['ops_uk_cab_bookings']),
+    ('uk_observerships','UK Observerships',       ['ops_uk_observerships']),
+    ('ngo',             'NGO Activities',         ['ops_ngo_activities']),
+    ('certificates',    'Certificates',           []),  # special: plab_client_documents
+]
+
+
+def _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefix, include_kit=True):
+    """Shared styled-xlsx builder for the per-pathway Services Summary export.
+    include_kit=False omits the Welcome Kit column (Consulting/UAE/Portfolio have no kit)."""
+    import io
+    from datetime import datetime
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
+    def _xs(v):
+        return ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
+
+    wb = Workbook(); ws = wb.active; ws.title = sheet_title[:31]
+    tail_headers = ['Welcome Email'] + (['Welcome Kit'] if include_kit else []) + ['Agreement', 'Refund Policy']
+    headers = ['#', 'Client Name', 'Registration Number', 'Registration Date',
+               'Account Status', 'Current Stage']
+    headers += [label for _k, label, _t in service_columns]
+    headers += tail_headers
+    ws.append(headers)
+    for i, r in enumerate(rows, 1):
+        line = [i, _xs(r['name']), _xs(r['registration_number']), _xs(r['registration_date']),
+                _xs(r['account_status']), _xs(r['current_stage'])]
+        for key, _label, _t in service_columns:
+            n = r['services'].get(key, 0)
+            line.append(f"Yes ({n})" if n else "No")
+        line.append('Yes' if r['welcome_email'] else 'No')
+        if include_kit:
+            line.append('Yes' if r.get('welcome_kit') else 'No')
+        line += ['Yes' if r['agreement'] else 'No', 'Yes' if r['refund_policy'] else 'No']
+        ws.append(line)
+    navy = PatternFill('solid', fgColor='0F1B33')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = navy
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.freeze_panes = 'C2'
+    ws.auto_filter.ref = ws.dimensions
+    widths = [5, 26, 20, 15, 14, 20] + [15] * len(service_columns) + [12] * len(tail_headers)
+    for idx, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = w
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    fn = f"{fn_prefix}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=fn)
+
+
+def _plab_services_summary_data(conn, search='', status_filter='', stage_filter=''):
+    """Return (rows, statuses, stages) for the PLAB/UK Services Summary + export."""
+    from routes.operations.australia import _yn_flag, _ensure_welcome_kit_col, _kit_given
+    _ensure_welcome_kit_col(conn)
+
+    sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='plab' "
+    params = []
+    if status_filter:
+        sql += " AND account_status = ? "; params.append(status_filter)
+    if stage_filter:
+        sql += " AND current_stage = ? "; params.append(stage_filter)
+    if search:
+        sql += (" AND (first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+                " OR mobile ILIKE ? OR email ILIKE ? "
+                " OR (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?) ")
+        params.extend([f'%{search}%'] * 6)
+    sql += (" ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''),'[^0-9]','','g'),'')"
+            "::bigint DESC NULLS LAST, id DESC ")
+    clients = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    def _norm(s):
+        return (s or '').strip().upper()
+
+    service_counts = {}
+    for key, _label, tables in PLAB_SERVICE_COLUMNS:
+        if not tables:
+            continue
+        merged = {}
+        for table in tables:
+            try:
+                for r in conn.execute(
+                    f"""SELECT UPPER(TRIM(registration_number)) AS k, COUNT(*) AS c
+                          FROM {table} WHERE COALESCE(pathway,'plab')='plab'
+                         GROUP BY UPPER(TRIM(registration_number))""").fetchall():
+                    if r['k']:
+                        merged[r['k']] = merged.get(r['k'], 0) + int(r['c'])
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        service_counts[key] = merged
+
+    # Certificates (special) — count of certificate documents per client (by id).
+    cert_counts = {}
+    try:
+        for r in conn.execute(
+            "SELECT client_id AS cid, COUNT(*) AS c FROM plab_client_documents "
+            "WHERE LOWER(COALESCE(doc_category,'')) = 'certificate' GROUP BY client_id").fetchall():
+            if r['cid'] is not None:
+                cert_counts[r['cid']] = int(r['c'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    # Service Agreement from the real record (uploaded contract / digital sign).
+    contract_regs = set()
+    try:
+        for r in conn.execute(
+            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
+                 FROM client_agreements ca
+                 JOIN client_registrations cr ON cr.id = ca.registration_id
+                WHERE ca.agreement_type = 'contract'""").fetchall():
+            if r['rn']: contract_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    rows = []
+    for c in clients:
+        rn = _norm(c.get('registration_number'))
+        name = ' '.join(f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".split())
+        services = {}
+        for key, _l, tables in PLAB_SERVICE_COLUMNS:
+            services[key] = cert_counts.get(c.get('id'), 0) if key == 'certificates' else service_counts.get(key, {}).get(rn, 0)
+        rows.append({
+            'id': c.get('id'),
+            'registration_number': c.get('registration_number') or '',
+            'name': name or '—',
+            'registration_date': c.get('registration_date') or '',
+            'account_status': c.get('account_status') or '',
+            'current_stage': c.get('current_stage') or '',
+            'services': services,
+            # Standard for every PLAB client → always Yes (refund policy goes with the kit).
+            'welcome_email': True,
+            'refund_policy': True,
+            'welcome_kit': _kit_given(c.get('welcome_kit_given')),
+            # Agreement reflects real data — an ops-uploaded contract flips it to Yes.
+            'agreement': _yn_flag(c.get('service_agreement')) or bool(c.get('contract_path')) or (rn in contract_regs),
+        })
+
+    statuses = sorted({r['account_status'] for r in rows if r['account_status']})
+    stages = sorted({r['current_stage'] for r in rows if r['current_stage']})
+    return rows, statuses, stages
+
+
+@app.route('/operations/plab/services-summary')
+@admin_required
+def ops_plab_services_summary():
+    """PLAB/UK Services Summary — per-client services-rendered sheet."""
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    rows, statuses, stages = [], [], []
+    try:
+        rows, statuses, stages = _plab_services_summary_data(conn, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_summary: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    return render_template(
+        'ops_plab_services_summary.html',
+        rows=rows, statuses=statuses, stages=stages,
+        service_columns=PLAB_SERVICE_COLUMNS,
+        q=search, status_filter=status_filter, stage_filter=stage_filter,
+        pathway_name='UK / PLAB Pathway',
+        active_ops_page='plab-services-summary',
+    )
+
+
+@app.route('/operations/plab/services-summary/download')
+@admin_required
+def ops_plab_services_summary_download():
+    """Excel download of the PLAB/UK Services Summary (respects current filters)."""
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    try:
+        rows, _s, _g = _plab_services_summary_data(conn, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_summary_download: {e}")
+        rows = []
+    conn.close()
+    return _services_summary_xlsx_response(rows, PLAB_SERVICE_COLUMNS, 'PLAB Services', 'PLAB_UK_Services_Summary')
+
+
+@app.route('/operations/plab/clients/<int:client_id>/welcome-kit', methods=['POST'])
+@admin_required
+def ops_plab_welcome_kit_toggle(client_id):
+    """Toggle a PLAB client's Welcome-Kit given/not-given flag (from the profile)."""
+    from routes.operations.australia import _ensure_welcome_kit_col
+    conn = get_db()
+    _ensure_welcome_kit_col(conn)
+    val = 1 if (request.form.get('given') == '1') else 0
+    try:
+        conn.execute(
+            "UPDATE plab_clients SET welcome_kit_given = ? "
+            "WHERE id = ? AND COALESCE(pathway,'plab')='plab'", (val, client_id))
+        conn.commit()
+        flash('Welcome kit marked as ' + ('Given.' if val else 'Not given.'), 'success')
+    except Exception as e:
+        logging.warning(f"ops_plab_welcome_kit_toggle: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not update welcome kit status.', 'error')
+    conn.close()
+    nxt = request.form.get('next') or url_for('ops_plab_dashboard', client_id=client_id)
+    return redirect(nxt)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Generic Services Summary for the kit-LESS pathways — Consulting, UAE,
+# Portfolio (founder 2026-08-06). No Welcome Kit column. OLD (Zoho-imported)
+# clients show Welcome Email/Refund = Yes; NEW (portal-registered) clients show
+# the real live signals. Agreement is always the real record (upload syncs).
+# ══════════════════════════════════════════════════════════════════════════
+
+CONSULTING_SERVICE_COLUMNS = [
+    ('gmc',              'GMC Registration',       ['ops_gmc_registration']),
+    ('epic',             'EPIC Verification',      ['ops_epic_registration']),
+    ('amc_registration', 'AMC Registration',       ['ops_amc_registration']),
+    ('mentorship',       'Mentorship',             ['ops_mentorship']),
+    ('training',         'Training',               ['ops_coaching']),
+    ('test_bookings',    'Test Bookings',          ['ops_test_bookings']),
+    ('online_courses',   'Online Courses',         ['ops_online_courses']),
+    ('online_subscriptions', 'Online Subscriptions', ['ops_online_subscriptions']),
+    ('research',         'Research & Publication', ['ops_research_publication']),
+    ('webinars',         'Webinars & Conferences', ['ops_webinars_conferences']),
+]
+UAE_SERVICE_COLUMNS = [
+    ('self_assessment',    'Self Assessment',    ['ops_self_assessment']),
+    ('eligibility_letter', 'Eligibility Letter', ['ops_eligibility_letter']),
+    ('data_flow',          'Data Flow',          ['ops_data_flow']),
+]
+PORTFOLIO_SERVICE_COLUMNS = [
+    ('research', 'Research & Publications',  ['ops_research_publication']),
+    ('courses',  'Courses & Certifications', ['ops_online_courses']),
+    ('webinars', 'Webinars & Conferences',   ['ops_webinars_conferences']),
+]
+
+
+def _pathway_services_summary_data(conn, pathway, service_columns, search='', status_filter='', stage_filter=''):
+    """Generic per-client services summary for the kit-less pathways.
+
+    Old (Zoho) clients → Welcome Email/Refund Policy = Yes (assume done, as PLAB/AMC).
+    New (portal-registered) clients → real live signals. Agreement always real.
+    `pathway` is a trusted internal constant (consulting/uae/portfolio), inlined safely.
+    """
+    from routes.operations.australia import _yn_flag
+    p = pathway
+
+    sql = f"SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='{p}' "
+    params = []
+    if status_filter:
+        sql += " AND account_status = ? "; params.append(status_filter)
+    if stage_filter:
+        sql += " AND current_stage = ? "; params.append(stage_filter)
+    if search:
+        sql += (" AND (first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+                " OR mobile ILIKE ? OR email ILIKE ? "
+                " OR (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?) ")
+        params.extend([f'%{search}%'] * 6)
+    sql += (" ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''),'[^0-9]','','g'),'')"
+            "::bigint DESC NULLS LAST, id DESC ")
+    clients = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    def _norm(s):
+        return (s or '').strip().upper()
+
+    service_counts = {}
+    for key, _label, tables in service_columns:
+        if not tables:
+            continue
+        merged = {}
+        for table in tables:
+            try:
+                for r in conn.execute(
+                    f"""SELECT UPPER(TRIM(registration_number)) AS k, COUNT(*) AS c
+                          FROM {table} WHERE COALESCE(pathway,'plab')='{p}'
+                         GROUP BY UPPER(TRIM(registration_number))""").fetchall():
+                    if r['k']:
+                        merged[r['k']] = merged.get(r['k'], 0) + int(r['c'])
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        service_counts[key] = merged
+
+    # NEW (portal) clients = reg numbers with a submitted portal registration.
+    new_regs = set()
+    try:
+        for r in conn.execute(
+            "SELECT DISTINCT UPPER(TRIM(registration_number)) AS rn FROM client_registrations "
+            "WHERE client_submitted_at IS NOT NULL").fetchall():
+            if r['rn']: new_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    # Real Agreement / Refund signatures (digital sign), by registration_number.
+    contract_regs, refund_regs = set(), set()
+    try:
+        for r in conn.execute(
+            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
+                 FROM client_agreements ca JOIN client_registrations cr ON cr.id = ca.registration_id
+                WHERE ca.agreement_type = 'contract'""").fetchall():
+            if r['rn']: contract_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    try:
+        for r in conn.execute(
+            """SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn
+                 FROM client_agreements ca JOIN client_registrations cr ON cr.account_id = ca.account_id
+                WHERE ca.agreement_type = 'refund_policy'""").fetchall():
+            if r['rn']: refund_regs.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    # Live welcome email (and call) from the onboarding table, for this pathway.
+    onb_email = set()
+    try:
+        for r in conn.execute(
+            f"""SELECT UPPER(TRIM(p2.registration_number)) AS rn, o.welcome_email_sent AS em
+                  FROM client_onboarding o JOIN plab_clients p2 ON p2.id = o.client_id
+                 WHERE COALESCE(p2.pathway,'plab')='{p}'""").fetchall():
+            if r['rn'] and r['em']: onb_email.add(r['rn'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    rows = []
+    for c in clients:
+        rn = _norm(c.get('registration_number'))
+        name = ' '.join(f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".split())
+        services = {key: service_counts.get(key, {}).get(rn, 0) for key, _l, _t in service_columns}
+        is_new = rn in new_regs
+        agreement = _yn_flag(c.get('service_agreement')) or bool(c.get('contract_path')) or (rn in contract_regs)
+        if is_new:
+            # New portal client → reflect reality (live sync)
+            welcome_email = _yn_flag(c.get('welcome_mail')) or (rn in onb_email)
+            refund_policy = _yn_flag(c.get('refund_policy')) or (rn in refund_regs)
+        else:
+            # Legacy Zoho client → standard-done
+            welcome_email = True
+            refund_policy = True
+        rows.append({
+            'id': c.get('id'),
+            'registration_number': c.get('registration_number') or '',
+            'name': name or '—',
+            'registration_date': c.get('registration_date') or '',
+            'account_status': c.get('account_status') or '',
+            'current_stage': c.get('current_stage') or '',
+            'services': services,
+            'welcome_email': welcome_email,
+            'agreement': agreement,
+            'refund_policy': refund_policy,
+            'is_new': is_new,
+        })
+
+    statuses = sorted({r['account_status'] for r in rows if r['account_status']})
+    stages = sorted({r['current_stage'] for r in rows if r['current_stage']})
+    return rows, statuses, stages
+
+
+def _render_pathway_summary(pathway_slug, pathway_name, badge, service_columns, active_slug):
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    rows, statuses, stages = [], [], []
+    try:
+        rows, statuses, stages = _pathway_services_summary_data(conn, pathway_slug, service_columns, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"services summary ({pathway_slug}): {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    return render_template(
+        'ops_pathway_services_summary.html',
+        rows=rows, statuses=statuses, stages=stages, service_columns=service_columns,
+        q=search, status_filter=status_filter, stage_filter=stage_filter,
+        pathway_slug=pathway_slug, pathway_name=pathway_name, pathway_badge=badge,
+        active_pathway=pathway_slug, active_ops_page=active_slug,
+    )
+
+
+def _download_pathway_summary(pathway_slug, service_columns, fn_prefix, sheet_title):
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    try:
+        rows, _s, _g = _pathway_services_summary_data(conn, pathway_slug, service_columns, search, status_filter, stage_filter)
+    except Exception as e:
+        logging.warning(f"services summary download ({pathway_slug}): {e}")
+        rows = []
+    conn.close()
+    return _services_summary_xlsx_response(rows, service_columns, sheet_title, fn_prefix, include_kit=False)
+
+
+@app.route('/operations/consulting/services-summary')
+@admin_required
+def ops_consulting_services_summary():
+    return _render_pathway_summary('consulting', 'Standard Consulting', 'Consulting',
+                                   CONSULTING_SERVICE_COLUMNS, 'consulting-services-summary')
+
+
+@app.route('/operations/consulting/services-summary/download')
+@admin_required
+def ops_consulting_services_summary_download():
+    return _download_pathway_summary('consulting', CONSULTING_SERVICE_COLUMNS,
+                                     'Consulting_Services_Summary', 'Consulting Services')
+
+
+@app.route('/operations/uae/services-summary')
+@admin_required
+def ops_uae_services_summary():
+    return _render_pathway_summary('uae', 'UAE Pathway', 'UAE',
+                                   UAE_SERVICE_COLUMNS, 'uae-services-summary')
+
+
+@app.route('/operations/uae/services-summary/download')
+@admin_required
+def ops_uae_services_summary_download():
+    return _download_pathway_summary('uae', UAE_SERVICE_COLUMNS,
+                                     'UAE_Services_Summary', 'UAE Services')
+
+
+@app.route('/operations/portfolio/services-summary')
+@admin_required
+def ops_portfolio_services_summary():
+    return _render_pathway_summary('portfolio', 'Portfolio Pathway', 'Portfolio',
+                                   PORTFOLIO_SERVICE_COLUMNS, 'portfolio-services-summary')
+
+
+@app.route('/operations/portfolio/services-summary/download')
+@admin_required
+def ops_portfolio_services_summary_download():
+    return _download_pathway_summary('portfolio', PORTFOLIO_SERVICE_COLUMNS,
+                                     'Portfolio_Services_Summary', 'Portfolio Services')
 
 
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
@@ -41729,6 +42323,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'PLAB / UK Pathway operational sub-areas. Grant these to staff supporting PLAB clients.',
         'sub_sections': [
             ('dashboard',         'Pathway Dashboard',       'Overview stats for PLAB clients'),
+            ('services_summary',  'Services Summary',        'Per-client PLAB/UK services-rendered overview + Excel export'),
             ('registration',      'Registration',            'PLAB client registration list + full profile'),
             ('onboarding',        'Onboarding',              'Welcome kit + onboarding workflow'),
             ('call_notes',        'Call Notes',              'PLAB call notes + follow-up tracker'),
@@ -41760,6 +42355,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'Australia (AMC) Pathway operational sub-areas. Grant these to staff supporting Australia clients.',
         'sub_sections': [
             ('dashboard',     'Pathway Dashboard',       'Overview stats for Australia clients'),
+            ('services_summary','Services Summary',      'Per-client AMC services-rendered overview + Excel export'),
             ('registration',  'Registration',            'Australia client registration list + full profile'),
             ('documents',     'Documents',               'Australia client document upload + verification'),
             ('call_notes',    'Call Notes',              'Australia call notes + tracker + not-contacted view'),
@@ -41782,6 +42378,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'Standard Consulting operational sub-areas. Houses AMC / UAE / USA / UK Consulting clients in one pathway. Grant these to staff supporting consulting clients.',
         'sub_sections': [
             ('dashboard',         'Pathway Dashboard',  'Overview stats for consulting clients'),
+            ('services_summary',  'Services Summary',   'Per-client Consulting services-rendered overview + Excel export'),
             ('registration',      'Registration',       'Consulting client registration list + full profile'),
             ('academic',          'Academic Details',   'Consulting client academic records'),
             ('documents',         'Documents',          'Consulting client document tracker'),
@@ -41807,6 +42404,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'UAE Pathway operational sub-areas. Houses UAE Services clients (reg prefix GCUAE). Grant these to staff supporting UAE clients.',
         'sub_sections': [
             ('dashboard',        'Pathway Dashboard',  'Overview stats for UAE clients'),
+            ('services_summary', 'Services Summary',   'Per-client UAE services-rendered overview + Excel export'),
             ('registration',     'Registration',       'UAE client registration list + full profile'),
             ('documents',        'Documents',          'UAE client document tracker'),
             ('payments',         'Payments',           'UAE payment records'),
@@ -41823,6 +42421,7 @@ ACCESS_SECTION_CATALOG = [
         'description': 'Portfolio Pathway operational sub-areas (lightweight). Houses Portfolio Services clients. Grant these to staff supporting portfolio clients.',
         'sub_sections': [
             ('dashboard',     'Pathway Dashboard',  'Overview stats for portfolio clients'),
+            ('services_summary','Services Summary', 'Per-client Portfolio services-rendered overview + Excel export'),
             ('registration',  'Registration',       'Portfolio client registration list + full profile'),
             ('payments',      'Payments',           'Portfolio payment records'),
             ('documents',     'Documents',          'Portfolio client document tracker'),
@@ -45295,6 +45894,8 @@ ACCESS_ROUTE_MAP = {
     'internal_transfer_return_to_sales':            _ap('clients', 'internal_transfers', 'edit'),
     # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
     'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
+    'ops_consulting_services_summary':              _ap('consulting_pathway', 'services_summary'),
+    'ops_consulting_services_summary_download':     _ap('consulting_pathway', 'services_summary'),
     'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
     'ops_consulting_client_detail':                 _ap('consulting_pathway', 'registration'),
     'ops_consulting_client_edit_page':              _ap('consulting_pathway', 'registration', 'edit'),
@@ -45381,6 +45982,8 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_research_add_save':             _ap('consulting_pathway', 'research', 'edit'),
     # ── Operations: UAE Pathway (mirrors Portfolio + 3 new sections) ──
     'ops_uae_pathway':                      _ap('uae_pathway', 'dashboard'),
+    'ops_uae_services_summary':             _ap('uae_pathway', 'services_summary'),
+    'ops_uae_services_summary_download':    _ap('uae_pathway', 'services_summary'),
     'ops_uae_clients_list':                 _ap('uae_pathway', 'registration'),
     'ops_uae_client_detail':                _ap('uae_pathway', 'registration'),
     'ops_uae_client_by_reg':                _ap('uae_pathway', 'registration'),
@@ -45420,6 +46023,8 @@ ACCESS_ROUTE_MAP = {
     'ops_uae_data_flow_add_save':           _ap('uae_pathway', 'data_flow', 'edit'),
     # ── Operations: Portfolio Pathway (Phase 4 lightweight) ────────────
     'ops_portfolio_pathway':                _ap('portfolio_pathway', 'dashboard'),
+    'ops_portfolio_services_summary':          _ap('portfolio_pathway', 'services_summary'),
+    'ops_portfolio_services_summary_download': _ap('portfolio_pathway', 'services_summary'),
     'ops_portfolio_clients_list':           _ap('portfolio_pathway', 'registration'),
     'ops_portfolio_client_detail':          _ap('portfolio_pathway', 'registration'),
     'ops_portfolio_client_by_reg':          _ap('portfolio_pathway', 'registration'),
@@ -45483,6 +46088,9 @@ ACCESS_ROUTE_MAP = {
     'ops_training_call_notes_add':          _ap('training_pathway', 'call_notes', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
+    'ops_australia_services_summary':          _ap('australia_pathway', 'services_summary'),
+    'ops_australia_services_summary_download': _ap('australia_pathway', 'services_summary'),
+    'ops_australia_welcome_kit_toggle':        _ap('australia_pathway', 'registration', 'edit'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
     'ops_australia_client_detail':          _ap('australia_pathway', 'registration'),
     'ops_australia_client_edit_page':       _ap('australia_pathway', 'registration', 'edit'),
@@ -45559,6 +46167,9 @@ ACCESS_ROUTE_MAP = {
     'ops_referrals_report':         _ap('plab_pathway', 'registration'),
 
     # ── Operations: PLAB Pathway ──────────────────────────────────────────
+    'ops_plab_services_summary':          _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_summary_download': _ap('plab_pathway', 'services_summary'),
+    'ops_plab_welcome_kit_toggle':        _ap('plab_pathway', 'registration', 'edit'),
     'ops_plab_list':                _ap('plab_pathway', 'registration'),
     'ops_plab_dashboard':           _ap('plab_pathway', 'registration'),
     'ops_plab_add':                 _ap('plab_pathway', 'registration', 'add'),

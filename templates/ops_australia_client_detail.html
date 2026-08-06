@@ -428,12 +428,31 @@
     <div id="dt-onboarding" class="dtab-panel" style="display:none;">
 
       <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Onboarding</h4>
+      {% set yes_badge = '<span style="background:#dcfce7;color:#15803d;font-weight:700;padding:2px 10px;border-radius:999px;font-size:13px;">&#10003; Yes</span>' %}
+      {% set no_badge = '<span style="background:#fee2e2;color:#b91c1c;font-weight:700;padding:2px 10px;border-radius:999px;font-size:13px;">No</span>' %}
       <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Call:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_call_by or '—' }}{% if client.welcome_call_date %} ({{ client.welcome_call_date }}){% endif %}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Mail:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_mail or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Service Agreement:</span><span style="color:var(--navy);font-weight:600;">{{ client.service_agreement or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Refund Policy:</span><span style="color:var(--navy);font-weight:600;">{{ client.refund_policy or '—' }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Call:</span><span>{{ (yes_badge if onboarding.welcome_call else no_badge)|safe }}{% if client.welcome_call_date %} <span style="color:var(--gray-500);font-size:12px;">({{ client.welcome_call_date }})</span>{% endif %}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Email:</span><span>{{ (yes_badge if onboarding.welcome_email else no_badge)|safe }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Service Agreement:</span><span>{{ (yes_badge if onboarding.agreement else no_badge)|safe }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Refund Policy:</span><span>{{ (yes_badge if onboarding.refund_policy else no_badge)|safe }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px dashed var(--gray-200);padding-top:12px;">
+          <span style="color:var(--gray-600);font-weight:500;">Welcome Kit:</span>
+          <span style="display:flex;align-items:center;gap:10px;">
+            {{ (yes_badge if onboarding.welcome_kit else no_badge)|safe }}
+            <form method="POST" action="/operations/australia/clients/{{ client.id }}/welcome-kit" style="margin:0;">
+              <input type="hidden" name="next" value="/operations/australia/clients/{{ client.id }}?tab=onboarding">
+              {% if onboarding.welcome_kit %}
+                <input type="hidden" name="given" value="0">
+                <button type="submit" style="background:#fff;border:1px solid #fca5a5;color:#b91c1c;font-weight:600;font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;">Mark as Not Given</button>
+              {% else %}
+                <input type="hidden" name="given" value="1">
+                <button type="submit" style="background:#fff;border:1px solid #86efac;color:#15803d;font-weight:600;font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer;">Mark as Given</button>
+              {% endif %}
+            </form>
+          </span>
+        </div>
       </div>
+      <p style="margin:14px 0 0;font-size:12px;color:var(--gray-500);max-width:560px;"><strong>Service Agreement</strong> reflects the real record — it shows <strong>Yes</strong> once a contract is uploaded (use <em>Upload Contract</em> at the top of this profile) or digitally signed. Welcome Call, Welcome Email &amp; Refund Policy are standard for every AMC client. Welcome Kit defaults to <strong>Given</strong> — switch it off for anyone who didn't receive one. These feed the <a href="/operations/australia/services-summary" style="color:var(--orange);font-weight:600;text-decoration:none;">Services Summary</a>.</p>
 
     </div><!-- /dt-onboarding -->
 
@@ -461,6 +480,13 @@ function showDtab(id, btn) {
     btn.style.fontWeight = '700';
   }
 }
+// Reopen a specific tab when linked with ?tab=... (e.g. after the Welcome Kit toggle).
+(function(){
+  try {
+    var t = new URLSearchParams(window.location.search).get('tab');
+    if (t) { var b = document.getElementById('dtbtn-' + t); if (b) b.click(); }
+  } catch (e) {}
+})();
 </script>
 {% include '_section_add_drawer.html' %}
 {% endblock %}
