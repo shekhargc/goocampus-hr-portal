@@ -244,6 +244,92 @@ def get_monthly_alloc(month_num):
 LEAVE_TYPE_ALLOC = {'annual': 13, 'sick': 6, 'casual': 6}
 
 
+def _leave_parse_ym(v):
+    """(year, month) from a TIMESTAMP / date / 'YYYY-MM-DD…' value, or None."""
+    if not v:
+        return None
+    try:
+        if hasattr(v, 'year') and hasattr(v, 'month'):
+            return (int(v.year), int(v.month))
+        parts = str(v).strip()[:10].split('-')
+        if len(parts) >= 2:
+            return (int(parts[0]), int(parts[1]))
+    except Exception:
+        return None
+    return None
+
+
+def _leave_accrual_meta(confirmation_status, confirmed_at, fy_start_year):
+    """How leave accrues for an employee in the FY starting April `fy_start_year`.
+
+    Probation-period staff (not yet confirmed permanent) accrue NOTHING — so any
+    leave they take is unpaid (LOP). A newly-permanent employee accrues only from
+    the month HR confirmed them permanent (that whole month onward). Legacy /
+    already-permanent staff (no confirmation stamp, or confirmed in an earlier FY)
+    accrue the full year, exactly as before. (founder 2026-08-06)
+    """
+    status = (confirmation_status or 'permanent').strip().lower()
+    if status != 'permanent':
+        return {'mode': 'none'}
+    ym = _leave_parse_ym(confirmed_at)
+    if not ym:
+        return {'mode': 'full'}               # legacy permanent — no confirmation date
+    fy_start = (fy_start_year, 4)             # April of the FY
+    fy_end = (fy_start_year + 1, 3)           # the following March
+    if ym <= fy_start:
+        return {'mode': 'full'}               # already permanent when this FY began
+    if ym > fy_end:
+        return {'mode': 'none'}               # not permanent until a later FY
+    return {'mode': 'from', 'start': ym}      # pro-rate from the confirmation month
+
+
+def _emp_month_alloc(meta, ry, rm):
+    """This employee's leave allocation for calendar (ry, rm), honouring probation."""
+    mode = (meta or {}).get('mode', 'full')
+    if mode == 'none':
+        return 0
+    if mode == 'from' and (ry, rm) < meta['start']:
+        return 0
+    return get_monthly_alloc(rm)
+
+
+def _fetch_leave_emp(conn, employee_id):
+    """Fetch carry_forward + confirmation fields as a plain dict (so .get works on
+    both Postgres RealDictRow and sqlite3.Row); resilient if the confirmation
+    columns don't exist yet on a cold start (falls back to carry_forward only)."""
+    try:
+        row = conn.execute(
+            "SELECT carry_forward, confirmation_status, confirmed_at FROM employees WHERE id = ?",
+            (employee_id,)).fetchone()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        row = conn.execute("SELECT carry_forward FROM employees WHERE id = ?", (employee_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def _leave_annual_entitlement(employee_id, fy_start_year):
+    """Total leave entitlement for the FY (pro-rated for probation/permanency) +
+    carry_forward. Replaces the old flat `25 + carry_forward` headline so a
+    probation employee shows 0, a mid-year-confirmed one shows only their months.
+    Opens its own short-lived connection so call sites needn't have `conn` handy."""
+    conn = get_db()
+    try:
+        emp = _fetch_leave_emp(conn, employee_id)
+        cf = float(emp['carry_forward'] or 0) if emp else 0.0
+        meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                                   emp.get('confirmed_at') if emp else None, fy_start_year)
+        total = cf
+        for offset in range(12):
+            rm = ((offset + 3) % 12) + 1
+            ry = fy_start_year if rm >= 4 else fy_start_year + 1
+            total += _emp_month_alloc(meta, ry, rm)
+        return round(total, 2)
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def leave_type_balances(employee_id, year):
     """Per-type leave balances for the FY starting April `year`.
 
@@ -259,16 +345,21 @@ def leave_type_balances(employee_id, year):
     Returns a dict with per-type alloc/taken/paid/balance plus totals.
     """
     conn = get_db()
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
+    emp = _fetch_leave_emp(conn, employee_id)
     cf = float(emp['carry_forward'] or 0) if emp else 0.0
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, year)
     paid = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
     taken = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
     total_deduction = 0.0
+    accrued_monthly = 0.0
     carried = cf
     for offset in range(12):
         rm = ((offset + 3) % 12) + 1
         ry = year if rm >= 4 else year + 1
-        available = carried + get_monthly_alloc(rm)
+        month_alloc = _emp_month_alloc(meta, ry, rm)
+        accrued_monthly += month_alloc
+        available = carried + month_alloc
         rows = conn.execute('''
             SELECT leave_type, days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -287,9 +378,14 @@ def leave_type_balances(employee_id, year):
             total_deduction += (d - paid_portion)
         carried = available  # always >= 0
     conn.close()
-    alloc = {'annual': LEAVE_TYPE_ALLOC['annual'] + cf,
-             'sick': LEAVE_TYPE_ALLOC['sick'],
-             'casual': LEAVE_TYPE_ALLOC['casual']}
+    # Entitlement is pro-rated to what actually accrued this FY (probation = 0,
+    # newly-permanent = only months since confirmation, else the full 25). The
+    # 13/6/6 type split is scaled by the same ratio so the cards still sum to the
+    # real total balance; carry_forward stays on the Annual bucket.
+    scale = (accrued_monthly / 25.0) if accrued_monthly else 0.0
+    alloc = {'annual': round(LEAVE_TYPE_ALLOC['annual'] * scale, 2) + cf,
+             'sick': round(LEAVE_TYPE_ALLOC['sick'] * scale, 2),
+             'casual': round(LEAVE_TYPE_ALLOC['casual'] * scale, 2)}
     bal = {k: alloc[k] - paid[k] for k in alloc}
     # A type can read negative if its PAID usage exceeded its own share while
     # the overall monthly pool still had capacity. Borrow the overdraft from a
@@ -458,18 +554,18 @@ def calculate_monthly_balance(employee_id, year, month):
     """Calculate running balance for a given month"""
     conn = get_db()
 
-    # Get carry forward
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
-    carry_forward = emp['carry_forward'] if emp else 0
-
-    # Total annual allocation = 25 + carry_forward
-    total_allocation = 25 + carry_forward
+    # Get carry forward + probation/permanency accrual gate
+    emp = _fetch_leave_emp(conn, employee_id)
+    carry_forward = float(emp['carry_forward'] or 0) if emp else 0.0
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, year)
 
     # Calculate balance up to and including the given month
     # Carry forward is added as starting balance; monthly alloc: April=3, others=2
+    # (0 during probation / before permanency).
     balance = carry_forward
     for m in range(4, month + 1):  # FY starts April (month 4)
-        balance += get_monthly_alloc(m)
+        balance += _emp_month_alloc(meta, year, m)
         # Subtract approved leaves in this month
         leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
@@ -487,16 +583,17 @@ def get_available_balance(employee_id, year, month):
     """Get available balance at the start of a month"""
     conn = get_db()
 
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
-    carry_forward = emp['carry_forward'] if emp else 0
-
-    total_allocation = 25 + carry_forward
+    emp = _fetch_leave_emp(conn, employee_id)
+    carry_forward = float(emp['carry_forward'] or 0) if emp else 0.0
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, year)
 
     # Get balance from start of FY to end of previous month
     # Carry forward added as starting balance; monthly alloc: April=3, others=2
+    # (0 during probation / before permanency).
     balance = carry_forward
     for m in range(4, month):
-        balance += get_monthly_alloc(m)
+        balance += _emp_month_alloc(meta, year, m)
         leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -529,9 +626,11 @@ def leave_month_figures(employee_id, year, month):
     balance_available, days_taken, deduction, balance_end (carried out).
     """
     conn = get_db()
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
+    emp = _fetch_leave_emp(conn, employee_id)
     carried = float(emp['carry_forward'] or 0) if emp else 0.0
     fy_start_year = year if month >= 4 else year - 1
+    meta = _leave_accrual_meta(emp.get('confirmation_status') if emp else None,
+                               emp.get('confirmed_at') if emp else None, fy_start_year)
     cy, cm = fy_start_year, 4
     result = None
     while True:
@@ -541,7 +640,7 @@ def leave_month_figures(employee_id, year, month):
             AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
         ''', (employee_id, str(cy), str(cm).zfill(2))).fetchone()
         taken_m = float(leaves['total_days'] or 0)
-        alloc_m = get_monthly_alloc(cm)
+        alloc_m = _emp_month_alloc(meta, cy, cm)
         carried_in = carried
         available = carried_in + alloc_m
         deduction = max(0.0, taken_m - available)
@@ -564,7 +663,7 @@ def leave_month_figures(employee_id, year, month):
             break
     conn.close()
     if result is None:
-        alloc_m = get_monthly_alloc(month)
+        alloc_m = _emp_month_alloc(meta, year, month)
         result = {'balance_start': 0.0, 'monthly_alloc': alloc_m,
                   'balance_available': alloc_m, 'days_taken': 0.0,
                   'deduction': 0.0, 'balance_end': alloc_m}
@@ -9680,7 +9779,7 @@ def dashboard():
     mgmt_leave_data = {}
     if user['emp_code'] != 'admin':
         carry_forward = user['carry_forward'] or 0
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(user['id'], (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
         leaves_taken = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -11206,7 +11305,7 @@ def leave_info():
     conn = get_db()
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
     conn.close()
 
     return render_template('leave_info.html',
@@ -11234,7 +11333,7 @@ def my_leave_report():
     # Total balance and carry forward
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     # Pending requests count
     pending_count = conn.execute(
@@ -11474,7 +11573,7 @@ def hr_dashboard():
     if is_management:
         fy_year = now.year if now.month >= 4 else now.year - 1
         carry_forward = user['carry_forward'] or 0
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(user['id'], fy_year)
         leaves_taken = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -11658,7 +11757,7 @@ def admin_employee_detail(emp_id):
     # Calculate balance
     emp_data = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (emp_id,)).fetchone()
     carry_forward = emp_data['carry_forward'] if emp_data else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(emp_id, (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
 
     # FY leave balance = entitlement − PAID leaves taken (consistent with reports)
     _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
@@ -14223,7 +14322,7 @@ def api_balance():
         return jsonify({'error': 'Employee not found'}), 404
 
     carry_forward = emp['carry_forward']
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(emp_id, (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
 
     _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
     _tb = leave_type_balances(emp_id, _fy)
@@ -14275,7 +14374,7 @@ def api_employee_profile(emp_id):
 
     # Leave summary — FY balance = entitlement − PAID leaves taken
     carry_forward = emp['carry_forward'] if emp.get('carry_forward') else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(emp['id'], (datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1))
     _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
     _tb = leave_type_balances(emp_id, _fy)
     days_taken = _tb['total_taken']
@@ -14746,7 +14845,7 @@ def admin_annual_report():
     report_data = []
     for emp in employees:
         carry_forward = emp['carry_forward']
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(emp['id'], year)
         # Shared rule: balance = entitlement − PAID leaves taken (unpaid/LOP
         # days don't reduce it). Consistent with every other leave report.
         _tb = leave_type_balances(emp['id'], year)
@@ -14814,7 +14913,7 @@ def admin_annual_report_download():
 
     for emp in employees:
         carry_forward = emp['carry_forward']
-        total_allocation = 25 + carry_forward
+        total_allocation = _leave_annual_entitlement(emp['id'], year)
         # Shared rule: balance = entitlement − PAID leaves taken.
         _tb = leave_type_balances(emp['id'], year)
         total_taken = _tb['total_taken']
@@ -14893,7 +14992,7 @@ def admin_employee_leave_report():
         selected_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (selected_emp_id,)).fetchone()
         if selected_emp:
             carry_forward = selected_emp['carry_forward'] or 0
-            total_allocation = 25 + carry_forward
+            total_allocation = _leave_annual_entitlement(selected_emp_id, fy_year)
 
             pending_count = conn.execute(
                 "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
@@ -15149,7 +15248,7 @@ def reports_monthly():
     # Total allocation
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     # FY total taken
     fy_leaves = conn.execute('''
@@ -15278,7 +15377,7 @@ def reports_quarterly():
     conn = get_db()
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     pending_count = conn.execute(
         'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
@@ -15385,7 +15484,7 @@ def reports_annual():
     conn = get_db()
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    total_allocation = _leave_annual_entitlement(user['id'], fy_year)
 
     pending_count = conn.execute(
         'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
