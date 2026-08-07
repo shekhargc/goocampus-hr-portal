@@ -46322,19 +46322,16 @@ ACCESS_ROUTE_MAP = {
     'admin_partner_b2b_leads':                      _ap('partners', 'leads', 'view'),
     'admin_partner_lead_detail':                    _ap('partners', 'leads', 'view'),
     'api_update_student_lead':                      _ap('partners', 'leads', 'edit'),
-    # ── Clients: All Clients list + client detail + verification actions ──
-    # These were previously unmapped, so ANY logged-in employee could open
-    # /admin/clients (the full client + invitation list) even without a Clients
-    # grant — the sidebar already assumes a 'registrations' grant is required
-    # (see _clients_subs). Governing them here makes Access Master enforce it.
-    # NOTE: whoever does sales/ops verification needs Clients → Registrations.
+    # ── Clients: All Clients LIST only ──
+    # /admin/clients (the full client + invitation list) was unmapped, so ANY
+    # logged-in employee could browse everyone via the sidebar / a "back to
+    # clients" link. Lock just the LIST to Clients → Registrations.
+    # IMPORTANT: do NOT lock admin_client_detail or the sales/ops verify actions
+    # here. Sales/Ops verifiers reach a single client's detail page from the
+    # verification queues (governed by Sales → Sales/Ops Verification), and they
+    # typically do NOT hold Clients → Registrations. Gating the detail page broke
+    # their verification. It stays reachable (as before) for the verify flow.
     'admin_clients_list':                           _ap('clients', 'registrations'),
-    'admin_client_detail':                          _ap('clients', 'registrations'),
-    'admin_client_sales_complete':                  _ap('clients', 'registrations', 'edit'),
-    'admin_client_ops_verify':                      _ap('clients', 'registrations', 'edit'),
-    'admin_client_welcome_call_confirm':            _ap('clients', 'registrations', 'edit'),
-    'admin_client_welcome_call_propose':            _ap('clients', 'registrations', 'edit'),
-    'admin_client_welcome_call_hold':               _ap('clients', 'registrations', 'edit'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),

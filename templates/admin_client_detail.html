@@ -326,12 +326,23 @@
     {% endif %}
     {% endwith %}
 
-    <!-- Back Link -->
-    <a href="/admin/clients" class="button button-secondary button-small" style="margin-bottom: 1.5rem;">
+    <!-- Back Link — return to wherever the user came from. Sales/Ops verifiers
+         arrive from their verification queue (?from=sales / ?from=ops) and may
+         not have access to the All Clients list, so send them back to the queue,
+         not to /admin/clients. -->
+    {% set _from = request.args.get('from') %}
+    {% if _from == 'sales' %}
+      {% set _back_url = url_for('verification_sales') %}{% set _back_txt = 'Back to Sales Verification' %}
+    {% elif _from == 'ops' %}
+      {% set _back_url = url_for('verification_ops') %}{% set _back_txt = 'Back to Ops Verification' %}
+    {% else %}
+      {% set _back_url = '/admin/clients' %}{% set _back_txt = 'Back to Clients' %}
+    {% endif %}
+    <a href="{{ _back_url }}" class="button button-secondary button-small" style="margin-bottom: 1.5rem;">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right:0.25rem;">
             <path d="M10 12L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Back to Clients
+        {{ _back_txt }}
     </a>
 
     <!-- Header -->
