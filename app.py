@@ -38771,9 +38771,10 @@ def partner_login_verify_otp():
     conn.close()
     if not partner:
         return jsonify({'error': 'Account not found or inactive.'}), 404
-    # Clear one-time OTP state, then start the session (same shape as password login).
-    for k in ('partner_login_otp', 'partner_login_num', 'partner_login_pid', 'partner_login_time'):
-        session.pop(k, None)
+    # Fully reset the session before starting the partner session, so no keys
+    # from a previous login (e.g. an employee's is_admin / user_id) can linger
+    # and mix profiles. Mirrors the employee login flows which session.clear().
+    session.clear()
     session.permanent = True
     session['user_id'] = partner['id']
     session['is_partner'] = True
@@ -47000,6 +47001,27 @@ def access_master_request_audit():
         # Real denial path. JSON for API endpoints, redirect for pages.
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'error': 'You do not have permission for this section.'}), 403
+        # LOOP GUARD: our redirect target below is the dashboard. If the page
+        # being denied IS the dashboard/index (a user with no dashboard grant —
+        # e.g. a brand-new employee, or someone who logged in via OTP onto a
+        # non-admin record), redirecting to the dashboard would be denied again
+        # → infinite redirect loop (ERR_TOO_MANY_REDIRECTS) with a flash piling
+        # up on every bounce. Render a plain no-access page instead of looping.
+        if endpoint in ('dashboard', 'index'):
+            name = (_row_get(user, 'name') or _row_get(user, 'emp_code') or 'your account')
+            return (
+                "<div style='font-family:system-ui,-apple-system,sans-serif;max-width:520px;"
+                "margin:12vh auto;padding:2rem;text-align:center;color:#1e293b'>"
+                "<div style='font-size:2.4rem'>🔒</div>"
+                "<h2 style='margin:.4rem 0 0'>No sections assigned yet</h2>"
+                f"<p style='color:#64748b;line-height:1.6'>You're signed in as "
+                f"<b>{name}</b>, but this account hasn't been granted access to any "
+                "section yet. Please ask your administrator to grant access in "
+                "Access Master, then sign in again.</p>"
+                "<a href='/logout' style='display:inline-block;margin-top:1rem;padding:10px 22px;"
+                "background:#F58220;color:#fff;border-radius:9px;text-decoration:none;"
+                "font-weight:600'>Log out</a></div>"
+            ), 403
         flash(
             f'Access denied: you don\'t have permission for "{main_section}/{sub_section}".',
             'error',
