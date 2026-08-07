@@ -41054,6 +41054,81 @@ def ensure_countries_reference():
 
 ensure_countries_reference()
 
+
+# Employee WhatsApp/OTP numbers, supplied by the founder 2026-08-07, keyed by
+# emp_code (unambiguous). First group = Official Number (the WhatsApp number);
+# second group = personal mobile (stored on the profile `phone` field). The OTP
+# login resolves official_number -> phone -> personal_phone.
+_EMP_WHATSAPP_SEED = {
+    'GC021': ('official_number', '9019925836'),  # Ralph Leander D Cruz
+    'GC006': ('official_number', '7483800701'),  # Robin Johnson
+    'GC012': ('official_number', '9538944468'),  # Vipin Vijaya Raghavan
+    'GC033': ('official_number', '7483800702'),  # Poornima S
+    'GC024': ('official_number', '7483800700'),  # Jeswin Jacob
+    'GC050': ('official_number', '6363142837'),  # Jeswin Shaju
+    'GC075': ('official_number', '6361516249'),  # Alfiya Naaz
+    'GC044': ('official_number', '9019925838'),  # Nandu C
+    'GC092': ('official_number', '7483524565'),  # Manya B M
+    'GC061': ('official_number', '6363141075'),  # Arun Kannan
+    'GC083': ('phone',           '7353237769'),  # Nikhil Shyamraj (personal)
+    'GC067': ('phone',           '8892869798'),  # Praveen L (personal)
+    'GC002': ('phone',           '9741234154'),  # Ashwini S (personal)
+    'GC001': ('phone',           '9611996500'),  # Santosh Shekhar (personal)
+    'GC003': ('phone',           '7795781385'),  # Maheen Ejaz (personal)
+    'GC046': ('phone',           '9606246260'),  # Harish S (personal)
+}
+
+
+def seed_employee_whatsapp_numbers_once():
+    """One-time: fill each employee's WhatsApp OTP number (founder 2026-08-07).
+    Guarded by a version marker so it runs once per version; bump the version to
+    re-apply a correction. Won't run again on later boots, so manual profile
+    edits made afterwards are preserved."""
+    SEED_VERSION = 'emp_whatsapp_v1'
+    conn = get_db()
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        conn.commit()
+        m = conn.execute("SELECT value FROM _import_markers WHERE key = 'emp_whatsapp_numbers'").fetchone()
+        if m and m['value'] == SEED_VERSION:
+            conn.close(); return
+        try:
+            _ensure_employee_onboarding(conn)  # make sure official_number column exists
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        n = 0
+        for code, (field, num) in _EMP_WHATSAPP_SEED.items():
+            try:
+                cur = conn.execute(f"UPDATE employees SET {field} = ? WHERE emp_code = ?", (num, code))
+                if getattr(cur, 'rowcount', 0):
+                    n += 1
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"emp whatsapp seed {code}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        try:
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES ('emp_whatsapp_numbers', ?) "
+                         "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (SEED_VERSION,))
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            conn.execute("DELETE FROM _import_markers WHERE key = 'emp_whatsapp_numbers'")
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES ('emp_whatsapp_numbers', ?)", (SEED_VERSION,))
+        conn.commit()
+        logging.info(f"seed_employee_whatsapp_numbers_once: applied {n}/{len(_EMP_WHATSAPP_SEED)} numbers ({SEED_VERSION})")
+    except Exception as e:
+        logging.error(f"seed_employee_whatsapp_numbers_once: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_employee_whatsapp_numbers_once()
+
 # ═══════════════════════════════════════════════════════════════
 #  TIME LOG / ATTENDANCE
 # ═══════════════════════════════════════════════════════════════
