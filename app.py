@@ -742,9 +742,13 @@ def _india_mobile10(raw):
 
 
 def _employee_otp_number(emp):
-    """OTP destination for an employee: office number if it's a WhatsApp-capable
-    mobile, otherwise their personal mobile. (founder 2026-08-05)"""
-    return _india_mobile10(emp.get('official_number')) or _india_mobile10(emp.get('phone'))
+    """WhatsApp OTP destination for an employee. The Official Number IS the
+    WhatsApp number, so it's always the first choice; if it isn't on file, fall
+    back to the employee's personal mobile (stored as `phone` on the profile or
+    `personal_phone` from the onboarding form). (founder 2026-08-05 / 2026-08-07)"""
+    return (_india_mobile10(_row_get(emp, 'official_number'))
+            or _india_mobile10(_row_get(emp, 'phone'))
+            or _india_mobile10(_row_get(emp, 'personal_phone')))
 
 
 def _mask_mobile(m10):
