@@ -1,0 +1,146 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Refund Worksheet{% endblock %}
+{% block section_content %}
+<style>
+  :root{--navy:#1B2A4A;--orange:#F58220;}
+  .rw-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;}
+  .rw-top h1{margin:0;font-size:1.4rem;color:var(--navy);font-weight:700;}
+  .rw-top .meta{font-size:.85rem;color:#64748b;margin-top:.3rem;}
+  .pw{display:inline-block;padding:2px 8px;border-radius:6px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:700;}
+  .st{display:inline-block;padding:3px 11px;border-radius:999px;font-size:11.5px;font-weight:700;margin-left:6px;}
+  .st-draft{background:#fef9c3;color:#a16207;} .st-pending{background:#ffedd5;color:#c2410c;}
+  .st-approved{background:#dcfce7;color:#15803d;} .st-rejected{background:#fee2e2;color:#b91c1c;}
+  .back{color:var(--orange);text-decoration:none;font-weight:600;font-size:.85rem;}
+  .cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:1.1rem;}
+  .card{flex:1;min-width:180px;background:#fff;border:1px solid #e2e8f0;border-radius:.7rem;padding:1rem 1.2rem;}
+  .card.hl{background:#0F1B33;border-color:#0F1B33;}
+  .card .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;font-weight:700;}
+  .card.hl .lbl{color:#93a4c4;}
+  .card .val{font-size:1.5rem;font-weight:800;color:var(--navy);margin-top:.2rem;}
+  .card.hl .val{color:#fff;}
+  .panel{background:#fff;border:1px solid #e2e8f0;border-radius:.75rem;overflow:hidden;margin-bottom:1.1rem;}
+  table.rw{border-collapse:collapse;width:100%;font-size:13.5px;}
+  table.rw th{background:#f1f5f9;color:#475569;font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding:9px 14px;text-align:left;}
+  table.rw td{padding:9px 14px;border-bottom:1px solid #eef2f7;color:#1e2836;}
+  .sec-row td{background:#f8fafc;font-weight:700;color:var(--navy);font-size:12.5px;}
+  .amt-in{width:130px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:13.5px;text-align:right;}
+  .amt-in:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,42,74,.1);}
+  .rupee{color:#94a3b8;margin-right:2px;}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px;}
+  .btn{border:0;border-radius:9px;padding:11px 20px;font-size:.92rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;}
+  .btn-primary{background:var(--orange);color:#fff;} .btn-primary:hover{background:#d96f14;}
+  .btn-g{background:#fff;border:1px solid #cbd5e1;color:#334155;}
+  .btn-approve{background:#16a34a;color:#fff;} .btn-approve:hover{background:#15803d;}
+  .btn-reject{background:#fff;border:1px solid #fca5a5;color:#b91c1c;}
+  .notes{width:100%;max-width:640px;border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font:inherit;font-size:.9rem;min-height:64px;}
+  .note-banner{padding:11px 15px;border-radius:9px;font-size:.88rem;margin-bottom:1rem;font-weight:500;}
+  .nb-info{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
+  .nb-warn{background:#fff7ed;color:#b45309;border:1px solid #fed7aa;}
+  .nb-ok{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;}
+</style>
+
+{% set locked = req and req.status == 'approved' %}
+{% set is_pending = req and req.status == 'pending' %}
+
+<div class="rw-top">
+  <div>
+    <a class="back" href="/admin/refund-requests">← All refund requests</a>
+    <h1 style="margin-top:.35rem;">{{ client_name }}
+      {% if req %}<span class="st st-{{ req.status }}">{{ {'draft':'Draft','pending':'Pending Approval','approved':'Approved','rejected':'Sent back'}.get(req.status, req.status) }}</span>{% endif %}
+    </h1>
+    <div class="meta"><span class="pw">{{ pathway_name }}</span> &nbsp; {{ reg }}</div>
+  </div>
+</div>
+
+{% if locked %}
+<div class="note-banner nb-ok">✓ This refund of <strong>₹{{ '{:,.0f}'.format(req.refund_amount|float) }}</strong> was approved{% if req.approved_by_name %} by {{ req.approved_by_name }}{% endif %} and recorded in the refund ledger. The worksheet is locked.</div>
+{% elif is_pending %}
+<div class="note-banner nb-info">This refund is <strong>pending approval</strong>. {% if can_approve %}Review the figures below and Approve or Send back.{% else %}It's with Santosh / Ashwini / Maheen / Admin for approval.{% endif %}</div>
+{% elif req and req.status == 'rejected' %}
+<div class="note-banner nb-warn">This refund was <strong>sent back</strong>{% if req.rejection_reason %}: “{{ req.rejection_reason }}”{% endif %}. Adjust the amounts and submit again.</div>
+{% else %}
+<div class="note-banner nb-info">Enter the amount spent on each item. The refund due is <strong>Total Paid (ex-GST) − Total Spent</strong>. Nothing is shown to the client until this is approved.</div>
+{% endif %}
+
+<div class="cards">
+  <div class="card"><div class="lbl">Total Paid (ex-GST)</div><div class="val">₹{{ '{:,.0f}'.format(paid_ex_gst|float) }}</div></div>
+  <div class="card"><div class="lbl">Total Spent</div><div class="val" id="spentCard">₹0</div></div>
+  <div class="card hl"><div class="lbl">Refund Due</div><div class="val" id="refundCard">₹0</div></div>
+</div>
+
+<form method="POST" action="/admin/refund-requests/{{ client.id }}/worksheet" id="rwForm">
+  <input type="hidden" name="action" id="rwAction" value="save">
+  <input type="hidden" name="item_count" value="{{ items|length }}">
+  <div class="panel">
+    <table class="rw">
+      <thead><tr><th style="width:60%;">Item</th><th style="text-align:right;">Amount Spent</th></tr></thead>
+      <tbody>
+        {% set ns = namespace(i=0) %}
+        {% for skey, g in groups.items() %}
+        <tr class="sec-row"><td colspan="2">{{ g.label }}{% if g.category == 'service' and g['items']|length > 1 %} <span style="color:#94a3b8;font-weight:600;">({{ g['items']|length }} delivered)</span>{% endif %}</td></tr>
+          {% for it in g['items'] %}
+          <tr>
+            <td>
+              {% if g.category == 'service' %}<span style="color:#64748b;">{{ it.item_label }}</span>{% else %}<strong>{{ it.item_label }}</strong>{% endif %}
+              <input type="hidden" name="cat_{{ ns.i }}" value="{{ it.category }}">
+              <input type="hidden" name="sec_{{ ns.i }}" value="{{ it.section_key }}">
+              <input type="hidden" name="seclabel_{{ ns.i }}" value="{{ it.section_label }}">
+              <input type="hidden" name="label_{{ ns.i }}" value="{{ it.item_label }}">
+            </td>
+            <td style="text-align:right;white-space:nowrap;">
+              <span class="rupee">₹</span>
+              <input class="amt-in rw-amt" type="number" step="0.01" min="0" name="amount_{{ ns.i }}"
+                     value="{{ '%.2f'|format(it.amount|float) if it.amount else '' }}" placeholder="0"
+                     {% if locked %}disabled{% endif %} oninput="rwRecalc()">
+            </td>
+          </tr>
+          {% set ns.i = ns.i + 1 %}
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-bottom:1rem;">
+    <label style="display:block;font-size:.78rem;font-weight:600;color:#64748b;margin-bottom:5px;">Notes (optional)</label>
+    <textarea class="notes" name="notes" {% if locked %}disabled{% endif %} placeholder="Any context for the approver…">{{ req.notes if req else '' }}</textarea>
+  </div>
+
+  {% if not locked %}
+  <div class="actions">
+    <button type="submit" class="btn btn-g" onclick="document.getElementById('rwAction').value='save'">Save Draft</button>
+    <button type="submit" class="btn btn-primary" onclick="document.getElementById('rwAction').value='submit'">Submit for Approval</button>
+  </div>
+  {% endif %}
+</form>
+
+{% if is_pending and can_approve %}
+<div class="panel" style="margin-top:1.2rem;padding:1.1rem 1.3rem;">
+  <div style="font-weight:700;color:var(--navy);margin-bottom:.6rem;">Approval</div>
+  <div class="actions">
+    <form method="POST" action="/admin/refund-requests/{{ req.id }}/approve" onsubmit="return confirm('Approve this refund of ₹{{ '{:,.0f}'.format(req.refund_amount|float) }} and record it in the ledger?');" style="margin:0;">
+      <button type="submit" class="btn btn-approve">✓ Approve refund (₹{{ '{:,.0f}'.format(req.refund_amount|float) }})</button>
+    </form>
+    <form method="POST" action="/admin/refund-requests/{{ req.id }}/reject" style="margin:0;display:flex;gap:8px;align-items:center;">
+      <input type="text" name="reason" placeholder="Reason to send back" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:.88rem;min-width:220px;">
+      <button type="submit" class="btn btn-reject">Send back</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<script>
+  var PAID = {{ paid_ex_gst|float }};
+  function _fmt(n){ return '₹' + Math.round(n).toLocaleString('en-IN'); }
+  function rwRecalc(){
+    var spent = 0;
+    document.querySelectorAll('.rw-amt').forEach(function(el){ var v = parseFloat(el.value); if(!isNaN(v)) spent += v; });
+    document.getElementById('spentCard').textContent = _fmt(spent);
+    var refund = PAID - spent;
+    var rc = document.getElementById('refundCard');
+    rc.textContent = _fmt(refund);
+    rc.style.color = refund < 0 ? '#fca5a5' : '#fff';
+  }
+  rwRecalc();
+</script>
+{% endblock %}

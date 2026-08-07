@@ -32441,6 +32441,361 @@ def admin_refunds_add():
         pre_reg=pre_reg, pre_name=pre_name, active_section='clients')
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# CLIENT REFUND WORKFLOW (founder 2026-08-06)
+# When ops sets a client to 'Dropped and Refunded', a refund worksheet opens:
+# total paid (ex-GST) minus an itemised spend list (consulting fee, welcome kit
+# if the pathway has one, and every delivered service item) => refund due. Ops
+# fills it, submits; ANY ONE of 4 approvers (GC001/GC002/GC003 or an admin)
+# approves; on approval it is posted to the refunds ledger. NOTHING is shown to
+# the client or sent to them at any stage.
+# ══════════════════════════════════════════════════════════════════════════
+
+REFUND_DROP_STATUS = 'Dropped and Refunded'
+
+
+def _ensure_refund_requests_tables(conn):
+    try:
+        conn.execute("""CREATE TABLE IF NOT EXISTS refund_requests (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT,
+            client_id INTEGER,
+            pathway TEXT,
+            client_name TEXT,
+            product_name TEXT,
+            plan_type TEXT,
+            total_paid_ex_gst NUMERIC(14,2) DEFAULT 0,
+            total_spent NUMERIC(14,2) DEFAULT 0,
+            refund_amount NUMERIC(14,2) DEFAULT 0,
+            status TEXT DEFAULT 'draft',
+            notes TEXT,
+            created_by INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            submitted_by INTEGER, submitted_at TIMESTAMP,
+            approved_by INTEGER, approved_by_name TEXT, approved_at TIMESTAMP,
+            rejected_by INTEGER, rejected_at TIMESTAMP, rejection_reason TEXT,
+            refund_ledger_id INTEGER
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS refund_request_items (
+            id SERIAL PRIMARY KEY,
+            refund_request_id INTEGER,
+            category TEXT,
+            section_key TEXT,
+            section_label TEXT,
+            item_label TEXT,
+            amount NUMERIC(14,2) DEFAULT 0,
+            sort_order INTEGER DEFAULT 0
+        )""")
+        conn.commit()
+    except Exception as e:
+        logging.warning(f"_ensure_refund_requests_tables: {e}")
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _refund_service_columns(pathway):
+    """The (key, label, [tables]) service list for a pathway (same as the Services
+    Summaries). Training and unknown pathways have none."""
+    try:
+        from routes.operations.australia import AMC_SERVICE_COLUMNS
+    except Exception:
+        AMC_SERVICE_COLUMNS = []
+    return {
+        'australia':  AMC_SERVICE_COLUMNS,
+        'plab':       PLAB_SERVICE_COLUMNS,
+        'consulting': CONSULTING_SERVICE_COLUMNS,
+        'uae':        UAE_SERVICE_COLUMNS,
+        'portfolio':  PORTFOLIO_SERVICE_COLUMNS,
+    }.get((pathway or 'plab'), [])
+
+
+def _refund_paid_ex_gst(conn, reg):
+    try:
+        r = conn.execute(
+            "SELECT COALESCE(SUM(amount_paid),0) AS a FROM ops_payments "
+            "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?))", (reg,)).fetchone()
+        return float(r['a'] or 0)
+    except Exception:
+        return 0.0
+
+
+_REFUND_LABEL_FIELDS = ['course_name', 'course', 'exam', 'event_name', 'event', 'title',
+                        'topic', 'session_topic', 'session', 'program', 'programme', 'name',
+                        'item_name', 'subscription', 'platform', 'provider', 'type', 'stage',
+                        'status', 'letter_type', 'assessment_type']
+
+
+def _refund_item_label(section_label, rec):
+    for f in _REFUND_LABEL_FIELDS:
+        v = rec.get(f)
+        if v is not None and str(v).strip():
+            return f"{str(v).strip()[:70]}"
+    return f"#{rec.get('id')}"
+
+
+def _refund_build_scaffold(conn, client):
+    """Build the itemised spend scaffold for a client from their DELIVERED records:
+    Consulting Fee + Welcome Kit (kit pathways) + each delivered service item."""
+    reg = client.get('registration_number')
+    pathway = (client.get('pathway') or 'plab')
+    items = [{'category': 'consulting_fee', 'section_key': 'consulting_fee',
+              'section_label': 'Consulting Fee', 'item_label': 'Consulting Fee',
+              'amount': 0.0, 'sort_order': 0}]
+    if pathway in ('plab', 'australia'):
+        items.append({'category': 'welcome_kit', 'section_key': 'welcome_kit',
+                      'section_label': 'Welcome Kit', 'item_label': 'Welcome Kit',
+                      'amount': 0.0, 'sort_order': 1})
+    so = 10
+    for key, label, tables in _refund_service_columns(pathway):
+        for table in tables:
+            try:
+                recs = conn.execute(
+                    f"SELECT * FROM {table} WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) "
+                    f"AND COALESCE(pathway,'plab') = ? ORDER BY id", (reg, pathway)).fetchall()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+                recs = []
+            for r in recs:
+                items.append({'category': 'service', 'section_key': key, 'section_label': label,
+                              'item_label': _refund_item_label(label, dict(r)),
+                              'amount': 0.0, 'sort_order': so})
+                so += 1
+    return items
+
+
+def _row_get(row, key, default=None):
+    """Safe accessor for a DB row that may be a dict (Postgres) or sqlite3.Row."""
+    try:
+        v = row[key]
+        return v if v is not None else default
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
+def _is_refund_approver(user):
+    from core.auth import MANAGEMENT_CODES
+    if not user:
+        return False
+    return bool(_row_get(user, 'is_admin') or (_row_get(user, 'emp_code') in MANAGEMENT_CODES))
+
+
+@app.route('/admin/refund-requests')
+@login_required
+def admin_refund_requests():
+    user = get_user()
+    if not (session.get('is_admin') or (user and has_section_permission(user, 'clients', 'refunds', 'view'))):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_refund_requests_tables(conn)
+    # Clients currently dropped+refunded, joined to any existing refund request.
+    rows = []
+    try:
+        rows = [dict(r) for r in conn.execute(f"""
+            SELECT c.id AS client_id, c.registration_number,
+                   TRIM(COALESCE(c.prefix,'')||' '||COALESCE(c.first_name,'')||' '||COALESCE(c.last_name,'')) AS name,
+                   COALESCE(c.pathway,'plab') AS pathway, c.registration_date,
+                   rr.id AS request_id, rr.status AS request_status,
+                   rr.refund_amount, rr.total_paid_ex_gst, rr.total_spent
+              FROM plab_clients c
+              LEFT JOIN refund_requests rr ON rr.client_id = c.id
+             WHERE c.account_status = ?
+             ORDER BY rr.status NULLS FIRST, c.id DESC""", (REFUND_DROP_STATUS,)).fetchall()]
+    except Exception as e:
+        logging.warning(f"admin_refund_requests: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    _PW = {'plab': 'UK / PLAB', 'australia': 'AMC', 'consulting': 'Consulting',
+           'uae': 'UAE', 'portfolio': 'Portfolio', 'training': 'Training'}
+    return render_template('admin_refund_requests.html', rows=rows, pathway_names=_PW,
+                           can_approve=_is_refund_approver(user), active_section='clients')
+
+
+@app.route('/admin/refund-requests/<int:client_id>/worksheet', methods=['GET', 'POST'])
+@login_required
+def admin_refund_worksheet(client_id):
+    user = get_user()
+    if not (session.get('is_admin') or (user and has_section_permission(user, 'clients', 'refunds', 'view'))):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_refund_requests_tables(conn)
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close(); flash('Client not found', 'error'); return redirect(url_for('admin_refund_requests'))
+    client = dict(client)
+    reg = client.get('registration_number')
+    paid_ex_gst = _refund_paid_ex_gst(conn, reg)
+    req = conn.execute("SELECT * FROM refund_requests WHERE client_id = ? ORDER BY id DESC LIMIT 1", (client_id,)).fetchone()
+    req = dict(req) if req else None
+
+    if request.method == 'POST':
+        if req and req.get('status') in ('approved',):
+            conn.close(); flash('This refund is already approved and locked.', 'error')
+            return redirect(url_for('admin_refund_worksheet', client_id=client_id))
+        action = request.form.get('action', 'save')
+        n = int(request.form.get('item_count', 0) or 0)
+        items = []
+        total_spent = 0.0
+        for i in range(n):
+            amt = float(request.form.get(f'amount_{i}', 0) or 0)
+            items.append({
+                'category': request.form.get(f'cat_{i}', 'service'),
+                'section_key': request.form.get(f'sec_{i}', ''),
+                'section_label': request.form.get(f'seclabel_{i}', ''),
+                'item_label': request.form.get(f'label_{i}', ''),
+                'amount': amt, 'sort_order': i,
+            })
+            total_spent += amt
+        refund_amount = round(paid_ex_gst - total_spent, 2)
+        notes = request.form.get('notes', '')
+        status = 'pending' if action == 'submit' else 'draft'
+        name = ' '.join(f"{client.get('prefix') or ''} {client.get('first_name') or ''} {client.get('last_name') or ''}".split())
+        try:
+            if req:
+                rid = req['id']
+                conn.execute("""UPDATE refund_requests SET total_paid_ex_gst=?, total_spent=?, refund_amount=?,
+                    status=?, notes=?, submitted_by=CASE WHEN ?='pending' THEN ? ELSE submitted_by END,
+                    submitted_at=CASE WHEN ?='pending' THEN CURRENT_TIMESTAMP ELSE submitted_at END
+                    WHERE id=?""",
+                    (paid_ex_gst, total_spent, refund_amount, status, notes,
+                     status, session.get('user_id'), status, rid))
+                conn.execute("DELETE FROM refund_request_items WHERE refund_request_id=?", (rid,))
+            else:
+                rid = conn.execute("""INSERT INTO refund_requests
+                    (registration_number, client_id, pathway, client_name, product_name, plan_type,
+                     total_paid_ex_gst, total_spent, refund_amount, status, notes, created_by,
+                     submitted_by, submitted_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, CASE WHEN ?='pending' THEN CURRENT_TIMESTAMP ELSE NULL END)
+                    RETURNING id""",
+                    (reg, client_id, client.get('pathway') or 'plab', name,
+                     client.get('product_name') or '', client.get('plan_type') or '',
+                     paid_ex_gst, total_spent, refund_amount, status, notes, session.get('user_id'),
+                     session.get('user_id') if status == 'pending' else None, status)).fetchone()['id']
+            for it in items:
+                conn.execute("""INSERT INTO refund_request_items
+                    (refund_request_id, category, section_key, section_label, item_label, amount, sort_order)
+                    VALUES (?,?,?,?,?,?,?)""",
+                    (rid, it['category'], it['section_key'], it['section_label'], it['item_label'], it['amount'], it['sort_order']))
+            conn.commit()
+            flash('Refund submitted for approval.' if action == 'submit' else 'Draft saved.', 'success')
+        except Exception as e:
+            logging.error(f"admin_refund_worksheet save: {e}")
+            try: conn.rollback()
+            except Exception: pass
+            flash('Could not save the refund worksheet.', 'error')
+        conn.close()
+        return redirect(url_for('admin_refund_worksheet', client_id=client_id))
+
+    # GET — load saved items if a request exists, else build the scaffold.
+    if req:
+        items = [dict(r) for r in conn.execute(
+            "SELECT * FROM refund_request_items WHERE refund_request_id=? ORDER BY sort_order, id", (req['id'],)).fetchall()]
+    else:
+        items = _refund_build_scaffold(conn, client)
+    # group items by section for display
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for it in items:
+        k = it['section_key']
+        groups.setdefault(k, {'label': it['section_label'], 'category': it['category'], 'items': []})
+        groups[k]['items'].append(it)
+    conn.close()
+    name = ' '.join(f"{client.get('prefix') or ''} {client.get('first_name') or ''} {client.get('last_name') or ''}".split())
+    _PW = {'plab': 'UK / PLAB', 'australia': 'AMC', 'consulting': 'Consulting',
+           'uae': 'UAE', 'portfolio': 'Portfolio', 'training': 'Training'}
+    return render_template('admin_refund_worksheet.html', client=client, client_name=name,
+                           reg=reg, pathway=(client.get('pathway') or 'plab'),
+                           pathway_name=_PW.get(client.get('pathway') or 'plab', client.get('pathway')),
+                           paid_ex_gst=paid_ex_gst, req=req, groups=groups, items=items,
+                           can_approve=_is_refund_approver(user), active_section='clients')
+
+
+@app.route('/admin/refund-requests/<int:req_id>/approve', methods=['POST'])
+@login_required
+def admin_refund_approve(req_id):
+    user = get_user()
+    if not _is_refund_approver(user):
+        flash('Only Santosh, Ashwini, Maheen or an Admin can approve refunds.', 'error')
+        return redirect(url_for('admin_refund_requests'))
+    conn = get_db()
+    _ensure_refund_requests_tables(conn)
+    req = conn.execute("SELECT * FROM refund_requests WHERE id = ?", (req_id,)).fetchone()
+    if not req:
+        conn.close(); flash('Refund request not found', 'error'); return redirect(url_for('admin_refund_requests'))
+    req = dict(req)
+    if req['status'] != 'pending':
+        conn.close(); flash(f"This request is already {req['status']}.", 'error')
+        return redirect(url_for('admin_refund_worksheet', client_id=req['client_id']))
+    try:
+        # Post to the refunds ledger (the final recorded refund).
+        led = conn.execute("""INSERT INTO refunds
+            (registration_number, amount, refund_date, refund_method, reason, pathway, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+            (req['registration_number'], float(req['refund_amount'] or 0),
+             datetime.now().strftime('%Y-%m-%d'), 'Bank Transfer',
+             'Approved refund on drop-out', req['pathway'],
+             f"Auto-posted from refund request #{req_id}", session.get('user_id'))).fetchone()
+        conn.execute("""UPDATE refund_requests SET status='approved', approved_by=?, approved_by_name=?,
+            approved_at=CURRENT_TIMESTAMP, refund_ledger_id=? WHERE id=?""",
+            (session.get('user_id'), (_row_get(user, 'name', '') if user else ''), led['id'], req_id))
+        conn.commit()
+        # Notify the ops person who raised it (internal only — nothing to client).
+        try:
+            if req.get('submitted_by') or req.get('created_by'):
+                create_notification(conn, req.get('submitted_by') or req.get('created_by'),
+                    'Refund approved',
+                    f"Refund of ₹{float(req['refund_amount'] or 0):,.0f} for {req.get('client_name') or req['registration_number']} was approved.",
+                    'success', url_for('admin_refund_worksheet', client_id=req['client_id']))
+                conn.commit()
+        except Exception:
+            pass
+        flash('Refund approved and recorded in the ledger.', 'success')
+    except Exception as e:
+        logging.error(f"admin_refund_approve: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not approve the refund.', 'error')
+    conn.close()
+    return redirect(url_for('admin_refund_worksheet', client_id=req['client_id']))
+
+
+@app.route('/admin/refund-requests/<int:req_id>/reject', methods=['POST'])
+@login_required
+def admin_refund_reject(req_id):
+    user = get_user()
+    if not _is_refund_approver(user):
+        flash('Only Santosh, Ashwini, Maheen or an Admin can reject refunds.', 'error')
+        return redirect(url_for('admin_refund_requests'))
+    conn = get_db()
+    _ensure_refund_requests_tables(conn)
+    req = conn.execute("SELECT * FROM refund_requests WHERE id = ?", (req_id,)).fetchone()
+    if not req:
+        conn.close(); flash('Refund request not found', 'error'); return redirect(url_for('admin_refund_requests'))
+    req = dict(req)
+    reason = request.form.get('reason', '').strip()
+    try:
+        conn.execute("""UPDATE refund_requests SET status='rejected', rejected_by=?, rejected_at=CURRENT_TIMESTAMP,
+            rejection_reason=? WHERE id=?""", (session.get('user_id'), reason, req_id))
+        conn.commit()
+        try:
+            if req.get('submitted_by') or req.get('created_by'):
+                create_notification(conn, req.get('submitted_by') or req.get('created_by'),
+                    'Refund sent back',
+                    f"Refund for {req.get('client_name') or req['registration_number']} was sent back. Reason: {reason or 'not given'}",
+                    'warning', url_for('admin_refund_worksheet', client_id=req['client_id']))
+                conn.commit()
+        except Exception:
+            pass
+        flash('Refund sent back to Operations.', 'success')
+    except Exception as e:
+        logging.error(f"admin_refund_reject: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not update the refund.', 'error')
+    conn.close()
+    return redirect(url_for('admin_refund_worksheet', client_id=req['client_id']))
+
+
 # ─────────────────────────────────────────────────────────
 #  OPERATIONS – Bulk Add / Bulk Edit (generic, all sections)
 # ─────────────────────────────────────────────────────────
@@ -45886,6 +46241,10 @@ ACCESS_ROUTE_MAP = {
     'admin_feedback_form_edit':                     _ap('clients', 'feedback', 'edit'),
     'admin_refunds':                                _ap('clients', 'refunds'),
     'admin_refunds_add':                            _ap('clients', 'refunds', 'add'),
+    'admin_refund_requests':                        _ap('clients', 'refunds'),
+    'admin_refund_worksheet':                       _ap('clients', 'refunds'),
+    'admin_refund_approve':                         _ap('clients', 'refunds'),
+    'admin_refund_reject':                          _ap('clients', 'refunds'),
     'admin_internal_transfers':                     _ap('clients', 'internal_transfers'),
     'admin_internal_transfer_client_info':          _ap('clients', 'internal_transfers'),
     'admin_internal_transfer_new':                  _ap('clients', 'internal_transfers', 'add'),

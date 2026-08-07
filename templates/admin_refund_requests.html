@@ -1,0 +1,78 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Refund Requests{% endblock %}
+{% block section_content %}
+<style>
+  .rr-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem;}
+  .rr-head h1{margin:0;font-size:1.5rem;color:var(--navy,#1B2A4A);font-weight:700;}
+  .rr-head .sub{font-size:.85rem;color:#64748b;margin-top:.25rem;max-width:60ch;}
+  .rr-wrap{overflow-x:auto;border:1px solid #e2e8f0;border-radius:.75rem;background:#fff;}
+  table.rr{border-collapse:collapse;width:100%;font-size:13.5px;}
+  table.rr th{background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:11px 14px;text-align:left;white-space:nowrap;}
+  table.rr td{padding:11px 14px;border-bottom:1px solid #eef2f7;color:#1e2836;vertical-align:middle;}
+  table.rr tbody tr:hover{background:#f8fafc;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
+  .p-none{background:#f1f5f9;color:#475569;} .p-draft{background:#fef9c3;color:#a16207;}
+  .p-pending{background:#ffedd5;color:#c2410c;} .p-approved{background:#dcfce7;color:#15803d;}
+  .p-rejected{background:#fee2e2;color:#b91c1c;}
+  .pw{display:inline-block;padding:2px 8px;border-radius:6px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:700;}
+  .amt{font-weight:700;color:#0f172a;}
+  .btn{display:inline-block;padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;cursor:pointer;border:0;}
+  .btn-o{background:#F58220;color:#fff;} .btn-o:hover{background:#d96f14;}
+  .btn-g{background:#fff;border:1px solid #cbd5e1;color:#334155;} .btn-g:hover{border-color:#0F1B33;}
+  .empty{padding:3rem 1rem;text-align:center;color:#64748b;}
+</style>
+
+<div class="rr-head">
+  <div>
+    <h1>Refund Requests</h1>
+    <div class="sub">Clients marked <strong>Dropped &amp; Refunded</strong> by Operations. Open a client's worksheet to itemise the spend and submit the refund for approval. Nothing is shown to the client.</div>
+  </div>
+  <a class="btn btn-g" href="/admin/refunds">View refund ledger →</a>
+</div>
+
+<div class="rr-wrap">
+  <table class="rr">
+    <thead>
+      <tr>
+        <th>#</th><th>Client</th><th>Reg No</th><th>Pathway</th>
+        <th style="text-align:right;">Paid (ex-GST)</th><th style="text-align:right;">Refund Due</th>
+        <th>Status</th><th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="color:#94a3b8;font-weight:600;">{{ loop.index }}</td>
+        <td style="font-weight:700;color:#0f172a;">{{ r.name or '—' }}</td>
+        <td style="color:#64748b;font-weight:600;font-size:12px;">{{ r.registration_number }}</td>
+        <td><span class="pw">{{ pathway_names.get(r.pathway, r.pathway) }}</span></td>
+        <td style="text-align:right;" class="amt">{% if r.total_paid_ex_gst is not none %}₹{{ '{:,.0f}'.format(r.total_paid_ex_gst|float) }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;" class="amt">{% if r.request_status == 'approved' and r.refund_amount is not none %}₹{{ '{:,.0f}'.format(r.refund_amount|float) }}{% else %}—{% endif %}</td>
+        <td>
+          {% set st = r.request_status %}
+          {% if not st %}<span class="pill p-none">Not started</span>
+          {% elif st == 'draft' %}<span class="pill p-draft">Draft</span>
+          {% elif st == 'pending' %}<span class="pill p-pending">Pending Approval</span>
+          {% elif st == 'approved' %}<span class="pill p-approved">Approved</span>
+          {% elif st == 'rejected' %}<span class="pill p-rejected">Sent back</span>
+          {% else %}<span class="pill p-none">{{ st }}</span>{% endif %}
+        </td>
+        <td>
+          {% if r.request_status == 'approved' %}
+            <a class="btn btn-g" href="/admin/refund-requests/{{ r.client_id }}/worksheet">View</a>
+          {% elif r.request_status == 'pending' %}
+            <a class="btn btn-o" href="/admin/refund-requests/{{ r.client_id }}/worksheet">{% if can_approve %}Review &amp; approve{% else %}View{% endif %}</a>
+          {% elif r.request_status == 'draft' or r.request_status == 'rejected' %}
+            <a class="btn btn-o" href="/admin/refund-requests/{{ r.client_id }}/worksheet">Continue</a>
+          {% else %}
+            <a class="btn btn-o" href="/admin/refund-requests/{{ r.client_id }}/worksheet">Open worksheet</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty">No clients are marked “Dropped &amp; Refunded” right now. When Operations sets a client to that status, they'll appear here.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
