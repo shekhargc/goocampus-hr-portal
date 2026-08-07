@@ -23,7 +23,7 @@
         <!-- Source client summary -->
         <div style="background:#F8FAFC;border:1px solid var(--gray-200);border-radius:10px;padding:0.9rem 1.1rem;margin-bottom:1rem;font-size:0.85rem;color:var(--navy);">
             <strong>{{ src.prefix or '' }} {{ src.first_name or '' }} {{ src.last_name or '' }}</strong>
-            &nbsp;·&nbsp; {{ src.registration_number }}
+            &nbsp;·&nbsp; {{ src.registration_number|format_reg }}
             &nbsp;·&nbsp; <span style="text-transform:capitalize;">{{ src.src_pathway }}</span> pathway
         </div>
 

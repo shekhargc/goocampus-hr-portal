@@ -98,7 +98,7 @@
       <tr>
         <td class="cnum col-sn">{{ loop.index }}</td>
         <td class="lft cname col-name"><a href="/operations/{{ pathway_slug }}/clients/{{ r.id }}">{{ r.name }}</a></td>
-        <td class="lft creg">{{ r.registration_number }}</td>
+        <td class="lft creg">{{ r.registration_number|format_reg }}</td>
         <td>{{ r.registration_date or '—' }}</td>
         <td>
           {% set s = r.account_status %}

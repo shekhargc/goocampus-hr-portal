@@ -181,10 +181,10 @@
     <h3>Employee Login</h3>
     <p class="msub">GooCampus team members.</p>
     <div class="seg">
-      <button type="button" class="on" id="empsegpw" onclick="empSeg('pw')">Password</button>
-      <button type="button" id="empsegotp" onclick="empSeg('otp')">WhatsApp OTP</button>
+      <button type="button" class="on" id="empsegotp" onclick="empSeg('otp')">WhatsApp OTP</button>
+      <button type="button" id="empsegpw" onclick="empSeg('pw')">Password</button>
     </div>
-    <div id="empPw">
+    <div id="empPw" style="display:none;">
       <form method="POST" action="/login">
         <label>Employee Code</label>
         <input class="inp" type="text" name="emp_code" placeholder="Enter your employee code" required>
@@ -194,7 +194,7 @@
       </form>
       <a class="link" href="/forgot-password">Forgot Password?</a>
     </div>
-    <div id="empOtp" style="display:none;">
+    <div id="empOtp">
       <label>Mobile Number</label>
       <input class="inp" id="empOtpMobile" type="tel" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" placeholder="Your official or personal mobile">
       <div id="empOtpEntry" style="display:none;">

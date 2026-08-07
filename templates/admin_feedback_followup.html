@@ -57,7 +57,7 @@
       <tr style="border-top:1px solid #f1f5f9;{% if r.failed %}background:#fef2f2;{% endif %}">
         <td style="padding:10px 12px;">
           <div style="font-weight:600;color:var(--navy);">{{ r.name }}{% if r.failed %} <span style="font-size:0.66rem;font-weight:700;color:#b91c1c;background:#fee2e2;padding:2px 7px;border-radius:999px;">✕ email failed</span>{% endif %}</div>
-          <div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} · {{ r.mobile or 'no mobile' }}</div>
+          <div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg|format_reg }} · {{ r.mobile or 'no mobile' }}</div>
         </td>
         <td style="padding:10px 12px;color:var(--gray-500);font-size:0.78rem;">{% if r.days_ago is none %}—{% elif r.days_ago == 0 %}today{% elif r.days_ago == 1 %}1 day ago{% else %}{{ r.days_ago }} days ago{% endif %}</td>
         <td style="padding:10px 12px;text-align:right;white-space:nowrap;">

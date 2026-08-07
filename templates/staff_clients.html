@@ -38,7 +38,7 @@
       <div style="width:42px;height:42px;border-radius:50%;background:#EEF2FF;color:#3730A3;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0">{{ (r.name[:1] or '?')|upper }}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;color:var(--navy)">{{ r.name }}</div>
-        <div style="color:var(--muted);font-size:12.5px">{{ r.registration_number }} · {{ (r.pathway or '')|title }}{% if r.account_status %} · {{ r.account_status }}{% endif %}</div>
+        <div style="color:var(--muted);font-size:12.5px">{{ r.registration_number|format_reg }} · {{ (r.pathway or '')|title }}{% if r.account_status %} · {{ r.account_status }}{% endif %}</div>
       </div>
       <i class="bi bi-chevron-right" style="color:#CBD5E1"></i>
     </a>

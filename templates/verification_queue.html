@@ -49,7 +49,7 @@
         {% for r in newreg %}
         <tr>
           <td>{{ loop.index }}</td>
-          <td>{{ r.reg }}</td>
+          <td>{{ r.reg|format_reg }}</td>
           <td><b style="color:var(--navy);">{{ r.name }}</b></td>
           <td>{{ r.product }}{% if r.pathway %} <span style="font-size:0.7rem;background:#eef2f7;color:#475569;padding:2px 8px;border-radius:999px;white-space:nowrap;">{{ r.pathway|title }}</span>{% endif %}</td>
           <td>{{ (r.when|string)[:10] if r.when else '—' }}</td>
@@ -79,7 +79,7 @@
           {% for t in transfers %}
           <tr>
             <td>{{ loop.index }}</td>
-            <td>{{ t.reg }}</td>
+            <td>{{ t.reg|format_reg }}</td>
             <td><b style="color:var(--navy);">{{ t.name }}</b></td>
             <td>{{ t.pathway|title }} → {{ t.product }}</td>
             <td>{{ t.requested_by_name or '—' }}</td>

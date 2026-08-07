@@ -153,62 +153,11 @@ def installment_label_filter(value):
 
 @app.template_filter('format_reg')
 def format_reg_filter(value):
-    """Normalize registration numbers to a single canonical display:
-        GCUKIP/YY-YY/NNN    (PLAB)
-        GCAUSIP/YY-YY/NNN   (AMC)
-        GCCSS/YY-YY/NNN     (Standard Consulting -- S-3)
-    Handles both source formats and pads the trailing number to at
-    least 3 digits.
-
-      GCUKIP/2022/42      ->  GCUKIP/22-23/042
-      GCUKIP/24-25/06     ->  GCUKIP/24-25/006
-      GCAUSIP/2023/9      ->  GCAUSIP/23-24/009
-      GCAUSIP/26-27/04    ->  GCAUSIP/26-27/004
-      GCAUSIP/25-26/039   ->  GCAUSIP/25-26/039   (unchanged)
-      GCCSS/24-25/06      ->  GCCSS/24-25/006
-    Unknown shapes are returned as-is. Empty / None becomes '—'.
-    """
-    if not value or not isinstance(value, str):
-        return value or '—'
-    value = value.strip()
-    if not value:
-        return '—'
-    import re as _re
-
-    def _pad(n):
-        try:
-            return f"{int(n):03d}"
-        except (ValueError, TypeError):
-            return n
-
-    # Match either prefix with either middle form.
-    # Group 1 prefix; group 2 either YYYY or YY-YY; group 3 trailing number.
-    m = _re.match(r'^(GCUKIP|GCAUSIP|GCCSS)/(\d{2,4}(?:-\d{2,4})?)/(\d+)$',
-                  value, _re.IGNORECASE)
-    if not m:
-        return value
-    prefix = m.group(1).upper()
-    middle = m.group(2)
-    num    = _pad(m.group(3))
-
-    if _re.match(r'^\d{4}$', middle):
-        # 4-digit year -> convert to YY-(YY+1)
-        year = int(middle)
-        yy = year % 100
-        next_yy = (yy + 1) % 100
-        middle = f"{yy:02d}-{next_yy:02d}"
-    elif _re.match(r'^\d{2}-\d{2}$', middle):
-        pass  # already canonical
-    elif _re.match(r'^\d{2,4}-\d{2,4}$', middle):
-        # Mixed widths -- coerce both halves to 2 digits if 4-digit years.
-        a, b = middle.split('-')
-        try:
-            a2 = int(a) % 100
-            b2 = int(b) % 100
-            middle = f"{a2:02d}-{b2:02d}"
-        except ValueError:
-            pass
-    return f"{prefix}/{middle}/{num}"
+    """Jinja `|format_reg` filter → canonical <PREFIX>/YY-YY/NNN for every
+    pathway prefix. Delegates to core.helpers.format_reg so the screen and the
+    Excel/CSV report exports share ONE implementation and can't drift apart."""
+    from core.helpers import format_reg
+    return format_reg(value)
 
 
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
@@ -27719,7 +27668,7 @@ def ops_reports_export():
             if add_cs:
                 _st = stat_by_reg.get(reg, ('', ''))
                 cs_vals = [_clean(_st[0]), _clean(_st[1])]
-            ws.append([_clean(_client_name(r)), _clean(reg)] + cs_vals + [_clean(r[c]) for c in data_cols])
+            ws.append([_clean(_client_name(r)), _clean(format_reg_filter(reg))] + cs_vals + [_clean(r[c]) for c in data_cols])
         if not rows:
             ws.append(['No data for this section / pathway.'])
         out = io.BytesIO(); wb.save(out); out.seek(0)
@@ -27791,7 +27740,7 @@ def ops_payment_summary_download():
             pkg = _num(r['package']) - _num(r['discount'])   # final package (net of discount)
             base = _num(r['base'])                            # actual received (ex-GST)
             balance = pkg - base                              # both ex-GST -> true amount still due
-            ws.append([i, _clean(r['name']), _clean(r['reg']), _clean(r['account_status']),
+            ws.append([i, _clean(r['name']), _clean(format_reg_filter(r['reg'])), _clean(r['account_status']),
                        _clean(r['current_stage']), pkg, _num(r['tot']), base, _num(r['gst']), balance])
         out = io.BytesIO(); wb.save(out); out.seek(0)
     except Exception as e:
@@ -32645,7 +32594,13 @@ def admin_refund_requests():
               FROM plab_clients c
               LEFT JOIN refund_requests rr ON rr.client_id = c.id
              WHERE c.account_status = ?
-             ORDER BY rr.status NULLS FIRST, c.id DESC""", (REFUND_DROP_STATUS,)).fetchall()]
+             ORDER BY c.id DESC""", (REFUND_DROP_STATUS,)).fetchall()]
+        # Always show a Paid (ex-GST): the saved refund figure if a request exists,
+        # else the live ops_payments sum (0 for old cases → completed on the worksheet).
+        for r in rows:
+            saved = r.get('total_paid_ex_gst')
+            r['paid_show'] = (float(saved) if (r.get('request_id') and saved is not None)
+                              else _refund_paid_ex_gst(conn, r['registration_number']))
     except Exception as e:
         logging.warning(f"admin_refund_requests: {e}")
         try: conn.rollback()
@@ -32653,7 +32608,15 @@ def admin_refund_requests():
     conn.close()
     _PW = {'plab': 'UK / PLAB', 'australia': 'AMC', 'consulting': 'Consulting',
            'uae': 'UAE', 'portfolio': 'Portfolio', 'training': 'Training'}
+    # Pathway tabs: only those actually present, each with a count, in a stable order.
+    counts = {}
+    for r in rows:
+        counts[r['pathway']] = counts.get(r['pathway'], 0) + 1
+    tab_order = ['plab', 'australia', 'consulting', 'uae', 'portfolio', 'training']
+    pathway_tabs = [(pw, _PW.get(pw, pw), counts[pw]) for pw in tab_order if pw in counts]
+    pathway_tabs += [(pw, _PW.get(pw, pw), counts[pw]) for pw in counts if pw not in tab_order]
     return render_template('admin_refund_requests.html', rows=rows, pathway_names=_PW,
+                           pathway_tabs=pathway_tabs,
                            can_approve=_is_refund_approver(user), active_section='clients')
 
 
@@ -32670,9 +32633,13 @@ def admin_refund_worksheet(client_id):
         conn.close(); flash('Client not found', 'error'); return redirect(url_for('admin_refund_requests'))
     client = dict(client)
     reg = client.get('registration_number')
-    paid_ex_gst = _refund_paid_ex_gst(conn, reg)
+    live_paid = _refund_paid_ex_gst(conn, reg)  # auto figure from ops_payments (ex-GST)
     req = conn.execute("SELECT * FROM refund_requests WHERE client_id = ? ORDER BY id DESC LIMIT 1", (client_id,)).fetchone()
     req = dict(req) if req else None
+    # Pre-fill: saved value if a request exists, else the auto figure. Editable on the
+    # worksheet so old/Zoho cases (no ops_payments rows) can still be completed.
+    paid_ex_gst = (float(req['total_paid_ex_gst']) if (req and req.get('total_paid_ex_gst') is not None)
+                   else live_paid)
 
     if request.method == 'POST':
         if req and req.get('status') in ('approved',):
@@ -32692,6 +32659,12 @@ def admin_refund_worksheet(client_id):
                 'amount': amt, 'sort_order': i,
             })
             total_spent += amt
+        # Total Paid (ex-GST) is editable on the worksheet — take the entered value
+        # (falls back to the auto figure if left blank).
+        _pf = request.form.get('paid_ex_gst', None)
+        if _pf is not None and str(_pf).strip() != '':
+            try: paid_ex_gst = round(float(_pf), 2)
+            except Exception: pass
         refund_amount = round(paid_ex_gst - total_spent, 2)
         notes = request.form.get('notes', '')
         status = 'pending' if action == 'submit' else 'draft'
@@ -32752,7 +32725,7 @@ def admin_refund_worksheet(client_id):
     return render_template('admin_refund_worksheet.html', client=client, client_name=name,
                            reg=reg, pathway=(client.get('pathway') or 'plab'),
                            pathway_name=_PW.get(client.get('pathway') or 'plab', client.get('pathway')),
-                           paid_ex_gst=paid_ex_gst, req=req, groups=groups, items=items,
+                           paid_ex_gst=paid_ex_gst, live_paid=live_paid, req=req, groups=groups, items=items,
                            can_approve=_is_refund_approver(user), active_section='clients')
 
 
@@ -38747,9 +38720,10 @@ def partner_login_verify_otp():
     conn.close()
     if not partner:
         return jsonify({'error': 'Account not found or inactive.'}), 404
-    # Clear one-time OTP state, then start the session (same shape as password login).
-    for k in ('partner_login_otp', 'partner_login_num', 'partner_login_pid', 'partner_login_time'):
-        session.pop(k, None)
+    # Fully reset the session before starting the partner session, so no keys
+    # from a previous login (e.g. an employee's is_admin / user_id) can linger
+    # and mix profiles. Mirrors the employee login flows which session.clear().
+    session.clear()
     session.permanent = True
     session['user_id'] = partner['id']
     session['is_partner'] = True
@@ -46348,6 +46322,19 @@ ACCESS_ROUTE_MAP = {
     'admin_partner_b2b_leads':                      _ap('partners', 'leads', 'view'),
     'admin_partner_lead_detail':                    _ap('partners', 'leads', 'view'),
     'api_update_student_lead':                      _ap('partners', 'leads', 'edit'),
+    # ── Clients: All Clients list + client detail + verification actions ──
+    # These were previously unmapped, so ANY logged-in employee could open
+    # /admin/clients (the full client + invitation list) even without a Clients
+    # grant — the sidebar already assumes a 'registrations' grant is required
+    # (see _clients_subs). Governing them here makes Access Master enforce it.
+    # NOTE: whoever does sales/ops verification needs Clients → Registrations.
+    'admin_clients_list':                           _ap('clients', 'registrations'),
+    'admin_client_detail':                          _ap('clients', 'registrations'),
+    'admin_client_sales_complete':                  _ap('clients', 'registrations', 'edit'),
+    'admin_client_ops_verify':                      _ap('clients', 'registrations', 'edit'),
+    'admin_client_welcome_call_confirm':            _ap('clients', 'registrations', 'edit'),
+    'admin_client_welcome_call_propose':            _ap('clients', 'registrations', 'edit'),
+    'admin_client_welcome_call_hold':               _ap('clients', 'registrations', 'edit'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),
@@ -46963,6 +46950,27 @@ def access_master_request_audit():
         # Real denial path. JSON for API endpoints, redirect for pages.
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'error': 'You do not have permission for this section.'}), 403
+        # LOOP GUARD: our redirect target below is the dashboard. If the page
+        # being denied IS the dashboard/index (a user with no dashboard grant —
+        # e.g. a brand-new employee, or someone who logged in via OTP onto a
+        # non-admin record), redirecting to the dashboard would be denied again
+        # → infinite redirect loop (ERR_TOO_MANY_REDIRECTS) with a flash piling
+        # up on every bounce. Render a plain no-access page instead of looping.
+        if endpoint in ('dashboard', 'index'):
+            name = (_row_get(user, 'name') or _row_get(user, 'emp_code') or 'your account')
+            return (
+                "<div style='font-family:system-ui,-apple-system,sans-serif;max-width:520px;"
+                "margin:12vh auto;padding:2rem;text-align:center;color:#1e293b'>"
+                "<div style='font-size:2.4rem'>🔒</div>"
+                "<h2 style='margin:.4rem 0 0'>No sections assigned yet</h2>"
+                f"<p style='color:#64748b;line-height:1.6'>You're signed in as "
+                f"<b>{name}</b>, but this account hasn't been granted access to any "
+                "section yet. Please ask your administrator to grant access in "
+                "Access Master, then sign in again.</p>"
+                "<a href='/logout' style='display:inline-block;margin-top:1rem;padding:10px 22px;"
+                "background:#F58220;color:#fff;border-radius:9px;text-decoration:none;"
+                "font-weight:600'>Log out</a></div>"
+            ), 403
         flash(
             f'Access denied: you don\'t have permission for "{main_section}/{sub_section}".',
             'error',

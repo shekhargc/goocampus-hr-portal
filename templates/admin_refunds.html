@@ -33,7 +33,7 @@
       {% for c in pending %}
       <div style="display:flex;align-items:center;gap:10px;font-size:0.85rem;padding:6px 0;border-top:1px solid #FECACA;">
         <span style="font-weight:600;color:#7F1D1D;">{{ (c.prefix or '') }} {{ (c.first_name or '') }} {{ (c.last_name or '') }}</span>
-        <span style="color:#b91c1c;font-size:0.76rem;">{{ c.registration_number }}</span>
+        <span style="color:#b91c1c;font-size:0.76rem;">{{ c.registration_number|format_reg }}</span>
         <span style="font-size:0.7rem;font-weight:700;background:#fff;color:#991B1B;padding:2px 8px;border-radius:999px;">{{ (c.pathway or 'plab')|upper }}</span>
         <a href="{{ url_for('admin_refunds_add', reg=c.registration_number) }}" style="margin-left:auto;color:#dc2626;font-weight:700;text-decoration:none;font-size:0.8rem;">Record refund →</a>
       </div>
@@ -60,7 +60,7 @@
           <td style="padding:10px 12px;color:var(--gray-600);white-space:nowrap;">{{ r.refund_date or '—' }}</td>
           <td style="padding:10px 12px;">
             <div style="font-weight:600;color:var(--navy);">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</div>
-            <div style="font-size:0.75rem;color:var(--gray-400);">{{ r.registration_number }}</div>
+            <div style="font-size:0.75rem;color:var(--gray-400);">{{ r.registration_number|format_reg }}</div>
           </td>
           <td style="padding:10px 12px;"><span style="font-size:0.72rem;font-weight:600;background:var(--gray-100);color:var(--gray-600);padding:2px 9px;border-radius:999px;">{{ (r.client_pathway or 'plab')|upper }}</span></td>
           <td style="padding:10px 12px;color:var(--gray-700);">{{ r.refund_method or '—' }}</td>

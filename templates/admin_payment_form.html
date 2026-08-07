@@ -16,7 +16,7 @@
         <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Client *</label>
         <input type="text" id="clientSearch" autocomplete="off" required
                placeholder="Search name or registration #"
-               value="{% if record %}{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }} — {{ record.registration_number }}{% endif %}"
+               value="{% if record %}{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }} — {{ record.registration_number|format_reg }}{% endif %}"
                style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
         <input type="hidden" name="registration_number" id="regNum" value="{{ record.registration_number if record else '' }}">
         <div id="clientResults" style="position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);max-height:240px;overflow:auto;display:none;"></div>

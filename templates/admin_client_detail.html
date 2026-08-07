@@ -341,7 +341,7 @@
                 {{ reg.client_name or reg.name or ((reg.prefix or '') ~ ' ' ~ (reg.first_name or '') ~ ' ' ~ (reg.last_name or '')).strip() or 'N/A' }}
             </h1>
             <p style="color: var(--gray-500); font-size: 0.95rem;">
-                Registration #{{ reg.registration_number or reg.id }}
+                Registration #{{ (reg.registration_number or reg.id)|format_reg }}
                 {% if reg.product_name %}
                 <span style="margin-left: 0.5rem; color: var(--gray-400);">|</span>
                 <span style="margin-left: 0.5rem; color: var(--blue); font-weight: 600;">{{ reg.product_name }}</span>
@@ -797,7 +797,7 @@
                 {% if s.installments %}
                 <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.75rem 0 0.35rem;">
                     {{ s.plan_type or s.product or 'Add-on' }} Installments
-                    <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ s.reg }} · separate payment schedule</span>
+                    <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ s.reg|format_reg }} · separate payment schedule</span>
                 </h3>
                 <div style="overflow-x:auto;">
                     <table class="table" style="border-radius:0.6rem;overflow:hidden;">
@@ -921,7 +921,7 @@
             {% if s.installments %}
             <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.75rem 0 1rem;">
                 {{ s.plan_type or s.product or 'Add-on' }} Installments
-                <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ s.reg }} · separate schedule</span>
+                <span style="font-weight:500;color:var(--gray-500);font-size:0.8rem;">— {{ s.reg|format_reg }} · separate schedule</span>
             </h3>
             {% set sns = namespace(tot=0, cur='₹') %}
             <div style="overflow-x: auto;">

@@ -1,5 +1,5 @@
 {% extends "ops_sidebar_base.html" %}
-{% block title %}Edit Payment - {{ record.registration_number or record.id }}{% endblock %}
+{% block title %}Edit Payment - {{ (record.registration_number or record.id)|format_reg }}{% endblock %}
 {% block ops_content %}
 <div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;">

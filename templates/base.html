@@ -38,6 +38,14 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        /* Portal-wide horizontal-overflow guard. A single element wider than the
+           screen (a stray wide table/row, a fixed-width block) used to push the
+           whole page sideways — content drifting left with a blank gap on the
+           right. `overflow-x: clip` at the root absorbs that on EVERY page.
+           It does NOT create a scroll container, so the sticky navbar and any
+           table with its own overflow-x:auto scroll keep working. (founder 2026-08-07) */
+        html, body { overflow-x: clip; max-width: 100%; }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: var(--gray-50);
@@ -173,6 +181,7 @@
             margin: 0 auto;
             padding: 2.5rem 3rem;
             width: 100%;
+            overflow-x: clip;   /* wide content on base pages scrolls in its own wrapper, not the page */
         }
 
         /* ===== FOOTER ===== */

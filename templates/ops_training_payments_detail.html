@@ -1,5 +1,5 @@
 {% extends "ops_sidebar_base.html" %}
-{% block title %}Training Payment - {{ record.registration_number or record.id }}{% endblock %}
+{% block title %}Training Payment - {{ (record.registration_number or record.id)|format_reg }}{% endblock %}
 {% block ops_content %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
   <!-- Back Link -->
