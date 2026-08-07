@@ -755,25 +755,65 @@ def _mask_mobile(m10):
     return ('••••••' + m10[-2:]) if m10 and len(m10) >= 2 else '••••••'
 
 
+def _find_employee_by_mobile(conn, mobile10):
+    """Find the single ACTIVE employee whose official OR personal mobile matches the
+    given 10-digit number (checks official_number / phone / personal_phone, last 10
+    digits). Returns (emp_dict, error). Employees log in with a number they remember
+    rather than their employee code. (founder 2026-08-07)"""
+    if not mobile10 or len(mobile10) != 10:
+        return None, 'Please enter your 10-digit mobile number.'
+    try:
+        rows = conn.execute("SELECT * FROM employees WHERE is_active = 1").fetchall()
+    except Exception:
+        return None, 'Could not look up your account. Please try your employee code + password.'
+    matches = []
+    for r in rows:
+        d = dict(r)
+        for f in ('official_number', 'phone', 'personal_phone'):
+            digits = _digits_only(d.get(f))
+            if digits and digits[-10:] == mobile10:
+                matches.append(d)
+                break
+    if len(matches) == 1:
+        return matches[0], None
+    if not matches:
+        return None, 'No employee found with that mobile number. Use your employee code + password, or contact HR.'
+    return None, 'This number is on more than one account — please use your employee code + password.'
+
+
 @app.route('/login/send-otp', methods=['POST'])
 def login_send_otp():
-    """Employee password-less login: WhatsApp OTP to the office (or personal)
-    mobile. Keyed by employee code; password login stays available."""
+    """Employee password-less login: enter the MOBILE NUMBER (official or personal)
+    → WhatsApp OTP to that number. Employees remember their mobile more easily than
+    their code. (Employee-code is still accepted as a fallback.) Password login stays."""
     data = request.get_json(silent=True) or {}
+    mobile_raw = data.get('mobile') or ''
     emp_code = (data.get('emp_code') or '').strip()
-    if not emp_code:
-        return jsonify({'error': 'Please enter your employee code.'}), 400
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (emp_code,)).fetchone()
-    conn.close()
-    if not emp:
-        return jsonify({'error': 'No active employee found with that code.'}), 404
-    num = _employee_otp_number(dict(emp))
-    if not num:
-        return jsonify({'error': 'No WhatsApp-capable mobile is on file for your account. Please use your password, or contact HR.'}), 400
+    if mobile_raw:
+        digits = _digits_only(mobile_raw)
+        m10 = digits[-10:] if len(digits) >= 10 else None
+        emp, err = _find_employee_by_mobile(conn, m10)
+        conn.close()
+        if not emp:
+            return jsonify({'error': err}), 404
+        num = m10  # send the OTP to the number they entered (verified as theirs)
+        code = emp.get('emp_code')
+    elif emp_code:
+        emp = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (emp_code,)).fetchone()
+        conn.close()
+        if not emp:
+            return jsonify({'error': 'No active employee found with that code.'}), 404
+        num = _employee_otp_number(dict(emp))
+        code = emp_code
+        if not num:
+            return jsonify({'error': 'No WhatsApp mobile is on file for your account. Please contact HR.'}), 400
+    else:
+        conn.close()
+        return jsonify({'error': 'Please enter your mobile number.'}), 400
     otp_code = str(random.randint(100000, 999999))
     session['emp_login_otp'] = otp_code
-    session['emp_login_code'] = emp_code
+    session['emp_login_code'] = code
     session['emp_login_num'] = num
     session['emp_login_time'] = datetime.now().isoformat()
     ok, err = _send_whatsapp_otp(num, otp_code)
@@ -785,12 +825,14 @@ def login_send_otp():
 
 @app.route('/login/verify-otp', methods=['POST'])
 def login_verify_otp():
+    """Verify the employee OTP. Uses the employee identified during send-otp (stored
+    in session), so the client only needs to send the OTP."""
     data = request.get_json(silent=True) or {}
-    emp_code = (data.get('emp_code') or '').strip()
     otp = (data.get('otp') or '').strip()
     stored = session.get('emp_login_otp')
     t = session.get('emp_login_time')
-    if not stored or not t or session.get('emp_login_code') != emp_code:
+    code = session.get('emp_login_code')
+    if not stored or not t or not code:
         return jsonify({'error': 'Please request an OTP first.'}), 400
     try:
         if (datetime.now() - datetime.fromisoformat(t)).total_seconds() > 600:
@@ -800,7 +842,7 @@ def login_verify_otp():
     if otp != stored:
         return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
     conn = get_db()
-    user = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (emp_code,)).fetchone()
+    user = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (code,)).fetchone()
     conn.close()
     if not user:
         return jsonify({'error': 'Account not found or inactive.'}), 404

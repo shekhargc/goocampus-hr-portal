@@ -195,8 +195,8 @@
       <a class="link" href="/forgot-password">Forgot Password?</a>
     </div>
     <div id="empOtp" style="display:none;">
-      <label>Employee Code</label>
-      <input class="inp" id="empOtpCode" type="text" placeholder="Enter your employee code">
+      <label>Mobile Number</label>
+      <input class="inp" id="empOtpMobile" type="tel" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" placeholder="Your official or personal mobile">
       <div id="empOtpEntry" style="display:none;">
         <label>WhatsApp OTP</label>
         <input class="inp" id="empOtpInput" type="text" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Enter 6-digit OTP" style="letter-spacing:4px;text-align:center;">
@@ -281,18 +281,18 @@
   // ── Employee OTP ──
   let _empSent=false;
   async function empOtpAction(){
-    const code=document.getElementById('empOtpCode').value.trim(), btn=document.getElementById('empOtpBtn');
+    const mobile=document.getElementById('empOtpMobile').value.trim(), btn=document.getElementById('empOtpBtn');
     if(!_empSent){
-      if(!code){ _msg('empOtpMsg','Enter your employee code.',false); return; }
+      if(!/^\d{10}$/.test(mobile)){ _msg('empOtpMsg','Enter your 10-digit mobile number.',false); return; }
       btn.disabled=true; _msg('empOtpMsg','Sending OTP…',true);
-      try{ const r=await fetch('/login/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emp_code:code})}); const d=await r.json();
+      try{ const r=await fetch('/login/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mobile})}); const d=await r.json();
         if(r.ok&&d.success){ _empSent=true; document.getElementById('empOtpEntry').style.display=''; btn.textContent='Verify & Sign In'; _msg('empOtpMsg',d.message||'OTP sent on WhatsApp.',true); }
         else _msg('empOtpMsg',d.error||'Could not send OTP.',false);
       }catch(e){ _msg('empOtpMsg','Network error. Try again.',false); } btn.disabled=false;
     } else {
       const otp=document.getElementById('empOtpInput').value.trim(); if(!otp){ _msg('empOtpMsg','Enter the 6-digit OTP.',false); return; }
       btn.disabled=true; _msg('empOtpMsg','Verifying…',true);
-      try{ const r=await fetch('/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emp_code:code,otp})}); const d=await r.json();
+      try{ const r=await fetch('/login/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mobile,otp})}); const d=await r.json();
         if(r.ok&&d.success){ _msg('empOtpMsg','Success! Redirecting…',true); window.location.href=d.redirect||'/'; }
         else { _msg('empOtpMsg',d.error||'Invalid OTP.',false); btn.disabled=false; }
       }catch(e){ _msg('empOtpMsg','Network error. Try again.',false); btn.disabled=false; }
