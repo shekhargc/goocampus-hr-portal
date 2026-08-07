@@ -38633,11 +38633,15 @@ def admin_diag_otp_test():
     import html as _html, json as _json
     mobile_raw = (request.args.get('mobile') or '').strip()
     out = []
+    out.append("<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+               "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+               "<title>OTP delivery test</title></head><body style='margin:0'>")
     out.append("<div style='font-family:system-ui,sans-serif;max-width:820px;margin:32px auto;padding:0 16px;color:#1e293b'>")
     out.append("<h2>WhatsApp OTP delivery test</h2>")
-    out.append("<form method='GET' style='margin:14px 0'><input name='mobile' value='%s' placeholder='10-digit mobile' "
+    out.append("<form method='GET' action='/admin/diag/otp-test' style='margin:14px 0'>"
+               "<input name='mobile' value='%s' placeholder='10-digit mobile' inputmode='numeric' autocomplete='off' "
                "style='padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;width:220px'> "
-               "<button style='padding:9px 18px;background:#F58220;color:#fff;border:0;border-radius:8px;font-weight:600'>Test send</button></form>"
+               "<button type='submit' style='padding:9px 18px;background:#F58220;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer'>Test send</button></form>"
                % _html.escape(mobile_raw))
     out.append("<p style='color:#64748b;font-size:.9rem'>Enter a staff mobile. This sends a real OTP and shows exactly what the WhatsApp provider (Infobip) reports — including whether it was actually delivered.</p>")
 
@@ -38673,37 +38677,56 @@ def admin_diag_otp_test():
                 out.append(f"<p>HTTP <b>{r.status_code}</b> — a 200 here means <i>accepted for delivery</i>, not delivered.</p>")
                 out.append("<pre style='background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;overflow:auto;font-size:12px'>%s</pre>"
                            % _html.escape(r.text[:1500]))
-                # 3. Delivery logs — the real status.
-                out.append("<h3 style='margin-top:22px'>3. Delivery status (Infobip logs)</h3>")
+                # Pull the messageId so we can ask for THIS message's delivery report.
+                _mid = None
                 try:
-                    lg = _rq.get(f"https://{infobip_base}/whatsapp/1/logs",
-                                 params={"to": f"91{m10}", "limit": 5},
-                                 headers={"Authorization": f"App {infobip_key}"}, timeout=15)
-                    if lg.status_code < 400:
-                        data = lg.json() if lg.text else {}
-                        results = (data.get('results') or [])
-                        if results:
-                            out.append("<table style='border-collapse:collapse;width:100%;font-size:13px'>"
-                                       "<tr style='background:#f1f5f9'><th style='text-align:left;padding:6px 10px'>Sent</th>"
-                                       "<th style='text-align:left;padding:6px 10px'>Status</th>"
-                                       "<th style='text-align:left;padding:6px 10px'>Detail</th></tr>")
-                            for it in results:
-                                st = (it.get('status') or {})
-                                grp = st.get('groupName', '?'); nm = st.get('name', ''); desc = st.get('description', '')
-                                color = '#065f46' if grp == 'DELIVERED' else ('#b91c1c' if grp in ('UNDELIVERABLE','REJECTED') else '#a16207')
-                                out.append(f"<tr><td style='padding:6px 10px'>{_html.escape(str(it.get('sentAt','')))[:19]}</td>"
-                                           f"<td style='padding:6px 10px;color:{color};font-weight:700'>{_html.escape(grp)}</td>"
-                                           f"<td style='padding:6px 10px;color:#64748b'>{_html.escape(nm)} — {_html.escape(desc)}</td></tr>")
-                            out.append("</table>")
-                        else:
-                            out.append("<p style='color:#64748b'>No delivery logs yet for this number (they can take a few seconds to appear — reload).</p>")
+                    _mid = (r.json().get('messages') or [{}])[0].get('messageId')
+                except Exception:
+                    _mid = None
+
+                # 3. Delivery status — the REAL outcome (correct endpoint: /reports).
+                out.append("<h3 style='margin-top:22px'>3. Delivery status (Infobip delivery report)</h3>")
+                if not _mid:
+                    out.append("<p style='color:#a16207'>No messageId returned, cannot fetch the delivery report.</p>")
+                else:
+                    import time as _time
+                    rep_items = []
+                    rep_err = None
+                    for _attempt in range(4):          # reports are async; poll a few times
+                        try:
+                            rep = _rq.get(f"https://{infobip_base}/whatsapp/1/reports",
+                                          params={"messageId": _mid, "limit": 5},
+                                          headers={"Authorization": f"App {infobip_key}"}, timeout=15)
+                            if rep.status_code < 400:
+                                rep_items = ((rep.json() if rep.text else {}).get('results') or [])
+                                if rep_items:
+                                    break
+                            else:
+                                rep_err = f"HTTP {rep.status_code}: {rep.text[:300]}"
+                                break
+                        except Exception as e:
+                            rep_err = str(e); break
+                        _time.sleep(2)
+                    if rep_items:
+                        out.append("<table style='border-collapse:collapse;width:100%;font-size:13px'>"
+                                   "<tr style='background:#f1f5f9'><th style='text-align:left;padding:6px 10px'>Status</th>"
+                                   "<th style='text-align:left;padding:6px 10px'>Reason</th></tr>")
+                        for it in rep_items:
+                            st = (it.get('status') or {}); err = (it.get('error') or {})
+                            grp = st.get('groupName', '?'); nm = st.get('name', '')
+                            reason = err.get('description') or st.get('description', '')
+                            color = '#065f46' if grp == 'DELIVERED' else ('#b91c1c' if grp in ('UNDELIVERABLE','REJECTED') else '#a16207')
+                            out.append(f"<tr><td style='padding:6px 10px;color:{color};font-weight:700'>{_html.escape(grp)} / {_html.escape(nm)}</td>"
+                                       f"<td style='padding:6px 10px;color:#64748b'>{_html.escape(reason)}</td></tr>")
+                        out.append("</table>")
+                    elif rep_err:
+                        out.append(f"<p style='color:#a16207'>Delivery report not available: {_html.escape(rep_err)}</p>")
                     else:
-                        out.append(f"<p style='color:#a16207'>Logs endpoint returned HTTP {lg.status_code}: {_html.escape(lg.text[:300])}</p>")
-                except Exception as e:
-                    out.append(f"<p style='color:#a16207'>Could not fetch delivery logs: {_html.escape(str(e))}</p>")
+                        out.append("<p style='color:#64748b'>Report not ready yet (they arrive a few seconds after sending). "
+                                   f"Reload this page in ~10s to see the final status for message <code>{_html.escape(_mid)}</code>.</p>")
             except Exception as e:
                 out.append(f"<p style='color:#b91c1c'>Send failed: {_html.escape(str(e))}</p>")
-    out.append("</div>")
+    out.append("</div></body></html>")
     return "".join(out)
 
 
