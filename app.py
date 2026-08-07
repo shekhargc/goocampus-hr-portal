@@ -38602,17 +38602,109 @@ def _send_whatsapp_otp(mobile_10, otp_code):
             },
         }]}
         resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
-        logging.info(f"Partner WA OTP to {mobile_10}: status={resp.status_code}")
+        # Log the FULL provider response, not just the HTTP code. A 200 here only
+        # means Infobip ACCEPTED the message for delivery (status groupName
+        # PENDING) — it does NOT mean WhatsApp delivered it. Undeliverable numbers
+        # (not on WhatsApp, blocked, sender/template restrictions) still 200 here
+        # and fail later, so this log is the only place to see the truth.
+        logging.info(f"WA OTP to {mobile_10}: status={resp.status_code} body={resp.text[:500]}")
         if resp.status_code >= 400:
             payload["messages"][0]["content"]["templateName"] = "otp_verify"
             payload["messages"][0]["content"]["language"] = "en_GB"
             resp2 = http_requests.post(url, json=payload, headers=headers, timeout=15)
+            logging.info(f"WA OTP to {mobile_10} (fallback tmpl): status={resp2.status_code} body={resp2.text[:500]}")
             if resp2.status_code >= 400:
                 return False, 'Could not send the WhatsApp OTP. Check the number and try again.'
         return True, None
     except Exception as e:
         logging.error(f"Partner WA OTP send error: {e}")
         return False, 'Failed to send OTP. Please try again.'
+
+
+@app.route('/admin/diag/otp-test')
+@login_required
+def admin_diag_otp_test():
+    """Diagnose WhatsApp OTP delivery for a single number. Shows (a) which
+    employee the number maps to, (b) Infobip's RAW accept response, and (c)
+    Infobip's recent DELIVERY logs for the number (the real DELIVERED /
+    UNDELIVERABLE / REJECTED status). Admin only. (founder 2026-08-07)"""
+    if not session.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    import html as _html, json as _json
+    mobile_raw = (request.args.get('mobile') or '').strip()
+    out = []
+    out.append("<div style='font-family:system-ui,sans-serif;max-width:820px;margin:32px auto;padding:0 16px;color:#1e293b'>")
+    out.append("<h2>WhatsApp OTP delivery test</h2>")
+    out.append("<form method='GET' style='margin:14px 0'><input name='mobile' value='%s' placeholder='10-digit mobile' "
+               "style='padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;width:220px'> "
+               "<button style='padding:9px 18px;background:#F58220;color:#fff;border:0;border-radius:8px;font-weight:600'>Test send</button></form>"
+               % _html.escape(mobile_raw))
+    out.append("<p style='color:#64748b;font-size:.9rem'>Enter a staff mobile. This sends a real OTP and shows exactly what the WhatsApp provider (Infobip) reports — including whether it was actually delivered.</p>")
+
+    m10 = _digits_only(mobile_raw)[-10:] if len(_digits_only(mobile_raw)) >= 10 else None
+    if m10:
+        conn = get_db()
+        emp, err = _find_employee_by_mobile(conn, m10)
+        conn.close()
+        out.append("<h3 style='margin-top:22px'>1. Employee match</h3>")
+        if emp:
+            out.append(f"<p style='color:#065f46'>✓ Matches <b>{_html.escape((emp.get('name') or ''))}</b> "
+                       f"(code <b>{_html.escape((emp.get('emp_code') or ''))}</b>, active). OTP login will sign in as this account.</p>")
+        else:
+            out.append(f"<p style='color:#b91c1c'>✗ {_html.escape(err or 'No active employee found.')}</p>")
+
+        out.append("<h3 style='margin-top:22px'>2. Provider accept response</h3>")
+        infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+        infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+        if not infobip_key or not infobip_base:
+            out.append("<p style='color:#b91c1c'>Infobip is not configured (missing API key / base URL).</p>")
+        else:
+            try:
+                import requests as _rq
+                _test_otp = '000000'
+                url = f"https://{infobip_base}/whatsapp/1/message/template"
+                headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
+                payload = {"messages": [{"from": "15558246314", "to": f"91{m10}",
+                    "content": {"templateName": "goocampus_otp_verify",
+                                "templateData": {"body": {"placeholders": [_test_otp]},
+                                                 "buttons": [{"type": "URL", "parameter": _test_otp}]},
+                                "language": "en"}}]}
+                r = _rq.post(url, json=payload, headers=headers, timeout=15)
+                out.append(f"<p>HTTP <b>{r.status_code}</b> — a 200 here means <i>accepted for delivery</i>, not delivered.</p>")
+                out.append("<pre style='background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;overflow:auto;font-size:12px'>%s</pre>"
+                           % _html.escape(r.text[:1500]))
+                # 3. Delivery logs — the real status.
+                out.append("<h3 style='margin-top:22px'>3. Delivery status (Infobip logs)</h3>")
+                try:
+                    lg = _rq.get(f"https://{infobip_base}/whatsapp/1/logs",
+                                 params={"to": f"91{m10}", "limit": 5},
+                                 headers={"Authorization": f"App {infobip_key}"}, timeout=15)
+                    if lg.status_code < 400:
+                        data = lg.json() if lg.text else {}
+                        results = (data.get('results') or [])
+                        if results:
+                            out.append("<table style='border-collapse:collapse;width:100%;font-size:13px'>"
+                                       "<tr style='background:#f1f5f9'><th style='text-align:left;padding:6px 10px'>Sent</th>"
+                                       "<th style='text-align:left;padding:6px 10px'>Status</th>"
+                                       "<th style='text-align:left;padding:6px 10px'>Detail</th></tr>")
+                            for it in results:
+                                st = (it.get('status') or {})
+                                grp = st.get('groupName', '?'); nm = st.get('name', ''); desc = st.get('description', '')
+                                color = '#065f46' if grp == 'DELIVERED' else ('#b91c1c' if grp in ('UNDELIVERABLE','REJECTED') else '#a16207')
+                                out.append(f"<tr><td style='padding:6px 10px'>{_html.escape(str(it.get('sentAt','')))[:19]}</td>"
+                                           f"<td style='padding:6px 10px;color:{color};font-weight:700'>{_html.escape(grp)}</td>"
+                                           f"<td style='padding:6px 10px;color:#64748b'>{_html.escape(nm)} — {_html.escape(desc)}</td></tr>")
+                            out.append("</table>")
+                        else:
+                            out.append("<p style='color:#64748b'>No delivery logs yet for this number (they can take a few seconds to appear — reload).</p>")
+                    else:
+                        out.append(f"<p style='color:#a16207'>Logs endpoint returned HTTP {lg.status_code}: {_html.escape(lg.text[:300])}</p>")
+                except Exception as e:
+                    out.append(f"<p style='color:#a16207'>Could not fetch delivery logs: {_html.escape(str(e))}</p>")
+            except Exception as e:
+                out.append(f"<p style='color:#b91c1c'>Send failed: {_html.escape(str(e))}</p>")
+    out.append("</div>")
+    return "".join(out)
 
 
 @app.route('/partner/onboard/send-phone-otp', methods=['POST'])
