@@ -62,15 +62,25 @@
 <div class="note-banner nb-info">Enter the amount spent on each item. The refund due is <strong>Total Paid (ex-GST) − Total Spent</strong>. Nothing is shown to the client until this is approved.</div>
 {% endif %}
 
-<div class="cards">
-  <div class="card"><div class="lbl">Total Paid (ex-GST)</div><div class="val">₹{{ '{:,.0f}'.format(paid_ex_gst|float) }}</div></div>
-  <div class="card"><div class="lbl">Total Spent</div><div class="val" id="spentCard">₹0</div></div>
-  <div class="card hl"><div class="lbl">Refund Due</div><div class="val" id="refundCard">₹0</div></div>
-</div>
-
 <form method="POST" action="/admin/refund-requests/{{ client.id }}/worksheet" id="rwForm">
   <input type="hidden" name="action" id="rwAction" value="save">
   <input type="hidden" name="item_count" value="{{ items|length }}">
+
+  <div class="cards">
+    <div class="card">
+      <div class="lbl">Total Paid (ex-GST) <span style="text-transform:none;letter-spacing:0;color:#cbd5e1;">— editable</span></div>
+      <div style="display:flex;align-items:baseline;gap:2px;margin-top:.15rem;">
+        <span style="font-size:1.4rem;font-weight:800;color:var(--navy);">₹</span>
+        <input id="paidInput" name="paid_ex_gst" type="number" step="0.01" min="0"
+               value="{{ '%.2f'|format(paid_ex_gst|float) if paid_ex_gst else '' }}" placeholder="0"
+               {% if locked %}disabled{% endif %} oninput="rwRecalc()"
+               style="font-size:1.35rem;font-weight:800;color:var(--navy);border:0;border-bottom:2px dashed #cbd5e1;width:135px;background:transparent;padding:2px 0;">
+      </div>
+      {% if live_paid %}<div style="font-size:.7rem;color:#94a3b8;margin-top:4px;">from recorded payments: ₹{{ '{:,.0f}'.format(live_paid|float) }}</div>{% endif %}
+    </div>
+    <div class="card"><div class="lbl">Total Spent</div><div class="val" id="spentCard">₹0</div></div>
+    <div class="card hl"><div class="lbl">Refund Due</div><div class="val" id="refundCard">₹0</div></div>
+  </div>
   <div class="panel">
     <table class="rw">
       <thead><tr><th style="width:60%;">Item</th><th style="text-align:right;">Amount Spent</th></tr></thead>
@@ -130,9 +140,11 @@
 {% endif %}
 
 <script>
-  var PAID = {{ paid_ex_gst|float }};
   function _fmt(n){ return '₹' + Math.round(n).toLocaleString('en-IN'); }
   function rwRecalc(){
+    var pi = document.getElementById('paidInput');
+    var PAID = pi ? parseFloat(pi.value) : NaN;
+    if(isNaN(PAID)) PAID = 0;
     var spent = 0;
     document.querySelectorAll('.rw-amt').forEach(function(el){ var v = parseFloat(el.value); if(!isNaN(v)) spent += v; });
     document.getElementById('spentCard').textContent = _fmt(spent);

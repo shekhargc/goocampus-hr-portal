@@ -19,7 +19,11 @@
     {% set submitted = clients|selectattr('form_status','equalto','submitted')|list|length %}
     {% set sales_pending = clients|rejectattr('sales_completed')|list|length %}
     {% set ops_verified = clients|selectattr('ops_status','equalto','verified')|list|length %}
-    {% set onboarded = clients|selectattr('onboarding_status','equalto','completed')|list|length %}
+    {# Onboarded = the client finished onboarding. Ops-verify sets onboarding_status
+       to 'confirmed' (after the contract + refund policy are digitally signed), so
+       that is the true "onboarded" marker. The old code looked for 'completed',
+       a value the system never writes, so this card always read 0. #}
+    {% set onboarded = clients|selectattr('onboarding_status','equalto','confirmed')|list|length %}
 
     <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
       <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500, #6b7280); margin-bottom: 8px;">Total Clients</div>

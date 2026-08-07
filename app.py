@@ -32645,7 +32645,13 @@ def admin_refund_requests():
               FROM plab_clients c
               LEFT JOIN refund_requests rr ON rr.client_id = c.id
              WHERE c.account_status = ?
-             ORDER BY rr.status NULLS FIRST, c.id DESC""", (REFUND_DROP_STATUS,)).fetchall()]
+             ORDER BY c.id DESC""", (REFUND_DROP_STATUS,)).fetchall()]
+        # Always show a Paid (ex-GST): the saved refund figure if a request exists,
+        # else the live ops_payments sum (0 for old cases → completed on the worksheet).
+        for r in rows:
+            saved = r.get('total_paid_ex_gst')
+            r['paid_show'] = (float(saved) if (r.get('request_id') and saved is not None)
+                              else _refund_paid_ex_gst(conn, r['registration_number']))
     except Exception as e:
         logging.warning(f"admin_refund_requests: {e}")
         try: conn.rollback()
@@ -32653,7 +32659,15 @@ def admin_refund_requests():
     conn.close()
     _PW = {'plab': 'UK / PLAB', 'australia': 'AMC', 'consulting': 'Consulting',
            'uae': 'UAE', 'portfolio': 'Portfolio', 'training': 'Training'}
+    # Pathway tabs: only those actually present, each with a count, in a stable order.
+    counts = {}
+    for r in rows:
+        counts[r['pathway']] = counts.get(r['pathway'], 0) + 1
+    tab_order = ['plab', 'australia', 'consulting', 'uae', 'portfolio', 'training']
+    pathway_tabs = [(pw, _PW.get(pw, pw), counts[pw]) for pw in tab_order if pw in counts]
+    pathway_tabs += [(pw, _PW.get(pw, pw), counts[pw]) for pw in counts if pw not in tab_order]
     return render_template('admin_refund_requests.html', rows=rows, pathway_names=_PW,
+                           pathway_tabs=pathway_tabs,
                            can_approve=_is_refund_approver(user), active_section='clients')
 
 
@@ -32670,9 +32684,13 @@ def admin_refund_worksheet(client_id):
         conn.close(); flash('Client not found', 'error'); return redirect(url_for('admin_refund_requests'))
     client = dict(client)
     reg = client.get('registration_number')
-    paid_ex_gst = _refund_paid_ex_gst(conn, reg)
+    live_paid = _refund_paid_ex_gst(conn, reg)  # auto figure from ops_payments (ex-GST)
     req = conn.execute("SELECT * FROM refund_requests WHERE client_id = ? ORDER BY id DESC LIMIT 1", (client_id,)).fetchone()
     req = dict(req) if req else None
+    # Pre-fill: saved value if a request exists, else the auto figure. Editable on the
+    # worksheet so old/Zoho cases (no ops_payments rows) can still be completed.
+    paid_ex_gst = (float(req['total_paid_ex_gst']) if (req and req.get('total_paid_ex_gst') is not None)
+                   else live_paid)
 
     if request.method == 'POST':
         if req and req.get('status') in ('approved',):
@@ -32692,6 +32710,12 @@ def admin_refund_worksheet(client_id):
                 'amount': amt, 'sort_order': i,
             })
             total_spent += amt
+        # Total Paid (ex-GST) is editable on the worksheet — take the entered value
+        # (falls back to the auto figure if left blank).
+        _pf = request.form.get('paid_ex_gst', None)
+        if _pf is not None and str(_pf).strip() != '':
+            try: paid_ex_gst = round(float(_pf), 2)
+            except Exception: pass
         refund_amount = round(paid_ex_gst - total_spent, 2)
         notes = request.form.get('notes', '')
         status = 'pending' if action == 'submit' else 'draft'
@@ -32752,7 +32776,7 @@ def admin_refund_worksheet(client_id):
     return render_template('admin_refund_worksheet.html', client=client, client_name=name,
                            reg=reg, pathway=(client.get('pathway') or 'plab'),
                            pathway_name=_PW.get(client.get('pathway') or 'plab', client.get('pathway')),
-                           paid_ex_gst=paid_ex_gst, req=req, groups=groups, items=items,
+                           paid_ex_gst=paid_ex_gst, live_paid=live_paid, req=req, groups=groups, items=items,
                            can_approve=_is_refund_approver(user), active_section='clients')
 
 
@@ -46348,6 +46372,19 @@ ACCESS_ROUTE_MAP = {
     'admin_partner_b2b_leads':                      _ap('partners', 'leads', 'view'),
     'admin_partner_lead_detail':                    _ap('partners', 'leads', 'view'),
     'api_update_student_lead':                      _ap('partners', 'leads', 'edit'),
+    # ── Clients: All Clients list + client detail + verification actions ──
+    # These were previously unmapped, so ANY logged-in employee could open
+    # /admin/clients (the full client + invitation list) even without a Clients
+    # grant — the sidebar already assumes a 'registrations' grant is required
+    # (see _clients_subs). Governing them here makes Access Master enforce it.
+    # NOTE: whoever does sales/ops verification needs Clients → Registrations.
+    'admin_clients_list':                           _ap('clients', 'registrations'),
+    'admin_client_detail':                          _ap('clients', 'registrations'),
+    'admin_client_sales_complete':                  _ap('clients', 'registrations', 'edit'),
+    'admin_client_ops_verify':                      _ap('clients', 'registrations', 'edit'),
+    'admin_client_welcome_call_confirm':            _ap('clients', 'registrations', 'edit'),
+    'admin_client_welcome_call_propose':            _ap('clients', 'registrations', 'edit'),
+    'admin_client_welcome_call_hold':               _ap('clients', 'registrations', 'edit'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),

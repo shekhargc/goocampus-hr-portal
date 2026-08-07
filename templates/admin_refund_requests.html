@@ -2,9 +2,18 @@
 {% block title %}Refund Requests{% endblock %}
 {% block section_content %}
 <style>
-  .rr-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem;}
+  .rr-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;}
   .rr-head h1{margin:0;font-size:1.5rem;color:var(--navy,#1B2A4A);font-weight:700;}
-  .rr-head .sub{font-size:.85rem;color:#64748b;margin-top:.25rem;max-width:60ch;}
+  .rr-head .sub{font-size:.85rem;color:#64748b;margin-top:.25rem;max-width:64ch;}
+  .rr-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.9rem;}
+  .rr-tab{border:1px solid #e2e8f0;background:#fff;color:#475569;font-size:.85rem;font-weight:600;padding:8px 15px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;}
+  .rr-tab .cnt{background:#eef2f7;color:#64748b;border-radius:999px;font-size:11px;font-weight:700;padding:1px 8px;}
+  .rr-tab.on{background:#0F1B33;border-color:#0F1B33;color:#fff;}
+  .rr-tab.on .cnt{background:#33415c;color:#fff;}
+  .rr-search{position:relative;margin-bottom:1rem;max-width:420px;}
+  .rr-search input{width:100%;padding:10px 14px 10px 38px;border:1px solid #cbd5e1;border-radius:10px;font-size:.92rem;color:#1e2836;}
+  .rr-search input:focus{outline:none;border-color:var(--navy,#1B2A4A);box-shadow:0 0 0 3px rgba(27,42,74,.1);}
+  .rr-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94a3b8;}
   .rr-wrap{overflow-x:auto;border:1px solid #e2e8f0;border-radius:.75rem;background:#fff;}
   table.rr{border-collapse:collapse;width:100%;font-size:13.5px;}
   table.rr th{background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:11px 14px;text-align:left;white-space:nowrap;}
@@ -15,11 +24,12 @@
   .p-pending{background:#ffedd5;color:#c2410c;} .p-approved{background:#dcfce7;color:#15803d;}
   .p-rejected{background:#fee2e2;color:#b91c1c;}
   .pw{display:inline-block;padding:2px 8px;border-radius:6px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:700;}
-  .amt{font-weight:700;color:#0f172a;}
+  .amt{font-weight:700;color:#0f172a;} .muted{color:#94a3b8;}
   .btn{display:inline-block;padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;cursor:pointer;border:0;}
   .btn-o{background:#F58220;color:#fff;} .btn-o:hover{background:#d96f14;}
   .btn-g{background:#fff;border:1px solid #cbd5e1;color:#334155;} .btn-g:hover{border-color:#0F1B33;}
-  .empty{padding:3rem 1rem;text-align:center;color:#64748b;}
+  .empty{padding:2.5rem 1rem;text-align:center;color:#64748b;}
+  #rrNoMatch{display:none;}
 </style>
 
 <div class="rr-head">
@@ -28,6 +38,18 @@
     <div class="sub">Clients marked <strong>Dropped &amp; Refunded</strong> by Operations. Open a client's worksheet to itemise the spend and submit the refund for approval. Nothing is shown to the client.</div>
   </div>
   <a class="btn btn-g" href="/admin/refunds">View refund ledger →</a>
+</div>
+
+<div class="rr-tabs">
+  <button class="rr-tab on" data-pw="all" onclick="rrTab(this,'all')">All <span class="cnt">{{ rows|length }}</span></button>
+  {% for pw, label, cnt in pathway_tabs %}
+  <button class="rr-tab" data-pw="{{ pw }}" onclick="rrTab(this,'{{ pw }}')">{{ label }} <span class="cnt">{{ cnt }}</span></button>
+  {% endfor %}
+</div>
+
+<div class="rr-search">
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+  <input type="text" id="rrSearch" placeholder="Search client name or registration number…" oninput="rrFilter()" autocomplete="off">
 </div>
 
 <div class="rr-wrap">
@@ -39,15 +61,15 @@
         <th>Status</th><th>Action</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="rrBody">
       {% for r in rows %}
-      <tr>
-        <td style="color:#94a3b8;font-weight:600;">{{ loop.index }}</td>
+      <tr class="rr-row" data-pw="{{ r.pathway }}" data-search="{{ (r.name ~ ' ' ~ r.registration_number)|lower }}">
+        <td class="muted" style="font-weight:600;">{{ loop.index }}</td>
         <td style="font-weight:700;color:#0f172a;">{{ r.name or '—' }}</td>
         <td style="color:#64748b;font-weight:600;font-size:12px;">{{ r.registration_number }}</td>
         <td><span class="pw">{{ pathway_names.get(r.pathway, r.pathway) }}</span></td>
-        <td style="text-align:right;" class="amt">{% if r.total_paid_ex_gst is not none %}₹{{ '{:,.0f}'.format(r.total_paid_ex_gst|float) }}{% else %}—{% endif %}</td>
-        <td style="text-align:right;" class="amt">{% if r.request_status == 'approved' and r.refund_amount is not none %}₹{{ '{:,.0f}'.format(r.refund_amount|float) }}{% else %}—{% endif %}</td>
+        <td style="text-align:right;" class="amt">{% if r.paid_show %}₹{{ '{:,.0f}'.format(r.paid_show|float) }}{% else %}<span class="muted">enter</span>{% endif %}</td>
+        <td style="text-align:right;" class="amt">{% if r.request_status == 'approved' and r.refund_amount is not none %}₹{{ '{:,.0f}'.format(r.refund_amount|float) }}{% else %}<span class="muted">—</span>{% endif %}</td>
         <td>
           {% set st = r.request_status %}
           {% if not st %}<span class="pill p-none">Not started</span>
@@ -62,7 +84,7 @@
             <a class="btn btn-g" href="/admin/refund-requests/{{ r.client_id }}/worksheet">View</a>
           {% elif r.request_status == 'pending' %}
             <a class="btn btn-o" href="/admin/refund-requests/{{ r.client_id }}/worksheet">{% if can_approve %}Review &amp; approve{% else %}View{% endif %}</a>
-          {% elif r.request_status == 'draft' or r.request_status == 'rejected' %}
+          {% elif r.request_status in ('draft','rejected') %}
             <a class="btn btn-o" href="/admin/refund-requests/{{ r.client_id }}/worksheet">Continue</a>
           {% else %}
             <a class="btn btn-o" href="/admin/refund-requests/{{ r.client_id }}/worksheet">Open worksheet</a>
@@ -72,7 +94,29 @@
       {% else %}
       <tr><td colspan="8" class="empty">No clients are marked “Dropped &amp; Refunded” right now. When Operations sets a client to that status, they'll appear here.</td></tr>
       {% endfor %}
+      <tr id="rrNoMatch"><td colspan="8" class="empty">No clients match your search / filter.</td></tr>
     </tbody>
   </table>
 </div>
+
+<script>
+  var rrCurrentTab = 'all';
+  function rrTab(btn, pw){
+    rrCurrentTab = pw;
+    document.querySelectorAll('.rr-tab').forEach(function(b){ b.classList.toggle('on', b === btn); });
+    rrFilter();
+  }
+  function rrFilter(){
+    var q = (document.getElementById('rrSearch').value || '').trim().toLowerCase();
+    var shown = 0;
+    document.querySelectorAll('.rr-row').forEach(function(row){
+      var okPw = (rrCurrentTab === 'all' || row.getAttribute('data-pw') === rrCurrentTab);
+      var okQ = (!q || (row.getAttribute('data-search') || '').indexOf(q) !== -1);
+      var show = okPw && okQ;
+      row.style.display = show ? '' : 'none';
+      if (show) shown++;
+    });
+    document.getElementById('rrNoMatch').style.display = shown ? 'none' : '';
+  }
+</script>
 {% endblock %}
