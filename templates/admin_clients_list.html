@@ -89,7 +89,7 @@
             {{ c.prefix ~ ' ' if c.prefix else '' }}{{ c.first_name }} {{ c.last_name }}
           </div>
           {% if c.registration_number %}
-          <div style="font-size: 0.75rem; color: var(--gray-500, #6b7280); margin-top: 2px;">{{ c.registration_number }}</div>
+          <div style="font-size: 0.75rem; color: var(--gray-500, #6b7280); margin-top: 2px;">{{ c.registration_number|format_reg }}</div>
           {% endif %}
         </div>
         <a href="/admin/client/{{ c.id }}" style="font-size: 0.8rem; color: var(--orange, #f97316); text-decoration: none; font-weight: 600; white-space: nowrap;">View Details &rarr;</a>

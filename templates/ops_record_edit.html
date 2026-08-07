@@ -7,7 +7,7 @@
   {% endif %}
   <h2 style="font-size:1.15rem;font-weight:700;color:var(--navy);margin:10px 0 4px;">Edit {{ section_label }}</h2>
   <p style="color:var(--gray-500);font-size:0.85rem;margin:0 0 16px;">
-    {{ client_name }}{% if rec.registration_number %} &middot; {{ rec.registration_number }}{% endif %}
+    {{ client_name }}{% if rec.registration_number %} &middot; {{ rec.registration_number|format_reg }}{% endif %}
   </p>
 
   {% with messages = get_flashed_messages(with_categories=true) %}

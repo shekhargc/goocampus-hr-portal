@@ -38,7 +38,7 @@
       {% macro tick(on, color) %}<span style="color:{% if on %}{{ color }}{% else %}var(--gray-300){% endif %};font-weight:700;font-size:1rem;">{% if on %}&#10003;{% else %}&ndash;{% endif %}</span>{% endmacro %}
       {% for r in rows %}
       <tr style="border-top:1px solid #f1f5f9;">
-        <td style="padding:9px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} &middot; {{ r.mobile or 'no mobile' }}</div></td>
+        <td style="padding:9px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg|format_reg }} &middot; {{ r.mobile or 'no mobile' }}</div></td>
         <td style="padding:9px 12px;text-align:center;">{{ tick(r.delivered, '#2563eb') }}</td>
         <td style="padding:9px 12px;text-align:center;">{{ tick(r.read, '#7c3aed') }}</td>
         <td style="padding:9px 12px;text-align:center;">{{ tick(r.opened_form, '#0891b2') }}</td>

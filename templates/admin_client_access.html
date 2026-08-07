@@ -71,7 +71,7 @@
       <tr><th>Client</th><th>Pathway</th><th>Status</th><th>Dashboard</th><th>Using</th><th>Last login</th><th>Admin</th></tr>
       {% for c in clients %}
       <tr>
-        <td><b>{{ (c.first_name or '') }} {{ (c.last_name or '') }}</b><br><span class="muted">{{ c.mobile }}{% if c.reg %} · {{ c.reg }}{% endif %}</span></td>
+        <td><b>{{ (c.first_name or '') }} {{ (c.last_name or '') }}</b><br><span class="muted">{{ c.mobile }}{% if c.reg %} · {{ c.reg|format_reg }}{% endif %}</span></td>
         <td>{{ labels.get(c.pathway, c.pathway|title) }}</td>
         <td>{{ c.status or '—' }}</td>
         <td>

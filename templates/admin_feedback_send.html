@@ -42,7 +42,7 @@
           <tbody>
           {% for c in clients %}
           <tr style="border-top:1px solid #f1f5f9;">
-            <td style="padding:9px 12px;"><input class="rowck" type="checkbox" name="reg" value="{{ c.registration_number }}"></td>
+            <td style="padding:9px 12px;"><input class="rowck" type="checkbox" name="reg" value="{{ c.registration_number|format_reg }}"></td>
             <td style="padding:9px 12px;font-weight:600;color:var(--navy);">{{ c.prefix or '' }} {{ c.first_name or '' }} {{ c.last_name or '' }}</td>
             <td style="padding:9px 12px;color:var(--gray-500);">{{ c.registration_number }}</td>
             <td style="padding:9px 12px;">{{ c.current_stage or '—' }}</td>

@@ -585,7 +585,7 @@
 <nav class="top-nav">
     <div style="display:flex;align-items:center;gap:16px;">
         <div class="logo"><img src="/static/logo-white.png" alt="GooCampus" style="height:34px;width:auto;display:block;"></div>
-        <span class="reg-id">{{ reg.registration_number }}</span>
+        <span class="reg-id">{{ reg.registration_number|format_reg }}</span>
     </div>
     {% if reg.form_status == 'submitted' %}
     <span class="submitted-badge">&#10003; Submitted</span>

@@ -20,7 +20,7 @@
       <tbody>
       {% for r in rows %}
       <tr style="border-top:1px solid #f1f5f9;">
-        <td style="padding:10px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg }} · {{ r.mobile or 'no mobile' }}</div></td>
+        <td style="padding:10px 12px;"><div style="font-weight:600;color:var(--navy);">{{ r.name }}</div><div style="font-size:0.72rem;color:var(--gray-400);">{{ r.reg|format_reg }} · {{ r.mobile or 'no mobile' }}</div></td>
         <td style="padding:10px 12px;">
           {% if not r.email %}<span style="color:var(--gray-400);">no email</span>
           {% elif r.email_ok %}<span style="color:#059669;font-weight:600;">✓ sent</span>

@@ -111,7 +111,7 @@
           <td style="padding:10px 12px;color:var(--gray-600);white-space:nowrap;">{{ r.transfer_date or '—' }}</td>
           <td style="padding:10px 12px;">
             <div style="font-weight:600;color:var(--navy);">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</div>
-            <div style="font-size:0.75rem;color:var(--gray-400);">{{ r.registration_number or r.from_reg or '' }}</div>
+            <div style="font-size:0.75rem;color:var(--gray-400);">{{ (r.registration_number or r.from_reg or '')|format_reg }}</div>
           </td>
           <td style="padding:10px 12px;">
             <span style="font-weight:600;color:var(--gray-700);">{{ r.from_product or r.from_reg or '—' }}</span>

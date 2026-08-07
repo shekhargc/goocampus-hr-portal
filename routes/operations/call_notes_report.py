@@ -20,6 +20,7 @@ from datetime import date, timedelta
 from flask import render_template, request, Response
 
 from core.auth import admin_required
+from core.helpers import format_reg
 from db import get_db
 
 # pathway -> (label, base URL path shared with the call-notes tab bar)
@@ -99,7 +100,7 @@ def _report(pathway):
         w = csv.writer(buf)
         w.writerow(['Date', 'Client', 'Reg number', 'Added by', 'Contact type', 'Contacted', 'Note'])
         for r in rows:
-            w.writerow([str(r['eff_date'] or ''), r['client_name'] or '', r['registration_number'] or '',
+            w.writerow([str(r['eff_date'] or ''), r['client_name'] or '', format_reg(r['registration_number']) if r['registration_number'] else '',
                         r['added_by'] or '', r['contact_type'] or '', r['contacted_status'] or 'Yes',
                         (r['call_note'] or '').replace('\r', ' ').replace('\n', ' ')])
         fname = f"call_notes_{pathway}_{d_from}_to_{d_to}.csv"

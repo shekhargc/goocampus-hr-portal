@@ -34,7 +34,7 @@
         <tr>
           <form method="POST" action="/sales/payment-followup/{{ x.registration_id }}/{{ x.inst_no }}/update">
           <td><b style="color:var(--navy);">{{ x.name }}</b></td>
-          <td>{{ x.registration_number }}</td>
+          <td>{{ x.registration_number|format_reg }}</td>
           {% if is_admin %}<td>{{ x.counsellor_name or '—' }}</td>{% endif %}
           <td>{{ x.ordinal }}</td>
           <td><input class="pf-inp" style="width:110px;" type="number" step="1" min="0" name="total_amount" value="{{ '%.0f'|format(x.total) }}"></td>
@@ -67,7 +67,7 @@
         {% for x in received %}
         <tr>
           <td><b style="color:var(--navy);">{{ x.name }}</b></td>
-          <td>{{ x.registration_number }}</td>
+          <td>{{ x.registration_number|format_reg }}</td>
           {% if is_admin %}<td>{{ x.counsellor_name or '—' }}</td>{% endif %}
           <td>{{ x.ordinal }}</td>
           <td>₹{{ '{:,.0f}'.format(x.total) }}</td>

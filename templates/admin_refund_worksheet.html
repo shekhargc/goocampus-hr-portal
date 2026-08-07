@@ -48,7 +48,7 @@
     <h1 style="margin-top:.35rem;">{{ client_name }}
       {% if req %}<span class="st st-{{ req.status }}">{{ {'draft':'Draft','pending':'Pending Approval','approved':'Approved','rejected':'Sent back'}.get(req.status, req.status) }}</span>{% endif %}
     </h1>
-    <div class="meta"><span class="pw">{{ pathway_name }}</span> &nbsp; {{ reg }}</div>
+    <div class="meta"><span class="pw">{{ pathway_name }}</span> &nbsp; {{ reg|format_reg }}</div>
   </div>
 </div>
 

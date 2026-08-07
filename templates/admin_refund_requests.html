@@ -63,10 +63,10 @@
     </thead>
     <tbody id="rrBody">
       {% for r in rows %}
-      <tr class="rr-row" data-pw="{{ r.pathway }}" data-search="{{ (r.name ~ ' ' ~ r.registration_number)|lower }}">
+      <tr class="rr-row" data-pw="{{ r.pathway }}" data-search="{{ (r.name ~ ' ' ~ r.registration_number ~ ' ' ~ (r.registration_number|format_reg))|lower }}">
         <td class="muted" style="font-weight:600;">{{ loop.index }}</td>
         <td style="font-weight:700;color:#0f172a;">{{ r.name or '—' }}</td>
-        <td style="color:#64748b;font-weight:600;font-size:12px;">{{ r.registration_number }}</td>
+        <td style="color:#64748b;font-weight:600;font-size:12px;">{{ r.registration_number|format_reg }}</td>
         <td><span class="pw">{{ pathway_names.get(r.pathway, r.pathway) }}</span></td>
         <td style="text-align:right;" class="amt">{% if r.paid_show %}₹{{ '{:,.0f}'.format(r.paid_show|float) }}{% else %}<span class="muted">enter</span>{% endif %}</td>
         <td style="text-align:right;" class="amt">{% if r.request_status == 'approved' and r.refund_amount is not none %}₹{{ '{:,.0f}'.format(r.refund_amount|float) }}{% else %}<span class="muted">—</span>{% endif %}</td>

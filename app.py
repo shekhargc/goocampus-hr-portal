@@ -153,62 +153,11 @@ def installment_label_filter(value):
 
 @app.template_filter('format_reg')
 def format_reg_filter(value):
-    """Normalize registration numbers to a single canonical display:
-        GCUKIP/YY-YY/NNN    (PLAB)
-        GCAUSIP/YY-YY/NNN   (AMC)
-        GCCSS/YY-YY/NNN     (Standard Consulting -- S-3)
-    Handles both source formats and pads the trailing number to at
-    least 3 digits.
-
-      GCUKIP/2022/42      ->  GCUKIP/22-23/042
-      GCUKIP/24-25/06     ->  GCUKIP/24-25/006
-      GCAUSIP/2023/9      ->  GCAUSIP/23-24/009
-      GCAUSIP/26-27/04    ->  GCAUSIP/26-27/004
-      GCAUSIP/25-26/039   ->  GCAUSIP/25-26/039   (unchanged)
-      GCCSS/24-25/06      ->  GCCSS/24-25/006
-    Unknown shapes are returned as-is. Empty / None becomes '—'.
-    """
-    if not value or not isinstance(value, str):
-        return value or '—'
-    value = value.strip()
-    if not value:
-        return '—'
-    import re as _re
-
-    def _pad(n):
-        try:
-            return f"{int(n):03d}"
-        except (ValueError, TypeError):
-            return n
-
-    # Match either prefix with either middle form.
-    # Group 1 prefix; group 2 either YYYY or YY-YY; group 3 trailing number.
-    m = _re.match(r'^(GCUKIP|GCAUSIP|GCCSS)/(\d{2,4}(?:-\d{2,4})?)/(\d+)$',
-                  value, _re.IGNORECASE)
-    if not m:
-        return value
-    prefix = m.group(1).upper()
-    middle = m.group(2)
-    num    = _pad(m.group(3))
-
-    if _re.match(r'^\d{4}$', middle):
-        # 4-digit year -> convert to YY-(YY+1)
-        year = int(middle)
-        yy = year % 100
-        next_yy = (yy + 1) % 100
-        middle = f"{yy:02d}-{next_yy:02d}"
-    elif _re.match(r'^\d{2}-\d{2}$', middle):
-        pass  # already canonical
-    elif _re.match(r'^\d{2,4}-\d{2,4}$', middle):
-        # Mixed widths -- coerce both halves to 2 digits if 4-digit years.
-        a, b = middle.split('-')
-        try:
-            a2 = int(a) % 100
-            b2 = int(b) % 100
-            middle = f"{a2:02d}-{b2:02d}"
-        except ValueError:
-            pass
-    return f"{prefix}/{middle}/{num}"
+    """Jinja `|format_reg` filter → canonical <PREFIX>/YY-YY/NNN for every
+    pathway prefix. Delegates to core.helpers.format_reg so the screen and the
+    Excel/CSV report exports share ONE implementation and can't drift apart."""
+    from core.helpers import format_reg
+    return format_reg(value)
 
 
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
@@ -27719,7 +27668,7 @@ def ops_reports_export():
             if add_cs:
                 _st = stat_by_reg.get(reg, ('', ''))
                 cs_vals = [_clean(_st[0]), _clean(_st[1])]
-            ws.append([_clean(_client_name(r)), _clean(reg)] + cs_vals + [_clean(r[c]) for c in data_cols])
+            ws.append([_clean(_client_name(r)), _clean(format_reg_filter(reg))] + cs_vals + [_clean(r[c]) for c in data_cols])
         if not rows:
             ws.append(['No data for this section / pathway.'])
         out = io.BytesIO(); wb.save(out); out.seek(0)
@@ -27791,7 +27740,7 @@ def ops_payment_summary_download():
             pkg = _num(r['package']) - _num(r['discount'])   # final package (net of discount)
             base = _num(r['base'])                            # actual received (ex-GST)
             balance = pkg - base                              # both ex-GST -> true amount still due
-            ws.append([i, _clean(r['name']), _clean(r['reg']), _clean(r['account_status']),
+            ws.append([i, _clean(r['name']), _clean(format_reg_filter(r['reg'])), _clean(r['account_status']),
                        _clean(r['current_stage']), pkg, _num(r['tot']), base, _num(r['gst']), balance])
         out = io.BytesIO(); wb.save(out); out.seek(0)
     except Exception as e:

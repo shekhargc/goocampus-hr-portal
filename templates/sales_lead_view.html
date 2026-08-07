@@ -63,7 +63,7 @@
     </div>
     {% if reg_status %}
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);font-size:0.82rem;color:var(--gray-600);">
-      <b>Registration:</b> {{ reg_status.registration_number or 'not yet assigned' }} ·
+      <b>Registration:</b> {{ (reg_status.registration_number or 'not yet assigned')|format_reg }} ·
       Form {{ reg_status.form_status or 'not started' }} ·
       Sales {{ 'verified' if reg_status.sales_completed else 'pending' }} ·
       Ops {{ reg_status.ops_status or 'pending' }}
