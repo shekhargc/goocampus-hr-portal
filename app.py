@@ -36204,6 +36204,27 @@ def _ensure_inquiry_schema(conn):
     except Exception:
         try: conn.rollback()
         except Exception: pass
+    # One-time: move already-received goocampus.in website leads that NOBODY has
+    # claimed yet (owner IS NULL) out of the hot Leads board and into Inquiries.
+    # Marker-guarded → runs once. Owned/worked/converted leads are left untouched.
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        done = conn.execute("SELECT 1 FROM _import_markers WHERE key = 'inquiry_backfill_v1'").fetchone()
+    except Exception:
+        done = True  # if we can't check the marker, don't risk repeating the move
+    if not done:
+        try:
+            conn.execute(
+                "UPDATE sales_leads SET is_inquiry = 1, "
+                "inquiry_status = COALESCE(NULLIF(inquiry_status,''),'New') "
+                "WHERE COALESCE(is_inquiry,0) = 0 AND owner_employee_id IS NULL "
+                "AND COALESCE(source,'') ILIKE ?", ('%goocampus.in%',))
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES ('inquiry_backfill_v1','done')")
+            conn.commit()
+        except Exception as e:
+            logging.error(f"inquiry backfill: {e}")
+            try: conn.rollback()
+            except Exception: pass
 
 
 @app.route('/sales/inquiries')
