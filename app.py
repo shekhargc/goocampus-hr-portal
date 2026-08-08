@@ -36172,6 +36172,169 @@ def _lead_reg_status_map(conn, leads):
     return out
 
 
+# ── Website Inquiries (goocampus.in) ─────────────────────────────────────────
+# Inbound website inquiries land in sales_leads with is_inquiry=1 so they stay
+# OFF the hot Leads board and in their own Sales → Inquiries area, with a status
+# + a follow-up thread, until a salesperson converts one into a real Lead.
+PG_INQUIRY_SOURCE = 'NEET PG Website (goocampus.in)'
+INQUIRY_STATUSES = ['New', 'Contacted', 'Follow-up', 'Interested', 'Not Interested', 'Converted']
+
+
+def _ensure_inquiry_schema(conn):
+    """Add the inquiry columns + follow-up table on demand (Render cold-start safe)."""
+    for ddl in (
+        "ALTER TABLE sales_leads ADD COLUMN is_inquiry INTEGER DEFAULT 0",
+        "ALTER TABLE sales_leads ADD COLUMN inquiry_status TEXT DEFAULT 'New'",
+    ):
+        try:
+            conn.execute(ddl); conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS sales_lead_followups (
+            id SERIAL PRIMARY KEY,
+            lead_id INTEGER NOT NULL,
+            note TEXT NOT NULL,
+            created_by_id INTEGER,
+            created_by_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+@app.route('/sales/inquiries')
+@login_required
+@sales_crm_required
+def sales_inquiries_list():
+    """Website inquiries from goocampus.in — separate from the hot Leads board."""
+    user = get_user()
+    role = get_sales_role(user)
+    conn = get_db()
+    _ensure_inquiry_schema(conn)
+    f_status = (request.args.get('status') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    where = ["COALESCE(sl.is_inquiry,0) = 1"]
+    params = []
+    if f_status and f_status in INQUIRY_STATUSES:
+        where.append("COALESCE(sl.inquiry_status,'New') = ?"); params.append(f_status)
+    if q:
+        where.append("(sl.lead_name ILIKE ? OR sl.phone ILIKE ? OR sl.email ILIKE ?)")
+        params += [f'%{q}%', f'%{q}%', f'%{q}%']
+    rows = []
+    counts = {s: 0 for s in INQUIRY_STATUSES}
+    try:
+        rows = [dict(r) for r in conn.execute(
+            f"""SELECT sl.*, s.name AS stage_name,
+                       (SELECT COUNT(*) FROM sales_lead_followups f WHERE f.lead_id = sl.id) AS followup_count
+                  FROM sales_leads sl
+             LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id
+                 WHERE {' AND '.join(where)}
+              ORDER BY sl.created_at DESC, sl.id DESC""", params).fetchall()]
+        for r in conn.execute("SELECT COALESCE(inquiry_status,'New') AS st, COUNT(*) AS c "
+                              "FROM sales_leads WHERE COALESCE(is_inquiry,0)=1 GROUP BY 1").fetchall():
+            counts[r['st']] = counts.get(r['st'], 0) + r['c']
+    except Exception as e:
+        logging.error(f"sales_inquiries_list: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    return render_template('sales_inquiries.html', user=user, role=role, inquiries=rows,
+                           statuses=INQUIRY_STATUSES, counts=counts, total=len(rows),
+                           f_status=f_status, q=q, active_section='sales')
+
+
+@app.route('/sales/inquiries/<int:inq_id>')
+@login_required
+@sales_crm_required
+def sales_inquiry_view(inq_id):
+    user = get_user()
+    conn = get_db()
+    _ensure_inquiry_schema(conn)
+    inq = conn.execute("SELECT sl.*, s.name AS stage_name FROM sales_leads sl "
+                       "LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id "
+                       "WHERE sl.id = ? AND COALESCE(sl.is_inquiry,0)=1", (inq_id,)).fetchone()
+    if not inq:
+        conn.close(); flash('Inquiry not found (it may already be converted to a Lead).', 'error')
+        return redirect(url_for('sales_inquiries_list'))
+    inq = dict(inq)
+    followups = [dict(r) for r in conn.execute(
+        "SELECT * FROM sales_lead_followups WHERE lead_id = ? ORDER BY created_at DESC, id DESC",
+        (inq_id,)).fetchall()]
+    conn.close()
+    return render_template('sales_inquiry_view.html', user=user, inq=inq, followups=followups,
+                           statuses=INQUIRY_STATUSES, active_section='sales')
+
+
+@app.route('/sales/inquiries/<int:inq_id>/status', methods=['POST'])
+@login_required
+@sales_write_required
+def sales_inquiry_status(inq_id):
+    new_status = (request.form.get('inquiry_status') or '').strip()
+    conn = get_db()
+    _ensure_inquiry_schema(conn)
+    if new_status in INQUIRY_STATUSES:
+        try:
+            conn.execute("UPDATE sales_leads SET inquiry_status = ? WHERE id = ? AND COALESCE(is_inquiry,0)=1",
+                         (new_status, inq_id))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"sales_inquiry_status: {e}")
+            try: conn.rollback()
+            except Exception: pass
+    conn.close()
+    return redirect(url_for('sales_inquiry_view', inq_id=inq_id))
+
+
+@app.route('/sales/inquiries/<int:inq_id>/followup', methods=['POST'])
+@login_required
+@sales_write_required
+def sales_inquiry_followup(inq_id):
+    note = (request.form.get('note') or '').strip()
+    user = get_user()
+    conn = get_db()
+    _ensure_inquiry_schema(conn)
+    if note:
+        try:
+            conn.execute("INSERT INTO sales_lead_followups (lead_id, note, created_by_id, created_by_name) "
+                         "VALUES (?, ?, ?, ?)",
+                         (inq_id, note, (user['id'] if user else None), (user['name'] if user else '')))
+            conn.commit()
+        except Exception as e:
+            logging.error(f"sales_inquiry_followup: {e}")
+            try: conn.rollback()
+            except Exception: pass
+    conn.close()
+    return redirect(url_for('sales_inquiry_view', inq_id=inq_id))
+
+
+@app.route('/sales/inquiries/<int:inq_id>/convert', methods=['POST'])
+@login_required
+@sales_write_required
+def sales_inquiry_convert(inq_id):
+    """Promote an inquiry into the hot Leads board: clear the inquiry flag, mark
+    it Converted, and assign it to the salesperson who converted it."""
+    user = get_user()
+    conn = get_db()
+    _ensure_inquiry_schema(conn)
+    try:
+        conn.execute("UPDATE sales_leads SET is_inquiry = 0, inquiry_status = 'Converted', "
+                     "owner_employee_id = COALESCE(owner_employee_id, ?) WHERE id = ? AND COALESCE(is_inquiry,0)=1",
+                     ((user['id'] if user else None), inq_id))
+        conn.commit()
+        flash('Inquiry converted to a Lead — it is now on the Leads board.', 'success')
+    except Exception as e:
+        logging.error(f"sales_inquiry_convert: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not convert the inquiry. Please try again.', 'error')
+    conn.close()
+    return redirect(url_for('sales_leads_view', lead_id=inq_id))
+
+
 @app.route('/sales/leads')
 @login_required
 @sales_crm_required
@@ -36191,7 +36354,8 @@ def sales_leads_list():
     # Show the team's own leads AND unassigned inbound leads (website leads land
     # with no owner — they must be visible so someone claims them, else they were
     # invisible on the board, founder 2026-07-20).
-    where = [f'(sl.owner_employee_id IN ({placeholders}) OR sl.owner_employee_id IS NULL)']
+    where = [f'(sl.owner_employee_id IN ({placeholders}) OR sl.owner_employee_id IS NULL)',
+             'COALESCE(sl.is_inquiry,0) = 0']   # website inquiries live in Sales → Inquiries, not here
     params = list(visible_ids)
     if f_stage and f_stage.isdigit():
         where.append('sl.stage_id = ?'); params.append(int(f_stage))
@@ -36201,6 +36365,7 @@ def sales_leads_list():
         where.append('sl.is_hot = 1')
 
     conn = get_db()
+    _ensure_inquiry_schema(conn)
     leads = conn.execute(
         f'''SELECT sl.*, s.name AS stage_name, s.color AS stage_color,
                   s.is_won AS stage_won, s.is_lost AS stage_lost,
@@ -37179,15 +37344,19 @@ def api_pg_lead():
         note_bits.append(f"From page: {src_page}")
     notes = ' · '.join(note_bits) or 'Website enquiry'
     conn = get_db()
+    _ensure_inquiry_schema(conn)
     try:
         stage = conn.execute(
             "SELECT id FROM sales_lead_stages WHERE COALESCE(is_active,1)=1 "
             "ORDER BY sort_order, id LIMIT 1").fetchone()
         stage_id = stage['id'] if stage else None
+        # is_inquiry=1 → lands in Sales → Inquiries (not the hot Leads board);
+        # is_hot=0 → a website enquiry is not yet a hot lead. (founder 2026-08-07)
         conn.execute(
-            "INSERT INTO sales_leads (lead_name, phone, email, source, stage_id, is_hot, notes, created_at) "
-            "VALUES (?, ?, ?, 'NEET PG Website (goocampus.in)', ?, 1, ?, CURRENT_TIMESTAMP)",
-            (name, phone, email, stage_id, notes))
+            "INSERT INTO sales_leads (lead_name, phone, email, source, stage_id, is_hot, "
+            "is_inquiry, inquiry_status, notes, created_at) "
+            "VALUES (?, ?, ?, ?, ?, 0, 1, 'New', ?, CURRENT_TIMESTAMP)",
+            (name, phone, email, PG_INQUIRY_SOURCE, stage_id, notes))
         conn.commit()
         try:
             sales_emails = _dept_emails(conn, ['Sales'])

@@ -68,6 +68,7 @@ def api_pg_otp_verify():
     data = request.get_json(silent=True) or {}
     mobile = _norm_mobile(data.get('mobile'))
     otp = re.sub(r'\D', '', str(data.get('otp', '')))
+    sname = (data.get('name') or '').strip()[:120]   # optional: goocampus.in may send the name at signup
     if len(mobile) != 10 or not otp:
         return jsonify({'ok': False, 'error': 'Mobile and code are required.'}), 400
     conn = get_db()
@@ -94,15 +95,22 @@ def api_pg_otp_verify():
         token_exp = datetime.utcnow() + timedelta(days=30)
         user = conn.execute("SELECT id, name FROM pg_users WHERE mobile = ?", (mobile,)).fetchone()
         if user:
-            conn.execute("UPDATE pg_users SET session_token = ?, token_expires_at = ?, "
-                         "last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                         (token, token_exp, user['id']))
             uid, uname = user['id'], (user['name'] or '')
+            # If the site now sends a name and we don't have one, capture it.
+            if sname and not uname:
+                conn.execute("UPDATE pg_users SET name = ?, session_token = ?, token_expires_at = ?, "
+                             "last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                             (sname, token, token_exp, uid))
+                uname = sname
+            else:
+                conn.execute("UPDATE pg_users SET session_token = ?, token_expires_at = ?, "
+                             "last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                             (token, token_exp, uid))
         else:
-            uid = conn.execute("INSERT INTO pg_users (mobile, session_token, token_expires_at, last_login_at) "
-                               "VALUES (?, ?, ?, CURRENT_TIMESTAMP) RETURNING id",
-                               (mobile, token, token_exp)).fetchone()['id']
-            uname = ''
+            uid = conn.execute("INSERT INTO pg_users (mobile, name, session_token, token_expires_at, last_login_at) "
+                               "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) RETURNING id",
+                               (mobile, sname, token, token_exp)).fetchone()['id']
+            uname = sname
         conn.commit()
     except Exception as e:
         try: conn.rollback()
