@@ -43,7 +43,7 @@
           {% for c in clients %}
           <tr style="border-top:1px solid #f1f5f9;">
             <td style="padding:9px 12px;"><input class="rowck" type="checkbox" name="reg" value="{{ c.registration_number|format_reg }}"></td>
-            <td style="padding:9px 12px;font-weight:600;color:var(--navy);">{{ c.prefix or '' }} {{ c.first_name or '' }} {{ c.last_name or '' }}</td>
+            <td style="padding:9px 12px;font-weight:600;color:var(--navy);">{{ ((c.first_name or '') ~ ' ' ~ (c.last_name or '')) | dr_name }}</td>
             <td style="padding:9px 12px;color:var(--gray-500);">{{ c.registration_number }}</td>
             <td style="padding:9px 12px;">{{ c.current_stage or '—' }}</td>
             <td style="padding:9px 12px;"><span style="font-size:0.72rem;padding:2px 8px;border-radius:999px;{% if c.account_status == 'In Process' %}background:#dcfce7;color:#166534;{% else %}background:#f1f5f9;color:#64748b;{% endif %}">{{ c.account_status or '—' }}</span></td>

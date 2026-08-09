@@ -58,7 +58,7 @@
 <!-- Client Banner -->
 <div class="client-banner">
     <div class="client-info">
-        <h2>{{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name or '' }}</h2>
+        <h2>{{ ((client.first_name or '') ~ ' ' ~ (client.last_name or '')) | dr_name }}</h2>
         <div class="meta">
             {{ (client.registration_number or '')|format_reg }}
             {% if client.plan_type %} &middot; {{ client.plan_type }}{% endif %}

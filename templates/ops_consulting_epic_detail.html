@@ -17,7 +17,7 @@
       <div>
         <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;color:var(--navy);">
           {% if record.first_name or record.last_name %}
-            {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+            {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
           {% else %}
             EPIC Registration
           {% endif %}
@@ -123,7 +123,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Candidate Name:</span>
             <span style="color:var(--navy);font-weight:600;">
               {% if record.first_name or record.last_name %}
-                {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+                {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
               {% else %}—{% endif %}
             </span>
           </div>

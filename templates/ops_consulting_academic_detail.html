@@ -17,7 +17,7 @@
       <div>
         <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
           {% if record.first_name or record.last_name %}
-            {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+            {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
           {% else %}
             Academic Record #{{ record.id }}
           {% endif %}

@@ -209,7 +209,7 @@
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}
-                        {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}
+                        {{ ((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name }}
                     {% else %}
                         <span style="color:var(--gray-400)">(client missing)</span>
                     {% endif %}
@@ -266,7 +266,7 @@
       {{ r.id }}: {
           id: {{ r.id }},
           registration_number: {{ (r.registration_number or '')|tojson }},
-          candidate_name: {{ (((r.prefix or '') ~ ' ' ~ (r.first_name or '') ~ ' ' ~ (r.last_name or ''))|trim)|tojson }},
+          candidate_name: {{ (((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name)|tojson }},
           english_training: {{ (r.english_training or '')|tojson }},
           coaching_method: {{ (r.coaching_method or '')|tojson }},
           vendor_provider: {{ (r.vendor_provider or '')|tojson }},

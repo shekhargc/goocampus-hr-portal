@@ -86,7 +86,7 @@
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
         <div>
           <div style="font-weight: 600; font-size: 1rem; color: #111827;">
-            {{ c.prefix ~ ' ' if c.prefix else '' }}{{ c.first_name }} {{ c.last_name }}
+            {{ ((c.first_name or '') ~ ' ' ~ (c.last_name or '')) | dr_name }}
           </div>
           {% if c.registration_number %}
           <div style="font-size: 0.75rem; color: var(--gray-500, #6b7280); margin-top: 2px;">{{ c.registration_number|format_reg }}</div>

@@ -160,6 +160,24 @@ def format_reg_filter(value):
     return format_reg(value)
 
 
+@app.template_filter('dr_name')
+def dr_name_filter(value):
+    """Client display name → 'Dr. <clean name>'. All GooCampus clients are shown as
+    'Dr.' (founder 2026-08-10). Strips any title already inside the name (Dr / Dr. /
+    DR / Doctor / Mr / Mrs / Ms / Miss / Prof — repeated, with or without a dot or
+    space) so it never doubles (e.g. 'Dr. DR. Renee' → 'Dr. Renee', 'Mr Shubham' →
+    'Dr. Shubham', 'Dr.Rachana' → 'Dr. Rachana'). Blank → '' (no bare 'Dr.').
+    Won't touch real names like 'Drake' (no title boundary)."""
+    import re as _re
+    s = (value or '').strip()
+    _t = _re.compile(r'^\s*(?:(?:dr|doctor|mr|mrs|ms|miss|prof)\.\s*|(?:dr|doctor|mr|mrs|ms|miss|prof)\s+)', _re.I)
+    prev = None
+    while s and s != prev:
+        prev = s
+        s = _t.sub('', s).strip()
+    return ('Dr. ' + s) if s else ''
+
+
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
 os.makedirs(PHOTO_FOLDER, exist_ok=True)
 

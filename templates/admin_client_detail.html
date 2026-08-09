@@ -349,7 +349,7 @@
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;">
         <div>
             <h1 style="font-size: 1.85rem; font-weight: 700; color: var(--navy); margin-bottom: 0.35rem;">
-                {{ reg.client_name or reg.name or ((reg.prefix or '') ~ ' ' ~ (reg.first_name or '') ~ ' ' ~ (reg.last_name or '')).strip() or 'N/A' }}
+                {{ (reg.client_name or reg.name or ((reg.first_name or '') ~ ' ' ~ (reg.last_name or ''))) | dr_name or 'N/A' }}
             </h1>
             <p style="color: var(--gray-500); font-size: 0.95rem;">
                 Registration #{{ (reg.registration_number or reg.id)|format_reg }}
@@ -446,7 +446,7 @@
             <div class="info-grid">
                 <div class="info-item">
                     <div class="info-label">Full Name</div>
-                    <div class="info-value">{{ reg.client_name or reg.name or ((reg.prefix or '') ~ ' ' ~ (reg.first_name or '') ~ ' ' ~ (reg.last_name or '')).strip() or '-' }}</div>
+                    <div class="info-value">{{ (reg.client_name or reg.name or ((reg.first_name or '') ~ ' ' ~ (reg.last_name or ''))) | dr_name or '-' }}</div>
                 </div>
                 <div class="info-item">
                     <div class="info-label">Date of Birth</div>
@@ -660,7 +660,7 @@
             <img src="{{ _ph.doc.file_path if '://' in _ph.doc.file_path else '/' + _ph.doc.file_path }}" alt="Client photo"
                  style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--gray-200);flex:0 0 auto;" onerror="this.style.display='none';">
             <div>
-                <div style="font-weight:700;color:var(--navy);font-size:1.05rem;">{{ reg.prefix or '' }} {{ reg.first_name or '' }} {{ reg.last_name or '' }}</div>
+                <div style="font-weight:700;color:var(--navy);font-size:1.05rem;">{{ ((reg.first_name or '') ~ ' ' ~ (reg.last_name or '')) | dr_name }}</div>
                 <div style="font-size:0.82rem;color:var(--gray-500);">Reg #{{ reg.registration_number|format_reg if reg.registration_number else '-' }} · {{ reg.product_name or '-' }}</div>
             </div>
         </div>

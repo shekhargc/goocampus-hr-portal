@@ -86,7 +86,7 @@
         <div class="h">Recent Registrations</div>
         {% for r in c.recent %}
         <div class="row">
-          <span class="nm">{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</span>
+          <span class="nm">{{ ((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name }}</span>
           <span class="st">{{ r.registration_date or r.current_stage or r.account_status or '' }}</span>
         </div>
         {% endfor %}
@@ -114,7 +114,7 @@
     <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #f1f1f1;font-size:0.85rem;">
       <span style="width:8px;height:8px;border-radius:50%;background:#16a34a;flex:none;"></span>
       <span style="font-weight:600;color:#1e293b;">₹{{ '{:,.0f}'.format(r.total_amount_paid or 0) }}</span>
-      <span style="color:#64748b;">{{ r.payment_method or '' }} · {{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</span>
+      <span style="color:#64748b;">{{ r.payment_method or '' }} · {{ ((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name }}</span>
       <span style="font-size:0.72rem;font-weight:600;background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:999px;">{{ (r.pathway or 'plab')|upper }}</span>
       <span style="margin-left:auto;color:#94a3b8;font-size:0.78rem;">{{ r.payment_date or '' }}{% if r.by_name %} · by {{ r.by_name }}{% endif %}</span>
     </div>

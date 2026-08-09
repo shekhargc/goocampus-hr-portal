@@ -199,7 +199,7 @@
                 <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
-                    {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}
+                    {{ ((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name }}
                     {% if r.email %}<div style="font-size:0.74rem;color:var(--gray-500)">{{ r.email }}</div>{% endif %}
                 </td>
                 <td>{{ r.mobile or r.whatsapp1 or '—' }}</td>
@@ -259,7 +259,7 @@
       {% for r in records %}
       {{ r.id }}: {
           id: {{ r.id }},
-          name: {{ (((r.prefix or '') ~ ' ' ~ (r.first_name or '') ~ ' ' ~ (r.last_name or ''))|trim)|tojson }},
+          name: {{ (((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name)|tojson }},
           registration_number: {{ (r.registration_number or '')|tojson }},
           mobile: {{ (r.mobile or '')|tojson }},
           whatsapp: {{ (r.whatsapp1 or '')|tojson }},

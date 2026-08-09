@@ -515,7 +515,7 @@
             <tbody>
                 {% for e in tab[1] %}
                 <tr>
-                    <td style="font-weight:600;color:var(--navy);">{{ e.prefix or '' }} {{ e.first_name or '' }} {{ e.last_name or '' }}</td>
+                    <td style="font-weight:600;color:var(--navy);">{{ ((e.first_name or '') ~ ' ' ~ (e.last_name or '')) | dr_name }}</td>
                     <td>
                         {% set ename = (e.exam or '')|lower %}
                         <span class="exam-badge {% if 'plab 1' in ename %}plab1{% elif 'plab 2' in ename %}plab2{% elif 'oet' in ename %}oet{% elif 'ielts' in ename %}ielts{% else %}other{% endif %}">{{ e.exam or '—' }}{% if e.exam_type %} ({{ e.exam_type }}){% endif %}</span>

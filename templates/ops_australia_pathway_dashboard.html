@@ -403,7 +403,7 @@
             <tbody>
                 {% for e in tab[1] %}
                 <tr>
-                    <td>{{ e.prefix or '' }} {{ e.first_name or '' }} {{ e.last_name or '' }}</td>
+                    <td>{{ ((e.first_name or '') ~ ' ' ~ (e.last_name or '')) | dr_name }}</td>
                     <td>{{ e.exam or '—' }}</td>
                     <td>{{ e.exam_date or '—' }}</td>
                     <td>in {{ e.days_until }} day{{ '' if e.days_until == 1 else 's' }}</td>

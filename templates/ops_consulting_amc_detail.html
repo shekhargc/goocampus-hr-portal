@@ -1,6 +1,6 @@
 {% extends "ops_sidebar_base.html" %}
 
-{% block title %}AMC Registration - {{ (record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or '') }}{% endblock %}
+{% block title %}AMC Registration - {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}{% endblock %}
 
 {% block ops_content %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
@@ -17,7 +17,7 @@
       <div>
         <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;color:var(--navy);">
           {% if record.first_name or record.last_name %}
-            {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+            {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
           {% else %}
             AMC Registration
           {% endif %}
@@ -96,7 +96,7 @@
         <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Candidate</h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Name:</span><span style="color:var(--navy);font-weight:600;">
-            {% if record.first_name or record.last_name %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% else %}—{% endif %}
+            {% if record.first_name or record.last_name %}{{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}{% else %}—{% endif %}
           </span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
