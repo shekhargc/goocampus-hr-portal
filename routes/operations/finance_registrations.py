@@ -56,14 +56,9 @@ def _reg_key(reg):
     return (reg or '').strip().upper()
 
 
-@login_required
-def finance_registrations_list():
-    user = get_user()
-    conn = get_db()
-    f_pathway = (request.args.get('pathway') or '').strip().lower()
-    f_from = (request.args.get('from') or '').strip()
-    f_to = (request.args.get('to') or '').strip()
-    q = (request.args.get('q') or '').strip()
+def _fetch_finance_rows(conn, f_pathway, f_from, f_to, q):
+    """Shared filter/sort so the list page and the Excel export return exactly
+    the same set for the same filters."""
     rows = []
     try:
         where = ["registration_number IS NOT NULL AND registration_number <> ''"]
@@ -103,14 +98,79 @@ def finance_registrations_list():
         recs.sort(key=lambda r: (r['_pd'] or date.min, r['id']), reverse=True)
         rows = recs
     except Exception as e:
-        logging.error(f"finance_registrations_list: {e}")
+        logging.error(f"_fetch_finance_rows: {e}")
         try: conn.rollback()
         except Exception: pass
+    return rows
+
+
+@login_required
+def finance_registrations_list():
+    user = get_user()
+    conn = get_db()
+    f_pathway = (request.args.get('pathway') or '').strip().lower()
+    f_from = (request.args.get('from') or '').strip()
+    f_to = (request.args.get('to') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    rows = _fetch_finance_rows(conn, f_pathway, f_from, f_to, q)
     conn.close()
     return render_template('finance_registrations.html', user=user, rows=rows,
                            pathways=_PW_LABELS, f_pathway=f_pathway,
                            f_from=f_from, f_to=f_to, q=q, total=len(rows),
                            active_section='finance')
+
+
+@login_required
+def finance_registrations_export():
+    """Export the CURRENT filtered view to Excel (.xlsx). Read-only."""
+    import io, re as _re
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from core.helpers import format_reg
+    from flask import Response
+
+    conn = get_db()
+    f_pathway = (request.args.get('pathway') or '').strip().lower()
+    f_from = (request.args.get('from') or '').strip()
+    f_to = (request.args.get('to') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    rows = _fetch_finance_rows(conn, f_pathway, f_from, f_to, q)
+    conn.close()
+
+    _ILLEGAL = _re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')  # openpyxl rejects these
+    def _c(v):
+        if v is None:
+            return ''
+        return _ILLEGAL.sub('', v) if isinstance(v, str) else v
+
+    wb = Workbook(); ws = wb.active; ws.title = 'Registrations'
+    headers = ['#', 'Registration Date', 'Registration Number', 'Full Name', 'Pathway',
+               'State', 'City', 'Mobile', 'WhatsApp', 'Email', 'Counsellor', 'Status', 'Total Paid (INR)']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='1E3A5F')
+    for i, r in enumerate(rows, start=1):
+        ws.append([
+            i, _c(r.get('registration_date')), _c(format_reg(r.get('registration_number'))),
+            _c(r.get('full_name')), _c(r.get('pathway_label')), _c(r.get('state')), _c(r.get('city')),
+            _c(r.get('mobile')), _c(r.get('whatsapp1')), _c(r.get('email')), _c(r.get('counsellor')),
+            _c(r.get('account_status')), round(float(r.get('total_paid') or 0), 2),
+        ])
+    if not rows:
+        ws.append(['No registrations match the current filters.'])
+    # readable column widths
+    for col, w in zip('ABCDEFGHIJKLM', (5, 16, 22, 26, 16, 16, 14, 14, 14, 26, 18, 16, 16)):
+        ws.column_dimensions[col].width = w
+
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    parts = ['client_registrations']
+    if f_pathway:
+        parts.append(f_pathway)
+    fname = '_'.join(parts) + '.xlsx'
+    return Response(out.read(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename="{fname}"'})
 
 
 @login_required
@@ -182,6 +242,8 @@ def register_routes(app):
                      view_func=finance_index, methods=['GET'])
     app.add_url_rule('/finance/registrations', endpoint='finance_registrations_list',
                      view_func=finance_registrations_list, methods=['GET'])
+    app.add_url_rule('/finance/registrations/export.xlsx', endpoint='finance_registrations_export',
+                     view_func=finance_registrations_export, methods=['GET'])
     app.add_url_rule('/finance/registrations/<int:client_id>/detail.json',
                      endpoint='finance_registration_detail',
                      view_func=finance_registration_detail, methods=['GET'])

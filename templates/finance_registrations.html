@@ -6,6 +6,8 @@
   .fr-head h1{margin:0;font-size:1.5rem;color:var(--navy,#1B2A4A);font-weight:700;}
   .fr-head .sub{font-size:.85rem;color:#64748b;margin-top:.25rem;}
   .fr-ro{display:inline-block;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:700;padding:2px 9px;border-radius:6px;margin-left:8px;vertical-align:middle;}
+  .fr-export{display:inline-flex;align-items:center;background:#16a34a;color:#fff;font-size:.85rem;font-weight:600;padding:9px 15px;border-radius:8px;text-decoration:none;white-space:nowrap;}
+  .fr-export:hover{background:#15803d;}
   .fr-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:1rem 0;}
   .fr-filters label{display:block;font-size:.72rem;font-weight:600;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em;}
   .fr-filters select,.fr-filters input{padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-size:.88rem;font:inherit;}
@@ -42,7 +44,13 @@
     <h1>Client Registrations <span class="fr-ro">READ-ONLY</span></h1>
     <div class="sub">Every client across all pathways with their payments. Finance audit view — nothing here can be edited.</div>
   </div>
-  <div style="font-size:.85rem;color:#64748b;">{{ total }} registration{{ '' if total == 1 else 's' }}</div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <span style="font-size:.85rem;color:#64748b;">{{ total }} registration{{ '' if total == 1 else 's' }}</span>
+    <a class="fr-export" href="/finance/registrations/export.xlsx?pathway={{ f_pathway|urlencode }}&amp;from={{ f_from|urlencode }}&amp;to={{ f_to|urlencode }}&amp;q={{ q|urlencode }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:5px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export to Excel
+    </a>
+  </div>
 </div>
 
 <form class="fr-filters" method="get" action="/finance/registrations">

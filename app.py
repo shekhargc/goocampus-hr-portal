@@ -46640,6 +46640,7 @@ ACCESS_ROUTE_MAP = {
     'admin_clients_list':                           _ap('clients', 'registrations'),
     # ── Finance: read-only Client Registrations audit (all pathways + payments) ──
     'finance_registrations_list':                   _ap('finance', 'registrations', 'view'),
+    'finance_registrations_export':                 _ap('finance', 'registrations', 'view'),
     'finance_registration_detail':                  _ap('finance', 'registrations', 'view'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
