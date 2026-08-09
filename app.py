@@ -43290,6 +43290,7 @@ ACCESS_SECTION_CATALOG = [
             ('expenses',     'Expenses',       'Expense claims + approvals'),
             ('salary',       'Salary',         'Salary structure + deductions'),
             ('reports',      'Finance Reports','Finance analytics'),
+            ('registrations','Client Registrations','Read-only registrations + payments across all pathways'),
             ('settings',     'Finance Settings','Finance-team-specific settings'),
         ],
     },
@@ -46637,6 +46638,9 @@ ACCESS_ROUTE_MAP = {
     # typically do NOT hold Clients → Registrations. Gating the detail page broke
     # their verification. It stays reachable (as before) for the verify flow.
     'admin_clients_list':                           _ap('clients', 'registrations'),
+    # ── Finance: read-only Client Registrations audit (all pathways + payments) ──
+    'finance_registrations_list':                   _ap('finance', 'registrations', 'view'),
+    'finance_registration_detail':                  _ap('finance', 'registrations', 'view'),
     # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
     'admin_payments_hub':                           _ap('clients', 'payments_hub'),
     'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),

@@ -38,6 +38,11 @@ def register_operations_modules(app):
     from . import ngo
     ngo.register_routes(app)
 
+    # Finance — read-only "Client Registrations" audit across ALL pathways +
+    # payments (/finance/registrations). Gated by finance→registrations.
+    from . import finance_registrations
+    finance_registrations.register_routes(app)
+
     # AMC Pathway — v2 client management dashboard (/operations/australia-pathway)
     # and the Australia client list (/operations/australia/clients) live in australia.py.
     # Test bookings now lives in its own au_test_bookings module (drawer/detail/edit).
