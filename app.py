@@ -37243,6 +37243,28 @@ def sales_leads_delete(lead_id):
     return redirect(url_for('sales_leads_list'))
 
 
+@app.route('/sales/leads/<int:lead_id>/to-inquiry', methods=['POST'])
+@login_required
+@sales_write_required
+def sales_lead_to_inquiry(lead_id):
+    """Move a lead OUT of the hot Leads board and INTO Sales → Inquiries (the
+    reverse of Convert-to-Lead). For a website enquiry that landed in Leads."""
+    conn = get_db()
+    _ensure_inquiry_schema(conn)
+    try:
+        conn.execute("UPDATE sales_leads SET is_inquiry = 1, "
+                     "inquiry_status = COALESCE(NULLIF(inquiry_status,''),'New') WHERE id = ?", (lead_id,))
+        conn.commit()
+        flash('Moved to Sales → Inquiries.', 'success')
+    except Exception as e:
+        logging.error(f"sales_lead_to_inquiry: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not move the lead. Please try again.', 'error')
+    conn.close()
+    return redirect(url_for('sales_inquiry_view', inq_id=lead_id))
+
+
 @app.route('/sales/leads/<int:lead_id>/resend-invite', methods=['POST'])
 @login_required
 @sales_write_required

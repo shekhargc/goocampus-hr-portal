@@ -40,6 +40,11 @@
       <form method="POST" action="/sales/leads/{{ lead.id }}/resend-invite" style="display:inline;" onsubmit="return confirm('Resend the registration link to this client?');">
         <button type="submit" class="lv-resend">Resend invite</button>
       </form>
+      {% if not lead.is_inquiry %}
+      <form method="POST" action="/sales/leads/{{ lead.id }}/to-inquiry" style="display:inline;" onsubmit="return confirm('Move this into Sales → Inquiries (out of the Leads board)?');">
+        <button type="submit" class="lv-inq" style="background:#7c3aed;color:#fff;">Move to Inquiry</button>
+      </form>
+      {% endif %}
       {% endif %}
       {% if role == 'admin' %}
       <form method="POST" action="/sales/leads/{{ lead.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this lead? This cannot be undone.');">
