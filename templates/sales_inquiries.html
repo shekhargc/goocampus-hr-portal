@@ -1,0 +1,72 @@
+{% extends "sales_sidebar_base.html" %}
+{% block title %}Inquiries — Sales CRM{% endblock %}
+{% block section_content %}
+<style>
+  .iq-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:.5rem;}
+  .iq-head h1{margin:0;font-size:1.5rem;color:var(--navy,#1B2A4A);font-weight:700;}
+  .iq-head .sub{font-size:.85rem;color:#64748b;margin-top:.25rem;max-width:70ch;}
+  .iq-chips{display:flex;gap:6px;flex-wrap:wrap;margin:1rem 0 .9rem;}
+  .iq-chip{border:1px solid #e2e8f0;background:#fff;color:#475569;font-size:.83rem;font-weight:600;padding:7px 14px;border-radius:9px;text-decoration:none;display:inline-flex;align-items:center;gap:7px;}
+  .iq-chip .cnt{background:#eef2f7;color:#64748b;border-radius:999px;font-size:11px;font-weight:700;padding:1px 8px;}
+  .iq-chip.on{background:#0F1B33;border-color:#0F1B33;color:#fff;}
+  .iq-chip.on .cnt{background:#33415c;color:#fff;}
+  .iq-search{margin:0 0 1rem;max-width:420px;}
+  .iq-search input{width:100%;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:.92rem;}
+  .iq-wrap{overflow-x:auto;border:1px solid #e2e8f0;border-radius:.75rem;background:#fff;}
+  table.iq{border-collapse:collapse;width:100%;font-size:13.5px;}
+  table.iq th{background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:11px 14px;text-align:left;white-space:nowrap;}
+  table.iq td{padding:11px 14px;border-bottom:1px solid #eef2f7;color:#1e2836;vertical-align:top;}
+  table.iq tbody tr:hover{background:#f8fafc;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
+  .s-New{background:#dbeafe;color:#1e40af;} .s-Contacted{background:#fef9c3;color:#a16207;}
+  .s-Followup{background:#ffedd5;color:#c2410c;} .s-Interested{background:#dcfce7;color:#15803d;}
+  .s-NotInterested{background:#fee2e2;color:#b91c1c;} .s-Converted{background:#e9d5ff;color:#6b21a8;}
+  .btn{display:inline-block;padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;cursor:pointer;border:0;}
+  .btn-o{background:#F58220;color:#fff;} .btn-o:hover{background:#d96f14;}
+  .muted{color:#94a3b8;} .empty{padding:2.5rem 1rem;text-align:center;color:#64748b;}
+</style>
+
+<div class="iq-head">
+  <div>
+    <h1>Inquiries</h1>
+    <div class="sub">Website enquiries from <strong>goocampus.in</strong>. These are not hot leads yet — follow up here, and <strong>Convert to Lead</strong> when one is ready for the sales pipeline.</div>
+  </div>
+  <a class="btn" style="background:#fff;border:1px solid #cbd5e1;color:#334155;" href="/sales/leads">Go to Leads →</a>
+</div>
+
+<div class="iq-chips">
+  <a class="iq-chip {{ 'on' if not f_status }}" href="/sales/inquiries">All <span class="cnt">{{ total if not f_status else counts.values()|sum }}</span></a>
+  {% for s in statuses %}
+  <a class="iq-chip {{ 'on' if f_status == s }}" href="/sales/inquiries?status={{ s }}">{{ s }} <span class="cnt">{{ counts.get(s, 0) }}</span></a>
+  {% endfor %}
+</div>
+
+<form class="iq-search" method="get" action="/sales/inquiries">
+  {% if f_status %}<input type="hidden" name="status" value="{{ f_status }}">{% endif %}
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name, phone or email…" autocomplete="off">
+</form>
+
+<div class="iq-wrap">
+  <table class="iq">
+    <thead><tr>
+      <th>#</th><th>Name</th><th>Contact</th><th>Enquiry</th><th>Status</th><th>Follow-ups</th><th>Received</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for r in inquiries %}
+      <tr>
+        <td class="muted" style="font-weight:600;">{{ loop.index }}</td>
+        <td style="font-weight:700;color:#0f172a;">{{ r.lead_name or '—' }}</td>
+        <td>{{ r.phone or '—' }}{% if r.email %}<div class="muted" style="font-size:12px;">{{ r.email }}</div>{% endif %}</td>
+        <td class="muted" style="max-width:280px;font-size:12.5px;">{{ r.notes or '—' }}</td>
+        <td><span class="pill s-{{ (r.inquiry_status or 'New')|replace(' ','')|replace('-','') }}">{{ r.inquiry_status or 'New' }}</span></td>
+        <td>{% if r.followup_count %}{{ r.followup_count }}{% else %}<span class="muted">0</span>{% endif %}</td>
+        <td class="muted" style="font-size:12px;white-space:nowrap;">{{ (r.created_at|string)[:16] if r.created_at else '—' }}</td>
+        <td><a class="btn btn-o" href="/sales/inquiries/{{ r.id }}">Open →</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty">No inquiries{{ ' with this status' if f_status else '' }} yet. New enquiries from goocampus.in will appear here.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

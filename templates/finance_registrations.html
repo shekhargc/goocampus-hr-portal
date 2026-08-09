@@ -1,0 +1,145 @@
+{% extends "finance_sidebar_base.html" %}
+{% block title %}Client Registrations — Finance{% endblock %}
+{% block section_content %}
+<style>
+  .fr-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:.4rem;}
+  .fr-head h1{margin:0;font-size:1.5rem;color:var(--navy,#1B2A4A);font-weight:700;}
+  .fr-head .sub{font-size:.85rem;color:#64748b;margin-top:.25rem;}
+  .fr-ro{display:inline-block;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:700;padding:2px 9px;border-radius:6px;margin-left:8px;vertical-align:middle;}
+  .fr-export{display:inline-flex;align-items:center;background:#16a34a;color:#fff;font-size:.85rem;font-weight:600;padding:9px 15px;border-radius:8px;text-decoration:none;white-space:nowrap;}
+  .fr-export:hover{background:#15803d;}
+  .fr-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:1rem 0;}
+  .fr-filters label{display:block;font-size:.72rem;font-weight:600;color:#64748b;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em;}
+  .fr-filters select,.fr-filters input{padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-size:.88rem;font:inherit;}
+  .fr-filters .go{background:var(--navy,#0F1B33);color:#fff;border:0;font-weight:600;cursor:pointer;padding:9px 18px;}
+  .fr-filters .clr{background:#fff;border:1px solid #cbd5e1;color:#334155;text-decoration:none;padding:9px 14px;border-radius:8px;font-size:.88rem;font-weight:600;}
+  .fr-wrap{overflow-x:auto;border:1px solid #e2e8f0;border-radius:.75rem;background:#fff;}
+  table.fr{border-collapse:collapse;width:100%;font-size:13px;}
+  table.fr th{background:#0F1B33;color:#fff;font-weight:600;font-size:11.5px;padding:10px 12px;text-align:left;white-space:nowrap;}
+  table.fr td{padding:10px 12px;border-bottom:1px solid #eef2f7;color:#1e2836;white-space:nowrap;}
+  table.fr tbody tr{cursor:pointer;} table.fr tbody tr:hover{background:#f1f5f9;}
+  .pw{display:inline-block;padding:2px 8px;border-radius:6px;background:#eef2ff;color:#3730a3;font-size:11px;font-weight:700;}
+  .amt{font-weight:700;color:#0f172a;text-align:right;} .muted{color:#94a3b8;}
+  .empty{padding:2.5rem 1rem;text-align:center;color:#64748b;}
+  /* drawer */
+  .fr-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:998;opacity:0;pointer-events:none;transition:opacity .2s;}
+  .fr-ov.open{opacity:1;pointer-events:auto;}
+  .fr-dr{position:fixed;top:0;right:0;height:100vh;width:min(460px,94vw);background:#fff;z-index:999;box-shadow:-8px 0 30px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;}
+  .fr-dr.open{transform:translateX(0);}
+  .fr-dr .dh{background:#0F1B33;color:#fff;padding:1.1rem 1.3rem;}
+  .fr-dr .dh h2{margin:0;font-size:1.15rem;font-weight:700;}
+  .fr-dr .dh .rn{font-size:.8rem;color:#aeb9cc;margin-top:3px;}
+  .fr-dr .db{padding:1.1rem 1.3rem;overflow-y:auto;flex:1;}
+  .fr-dr .x{position:absolute;top:14px;right:16px;background:rgba(255,255,255,.15);border:0;color:#fff;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:1.1rem;}
+  .drow{display:flex;gap:10px;font-size:.86rem;padding:6px 0;border-bottom:1px solid #f1f5f9;}
+  .drow .k{color:#94a3b8;min-width:96px;} .drow .v{color:#1e2836;font-weight:600;word-break:break-word;}
+  .dsec{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin:1.1rem 0 .5rem;}
+  table.pm{border-collapse:collapse;width:100%;font-size:12px;}
+  table.pm th{background:#f1f5f9;color:#475569;font-weight:700;padding:6px 8px;text-align:left;}
+  table.pm td{padding:6px 8px;border-bottom:1px solid #f1f5f9;}
+</style>
+
+<div class="fr-head">
+  <div>
+    <h1>Client Registrations <span class="fr-ro">READ-ONLY</span></h1>
+    <div class="sub">Every client across all pathways with their payments. Finance audit view — nothing here can be edited.</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <span style="font-size:.85rem;color:#64748b;">{{ total }} registration{{ '' if total == 1 else 's' }}</span>
+    <a class="fr-export" href="/finance/registrations/export.xlsx?pathway={{ f_pathway|urlencode }}&amp;from={{ f_from|urlencode }}&amp;to={{ f_to|urlencode }}&amp;q={{ q|urlencode }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:5px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export to Excel
+    </a>
+  </div>
+</div>
+
+<form class="fr-filters" method="get" action="/finance/registrations">
+  <div>
+    <label>Pathway</label>
+    <select name="pathway">
+      <option value="">All pathways</option>
+      {% for pw, lbl in pathways.items() %}<option value="{{ pw }}" {{ 'selected' if f_pathway == pw }}>{{ lbl }}</option>{% endfor %}
+    </select>
+  </div>
+  <div><label>From (reg date)</label><input type="date" name="from" value="{{ f_from }}"></div>
+  <div><label>To (reg date)</label><input type="date" name="to" value="{{ f_to }}"></div>
+  <div style="flex:1;min-width:200px;"><label>Search</label><input type="text" name="q" value="{{ q }}" placeholder="Name, reg no, mobile, email…" style="width:100%;box-sizing:border-box;"></div>
+  <button class="go" type="submit">Apply</button>
+  {% if f_pathway or f_from or f_to or q %}<a class="clr" href="/finance/registrations">Clear</a>{% endif %}
+</form>
+
+<div class="fr-wrap">
+  <table class="fr">
+    <thead><tr>
+      <th>#</th><th>Reg Date</th><th>Reg Number</th><th>Full Name</th><th>State</th><th>City</th>
+      <th>Pathway</th><th style="text-align:right;">Total Paid</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr onclick="frOpen({{ r.id }})">
+        <td class="muted">{{ loop.index }}</td>
+        <td>{{ r.registration_date or '—' }}</td>
+        <td style="font-weight:600;color:#334155;">{{ r.registration_number|format_reg }}</td>
+        <td style="font-weight:700;color:#0f172a;">{{ r.full_name }}</td>
+        <td>{{ r.state or '—' }}</td>
+        <td>{{ r.city or '—' }}</td>
+        <td><span class="pw">{{ r.pathway_label }}</span></td>
+        <td class="amt">{% if r.total_paid %}₹{{ '{:,.0f}'.format(r.total_paid) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ r.account_status or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="empty">No registrations match your filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="fr-ov" id="frOv" onclick="frClose()"></div>
+<aside class="fr-dr" id="frDr" aria-hidden="true">
+  <div class="dh" style="position:relative;">
+    <button class="x" onclick="frClose()">&times;</button>
+    <h2 id="frName">—</h2>
+    <div class="rn" id="frReg">—</div>
+  </div>
+  <div class="db" id="frBody"><div class="muted">Loading…</div></div>
+</aside>
+
+<script>
+  function _e(s){var d=document.createElement('div');d.textContent=(s==null?'':s);return d.innerHTML;}
+  function _rs(n){return '₹'+Math.round(n||0).toLocaleString('en-IN');}
+  function frClose(){document.getElementById('frOv').classList.remove('open');document.getElementById('frDr').classList.remove('open');}
+  function frOpen(id){
+    var ov=document.getElementById('frOv'),dr=document.getElementById('frDr');
+    ov.classList.add('open');dr.classList.add('open');
+    document.getElementById('frName').textContent='Loading…';
+    document.getElementById('frReg').textContent='';
+    document.getElementById('frBody').innerHTML='<div class="muted">Loading…</div>';
+    fetch('/finance/registrations/'+id+'/detail.json').then(function(r){return r.json();}).then(function(d){
+      if(d.error){document.getElementById('frBody').innerHTML='<div class="muted">Could not load.</div>';return;}
+      var p=d.profile||{};
+      document.getElementById('frName').textContent=p.name||'—';
+      document.getElementById('frReg').textContent=(p.registration_number||'')+' · '+(p.pathway||'');
+      var rows=[
+        ['Reg date',p.registration_date],['Pathway',p.pathway],['Status',p.status],
+        ['Mobile',p.mobile],['WhatsApp',p.whatsapp],['Email',p.email],
+        ['City',p.city],['State',p.state],['Counsellor',p.counsellor],
+        ['Package',p.package],['Total paid',_rs(p.total_paid)]
+      ];
+      var h='';
+      rows.forEach(function(kv){ if(kv[1]!==''&&kv[1]!=null){ h+='<div class="drow"><span class="k">'+_e(kv[0])+'</span><span class="v">'+_e(kv[1])+'</span></div>'; }});
+      var pays=d.payments||[];
+      h+='<div class="dsec">Payments ('+pays.length+')</div>';
+      if(pays.length){
+        h+='<table class="pm"><thead><tr><th>Date</th><th>Amount</th><th>GST</th><th>Total</th><th>Inst.</th><th>Method</th></tr></thead><tbody>';
+        pays.forEach(function(x){
+          h+='<tr><td>'+_e(x.date||'—')+'</td><td>'+_rs(x.amount)+'</td><td>'+_rs(x.gst)+'</td><td><b>'+_rs(x.total)+'</b></td><td>'+_e(x.instalment||'—')+'</td><td>'+_e(x.method||'—')+'</td></tr>';
+          if(x.notes){h+='<tr><td colspan="6" style="color:#94a3b8;">'+_e(x.notes)+'</td></tr>';}
+        });
+        h+='</tbody></table>';
+      } else { h+='<div class="muted" style="font-size:.85rem;">No payments recorded.</div>'; }
+      document.getElementById('frBody').innerHTML=h;
+    }).catch(function(){document.getElementById('frBody').innerHTML='<div class="muted">Could not load.</div>';});
+  }
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')frClose();});
+</script>
+{% endblock %}

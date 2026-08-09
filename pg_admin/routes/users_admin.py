@@ -100,6 +100,33 @@ def users_admin():
             f"{base}{where} ORDER BY u.id DESC LIMIT {_PER_PAGE} OFFSET {(page-1)*_PER_PAGE}",
             tuple(params)).fetchall()]
 
+        # goocampus.in signup captures only the mobile (its OTP signup asks no
+        # name), so many pg_users have a blank name → the list showed "Unnamed".
+        # Fill the DISPLAYED name from a matching counselling-form lead
+        # (sales_leads by last-10 of the mobile) — display only, we never write
+        # back to the synced pg_users row.
+        def _m10(s):
+            d = ''.join(ch for ch in (s or '') if ch.isdigit())
+            return d[-10:] if len(d) >= 10 else ''
+        _need = [u for u in users if not (u.get('name') or '').strip()]
+        want = {_m10(u.get('mobile')) for u in _need if _m10(u.get('mobile'))}
+        if want:
+            ph = ','.join(['?'] * len(want))
+            lead_names = {}
+            try:
+                for r in conn.execute(
+                    f"SELECT RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) AS m10, "
+                    f"       MAX(lead_name) AS lead_name FROM sales_leads "
+                    f"WHERE COALESCE(lead_name,'')<>'' "
+                    f"  AND RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) IN ({ph}) "
+                    f"GROUP BY 1", tuple(want)).fetchall():
+                    if r['lead_name']:
+                        lead_names[r['m10']] = r['lead_name']
+            except Exception:
+                lead_names = {}
+            for u in _need:
+                u['name'] = lead_names.get(_m10(u.get('mobile')), '')
+
         s = conn.execute(
             "SELECT COUNT(*) AS total, "
             "  COALESCE(SUM(CASE WHEN COALESCE(is_blocked,0)=1 THEN 1 ELSE 0 END),0) AS blocked, "

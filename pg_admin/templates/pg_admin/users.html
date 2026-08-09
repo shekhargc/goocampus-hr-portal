@@ -79,7 +79,7 @@
     {% for u in users %}
     <tr>
       <td>
-        <div class="pu-name">{{ u.name or 'Unnamed' }}
+        <div class="pu-name">{{ u.name or '(name pending)' }}
           {% if u.is_blocked %}<span class="chip chip-red">Blocked</span>{% endif %}</div>
         <div class="pu-sub">{{ u.college or '' }}{% if u.state %} · {{ u.state }}{% endif %}</div>
       </td>

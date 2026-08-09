@@ -1,0 +1,112 @@
+{% extends "sales_sidebar_base.html" %}
+{% block title %}Inquiry — {{ inq.lead_name or 'Website enquiry' }}{% endblock %}
+{% block section_content %}
+<style>
+  :root{--navy:#1B2A4A;--orange:#F58220;}
+  .iv-back{color:var(--orange);text-decoration:none;font-weight:600;font-size:.85rem;}
+  .iv-hero{background:linear-gradient(135deg,#0F1B33,#22324f);color:#fff;border-radius:14px;padding:1.3rem 1.5rem;margin:.6rem 0 1.1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;}
+  .iv-hero .who{display:flex;align-items:center;gap:14px;}
+  .iv-av{width:52px;height:52px;border-radius:50%;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:800;flex-shrink:0;}
+  .iv-hero h1{margin:0;font-size:1.35rem;font-weight:700;}
+  .iv-hero .meta{font-size:.82rem;color:#aeb9cc;margin-top:3px;}
+  .pill{display:inline-block;padding:5px 13px;border-radius:999px;font-size:12px;font-weight:700;}
+  .s-New{background:#dbeafe;color:#1e40af;} .s-Contacted{background:#fef9c3;color:#a16207;}
+  .s-Followup{background:#ffedd5;color:#c2410c;} .s-Interested{background:#dcfce7;color:#15803d;}
+  .s-NotInterested{background:#fee2e2;color:#b91c1c;} .s-Converted{background:#e9d5ff;color:#6b21a8;}
+  .iv-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;align-items:start;}
+  @media (max-width:860px){.iv-grid{grid-template-columns:1fr;}}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1.15rem 1.35rem;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  .card h3{margin:0 0 .9rem;font-size:.82rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;}
+  .row{display:flex;gap:10px;font-size:.9rem;padding:7px 0;border-bottom:1px solid #f1f5f9;}
+  .row:last-child{border-bottom:0;} .row .k{color:#94a3b8;min-width:92px;} .row .v{color:#1e2836;font-weight:600;word-break:break-word;}
+  .ta{width:100%;border:1px solid #cbd5e1;border-radius:9px;padding:11px 13px;font:inherit;font-size:.9rem;min-height:76px;box-sizing:border-box;}
+  .btn{border:0;border-radius:9px;padding:10px 17px;font-size:.88rem;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;}
+  .btn-primary{background:var(--orange);color:#fff;} .btn-primary:hover{background:#d96f14;}
+  .btn-g{background:#fff;border:1px solid #cbd5e1;color:#334155;} .btn-convert{background:#7c3aed;color:#fff;width:100%;text-align:center;}
+  select.inp{padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:.9rem;font:inherit;flex:1;}
+  /* timeline */
+  .tl{position:relative;margin-top:.4rem;padding-left:26px;}
+  .tl:before{content:'';position:absolute;left:9px;top:4px;bottom:4px;width:2px;background:#e8edf3;}
+  .tl-item{position:relative;padding:0 0 1.1rem;}
+  .tl-item:last-child{padding-bottom:0;}
+  .tl-dot{position:absolute;left:-22px;top:2px;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid var(--orange);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:var(--orange);}
+  .tl-when{font-size:.74rem;color:#94a3b8;font-weight:600;}
+  .tl-who{font-size:.8rem;color:var(--navy);font-weight:700;margin-top:1px;}
+  .tl-txt{font-size:.92rem;color:#1e2836;white-space:pre-wrap;margin-top:4px;line-height:1.5;}
+  .tl-empty{color:#94a3b8;font-size:.9rem;padding:.4rem 0;}
+  .note{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:.82rem;padding:10px 14px;border-radius:10px;margin-bottom:1.1rem;}
+</style>
+
+<a class="iv-back" href="/sales/inquiries">← All inquiries</a>
+<div class="iv-hero">
+  <div class="who">
+    <div class="iv-av">{{ (inq.lead_name or 'W')[:1]|upper }}</div>
+    <div>
+      <h1>{{ inq.lead_name or 'Website enquiry' }}</h1>
+      <div class="meta">🌐 goocampus.in inquiry · received {{ inq.created_at|format_datetime }}</div>
+    </div>
+  </div>
+  <span class="pill s-{{ (inq.inquiry_status or 'New')|replace(' ','')|replace('-','') }}">{{ inq.inquiry_status or 'New' }}</span>
+</div>
+
+<div class="note">This is a <strong>website inquiry from goocampus.in</strong> — not a hot lead yet. Log your follow-ups below; hit <strong>Convert to Lead</strong> once they're ready for the sales pipeline.</div>
+
+<div class="iv-grid">
+  <div>
+    <div class="card">
+      <h3>Follow-up thread</h3>
+      <form method="POST" action="/sales/inquiries/{{ inq.id }}/followup" style="margin-bottom:1.1rem;">
+        <textarea class="ta" name="note" placeholder="Log a call, WhatsApp, or next step…" required></textarea>
+        <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:.75rem;color:#94a3b8;">Date &amp; time are captured automatically.</span>
+          <button type="submit" class="btn btn-primary">Add follow-up</button>
+        </div>
+      </form>
+      {% if followups %}
+      <div class="tl">
+        {% for f in followups %}
+        <div class="tl-item">
+          <div class="tl-dot">{{ (f.created_by_name or '?')[:1]|upper }}</div>
+          <div class="tl-when">{{ f.created_at|format_datetime }}</div>
+          <div class="tl-who">{{ f.created_by_name or 'Someone' }}</div>
+          <div class="tl-txt">{{ f.note }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="tl-empty">No follow-ups yet. Add the first one above — the date is stamped automatically.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h3>Contact</h3>
+      <div class="row"><span class="k">Name</span><span class="v">{{ inq.lead_name or '—' }}</span></div>
+      <div class="row"><span class="k">Phone</span><span class="v">{{ inq.phone or '—' }}</span></div>
+      <div class="row"><span class="k">Email</span><span class="v">{{ inq.email or '—' }}</span></div>
+      <div class="row"><span class="k">Source</span><span class="v">{{ inq.source or 'goocampus.in' }}</span></div>
+      <div class="row"><span class="k">Received</span><span class="v">{{ inq.created_at|format_datetime }}</span></div>
+      {% if inq.notes %}<div class="row" style="flex-direction:column;gap:4px;"><span class="k">Enquiry</span><span class="v" style="font-weight:500;">{{ inq.notes }}</span></div>{% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Status</h3>
+      <form method="POST" action="/sales/inquiries/{{ inq.id }}/status" style="display:flex;gap:8px;align-items:center;">
+        <select class="inp" name="inquiry_status">
+          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if (inq.inquiry_status or 'New') == s }}>{{ s }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-g">Update</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Ready for the pipeline?</h3>
+      <p style="font-size:.85rem;color:#64748b;margin:0 0 .9rem;">Converting moves this into <strong>Leads</strong> (assigned to you) and out of Inquiries.</p>
+      <form method="POST" action="/sales/inquiries/{{ inq.id }}/convert" onsubmit="return confirm('Convert this inquiry into a Lead and move it to the Leads board?');">
+        <button type="submit" class="btn btn-convert">✓ Convert to Lead →</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
