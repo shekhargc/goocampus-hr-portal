@@ -36029,12 +36029,10 @@ def admin_diag_lead_status():
                 "SELECT id, product_id, client_name, client_mobile, status, created_at FROM client_invitations "
                 "WHERE LOWER(COALESCE(client_name,'')) LIKE ? ORDER BY id DESC LIMIT 20", (like,))
 
-        lead_ids = [str(l['id']) for l in leads]
-        pc_sql = ("SELECT id, lead_id, registration_number, pathway, account_status, first_name, last_name, mobile "
+        pc_sql = ("SELECT id, registration_number, pathway, account_status, first_name, last_name, mobile "
                   "FROM plab_clients WHERE LOWER(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) LIKE ? OR mobile LIKE ? "
-                  + (f"OR lead_id IN ({','.join(['?']*len(lead_ids))}) " if lead_ids else "")
-                  + "ORDER BY id DESC LIMIT 20")
-        run("plab_clients (master by name / mobile / lead_id)", pc_sql, [like, f"%{q}%"] + lead_ids)
+                  "ORDER BY id DESC LIMIT 20")
+        run("plab_clients (master by name / mobile)", pc_sql, (like, f"%{q}%"))
 
         acct_ids = list({str(r['account_id']) for r in regs if r.get('account_id')})
         if acct_ids:
@@ -36091,13 +36089,17 @@ def _lead_reg_status_map(conn, leads):
     if not leads:
         return out
     lead_ids = [l['id'] for l in leads]
-    lead_key = {}          # lead_id -> (mobile10, product_id)
+    lead_key = {}          # lead_id -> (mobile10, product_id, email)
     mobiles = set()
+    emails = set()
     for l in leads:
         m = _norm_mobile10(l.get('phone'))
-        lead_key[l['id']] = (m, l.get('product_id'))
+        em = (l.get('email') or '').strip().lower()
+        lead_key[l['id']] = (m, l.get('product_id'), em)
         if m:
             mobiles.add(m)
+        if em:
+            emails.add(em)
 
     def _in(seq):
         seq = list(seq)
@@ -36115,6 +36117,27 @@ def _lead_reg_status_map(conn, leads):
         except Exception:
             conn.rollback()
 
+    # 1b) Invitations by EMAIL — fallback for leads whose phone doesn't normalise
+    #     to a valid 10-digit Indian mobile (9-digit / foreign numbers), so the
+    #     mobile match misses even when the client is fully onboarded. Keyed by
+    #     (email, product) with an any-product fallback.
+    inv_by_email = {}       # (email, product_id) -> {id, status}
+    inv_by_email_any = {}   # email -> {id, status}
+    if emails:
+        ph, vals = _in(emails)
+        try:
+            for r in conn.execute(
+                    f"SELECT id, product_id, LOWER(COALESCE(client_email,'')) AS em, "
+                    f"COALESCE(status,'pending') AS status "
+                    f"FROM client_invitations WHERE LOWER(COALESCE(client_email,'')) IN ({ph}) "
+                    f"ORDER BY id DESC", vals).fetchall():
+                if not r['em']:
+                    continue
+                inv_by_email.setdefault((r['em'], r['product_id']), {'id': r['id'], 'status': r['status']})
+                inv_by_email_any.setdefault(r['em'], {'id': r['id'], 'status': r['status']})
+        except Exception:
+            conn.rollback()
+
     # 2) Registrations via the INVITATION link (reliable — the reg's own product
     #    can differ from the lead's, e.g. combos, so we can't key on product).
     #    'Submitted' = the client actually submitted the form (client_submitted_at
@@ -36124,7 +36147,8 @@ def _lead_reg_status_map(conn, leads):
     #    verification queues use). The client-side contract/refund agreement is
     #    part of the client's own submission and is deliberately NOT used here.
     reg_by_inv = {}        # inv_id -> {submitted, sales_completed, ops_verified, wc_confirmed}
-    inv_ids = [v['id'] for v in inv_by_key.values()]
+    inv_ids = list({v['id'] for v in inv_by_key.values()}
+                   | {v['id'] for v in inv_by_email_any.values()})
     if inv_ids:
         ph, vals = _in(inv_ids)
         try:
@@ -36147,8 +36171,10 @@ def _lead_reg_status_map(conn, leads):
 
     for l in leads:
         lid = l['id']
-        m, pid = lead_key[lid]
+        m, pid, em = lead_key[lid]
         inv = inv_by_key.get((m, pid)) if m else None
+        if not inv and em:                                   # email fallback
+            inv = inv_by_email.get((em, pid)) or inv_by_email_any.get(em)
         reg = reg_by_inv.get(inv['id']) if inv else None
 
         submitted = bool(reg and reg['submitted'])       # form actually submitted
