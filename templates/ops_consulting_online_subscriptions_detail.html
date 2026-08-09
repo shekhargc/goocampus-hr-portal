@@ -20,7 +20,7 @@
         </h1>
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
           {% if record.first_name or record.last_name %}
-            {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+            {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
             &middot;
           {% endif %}
           Registration #{{ record.registration_number|format_reg }}
@@ -78,7 +78,7 @@
             <span style="color:var(--gray-600);font-weight:500;">Name:</span>
             <span style="color:var(--navy);font-weight:600;">
               {% if record.first_name or record.last_name %}
-                {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+                {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
               {% else %}
                 <span style="color:var(--gray-400);">—</span>
               {% endif %}

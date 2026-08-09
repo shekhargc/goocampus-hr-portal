@@ -38,7 +38,7 @@
         </div>
     </nav>
 
-    {% set _name = ((reg.prefix or '') ~ ' ' ~ (reg.first_name or '') ~ ' ' ~ (reg.last_name or '')).strip() %}
+    {% set _name = ((reg.first_name or '') ~ ' ' ~ (reg.last_name or '')) | dr_name %}
     <div class="container" style="max-width:760px; padding-top:2rem; padding-bottom:3rem;">
 
         {% with messages = get_flashed_messages(with_categories=true) %}

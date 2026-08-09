@@ -205,7 +205,7 @@
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}
-                        {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}
+                        {{ ((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name }}
                     {% else %}
                         <span style="color:var(--gray-400)">(client missing)</span>
                     {% endif %}
@@ -258,7 +258,7 @@
       {% for r in records %}
       {{ r.id }}: {
           id: {{ r.id }},
-          name: {{ (((r.prefix or '') ~ ' ' ~ (r.first_name or '') ~ ' ' ~ (r.last_name or ''))|trim)|tojson }},
+          name: {{ (((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name)|tojson }},
           registration_number: {{ (r.registration_number or '')|tojson }},
           online_subscription: {{ (r.online_subscription or '')|tojson }},
           activation_type: {{ (r.activation_type or '')|tojson }},

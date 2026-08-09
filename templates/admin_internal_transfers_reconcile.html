@@ -36,7 +36,7 @@
             {% endif %}
             <tr style="border-top:1px solid var(--gray-100);">
               <td style="padding:9px 12px;">
-                <div style="font-weight:600;color:var(--navy);">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</div>
+                <div style="font-weight:600;color:var(--navy);">{{ ((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name }}</div>
                 <div style="font-size:0.74rem;color:var(--gray-400);">{{ r.registration_number|format_reg }}</div>
               </td>
               <td style="padding:9px 12px;"><span style="font-size:0.72rem;font-weight:700;background:var(--gray-100);color:var(--gray-600);padding:2px 8px;border-radius:999px;">{{ r.pathway|upper }}</span></td>

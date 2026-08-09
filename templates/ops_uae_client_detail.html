@@ -3,7 +3,7 @@
 {% block title %}UAE Client Dashboard - {{ client.first_name }} {{ client.last_name }}{% endblock %}
 
 {% block ops_content %}
-{% set client_display = (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip()) %}
+{% set client_display = (((client.first_name or '') ~ ' ' ~ (client.last_name or '')) | dr_name) %}
 {% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display) %}
 <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
@@ -68,7 +68,7 @@
         {% endif %}
       <div>
         <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
-          {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
+          {{ ((client.first_name or '') ~ ' ' ~ (client.last_name or '')) | dr_name }}
           {% if client.is_pg_doctor %}
           <span style="vertical-align:middle;display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:#FEF3E7;color:#C2410C;border:1px solid #FDBA74;margin-left:8px;">PG Doctor</span>
           {% else %}

@@ -103,7 +103,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     {% for record in records %}
                     <tr data-rec="{{ rec_json(record) }}" class="clickable-row" id="row-{{ record.id }}" onclick="openWebinarsDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
-                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number|format_reg }}</td>
                         <td style="padding:12px 16px;">{{ record.event_type or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.event_name or '—' }}</td>
@@ -139,7 +139,7 @@ const RECORDS = {
     {% for record in records %}
     {{ record.id }}: {
         id: {{ record.id }},
-        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        name: {{ (((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
         event_type: {{ (record.event_type or '')|tojson }},
         event_name: {{ (record.event_name or '')|tojson }},

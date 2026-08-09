@@ -674,7 +674,7 @@
         <tr class="clickable-row" title="Phone: {{ client.mobile or client.whatsapp1 or '—' }}  ·  Email: {{ client.email or '—' }}  ·  DOB: {{ client.dob or '—' }}" id="row-{{ client.id }}" onclick="openPlabDetail({{ client.id }})">
           <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
           <td>{{ client.registration_number|format_reg }}</td>
-          <td>{{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}</td>
+          <td>{{ ((client.first_name or '') ~ ' ' ~ (client.last_name or '')) | dr_name }}</td>
           <td>{{ client.current_stage or '–' }}</td>
           <td>
             {% set status = client.account_status %}
@@ -742,7 +742,7 @@
       {% for client in clients %}
       {{ client.id }}: {
           id: {{ client.id }},
-          name: {{ (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or ''))|trim)|tojson }},
+          name: {{ (((client.first_name or '') ~ ' ' ~ (client.last_name or '')) | dr_name)|tojson }},
           registration_number: {{ (client.registration_number or '')|tojson }},
           formatted_reg: {{ (client.registration_number or '')|format_reg|tojson }},
           current_stage: {{ (client.current_stage or '')|tojson }},

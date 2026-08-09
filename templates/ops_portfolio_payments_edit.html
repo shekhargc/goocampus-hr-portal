@@ -11,7 +11,7 @@
         <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
             Update Portfolio Pathway payment information.
             {% if record.first_name or record.last_name %}
-              Candidate: {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+              Candidate: {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
             {% endif %}
             {% if record.registration_number %}&middot; Reg #{{ record.registration_number|format_reg }}{% endif %}
         </p>
@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate</label>
-                    <input type="text" value="{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    <input type="text" value="{{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
                 </div>
             </div>
 

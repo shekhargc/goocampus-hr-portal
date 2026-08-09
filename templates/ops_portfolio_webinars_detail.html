@@ -21,7 +21,7 @@
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
           Registration #{{ record.registration_number|format_reg }}
           {% if record.first_name or record.last_name %}
-            &middot; Candidate: {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+            &middot; Candidate: {{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}
           {% endif %}
         </p>
         {% if record.start_date or record.end_date %}
@@ -101,7 +101,7 @@
         <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Candidate</h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Name:</span><span style="color:var(--navy);font-weight:600;">
-            {% if record.first_name or record.last_name %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% else %}—{% endif %}
+            {% if record.first_name or record.last_name %}{{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}{% else %}—{% endif %}
           </span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ record.mobile or '—' }}</span></div>
