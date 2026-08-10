@@ -121,7 +121,7 @@
                         <tr style="border-top:1px solid var(--gray-100);">
                             <td style="padding:0.6rem 0.9rem;">
                                 <div style="font-weight:600;color:var(--navy);">
-                                    {% if l.is_hot %}<span style="color:#b91c1c;margin-right:0.25rem;">🔥</span>{% endif %}{{ l.lead_name }}
+                                    {% if l.is_hot %}<span style="color:#b91c1c;margin-right:0.25rem;">🔥</span>{% endif %}{{ l.lead_name | dr_name }}
                                 </div>
                                 {% if l.company %}<div style="font-size:0.72rem;color:var(--gray-500);">{{ l.company }}</div>{% endif %}
                             </td>
@@ -155,7 +155,7 @@
                 <div style="padding:0.7rem 0;border-top:1px solid var(--gray-100);">
                     <div style="display:flex;justify-content:space-between;gap:0.6rem;">
                         <div style="min-width:0;flex:1;">
-                            <div style="font-weight:600;color:var(--navy);font-size:0.88rem;">{{ c.client_name or c.product_name or 'Closure' }}</div>
+                            <div style="font-weight:600;color:var(--navy);font-size:0.88rem;">{{ (c.client_name | dr_name) or c.product_name or 'Closure' }}</div>
                             <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.1rem;">
                                 {% if c.product_name and c.client_name %}{{ c.product_name }} &middot; {% endif %}{{ c.close_date|format_date }}
                             </div>

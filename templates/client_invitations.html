@@ -87,7 +87,7 @@
         <tr class="inv-row" data-search="{{ inv.client_name|lower }} {{ inv.client_email|lower }} {{ inv.client_mobile }}"
           style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;"
           onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">
-          <td style="padding: 12px 16px; font-weight: 500; color: #111827;">{{ inv.client_name }}</td>
+          <td style="padding: 12px 16px; font-weight: 500; color: #111827;">{{ inv.client_name | dr_name }}</td>
           <td style="padding: 12px 16px; color: #374151;">{{ inv.client_mobile }}</td>
           <td style="padding: 12px 16px; color: #374151;">{{ inv.client_email }}</td>
           <td style="padding: 12px 16px; color: #374151;">{{ inv.product_name }}</td>

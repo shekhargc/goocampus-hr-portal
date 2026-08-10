@@ -86,7 +86,7 @@
         </div>
         {% for c in kanban_clients if c.onboarding_status == st %}
         <a href="/operations/onboarding/{{ c.id }}" class="kanban-card" style="display:block;text-decoration:none;">
-            <div class="kanban-card-name">{{ c.first_name }} {{ c.last_name or '' }}</div>
+            <div class="kanban-card-name">{{ ((c.first_name or '') ~ ' ' ~ (c.last_name or '')) | dr_name }}</div>
             <div class="kanban-card-reg">{{ (c.registration_number or '')|format_reg }}</div>
             <div class="kanban-card-plan">{{ c.plan_type or '' }}</div>
         </a>
@@ -115,7 +115,7 @@
                 {% for c in clients %}
                 <tr>
                     <td>{{ (c.registration_number or '')|format_reg }}</td>
-                    <td style="font-weight:600;">{{ c.first_name }} {{ c.last_name or '' }}</td>
+                    <td style="font-weight:600;">{{ ((c.first_name or '') ~ ' ' ~ (c.last_name or '')) | dr_name }}</td>
                     <td>{{ c.plan_type or '—' }}</td>
                     <td>
                         {% set sc = {'Pending':'status-pending','Email Sent':'status-email-sent','Call Done':'status-call-done','Kit Dispatched':'status-kit-dispatched','Completed':'status-completed'} %}
