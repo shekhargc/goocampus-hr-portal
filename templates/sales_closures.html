@@ -71,7 +71,7 @@
                         <td style="padding:0.65rem 1rem;color:var(--gray-700);">{{ (c.eff_date or c.close_date)|format_date }}</td>
                         <td style="padding:0.65rem 0.5rem;">
                             <div style="font-weight:600;color:var(--navy);">{{ c.display_name }}</div>
-                            <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.1rem;">{{ c.client_name or '—' }}</div>
+                            <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.1rem;">{{ (c.client_name | dr_name) or '—' }}</div>
                         </td>
                         <td style="padding:0.65rem 0.5rem;">
                             <div style="display:flex;align-items:center;gap:0.45rem;">
