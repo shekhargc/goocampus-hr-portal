@@ -193,7 +193,7 @@
             <div class="product-badge">{{ product.name }}</div>
             <h1>Create Your Account</h1>
             {% if invitation.client_name %}
-            <p>Welcome, <span class="client-name">{{ invitation.client_name }}</span>! Set up your account to get started.</p>
+            <p>Welcome, <span class="client-name">{{ invitation.client_name | dr_name }}</span>! Set up your account to get started.</p>
             {% else %}
             <p>Set up your account to get started.</p>
             {% endif %}
