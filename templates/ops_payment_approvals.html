@@ -26,7 +26,7 @@
                 {% for x in pending %}
                 <tr style="border-top:1px solid var(--gray-100);">
                     <td style="padding:0.7rem 0.9rem;">
-                        <div style="font-weight:600;color:var(--navy);">{{ x.name }}</div>
+                        <div style="font-weight:600;color:var(--navy);">{{ x.name | dr_name }}</div>
                         <div style="font-size:0.75rem;color:var(--gray-500);">{{ x.registration_number|format_reg }}</div>
                     </td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.ordinal }}</td>
@@ -65,7 +65,7 @@
             <tbody>
                 {% for x in approved %}
                 <tr style="border-top:1px solid var(--gray-100);">
-                    <td style="padding:0.55rem 0.9rem;color:var(--navy);font-weight:600;">{{ x.name }} <span style="font-weight:400;color:var(--gray-500);">· {{ x.registration_number|format_reg }}</span></td>
+                    <td style="padding:0.55rem 0.9rem;color:var(--navy);font-weight:600;">{{ x.name | dr_name }} <span style="font-weight:400;color:var(--gray-500);">· {{ x.registration_number|format_reg }}</span></td>
                     <td style="padding:0.55rem 0.9rem;">{{ x.ordinal }}</td>
                     <td style="padding:0.55rem 0.9rem;text-align:right;color:var(--gray-700);">₹{{ '{:,.0f}'.format(x.total) }}</td>
                     <td style="padding:0.55rem 0.9rem;color:#16A34A;font-weight:600;">✓ Posted</td>
