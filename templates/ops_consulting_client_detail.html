@@ -439,13 +439,21 @@
     <!-- Panel: Onboarding -->
     <div id="dt-onboarding" class="dtab-panel" style="display:none;">
 
+      {% set yes_badge = '<span style="background:#dcfce7;color:#15803d;font-weight:700;padding:2px 10px;border-radius:999px;font-size:13px;">&#10003; Yes</span>' %}
+      {% set no_badge = '<span style="background:#fee2e2;color:#b91c1c;font-weight:700;padding:2px 10px;border-radius:999px;font-size:13px;">No</span>' %}
+      {% set hold_badge = '<span style="background:#ffedd5;color:#c2410c;font-weight:700;padding:2px 10px;border-radius:999px;font-size:13px;">On hold</span>' %}
+      {% set sched_badge = '<span style="background:#dbeafe;color:#1e40af;font-weight:700;padding:2px 10px;border-radius:999px;font-size:13px;">Scheduled</span>' %}
       <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Onboarding</h4>
       <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Call:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_call_by or '—' }}{% if client.welcome_call_date %} ({{ client.welcome_call_date }}){% endif %}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Mail:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_mail or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Service Agreement:</span><span style="color:var(--navy);font-weight:600;">{{ client.service_agreement or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Refund Policy:</span><span style="color:var(--navy);font-weight:600;">{{ client.refund_policy or '—' }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Call:</span><span>
+          {% if onboarding.welcome_call == 'hold' %}{{ hold_badge|safe }}{% elif onboarding.welcome_call == 'scheduled' %}{{ sched_badge|safe }}{% elif onboarding.welcome_call == 'yes' %}{{ yes_badge|safe }}{% else %}{{ no_badge|safe }}{% endif %}
+          {% if onboarding.welcome_call == 'hold' and onboarding.wc_hold_note %} <span style="color:var(--gray-500);font-size:12px;">— {{ onboarding.wc_hold_note }}</span>{% elif client.welcome_call_date %} <span style="color:var(--gray-500);font-size:12px;">({{ client.welcome_call_date }})</span>{% endif %}
+        </span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Mail:</span><span>{{ (yes_badge if onboarding.welcome_email else no_badge)|safe }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Service Agreement:</span><span>{{ (yes_badge if onboarding.agreement else no_badge)|safe }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Refund Policy:</span><span>{{ (yes_badge if onboarding.refund_policy else no_badge)|safe }}</span></div>
       </div>
+      <p style="margin:14px 0 0;font-size:12px;color:var(--gray-500);max-width:560px;"><strong>Service Agreement</strong> shows <strong>Yes</strong> once a contract is uploaded (use <em>Upload Contract</em> above) or digitally signed. <strong>Welcome Call</strong> reflects the live status — <strong>On hold</strong>, <strong>Scheduled</strong>, or <strong>Yes</strong> once done. Standard Consulting has no welcome kit. These feed the <a href="/operations/consulting/services-summary" style="color:var(--orange);font-weight:600;text-decoration:none;">Services Summary</a>.</p>
 
     </div><!-- /dt-onboarding -->
 

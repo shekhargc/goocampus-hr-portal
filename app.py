@@ -46611,6 +46611,45 @@ def seed_product_pathways_once():
 seed_product_pathways_once()
 
 
+def seed_consulting_specialist_tag_once():
+    """Default all Standard Consulting clients to the PG / Specialist doctor tag
+    (founder 2026-08-11). Most Consulting clients are specialists; recent portal
+    clients are already auto-tagged from their academic details at registration,
+    so this only fills in the older Zoho-imported clients that had no tag. It is
+    a one-time, marker-guarded sweep and is fully reversible per client via the
+    PG Doctor badge tool (/admin/pg-doctor-badge)."""
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        if conn.execute("SELECT 1 FROM _import_markers WHERE key = 'consulting_specialist_v1'").fetchone():
+            return
+        try:
+            conn.execute("ALTER TABLE plab_clients ADD COLUMN IF NOT EXISTS is_pg_doctor INTEGER DEFAULT 0")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        cur = conn.execute(
+            "UPDATE plab_clients SET is_pg_doctor = 1 "
+            "WHERE COALESCE(pathway,'') = 'consulting' AND COALESCE(is_pg_doctor,0) = 0")
+        n = getattr(cur, 'rowcount', None)
+        conn.execute("INSERT INTO _import_markers (key, value) VALUES ('consulting_specialist_v1','done')")
+        conn.commit()
+        logging.info(f"seed_consulting_specialist_tag_once: tagged {n} consulting clients as PG/Specialist")
+    except Exception as e:
+        logging.error(f"seed_consulting_specialist_tag_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_consulting_specialist_tag_once()
+
+
 # ─────────────────────────────────────────────────────────────────────────
 #  Access Master Phase 3: log-only enforcement
 #

@@ -519,12 +519,52 @@ def ops_consulting_client_detail(client_id):
             (client['id'], client.get('email'), client.get('mobile'))).fetchone() is not None
     except Exception:
         has_training = False
+
+    # ── Onboarding sync (Standard Consulting — founder 2026-08-11) ──
+    # Consulting's Onboarding tab used to read empty legacy columns → all '—'.
+    # Now: Welcome Email = Yes (standard); Service Agreement + Refund Policy read
+    # the REAL digitally-signed records; Welcome Call reflects the REAL status
+    # (incl. 'On hold') for portal-registered clients. Older Zoho clients (no
+    # registration) assume done. Consulting has NO welcome kit.
+    onboarding = {'welcome_call': 'yes', 'welcome_email': True, 'agreement': False,
+                  'refund_policy': True, 'wc_hold_note': ''}
+    try:
+        from routes.operations.australia import _yn_flag
+        rn = (client.get('registration_number') or '').strip().upper()
+        rowreg = conn.execute(
+            "SELECT id, account_id, COALESCE(welcome_call_hold,0) AS hold, wc_hold_note, "
+            "COALESCE(wc_confirmed,0) AS confirmed, welcome_call_date, COALESCE(wc_status,'') AS wc_status "
+            "FROM client_registrations WHERE UPPER(TRIM(registration_number)) = ? "
+            "AND client_submitted_at IS NOT NULL ORDER BY id DESC LIMIT 1", (rn,)).fetchone()
+        contract_signed = False
+        if rowreg:
+            if rowreg['hold']:
+                onboarding['welcome_call'] = 'hold'
+                onboarding['wc_hold_note'] = rowreg['wc_hold_note'] or ''
+            elif rowreg['confirmed']:
+                onboarding['welcome_call'] = 'yes'
+            elif rowreg['welcome_call_date'] or rowreg['wc_status']:
+                onboarding['welcome_call'] = 'scheduled'
+            else:
+                onboarding['welcome_call'] = 'yes'
+            contract_signed = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? AND registration_id = ? "
+                "AND agreement_type = 'contract' LIMIT 1", (rowreg['account_id'], rowreg['id'])).fetchone())
+            onboarding['refund_policy'] = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' LIMIT 1",
+                (rowreg['account_id'],)).fetchone())
+        onboarding['agreement'] = _yn_flag(client.get('service_agreement')) or bool(client.get('contract_path')) or contract_signed
+    except Exception as e:
+        logging.warning(f"Consulting onboarding sync: {e}")
+        try: conn.rollback()
+        except Exception: pass
     conn.close()
 
     return render_template(
         'ops_consulting_client_detail.html',
         user=user,
         client=client,
+        onboarding=onboarding,
         has_training=has_training,
         documents=documents,
         plab_doc_types=PLAB_DOC_TYPES,
