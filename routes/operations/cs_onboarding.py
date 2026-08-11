@@ -35,13 +35,20 @@ def ops_consulting_onboarding_list():
     page = int(request.args.get('page', 1) or 1)
     per_page = 50
 
-    # Board columns (founder 2026-08-11): status is DERIVED from real data.
-    #   NEW portal-registered clients → live status from the real onboarding
-    #     signals (welcome email sent, welcome-call flow incl. On hold,
-    #     agreement + refund signed).
+    # Board columns (founder 2026-08-11): each client sits in the ONBOARDING
+    # STAGE it is actually in — a progression, not a done/not-done checklist.
+    #   Verification Pending → sales OR ops verification not yet done
+    #   Email Sent           → verified + welcome email sent, call not arranged
+    #   Welcome Call Pending → welcome-call stage: call scheduled but not done
+    #   Welcome Call On Hold → welcome call put on hold (shows here even if the
+    #                          rest of onboarding is done — must match the profile)
+    #   Completed            → welcome call DONE = onboarded (NOT gated on
+    #                          agreement/refund — that wrongly parked completed
+    #                          clients in Email Sent)
     #   OLD Zoho-imported clients (no portal registration) → 'Completed'
     #     (they never went through the portal onboarding flow → assume done).
-    STATUSES = ['Pending', 'Email Sent', 'Call Done', 'On Hold', 'Completed']
+    STATUSES = ['Verification Pending', 'Email Sent', 'Welcome Call Pending',
+                'Welcome Call On Hold', 'Completed']
 
     try:
         from routes.operations.australia import _yn_flag
@@ -70,6 +77,7 @@ def ops_consulting_onboarding_list():
     try:
         for r in conn.execute(
             "SELECT UPPER(TRIM(registration_number)) AS rn, account_id, "
+            "       COALESCE(sales_completed,0) AS sales_done, COALESCE(ops_status,'') AS ops_status, "
             "       COALESCE(welcome_call_hold,0) AS hold, COALESCE(wc_confirmed,0) AS confirmed, "
             "       COALESCE(wc_status,'') AS wc_status, wc_scheduled_date, wc_proposed_date, "
             "       wc_pref_date, wc_confirmed_at "
@@ -82,45 +90,35 @@ def ops_consulting_onboarding_list():
         try: conn.rollback()
         except Exception: pass
 
-    # Digitally-signed contract / refund, by reg number.
-    contract_regs, refund_regs = set(), set()
-    try:
-        for r in conn.execute(
-            "SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn "
-            "  FROM client_agreements ca JOIN client_registrations cr ON cr.account_id = ca.account_id "
-            " WHERE ca.agreement_type = 'contract'").fetchall():
-            if r['rn']: contract_regs.add(r['rn'])
-        for r in conn.execute(
-            "SELECT DISTINCT UPPER(TRIM(cr.registration_number)) AS rn "
-            "  FROM client_agreements ca JOIN client_registrations cr ON cr.account_id = ca.account_id "
-            " WHERE ca.agreement_type = 'refund_policy'").fetchall():
-            if r['rn']: refund_regs.add(r['rn'])
-    except Exception as e:
-        logging.warning(f"cs onboarding agreements: {e}")
-        try: conn.rollback()
-        except Exception: pass
-
     def _derive(c):
         rn = _norm(c.get('registration_number'))
         reg = regmap.get(rn)
         if not reg:
             return 'Completed'          # legacy Zoho client → assume onboarding done
+        # Verification gate: sales AND ops verification done. A client whose
+        # master account already has a status is by definition past verification
+        # (guards against a registration row whose ops_status wasn't stamped).
+        verified = ((bool(reg.get('sales_done')) and reg.get('ops_status') == 'verified')
+                    or bool((c.get('account_status') or '').strip()))
+        if not verified:
+            return 'Verification Pending'
         st = (reg.get('wc_status') or '').strip().lower()
+        # Welcome-call flow — client_registrations is the source of truth.
+        # Hold shows even if the rest of onboarding is done (founder: must match
+        # what the profile shows inside).
         if reg.get('hold'):
-            return 'On Hold'
+            return 'Welcome Call On Hold'
         call_done = (bool(reg.get('confirmed')) or st in ('confirmed', 'completed', 'done')
                      or bool(c.get('welcome_call_confirmed')))
-        email_done = bool(c.get('welcome_email_sent')) or _yn_flag(c.get('welcome_mail'))
-        agreement_done = (bool(c.get('contract_path')) or _yn_flag(c.get('service_agreement'))
-                          or (rn in contract_regs))
-        refund_done = _yn_flag(c.get('refund_policy')) or (rn in refund_regs)
-        if email_done and call_done and agreement_done and refund_done:
-            return 'Completed'
         if call_done:
-            return 'Call Done'
-        if email_done:
-            return 'Email Sent'
-        return 'Pending'
+            return 'Completed'          # welcome call done = onboarded
+        call_scheduled = (bool(reg.get('wc_scheduled_date')) or bool(reg.get('wc_proposed_date'))
+                          or bool(reg.get('wc_pref_date'))
+                          or st in ('scheduled', 'proposed', 'requested'))
+        if call_scheduled:
+            return 'Welcome Call Pending'
+        # Verified, welcome email auto-sent on ops-verify, call not arranged yet.
+        return 'Email Sent'
 
     for c in clients:
         c['onboarding_status'] = _derive(c)
@@ -214,11 +212,38 @@ def ops_consulting_onboarding_detail(client_id):
     email_tpl = conn.execute(
         "SELECT * FROM email_templates WHERE template_key = 'welcome_email'"
     ).fetchone()
+
+    # Real welcome-call status from client_registrations (the source of truth
+    # that drives the board) so this page matches the board — e.g. an On Hold
+    # call must read On Hold here too, not "done" from the manual table.
+    wc_real = {'state': '', 'label': '', 'note': ''}
+    try:
+        rr = conn.execute(
+            "SELECT COALESCE(welcome_call_hold,0) AS hold, wc_hold_note, "
+            "       COALESCE(wc_confirmed,0) AS confirmed, COALESCE(wc_status,'') AS wc_status, "
+            "       wc_scheduled_date, wc_proposed_date, wc_pref_date "
+            "  FROM client_registrations "
+            " WHERE UPPER(TRIM(registration_number)) = ? AND client_submitted_at IS NOT NULL "
+            " ORDER BY id DESC LIMIT 1",
+            ((client['registration_number'] or '').strip().upper(),)).fetchone()
+        if rr:
+            st = (rr['wc_status'] or '').strip().lower()
+            if rr['hold']:
+                wc_real = {'state': 'hold', 'label': 'On Hold', 'note': rr['wc_hold_note'] or ''}
+            elif rr['confirmed'] or st in ('confirmed', 'completed', 'done'):
+                wc_real = {'state': 'done', 'label': 'Done', 'note': ''}
+            elif rr['wc_scheduled_date'] or rr['wc_proposed_date'] or rr['wc_pref_date'] or st in ('scheduled', 'proposed', 'requested'):
+                wc_real = {'state': 'scheduled', 'label': 'Scheduled', 'note': ''}
+            else:
+                wc_real = {'state': 'pending', 'label': 'Pending', 'note': ''}
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
     conn.close()
 
     return render_template(
         'ops_consulting_onboarding_detail.html',
-        client=client, onboarding=onb,
+        client=client, onboarding=onb, wc_real=wc_real,
         kit_items=kit_items, kit_template=kit_template,
         email_template=email_tpl,
         active_ops_page='consulting-onboarding',

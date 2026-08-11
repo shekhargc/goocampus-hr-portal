@@ -109,8 +109,8 @@
                     <td>{{ (c.registration_number or '')|format_reg }}</td>
                     <td style="font-weight:600;">{{ ((c.first_name or '') ~ ' ' ~ (c.last_name or '')) | dr_name }}</td>
                     <td>
-                        {% set sc = {'Pending':'status-pending','Email Sent':'status-email-sent','Call Done':'status-call-done','On Hold':'status-on-hold','Kit Dispatched':'status-kit-dispatched','Completed':'status-completed'} %}
-                        <span class="status-badge {{ sc.get(c.onboarding_status, 'status-pending') }}">{{ c.onboarding_status or 'Pending' }}</span>
+                        {% set sc = {'Verification Pending':'status-pending','Email Sent':'status-email-sent','Welcome Call Pending':'status-call-done','Welcome Call On Hold':'status-on-hold','Completed':'status-completed'} %}
+                        <span class="status-badge {{ sc.get(c.onboarding_status, 'status-pending') }}">{{ c.onboarding_status or 'Verification Pending' }}</span>
                     </td>
                     <td>
                         {% if c.welcome_email_sent_at %}<span style="color:#059669;">{{ c.welcome_email_sent_at|format_date }}</span>{% else %}<span style="color:#9CA3AF;">—</span>{% endif %}

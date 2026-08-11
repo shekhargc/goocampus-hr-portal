@@ -136,6 +136,15 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
         Welcome Call
     </h3>
+    {% if wc_real and wc_real.label %}
+    {% set wc_bg = {'hold':'#FFEDD5','done':'#DCFCE7','scheduled':'#DBEAFE','pending':'#FEF3C7'} %}
+    {% set wc_fg = {'hold':'#C2410C','done':'#15803D','scheduled':'#1E40AF','pending':'#92400E'} %}
+    <div style="margin:0 0 14px 0;padding:10px 14px;border-radius:8px;background:{{ wc_bg.get(wc_real.state,'#F3F4F6') }};color:{{ wc_fg.get(wc_real.state,'#374151') }};font-size:13px;">
+        <strong>Live welcome-call status:</strong> {{ wc_real.label }}
+        {% if wc_real.note %}<span style="opacity:0.85;"> — {{ wc_real.note }}</span>{% endif %}
+        <div style="margin-top:4px;font-size:11.5px;opacity:0.8;">This is the real status from the client's welcome-call flow (what the Onboarding board shows). The fields below are the manual onboarding checklist.</div>
+    </div>
+    {% endif %}
     <div class="form-grid">
         <div class="form-field">
             <label>Call Date</label>
