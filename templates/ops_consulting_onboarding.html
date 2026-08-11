@@ -17,6 +17,7 @@
     .status-pending { background:#FEF3C7; color:#92400E; }
     .status-email-sent { background:#DBEAFE; color:#1E40AF; }
     .status-call-done { background:#E0E7FF; color:#3730A3; }
+    .status-on-hold { background:#FFEDD5; color:#C2410C; }
     .status-kit-dispatched { background:#FDE68A; color:#78350F; }
     .status-completed { background:#D1FAE5; color:#065F46; }
 
@@ -62,7 +63,7 @@
     <input type="text" id="searchInput" placeholder="Search by name, reg number..." value="{{ search }}" onkeyup="debounceSearch(this.value)">
     <select id="statusFilter" onchange="applyFilters()">
         <option value="">All Statuses</option>
-        {% for st in ['Pending','Email Sent','Call Done','Completed'] %}
+        {% for st in board_statuses %}
         <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
         {% endfor %}
     </select>
@@ -70,7 +71,7 @@
 </div>
 
 <div id="kanbanView" class="kanban-container">
-    {% set statuses = ['Pending','Email Sent','Call Done','Completed'] %}
+    {% set statuses = board_statuses %}
     {% for st in statuses %}
     <div class="kanban-col">
         <div class="kanban-col-header">
@@ -108,7 +109,7 @@
                     <td>{{ (c.registration_number or '')|format_reg }}</td>
                     <td style="font-weight:600;">{{ ((c.first_name or '') ~ ' ' ~ (c.last_name or '')) | dr_name }}</td>
                     <td>
-                        {% set sc = {'Pending':'status-pending','Email Sent':'status-email-sent','Call Done':'status-call-done','Kit Dispatched':'status-kit-dispatched','Completed':'status-completed'} %}
+                        {% set sc = {'Pending':'status-pending','Email Sent':'status-email-sent','Call Done':'status-call-done','On Hold':'status-on-hold','Kit Dispatched':'status-kit-dispatched','Completed':'status-completed'} %}
                         <span class="status-badge {{ sc.get(c.onboarding_status, 'status-pending') }}">{{ c.onboarding_status or 'Pending' }}</span>
                     </td>
                     <td>
