@@ -16,6 +16,7 @@ Endpoints registered:
 """
 
 import logging
+import re
 from flask import render_template, flash, request, redirect, url_for, session
 
 from core.auth import admin_required
@@ -29,73 +30,135 @@ def ops_consulting_onboarding_list():
     Filtered to pathway='consulting' on plab_clients."""
     conn = get_db()
     status_filter = request.args.get('status', '')
-    search = (request.args.get('search') or '').strip()
+    search_raw = (request.args.get('search') or '').strip()
+    search = search_raw.lower()
     page = int(request.args.get('page', 1) or 1)
     per_page = 50
 
-    base_select = """SELECT p.id, p.registration_number, p.first_name, p.last_name,
-                            p.email, p.mobile, p.plan_type, p.current_stage,
-                            p.account_status, p.registration_date,
-                            COALESCE(o.onboarding_status, 'Pending') as onboarding_status,
-                            o.welcome_email_sent, o.welcome_email_sent_at,
-                            o.welcome_call_date, o.welcome_call_by, o.welcome_call_confirmed,
-                            o.welcome_kit_method, o.welcome_kit_sent_date,
-                            o.id as onboarding_id"""
-    base_from = (" FROM plab_clients p "
-                 " LEFT JOIN client_onboarding o ON o.client_id = p.id "
-                 " WHERE COALESCE(p.pathway, 'plab') = 'consulting' ")
-    where, params = [], []
-    if status_filter:
-        if status_filter == 'Pending':
-            where.append("(o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')")
-        else:
-            where.append("o.onboarding_status = ?")
-            params.append(status_filter)
+    # Board columns (founder 2026-08-11): each client sits in the ONBOARDING
+    # STAGE it is actually in — a progression, not a done/not-done checklist.
+    #   Verification Pending → sales OR ops verification not yet done
+    #   Email Sent           → verified + welcome email sent, call not arranged
+    #   Welcome Call Pending → welcome-call stage: call scheduled but not done
+    #   Welcome Call On Hold → welcome call put on hold (shows here even if the
+    #                          rest of onboarding is done — must match the profile)
+    #   Completed            → welcome call DONE = onboarded (NOT gated on
+    #                          agreement/refund — that wrongly parked completed
+    #                          clients in Email Sent)
+    #   OLD Zoho-imported clients (no portal registration) → 'Completed'
+    #     (they never went through the portal onboarding flow → assume done).
+    STATUSES = ['Verification Pending', 'Email Sent', 'Welcome Call Pending',
+                'Welcome Call On Hold', 'Completed']
+
+    try:
+        from routes.operations.australia import _yn_flag
+    except Exception:
+        def _yn_flag(v):
+            return str(v or '').strip().lower() in (
+                'yes', 'y', 'done', '1', 'true', 'completed', 'signed', 'given')
+
+    def _norm(s):
+        return (s or '').strip().upper()
+
+    clients = [dict(r) for r in conn.execute(
+        "SELECT p.id, p.registration_number, p.first_name, p.last_name, p.prefix, "
+        "       p.email, p.mobile, p.plan_type, p.current_stage, p.account_status, "
+        "       p.registration_date, p.welcome_mail, p.service_agreement, "
+        "       p.refund_policy, p.contract_path, "
+        "       o.welcome_email_sent, o.welcome_email_sent_at, o.welcome_call_date, "
+        "       o.welcome_call_by, o.welcome_call_confirmed, o.welcome_kit_sent_date, "
+        "       o.id AS onboarding_id "
+        "  FROM plab_clients p "
+        "  LEFT JOIN client_onboarding o ON o.client_id = p.id "
+        " WHERE COALESCE(p.pathway, 'plab') = 'consulting'").fetchall()]
+
+    # Portal registrations (the "new client" anchor + welcome-call status), by reg no.
+    regmap = {}
+    try:
+        for r in conn.execute(
+            "SELECT UPPER(TRIM(registration_number)) AS rn, account_id, "
+            "       COALESCE(sales_completed,0) AS sales_done, COALESCE(ops_status,'') AS ops_status, "
+            "       COALESCE(welcome_call_hold,0) AS hold, COALESCE(wc_confirmed,0) AS confirmed, "
+            "       COALESCE(wc_status,'') AS wc_status, wc_scheduled_date, wc_proposed_date, "
+            "       wc_pref_date, wc_confirmed_at "
+            "  FROM client_registrations WHERE client_submitted_at IS NOT NULL "
+            " ORDER BY id ASC").fetchall():
+            if r['rn']:
+                regmap[r['rn']] = dict(r)   # latest submitted registration wins
+    except Exception as e:
+        logging.warning(f"cs onboarding regmap: {e}")
+        try: conn.rollback()
+        except Exception: pass
+
+    def _derive(c):
+        rn = _norm(c.get('registration_number'))
+        reg = regmap.get(rn)
+        if not reg:
+            return 'Completed'          # legacy Zoho client → assume onboarding done
+        # Verification gate: sales AND ops verification done. A client whose
+        # master account already has a status is by definition past verification
+        # (guards against a registration row whose ops_status wasn't stamped).
+        verified = ((bool(reg.get('sales_done')) and reg.get('ops_status') == 'verified')
+                    or bool((c.get('account_status') or '').strip()))
+        if not verified:
+            return 'Verification Pending'
+        st = (reg.get('wc_status') or '').strip().lower()
+        # Welcome-call flow — client_registrations is the source of truth.
+        # Hold shows even if the rest of onboarding is done (founder: must match
+        # what the profile shows inside).
+        if reg.get('hold'):
+            return 'Welcome Call On Hold'
+        call_done = (bool(reg.get('confirmed')) or st in ('confirmed', 'completed', 'done')
+                     or bool(c.get('welcome_call_confirmed')))
+        if call_done:
+            return 'Completed'          # welcome call done = onboarded
+        call_scheduled = (bool(reg.get('wc_scheduled_date')) or bool(reg.get('wc_proposed_date'))
+                          or bool(reg.get('wc_pref_date'))
+                          or st in ('scheduled', 'proposed', 'requested'))
+        if call_scheduled:
+            return 'Welcome Call Pending'
+        # Verified, welcome email auto-sent on ops-verify, call not arranged yet.
+        return 'Email Sent'
+
+    for c in clients:
+        c['onboarding_status'] = _derive(c)
+        if not c.get('welcome_call_date'):
+            reg = regmap.get(_norm(c.get('registration_number')))
+            if reg:
+                c['welcome_call_date'] = reg.get('wc_confirmed_at') or reg.get('wc_scheduled_date') or None
+
+    def _regnum(c):
+        d = re.sub(r'[^0-9]', '', c.get('registration_number') or '')
+        return int(d) if d else -1
+    clients.sort(key=lambda c: (_regnum(c), c.get('id') or 0), reverse=True)
+
     if search:
-        where.append("(p.first_name ILIKE ? OR p.last_name ILIKE ? "
-                     " OR p.registration_number ILIKE ? OR p.email ILIKE ? "
-                     " OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)")
-        params.extend([f'%{search}%'] * 5)
-    where_sql = (' AND ' + ' AND '.join(where)) if where else ''
+        clients = [c for c in clients if search in ' '.join([
+            str(c.get('first_name') or ''), str(c.get('last_name') or ''),
+            str(c.get('registration_number') or ''), str(c.get('email') or ''),
+            str(c.get('prefix') or '')]).lower()]
 
-    total = conn.execute(
-        "SELECT COUNT(*) AS cnt FROM plab_clients p "
-        " LEFT JOIN client_onboarding o ON o.client_id = p.id "
-        " WHERE COALESCE(p.pathway, 'plab') = 'consulting'" + where_sql,
-        params,
-    ).fetchone()['cnt']
+    # Counts over the search-filtered set, before the status filter.
+    kanban_counts = {st: 0 for st in STATUSES}
+    for c in clients:
+        kanban_counts[c['onboarding_status']] = kanban_counts.get(c['onboarding_status'], 0) + 1
+
+    if status_filter:
+        clients = [c for c in clients if c['onboarding_status'] == status_filter]
+
+    total = len(clients)
     total_pages = max(1, (total + per_page - 1) // per_page)
-
-    kanban_sql = base_select + base_from + where_sql + " ORDER BY NULLIF(regexp_replace(COALESCE(p.registration_number,''), '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, p.id DESC"
-    kanban_clients = conn.execute(kanban_sql, params).fetchall()
-    table_sql = kanban_sql + " LIMIT ? OFFSET ?"
-    table_clients = conn.execute(table_sql, params + [per_page, (page - 1) * per_page]).fetchall()
-
-    kanban_counts = {}
-    for st in ['Pending', 'Email Sent', 'Call Done', 'Kit Dispatched', 'Completed']:
-        if st == 'Pending':
-            c = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM plab_clients p "
-                " LEFT JOIN client_onboarding o ON o.client_id = p.id "
-                " WHERE COALESCE(p.pathway, 'plab') = 'consulting' "
-                "   AND (o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')"
-            ).fetchone()['cnt']
-        else:
-            c = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM client_onboarding co "
-                " JOIN plab_clients p ON p.id = co.client_id "
-                " WHERE COALESCE(p.pathway, 'plab') = 'consulting' AND co.onboarding_status = ?",
-                (st,),
-            ).fetchone()['cnt']
-        kanban_counts[st] = c
+    page = min(max(1, page), total_pages)
+    kanban_clients = clients
+    table_clients = clients[(page - 1) * per_page: page * per_page]
     conn.close()
 
     return render_template(
         'ops_consulting_onboarding.html',
         clients=table_clients, kanban_clients=kanban_clients,
         page=page, total_pages=total_pages, total=total,
-        status_filter=status_filter, search=search,
-        kanban_counts=kanban_counts,
+        status_filter=status_filter, search=search_raw,
+        kanban_counts=kanban_counts, board_statuses=STATUSES,
         active_ops_page='consulting-onboarding',
         active_pathway='consulting',
         active_section='operations',
@@ -149,11 +212,38 @@ def ops_consulting_onboarding_detail(client_id):
     email_tpl = conn.execute(
         "SELECT * FROM email_templates WHERE template_key = 'welcome_email'"
     ).fetchone()
+
+    # Real welcome-call status from client_registrations (the source of truth
+    # that drives the board) so this page matches the board — e.g. an On Hold
+    # call must read On Hold here too, not "done" from the manual table.
+    wc_real = {'state': '', 'label': '', 'note': ''}
+    try:
+        rr = conn.execute(
+            "SELECT COALESCE(welcome_call_hold,0) AS hold, wc_hold_note, "
+            "       COALESCE(wc_confirmed,0) AS confirmed, COALESCE(wc_status,'') AS wc_status, "
+            "       wc_scheduled_date, wc_proposed_date, wc_pref_date "
+            "  FROM client_registrations "
+            " WHERE UPPER(TRIM(registration_number)) = ? AND client_submitted_at IS NOT NULL "
+            " ORDER BY id DESC LIMIT 1",
+            ((client['registration_number'] or '').strip().upper(),)).fetchone()
+        if rr:
+            st = (rr['wc_status'] or '').strip().lower()
+            if rr['hold']:
+                wc_real = {'state': 'hold', 'label': 'On Hold', 'note': rr['wc_hold_note'] or ''}
+            elif rr['confirmed'] or st in ('confirmed', 'completed', 'done'):
+                wc_real = {'state': 'done', 'label': 'Done', 'note': ''}
+            elif rr['wc_scheduled_date'] or rr['wc_proposed_date'] or rr['wc_pref_date'] or st in ('scheduled', 'proposed', 'requested'):
+                wc_real = {'state': 'scheduled', 'label': 'Scheduled', 'note': ''}
+            else:
+                wc_real = {'state': 'pending', 'label': 'Pending', 'note': ''}
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
     conn.close()
 
     return render_template(
         'ops_consulting_onboarding_detail.html',
-        client=client, onboarding=onb,
+        client=client, onboarding=onb, wc_real=wc_real,
         kit_items=kit_items, kit_template=kit_template,
         email_template=email_tpl,
         active_ops_page='consulting-onboarding',

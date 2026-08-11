@@ -519,12 +519,80 @@ def ops_consulting_client_detail(client_id):
             (client['id'], client.get('email'), client.get('mobile'))).fetchone() is not None
     except Exception:
         has_training = False
+
+    # ── Onboarding sync (Standard Consulting — founder 2026-08-11) ──
+    # Consulting's Onboarding tab used to read empty legacy columns → all '—'.
+    # Now every row reflects REAL state:
+    #   Welcome Mail    = Yes (standard on ops-verify)
+    #   Service Agmt.   = Yes once a contract is uploaded (contract_path) OR the
+    #                     client digitally signed it (client_agreements)
+    #   Refund Policy   = the real digitally-signed record (portal clients)
+    #   Welcome Call    = live status: On hold / Scheduled / Done / Pending
+    # Older Zoho clients (no portal registration) assume onboarding done.
+    # Consulting has NO welcome kit.
+    #
+    # NOTE: computed defensively in independent steps — a failure in the
+    # welcome-call lookup must never blank out Agreement/Refund (that was the
+    # 2026-08-11 bug: a query on a non-existent column threw and wiped the lot).
+    onboarding = {'welcome_call': 'pending', 'welcome_email': True, 'agreement': False,
+                  'refund_policy': True, 'wc_hold_note': ''}
+    try:
+        from routes.operations.australia import _yn_flag
+    except Exception:
+        def _yn_flag(v):
+            return str(v or '').strip().lower() in (
+                'yes', 'y', 'done', '1', 'true', 'completed', 'signed', 'given')
+    # Agreement from the same signals the "View Contract" button uses — reliable,
+    # independent of any registration lookup.
+    onboarding['agreement'] = _yn_flag(client.get('service_agreement')) or bool(client.get('contract_path'))
+    rn = (client.get('registration_number') or '').strip().upper()
+    rowreg = None
+    try:
+        rowreg = conn.execute(
+            "SELECT id, account_id, COALESCE(welcome_call_hold,0) AS hold, wc_hold_note, "
+            "COALESCE(wc_confirmed,0) AS confirmed, COALESCE(wc_status,'') AS wc_status, "
+            "wc_scheduled_date, wc_proposed_date, wc_pref_date "
+            "FROM client_registrations WHERE UPPER(TRIM(registration_number)) = ? "
+            "AND client_submitted_at IS NOT NULL ORDER BY id DESC LIMIT 1", (rn,)).fetchone()
+    except Exception as e:
+        logging.warning(f"Consulting onboarding wc lookup: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    if rowreg:
+        # Portal-registered client → reflect the REAL welcome-call status.
+        st = (rowreg['wc_status'] or '').strip().lower()
+        if rowreg['hold']:
+            onboarding['welcome_call'] = 'hold'
+            onboarding['wc_hold_note'] = rowreg['wc_hold_note'] or ''
+        elif rowreg['confirmed'] or st in ('confirmed', 'completed', 'done'):
+            onboarding['welcome_call'] = 'yes'
+        elif (rowreg['wc_scheduled_date'] or rowreg['wc_proposed_date']
+              or rowreg['wc_pref_date'] or st in ('scheduled', 'proposed', 'requested')):
+            onboarding['welcome_call'] = 'scheduled'
+        else:
+            onboarding['welcome_call'] = 'pending'
+        # Agreement/Refund from the real digitally-signed records.
+        try:
+            if not onboarding['agreement']:
+                onboarding['agreement'] = bool(conn.execute(
+                    "SELECT 1 FROM client_agreements WHERE account_id = ? "
+                    "AND agreement_type = 'contract' LIMIT 1", (rowreg['account_id'],)).fetchone())
+            onboarding['refund_policy'] = bool(conn.execute(
+                "SELECT 1 FROM client_agreements WHERE account_id = ? "
+                "AND agreement_type = 'refund_policy' LIMIT 1", (rowreg['account_id'],)).fetchone())
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    else:
+        # Legacy Zoho client (no portal registration) → assume onboarding done.
+        onboarding['welcome_call'] = 'yes'
     conn.close()
 
     return render_template(
         'ops_consulting_client_detail.html',
         user=user,
         client=client,
+        onboarding=onboarding,
         has_training=has_training,
         documents=documents,
         plab_doc_types=PLAB_DOC_TYPES,
