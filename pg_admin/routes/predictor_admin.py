@@ -430,7 +430,7 @@ def predictor_upload():
         # Replace this year only — re-uploading a corrected file is safe, and other
         # years (and everything else in the DB) are untouched.
         conn.execute("DELETE FROM pg_cutoffs WHERE year = ?", (year,))
-        batch = []
+        allvals = []
         for r in rows:
             if not isinstance(r, dict):
                 skipped += 1
@@ -446,14 +446,12 @@ def predictor_upload():
                     vals.append((str(v).strip() if v is not None else ''))
             at, dg, is_ref = _derive_tags(r)
             vals += [at, dg, is_ref, _closing_rank(r)]
-            batch.append(vals)
-            if len(batch) >= _BATCH:
-                conn.executemany(sql, batch)
-                inserted += len(batch)
-                batch = []
-        if batch:
-            conn.executemany(sql, batch)
-            inserted += len(batch)
+            allvals.append(vals)
+        # execute_values (multi-row INSERT) — psycopg2's default executemany sends
+        # one statement PER ROW, which timed out the 67k-row upload (2026-08-12).
+        if allvals:
+            conn.execute_batch(sql, allvals, page_size=1000)
+            inserted = len(allvals)
         conn.commit()
         # Build the college master + backfill college_id (founder 2026-08-11).
         try:
