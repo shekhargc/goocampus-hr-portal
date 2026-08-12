@@ -217,6 +217,10 @@ def ensure_pg_cutoffs_table():
             ('degree_group', 'TEXT'), ('seat_type', 'TEXT'),
             ('course_type', 'TEXT'), ('beds', 'INTEGER'),
             ('college_id', 'INTEGER'), ('is_reference', 'INTEGER DEFAULT 0'),
+            # Year-wise stipend + full counselling body name (founder 2026-08-12).
+            # `stipend` holds Year 1; these add Years 2 & 3 and the verbose body.
+            ('stipend_yr2', 'NUMERIC(14,2)'), ('stipend_yr3', 'NUMERIC(14,2)'),
+            ('counselling_body', 'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE pg_cutoffs ADD COLUMN IF NOT EXISTS {col} {ddl}")
