@@ -31,7 +31,12 @@ _FIELD_MAP = [
     ('d', 'degree'), ('n', 'course'), ('st', 'state'),
     ('f', 'fee'), ('sp', 'stipend'), ('by', 'bond_years'), ('pen', 'penalty'),
     ('r1', 'r1'), ('r2', 'r2'), ('r3', 'r3'), ('r4', 'r4'), ('stray', 'stray'),
+    # College-database columns (founder 2026-08-11) — stored verbatim on pg_cutoffs.
+    ('it', 'institute_type'), ('seat', 'seat_type'), ('ct', 'course_type'), ('beds', 'beds'),
 ]
+# 'scope' (Counselling Scope) is captured for DERIVATION only (authority_type /
+# is_reference) — it is not a stored pg_cutoffs column, so it stays out of _FIELD_MAP.
+_EXTRA_COL_TO_KEY = {'scope': 'scope'}
 
 
 # ── Excel / CSV support ──────────────────────────────────────────────────────
@@ -45,14 +50,23 @@ _HEADER_ALIASES = {
                    'source', 'conducted by', 'exam authority', 'type'],
     'quota':      ['quota', 'seat quota', 'quota type'],
     'category':   ['category', 'cat', 'seat category', 'reservation', 'caste category'],
-    'degree':     ['degree', 'course type', 'qualification', 'level', 'degree type'],
+    'degree':     ['degree', 'qualification', 'level', 'degree type'],
     'course':     ['course', 'course name', 'speciality', 'specialty', 'subject', 'branch',
                    'discipline', 'pg course'],
     'state':      ['state', 'state name', 'region', 'state/ut'],
     'fee':        ['fee', 'fees', 'course fee', 'annual fee', 'tuition', 'tuition fee'],
-    'stipend':    ['stipend', 'monthly stipend', 'stipend per month'],
+    'stipend':    ['stipend', 'monthly stipend', 'stipend per month',
+                   'stipend yr 1', 'stipend year 1', 'stipend yr 1 mo'],
     'bond_years': ['bond', 'bond years', 'bond period', 'bond (years)', 'bond duration'],
-    'penalty':    ['penalty', 'bond penalty', 'bond amount', 'penalty amount'],
+    'penalty':    ['penalty', 'bond penalty', 'bond amount', 'penalty amount',
+                   'bond course mid way', 'bond / course mid way'],
+    # College-database columns from the founder's Master file (2026-08-11).
+    'institute_type': ['institute type', 'institution type', 'college type',
+                       'type of institute', 'type of institution'],
+    'seat_type':      ['seat type', 'seat category type'],
+    'course_type':    ['course type', 'clinical type'],
+    'scope':          ['counselling scope', 'counseling scope', 'scope'],
+    'beds':           ['beds', 'no of beds', 'number of beds', 'bed count', 'bed strength'],
     'r1':         ['r1', 'round 1', 'round1', 'round-1', 'r 1', 'closing rank r1', 'cr1'],
     'r2':         ['r2', 'round 2', 'round2', 'round-2', 'r 2', 'closing rank r2', 'cr2'],
     'r3':         ['r3', 'round 3', 'round3', 'round-3', 'r 3', 'closing rank r3', 'cr3'],
@@ -141,6 +155,7 @@ def _rows_from_tabular(headers, data_rows):
     mapping = _map_headers(headers)
     # Our short JSON keys, so downstream code is identical for both formats.
     col_to_key = {c: k for k, c in _FIELD_MAP}
+    col_to_key.update(_EXTRA_COL_TO_KEY)   # 'scope' captured for derivation only
     rows = []
     for raw in data_rows:
         row = {}
@@ -243,6 +258,100 @@ def _closing_rank(row):
     return max(ranks) if ranks else None
 
 
+def _derive_tags(row):
+    """From one Master row, derive (authority_type, degree_group, is_reference).
+
+    - authority_type: 'allindia' (MCC / All-India Quota) | 'state' | '' (unknown).
+      Read from Counselling Scope first ('AIQ MCC' / 'State' / 'Reference (SBP only)'),
+      falling back to the authority string.
+    - degree_group: 'mdms' (MD/MS) | 'dnb' (DNB/DNB-Diploma) | 'other'
+      (PG-Diploma / MCh / MPH — excluded from both predictors). If the degree is
+      blank (stipend-only reference rows), infer from Seat Type.
+    - is_reference: 1 for 'Reference (SBP only)' rows — stipend/bond detail with no
+      cut-off; kept for the college master but excluded from the predictor.
+    DNB with no known scope defaults to 'allindia' (DNB counselling is centralised),
+    so DNB colleges are still browsable under the all-India DNB tab.
+    """
+    scope = _norm_header(row.get('scope'))          # 'aiq mcc' / 'state' / 'reference sbp only'
+    authority = str(row.get('s') or '').strip().lower()
+    degree = str(row.get('d') or '').strip().upper()
+    seat = _norm_header(row.get('seat'))            # 'md ms seats' / 'dnb seats' / …
+
+    is_ref = 1 if 'reference' in scope else 0
+
+    if 'mcc' in scope or 'aiq' in scope:
+        at = 'allindia'
+    elif scope == 'state':
+        at = 'state'
+    elif is_ref:
+        at = ''
+    elif 'mcc' in authority or 'all india' in authority:
+        at = 'allindia'
+    elif authority:
+        at = 'state'
+    else:
+        at = ''
+
+    if degree in ('MD', 'MS', 'MD/MS', 'MD-MS', 'MDMS'):
+        dg = 'mdms'
+    elif degree.startswith('DNB'):
+        dg = 'dnb'
+    elif not degree:
+        if 'dnb' in seat:
+            dg = 'dnb'
+        elif 'md' in seat or 'ms' in seat:
+            dg = 'mdms'
+        else:
+            dg = 'other'
+    else:
+        dg = 'other'
+
+    if not at and dg == 'dnb':
+        at = 'allindia'
+    return at, dg, is_ref
+
+
+def _rebuild_pg_colleges(conn, year):
+    """Rebuild the pg_colleges master from the cut-off rows just loaded, then
+    backfill college_id onto pg_cutoffs. Stable ids: UPSERT on
+    (name_key, authority_type, state) so a college keeps its id across re-uploads."""
+    groups = conn.execute(
+        "SELECT LOWER(TRIM(institute)) AS name_key, "
+        "       MIN(institute) AS name, "
+        "       COALESCE(authority_type,'') AS authority_type, "
+        "       COALESCE(state,'') AS state, "
+        "       MAX(NULLIF(TRIM(COALESCE(institute_type,'')),'')) AS institution_type, "
+        "       MAX(beds) AS beds, "
+        "       STRING_AGG(DISTINCT NULLIF(degree_group,''), ',') AS dgs "
+        "  FROM pg_cutoffs "
+        " WHERE year = ? AND COALESCE(institute,'') <> '' "
+        " GROUP BY LOWER(TRIM(institute)), COALESCE(authority_type,''), COALESCE(state,'')",
+        (year,)).fetchall()
+    for g in groups:
+        dgs = sorted({d for d in (g['dgs'] or '').split(',') if d in ('mdms', 'dnb')})
+        conn.execute(
+            "INSERT INTO pg_colleges "
+            "  (name, name_key, institution_type, authority_type, state, degree_groups, beds, year) "
+            "VALUES (?,?,?,?,?,?,?,?) "
+            "ON CONFLICT (name_key, authority_type, state) DO UPDATE SET "
+            "  name = EXCLUDED.name, institution_type = EXCLUDED.institution_type, "
+            "  degree_groups = EXCLUDED.degree_groups, beds = EXCLUDED.beds, "
+            "  year = EXCLUDED.year, updated_at = CURRENT_TIMESTAMP",
+            (g['name'], g['name_key'], g['institution_type'] or '', g['authority_type'],
+             g['state'], json.dumps(dgs), g['beds']))
+    conn.commit()
+    conn.execute(
+        "UPDATE pg_cutoffs c SET college_id = col.college_id "
+        "  FROM pg_colleges col "
+        " WHERE c.year = ? "
+        "   AND col.name_key = LOWER(TRIM(c.institute)) "
+        "   AND col.authority_type = COALESCE(c.authority_type,'') "
+        "   AND col.state = COALESCE(c.state,'')",
+        (year,))
+    conn.commit()
+    return len(groups)
+
+
 @login_required
 def predictor_admin():
     """Show what's loaded + the upload form."""
@@ -302,12 +411,14 @@ def predictor_upload():
         flash('No year found in the file — type the year in the Year box and upload again.', 'error')
         return redirect(url_for('pg_predictor_admin'))
 
-    cols = ['year'] + [c for _k, c in _FIELD_MAP] + ['closing_rank']
+    # Storable columns + the three derived tags + closing_rank.
+    cols = ['year'] + [c for _k, c in _FIELD_MAP] + \
+           ['authority_type', 'degree_group', 'is_reference', 'closing_rank']
     placeholders = ','.join(['?'] * len(cols))
     sql = f"INSERT INTO pg_cutoffs ({','.join(cols)}) VALUES ({placeholders})"
 
     conn = get_db()
-    inserted = skipped = 0
+    inserted = skipped = colleges = 0
     try:
         # Replace this year only — re-uploading a corrected file is safe, and other
         # years (and everything else in the DB) are untouched.
@@ -322,11 +433,12 @@ def predictor_upload():
                 v = r.get(key)
                 if col in ('fee', 'stipend', 'bond_years', 'penalty'):
                     vals.append(_num(v))
-                elif col in ('r1', 'r2', 'r3', 'r4', 'stray'):
+                elif col in ('r1', 'r2', 'r3', 'r4', 'stray', 'beds'):
                     vals.append(_int(v))
                 else:
                     vals.append((str(v).strip() if v is not None else ''))
-            vals.append(_closing_rank(r))
+            at, dg, is_ref = _derive_tags(r)
+            vals += [at, dg, is_ref, _closing_rank(r)]
             batch.append(vals)
             if len(batch) >= _BATCH:
                 conn.executemany(sql, batch)
@@ -336,7 +448,15 @@ def predictor_upload():
             conn.executemany(sql, batch)
             inserted += len(batch)
         conn.commit()
-        msg = f'Loaded {inserted:,} rows for {year}' + (f' ({skipped} skipped)' if skipped else '') + '.'
+        # Build the college master + backfill college_id (founder 2026-08-11).
+        try:
+            colleges = _rebuild_pg_colleges(conn, year)
+        except Exception as ce:
+            conn.rollback()
+            logging.error("pg_colleges rebuild: %s", ce)
+        msg = (f'Loaded {inserted:,} rows for {year}'
+               + (f' · {colleges:,} colleges' if colleges else '')
+               + (f' ({skipped} skipped)' if skipped else '') + '.')
         if mapping:
             # Spreadsheet upload: show which of THEIR columns we used, so a
             # mis-read header is obvious immediately rather than after go-live.
