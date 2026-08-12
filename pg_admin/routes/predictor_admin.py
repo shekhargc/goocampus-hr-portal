@@ -31,12 +31,14 @@ _FIELD_MAP = [
     ('d', 'degree'), ('n', 'course'), ('st', 'state'),
     ('f', 'fee'), ('sp', 'stipend'), ('by', 'bond_years'), ('pen', 'penalty'),
     ('r1', 'r1'), ('r2', 'r2'), ('r3', 'r3'), ('r4', 'r4'), ('stray', 'stray'),
-    # College-database columns (founder 2026-08-11) — stored verbatim on pg_cutoffs.
+    # College-database columns (founder 2026-08-11..12) — stored verbatim on pg_cutoffs.
     ('it', 'institute_type'), ('seat', 'seat_type'), ('ct', 'course_type'), ('beds', 'beds'),
+    ('sp2', 'stipend_yr2'), ('sp3', 'stipend_yr3'), ('cbody', 'counselling_body'),
 ]
-# 'scope' (Counselling Scope) is captured for DERIVATION only (authority_type /
-# is_reference) — it is not a stored pg_cutoffs column, so it stays out of _FIELD_MAP.
-_EXTRA_COL_TO_KEY = {'scope': 'scope'}
+# Captured for logic only (NOT stored as their own pg_cutoffs columns):
+#   'scope'      → derive authority_type / is_reference
+#   'fees_year'  → auto-detect the dataset year so the admin needn't type it
+_EXTRA_COL_TO_KEY = {'scope': 'scope', 'fees_year': 'fees_year'}
 
 
 # ── Excel / CSV support ──────────────────────────────────────────────────────
@@ -59,14 +61,19 @@ _HEADER_ALIASES = {
                    'stipend yr 1', 'stipend year 1', 'stipend yr 1 mo'],
     'bond_years': ['bond', 'bond years', 'bond period', 'bond (years)', 'bond duration'],
     'penalty':    ['penalty', 'bond penalty', 'bond amount', 'penalty amount',
-                   'bond course mid way', 'bond / course mid way'],
-    # College-database columns from the founder's Master file (2026-08-11).
+                   'bond course mid way', 'bond / course mid way',
+                   'bond course mid way penalty', 'bond course mid way penalty rs'],
+    # College-database columns from the founder's Master file (2026-08-11..12).
     'institute_type': ['institute type', 'institution type', 'college type',
                        'type of institute', 'type of institution'],
     'seat_type':      ['seat type', 'seat category type'],
     'course_type':    ['course type', 'clinical type'],
     'scope':          ['counselling scope', 'counseling scope', 'scope'],
     'beds':           ['beds', 'no of beds', 'number of beds', 'bed count', 'bed strength'],
+    'stipend_yr2':    ['stipend yr 2', 'stipend year 2', 'stipend yr 2 mo'],
+    'stipend_yr3':    ['stipend yr 3', 'stipend year 3', 'stipend yr 3 mo'],
+    'counselling_body': ['counselling body', 'counseling body'],
+    'fees_year':      ['fees year', 'fee session', 'fee year', 'counselling year', 'year'],
     'r1':         ['r1', 'round 1', 'round1', 'round-1', 'r 1', 'closing rank r1', 'cr1'],
     'r2':         ['r2', 'round 2', 'round2', 'round-2', 'r 2', 'closing rank r2', 'cr2'],
     'r3':         ['r3', 'round 3', 'round3', 'round-3', 'r 3', 'closing rank r3', 'cr3'],
@@ -227,7 +234,18 @@ def _read_upload(f):
                          'check the header row.')
     if not ({'r1', 'r2', 'r3', 'r4', 'stray'} & matched):
         raise ValueError('No closing-rank columns found (Round 1 / R1 / Stray …).')
-    return rows, None, mapping, headers
+    # Auto-detect the dataset year from a Fees Year / Fee Session / Year column so
+    # the admin needn't type it (founder 2026-08-12). Falls back to the Year box.
+    detected_year = None
+    for r in rows[:200]:
+        try:
+            y = int(float(str(r.get('fees_year')).strip()))
+            if 2000 <= y <= 2100:
+                detected_year = y
+                break
+        except (TypeError, ValueError, AttributeError):
+            pass
+    return rows, detected_year, mapping, headers
 
 
 def _admin_only():
@@ -438,7 +456,7 @@ def predictor_upload():
             vals = [year]
             for key, col in _FIELD_MAP:
                 v = r.get(key)
-                if col in ('fee', 'stipend', 'bond_years', 'penalty'):
+                if col in ('fee', 'stipend', 'stipend_yr2', 'stipend_yr3', 'bond_years', 'penalty'):
                     vals.append(_num(v))
                 elif col in ('r1', 'r2', 'r3', 'r4', 'stray', 'beds'):
                     vals.append(_int(v))
