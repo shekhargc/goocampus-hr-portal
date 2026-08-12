@@ -203,6 +203,25 @@ def ensure_pg_cutoffs_table():
             closing_rank INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Extra columns for the college database (founder 2026-08-11): the master
+        # file also carries institution type, seat/course type and beds, and we
+        # derive coarse scope tags so the site can filter by predictor + tab.
+        #   institute_type  — verbatim from the Excel (Government Institute / Deemed / …)
+        #   authority_type  — 'allindia' (MCC) | 'state'  (which counselling)
+        #   degree_group    — 'mdms' (MD/MS) | 'dnb' (DNB/DNB-Diploma) | 'other'
+        #   seat_type/course_type/beds — extra detail carried through
+        #   college_id      — FK into pg_colleges (backfilled after each import)
+        #   is_reference    — 1 for stipend/bond-only rows (no cut-off) → excluded
+        for col, ddl in [
+            ('institute_type', 'TEXT'), ('authority_type', 'TEXT'),
+            ('degree_group', 'TEXT'), ('seat_type', 'TEXT'),
+            ('course_type', 'TEXT'), ('beds', 'INTEGER'),
+            ('college_id', 'INTEGER'), ('is_reference', 'INTEGER DEFAULT 0'),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE pg_cutoffs ADD COLUMN IF NOT EXISTS {col} {ddl}")
+            except Exception:
+                conn.rollback()
         # The predictor filters on year + closing_rank, then narrows by
         # authority / category / state / course keyword.
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_cutoffs_rank "
@@ -213,6 +232,8 @@ def ensure_pg_cutoffs_table():
                      "ON pg_cutoffs (category)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_cutoffs_state "
                      "ON pg_cutoffs (state)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_cutoffs_college "
+                     "ON pg_cutoffs (college_id)")
         conn.commit()
         logging.info("pg_cutoffs table ensured successfully")
     except Exception as e:
@@ -226,3 +247,75 @@ def ensure_pg_cutoffs_table():
             conn.close()
         except Exception:
             pass
+
+
+def ensure_pg_colleges_table():
+    """College master for the NEET-PG/DNB database (founder 2026-08-11).
+
+    One row per distinct (college, counselling scope). The `college_id` is the
+    STABLE backbone — cut-offs reference it, favourites store it, the site's
+    4th "Favourite colleges" predictor tab matches on it. It must survive a data
+    re-upload, so the importer UPSERTs by `name_key` + `authority_type` and never
+    reissues an id for a college it has seen before.
+    """
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_colleges (
+            college_id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            name_key TEXT NOT NULL,            -- normalised name, for stable identity
+            institution_type TEXT DEFAULT '',  -- verbatim from the Excel
+            authority_type TEXT DEFAULT '',    -- 'allindia' | 'state'
+            state TEXT DEFAULT '',
+            city TEXT DEFAULT '',
+            degree_groups TEXT DEFAULT '[]',   -- JSON array e.g. ["mdms","dnb"]
+            beds INTEGER,
+            year INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # Identity = normalised name + counselling scope + state. A college that
+        # sits under BOTH MCC and a state yields two rows (one per scope) — the
+        # site was told to expect a scalar authority_type (see API_CONTRACT.md).
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_colleges_identity "
+                     "ON pg_colleges (name_key, authority_type, state)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_colleges_type "
+                     "ON pg_colleges (institution_type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_colleges_state "
+                     "ON pg_colleges (state)")
+        conn.commit()
+        logging.info("pg_colleges table ensured successfully")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"ensure_pg_colleges_table: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+def ensure_pg_favorites_table():
+    """Per-doctor college shortlist (founder 2026-08-11). Scoped to a pg_users
+    id (the goocampus.in doctor account). Surfaced in the Sales/CRM view as a
+    2026-27 counselling call opener."""
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_favorites (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            college_id INTEGER NOT NULL,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_favorites "
+                     "ON pg_favorites (user_id, college_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_favorites_user "
+                     "ON pg_favorites (user_id)")
+        conn.commit()
+        logging.info("pg_favorites table ensured successfully")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"ensure_pg_favorites_table: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass

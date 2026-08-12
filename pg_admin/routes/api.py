@@ -271,8 +271,36 @@ def api_pg_mentor_photo(mentor_id):
                     headers={'Cache-Control': 'public, max-age=3600'})
 
 
+# ── Predictor scope helpers (shared by predictor / filters / courses) ─────────
+# degree_group + authority_type were added to pg_cutoffs at import; but so the
+# filters work on data uploaded BEFORE those columns existed, each clause prefers
+# the stored column and FALLS BACK to deriving from the raw degree / authority.
+# The fragments contain no user input (fixed literals) so they bind no params.
+def _degree_group_sql(dg):
+    dg = (dg or '').strip().lower()
+    if dg == 'mdms':
+        return ("(LOWER(COALESCE(degree_group,''))='mdms' OR (COALESCE(degree_group,'')='' "
+                "AND UPPER(TRIM(COALESCE(degree,''))) IN ('MD','MS','MD/MS')))")
+    if dg == 'dnb':
+        return ("(LOWER(COALESCE(degree_group,''))='dnb' OR (COALESCE(degree_group,'')='' "
+                "AND UPPER(TRIM(COALESCE(degree,''))) LIKE 'DNB%'))")
+    return None
+
+
+def _authority_type_sql(at):
+    at = (at or '').strip().lower()
+    if at == 'allindia':
+        return ("(LOWER(COALESCE(authority_type,''))='allindia' OR (COALESCE(authority_type,'')='' "
+                "AND (authority ILIKE 'MCC%' OR authority ILIKE '%all india%')))")
+    if at == 'state':
+        return ("(LOWER(COALESCE(authority_type,''))='state' OR (COALESCE(authority_type,'')='' "
+                "AND COALESCE(authority,'')<>'' AND NOT (authority ILIKE 'MCC%' OR authority ILIKE '%all india%')))")
+    return None
+
+
 def api_pg_predictor():
     """GET /api/pg/predictor?rank=&authority=&category=&state=&q=&year=&limit=
+       &degree_group=mdms|dnb &authority_type=allindia|state
 
     Colleges within reach for a NEET-PG rank, from the pg_cutoffs dataset uploaded
     in the portal (Predictor Data admin). Replaces the 10 MB JSON the site used to
@@ -296,10 +324,12 @@ def api_pg_predictor():
     quota = (request.args.get('quota') or '').strip()
     state = (request.args.get('state') or '').strip()
     q = (request.args.get('q') or '').strip()
+    degree_group = (request.args.get('degree_group') or '').strip()
+    authority_type = (request.args.get('authority_type') or '').strip()
     try:
-        limit = min(int(request.args.get('limit') or 800), 2000)
+        limit = min(int(request.args.get('limit') or 2000), 2000)
     except (TypeError, ValueError):
-        limit = 800
+        limit = 2000
 
     conn = get_db()
     try:
@@ -310,33 +340,47 @@ def api_pg_predictor():
             conn.close()
             return jsonify({'ok': True, 'year': None, 'count': 0, 'results': [],
                             'note': 'No cut-off dataset has been uploaded yet.'})
-        # closing_rank is the WORST (last-round) closing rank, so `rank <= closing_rank`
-        # is exactly "at least one round is clearable" — the same test the site's
-        # engine applies per round. Keeping it exact (no stretch band) means the
-        # total below is a true count, not an approximation.
-        where = ["year = ?", "closing_rank IS NOT NULL", "closing_rank >= ?"]
-        params = [year, rank]
+        # Return the FULL matching set — NOT rank-filtered (founder 2026-08-11).
+        # The site bands by rank itself; the portal's job is to send every row
+        # matching the scope. Reference-only (stipend/bond) rows are excluded —
+        # they carry no cut-off, so they're not predictor rows.
+        where = ["year = ?", "COALESCE(is_reference,0) = 0"]
+        params = [year]
         if authority and authority.lower() not in ('all', 'all authorities'):
             where.append("authority ILIKE ?"); params.append(f"%{authority}%")
+        # quota + category are EXACT (trimmed, case-insensitive) — 'OPEN' must not
+        # also pull 'OPEN PwD' (founder 2026-08-10).
         if category and category.lower() not in ('any', 'any category'):
-            where.append("category ILIKE ?"); params.append(f"%{category}%")
+            where.append("LOWER(TRIM(category)) = LOWER(TRIM(?))"); params.append(category)
         if quota and quota.lower() not in ('any', 'any quota'):
-            where.append("quota ILIKE ?"); params.append(f"%{quota}%")
+            where.append("LOWER(TRIM(quota)) = LOWER(TRIM(?))"); params.append(quota)
         if state:
             where.append("state ILIKE ?"); params.append(f"%{state}%")
+        dg_sql = _degree_group_sql(degree_group)
+        if dg_sql:
+            where.append(dg_sql)
+        at_sql = _authority_type_sql(authority_type)
+        if at_sql:
+            where.append(at_sql)
         if q:
             where.append("(course ILIKE ? OR institute ILIKE ?)")
             params.extend([f"%{q}%", f"%{q}%"])
         where_sql = ' AND '.join(where)
-        # Exact match count (not just the page) so the site can say "N within reach"
+        # Exact match count (not just the page) so the site can say "N total"
         # truthfully even though only `limit` rows are returned for display.
         total = conn.execute(
             f"SELECT COUNT(*) AS c FROM pg_cutoffs WHERE {where_sql}", params).fetchone()['c']
+        # college_id + institution_type let the site match favourites to cut-offs
+        # exactly and show an institution-type column (founder 2026-08-11). Both
+        # are NULL/'' until the master file is re-imported — the site treats them
+        # as optional and degrades gracefully.
         rows = conn.execute(
             "SELECT institute, authority, quota, category, degree, course, state, "
-            "       fee, stipend, bond_years, penalty, r1, r2, r3, r4, stray, closing_rank "
+            "       fee, stipend, bond_years, penalty, r1, r2, r3, r4, stray, closing_rank, "
+            "       college_id, COALESCE(institute_type,'') AS institution_type "
             f"  FROM pg_cutoffs WHERE {where_sql} "
-            "  ORDER BY closing_rank ASC LIMIT ?", params + [limit]).fetchall()
+            "  ORDER BY closing_rank ASC NULLS LAST, institute ASC LIMIT ?",
+            params + [limit]).fetchall()
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -380,6 +424,8 @@ def api_pg_predictor_filters():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     authority = (request.args.get('authority') or '').strip()
     quota = (request.args.get('quota') or '').strip()
+    degree_group = (request.args.get('degree_group') or '').strip()
+    authority_type = (request.args.get('authority_type') or '').strip()
     conn = get_db()
     out = {'ok': True, 'year': None, 'authorities': [], 'quotas': [],
            'categories': [], 'states': []}
@@ -390,10 +436,21 @@ def api_pg_predictor_filters():
         if not year:
             return jsonify(out)
 
+        # Scope every option list to the active predictor (degree_group) + tab
+        # (authority_type), and never offer stipend-only reference rows, so the
+        # dropdowns match what /predictor will actually return.
+        base = "AND COALESCE(is_reference,0) = 0"
+        _dg = _degree_group_sql(degree_group)
+        if _dg:
+            base += " AND " + _dg
+        _at = _authority_type_sql(authority_type)
+        if _at:
+            base += " AND " + _at
+
         def _distinct(col, extra_where='', extra_params=()):
             return [r[col] for r in conn.execute(
                 f"SELECT DISTINCT {col} FROM pg_cutoffs "
-                f" WHERE year = ? AND COALESCE({col},'') <> '' {extra_where} "
+                f" WHERE year = ? AND COALESCE({col},'') <> '' {base} {extra_where} "
                 f" ORDER BY {col}", (year,) + tuple(extra_params)).fetchall()]
 
         out['authorities'] = _distinct('authority')
@@ -426,6 +483,8 @@ def api_pg_predictor_courses():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     q = (request.args.get('q') or '').strip()
     authority = (request.args.get('authority') or '').strip()
+    degree_group = (request.args.get('degree_group') or '').strip()
+    authority_type = (request.args.get('authority_type') or '').strip()
     try:
         limit = min(int(request.args.get('limit') or 20), 50)
     except (TypeError, ValueError):
@@ -436,7 +495,7 @@ def api_pg_predictor_courses():
         yr = conn.execute("SELECT COALESCE(MAX(year), 0) AS y FROM pg_cutoffs").fetchone()
         year = int(yr['y']) if yr and yr['y'] else 0
         if year:
-            where = ["year = ?", "COALESCE(course,'') <> ''"]
+            where = ["year = ?", "COALESCE(course,'') <> ''", "COALESCE(is_reference,0) = 0"]
             params = [year]
             if q:
                 where.append("course ILIKE ?")
@@ -444,6 +503,12 @@ def api_pg_predictor_courses():
             if authority:
                 where.append("authority = ?")
                 params.append(authority)
+            _dg = _degree_group_sql(degree_group)
+            if _dg:
+                where.append(_dg)
+            _at = _authority_type_sql(authority_type)
+            if _at:
+                where.append(_at)
             # Most-offered courses first: a doctor typing 'radio' should see the
             # common MD Radiodiagnosis before a one-off variant.
             courses = [r['course'] for r in conn.execute(
@@ -456,6 +521,199 @@ def api_pg_predictor_courses():
     finally:
         conn.close()
     return jsonify({'ok': True, 'courses': courses})
+
+
+# ── College database + Favourites (founder 2026-08-11) ───────────────────────
+def _college_row(r):
+    """Shape a pg_colleges row for the API, parsing degree_groups back to a list."""
+    d = as_dict(r)
+    try:
+        d['degree_groups'] = json.loads(d.get('degree_groups') or '[]')
+    except Exception:
+        d['degree_groups'] = []
+    d['state'] = d.get('state') or None
+    d['city'] = d.get('city') or None
+    return d
+
+
+def api_pg_colleges():
+    """GET /api/pg/colleges?degree_group=&authority_type=&state=&institution_type=&q=&limit=
+
+    The college master that powers the Favourites left-box browser. Auth: X-PG-Key.
+    `q` substring-matches the name; the rest are exact scopes. (founder 2026-08-11)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    degree_group = (request.args.get('degree_group') or '').strip().lower()
+    authority_type = (request.args.get('authority_type') or '').strip().lower()
+    state = (request.args.get('state') or '').strip()
+    institution_type = (request.args.get('institution_type') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    try:
+        limit = min(int(request.args.get('limit') or 500), 2000)
+    except (TypeError, ValueError):
+        limit = 500
+    conn = get_db()
+    where, params = ["1=1"], []
+    if authority_type in ('allindia', 'state'):
+        where.append("authority_type = ?"); params.append(authority_type)
+    if degree_group in ('mdms', 'dnb'):
+        where.append("degree_groups LIKE ?"); params.append(f'%"{degree_group}"%')
+    if state:
+        where.append("LOWER(TRIM(state)) = LOWER(TRIM(?))"); params.append(state)
+    if institution_type:
+        where.append("LOWER(TRIM(institution_type)) = LOWER(TRIM(?))"); params.append(institution_type)
+    if q:
+        where.append("name ILIKE ?"); params.append(f"%{q}%")
+    colleges = []
+    try:
+        rows = conn.execute(
+            "SELECT college_id, name, institution_type, authority_type, state, city, "
+            "       degree_groups, beds "
+            f"  FROM pg_colleges WHERE {' AND '.join(where)} "
+            "  ORDER BY name ASC LIMIT ?", params + [limit]).fetchall()
+        colleges = [_college_row(r) for r in rows]
+    except Exception as e:
+        logging.error("api_pg_colleges: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'colleges': colleges, 'count': len(colleges)})
+
+
+def api_pg_colleges_facets():
+    """GET /api/pg/colleges/facets?degree_group=&authority_type=&state=
+
+    Distinct institution_types + states for the filter chips, so the site never
+    hard-codes them. Auth: X-PG-Key. (founder 2026-08-11)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    degree_group = (request.args.get('degree_group') or '').strip().lower()
+    authority_type = (request.args.get('authority_type') or '').strip().lower()
+    state = (request.args.get('state') or '').strip()
+    conn = get_db()
+    where, params = ["1=1"], []
+    if authority_type in ('allindia', 'state'):
+        where.append("authority_type = ?"); params.append(authority_type)
+    if degree_group in ('mdms', 'dnb'):
+        where.append("degree_groups LIKE ?"); params.append(f'%"{degree_group}"%')
+    if state:
+        where.append("LOWER(TRIM(state)) = LOWER(TRIM(?))"); params.append(state)
+    base = ' AND '.join(where)
+    out = {'ok': True, 'institution_types': [], 'states': []}
+    try:
+        out['institution_types'] = [r['institution_type'] for r in conn.execute(
+            f"SELECT DISTINCT institution_type FROM pg_colleges "
+            f" WHERE {base} AND COALESCE(institution_type,'') <> '' "
+            f" ORDER BY institution_type", params).fetchall()]
+        out['states'] = [r['state'] for r in conn.execute(
+            f"SELECT DISTINCT state FROM pg_colleges "
+            f" WHERE {base} AND COALESCE(state,'') <> '' "
+            f" ORDER BY state", params).fetchall()]
+    except Exception as e:
+        logging.error("api_pg_colleges_facets: %s", e)
+    finally:
+        conn.close()
+    return jsonify(out)
+
+
+def api_pg_favorites():
+    """Per-doctor college shortlist. Auth: X-PG-Key + Bearer token.
+      GET  /api/pg/favorites            → {ok, favorites:[{college_id,name,…,added_at}]}
+      POST /api/pg/favorites {college_id}→ idempotent add
+      PUT  /api/pg/favorites {college_ids:[…]} → replace the whole set
+    (founder 2026-08-11)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    token = _bearer_token()
+    if not token:
+        return jsonify({'ok': False, 'error': 'no_token'}), 401
+    conn = get_db()
+    try:
+        user = _pg_user_by_token(conn, token)
+        if not user:
+            return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        uid = user['id']
+
+        if request.method == 'GET':
+            rows = conn.execute(
+                "SELECT f.college_id, f.added_at, c.name, c.institution_type, "
+                "       c.authority_type, c.state, c.degree_groups "
+                "  FROM pg_favorites f "
+                "  LEFT JOIN pg_colleges c ON c.college_id = f.college_id "
+                " WHERE f.user_id = ? ORDER BY f.added_at DESC", (uid,)).fetchall()
+            favs = []
+            for r in rows:
+                d = as_dict(r)
+                try:
+                    d['degree_groups'] = json.loads(d.get('degree_groups') or '[]')
+                except Exception:
+                    d['degree_groups'] = []
+                favs.append(d)
+            return jsonify({'ok': True, 'favorites': favs})
+
+        body = request.get_json(silent=True) or {}
+
+        if request.method == 'PUT':
+            ids = body.get('college_ids') or []
+            clean = []
+            for x in ids:
+                try: clean.append(int(x))
+                except (TypeError, ValueError): pass
+            conn.execute("DELETE FROM pg_favorites WHERE user_id = ?", (uid,))
+            for cid in clean:
+                exists = conn.execute(
+                    "SELECT 1 FROM pg_colleges WHERE college_id = ?", (cid,)).fetchone()
+                if exists:
+                    conn.execute(
+                        "INSERT INTO pg_favorites (user_id, college_id) VALUES (?, ?) "
+                        "ON CONFLICT (user_id, college_id) DO NOTHING", (uid, cid))
+            conn.commit()
+            return jsonify({'ok': True})
+
+        # POST — idempotent add of one college.
+        try:
+            cid = int(body.get('college_id'))
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'error': 'college_id required'}), 400
+        if not conn.execute("SELECT 1 FROM pg_colleges WHERE college_id = ?", (cid,)).fetchone():
+            return jsonify({'ok': False, 'error': 'unknown college_id'}), 404
+        conn.execute(
+            "INSERT INTO pg_favorites (user_id, college_id) VALUES (?, ?) "
+            "ON CONFLICT (user_id, college_id) DO NOTHING", (uid, cid))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_favorites: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_favorite_delete(college_id):
+    """DELETE /api/pg/favorites/<college_id> → remove one. Auth: X-PG-Key + Bearer."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    token = _bearer_token()
+    if not token:
+        return jsonify({'ok': False, 'error': 'no_token'}), 401
+    conn = get_db()
+    try:
+        user = _pg_user_by_token(conn, token)
+        if not user:
+            return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        conn.execute("DELETE FROM pg_favorites WHERE user_id = ? AND college_id = ?",
+                     (user['id'], college_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_favorite_delete: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
 
 
 def api_pg_neetpg_pdfs():

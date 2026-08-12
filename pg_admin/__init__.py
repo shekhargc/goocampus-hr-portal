@@ -26,6 +26,8 @@ def register_pg_admin(app):
     # Tables self-create at boot (idempotent) — same pattern as college module.
     for fn in (_tables.ensure_pg_mentors_table, _tables.ensure_pg_auth_tables,
                _tables.ensure_pg_cutoffs_table,
+               _tables.ensure_pg_colleges_table,
+               _tables.ensure_pg_favorites_table,
                _plans_tables.ensure_pg_plans_tables,
                _plans_tables.seed_pg_pricing_defaults):
         try:
@@ -71,6 +73,16 @@ def register_pg_admin(app):
                      api.api_pg_predictor_filters, methods=['GET'])
     app.add_url_rule('/api/pg/predictor/courses', 'api_pg_predictor_courses',
                      api.api_pg_predictor_courses, methods=['GET'])
+
+    # ── College database + Favourites (X-PG-Key; favourites also need Bearer) ──
+    app.add_url_rule('/api/pg/colleges', 'api_pg_colleges',
+                     api.api_pg_colleges, methods=['GET'])
+    app.add_url_rule('/api/pg/colleges/facets', 'api_pg_colleges_facets',
+                     api.api_pg_colleges_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/favorites', 'api_pg_favorites',
+                     api.api_pg_favorites, methods=['GET', 'POST', 'PUT'])
+    app.add_url_rule('/api/pg/favorites/<int:college_id>', 'api_pg_favorite_delete',
+                     api.api_pg_favorite_delete, methods=['DELETE'])
 
     # ── NEET-PG PDF library for the goocampus.in dashboard (same library as .org) ──
     app.add_url_rule('/api/pg/neetpg-pdfs', 'api_pg_neetpg_pdfs',
