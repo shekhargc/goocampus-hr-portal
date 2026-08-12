@@ -314,32 +314,37 @@ def _derive_tags(row):
 def _rebuild_pg_colleges(conn, year):
     """Rebuild the pg_colleges master from the cut-off rows just loaded, then
     backfill college_id onto pg_cutoffs. Stable ids: UPSERT on
-    (name_key, authority_type, state) so a college keeps its id across re-uploads."""
-    groups = conn.execute(
-        "SELECT LOWER(TRIM(institute)) AS name_key, "
-        "       MIN(institute) AS name, "
+    (name_key, authority_type, state) so a college keeps its id across re-uploads.
+
+    Done in TWO set-based SQL statements (aggregate-upsert + join-update) instead
+    of a per-college Python loop — thousands of round-trips over 67k rows would
+    blow the request timeout (the 2026-08-12 upload 502'd on exactly that)."""
+    # 1) Aggregate distinct colleges and upsert in a single statement.
+    #    degree_groups is built as a JSON text array (e.g. ["dnb","mdms"]) so the
+    #    /api/pg/colleges LIKE '%"mdms"%' filter matches.
+    conn.execute(
+        "INSERT INTO pg_colleges "
+        "  (name, name_key, institution_type, authority_type, state, degree_groups, beds, year) "
+        "SELECT MIN(institute) AS name, "
+        "       LOWER(TRIM(institute)) AS name_key, "
+        "       COALESCE(MAX(NULLIF(TRIM(COALESCE(institute_type,'')),'')), '') AS institution_type, "
         "       COALESCE(authority_type,'') AS authority_type, "
         "       COALESCE(state,'') AS state, "
-        "       MAX(NULLIF(TRIM(COALESCE(institute_type,'')),'')) AS institution_type, "
+        "       to_json(COALESCE("
+        "           array_agg(DISTINCT degree_group) FILTER (WHERE degree_group IN ('mdms','dnb')), "
+        "           ARRAY[]::text[]))::text AS degree_groups, "
         "       MAX(beds) AS beds, "
-        "       STRING_AGG(DISTINCT NULLIF(degree_group,''), ',') AS dgs "
+        "       ? AS year "
         "  FROM pg_cutoffs "
         " WHERE year = ? AND COALESCE(institute,'') <> '' "
-        " GROUP BY LOWER(TRIM(institute)), COALESCE(authority_type,''), COALESCE(state,'')",
-        (year,)).fetchall()
-    for g in groups:
-        dgs = sorted({d for d in (g['dgs'] or '').split(',') if d in ('mdms', 'dnb')})
-        conn.execute(
-            "INSERT INTO pg_colleges "
-            "  (name, name_key, institution_type, authority_type, state, degree_groups, beds, year) "
-            "VALUES (?,?,?,?,?,?,?,?) "
-            "ON CONFLICT (name_key, authority_type, state) DO UPDATE SET "
-            "  name = EXCLUDED.name, institution_type = EXCLUDED.institution_type, "
-            "  degree_groups = EXCLUDED.degree_groups, beds = EXCLUDED.beds, "
-            "  year = EXCLUDED.year, updated_at = CURRENT_TIMESTAMP",
-            (g['name'], g['name_key'], g['institution_type'] or '', g['authority_type'],
-             g['state'], json.dumps(dgs), g['beds']))
+        " GROUP BY LOWER(TRIM(institute)), COALESCE(authority_type,''), COALESCE(state,'') "
+        "ON CONFLICT (name_key, authority_type, state) DO UPDATE SET "
+        "  name = EXCLUDED.name, institution_type = EXCLUDED.institution_type, "
+        "  degree_groups = EXCLUDED.degree_groups, beds = EXCLUDED.beds, "
+        "  year = EXCLUDED.year, updated_at = CURRENT_TIMESTAMP",
+        (year, year))
     conn.commit()
+    # 2) Backfill college_id onto the cut-off rows in one join-update.
     conn.execute(
         "UPDATE pg_cutoffs c SET college_id = col.college_id "
         "  FROM pg_colleges col "
@@ -349,7 +354,9 @@ def _rebuild_pg_colleges(conn, year):
         "   AND col.state = COALESCE(c.state,'')",
         (year,))
     conn.commit()
-    return len(groups)
+    n = conn.execute(
+        "SELECT COUNT(*) AS c FROM pg_colleges WHERE year = ?", (year,)).fetchone()
+    return (n['c'] if n else 0)
 
 
 @login_required
