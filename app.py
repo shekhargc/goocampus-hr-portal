@@ -10254,8 +10254,8 @@ def apply_leave():
             total_days += day_val
 
             # Check for duplicate leave
-            existing = conn.execute('SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status != ?',
-                                   (user['id'], date_str, 'rejected')).fetchone()
+            existing = conn.execute("SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status IN ('pending','approved')",
+                                   (user['id'], date_str)).fetchone()
             if existing:
                 flash(f'You already have a leave record for {date_str}', 'error')
                 conn.close()
@@ -10420,8 +10420,8 @@ def apply_late_leave():
             total_days += day_val
 
             # Check for duplicate
-            existing = conn.execute('SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status != ?',
-                                   (user['id'], date_str, 'rejected')).fetchone()
+            existing = conn.execute("SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status IN ('pending','approved')",
+                                   (user['id'], date_str)).fetchone()
             if existing:
                 flash(f'You already have a leave record for {date_str}', 'error')
                 conn.close()
@@ -12139,8 +12139,8 @@ def admin_add_leave():
             day_val = 0.5 if portion in ['first_half', 'second_half'] else 1.0
 
             # Check for existing leave on this date
-            existing = conn.execute('SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status != ?',
-                                    (employee_id, date_str, 'rejected')).fetchone()
+            existing = conn.execute("SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status IN ('pending','approved')",
+                                    (employee_id, date_str)).fetchone()
             if existing:
                 flash(f'Employee already has a leave record for {date_str} — skipped', 'warning')
                 continue
