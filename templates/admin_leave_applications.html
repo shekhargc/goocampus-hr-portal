@@ -260,24 +260,8 @@
     <div class="stat-pill rejected"><span class="count">{{ rejected_count }}</span> Rejected</div>
 </div>
 
-<!-- Leave Table -->
-<div class="card" style="padding: 0; overflow: hidden;">
-    {% if leaves %}
-    <div style="overflow-x: auto;">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Employee</th>
-                <th>Department</th>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Duration</th>
-                <th>Reason</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for leave in leaves %}
+<!-- One reusable row so Upcoming (month-grouped) + Past share identical markup -->
+{% macro leave_row(leave) %}
             <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail('{{ leave.group_id }}')">
                 <td>
                     <div class="emp-cell">
@@ -315,6 +299,43 @@
                     <span class="status-badge {{ leave.status }}">{{ leave.status.capitalize() }}</span>
                 </td>
             </tr>
+{% endmacro %}
+
+<style>
+    .leave-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
+    .ltab { background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200);
+            border-radius: 8px; padding: 0.5rem 1.1rem; font-size: 0.88rem; font-weight: 600;
+            cursor: pointer; font-family: inherit; }
+    .ltab.active { background: var(--orange); color: #fff; border-color: var(--orange); }
+    .ltab .tab-count { display: inline-block; margin-left: 6px; background: rgba(0,0,0,0.12);
+            border-radius: 999px; padding: 1px 8px; font-size: 0.78rem; }
+    .month-row td { background: #FFF7ED; font-weight: 700; color: var(--navy);
+            padding: 8px 14px; border-bottom: 1px solid var(--gray-200); }
+    .month-row .m-count { color: var(--gray-400); font-weight: 500; }
+    .th-row th { position: sticky; top: 0; }
+</style>
+
+<!-- Upcoming vs Past tabs -->
+<div class="leave-tabs">
+    <button type="button" class="ltab active" data-tab="upcoming" onclick="switchLeaveTab('upcoming')">
+        Upcoming <span class="tab-count">{{ upcoming_count }}</span></button>
+    <button type="button" class="ltab" data-tab="past" onclick="switchLeaveTab('past')">
+        Past <span class="tab-count">{{ past_count }}</span></button>
+</div>
+
+<!-- Upcoming (soonest first, grouped by month) -->
+<div id="tab-upcoming" class="leave-tab-panel">
+<div class="card" style="padding: 0; overflow: hidden;">
+    {% if upcoming_months %}
+    <div style="overflow-x: auto;">
+    <table class="data-table">
+        <thead>
+            <tr class="th-row"><th>Employee</th><th>Department</th><th>Date</th><th>Type</th><th>Duration</th><th>Reason</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+            {% for month, month_leaves in upcoming_months.items() %}
+            <tr class="month-row"><td colspan="7">{{ month }} <span class="m-count">· {{ month_leaves|length }} leave{{ 's' if month_leaves|length != 1 else '' }}</span></td></tr>
+            {% for leave in month_leaves %}{{ leave_row(leave) }}{% endfor %}
             {% endfor %}
         </tbody>
     </table>
@@ -322,10 +343,42 @@
     {% else %}
     <div class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <p>No leave applications found matching your filters</p>
+        <p>No upcoming leaves{% if f_employee or f_type or f_status or f_from or f_to %} matching your filters{% endif %}</p>
     </div>
     {% endif %}
 </div>
+</div>
+
+<!-- Past (most recent first) -->
+<div id="tab-past" class="leave-tab-panel" style="display: none;">
+<div class="card" style="padding: 0; overflow: hidden;">
+    {% if past_leaves %}
+    <div style="overflow-x: auto;">
+    <table class="data-table">
+        <thead>
+            <tr class="th-row"><th>Employee</th><th>Department</th><th>Date</th><th>Type</th><th>Duration</th><th>Reason</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+            {% for leave in past_leaves %}{{ leave_row(leave) }}{% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <p>No past leaves{% if f_employee or f_type or f_status or f_from or f_to %} matching your filters{% endif %}</p>
+    </div>
+    {% endif %}
+</div>
+</div>
+
+<script>
+function switchLeaveTab(tab) {
+    document.querySelectorAll('.ltab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
+    document.getElementById('tab-upcoming').style.display = (tab === 'upcoming') ? '' : 'none';
+    document.getElementById('tab-past').style.display = (tab === 'past') ? '' : 'none';
+}
+</script>
 
 <!-- Drawer -->
 <div class="drawer-backdrop" id="leaveBackdrop" onclick="closeLeaveDetail()"></div>

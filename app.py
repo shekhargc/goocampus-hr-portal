@@ -18651,10 +18651,32 @@ def admin_leave_applications():
     approved_count = sum(1 for l in leaves if l['status'] == 'approved')
     rejected_count = sum(1 for l in leaves if l['status'] == 'rejected')
 
-    conn.close()
+    # Split into UPCOMING vs PAST by the leave's last date, and month-group the
+    # upcoming ones so admins see who's off when, soonest first (founder 2026-08-13).
+    # (`leaves` is still passed whole — the detail drawer keys off every record.)
     today_str = datetime.now().strftime('%Y-%m-%d')
+    upcoming_months = OrderedDict()
+    past_leaves = []
+    for l in sorted(leaves, key=lambda x: (x['date_from'], x['date_to'])):
+        end = l.get('date_to') or l['date_from']
+        if end >= today_str:
+            try:
+                mk = datetime.strptime(l['date_from'], '%Y-%m-%d').strftime('%B %Y')
+            except Exception:
+                mk = 'Scheduled'
+            upcoming_months.setdefault(mk, []).append(l)
+    for l in sorted(leaves, key=lambda x: (x['date_from'], x['date_to']), reverse=True):
+        end = l.get('date_to') or l['date_from']
+        if end < today_str:
+            past_leaves.append(l)
+    upcoming_count = sum(len(v) for v in upcoming_months.values())
+    past_count = len(past_leaves)
+
+    conn.close()
     return render_template('admin_leave_applications.html',
         user=user, leaves=leaves, employees=employees,
+        upcoming_months=upcoming_months, past_leaves=past_leaves,
+        upcoming_count=upcoming_count, past_count=past_count,
         total=total, pending_count=pending_count,
         approved_count=approved_count, rejected_count=rejected_count,
         f_employee=f_employee, f_type=f_type, f_status=f_status,
