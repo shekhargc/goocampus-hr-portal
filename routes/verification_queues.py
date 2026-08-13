@@ -19,6 +19,8 @@ existing routes (we just link to them). Registered from app.py.
 
 import logging
 
+from core.helpers import format_dr_name
+
 from flask import render_template, request, redirect, url_for, flash, session
 
 from core.auth import login_required
@@ -58,7 +60,10 @@ def _can_verify(user):
 
 
 def _name(prefix, first, last):
-    return (f"{prefix or ''} {first or ''} {last or ''}").strip() or '(no name)'
+    # Normalise to a single 'Dr.' — the stored prefix/first_name sometimes already
+    # carry a title, so a raw concat produced 'Dr. Dr. …' (founder 2026-08-13).
+    raw = (f"{prefix or ''} {first or ''} {last or ''}").strip()
+    return format_dr_name(raw) or '(no name)'
 
 
 def _transfer_edit_url(pathway, client_id):
@@ -184,7 +189,7 @@ def _transfer_rows(conn, stage):
     for r in rows:
         out.append({
             'id': r['id'], 'from_reg': r['from_reg'], 'reg': r['to_reg'],
-            'name': (r['client_name'] or '').strip() or '(record not found)',
+            'name': format_dr_name((r['client_name'] or '').strip()) or '(record not found)',
             'pathway': r['to_pathway'] or 'plab', 'product': r['to_product'] or '',
             'requested_by': r['created_by'],
             'amount': float(r['amount_transferred'] or 0),

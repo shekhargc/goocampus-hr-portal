@@ -162,20 +162,11 @@ def format_reg_filter(value):
 
 @app.template_filter('dr_name')
 def dr_name_filter(value):
-    """Client display name → 'Dr. <clean name>'. All GooCampus clients are shown as
-    'Dr.' (founder 2026-08-10). Strips any title already inside the name (Dr / Dr. /
-    DR / Doctor / Mr / Mrs / Ms / Miss / Prof — repeated, with or without a dot or
-    space) so it never doubles (e.g. 'Dr. DR. Renee' → 'Dr. Renee', 'Mr Shubham' →
-    'Dr. Shubham', 'Dr.Rachana' → 'Dr. Rachana'). Blank → '' (no bare 'Dr.').
-    Won't touch real names like 'Drake' (no title boundary)."""
-    import re as _re
-    s = (value or '').strip()
-    _t = _re.compile(r'^\s*(?:(?:dr|doctor|mr|mrs|ms|miss|prof)\.\s*|(?:dr|doctor|mr|mrs|ms|miss|prof)\s+)', _re.I)
-    prev = None
-    while s and s != prev:
-        prev = s
-        s = _t.sub('', s).strip()
-    return ('Dr. ' + s) if s else ''
+    """Client display name → 'Dr. <clean name>' — delegates to the single source
+    of truth in core.helpers so the screen, the verification queues and the emails
+    can never drift apart (founder 2026-08-10; re-audited 2026-08-13)."""
+    from core.helpers import format_dr_name
+    return format_dr_name(value)
 
 
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
@@ -183,7 +174,7 @@ os.makedirs(PHOTO_FOLDER, exist_ok=True)
 
 # Shared helpers extracted to core/helpers.py during refactor.
 # Re-exported here so existing code keeps working unchanged.
-from core.helpers import ALLOWED_EXTENSIONS, allowed_file, hash_password
+from core.helpers import ALLOWED_EXTENSIONS, allowed_file, hash_password, format_dr_name
 
 # Auth decorators + permission helpers extracted to core/auth.py during refactor.
 # User-related query helpers extracted to core/users.py during refactor.
@@ -4498,7 +4489,7 @@ def _notify_client_submitted(reg_id):
         if not reg:
             conn.close()
             return
-        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        client_name = format_dr_name(f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip())
         sm_name, sm_email = _lead_sales_member(conn, reg)
         ops_emails = _dept_emails(conn, ['Operations'])
         mgmt_emails = _management_emails(conn)
@@ -7310,11 +7301,11 @@ def client_pick_slot(token):
     ).fetchone()
     client_name = ''
     if client:
-        client_name = (
+        client_name = format_dr_name((
             f"{client['prefix'] or ''} "
             f"{client['first_name'] or ''} "
             f"{client['last_name'] or ''}"
-        ).strip()
+        ).strip())
 
     # Group slots by date for the UI
     slots_by_day = {}
@@ -8055,7 +8046,7 @@ def _notify_sales_completed(reg_id):
         if not reg:
             conn.close()
             return
-        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        client_name = format_dr_name(f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip())
         ops_emails = _dept_emails(conn, ['Operations'])
         mgmt_emails = _management_emails(conn)
         from email_utils import send_email, render_branded_email, brand_detail_rows, brand_button
@@ -8207,7 +8198,7 @@ def _notify_onboarding_confirmed(reg_id):
         if not reg:
             conn.close()
             return
-        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        client_name = format_dr_name(f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip())
 
         # 1. Welcome email to client — render the editable 'welcome_email'
         # template (admin can edit it at /admin/email-templates/welcome_email)
@@ -8457,7 +8448,7 @@ def client_welcome_call_request():
             LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
         sm_name, sm_email = _lead_sales_member(conn, full)
         team_to = list(dict.fromkeys([e for e in ([sm_email] + _dept_emails(conn, ['Operations'])) if e]))
-        cname = f"{full['prefix'] or ''} {full['first_name'] or ''} {full['last_name'] or ''}".strip()
+        cname = format_dr_name(f"{full['prefix'] or ''} {full['first_name'] or ''} {full['last_name'] or ''}".strip())
         from email_utils import send_email, render_branded_email, brand_detail_rows, brand_button
         if team_to:
             inner = (brand_detail_rows([('Client', cname), ('Registration #', full['registration_number']),
@@ -8546,7 +8537,7 @@ def _notify_welcome_call_confirmed(reg_id):
                                  url='/client/dashboard#call', tag='wc')
         except Exception:
             pass
-        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        client_name = format_dr_name(f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip())
         client_email = reg['email']
         product_name = reg['product_name'] or 'your program'
         sm_name, sm_email = _lead_sales_member(conn, reg)
@@ -8725,7 +8716,7 @@ def admin_client_welcome_call_hold(reg_id):
         reg = conn.execute('''SELECT cr.*, ps.name AS product_name FROM client_registrations cr
             LEFT JOIN products_services ps ON ps.id = cr.product_id WHERE cr.id = ?''', (reg_id,)).fetchone()
         ops_emails = _dept_emails(conn, ['Operations'])
-        cname = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        cname = format_dr_name(f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip())
         from email_utils import send_email, render_branded_email, brand_callout, brand_detail_rows, brand_button
         if ops_emails:
             if hold:
