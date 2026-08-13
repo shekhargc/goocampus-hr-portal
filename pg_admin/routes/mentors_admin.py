@@ -538,11 +538,14 @@ def mentors_migrate_photos():
     migrated = failed = remaining = 0
     try:
         from pg_admin.data.mentors_seed_import import _migrate_photo
+        # Bind the LIKE pattern as a parameter — a bare '%' literal in the SQL
+        # collides with psycopg2's placeholder substitution ("tuple index out of
+        # range"), per the %%/bind gotcha in CLAUDE.md.
         todo = conn.execute(
             "SELECT id, source_photo_url, photo_url FROM pg_mentors "
             " WHERE COALESCE(source_photo_url,'') <> '' "
-            "   AND COALESCE(photo_url,'') NOT LIKE 'pg_mentors/%' "
-            " ORDER BY id LIMIT ?", (batch,)).fetchall()
+            "   AND COALESCE(photo_url,'') NOT LIKE ? "
+            " ORDER BY id LIMIT ?", ('pg_mentors/%', batch)).fetchall()
         for r in todo:
             res = _migrate_photo(conn, r['id'], r['source_photo_url'], r['photo_url'])
             if res == 'migrated':
@@ -552,7 +555,7 @@ def mentors_migrate_photos():
         remaining = conn.execute(
             "SELECT COUNT(*) AS c FROM pg_mentors "
             " WHERE COALESCE(source_photo_url,'') <> '' "
-            "   AND COALESCE(photo_url,'') NOT LIKE 'pg_mentors/%'").fetchone()['c']
+            "   AND COALESCE(photo_url,'') NOT LIKE ?", ('pg_mentors/%',)).fetchone()['c']
         flash(f"Photos: {migrated} copied to R2, {failed} failed. {remaining} remaining"
               + (" — click “Copy photos to R2” again to continue."
                  if remaining else " — all done!"),
