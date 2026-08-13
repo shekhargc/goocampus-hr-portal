@@ -1,0 +1,72 @@
+{# Shared client Address section (founder 2026-08-13). Needs `client` (with .id)
+   and `address` = build_client_address_ctx(...). View + inline edit; any staff who
+   can open the profile can correct it. Permanent + Communication address. #}
+{% if address is defined and address %}
+<div id="address" style="background:#fff;border-radius:12px;padding:22px;margin-top:20px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+    <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--navy);">&#128205; Address</h4>
+    <button type="button" onclick="var v=document.getElementById('addr-view-{{ client.id }}'),e=document.getElementById('addr-edit-{{ client.id }}');var on=e.style.display==='none';e.style.display=on?'block':'none';v.style.display=on?'none':'block';"
+            style="padding:7px 14px;background:#fff;color:var(--orange);border:1px solid var(--orange);border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">&#9998; Edit address</button>
+  </div>
+
+  {# ---------- VIEW ---------- #}
+  <div id="addr-view-{{ client.id }}" style="font-size:14px;color:var(--navy);line-height:1.6;">
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11.5px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">Permanent Address</div>
+      {% set p = address.perm %}
+      {% if p.line1 or p.city or p.state or p.country %}
+        {{ p.line1 }}{% if p.line2 %}, {{ p.line2 }}{% endif %}<br>
+        {{ [p.city, p.state, p.postal, p.country]|select|join(', ') }}
+        {% if not address.has_structured %}<div style="font-size:11.5px;color:var(--gray-400);margin-top:2px;">From the client's registration — treated as the permanent address.</div>{% endif %}
+      {% else %}<span style="color:var(--gray-400);">Not provided yet</span>{% endif %}
+    </div>
+    <div>
+      <div style="font-size:11.5px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;">Communication Address</div>
+      {% set c = address.comm %}
+      {% if address.comm_same %}
+        <span style="color:#15803d;font-weight:600;">&#10003; Same as permanent address</span>
+      {% elif c.line1 or c.city or c.state or c.country %}
+        {{ c.line1 }}{% if c.line2 %}, {{ c.line2 }}{% endif %}<br>
+        {{ [c.city, c.state, c.postal, c.country]|select|join(', ') }}
+      {% else %}<span style="color:var(--gray-400);">Not confirmed yet — tick “same as permanent” or add it after confirming with the client.</span>{% endif %}
+    </div>
+  </div>
+
+  {# ---------- EDIT ---------- #}
+  <form id="addr-edit-{{ client.id }}" method="POST" action="{{ url_for('ops_client_address_save', client_id=client.id) }}" style="display:none;">
+    {% set p = address.perm %}{% set c = address.comm %}
+    {% set lbl = 'display:block;font-size:11.5px;font-weight:600;color:var(--gray-600);margin:0 0 3px;' %}
+    {% set inp = 'width:100%;padding:0.5rem 0.65rem;border:1px solid var(--gray-300);border-radius:6px;font-size:0.86rem;box-sizing:border-box;' %}
+    <div style="font-size:12px;font-weight:700;color:var(--navy);margin:4px 0 8px;">Permanent Address</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="grid-column:1/-1;"><label style="{{ lbl }}">Address line 1</label><input type="text" name="perm_line1" value="{{ p.line1 }}" style="{{ inp }}"></div>
+      <div style="grid-column:1/-1;"><label style="{{ lbl }}">Address line 2</label><input type="text" name="perm_line2" value="{{ p.line2 }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">City / District</label><input type="text" name="perm_city" value="{{ p.city }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">State / Province</label><input type="text" name="perm_state" value="{{ p.state }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">Postal / PIN code</label><input type="text" name="perm_postal" value="{{ p.postal }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">Country</label><input type="text" name="perm_country" value="{{ p.country }}" style="{{ inp }}"></div>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:8px;margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;">
+      <input type="checkbox" name="comm_same" id="commsame-{{ client.id }}" {% if address.comm_same %}checked{% endif %}
+             onchange="document.getElementById('commfields-{{ client.id }}').style.display=this.checked?'none':'grid';"
+             style="width:16px;height:16px;accent-color:var(--orange);">
+      Communication address is the same as permanent
+    </label>
+    <div id="commfields-{{ client.id }}" style="display:{{ 'none' if address.comm_same else 'grid' }};grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="grid-column:1/-1;"><label style="{{ lbl }}">Comm. address line 1</label><input type="text" name="comm_line1" value="{{ c.line1 }}" style="{{ inp }}"></div>
+      <div style="grid-column:1/-1;"><label style="{{ lbl }}">Comm. address line 2</label><input type="text" name="comm_line2" value="{{ c.line2 }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">City / District</label><input type="text" name="comm_city" value="{{ c.city }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">State / Province</label><input type="text" name="comm_state" value="{{ c.state }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">Postal / PIN code</label><input type="text" name="comm_postal" value="{{ c.postal }}" style="{{ inp }}"></div>
+      <div><label style="{{ lbl }}">Country</label><input type="text" name="comm_country" value="{{ c.country }}" style="{{ inp }}"></div>
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;">
+      <button type="submit" style="padding:9px 20px;background:var(--orange);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:14px;">Save address</button>
+      <button type="button" onclick="document.getElementById('addr-edit-{{ client.id }}').style.display='none';document.getElementById('addr-view-{{ client.id }}').style.display='block';"
+              style="padding:9px 20px;background:var(--gray-100);color:var(--gray-600);border:1px solid var(--gray-300);border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;">Cancel</button>
+    </div>
+  </form>
+</div>
+{% endif %}

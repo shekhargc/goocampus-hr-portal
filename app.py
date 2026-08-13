@@ -2726,6 +2726,89 @@ _CLIENT_PROFILE_ACADEMIC = ('img_fmg', 'country', 'fmg_medical_college', 'img_me
     'pg_done', 'pg_type', 'pg_specialty', 'pg_college', 'pg_status', 'additional_info')
 
 
+def build_client_address_ctx(conn, client):
+    """Address-section context for the ops client profile (founder 2026-08-13).
+
+    OLD clients: their structured Permanent + Communication address (already on
+    plab_clients from the admin/UK flow). NEW portal clients: the simple address
+    they filled at registration (client_registrations.address + city/state/country)
+    is surfaced AS the Permanent address, with a 'same as communication' checkbox
+    ops ticks once they confirm it with the client — so we have a usable
+    shipping/communication address later.
+    """
+    def g(k):
+        return str((client.get(k) or '')).strip()
+    reg = g('registration_number')
+    simple = {}
+    if reg:
+        try:
+            r = conn.execute(
+                "SELECT address, city, state, country FROM client_registrations "
+                "WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) "
+                "ORDER BY id DESC LIMIT 1", (reg,)).fetchone()
+            if r:
+                simple = {k: (r[k] or '') for k in ('address', 'city', 'state', 'country')}
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    perm_cols = ('perm_address_line1', 'perm_address_line2', 'perm_city_district',
+                 'perm_state_province', 'perm_postal_code', 'perm_country')
+    has_structured = any(g(k) for k in perm_cols)
+    if has_structured:
+        perm = {'line1': g('perm_address_line1'), 'line2': g('perm_address_line2'),
+                'city': g('perm_city_district'), 'state': g('perm_state_province'),
+                'postal': g('perm_postal_code'), 'country': g('perm_country')}
+    else:
+        # New portal client — map their simple address in as the permanent one.
+        perm = {'line1': (simple.get('address') or '').strip(), 'line2': '',
+                'city': (simple.get('city') or g('city')), 'state': (simple.get('state') or g('state')),
+                'postal': '', 'country': (simple.get('country') or g('country'))}
+    comm_same = g('comm_address_same').lower() in ('yes', 'y', '1', 'true', 'same')
+    comm = {'line1': g('comm_address_line1'), 'line2': g('comm_address_line2'),
+            'city': g('comm_city_district'), 'state': g('comm_state_province'),
+            'postal': g('comm_postal_code'), 'country': g('comm_country')}
+    return {'perm': perm, 'comm': comm, 'comm_same': comm_same,
+            'has_structured': has_structured,
+            'has_any': any(perm.values()) or any(comm.values())}
+
+
+@app.route('/operations/client/<int:client_id>/address', methods=['POST'])
+@login_required
+def ops_client_address_save(client_id):
+    """Save the client's Permanent + Communication address from the profile
+    Address section. Any staff who can open the profile can correct it
+    (founder 2026-08-13, Ops + Admin)."""
+    conn = get_db()
+    try:
+        f = request.form
+        comm_same = 'Yes' if f.get('comm_same') else 'No'
+        conn.execute(
+            "UPDATE plab_clients SET "
+            "  perm_address_line1=?, perm_address_line2=?, perm_city_district=?, "
+            "  perm_state_province=?, perm_postal_code=?, perm_country=?, "
+            "  comm_address_same=?, comm_address_line1=?, comm_address_line2=?, "
+            "  comm_city_district=?, comm_state_province=?, comm_postal_code=?, comm_country=? "
+            "WHERE id=?",
+            ((f.get('perm_line1') or '').strip(), (f.get('perm_line2') or '').strip(),
+             (f.get('perm_city') or '').strip(), (f.get('perm_state') or '').strip(),
+             (f.get('perm_postal') or '').strip(), (f.get('perm_country') or '').strip(),
+             comm_same,
+             (f.get('comm_line1') or '').strip(), (f.get('comm_line2') or '').strip(),
+             (f.get('comm_city') or '').strip(), (f.get('comm_state') or '').strip(),
+             (f.get('comm_postal') or '').strip(), (f.get('comm_country') or '').strip(),
+             client_id))
+        conn.commit()
+        flash('Address saved.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("ops_client_address_save: %s", e)
+        flash('Could not save the address — please try again.', 'error')
+    finally:
+        conn.close()
+    return redirect((request.referrer or url_for('dashboard')) + '#address')
+
+
 def _sync_client_academics_to_ops(conn, reg_id):
     """Push a client's academic edits into the ops-side record so every pathway's
     Academic Details page reflects what the client entered. The client OWNS these

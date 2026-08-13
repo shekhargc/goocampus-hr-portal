@@ -519,6 +519,11 @@ def ops_australia_client_detail(client_id):
         try: conn.rollback()
         except Exception: pass
 
+    try:
+        from app import build_client_address_ctx
+        address_ctx = build_client_address_ctx(conn, dict(client))
+    except Exception:
+        address_ctx = None
     conn.close()
 
     return render_template(
@@ -528,6 +533,7 @@ def ops_australia_client_detail(client_id):
         plab_doc_types=PLAB_DOC_TYPES,
         user=user,
         client=client,
+        address=address_ctx,
         package_services=package_services,
         sections=sections,
         amount_paid=amount_paid,

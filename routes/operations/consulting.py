@@ -586,12 +586,18 @@ def ops_consulting_client_detail(client_id):
     else:
         # Legacy Zoho client (no portal registration) → assume onboarding done.
         onboarding['welcome_call'] = 'yes'
+    try:
+        from app import build_client_address_ctx
+        address_ctx = build_client_address_ctx(conn, dict(client))
+    except Exception:
+        address_ctx = None
     conn.close()
 
     return render_template(
         'ops_consulting_client_detail.html',
         user=user,
         client=client,
+        address=address_ctx,
         onboarding=onboarding,
         has_training=has_training,
         documents=documents,

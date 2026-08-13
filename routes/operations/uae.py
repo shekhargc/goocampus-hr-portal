@@ -460,12 +460,18 @@ def ops_uae_client_detail(client_id):
             conn, client.get('product_id'), client.get('plan_type'))
     except Exception:
         package_services = []
+    try:
+        from app import build_client_address_ctx
+        address_ctx = build_client_address_ctx(conn, dict(client))
+    except Exception:
+        address_ctx = None
     conn.close()
 
     return render_template(
         'ops_uae_client_detail.html',
         user=user,
         client=client,
+        address=address_ctx,
         package_services=package_services,
         documents=documents,
         plab_doc_types=PLAB_DOC_TYPES,
