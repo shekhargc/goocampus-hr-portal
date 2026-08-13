@@ -86,6 +86,36 @@ def ensure_pg_mentors_table():
         ('external_id', "TEXT DEFAULT ''"),
         ('source_photo_url', "TEXT DEFAULT ''"),
         ('profile_source_url', "TEXT DEFAULT ''"),
+        # ── Full mentor profile from the founder's mentors_list.xlsx (2026-08-13).
+        #    Granular fields kept verbatim so nothing is lost; the display columns
+        #    above (name/bio/mentor_type/…) are populated from these at import.
+        ('gender', "TEXT DEFAULT ''"),
+        ('timezone', "TEXT DEFAULT ''"),
+        ('pricing_currency', "TEXT DEFAULT ''"),
+        ('discount', "TEXT DEFAULT ''"),
+        ('current_state', "TEXT DEFAULT ''"),
+        ('current_city', "TEXT DEFAULT ''"),
+        ('location_origin', "TEXT DEFAULT ''"),
+        ('special_interest', "TEXT DEFAULT ''"),
+        ('hobbies', "TEXT DEFAULT ''"),
+        ('completion_yr', "TEXT DEFAULT ''"),
+        ('profession_job_title', "TEXT DEFAULT ''"),
+        ('profession_company', "TEXT DEFAULT ''"),
+        ('profession_location', "TEXT DEFAULT ''"),
+        ('profession_total_exp', "TEXT DEFAULT ''"),
+        ('profession_curr_work_exp', "TEXT DEFAULT ''"),
+        ('profession_previous_work_exp', "TEXT DEFAULT ''"),
+        ('pre_work_exp', "TEXT DEFAULT ''"),
+        ('edu_qualification', "TEXT DEFAULT ''"),
+        ('edu_pg_speciality', "TEXT DEFAULT ''"),
+        ('edu_mbbs_college', "TEXT DEFAULT ''"),
+        ('edu_mbbs_year', "TEXT DEFAULT ''"),
+        ('edu_pg_college', "TEXT DEFAULT ''"),
+        ('edu_pg_year', "TEXT DEFAULT ''"),
+        ('topics_list', "TEXT DEFAULT ''"),
+        ('intro_video', "TEXT DEFAULT ''"),
+        ('added_on', "TEXT DEFAULT ''"),
+        ('updated_src', "TEXT DEFAULT ''"),
     ]:
         try:
             conn.execute(f"ALTER TABLE pg_mentors ADD COLUMN {col} {ddl}")

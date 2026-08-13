@@ -88,9 +88,19 @@
         <p>The doctors aspirants browse &amp; book on goocampus.in. Only <strong>Published</strong> mentors appear publicly.</p>
     </div>
     <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
-        <form method="POST" action="/admin/pg/mentors/import" style="display:inline"
-              onsubmit="return confirm('Import / refresh the goocampusworld.com mentor set (160 mentors) and migrate photos to R2? Safe to re-run — your publish/verify choices are kept.');">
-            <button class="pgm-btn pgm-btn-ghost" title="Upsert the scraped dataset + migrate photos to R2"><i class="fas fa-cloud-arrow-down"></i> Import from goocampusworld.com</button>
+        <form method="POST" action="/admin/pg/mentors/import-xlsx" enctype="multipart/form-data"
+              style="display:inline-flex;gap:0.4rem;align-items:center;"
+              onsubmit="return confirm('Import this mentors Excel — upsert every mentor and RETIRE the older auto-scraped set? Safe to re-run; your publish/verify choices are kept.');">
+            <label class="pgm-btn pgm-btn-ghost" style="cursor:pointer;margin:0;" title="Upload the mentors_list.xlsx">
+                <i class="fas fa-file-excel"></i> Upload mentors .xlsx
+                <input type="file" name="data_file" accept=".xlsx,.xlsm" required
+                       onchange="this.closest('form').querySelector('button[type=submit]').style.display='inline-flex';" style="display:none;">
+            </label>
+            <button type="submit" class="pgm-btn pgm-btn-primary" style="display:none;"><i class="fas fa-upload"></i> Import</button>
+        </form>
+        <form method="POST" action="/admin/pg/mentors/migrate-photos" style="display:inline"
+              onsubmit="return confirm('Copy the next batch of mentor photos into our R2 storage?');">
+            <button class="pgm-btn pgm-btn-ghost" title="Copy source photos into our R2 storage (batched — click again until 0 remain)"><i class="fas fa-cloud-arrow-up"></i> Copy photos to R2</button>
         </form>
         <button class="pgm-btn pgm-btn-primary" onclick="pgmOpenAdd()"><i class="fas fa-plus"></i> Add Mentor</button>
     </div>
@@ -207,6 +217,31 @@
                         data-hospital-name="{{ m.hospital_name }}"
                         data-hospital-address="{{ m.hospital_address }}"
                         data-admin-notes="{{ m.admin_notes }}"
+                        data-gender="{{ m.gender or '' }}"
+                        data-timezone="{{ m.timezone or '' }}"
+                        data-pricing-currency="{{ m.pricing_currency or '' }}"
+                        data-discount="{{ m.discount or '' }}"
+                        data-current-state="{{ m.current_state or '' }}"
+                        data-current-city="{{ m.current_city or '' }}"
+                        data-location-origin="{{ m.location_origin or '' }}"
+                        data-special-interest="{{ m.special_interest or '' }}"
+                        data-hobbies="{{ m.hobbies or '' }}"
+                        data-completion-yr="{{ m.completion_yr or '' }}"
+                        data-profession-job-title="{{ m.profession_job_title or '' }}"
+                        data-profession-company="{{ m.profession_company or '' }}"
+                        data-profession-location="{{ m.profession_location or '' }}"
+                        data-profession-total-exp="{{ m.profession_total_exp or '' }}"
+                        data-profession-curr-work-exp="{{ m.profession_curr_work_exp or '' }}"
+                        data-profession-previous-work-exp="{{ m.profession_previous_work_exp or '' }}"
+                        data-pre-work-exp="{{ m.pre_work_exp or '' }}"
+                        data-edu-qualification="{{ m.edu_qualification or '' }}"
+                        data-edu-pg-speciality="{{ m.edu_pg_speciality or '' }}"
+                        data-edu-mbbs-college="{{ m.edu_mbbs_college or '' }}"
+                        data-edu-mbbs-year="{{ m.edu_mbbs_year or '' }}"
+                        data-edu-pg-college="{{ m.edu_pg_college or '' }}"
+                        data-edu-pg-year="{{ m.edu_pg_year or '' }}"
+                        data-topics-list="{{ m.topics_list or '' }}"
+                        data-intro-video="{{ m.intro_video or '' }}"
                         data-is-available="{{ '1' if m.is_available else '0' }}"
                         data-is-verified="{{ '1' if m.is_verified else '0' }}"
                         data-is-published="{{ '1' if m.is_published else '0' }}"
@@ -281,6 +316,36 @@
           <div class="pgm-field"><label>Hospital address</label><input name="hospital_address" id="f_hospital_address"></div>
           <div class="pgm-field full"><label>Admin notes <span class="hint">(admin-only, never public)</span></label><textarea name="admin_notes" id="f_admin_notes" rows="2"></textarea></div>
 
+          <div class="pgm-field full" style="border-top:1px solid #e5e7eb;margin-top:6px;padding-top:12px;">
+            <strong style="color:#334155;font-size:0.92rem;">Full profile detail</strong>
+            <span class="hint">— from the mentors sheet, all editable</span>
+          </div>
+          <div class="pgm-field"><label>Gender</label><input name="gender" id="f_gender"></div>
+          <div class="pgm-field"><label>Timezone</label><input name="timezone" id="f_timezone"></div>
+          <div class="pgm-field"><label>Currency</label><input name="pricing_currency" id="f_pricing_currency" placeholder="INR / GBP / USD"></div>
+          <div class="pgm-field"><label>Discount</label><input name="discount" id="f_discount"></div>
+          <div class="pgm-field"><label>Current state</label><input name="current_state" id="f_current_state"></div>
+          <div class="pgm-field"><label>Current city</label><input name="current_city" id="f_current_city"></div>
+          <div class="pgm-field"><label>Location / origin</label><input name="location_origin" id="f_location_origin"></div>
+          <div class="pgm-field"><label>Completion year</label><input name="completion_yr" id="f_completion_yr"></div>
+          <div class="pgm-field full"><label>Special interest</label><input name="special_interest" id="f_special_interest"></div>
+          <div class="pgm-field full"><label>Hobbies</label><input name="hobbies" id="f_hobbies"></div>
+          <div class="pgm-field"><label>Job title</label><input name="profession_job_title" id="f_profession_job_title"></div>
+          <div class="pgm-field"><label>Company</label><input name="profession_company" id="f_profession_company"></div>
+          <div class="pgm-field"><label>Work location</label><input name="profession_location" id="f_profession_location"></div>
+          <div class="pgm-field"><label>Total experience</label><input name="profession_total_exp" id="f_profession_total_exp"></div>
+          <div class="pgm-field"><label>Current work exp.</label><input name="profession_curr_work_exp" id="f_profession_curr_work_exp"></div>
+          <div class="pgm-field"><label>Previous work exp.</label><input name="profession_previous_work_exp" id="f_profession_previous_work_exp"></div>
+          <div class="pgm-field full"><label>Prior work experience (detail)</label><textarea name="pre_work_exp" id="f_pre_work_exp" rows="2"></textarea></div>
+          <div class="pgm-field"><label>Education qualification</label><input name="edu_qualification" id="f_edu_qualification"></div>
+          <div class="pgm-field"><label>PG speciality</label><input name="edu_pg_speciality" id="f_edu_pg_speciality"></div>
+          <div class="pgm-field"><label>MBBS college</label><input name="edu_mbbs_college" id="f_edu_mbbs_college"></div>
+          <div class="pgm-field"><label>MBBS year</label><input name="edu_mbbs_year" id="f_edu_mbbs_year"></div>
+          <div class="pgm-field"><label>PG college</label><input name="edu_pg_college" id="f_edu_pg_college"></div>
+          <div class="pgm-field"><label>PG year</label><input name="edu_pg_year" id="f_edu_pg_year"></div>
+          <div class="pgm-field full"><label>Topics list</label><textarea name="topics_list" id="f_topics_list" rows="2"></textarea></div>
+          <div class="pgm-field full"><label>Intro video URL</label><input name="intro_video" id="f_intro_video"></div>
+
           <div class="pgm-field full">
             <label>Weekly availability</label>
             <div class="pgm-avail">
@@ -336,7 +401,12 @@ function pgmReset(){
      'f_experience_range','f_counselling_fee','f_consultation_fee','f_specialties','f_languages',
      'f_awards','f_certifications','f_bio','f_email','f_phone',
      'f_council_number','f_council_state','f_hospital_name','f_hospital_address','f_admin_notes',
-     'f_country_edit'
+     'f_country_edit',
+     'f_gender','f_timezone','f_pricing_currency','f_discount','f_current_state','f_current_city',
+     'f_location_origin','f_special_interest','f_hobbies','f_completion_yr','f_profession_job_title',
+     'f_profession_company','f_profession_location','f_profession_total_exp','f_profession_curr_work_exp',
+     'f_profession_previous_work_exp','f_pre_work_exp','f_edu_qualification','f_edu_pg_speciality',
+     'f_edu_mbbs_college','f_edu_mbbs_year','f_edu_pg_college','f_edu_pg_year','f_topics_list','f_intro_video'
     ].forEach(function(id){ pgmSetVal(id,''); });
     pgmSetVal('f_service_type','counselling');
     pgmSetVal('f_mentor_type', (PGM_ACTIVE_TYPE && PGM_ACTIVE_TYPE!=='all') ? PGM_ACTIVE_TYPE : 'specialist');
@@ -380,6 +450,32 @@ function pgmOpenEdit(btn){
     pgmSetVal('f_hospital_name', d.hospitalName);
     pgmSetVal('f_hospital_address', d.hospitalAddress);
     pgmSetVal('f_admin_notes', d.adminNotes);
+    // Full profile detail
+    pgmSetVal('f_gender', d.gender);
+    pgmSetVal('f_timezone', d.timezone);
+    pgmSetVal('f_pricing_currency', d.pricingCurrency);
+    pgmSetVal('f_discount', d.discount);
+    pgmSetVal('f_current_state', d.currentState);
+    pgmSetVal('f_current_city', d.currentCity);
+    pgmSetVal('f_location_origin', d.locationOrigin);
+    pgmSetVal('f_special_interest', d.specialInterest);
+    pgmSetVal('f_hobbies', d.hobbies);
+    pgmSetVal('f_completion_yr', d.completionYr);
+    pgmSetVal('f_profession_job_title', d.professionJobTitle);
+    pgmSetVal('f_profession_company', d.professionCompany);
+    pgmSetVal('f_profession_location', d.professionLocation);
+    pgmSetVal('f_profession_total_exp', d.professionTotalExp);
+    pgmSetVal('f_profession_curr_work_exp', d.professionCurrWorkExp);
+    pgmSetVal('f_profession_previous_work_exp', d.professionPreviousWorkExp);
+    pgmSetVal('f_pre_work_exp', d.preWorkExp);
+    pgmSetVal('f_edu_qualification', d.eduQualification);
+    pgmSetVal('f_edu_pg_speciality', d.eduPgSpeciality);
+    pgmSetVal('f_edu_mbbs_college', d.eduMbbsCollege);
+    pgmSetVal('f_edu_mbbs_year', d.eduMbbsYear);
+    pgmSetVal('f_edu_pg_college', d.eduPgCollege);
+    pgmSetVal('f_edu_pg_year', d.eduPgYear);
+    pgmSetVal('f_topics_list', d.topicsList);
+    pgmSetVal('f_intro_video', d.introVideo);
     pgmSetChk('f_is_available', d.isAvailable === '1');
     pgmSetChk('f_is_verified', d.isVerified === '1');
     pgmSetChk('f_is_published', d.isPublished === '1');

@@ -56,8 +56,12 @@ def mentor_public_dict(row, photo_base_url):
     # so promising a photo on the strength of that field made the site render a
     # broken image for every mentor. Better no photo (the site draws its own
     # initials placeholder) than a broken one. (founder 2026-07-28)
+    # Advertise a photo when EITHER an R2 copy or a reachable source image exists —
+    # the /photo endpoint serves R2 first and falls back to the source (the 2026-08
+    # mentor sheet's profilePics are public), so the site shows real photos even
+    # before R2 migration completes. (founder 2026-08-13)
     photo = None
-    if row.get('photo_url'):
+    if row.get('photo_url') or row.get('source_photo_url'):
         photo = f"{photo_base_url}/api/pg/mentors/{row['id']}/photo"
     return {
         'id': row['id'],
@@ -83,4 +87,28 @@ def mentor_public_dict(row, photo_base_url):
         'is_verified': bool(row.get('is_verified')),
         'rating': _num(row.get('rating')) or 0,
         'total_reviews': row.get('reviews_count') or row.get('total_reviews') or 0,
+        # Richer profile from the founder's mentor sheet (2026-08-13). Public-safe.
+        'country': row.get('country') or '',
+        'gender': row.get('gender') or '',
+        'current_city': row.get('current_city') or '',
+        'current_state': row.get('current_state') or '',
+        'special_interest': row.get('special_interest') or '',
+        'hobbies': row.get('hobbies') or '',
+        'intro_video': row.get('intro_video') or '',
+        'currency': row.get('pricing_currency') or '',
+        'topics_list': row.get('topics_list') or '',
+        'education': {
+            'qualification': row.get('edu_qualification') or '',
+            'pg_speciality': row.get('edu_pg_speciality') or '',
+            'mbbs_college': row.get('edu_mbbs_college') or '',
+            'mbbs_year': row.get('edu_mbbs_year') or '',
+            'pg_college': row.get('edu_pg_college') or '',
+            'pg_year': row.get('edu_pg_year') or '',
+        },
+        'profession': {
+            'job_title': row.get('profession_job_title') or '',
+            'company': row.get('profession_company') or '',
+            'location': row.get('profession_location') or '',
+            'total_exp': row.get('profession_total_exp') or '',
+        },
     }

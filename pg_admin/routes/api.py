@@ -227,7 +227,7 @@ def api_pg_mentor_photo(mentor_id):
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT photo_url, source_photo_url FROM pg_mentors "
+            "SELECT name, photo_url, source_photo_url FROM pg_mentors "
             "WHERE id = ? AND is_published AND is_active",
             (mentor_id,)
         ).fetchone()
@@ -250,10 +250,15 @@ def api_pg_mentor_photo(mentor_id):
         url = storage.presigned_get_url(key)
         if url:
             return redirect(url, code=302)
-    # No migrated photo. Serve a generated initials avatar rather than 404 or a
-    # redirect to the old goocampus-s3bucket — that bucket is PRIVATE (403), so
-    # redirecting there just renders a broken image on every card. This makes
-    # <img src=".../photo"> always work; consumers that want their own placeholder
+    # Not migrated to R2 yet — if the source image is reachable, serve it so the
+    # real photo shows immediately (only published+active mentors reach here, and
+    # the 2026-08 mentor sheet's profilePics are public). R2 migration then makes
+    # them self-hosted. (founder 2026-08-13)
+    src = (row.get('source_photo_url') or '').strip()
+    if src.startswith('http'):
+        return redirect(src, code=302)
+    # No photo at all. Serve a generated initials avatar rather than 404, so
+    # <img src=".../photo"> always works; consumers that want their own placeholder
     # can still branch on the JSON's photo_url being null. (founder 2026-07-28)
     name = (row.get('name') or '').strip()
     parts = [p for p in name.replace('.', ' ').split() if p]
