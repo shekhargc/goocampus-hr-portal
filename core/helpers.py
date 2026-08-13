@@ -13,6 +13,31 @@ import re as _re
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 
+_DR_TITLE_RE = _re.compile(
+    r'^\s*(?:(?:dr|doctor|mr|mrs|ms|miss|prof)\.\s*|(?:dr|doctor|mr|mrs|ms|miss|prof)\s+)',
+    _re.I)
+
+
+def format_dr_name(value):
+    """Client display name → 'Dr. <clean name>'. All GooCampus clients show as
+    'Dr.' (founder 2026-08-10). Strips ANY title(s) already inside the name —
+    Dr / Dr. / DR / Doctor / Mr / Mrs / Ms / Miss / Prof, repeated, with or
+    without a dot/space — so it never doubles ('Dr. Dr. Milen' -> 'Dr. Milen',
+    'Mr Shubham' -> 'Dr. Shubham', 'Dr.Rachana' -> 'Dr. Rachana'). Blank -> ''
+    (never a bare 'Dr.'). Won't touch real names like 'Drake' (no title boundary).
+
+    Single source of truth: app.py's `dr_name` Jinja filter AND every server-side
+    name build (verification queues, emails) delegate here, so the screen and the
+    emails can never disagree.
+    """
+    s = (value or '').strip()
+    prev = None
+    while s and s != prev:
+        prev = s
+        s = _DR_TITLE_RE.sub('', s).strip()
+    return ('Dr. ' + s) if s else ''
+
+
 def format_reg(value):
     """Canonical GooCampus registration-number display: <PREFIX>/YY-YY/NNN,
     for EVERY pathway prefix (GCUKIP, GCAUSIP, GCCSS, GCTRN, GCUAE/GCUAEIP,
