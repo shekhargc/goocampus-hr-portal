@@ -42,6 +42,10 @@ def register_pg_admin(app):
                      mentors_admin.mentor_save, methods=['POST'])
     app.add_url_rule('/admin/pg/mentors/import', 'pg_mentors_import',
                      mentors_admin.mentors_import, methods=['POST'])
+    app.add_url_rule('/admin/pg/mentors/import-xlsx', 'pg_mentors_import_xlsx',
+                     mentors_admin.mentors_import_xlsx, methods=['POST'])
+    app.add_url_rule('/admin/pg/mentors/migrate-photos', 'pg_mentors_migrate_photos',
+                     mentors_admin.mentors_migrate_photos, methods=['POST'])
     app.add_url_rule('/admin/pg/mentors/<int:mentor_id>', 'pg_mentor_detail',
                      mentors_admin.mentor_detail, methods=['GET'])
     app.add_url_rule('/admin/pg/mentors/<int:mentor_id>/toggle', 'pg_mentor_toggle',

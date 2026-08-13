@@ -266,6 +266,16 @@ def mentor_save():
         'is_published': form.get('is_published') == 'on',
         'admin_notes': (form.get('admin_notes') or '').strip(),
     }
+    # Full-profile fields from the mentors sheet — all admin-editable (founder 2026-08-13).
+    for _c in ('gender', 'timezone', 'pricing_currency', 'discount', 'current_state',
+               'current_city', 'location_origin', 'special_interest', 'hobbies',
+               'completion_yr', 'profession_job_title', 'profession_company',
+               'profession_location', 'profession_total_exp', 'profession_curr_work_exp',
+               'profession_previous_work_exp', 'pre_work_exp', 'edu_qualification',
+               'edu_pg_speciality', 'edu_mbbs_college', 'edu_mbbs_year', 'edu_pg_college',
+               'edu_pg_year', 'topics_list', 'intro_video'):
+        if _c in form:
+            fields[_c] = (form.get(_c) or '').strip()
 
     conn = get_db()
     mentor_id = None
@@ -467,3 +477,94 @@ def mentor_photo_admin(mentor_id):
     if src:
         return redirect(src, code=302)
     abort(404)
+
+
+@login_required
+def mentors_import_xlsx():
+    """Upload the founder's authoritative mentors_list.xlsx → upsert every mentor
+    (keyed on the sheet's mentor_id) and retire the older auto-scraped set.
+    Idempotent: re-uploading refreshes content but keeps admin publish/verify choices."""
+    user = _require_admin()
+    if not user:
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    f = request.files.get('data_file')
+    if not f or not f.filename:
+        flash('Choose the mentors .xlsx file to upload.', 'error')
+        return redirect(url_for('pg_mentors_admin'))
+    if not f.filename.lower().endswith(('.xlsx', '.xlsm')):
+        flash('Please upload a .xlsx file.', 'error')
+        return redirect(url_for('pg_mentors_admin'))
+    retire = request.form.get('retire_others') != 'off'
+    conn = get_db()
+    try:
+        from pg_admin.data.mentors_xlsx_import import parse_xlsx, import_mentors_from_xlsx
+        rows, _headers = parse_xlsx(f.read())
+        if not rows:
+            flash('No mentor rows found in that file.', 'error')
+            return redirect(url_for('pg_mentors_admin'))
+        res = import_mentors_from_xlsx(conn, rows, created_by=user.get('id'),
+                                       retire_others=retire)
+        msg = (f"Imported {res['created']} new + {res['updated']} updated mentors "
+               f"(of {res['total']}).")
+        if res['retired']:
+            msg += f" Retired {res['retired']} older auto-scraped mentors."
+        msg += " Next: click “Copy photos to R2” so images are self-hosted."
+        flash(msg + (f" {len(res['errors'])} row error(s) — see logs." if res['errors'] else ''),
+              'success' if not res['errors'] else 'warning')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("mentors_import_xlsx: %s", e)
+        flash(f'Import failed — nothing changed: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_mentors_admin'))
+
+
+@login_required
+def mentors_migrate_photos():
+    """Copy the next batch of source photos into R2, chunked so it never times out.
+    Click again until 0 remain."""
+    user = _require_admin()
+    if not user:
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    try:
+        batch = min(int(request.form.get('batch') or 30), 60)
+    except (TypeError, ValueError):
+        batch = 30
+    conn = get_db()
+    migrated = failed = remaining = 0
+    try:
+        from pg_admin.data.mentors_seed_import import _migrate_photo
+        # Bind the LIKE pattern as a parameter — a bare '%' literal in the SQL
+        # collides with psycopg2's placeholder substitution ("tuple index out of
+        # range"), per the %%/bind gotcha in CLAUDE.md.
+        todo = conn.execute(
+            "SELECT id, source_photo_url, photo_url FROM pg_mentors "
+            " WHERE COALESCE(source_photo_url,'') <> '' "
+            "   AND COALESCE(photo_url,'') NOT LIKE ? "
+            " ORDER BY id LIMIT ?", ('pg_mentors/%', batch)).fetchall()
+        for r in todo:
+            res = _migrate_photo(conn, r['id'], r['source_photo_url'], r['photo_url'])
+            if res == 'migrated':
+                migrated += 1
+            elif res == 'failed':
+                failed += 1
+        remaining = conn.execute(
+            "SELECT COUNT(*) AS c FROM pg_mentors "
+            " WHERE COALESCE(source_photo_url,'') <> '' "
+            "   AND COALESCE(photo_url,'') NOT LIKE ?", ('pg_mentors/%',)).fetchone()['c']
+        flash(f"Photos: {migrated} copied to R2, {failed} failed. {remaining} remaining"
+              + (" — click “Copy photos to R2” again to continue."
+                 if remaining else " — all done!"),
+              'success' if not failed else 'warning')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("mentors_migrate_photos: %s", e)
+        flash(f'Photo migration failed: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_mentors_admin'))
