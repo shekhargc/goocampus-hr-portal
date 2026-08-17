@@ -36965,12 +36965,21 @@ def sales_leads_add():
     ).fetchall()
     streams = conn.execute("SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name").fetchall()
     # Owner options = the sales visible set + Operations team, so an ops-referred
-    # lead/closure can be attributed to the ops member (founder 2026-08-14).
+    # lead/closure can be attributed to the ops member (founder 2026-08-14). Each
+    # owner is tagged with a `team` (Sales / Operations / Other) so the dropdown
+    # can group them.
     owner_ids = get_lead_owner_ids(user)
     if owner_ids:
         ph = ','.join(['?'] * len(owner_ids))
         owners = conn.execute(
-            f'SELECT id, name FROM employees WHERE id IN ({ph}) AND COALESCE(is_active,1) = 1 ORDER BY name',
+            "SELECT e.id, e.name, "
+            "  CASE WHEN st.employee_id IS NOT NULL THEN 'Sales' "
+            "       WHEN LOWER(COALESCE(e.department,'')) = 'operations' THEN 'Operations' "
+            "       ELSE 'Other' END AS team "
+            "  FROM employees e "
+            "  LEFT JOIN sales_team st ON st.employee_id = e.id AND COALESCE(st.is_active,1) = 1 "
+            f" WHERE e.id IN ({ph}) AND COALESCE(e.is_active,1) = 1 "
+            "  ORDER BY e.name",
             owner_ids
         ).fetchall()
     else:
@@ -37249,12 +37258,21 @@ def sales_leads_edit(lead_id):
     ).fetchall()
     streams = conn.execute("SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name").fetchall()
     # Owner options = the sales visible set + Operations team, so an ops-referred
-    # lead/closure can be attributed to the ops member (founder 2026-08-14).
+    # lead/closure can be attributed to the ops member (founder 2026-08-14). Each
+    # owner is tagged with a `team` (Sales / Operations / Other) so the dropdown
+    # can group them.
     owner_ids = get_lead_owner_ids(user)
     if owner_ids:
         ph = ','.join(['?'] * len(owner_ids))
         owners = conn.execute(
-            f'SELECT id, name FROM employees WHERE id IN ({ph}) AND COALESCE(is_active,1) = 1 ORDER BY name',
+            "SELECT e.id, e.name, "
+            "  CASE WHEN st.employee_id IS NOT NULL THEN 'Sales' "
+            "       WHEN LOWER(COALESCE(e.department,'')) = 'operations' THEN 'Operations' "
+            "       ELSE 'Other' END AS team "
+            "  FROM employees e "
+            "  LEFT JOIN sales_team st ON st.employee_id = e.id AND COALESCE(st.is_active,1) = 1 "
+            f" WHERE e.id IN ({ph}) AND COALESCE(e.is_active,1) = 1 "
+            "  ORDER BY e.name",
             owner_ids
         ).fetchall()
     else:
@@ -37797,12 +37815,21 @@ def sales_closures_edit(cid):
         "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
     ).fetchall()
     # Owner options = the sales visible set + Operations team, so an ops-referred
-    # lead/closure can be attributed to the ops member (founder 2026-08-14).
+    # lead/closure can be attributed to the ops member (founder 2026-08-14). Each
+    # owner is tagged with a `team` (Sales / Operations / Other) so the dropdown
+    # can group them.
     owner_ids = get_lead_owner_ids(user)
     if owner_ids:
         ph = ','.join(['?'] * len(owner_ids))
         owners = conn.execute(
-            f'SELECT id, name FROM employees WHERE id IN ({ph}) AND COALESCE(is_active,1) = 1 ORDER BY name',
+            "SELECT e.id, e.name, "
+            "  CASE WHEN st.employee_id IS NOT NULL THEN 'Sales' "
+            "       WHEN LOWER(COALESCE(e.department,'')) = 'operations' THEN 'Operations' "
+            "       ELSE 'Other' END AS team "
+            "  FROM employees e "
+            "  LEFT JOIN sales_team st ON st.employee_id = e.id AND COALESCE(st.is_active,1) = 1 "
+            f" WHERE e.id IN ({ph}) AND COALESCE(e.is_active,1) = 1 "
+            "  ORDER BY e.name",
             owner_ids
         ).fetchall()
     else:
