@@ -36894,19 +36894,26 @@ def sales_leads_add():
                         # counsellor" card + invite email reflect the generator,
                         # not the Owner field (which drives revenue) or whoever is
                         # logged in. Falls back to Owner, then the current user.
+                        # Counsellor = the lead's OWNER (the person who handles/refers
+                        # the client — Sales OR Operations). Falls back to the lead's
+                        # generator, then the current user. (founder 2026-08-14: an
+                        # ops-owned referral must show the ops member as counsellor, not
+                        # the admin who keyed it in.)
                         _counsellor_id = None
                         try:
-                            _gen = conn.execute("SELECT created_by FROM sales_leads WHERE id = ?",
-                                                (new_lead_id,)).fetchone()
-                            if _gen and _gen['created_by']:
-                                _counsellor_id = _gen['created_by']
-                        except Exception:
+                            _counsellor_id = int(request.form.get('owner_employee_id') or 0) or None
+                        except (TypeError, ValueError):
                             _counsellor_id = None
                         if not _counsellor_id:
                             try:
-                                _counsellor_id = int(request.form.get('owner_employee_id') or 0) or user['id']
-                            except (TypeError, ValueError):
-                                _counsellor_id = user['id']
+                                _gen = conn.execute("SELECT created_by FROM sales_leads WHERE id = ?",
+                                                    (new_lead_id,)).fetchone()
+                                if _gen and _gen['created_by']:
+                                    _counsellor_id = _gen['created_by']
+                            except Exception:
+                                _counsellor_id = None
+                        if not _counsellor_id:
+                            _counsellor_id = user['id']
                         token = _auto_invite_from_closure(
                             conn,
                             product_id=product_id,
