@@ -55,8 +55,16 @@
                     <label class="slf-lbl">Owner *</label>
                     {% if role == 'admin' %}
                     <select name="owner_employee_id" class="slf-inp" style="background:white;">
-                        {% for o in owners %}
-                        <option value="{{ o.id }}" {% if lead and lead.owner_employee_id == o.id %}selected{% elif not lead and o.id == user.id %}selected{% endif %}>{{ o.name }}</option>
+                        {# Group by team — Sales first, then Operations, then any Other (admin) #}
+                        {% for grp in ['Sales', 'Operations', 'Other'] %}
+                          {% set members = owners | selectattr('team', 'equalto', grp) | list %}
+                          {% if members %}
+                          <optgroup label="{{ grp }}">
+                            {% for o in members %}
+                            <option value="{{ o.id }}" {% if lead and lead.owner_employee_id == o.id %}selected{% elif not lead and o.id == user.id %}selected{% endif %}>{{ o.name }}</option>
+                            {% endfor %}
+                          </optgroup>
+                          {% endif %}
                         {% endfor %}
                     </select>
                     {% else %}

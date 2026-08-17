@@ -35593,6 +35593,34 @@ def get_visible_sales_employee_ids(user):
         return [user['id']]
 
 
+def get_operations_employee_ids():
+    """Active Operations-department employees — eligible as a lead Owner even
+    though they're not on the sales team, so an ops-referred lead can be
+    attributed to whoever brought/closed it (founder 2026-08-14)."""
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id FROM employees WHERE is_active = 1 "
+            "AND LOWER(COALESCE(department,'')) = 'operations'").fetchall()
+        conn.close()
+        return [r['id'] for r in rows]
+    except Exception as e:
+        logging.error(f"get_operations_employee_ids: {e}")
+        return []
+
+
+def get_lead_owner_ids(user):
+    """Employee ids that can OWN a lead (and whose leads show on the Sales board):
+    the user's visible SALES set + all active Operations employees. Lets an
+    ops-referred lead be attributed to the ops member who brought/closed it,
+    while keeping that lead visible on the board (founder 2026-08-14)."""
+    ids = list(get_visible_sales_employee_ids(user))
+    for oid in get_operations_employee_ids():
+        if oid not in ids:
+            ids.append(oid)
+    return ids
+
+
 def sales_crm_required(f):
     """Decorator: sales module access AND a sales role (admin/viewer/manager/rep)."""
     @wraps(f)
@@ -36498,7 +36526,9 @@ def sales_inquiry_convert(inq_id):
 def sales_leads_list():
     user = get_user()
     role = get_sales_role(user)
-    visible_ids = get_visible_sales_employee_ids(user)
+    # Sales visible set + Operations team, so ops-referred leads (owned by an ops
+    # member) stay on the board and ops names appear in the Owner filter.
+    visible_ids = get_lead_owner_ids(user)
     if not visible_ids:
         return render_template('sales_leads.html', user=user, leads=[], stages=[], owners=[], role=role,
                     reg_status_meta=REG_STATUS_META, reg_status_order=REG_STATUS_ORDER, reg_counts={},
@@ -36934,11 +36964,23 @@ def sales_leads_add():
         "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
     ).fetchall()
     streams = conn.execute("SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name").fetchall()
-    if visible_ids:
-        ph = ','.join(['?'] * len(visible_ids))
+    # Owner options = the sales visible set + Operations team, so an ops-referred
+    # lead/closure can be attributed to the ops member (founder 2026-08-14). Each
+    # owner is tagged with a `team` (Sales / Operations / Other) so the dropdown
+    # can group them.
+    owner_ids = get_lead_owner_ids(user)
+    if owner_ids:
+        ph = ','.join(['?'] * len(owner_ids))
         owners = conn.execute(
-            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
-            visible_ids
+            "SELECT e.id, e.name, "
+            "  CASE WHEN st.employee_id IS NOT NULL THEN 'Sales' "
+            "       WHEN LOWER(COALESCE(e.department,'')) = 'operations' THEN 'Operations' "
+            "       ELSE 'Other' END AS team "
+            "  FROM employees e "
+            "  LEFT JOIN sales_team st ON st.employee_id = e.id AND COALESCE(st.is_active,1) = 1 "
+            f" WHERE e.id IN ({ph}) AND COALESCE(e.is_active,1) = 1 "
+            "  ORDER BY e.name",
+            owner_ids
         ).fetchall()
     else:
         owners = []
@@ -37215,11 +37257,23 @@ def sales_leads_edit(lead_id):
         "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
     ).fetchall()
     streams = conn.execute("SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name").fetchall()
-    if visible_ids:
-        ph = ','.join(['?'] * len(visible_ids))
+    # Owner options = the sales visible set + Operations team, so an ops-referred
+    # lead/closure can be attributed to the ops member (founder 2026-08-14). Each
+    # owner is tagged with a `team` (Sales / Operations / Other) so the dropdown
+    # can group them.
+    owner_ids = get_lead_owner_ids(user)
+    if owner_ids:
+        ph = ','.join(['?'] * len(owner_ids))
         owners = conn.execute(
-            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
-            visible_ids
+            "SELECT e.id, e.name, "
+            "  CASE WHEN st.employee_id IS NOT NULL THEN 'Sales' "
+            "       WHEN LOWER(COALESCE(e.department,'')) = 'operations' THEN 'Operations' "
+            "       ELSE 'Other' END AS team "
+            "  FROM employees e "
+            "  LEFT JOIN sales_team st ON st.employee_id = e.id AND COALESCE(st.is_active,1) = 1 "
+            f" WHERE e.id IN ({ph}) AND COALESCE(e.is_active,1) = 1 "
+            "  ORDER BY e.name",
+            owner_ids
         ).fetchall()
     else:
         owners = []
@@ -37760,11 +37814,23 @@ def sales_closures_edit(cid):
     products = conn.execute(
         "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
     ).fetchall()
-    if visible_ids:
-        ph = ','.join(['?'] * len(visible_ids))
+    # Owner options = the sales visible set + Operations team, so an ops-referred
+    # lead/closure can be attributed to the ops member (founder 2026-08-14). Each
+    # owner is tagged with a `team` (Sales / Operations / Other) so the dropdown
+    # can group them.
+    owner_ids = get_lead_owner_ids(user)
+    if owner_ids:
+        ph = ','.join(['?'] * len(owner_ids))
         owners = conn.execute(
-            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
-            visible_ids
+            "SELECT e.id, e.name, "
+            "  CASE WHEN st.employee_id IS NOT NULL THEN 'Sales' "
+            "       WHEN LOWER(COALESCE(e.department,'')) = 'operations' THEN 'Operations' "
+            "       ELSE 'Other' END AS team "
+            "  FROM employees e "
+            "  LEFT JOIN sales_team st ON st.employee_id = e.id AND COALESCE(st.is_active,1) = 1 "
+            f" WHERE e.id IN ({ph}) AND COALESCE(e.is_active,1) = 1 "
+            "  ORDER BY e.name",
+            owner_ids
         ).fetchall()
     else:
         owners = []
