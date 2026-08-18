@@ -2829,7 +2829,8 @@ def admin_consulting_product_backfill():
         # clients sit in the Consulting list (founder 2026-08-14).
         prods = [dict(r) for r in conn.execute(
             "SELECT id, name FROM products_services "
-            " WHERE COALESCE(pathway,'') = 'consulting' OR LOWER(COALESCE(name,'')) LIKE '%consulting%'").fetchall()]
+            " WHERE COALESCE(pathway,'') = 'consulting' OR LOWER(COALESCE(name,'')) LIKE ?",
+            ('%consulting%',)).fetchall()]
         name_map = {(p['name'] or '').strip().lower(): (p['id'], p['name']) for p in prods}
         # keyword per product: 'AMC Consulting' -> 'amc', 'UK Consulting' -> 'uk'
         kw_list = []
@@ -2842,7 +2843,8 @@ def admin_consulting_product_backfill():
             for r in conn.execute(
                 "SELECT DISTINCT LOWER(TRIM(pp.plan_type)) AS pt, pp.product_id, ps.name "
                 "  FROM plan_packages pp JOIN products_services ps ON ps.id = pp.product_id "
-                " WHERE COALESCE(ps.pathway,'') = 'consulting' OR LOWER(COALESCE(ps.name,'')) LIKE '%consulting%'").fetchall():
+                " WHERE COALESCE(ps.pathway,'') = 'consulting' OR LOWER(COALESCE(ps.name,'')) LIKE ?",
+                ('%consulting%',)).fetchall():
                 if r['pt']:
                     pt_map.setdefault(r['pt'], (r['product_id'], r['name']))
         except Exception:
