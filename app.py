@@ -3028,11 +3028,11 @@ def admin_consulting_counsellor_sync():
             n = 0
             for c in matched:
                 conn.execute(
-                    "UPDATE plab_clients SET counsellor = ?, counsellor_id = ?, counsellor_name = ?, "
+                    "UPDATE plab_clients SET counsellor = ?, counsellor_id = ?, "
                     "  counsellor_email = COALESCE(NULLIF(counsellor_email,''), ?), "
                     "  counsellor_number = COALESCE(NULLIF(counsellor_number,''), ?), "
                     "  updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (c['_new'], c['_oid'], c['_new'], c['_email'], c['_phone'], c['id']))
+                    (c['_new'], c['_oid'], c['_email'], c['_phone'], c['id']))
                 n += 1
             conn.commit()
             flash(f'Set the counsellor from the lead owner for {n} client(s).', 'success')
