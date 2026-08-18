@@ -2844,6 +2844,26 @@ def admin_consulting_product_backfill():
         except Exception:
             pass
 
+        # Country/plan-type alias -> product (founder 2026-08-14): the plan_type names
+        # the country ("Australia CSS", "UK CSS"…) while the product is named by council
+        # ("AMC Consulting" = Australia, "UK Consulting"…). Map both to a common code.
+        def _code(t):
+            t = (t or '').lower()
+            if 'amc' in t or 'australia' in t or 'austrail' in t:
+                return 'amc'
+            if 'uae' in t:
+                return 'uae'
+            if 'usa' in t or 'usmle' in t:
+                return 'usa'
+            if 'uk' in t or 'plab' in t:
+                return 'uk'
+            return None
+        code_map = {}
+        for p in prods:
+            c = _code(p['name'])
+            if c:
+                code_map.setdefault(c, (p['id'], p['name']))
+
         def _resolve(plan_type):
             pt = (plan_type or '').strip().lower()
             if not pt:
@@ -2852,6 +2872,9 @@ def admin_consulting_product_backfill():
                 return name_map[pt]
             if pt in pt_map:
                 return pt_map[pt]
+            c = _code(pt)
+            if c and c in code_map:
+                return code_map[c]
             for kw, pid, nm in kw_list:
                 if kw and kw in pt:
                     return (pid, nm)
