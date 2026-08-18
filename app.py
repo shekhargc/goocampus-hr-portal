@@ -2857,15 +2857,36 @@ def admin_consulting_product_backfill():
                     return (pid, nm)
             return None
 
+        # Primary source = the EXACT product on the client's registration record
+        # (set by the new lead/registration flow). Only fall back to guessing from
+        # plan_type for genuinely old Zoho records with no registration product.
         rows = [dict(r) for r in conn.execute(
-            "SELECT id, registration_number, prefix, first_name, last_name, plan_type "
-            "  FROM plab_clients WHERE COALESCE(pathway,'plab') = 'consulting' AND product_id IS NULL "
-            " ORDER BY id DESC").fetchall()]
+            "SELECT pc.id, pc.registration_number, pc.prefix, pc.first_name, pc.last_name, pc.plan_type, "
+            "  (SELECT cr.product_id FROM client_registrations cr "
+            "     WHERE UPPER(TRIM(cr.registration_number)) = UPPER(TRIM(pc.registration_number)) "
+            "       AND cr.product_id IS NOT NULL ORDER BY cr.id DESC LIMIT 1) AS reg_product_id "
+            "  FROM plab_clients pc "
+            " WHERE COALESCE(pc.pathway,'plab') = 'consulting' AND pc.product_id IS NULL "
+            " ORDER BY pc.id DESC").fetchall()]
+        _pname_cache = {p['id']: p['name'] for p in prods}
+
+        def _pname(pid):
+            if pid in _pname_cache:
+                return _pname_cache[pid]
+            row = conn.execute("SELECT name FROM products_services WHERE id = ?", (pid,)).fetchone()
+            _pname_cache[pid] = (row['name'] if row else '')
+            return _pname_cache[pid]
+
         matched, unmatched = [], []
         for r in rows:
+            rpid = r.get('reg_product_id')
+            if rpid:
+                r['pid'], r['pname'], r['src'] = rpid, _pname(rpid), 'registration'
+                matched.append(r)
+                continue
             res = _resolve(r.get('plan_type'))
             if res:
-                r['pid'], r['pname'] = res[0], res[1]
+                r['pid'], r['pname'], r['src'] = res[0], res[1], 'plan type'
                 matched.append(r)
             else:
                 unmatched.append(r)
@@ -2889,8 +2910,9 @@ def admin_consulting_product_backfill():
             f"<tr><td>{_esc(r['registration_number'])}</td>"
             f"<td>{_esc(((r.get('first_name') or '') + ' ' + (r.get('last_name') or '')).strip())}</td>"
             f"<td>{_esc(r.get('plan_type'))}</td>"
-            f"<td style='font-weight:600;color:#0f766e;'>&rarr; {_esc(r['pname'])}</td></tr>"
-            for r in matched[:500])
+            f"<td style='font-weight:600;color:#0f766e;'>&rarr; {_esc(r['pname'])}</td>"
+            f"<td style='font-size:0.76rem;color:#888;'>{_esc(r.get('src'))}</td></tr>"
+            for r in matched[:600])
         un_html = ''.join(
             f"<tr><td>{_esc(r['registration_number'])}</td>"
             f"<td>{_esc(((r.get('first_name') or '') + ' ' + (r.get('last_name') or '')).strip())}</td>"
@@ -2912,8 +2934,8 @@ def admin_consulting_product_backfill():
   {'<form method=post><input type=hidden name=apply value=1><button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply &mdash; link ' + str(len(matched)) + ' clients</button></form>' if matched else ''}
   <h3 style="color:#2952A3;margin-top:22px;">Will be linked ({len(matched)})</h3>
   <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
-    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Reg. No.</th><th>Name</th><th>Plan type</th><th>Product</th></tr></thead>
-    <tbody>{rows_html or '<tr><td colspan=4 style=color:#888;>None.</td></tr>'}</tbody>
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Reg. No.</th><th>Name</th><th>Plan type</th><th>Product</th><th>Via</th></tr></thead>
+    <tbody>{rows_html or '<tr><td colspan=5 style=color:#888;>None.</td></tr>'}</tbody>
   </table>
   <h3 style="color:#b91c1c;margin-top:22px;">Couldn't match ({len(unmatched)})</h3>
   <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
