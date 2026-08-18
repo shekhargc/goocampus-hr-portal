@@ -145,7 +145,27 @@
     </div>
 </div>
 
+<!-- Product tabs: filter the list by product (AMC / UK / USA / UAE Consulting …) -->
+{% if products %}
+<style>
+  .prod-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
+  .prod-tab { text-decoration:none; padding:0.45rem 0.95rem; border-radius:999px; font-size:0.85rem;
+              font-weight:600; color:var(--gray-600); background:var(--gray-100);
+              border:1px solid var(--gray-200); white-space:nowrap; }
+  .prod-tab.on { background:var(--orange); color:#fff; border-color:var(--orange); }
+  .prod-tab .pt-count { display:inline-block; margin-left:5px; background:rgba(0,0,0,0.12);
+              border-radius:999px; padding:0 7px; font-size:0.75rem; }
+</style>
+<div class="prod-tabs">
+  <a href="{{ url_for('ops_consulting_clients_list') }}" class="prod-tab {% if not product_filter %}on{% endif %}">All <span class="pt-count">{{ all_count }}</span></a>
+  {% for p in products %}
+  <a href="{{ url_for('ops_consulting_clients_list', product=p.id) }}" class="prod-tab {% if product_filter == p.id|string %}on{% endif %}">{{ p.name }} <span class="pt-count">{{ p.cnt }}</span></a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <form class="filter-bar" method="get" action="{{ url_for('ops_consulting_clients_list') }}">
+    {% if product_filter %}<input type="hidden" name="product" value="{{ product_filter }}">{% endif %}
     <div class="autocomplete-wrap">
         <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search name, reg no, mobile, email…" autocomplete="off" data-pathway="consulting">
         <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
@@ -182,6 +202,7 @@
                 <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
+                <th>Product</th>
                 <th>Mobile</th>
                 <th>City / State</th>
                 <th>Status</th>
@@ -202,6 +223,7 @@
                     {{ ((r.first_name or '') ~ ' ' ~ (r.last_name or '')) | dr_name }}
                     {% if r.email %}<div style="font-size:0.74rem;color:var(--gray-500)">{{ r.email }}</div>{% endif %}
                 </td>
+                <td>{% if r.product_name %}<span style="font-size:0.8rem;color:var(--navy);font-weight:600;">{{ r.product_name }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
                 <td>{{ r.mobile or r.whatsapp1 or '—' }}</td>
                 <td>
                     {% if r.city or r.state %}
