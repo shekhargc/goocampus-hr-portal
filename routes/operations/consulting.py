@@ -279,12 +279,15 @@ def ops_consulting_clients_list():
     status_filter = (request.args.get('status', '') or '').strip()
     stage_filter = (request.args.get('stage', '') or '').strip()
     counsellor_filter = (request.args.get('counsellor', '') or '').strip()
+    product_filter = (request.args.get('product', '') or '').strip()
 
     records = []
     total = 0
     statuses = []
     stages = []
     counsellors = []
+    products = []          # product tabs (AMC / UK / USA / UAE Consulting …) + counts
+    all_count = 0          # total consulting clients (for the "All" tab)
 
     try:
         where = ["COALESCE(pathway, 'plab') = 'consulting'"]
@@ -306,6 +309,9 @@ def ops_consulting_clients_list():
         if counsellor_filter:
             where.append("counsellor = ?")
             params.append(counsellor_filter)
+        if product_filter and product_filter.isdigit():
+            where.append("product_id = ?")
+            params.append(int(product_filter))
         where_sql = " AND ".join(where)
 
         total = conn.execute(
@@ -314,7 +320,9 @@ def ops_consulting_clients_list():
         ).fetchone()['c']
 
         records = [dict(r) for r in conn.execute(
-            f"""SELECT * FROM plab_clients
+            f"""SELECT *,
+                    (SELECT name FROM products_services ps WHERE ps.id = plab_clients.product_id) AS product_name
+                  FROM plab_clients
                  WHERE {where_sql}
                  ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''), '[^0-9]', '', 'g'), '')::bigint DESC NULLS LAST, id DESC""",
             params,
@@ -356,6 +364,17 @@ def ops_consulting_clients_list():
                     ORDER BY counsellor"""
             ).fetchall()
         ]
+        # Product tabs (AMC / UK / USA / UAE Consulting …) with per-product counts,
+        # built from the products consulting clients actually have (founder 2026-08-14).
+        products = [dict(r) for r in conn.execute(
+            "SELECT ps.id, ps.name, COUNT(pc.id) AS cnt "
+            "  FROM plab_clients pc JOIN products_services ps ON ps.id = pc.product_id "
+            " WHERE COALESCE(pc.pathway,'plab') = 'consulting' "
+            " GROUP BY ps.id, ps.name ORDER BY ps.name"
+        ).fetchall()]
+        all_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM plab_clients WHERE COALESCE(pathway,'plab') = 'consulting'"
+        ).fetchone()['c']
     except Exception as e:
         logging.error(f"ops_consulting_clients_list: {e}")
         flash(f'Error loading clients list: {e}', 'error')
@@ -374,6 +393,9 @@ def ops_consulting_clients_list():
         statuses=statuses,
         stages=stages,
         counsellors=counsellors,
+        products=products,
+        product_filter=product_filter,
+        all_count=all_count,
         active_ops_page='consulting-clients',
         active_pathway='consulting',
     )

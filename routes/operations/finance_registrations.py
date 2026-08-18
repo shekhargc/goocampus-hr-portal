@@ -47,9 +47,11 @@ def _parse_date_loose(s):
 
 
 def _full_name(r):
-    return ' '.join(p for p in [(r.get('prefix') or '').strip(),
-                                (r.get('first_name') or '').strip(),
-                                (r.get('last_name') or '').strip()] if p).strip()
+    from core.helpers import format_dr_name
+    raw = ' '.join(p for p in [(r.get('prefix') or '').strip(),
+                               (r.get('first_name') or '').strip(),
+                               (r.get('last_name') or '').strip()] if p).strip()
+    return format_dr_name(raw)
 
 
 def _reg_key(reg):
@@ -72,7 +74,11 @@ def _fetch_finance_rows(conn, f_pathway, f_from, f_to, q):
         recs = [dict(r) for r in conn.execute(
             "SELECT id, registration_number, registration_date, prefix, first_name, last_name, "
             "mobile, whatsapp1, email, city, state, COALESCE(pathway,'plab') AS pathway, "
-            "counsellor, account_status, final_package "
+            # Resolve the counsellor from the best available source so ops-team
+            # counsellors show too (founder 2026-08-14).
+            "COALESCE(NULLIF(TRIM(counsellor),''), NULLIF(TRIM(counsellor_name),''), "
+            "  (SELECT e.name FROM employees e WHERE e.id = plab_clients.counsellor_id)) AS counsellor, "
+            "account_status, final_package "
             f"FROM plab_clients WHERE {' AND '.join(where)}", params).fetchall()]
         # total paid per registration (SUM of GST-inclusive totals)
         paid_map = {}

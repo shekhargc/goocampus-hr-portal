@@ -2809,6 +2809,181 @@ def ops_client_address_save(client_id):
     return redirect((request.referrer or url_for('dashboard')) + '#address')
 
 
+@app.route('/admin/consulting/product-backfill', methods=['GET', 'POST'])
+@login_required
+def admin_consulting_product_backfill():
+    """Preview + backfill the product link for OLD Standard Consulting clients whose
+    product_id is empty (mostly Zoho-imported). Resolves the product from the client's
+    plan_type -> the CURRENT product (by product name, plan_packages plan_type, or a
+    product keyword like AMC/UK/USA/UAE). Setting product_id syncs the product name
+    everywhere it's derived (list tabs, finance, reports/downloads). Preview first;
+    only the explicit Apply writes. Admin only. (founder 2026-08-14)"""
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        # All the "… Consulting" products — NOT just pathway='consulting', because
+        # AMC Consulting is tagged under the Australia/AMC pathway even though its
+        # clients sit in the Consulting list (founder 2026-08-14).
+        prods = [dict(r) for r in conn.execute(
+            "SELECT id, name FROM products_services "
+            " WHERE COALESCE(pathway,'') = 'consulting' OR LOWER(COALESCE(name,'')) LIKE ?",
+            ('%consulting%',)).fetchall()]
+        name_map = {(p['name'] or '').strip().lower(): (p['id'], p['name']) for p in prods}
+        # keyword per product: 'AMC Consulting' -> 'amc', 'UK Consulting' -> 'uk'
+        kw_list = []
+        for p in prods:
+            kw = (p['name'] or '').lower().replace('consulting', '').replace('standard', '').strip()
+            if kw:
+                kw_list.append((kw, p['id'], p['name']))
+        pt_map = {}
+        try:
+            for r in conn.execute(
+                "SELECT DISTINCT LOWER(TRIM(pp.plan_type)) AS pt, pp.product_id, ps.name "
+                "  FROM plan_packages pp JOIN products_services ps ON ps.id = pp.product_id "
+                " WHERE COALESCE(ps.pathway,'') = 'consulting' OR LOWER(COALESCE(ps.name,'')) LIKE ?",
+                ('%consulting%',)).fetchall():
+                if r['pt']:
+                    pt_map.setdefault(r['pt'], (r['product_id'], r['name']))
+        except Exception:
+            pass
+
+        # Country/plan-type alias -> product (founder 2026-08-14): the plan_type names
+        # the country ("Australia CSS", "UK CSS"…) while the product is named by council
+        # ("AMC Consulting" = Australia, "UK Consulting"…). Map both to a common code.
+        def _code(t):
+            t = (t or '').lower()
+            if 'amc' in t or 'australia' in t or 'austrail' in t:
+                return 'amc'
+            if 'uae' in t:
+                return 'uae'
+            if 'usa' in t or 'usmle' in t:
+                return 'usa'
+            if 'uk' in t or 'plab' in t:
+                return 'uk'
+            return None
+        code_map = {}
+        for p in prods:
+            c = _code(p['name'])
+            if c:
+                code_map.setdefault(c, (p['id'], p['name']))
+
+        def _resolve(plan_type):
+            pt = (plan_type or '').strip().lower()
+            if not pt:
+                return None
+            if pt in name_map:
+                return name_map[pt]
+            if pt in pt_map:
+                return pt_map[pt]
+            c = _code(pt)
+            if c and c in code_map:
+                return code_map[c]
+            for kw, pid, nm in kw_list:
+                if kw and kw in pt:
+                    return (pid, nm)
+            return None
+
+        # Primary source = the EXACT product on the client's registration record
+        # (set by the new lead/registration flow). Only fall back to guessing from
+        # plan_type for genuinely old Zoho records with no registration product.
+        rows = [dict(r) for r in conn.execute(
+            "SELECT pc.id, pc.registration_number, pc.prefix, pc.first_name, pc.last_name, pc.plan_type, "
+            "  (SELECT cr.product_id FROM client_registrations cr "
+            "     WHERE UPPER(TRIM(cr.registration_number)) = UPPER(TRIM(pc.registration_number)) "
+            "       AND cr.product_id IS NOT NULL ORDER BY cr.id DESC LIMIT 1) AS reg_product_id "
+            "  FROM plab_clients pc "
+            " WHERE COALESCE(pc.pathway,'plab') = 'consulting' AND pc.product_id IS NULL "
+            " ORDER BY pc.id DESC").fetchall()]
+        _pname_cache = {p['id']: p['name'] for p in prods}
+
+        def _pname(pid):
+            if pid in _pname_cache:
+                return _pname_cache[pid]
+            row = conn.execute("SELECT name FROM products_services WHERE id = ?", (pid,)).fetchone()
+            _pname_cache[pid] = (row['name'] if row else '')
+            return _pname_cache[pid]
+
+        matched, unmatched = [], []
+        for r in rows:
+            rpid = r.get('reg_product_id')
+            if rpid:
+                r['pid'], r['pname'], r['src'] = rpid, _pname(rpid), 'registration'
+                matched.append(r)
+                continue
+            res = _resolve(r.get('plan_type'))
+            if res:
+                r['pid'], r['pname'], r['src'] = res[0], res[1], 'plan type'
+                matched.append(r)
+            else:
+                unmatched.append(r)
+
+        if request.method == 'POST' and request.form.get('apply') == '1':
+            n = 0
+            for r in matched:
+                conn.execute("UPDATE plab_clients SET product_id = ?, updated_at = CURRENT_TIMESTAMP "
+                             "WHERE id = ? AND product_id IS NULL", (r['pid'], r['id']))
+                n += 1
+            conn.commit()
+            flash(f'Linked {n} Standard Consulting client(s) to their product. '
+                  f'{len(unmatched)} could not be matched (blank/unknown plan type) — set those manually.',
+                  'success')
+            return redirect(url_for('admin_consulting_product_backfill'))
+
+        from collections import Counter
+        by_prod = Counter(r['pname'] for r in matched)
+        def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        rows_html = ''.join(
+            f"<tr><td>{_esc(r['registration_number'])}</td>"
+            f"<td>{_esc(((r.get('first_name') or '') + ' ' + (r.get('last_name') or '')).strip())}</td>"
+            f"<td>{_esc(r.get('plan_type'))}</td>"
+            f"<td style='font-weight:600;color:#0f766e;'>&rarr; {_esc(r['pname'])}</td>"
+            f"<td style='font-size:0.76rem;color:#888;'>{_esc(r.get('src'))}</td></tr>"
+            for r in matched[:600])
+        un_html = ''.join(
+            f"<tr><td>{_esc(r['registration_number'])}</td>"
+            f"<td>{_esc(((r.get('first_name') or '') + ' ' + (r.get('last_name') or '')).strip())}</td>"
+            f"<td>{_esc(r.get('plan_type')) or '<span style=color:#b91c1c>(blank)</span>'}</td>"
+            f"<td style='color:#b91c1c;'>&mdash; no match</td></tr>"
+            for r in unmatched[:500])
+        summary = ' &middot; '.join(f"{_esc(k)}: <b>{v}</b>" for k, v in sorted(by_prod.items()))
+        html = f"""<!doctype html><meta charset=utf-8><title>Consulting product backfill</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('ops_consulting_clients_list')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to Consulting clients</a></p>
+  <h2 style="color:#2952A3;">Fill missing product for Standard Consulting clients</h2>
+  <p style="color:#555;">These clients have no product link (mostly older/imported records). Their product is
+  worked out from their <b>plan type</b> and matched to your current product names. Review below, then Apply.
+  Setting the product link makes the product show in the list tabs, finance and reports automatically.</p>
+  <div style="background:#F0FDF4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin:14px 0;">
+    <b>{len(matched)}</b> will be linked &nbsp;|&nbsp; <b>{len(unmatched)}</b> can't be matched (set manually)<br>
+    <span style="font-size:0.9rem;color:#555;">{summary or 'None matched.'}</span>
+  </div>
+  {'<form method=post><input type=hidden name=apply value=1><button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply &mdash; link ' + str(len(matched)) + ' clients</button></form>' if matched else ''}
+  <h3 style="color:#2952A3;margin-top:22px;">Will be linked ({len(matched)})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Reg. No.</th><th>Name</th><th>Plan type</th><th>Product</th><th>Via</th></tr></thead>
+    <tbody>{rows_html or '<tr><td colspan=5 style=color:#888;>None.</td></tr>'}</tbody>
+  </table>
+  <h3 style="color:#b91c1c;margin-top:22px;">Couldn't match ({len(unmatched)})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Reg. No.</th><th>Name</th><th>Plan type</th><th></th></tr></thead>
+    <tbody>{un_html or '<tr><td colspan=4 style=color:#888;>None &mdash; everything matched.</td></tr>'}</tbody>
+  </table>
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_consulting_product_backfill: %s", e)
+        flash(f'Product backfill error: {e}', 'error')
+        return redirect(url_for('ops_consulting_clients_list'))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _sync_client_academics_to_ops(conn, reg_id):
     """Push a client's academic edits into the ops-side record so every pathway's
     Academic Details page reflects what the client entered. The client OWNS these
@@ -36894,19 +37069,26 @@ def sales_leads_add():
                         # counsellor" card + invite email reflect the generator,
                         # not the Owner field (which drives revenue) or whoever is
                         # logged in. Falls back to Owner, then the current user.
+                        # Counsellor = the lead's OWNER (the person who handles/refers
+                        # the client — Sales OR Operations). Falls back to the lead's
+                        # generator, then the current user. (founder 2026-08-14: an
+                        # ops-owned referral must show the ops member as counsellor, not
+                        # the admin who keyed it in.)
                         _counsellor_id = None
                         try:
-                            _gen = conn.execute("SELECT created_by FROM sales_leads WHERE id = ?",
-                                                (new_lead_id,)).fetchone()
-                            if _gen and _gen['created_by']:
-                                _counsellor_id = _gen['created_by']
-                        except Exception:
+                            _counsellor_id = int(request.form.get('owner_employee_id') or 0) or None
+                        except (TypeError, ValueError):
                             _counsellor_id = None
                         if not _counsellor_id:
                             try:
-                                _counsellor_id = int(request.form.get('owner_employee_id') or 0) or user['id']
-                            except (TypeError, ValueError):
-                                _counsellor_id = user['id']
+                                _gen = conn.execute("SELECT created_by FROM sales_leads WHERE id = ?",
+                                                    (new_lead_id,)).fetchone()
+                                if _gen and _gen['created_by']:
+                                    _counsellor_id = _gen['created_by']
+                            except Exception:
+                                _counsellor_id = None
+                        if not _counsellor_id:
+                            _counsellor_id = user['id']
                         token = _auto_invite_from_closure(
                             conn,
                             product_id=product_id,
