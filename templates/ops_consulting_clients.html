@@ -162,6 +162,9 @@
   <a href="{{ url_for('ops_consulting_clients_list', product=p.id) }}" class="prod-tab {% if product_filter == p.id|string %}on{% endif %}">{{ p.name }} <span class="pt-count">{{ p.cnt }}</span></a>
   {% endfor %}
 </div>
+{% if user and user.is_admin %}
+<div style="margin:-8px 0 14px;"><a href="{{ url_for('admin_consulting_product_backfill') }}" style="font-size:0.8rem;color:var(--gray-500);text-decoration:none;">&#9881; Fill missing products for older clients&hellip;</a></div>
+{% endif %}
 {% endif %}
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_consulting_clients_list') }}">
