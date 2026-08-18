@@ -2984,6 +2984,95 @@ def admin_consulting_product_backfill():
         except Exception: pass
 
 
+@app.route('/admin/consulting/counsellor-sync', methods=['GET', 'POST'])
+@login_required
+def admin_consulting_counsellor_sync():
+    """Preview + sync the counsellor from the lead OWNER for Standard Consulting
+    clients whose counsellor is blank or 'admin'. Matches the client to their sales
+    lead by phone and takes the lead's owner (sales OR ops). Preview first; only Apply
+    writes. Admin only. (founder 2026-08-18)"""
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        owner_by_phone = {}
+        for r in conn.execute(
+            "SELECT RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) AS ph, owner_employee_id "
+            "  FROM sales_leads WHERE owner_employee_id IS NOT NULL ORDER BY id ASC").fetchall():
+            if r['ph'] and len(r['ph']) == 10:
+                owner_by_phone[r['ph']] = r['owner_employee_id']   # latest lead wins
+        emps = {r['id']: dict(r) for r in conn.execute(
+            "SELECT id, name, email, phone FROM employees").fetchall()}
+        clients = [dict(r) for r in conn.execute(
+            "SELECT id, registration_number, prefix, first_name, last_name, mobile, counsellor "
+            "  FROM plab_clients WHERE COALESCE(pathway,'plab') = 'consulting' "
+            " ORDER BY id DESC").fetchall()]
+        matched = []
+        for c in clients:
+            cur = (c.get('counsellor') or '').strip()
+            if cur and cur.lower() != 'admin':
+                continue   # already has a real counsellor — leave it
+            ph = re.sub(r'\D', '', str(c.get('mobile') or ''))[-10:]
+            oid = owner_by_phone.get(ph) if len(ph) == 10 else None
+            e = emps.get(oid) if oid else None
+            if e and (e.get('name') or '').strip():
+                c['_new'] = e['name']
+                c['_oid'] = oid
+                c['_email'] = e.get('email') or ''
+                c['_phone'] = e.get('phone') or ''
+                matched.append(c)
+
+        if request.method == 'POST' and request.form.get('apply') == '1':
+            n = 0
+            for c in matched:
+                conn.execute(
+                    "UPDATE plab_clients SET counsellor = ?, counsellor_id = ?, counsellor_name = ?, "
+                    "  counsellor_email = COALESCE(NULLIF(counsellor_email,''), ?), "
+                    "  counsellor_number = COALESCE(NULLIF(counsellor_number,''), ?), "
+                    "  updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (c['_new'], c['_oid'], c['_new'], c['_email'], c['_phone'], c['id']))
+                n += 1
+            conn.commit()
+            flash(f'Set the counsellor from the lead owner for {n} client(s).', 'success')
+            return redirect(url_for('admin_consulting_counsellor_sync'))
+
+        def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        rows_html = ''.join(
+            f"<tr><td>{_esc(c['registration_number'])}</td>"
+            f"<td>{_esc(((c.get('first_name') or '') + ' ' + (c.get('last_name') or '')).strip())}</td>"
+            f"<td style='color:#b91c1c;'>{_esc(c.get('counsellor')) or '(blank)'}</td>"
+            f"<td style='font-weight:600;color:#0f766e;'>&rarr; {_esc(c['_new'])}</td></tr>"
+            for c in matched[:800])
+        html = f"""<!doctype html><meta charset=utf-8><title>Consulting counsellor sync</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:960px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('ops_consulting_clients_list')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to Consulting clients</a></p>
+  <h2 style="color:#2952A3;">Fix counsellor from the lead owner</h2>
+  <p style="color:#555;">Standard Consulting clients whose counsellor is <b>blank or "admin"</b> are matched to their
+  sales lead (by phone) and set to that lead's <b>owner</b> (sales or operations). Clients who already have a
+  real counsellor are left alone. Review, then Apply.</p>
+  <div style="background:#F0FDF4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin:14px 0;">
+    <b>{len(matched)}</b> client(s) will get their counsellor set from the lead owner.
+  </div>
+  {'<form method=post><input type=hidden name=apply value=1><button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply &mdash; fix ' + str(len(matched)) + ' counsellors</button></form>' if matched else '<p style=color:#888;>Nothing to fix &mdash; every consulting client already has a counsellor, or no matching lead owner was found.</p>'}
+  <table style="width:100%;border-collapse:collapse;font-size:0.86rem;margin-top:18px;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Reg. No.</th><th>Name</th><th>Current counsellor</th><th>New (lead owner)</th></tr></thead>
+    <tbody>{rows_html or '<tr><td colspan=4 style=color:#888;>None.</td></tr>'}</tbody>
+  </table>
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_consulting_counsellor_sync: %s", e)
+        flash(f'Counsellor sync error: {e}', 'error')
+        return redirect(url_for('ops_consulting_clients_list'))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _sync_client_academics_to_ops(conn, reg_id):
     """Push a client's academic edits into the ops-side record so every pathway's
     Academic Details page reflects what the client entered. The client OWNS these
@@ -9056,12 +9145,14 @@ def _resolve_counsellor_for_reg(conn, reg):
         if len(phone) == 10:
             try:
                 lead = conn.execute(
-                    "SELECT created_by FROM sales_leads "
+                    "SELECT owner_employee_id, created_by FROM sales_leads "
                     "WHERE RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) = ? "
-                    "AND created_by IS NOT NULL ORDER BY id DESC LIMIT 1",
+                    "AND (owner_employee_id IS NOT NULL OR created_by IS NOT NULL) ORDER BY id DESC LIMIT 1",
                     (phone,)).fetchone()
-                if lead and lead['created_by']:
-                    emp_id = lead['created_by']
+                if lead:
+                    # Prefer the lead's OWNER (the sales/ops member who handles it) over
+                    # created_by (often the admin who keyed it) — founder 2026-08-18.
+                    emp_id = lead['owner_employee_id'] or lead['created_by']
             except Exception:
                 pass
     if emp_id:

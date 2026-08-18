@@ -163,7 +163,11 @@
   {% endfor %}
 </div>
 {% if user and user.is_admin %}
-<div style="margin:-8px 0 14px;"><a href="{{ url_for('admin_consulting_product_backfill') }}" style="font-size:0.8rem;color:var(--gray-500);text-decoration:none;">&#9881; Fill missing products for older clients&hellip;</a></div>
+<div style="margin:-8px 0 14px;font-size:0.8rem;color:var(--gray-500);">
+  <a href="{{ url_for('admin_consulting_product_backfill') }}" style="color:var(--gray-500);text-decoration:none;">&#9881; Fill missing products&hellip;</a>
+  &nbsp;&middot;&nbsp;
+  <a href="{{ url_for('admin_consulting_counsellor_sync') }}" style="color:var(--gray-500);text-decoration:none;">&#9881; Fix counsellors from lead owner&hellip;</a>
+</div>
 {% endif %}
 {% endif %}
 
