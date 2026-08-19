@@ -31,10 +31,34 @@ MANAGEMENT_CODES = ['GC001', 'GC002', 'GC003']
 
 
 def login_required(f):
-    """Require a logged-in employee session; otherwise redirect to /login."""
+    """Require a logged-in EMPLOYEE session; otherwise redirect to /login.
+
+    SECURITY: employee and client logins share session['user_id'] (an employee
+    id vs a client_accounts id). A client session is is_client=True. Without the
+    is_client/is_partner guard below, a logged-in client passes this decorator
+    and the page's get_user() resolves their id against `employees`, silently
+    logging them into the employee whose id matches — a cross-account leak
+    (client landing in an ex-employee's account). Send client/partner sessions
+    to their own area instead of the staff page. (founder 2026-08-19)
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            return redirect(url_for('login'))
+        if session.get('is_client'):
+            return redirect(url_for('client_dashboard'))
+        if session.get('is_partner'):
+            return redirect(url_for('login'))
+        # Enforce is_active on every request: a resigned/disabled employee's
+        # existing session must stop working immediately (not just at the login
+        # form). is_active is set when HR marks them resigned.
+        conn = get_db()
+        row = conn.execute('SELECT is_active FROM employees WHERE id = ?',
+                           (session['user_id'],)).fetchone()
+        conn.close()
+        if not row or not row['is_active']:
+            session.clear()
+            flash('Your account is inactive. Please contact HR.', 'error')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -69,11 +93,24 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('login'))
+        # SECURITY: never let a client/partner session resolve as an employee
+        # (shared session['user_id'] namespace — see login_required). A client
+        # id colliding with an admin employee id would otherwise grant admin.
+        if session.get('is_client'):
+            return redirect(url_for('client_dashboard'))
+        if session.get('is_partner'):
+            return redirect(url_for('login'))
         conn = get_db()
         user = conn.execute(
-            'SELECT is_admin FROM employees WHERE id = ?',
+            'SELECT is_admin, is_active FROM employees WHERE id = ?',
             (session['user_id'],)
         ).fetchone()
+        # Resigned/disabled account: kill the live session immediately.
+        if not user or not user['is_active']:
+            conn.close()
+            session.clear()
+            flash('Your account is inactive. Please contact HR.', 'error')
+            return redirect(url_for('login'))
         if user and user['is_admin'] == 1:
             conn.close()
             return f(*args, **kwargs)

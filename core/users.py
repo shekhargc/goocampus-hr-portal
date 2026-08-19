@@ -16,12 +16,25 @@ from db import get_db
 
 
 def get_user():
-    """Return the logged-in employee row, or None if no active session."""
+    """Return the logged-in employee row, or None if no active session.
+
+    SECURITY: employees and clients share the same `session['user_id']` key
+    (an employee id vs a client_accounts id — independent sequences that DO
+    collide). A client session is flagged is_client=True. If we resolved a
+    client's user_id against `employees` we'd hand back the employee whose id
+    happens to equal the client's id (e.g. a client landing in an ex-employee's
+    account). Refuse any client/partner session here. (founder 2026-08-19)
+    """
     if 'user_id' not in session:
         return None
+    if session.get('is_client') or session.get('is_partner'):
+        return None
     conn = get_db()
+    # is_active is the single login-access switch: the moment HR marks an
+    # employee resigned/inactive, their existing session stops resolving here
+    # (login access disabled everywhere, not just at the login form).
     user = conn.execute(
-        'SELECT * FROM employees WHERE id = ?',
+        'SELECT * FROM employees WHERE id = ? AND is_active = 1',
         (session['user_id'],)
     ).fetchone()
     conn.close()

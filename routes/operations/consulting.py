@@ -672,6 +672,16 @@ def ops_consulting_client_edit_page(client_id):
         (client_id,),
     ).fetchone()
     xfer = transfer_for_reg(conn, client['registration_number']) if client else None
+    # Current Sales + Operations staff, to enrich the Counsellor dropdown so an
+    # ops-referred client can be assigned its ops counsellor (founder 2026-08-18).
+    counsellor_emps = []
+    try:
+        counsellor_emps = [r['name'] for r in conn.execute(
+            "SELECT name FROM employees WHERE is_active = 1 "
+            " AND LOWER(COALESCE(department,'')) IN ('sales','operations') "
+            " AND COALESCE(name,'') <> '' ORDER BY name").fetchall()]
+    except Exception:
+        pass
     conn.close()
     if not client:
         flash('Consulting client not found.', 'error')
@@ -680,6 +690,18 @@ def ops_consulting_client_edit_page(client_id):
     if not client.get('product_id') and client.get('plan_type'):
         from app import derive_product_id_from_plan
         client['product_id'] = derive_product_id_from_plan('consulting', client.get('plan_type'))
+    # Dropdown options for Plan Type, Account Status, Current Stage, Switched Program,
+    # Counsellor, Lead Source — from lookup_options. Merge current staff into the
+    # Counsellor list (keep the client's existing value even if it's not in either).
+    lookups = section_client_lookups('consulting')
+    merged = list(lookups.get('counsellors') or [])
+    for nm in counsellor_emps:
+        if nm not in merged:
+            merged.append(nm)
+    cur = (client.get('counsellor') or '').strip()
+    if cur and cur not in merged:
+        merged.append(cur)
+    lookups['counsellors'] = sorted({m for m in merged if m}, key=str.lower)
     return render_template(
         'ops_consulting_client_edit_form.html',
         user=user,
@@ -688,10 +710,7 @@ def ops_consulting_client_edit_page(client_id):
         pathway_name='Standard Consulting',
         active_ops_page='consulting-clients',
         active_pathway='consulting',
-        # Dropdown options for Plan Type, Account Status, Current Stage,
-        # Switched Program, Counsellor, Lead Source. Sourced from
-        # lookup_options where pathway='consulting'.
-        **section_client_lookups('consulting'),
+        **lookups,
         **section_client_products('consulting'),
     )
 
