@@ -49,6 +49,17 @@ def login_required(f):
             return redirect(url_for('client_dashboard'))
         if session.get('is_partner'):
             return redirect(url_for('login'))
+        # Enforce is_active on every request: a resigned/disabled employee's
+        # existing session must stop working immediately (not just at the login
+        # form). is_active is set when HR marks them resigned.
+        conn = get_db()
+        row = conn.execute('SELECT is_active FROM employees WHERE id = ?',
+                           (session['user_id'],)).fetchone()
+        conn.close()
+        if not row or not row['is_active']:
+            session.clear()
+            flash('Your account is inactive. Please contact HR.', 'error')
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -91,9 +102,15 @@ def admin_required(f):
             return redirect(url_for('login'))
         conn = get_db()
         user = conn.execute(
-            'SELECT is_admin FROM employees WHERE id = ?',
+            'SELECT is_admin, is_active FROM employees WHERE id = ?',
             (session['user_id'],)
         ).fetchone()
+        # Resigned/disabled account: kill the live session immediately.
+        if not user or not user['is_active']:
+            conn.close()
+            session.clear()
+            flash('Your account is inactive. Please contact HR.', 'error')
+            return redirect(url_for('login'))
         if user and user['is_admin'] == 1:
             conn.close()
             return f(*args, **kwargs)

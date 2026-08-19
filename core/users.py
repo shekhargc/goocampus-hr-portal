@@ -30,8 +30,11 @@ def get_user():
     if session.get('is_client') or session.get('is_partner'):
         return None
     conn = get_db()
+    # is_active is the single login-access switch: the moment HR marks an
+    # employee resigned/inactive, their existing session stops resolving here
+    # (login access disabled everywhere, not just at the login form).
     user = conn.execute(
-        'SELECT * FROM employees WHERE id = ?',
+        'SELECT * FROM employees WHERE id = ? AND is_active = 1',
         (session['user_id'],)
     ).fetchone()
     conn.close()
