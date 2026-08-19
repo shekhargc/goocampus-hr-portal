@@ -656,6 +656,46 @@ def get_all_holidays():
     conn.close()
     return {row['holiday_date']: row for row in holidays}
 
+def _default_password_for(user):
+    """The guessable default password for an employee: first name, lowercase."""
+    name = (user['name'] if user and 'name' in user.keys() else '') or ''
+    first = name.split()[0].lower() if name.split() else ''
+    return first
+
+
+def _employee_on_default_password(user):
+    """True if the employee's stored password still equals the first-name default.
+    Such accounts are trivially guessable (known emp_code + first name), so we force
+    a change on login before granting access."""
+    default_pw = _default_password_for(user)
+    if not default_pw:
+        return False
+    try:
+        return user['password'] == hash_password(default_pw)
+    except Exception:
+        return False
+
+
+# Endpoints an employee stuck on the default password may still reach, so they can
+# actually change it (and leave). Everything else redirects to /change-password.
+_PW_CHANGE_ALLOWED_ENDPOINTS = {'change_password', 'logout', 'static'}
+
+
+@app.before_request
+def _enforce_password_change():
+    """Block a logged-in EMPLOYEE who is still on the default password from every
+    page except the change-password form, until they set a real one. Closes the
+    employee->employee / ->admin leak from guessable default passwords."""
+    if not session.get('must_change_pw'):
+        return
+    # Employees only (client/partner sessions never carry must_change_pw).
+    if session.get('is_client') or session.get('is_partner'):
+        return
+    if request.endpoint in _PW_CHANGE_ALLOWED_ENDPOINTS:
+        return
+    return redirect(url_for('change_password'))
+
+
 @app.route('/')
 @login_required
 def index():
@@ -681,10 +721,16 @@ def login():
             session['user_id'] = user['id']
             session['is_admin'] = user['is_admin']
             session['emp_code'] = user['emp_code']
-            # Check if password is still the default (first name lowercase)
-            default_pw = user['name'].split()[0].lower()
-            if password == default_pw:
+            # SECURITY: if still on the default password (first name lowercase),
+            # force a change before anything else. The default is guessable from a
+            # known emp_code + first name, so it let one person log into another's
+            # (or an admin's) account. before_request blocks every other page until
+            # they set a real password. (founder 2026-08-19)
+            if _employee_on_default_password(user):
                 session['show_welcome'] = True
+                session['must_change_pw'] = True
+                flash('For security, please set a new password to continue.', 'error')
+                return redirect(url_for('change_password'))
             flash('Login successful', 'success')
             return redirect(url_for('index'))
         else:
@@ -818,6 +864,11 @@ def login_verify_otp():
     session['user_id'] = user['id']
     session['is_admin'] = user['is_admin']
     session['emp_code'] = user['emp_code']
+    # SECURITY: OTP login doesn't involve a password, but the account may still be
+    # on the guessable default (first name). Force a change before granting access.
+    if _employee_on_default_password(user):
+        session['must_change_pw'] = True
+        return jsonify({'success': True, 'redirect': url_for('change_password')})
     return jsonify({'success': True, 'redirect': url_for('index')})
 
 
@@ -831,36 +882,48 @@ def logout():
 @login_required
 def change_password():
     user = get_user()
+    # Forced flow: employee still on the default password. They may have signed in
+    # via OTP and not know the "current" password, so we don't ask for it here — the
+    # session already proves who they are; we only need a new, non-default password.
+    forced = bool(session.get('must_change_pw'))
     if request.method == 'POST':
         old_password = request.form.get('old_password', '').strip()
         new_password = request.form.get('new_password', '').strip()
         confirm_password = request.form.get('confirm_password', '').strip()
 
-        if not old_password or not new_password or not confirm_password:
+        if not new_password or not confirm_password or (not forced and not old_password):
             flash('All fields required', 'error')
-            return render_template('change_password.html', user=user)
+            return render_template('change_password.html', user=user, forced=forced)
 
-        if user['password'] != hash_password(old_password):
+        if not forced and user['password'] != hash_password(old_password):
             flash('Current password is incorrect', 'error')
-            return render_template('change_password.html', user=user)
+            return render_template('change_password.html', user=user, forced=forced)
 
         if new_password != confirm_password:
             flash('New passwords do not match', 'error')
-            return render_template('change_password.html', user=user)
+            return render_template('change_password.html', user=user, forced=forced)
 
-        if len(new_password) < 4:
-            flash('Password must be at least 4 characters', 'error')
-            return render_template('change_password.html', user=user)
+        if len(new_password) < 6:
+            flash('Password must be at least 6 characters', 'error')
+            return render_template('change_password.html', user=user, forced=forced)
+
+        # Never allow the guessable default (first name) as the new password.
+        if new_password.lower() == _default_password_for(user):
+            flash('Please choose a password that is not your first name.', 'error')
+            return render_template('change_password.html', user=user, forced=forced)
 
         conn = get_db()
         conn.execute('UPDATE employees SET password = ? WHERE id = ?', (hash_password(new_password), user['id']))
         conn.commit()
         conn.close()
 
+        # Cleared: they now have a real password, so lift the block.
+        session.pop('must_change_pw', None)
+        session.pop('show_welcome', None)
         flash('Password changed successfully', 'success')
         return redirect(url_for('dashboard'))
 
-    return render_template('change_password.html', user=user)
+    return render_template('change_password.html', user=user, forced=forced)
 
 
 # ─── FORGOT PASSWORD FLOW ───
