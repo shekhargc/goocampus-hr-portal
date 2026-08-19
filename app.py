@@ -35,14 +35,17 @@ app = Flask(__name__)
 # properties (e.g. /georgia/) doesn't 404. Single switch, applies to
 # every route -- no per-route change needed.
 app.url_map.strict_slashes = False
-# SECRET_KEY rotated 2026-08-19 after a client landed in an ex-employee's account
-# (client + employee logins shared session['user_id']; the employee guards did
-# not exclude client sessions). The real fix is in core/auth.py + core/users.py
-# (is_client-gated identity); this rotation ALSO invalidates every previously
-# issued cookie so every current session is force-logged-out and everyone signs
-# in fresh. Earlier rotation: 2026-07-02. Set SECRET_KEY in the environment to
-# override (if set on Render, rotate it THERE too to force the mass logout).
-app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-session-2026-08-19-authfix-rot2')
+# Session signing key. The effective key = (env SECRET_KEY, or the code default)
+# joined with a CODE-CONTROLLED rotation salt below. Because the salt is appended
+# in code, bumping SESSION_KEY_ROTATION rotates the signing key and force-logs-out
+# EVERYONE even when SECRET_KEY is pinned as a Render env var (the env value alone
+# would otherwise keep every old cookie valid). Zero risk of a login loop — it's
+# just a key change; new logins sign with the new key, old cookies fail to verify
+# and get redirected to login. To force a mass logout in future: bump the salt.
+#   Rotations: 2026-07-02 (first cross-user leak), 2026-08-19 (client-in-employee).
+SESSION_KEY_ROTATION = '2026-08-19-authfix-2'
+app.secret_key = (os.environ.get('SECRET_KEY', 'goocampus-session-2026-08-19')
+                  + '|' + SESSION_KEY_ROTATION)
 app.config['DEBUG'] = False
 
 # ─── Session persistence (safe) ───────────────────────────────────────
