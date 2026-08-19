@@ -35,11 +35,14 @@ app = Flask(__name__)
 # properties (e.g. /georgia/) doesn't 404. Single switch, applies to
 # every route -- no per-route change needed.
 app.url_map.strict_slashes = False
-# SECRET_KEY rotated 2026-07-02 after a cross-user session leak — bumping the
-# default invalidates every previously-issued cookie so any leaked/shared
-# session stops working and everyone re-logs in cleanly. Set SECRET_KEY in the
-# environment to override.
-app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-session-2026-07-02-rot1')
+# SECRET_KEY rotated 2026-08-19 after a client landed in an ex-employee's account
+# (client + employee logins shared session['user_id']; the employee guards did
+# not exclude client sessions). The real fix is in core/auth.py + core/users.py
+# (is_client-gated identity); this rotation ALSO invalidates every previously
+# issued cookie so every current session is force-logged-out and everyone signs
+# in fresh. Earlier rotation: 2026-07-02. Set SECRET_KEY in the environment to
+# override (if set on Render, rotate it THERE too to force the mass logout).
+app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-session-2026-08-19-authfix-rot2')
 app.config['DEBUG'] = False
 
 # ─── Session persistence (safe) ───────────────────────────────────────
@@ -390,7 +393,10 @@ def inject_manager_status():
     lands on /operations/consulting instead of 403'ing on
     /operations/uk-pathway.
     """
-    if 'user_id' in session:
+    # Only build EMPLOYEE context for an employee session. Clients/partners share
+    # the session['user_id'] key (different id space) — resolving it against
+    # employee tables here would compute a stranger's manager/permission flags.
+    if 'user_id' in session and not session.get('is_client') and not session.get('is_partner'):
         user_id = session['user_id']
         user = get_user()
         mgr = is_manager(user_id)
@@ -1269,6 +1275,7 @@ def client_login_page():
         acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ? AND is_active = 1", (clean,)).fetchone()
         conn.close()
         if acct and acct['password_hash'] == hash_password(password):
+            session.clear()  # fresh session: never carry over stale employee/admin keys
             session.permanent = True
             session['user_id'] = acct['id']
             session['is_client'] = True

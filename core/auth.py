@@ -31,10 +31,23 @@ MANAGEMENT_CODES = ['GC001', 'GC002', 'GC003']
 
 
 def login_required(f):
-    """Require a logged-in employee session; otherwise redirect to /login."""
+    """Require a logged-in EMPLOYEE session; otherwise redirect to /login.
+
+    SECURITY: employee and client logins share session['user_id'] (an employee
+    id vs a client_accounts id). A client session is is_client=True. Without the
+    is_client/is_partner guard below, a logged-in client passes this decorator
+    and the page's get_user() resolves their id against `employees`, silently
+    logging them into the employee whose id matches — a cross-account leak
+    (client landing in an ex-employee's account). Send client/partner sessions
+    to their own area instead of the staff page. (founder 2026-08-19)
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            return redirect(url_for('login'))
+        if session.get('is_client'):
+            return redirect(url_for('client_dashboard'))
+        if session.get('is_partner'):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -68,6 +81,13 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            return redirect(url_for('login'))
+        # SECURITY: never let a client/partner session resolve as an employee
+        # (shared session['user_id'] namespace — see login_required). A client
+        # id colliding with an admin employee id would otherwise grant admin.
+        if session.get('is_client'):
+            return redirect(url_for('client_dashboard'))
+        if session.get('is_partner'):
             return redirect(url_for('login'))
         conn = get_db()
         user = conn.execute(
