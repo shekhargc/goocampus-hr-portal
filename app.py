@@ -36830,7 +36830,7 @@ def sales_leads_list():
            LEFT JOIN products_services ps ON sl.product_id = ps.id
            LEFT JOIN projects p ON ps.project_id = p.id
            WHERE {' AND '.join(where)}
-           ORDER BY sl.is_hot DESC, sl.expected_close_date NULLS LAST, sl.created_at DESC''',
+           ORDER BY sl.expected_close_date DESC NULLS LAST, sl.created_at DESC''',
         params
     ).fetchall()
     stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
