@@ -75,8 +75,9 @@ def _fetch_finance_rows(conn, f_pathway, f_from, f_to, q):
             "SELECT id, registration_number, registration_date, prefix, first_name, last_name, "
             "mobile, whatsapp1, email, city, state, COALESCE(pathway,'plab') AS pathway, "
             # Resolve the counsellor from the best available source so ops-team
-            # counsellors show too (founder 2026-08-14).
-            "COALESCE(NULLIF(TRIM(counsellor),''), NULLIF(TRIM(counsellor_name),''), "
+            # counsellors show too (founder 2026-08-14). NOTE: plab_clients has no
+            # counsellor_name column — only counsellor (name) + counsellor_id.
+            "COALESCE(NULLIF(TRIM(counsellor),''), "
             "  (SELECT e.name FROM employees e WHERE e.id = plab_clients.counsellor_id)) AS counsellor, "
             "account_status, final_package "
             f"FROM plab_clients WHERE {' AND '.join(where)}", params).fetchall()]
