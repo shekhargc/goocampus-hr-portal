@@ -3260,6 +3260,25 @@ def admin_diag_no_counsellor():
         except Exception: pass
 
 
+def _counsellor_options_with_staff(pathway='plab'):
+    """Counsellor dropdown options = the configured lookup names PLUS every active
+    Sales/Operations employee, so the PLAB add/edit forms offer real team members
+    (e.g. an ops person who owns a transferred client) like the other pathways'
+    edit forms now do via section_client_lookups. (founder 2026-08-20)"""
+    opts = list(get_lookup_options('counsellor', pathway=pathway) or [])
+    try:
+        conn = get_db()
+        for r in conn.execute(
+                "SELECT name FROM employees WHERE is_active = 1 "
+                "AND LOWER(COALESCE(department,'')) IN ('sales','operations') "
+                "AND COALESCE(TRIM(name),'') <> ''").fetchall():
+            opts.append(r['name'])
+        conn.close()
+    except Exception:
+        pass
+    return sorted({o for o in opts if o}, key=str.lower)
+
+
 def _sync_client_academics_to_ops(conn, reg_id):
     """Push a client's academic edits into the ops-side record so every pathway's
     Academic Details page reflects what the client entered. The client OWNS these
@@ -29156,7 +29175,7 @@ def ops_plab_add():
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
-                           counsellors=get_lookup_options('counsellor'),
+                           counsellors=_counsellor_options_with_staff('plab'),
                            upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=[], plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
@@ -29293,7 +29312,7 @@ def ops_plab_edit(client_id):
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
-                           counsellors=get_lookup_options('counsellor'),
+                           counsellors=_counsellor_options_with_staff('plab'),
                            upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
