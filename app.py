@@ -3146,6 +3146,99 @@ def admin_consulting_counsellor_sync():
         except Exception: pass
 
 
+@app.route('/admin/diag/no-counsellor')
+@login_required
+def admin_diag_no_counsellor():
+    """READ-ONLY: how many clients have no counsellor (blank or 'admin'), across
+    EVERY pathway, with a per-pathway breakdown and a list. Also flags how many
+    could be auto-filled from the lead owner (by phone match). No writes.
+    (founder 2026-08-20)"""
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    _PW = {'plab': 'UK / PLAB', 'australia': 'AMC (Australia)', 'consulting': 'Consulting',
+           'uae': 'UAE', 'portfolio': 'Portfolio', 'training': 'Training'}
+    conn = get_db()
+    try:
+        owner_by_phone = {}
+        for r in conn.execute(
+            "SELECT RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) AS ph, owner_employee_id "
+            "  FROM sales_leads WHERE owner_employee_id IS NOT NULL ORDER BY id ASC").fetchall():
+            if r['ph'] and len(r['ph']) == 10:
+                owner_by_phone[r['ph']] = r['owner_employee_id']
+        emp_ids = {r['id'] for r in conn.execute("SELECT id FROM employees").fetchall()}
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, registration_number, prefix, first_name, last_name, mobile, "
+            "       COALESCE(NULLIF(TRIM(pathway),''),'plab') AS pw, counsellor "
+            "  FROM plab_clients "
+            " WHERE registration_number IS NOT NULL AND registration_number <> '' "
+            " ORDER BY id DESC").fetchall()]
+        by_pw = {}          # pw -> {'total':n, 'blank':n, 'fixable':n}
+        blanks = []
+        for c in rows:
+            pw = c['pw']
+            d = by_pw.setdefault(pw, {'total': 0, 'blank': 0, 'fixable': 0})
+            d['total'] += 1
+            cur = (c.get('counsellor') or '').strip()
+            if cur and cur.lower() != 'admin':
+                continue
+            d['blank'] += 1
+            ph = re.sub(r'\D', '', str(c.get('mobile') or ''))[-10:]
+            oid = owner_by_phone.get(ph) if len(ph) == 10 else None
+            fixable = bool(oid and oid in emp_ids)
+            if fixable:
+                d['fixable'] += 1
+            c['_fixable'] = fixable
+            blanks.append(c)
+        total_blank = sum(d['blank'] for d in by_pw.values())
+        total_fixable = sum(d['fixable'] for d in by_pw.values())
+
+        def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        pw_rows = ''.join(
+            f"<tr><td>{_esc(_PW.get(pw, pw))}</td><td style='text-align:right;'>{d['total']}</td>"
+            f"<td style='text-align:right;color:#b91c1c;font-weight:700;'>{d['blank']}</td>"
+            f"<td style='text-align:right;color:#0f766e;'>{d['fixable']}</td></tr>"
+            for pw, d in sorted(by_pw.items(), key=lambda kv: kv[1]['blank'], reverse=True))
+        list_rows = ''.join(
+            f"<tr><td>{_esc(c['registration_number'])}</td>"
+            f"<td>{_esc(((c.get('first_name') or '') + ' ' + (c.get('last_name') or '')).strip())}</td>"
+            f"<td>{_esc(_PW.get(c['pw'], c['pw']))}</td>"
+            f"<td style='color:#b91c1c;'>{_esc(c.get('counsellor')) or '(blank)'}</td>"
+            f"<td style='text-align:center;'>{'✅' if c.get('_fixable') else '—'}</td></tr>"
+            for c in blanks[:1500])
+        html = f"""<!doctype html><meta charset=utf-8><title>Clients with no counsellor</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('dashboard')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to dashboard</a></p>
+  <h2 style="color:#2952A3;">Clients with no counsellor</h2>
+  <div style="background:#FEF2F2;border:1px solid #fca5a5;border-radius:8px;padding:14px 18px;margin:14px 0;font-size:1.05rem;">
+    <b style="font-size:1.6rem;color:#b91c1c;">{total_blank}</b> client(s) have no counsellor (blank or "admin").
+    Of these, <b style="color:#0f766e;">{total_fixable}</b> can be auto-filled from their lead owner.
+  </div>
+  <table style="border-collapse:collapse;font-size:0.9rem;margin:10px 0 22px;min-width:520px;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th style="padding:6px 14px;">Pathway</th><th style="padding:6px 14px;">Total clients</th><th style="padding:6px 14px;">No counsellor</th><th style="padding:6px 14px;">Auto-fixable</th></tr></thead>
+    <tbody>{pw_rows}</tbody>
+  </table>
+  <p style="color:#555;font-size:0.9rem;">Read-only report. "Auto-fixable" = a sales lead with the same phone has an owner we can copy.
+  The Consulting ones can be fixed from the Consulting list's <b>Fix counsellors from lead owner</b> tool; tell me if you want that extended to every pathway.</p>
+  <h3 style="color:#2952A3;font-size:1rem;">The list ({len(blanks)}{' — showing first 1500' if len(blanks) > 1500 else ''})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Reg. No.</th><th>Name</th><th>Pathway</th><th>Current counsellor</th><th style="text-align:center;">Fixable</th></tr></thead>
+    <tbody>{list_rows or '<tr><td colspan=5 style=color:#888;>None — every client has a counsellor.</td></tr>'}</tbody>
+  </table>
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_diag_no_counsellor: %s", e)
+        flash(f'No-counsellor report error: {e}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _sync_client_academics_to_ops(conn, reg_id):
     """Push a client's academic edits into the ops-side record so every pathway's
     Academic Details page reflects what the client entered. The client OWNS these
