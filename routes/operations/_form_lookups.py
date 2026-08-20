@@ -127,6 +127,22 @@ def section_client_lookups(pathway):
     edit forms historically used plain text inputs for the same fields —
     after this lookup wiring they should switch to <select>.
     """
+    # Counsellors = the configured lookup names PLUS every current Sales/Operations
+    # employee, so a client's counsellor can be set to an actual team member (e.g.
+    # an ops person who owns a transferred client) on ANY pathway's edit form — not
+    # just the historical fixed name list. (founder 2026-08-20)
+    counsellors = list(get_lookup_options('counsellor', pathway=pathway) or [])
+    try:
+        conn = get_db()
+        for r in conn.execute(
+                "SELECT name FROM employees WHERE is_active = 1 "
+                "AND LOWER(COALESCE(department,'')) IN ('sales','operations') "
+                "AND COALESCE(TRIM(name),'') <> ''").fetchall():
+            counsellors.append(r['name'])
+        conn.close()
+    except Exception:
+        pass
+    counsellors = sorted({c for c in counsellors if c}, key=str.lower)
     return {
         'plan_types':           get_lookup_options('plan_type',          pathway=pathway),
         'joined_stages':        get_lookup_options('joined_stage',       pathway=pathway),
@@ -135,7 +151,7 @@ def section_client_lookups(pathway):
         'switched_programs':    get_lookup_options('switched_program',   pathway=pathway),
         'lead_sources':         get_lookup_options('lead_source',        pathway=pathway),
         'operations_referrals': get_lookup_options('operations_referral',pathway=pathway),
-        'counsellors':          get_lookup_options('counsellor',         pathway=pathway),
+        'counsellors':          counsellors,
     }
 
 

@@ -3146,6 +3146,164 @@ def admin_consulting_counsellor_sync():
         except Exception: pass
 
 
+@app.route('/admin/diag/no-counsellor', methods=['GET', 'POST'])
+@login_required
+def admin_diag_no_counsellor():
+    """How many clients have no counsellor (blank or 'admin'), across EVERY pathway,
+    with a per-pathway breakdown and a list. Flags how many can be auto-filled from
+    the lead owner (by phone match) and, on Apply, fills those. Manual cases are set
+    via each client's Edit page. (founder 2026-08-20)"""
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    _PW = {'plab': 'UK / PLAB', 'australia': 'AMC (Australia)', 'consulting': 'Consulting',
+           'uae': 'UAE', 'portfolio': 'Portfolio', 'training': 'Training'}
+    conn = get_db()
+    try:
+        owner_by_phone = {}
+        for r in conn.execute(
+            "SELECT RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) AS ph, owner_employee_id "
+            "  FROM sales_leads WHERE owner_employee_id IS NOT NULL ORDER BY id ASC").fetchall():
+            if r['ph'] and len(r['ph']) == 10:
+                owner_by_phone[r['ph']] = r['owner_employee_id']
+        emps = {r['id']: dict(r) for r in conn.execute(
+            "SELECT id, name, email, phone FROM employees").fetchall()}
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, registration_number, prefix, first_name, last_name, mobile, "
+            "       COALESCE(NULLIF(TRIM(pathway),''),'plab') AS pw, "
+            "       counsellor, counsellor_id, counsellor_email, counsellor_number "
+            "  FROM plab_clients "
+            " WHERE registration_number IS NOT NULL AND registration_number <> '' "
+            " ORDER BY id DESC").fetchall()]
+        # A client's OTHER pathway record (same phone) that already has a real
+        # counsellor is the best source — e.g. a combo Consulting+Training client
+        # whose Consulting record has the counsellor but the Training sibling is
+        # blank. Prefer that; fall back to the sales-lead owner. (founder 2026-08-20)
+        sibling_by_phone = {}
+        for c in rows:
+            cur = (c.get('counsellor') or '').strip()
+            if not cur or cur.lower() == 'admin':
+                continue
+            ph = re.sub(r'\D', '', str(c.get('mobile') or ''))[-10:]
+            if len(ph) == 10 and ph not in sibling_by_phone:
+                sibling_by_phone[ph] = {'name': cur, 'id': c.get('counsellor_id'),
+                                        'email': c.get('counsellor_email') or '',
+                                        'phone': c.get('counsellor_number') or ''}
+        by_pw = {}          # pw -> {'total':n, 'blank':n, 'fixable':n}
+        blanks = []
+        for c in rows:
+            pw = c['pw']
+            d = by_pw.setdefault(pw, {'total': 0, 'blank': 0, 'fixable': 0})
+            d['total'] += 1
+            cur = (c.get('counsellor') or '').strip()
+            if cur and cur.lower() != 'admin':
+                continue
+            d['blank'] += 1
+            ph = re.sub(r'\D', '', str(c.get('mobile') or ''))[-10:]
+            fix = None
+            sib = sibling_by_phone.get(ph) if len(ph) == 10 else None
+            if sib:
+                fix = dict(sib); fix['src'] = 'their other record'
+            else:
+                oid = owner_by_phone.get(ph) if len(ph) == 10 else None
+                e = emps.get(oid) if oid else None
+                if e and (e.get('name') or '').strip():
+                    fix = {'name': e['name'], 'id': e['id'], 'email': e.get('email') or '',
+                           'phone': e.get('phone') or '', 'src': 'lead owner'}
+            if fix:
+                d['fixable'] += 1
+                c['_fix'] = fix
+            c['_fixable'] = bool(fix)
+            blanks.append(c)
+        total_blank = sum(d['blank'] for d in by_pw.values())
+        total_fixable = sum(d['fixable'] for d in by_pw.values())
+
+        if request.method == 'POST' and request.form.get('apply') == '1':
+            n = 0
+            for c in blanks:
+                if not c.get('_fixable'):
+                    continue
+                f = c['_fix']
+                conn.execute(
+                    "UPDATE plab_clients SET counsellor = ?, counsellor_id = ?, "
+                    "  counsellor_email = COALESCE(NULLIF(counsellor_email,''), ?), "
+                    "  counsellor_number = COALESCE(NULLIF(counsellor_number,''), ?), "
+                    "  updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (f['name'], f.get('id'), f.get('email') or '', f.get('phone') or '', c['id']))
+                n += 1
+            conn.commit()
+            flash(f'Filled the counsellor for {n} client(s) from their other record / lead owner.', 'success')
+            return redirect(url_for('admin_diag_no_counsellor'))
+
+        def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        pw_rows = ''.join(
+            f"<tr><td>{_esc(_PW.get(pw, pw))}</td><td style='text-align:right;'>{d['total']}</td>"
+            f"<td style='text-align:right;color:#b91c1c;font-weight:700;'>{d['blank']}</td>"
+            f"<td style='text-align:right;color:#0f766e;'>{d['fixable']}</td></tr>"
+            for pw, d in sorted(by_pw.items(), key=lambda kv: kv[1]['blank'], reverse=True))
+        list_rows = ''.join(
+            f"<tr><td>{_esc(c['registration_number'])}</td>"
+            f"<td>{_esc(((c.get('first_name') or '') + ' ' + (c.get('last_name') or '')).strip())}</td>"
+            f"<td>{_esc(_PW.get(c['pw'], c['pw']))}</td>"
+            f"<td style='color:#b91c1c;'>{_esc(c.get('counsellor')) or '(blank)'}</td>"
+            + (f"<td style='color:#0f766e;'>&rarr; {_esc(c['_fix']['name'])} <span style='color:#888;font-size:.8em;'>({_esc(c['_fix']['src'])})</span></td>"
+               if c.get('_fix') else "<td style='text-align:center;'>—</td>")
+            + "</tr>"
+            for c in blanks[:1500])
+        html = f"""<!doctype html><meta charset=utf-8><title>Clients with no counsellor</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('dashboard')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to dashboard</a></p>
+  <h2 style="color:#2952A3;">Clients with no counsellor</h2>
+  <div style="background:#FEF2F2;border:1px solid #fca5a5;border-radius:8px;padding:14px 18px;margin:14px 0;font-size:1.05rem;">
+    <b style="font-size:1.6rem;color:#b91c1c;">{total_blank}</b> client(s) have no counsellor (blank or "admin").
+    Of these, <b style="color:#0f766e;">{total_fixable}</b> can be auto-filled from their other pathway record or lead owner.
+  </div>
+  {'<form method=post style="margin:12px 0;"><input type=hidden name=apply value=1><button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply &mdash; fill ' + str(total_fixable) + ' automatically</button></form>' if total_fixable else ''}
+  <table style="border-collapse:collapse;font-size:0.9rem;margin:10px 0 22px;min-width:520px;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th style="padding:6px 14px;">Pathway</th><th style="padding:6px 14px;">Total clients</th><th style="padding:6px 14px;">No counsellor</th><th style="padding:6px 14px;">Auto-fixable</th></tr></thead>
+    <tbody>{pw_rows}</tbody>
+  </table>
+  <p style="color:#555;font-size:0.9rem;">"Auto-fixable" = we can copy the counsellor from the client's <b>own other pathway record</b>
+  (e.g. a combo Consulting+Training client) or, failing that, from their <b>sales-lead owner</b>. Apply fills those in one go.
+  The rest have no source on file and are set manually from each client's <b>Edit</b> page (the counsellor dropdown now lists all Sales/Operations staff).</p>
+  <h3 style="color:#2952A3;font-size:1rem;">The list ({len(blanks)}{' — showing first 1500' if len(blanks) > 1500 else ''})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Reg. No.</th><th>Name</th><th>Pathway</th><th>Current counsellor</th><th>Will be set to</th></tr></thead>
+    <tbody>{list_rows or '<tr><td colspan=5 style=color:#888;>None — every client has a counsellor.</td></tr>'}</tbody>
+  </table>
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_diag_no_counsellor: %s", e)
+        flash(f'No-counsellor report error: {e}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+def _counsellor_options_with_staff(pathway='plab'):
+    """Counsellor dropdown options = the configured lookup names PLUS every active
+    Sales/Operations employee, so the PLAB add/edit forms offer real team members
+    (e.g. an ops person who owns a transferred client) like the other pathways'
+    edit forms now do via section_client_lookups. (founder 2026-08-20)"""
+    opts = list(get_lookup_options('counsellor', pathway=pathway) or [])
+    try:
+        conn = get_db()
+        for r in conn.execute(
+                "SELECT name FROM employees WHERE is_active = 1 "
+                "AND LOWER(COALESCE(department,'')) IN ('sales','operations') "
+                "AND COALESCE(TRIM(name),'') <> ''").fetchall():
+            opts.append(r['name'])
+        conn.close()
+    except Exception:
+        pass
+    return sorted({o for o in opts if o}, key=str.lower)
+
+
 def _sync_client_academics_to_ops(conn, reg_id):
     """Push a client's academic edits into the ops-side record so every pathway's
     Academic Details page reflects what the client entered. The client OWNS these
@@ -9234,6 +9392,24 @@ def _resolve_counsellor_for_reg(conn, reg):
                                (emp_id,)).fetchone()
             if emp:
                 return (emp['name'] or ''), (emp['email'] or ''), (emp['phone'] or ''), emp_id
+        except Exception:
+            pass
+    # 5. A sibling master record for the SAME person (same phone) that already has a
+    #    real counsellor — covers combo registrations (e.g. Consulting + Training)
+    #    where one pathway's record carries the counsellor and the other is blank.
+    phone = re.sub(r'\D', '', str(reg.get('mobile') or ''))[-10:]
+    if len(phone) == 10:
+        try:
+            sib = conn.execute(
+                "SELECT counsellor, counsellor_id, counsellor_email, counsellor_number "
+                "FROM plab_clients "
+                "WHERE RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? "
+                "  AND COALESCE(NULLIF(TRIM(counsellor),''),'') <> '' "
+                "  AND LOWER(TRIM(counsellor)) <> 'admin' ORDER BY id DESC LIMIT 1",
+                (phone,)).fetchone()
+            if sib and (sib['counsellor'] or '').strip():
+                return (sib['counsellor'] or ''), (sib['counsellor_email'] or ''), \
+                       (sib['counsellor_number'] or ''), sib['counsellor_id']
         except Exception:
             pass
     return (reg.get('counsellor_name') or ''), '', '', None
@@ -29042,7 +29218,7 @@ def ops_plab_add():
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
-                           counsellors=get_lookup_options('counsellor'),
+                           counsellors=_counsellor_options_with_staff('plab'),
                            upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=[], plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
@@ -29179,7 +29355,7 @@ def ops_plab_edit(client_id):
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
-                           counsellors=get_lookup_options('counsellor'),
+                           counsellors=_counsellor_options_with_staff('plab'),
                            upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
