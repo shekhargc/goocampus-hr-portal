@@ -48,8 +48,30 @@ _COPY_FIELDS = [
     'prefix', 'first_name', 'last_name', 'mobile', 'whatsapp1', 'whatsapp2',
     'email', 'dob', 'city', 'state',
     'father_name', 'father_phone', 'mother_name', 'mother_phone', 'parents_email',
-    'counsellor', 'counsellor_email', 'counsellor_number',
+    'counsellor', 'counsellor_id', 'counsellor_email', 'counsellor_number',
 ]
+
+
+def _counsellor_from_lead_owner(conn, mobile):
+    """Resolve (name, emp_id, email, phone) of the sales-lead OWNER for a client's
+    mobile, so a transferred/added client inherits the same counsellor as the lead
+    owner even when the source record's counsellor was blank. Returns None if no
+    match. (founder 2026-08-20: lead owner == counsellor, on every pathway.)"""
+    import re as _re
+    ph = _re.sub(r'\D', '', str(mobile or ''))[-10:]
+    if len(ph) != 10:
+        return None
+    row = conn.execute(
+        "SELECT owner_employee_id FROM sales_leads "
+        "WHERE RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) = ? "
+        "  AND owner_employee_id IS NOT NULL ORDER BY id DESC LIMIT 1", (ph,)).fetchone()
+    if not row or not row['owner_employee_id']:
+        return None
+    e = conn.execute("SELECT id, name, email, phone FROM employees WHERE id = ?",
+                     (row['owner_employee_id'],)).fetchone()
+    if not e or not (e['name'] or '').strip():
+        return None
+    return (e['name'], e['id'], e['email'] or '', e['phone'] or '')
 
 
 def _training_reg_number(conn):
@@ -167,6 +189,15 @@ def ops_add_to_training_save(src_id):
         row['referral_client_name'] = (
             (src['prefix'] or '') + ' ' + (src['first_name'] or '') + ' ' + (src['last_name'] or '')
         ).strip()
+
+        # Counsellor must equal the lead owner on every pathway. The source's
+        # counsellor is copied above; if it was blank/'admin', recover it from the
+        # client's sales-lead owner so the training entry isn't left without one.
+        _cur = (row.get('counsellor') or '').strip()
+        if not _cur or _cur.lower() == 'admin':
+            owner = _counsellor_from_lead_owner(conn, row.get('mobile') or src['mobile'])
+            if owner:
+                row['counsellor'], row['counsellor_id'], row['counsellor_email'], row['counsellor_number'] = owner
 
         cols = list(row.keys())
         placeholders = ', '.join(['?'] * len(cols))

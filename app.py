@@ -3146,13 +3146,13 @@ def admin_consulting_counsellor_sync():
         except Exception: pass
 
 
-@app.route('/admin/diag/no-counsellor')
+@app.route('/admin/diag/no-counsellor', methods=['GET', 'POST'])
 @login_required
 def admin_diag_no_counsellor():
-    """READ-ONLY: how many clients have no counsellor (blank or 'admin'), across
-    EVERY pathway, with a per-pathway breakdown and a list. Also flags how many
-    could be auto-filled from the lead owner (by phone match). No writes.
-    (founder 2026-08-20)"""
+    """How many clients have no counsellor (blank or 'admin'), across EVERY pathway,
+    with a per-pathway breakdown and a list. Flags how many can be auto-filled from
+    the lead owner (by phone match) and, on Apply, fills those. Manual cases are set
+    via each client's Edit page. (founder 2026-08-20)"""
     user = get_user()
     if not (user and user.get('is_admin')):
         flash('Admin access required', 'error')
@@ -3167,7 +3167,8 @@ def admin_diag_no_counsellor():
             "  FROM sales_leads WHERE owner_employee_id IS NOT NULL ORDER BY id ASC").fetchall():
             if r['ph'] and len(r['ph']) == 10:
                 owner_by_phone[r['ph']] = r['owner_employee_id']
-        emp_ids = {r['id'] for r in conn.execute("SELECT id FROM employees").fetchall()}
+        emps = {r['id']: dict(r) for r in conn.execute(
+            "SELECT id, name, email, phone FROM employees").fetchall()}
         rows = [dict(r) for r in conn.execute(
             "SELECT id, registration_number, prefix, first_name, last_name, mobile, "
             "       COALESCE(NULLIF(TRIM(pathway),''),'plab') AS pw, counsellor "
@@ -3186,13 +3187,32 @@ def admin_diag_no_counsellor():
             d['blank'] += 1
             ph = re.sub(r'\D', '', str(c.get('mobile') or ''))[-10:]
             oid = owner_by_phone.get(ph) if len(ph) == 10 else None
-            fixable = bool(oid and oid in emp_ids)
+            e = emps.get(oid) if oid else None
+            fixable = bool(e and (e.get('name') or '').strip())
             if fixable:
                 d['fixable'] += 1
+                c['_owner'] = e
             c['_fixable'] = fixable
             blanks.append(c)
         total_blank = sum(d['blank'] for d in by_pw.values())
         total_fixable = sum(d['fixable'] for d in by_pw.values())
+
+        if request.method == 'POST' and request.form.get('apply') == '1':
+            n = 0
+            for c in blanks:
+                if not c.get('_fixable'):
+                    continue
+                e = c['_owner']
+                conn.execute(
+                    "UPDATE plab_clients SET counsellor = ?, counsellor_id = ?, "
+                    "  counsellor_email = COALESCE(NULLIF(counsellor_email,''), ?), "
+                    "  counsellor_number = COALESCE(NULLIF(counsellor_number,''), ?), "
+                    "  updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (e['name'], e['id'], e.get('email') or '', e.get('phone') or '', c['id']))
+                n += 1
+            conn.commit()
+            flash(f'Filled the counsellor from the lead owner for {n} client(s).', 'success')
+            return redirect(url_for('admin_diag_no_counsellor'))
 
         def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         pw_rows = ''.join(
@@ -3215,6 +3235,7 @@ def admin_diag_no_counsellor():
     <b style="font-size:1.6rem;color:#b91c1c;">{total_blank}</b> client(s) have no counsellor (blank or "admin").
     Of these, <b style="color:#0f766e;">{total_fixable}</b> can be auto-filled from their lead owner.
   </div>
+  {'<form method=post style="margin:12px 0;"><input type=hidden name=apply value=1><button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply &mdash; fill ' + str(total_fixable) + ' from lead owner</button></form>' if total_fixable else ''}
   <table style="border-collapse:collapse;font-size:0.9rem;margin:10px 0 22px;min-width:520px;">
     <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th style="padding:6px 14px;">Pathway</th><th style="padding:6px 14px;">Total clients</th><th style="padding:6px 14px;">No counsellor</th><th style="padding:6px 14px;">Auto-fixable</th></tr></thead>
     <tbody>{pw_rows}</tbody>
