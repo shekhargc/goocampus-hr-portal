@@ -3285,6 +3285,155 @@ def admin_diag_no_counsellor():
         except Exception: pass
 
 
+@app.route('/admin/diag/counsellor-names')
+@login_required
+def admin_diag_counsellor_names():
+    """READ-ONLY audit: reconcile the free-text `counsellor` names on client records
+    against the real employee list (active AND inactive). Surfaces spelling variants
+    / partial names (first-name-only etc.), how many clients each maps to, ambiguous
+    names that could be more than one employee, and 'orphan' names that match no
+    employee. No writes — just so the founder can decide the standard mapping.
+    (founder 2026-08-20)"""
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    def _norm(s):
+        s = (s or '').lower()
+        s = re.sub(r'\bdr\b\.?', ' ', s)
+        s = re.sub(r'[^a-z0-9\s]', ' ', s)
+        return re.sub(r'\s+', ' ', s).strip()
+    def _toks(s):
+        return [t for t in _norm(s).split() if t]
+
+    conn = get_db()
+    try:
+        # Distinct counsellor strings on clients (excluding blank/'admin' — those are
+        # the "no counsellor" cases handled by the other report).
+        cstrings = [dict(r) for r in conn.execute(
+            "SELECT TRIM(counsellor) AS name, COUNT(*) AS n "
+            "  FROM plab_clients "
+            " WHERE COALESCE(NULLIF(TRIM(counsellor),''),'') <> '' "
+            "   AND LOWER(TRIM(counsellor)) <> 'admin' "
+            " GROUP BY TRIM(counsellor) ORDER BY n DESC").fetchall()]
+        emps = [dict(r) for r in conn.execute(
+            "SELECT id, name, COALESCE(department,'') AS dept, COALESCE(is_active,0) AS active "
+            "  FROM employees WHERE COALESCE(TRIM(name),'') <> ''").fetchall()]
+        for e in emps:
+            e['_tok'] = set(_toks(e['name']))
+            e['_norm'] = _norm(e['name'])
+            e['_first'] = (_toks(e['name']) or [''])[0]
+
+        def _match(cs):
+            ct = set(_toks(cs)); cn = _norm(cs)
+            first = (_toks(cs) or [''])[0]
+            best_tier, cands = 0, []
+            for e in emps:
+                if cn and cn == e['_norm']:
+                    tier = 3
+                elif ct and e['_tok'] and (ct <= e['_tok'] or e['_tok'] <= ct):
+                    tier = 2
+                elif first and first == e['_first']:
+                    tier = 1
+                else:
+                    tier = 0
+                if tier == 0:
+                    continue
+                if tier > best_tier:
+                    best_tier, cands = tier, [e]
+                elif tier == best_tier:
+                    cands.append(e)
+            return best_tier, cands
+
+        TIER = {3: 'exact', 2: 'partial (one name inside the other)', 1: 'first name only'}
+        roll = {}          # emp_id -> {'emp':e, 'total':n, 'variants':[(name,n)]}
+        ambiguous = []     # (cs, n, [emps])
+        orphans = []       # (cs, n)
+        for c in cstrings:
+            tier, cands = _match(c['name'])
+            if not cands:
+                orphans.append((c['name'], c['n']))
+            elif len(cands) == 1:
+                e = cands[0]
+                d = roll.setdefault(e['id'], {'emp': e, 'total': 0, 'variants': []})
+                d['total'] += c['n']
+                d['variants'].append((c['name'], c['n'], TIER.get(tier, '')))
+            else:
+                ambiguous.append((c['name'], c['n'], tier, cands))
+
+        def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+        # Employee rollup — who has how many clients + the spellings that mapped to them
+        roll_sorted = sorted(roll.values(), key=lambda d: d['total'], reverse=True)
+        roll_rows = ''
+        for d in roll_sorted:
+            e = d['emp']
+            variants = ' · '.join(
+                f"{_esc(nm)} ({n}{'' if t=='exact' else ', '+t})" for nm, n, t in
+                sorted(d['variants'], key=lambda v: v[1], reverse=True))
+            multi = len([1 for _ in d['variants']]) > 1
+            act = 'Active' if e['active'] else '<span style="color:#b91c1c;">Inactive</span>'
+            roll_rows += (f"<tr><td style='font-weight:600;'>{_esc(e['name'])}</td>"
+                          f"<td>{_esc(e['dept']) or '—'}</td><td>{act}</td>"
+                          f"<td style='text-align:right;font-weight:700;'>{d['total']}</td>"
+                          f"<td style='{'background:#fff7ed;' if multi else ''}'>{variants}</td></tr>")
+
+        amb_rows = ''.join(
+            f"<tr><td>{_esc(cs)}</td><td style='text-align:right;'>{n}</td>"
+            f"<td>{_esc(', '.join(e['name'] + (' [inactive]' if not e['active'] else '') for e in cands))}</td></tr>"
+            for cs, n, tier, cands in sorted(ambiguous, key=lambda x: x[1], reverse=True))
+        orph_rows = ''.join(
+            f"<tr><td>{_esc(cs)}</td><td style='text-align:right;'>{n}</td></tr>"
+            for cs, n in sorted(orphans, key=lambda x: x[1], reverse=True))
+
+        multi_emps = sum(1 for d in roll_sorted if len(d['variants']) > 1)
+        html = f"""<!doctype html><meta charset=utf-8><title>Counsellor name audit</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:1080px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('dashboard')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to dashboard</a></p>
+  <h2 style="color:#2952A3;">Counsellor name audit</h2>
+  <p style="color:#555;">Read-only. The <b>counsellor</b> field on client records is free text, so the same person can appear
+  under several spellings (first-name-only, with/without middle name, typos). This matches every counsellor name on clients
+  against the employee list (active + inactive) so you can standardise. <b>Nothing is changed.</b></p>
+  <div style="background:#EFF6FF;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin:14px 0;">
+    <b>{len(cstrings)}</b> distinct counsellor names on clients &middot; matched to <b>{len(roll_sorted)}</b> employees &middot;
+    <b style="color:#b45309;">{multi_emps}</b> employees appear under more than one spelling &middot;
+    <b style="color:#7c3aed;">{len(ambiguous)}</b> ambiguous &middot; <b style="color:#b91c1c;">{len(orphans)}</b> match no employee.
+  </div>
+
+  <h3 style="color:#2952A3;font-size:1.05rem;">1. Per employee — clients + the spellings that map to them</h3>
+  <p style="color:#777;font-size:.85rem;margin-top:2px;">Rows highlighted in the last column have MORE THAN ONE spelling = likely names to merge. "Total" = clients across all those spellings.</p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Employee</th><th>Dept</th><th>Status</th><th style="text-align:right;">Clients</th><th>Counsellor spellings on clients (count)</th></tr></thead>
+    <tbody>{roll_rows or '<tr><td colspan=5 style=color:#888;>None.</td></tr>'}</tbody>
+  </table>
+
+  <h3 style="color:#7c3aed;font-size:1.05rem;margin-top:26px;">2. Ambiguous &mdash; could be more than one employee ({len(ambiguous)})</h3>
+  <p style="color:#777;font-size:.85rem;margin-top:2px;">A first name (e.g. "Robin", "Kiran") that matches several employees. Tell me which one each belongs to.</p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Counsellor name on clients</th><th style="text-align:right;">Clients</th><th>Possible employees</th></tr></thead>
+    <tbody>{amb_rows or '<tr><td colspan=3 style=color:#888;>None.</td></tr>'}</tbody>
+  </table>
+
+  <h3 style="color:#b91c1c;font-size:1.05rem;margin-top:26px;">3. No employee match &mdash; orphan names ({len(orphans)})</h3>
+  <p style="color:#777;font-size:.85rem;margin-top:2px;">These names don't correspond to any employee (old/ex counsellors not in the employee table, external names, or typos). Decide who each should map to.</p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Counsellor name on clients</th><th style="text-align:right;">Clients</th></tr></thead>
+    <tbody>{orph_rows or '<tr><td colspan=2 style=color:#888;>None.</td></tr>'}</tbody>
+  </table>
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_diag_counsellor_names: %s", e)
+        flash(f'Counsellor name audit error: {e}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _counsellor_options_with_staff(pathway='plab'):
     """Counsellor dropdown options = the configured lookup names PLUS every active
     Sales/Operations employee, so the PLAB add/edit forms offer real team members
