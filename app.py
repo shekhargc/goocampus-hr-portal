@@ -3449,6 +3449,7 @@ _COUNSELLOR_STANDARDISE_MAP = [
     ('Kiran',        'Kiran D R'),
     ('Robin',        'Robin Johnson J'),
     ('Adhithya',     'Adithya A'),
+    ('Jeswin',       'Jeswin Jacob'),
 ]
 
 
