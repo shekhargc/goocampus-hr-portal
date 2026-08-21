@@ -3309,14 +3309,19 @@ def admin_diag_counsellor_names():
 
     conn = get_db()
     try:
-        # Distinct counsellor strings on clients (excluding blank/'admin' — those are
-        # the "no counsellor" cases handled by the other report).
+        # Distinct counsellor strings across the client master AND the registration
+        # snapshot (excluding blank/'admin' — those are the "no counsellor" cases the
+        # other report handles). Counts are total mentions across both tables.
         cstrings = [dict(r) for r in conn.execute(
-            "SELECT TRIM(counsellor) AS name, COUNT(*) AS n "
-            "  FROM plab_clients "
-            " WHERE COALESCE(NULLIF(TRIM(counsellor),''),'') <> '' "
-            "   AND LOWER(TRIM(counsellor)) <> 'admin' "
-            " GROUP BY TRIM(counsellor) ORDER BY n DESC").fetchall()]
+            "SELECT name, SUM(n) AS n FROM ("
+            "  SELECT TRIM(counsellor) AS name, COUNT(*) AS n FROM plab_clients "
+            "    WHERE COALESCE(NULLIF(TRIM(counsellor),''),'') <> '' AND LOWER(TRIM(counsellor)) <> 'admin' "
+            "    GROUP BY TRIM(counsellor) "
+            "  UNION ALL "
+            "  SELECT TRIM(counsellor_name) AS name, COUNT(*) AS n FROM client_registrations "
+            "    WHERE COALESCE(NULLIF(TRIM(counsellor_name),''),'') <> '' AND LOWER(TRIM(counsellor_name)) <> 'admin' "
+            "    GROUP BY TRIM(counsellor_name) "
+            ") u GROUP BY name ORDER BY n DESC").fetchall()]
         emps = [dict(r) for r in conn.execute(
             "SELECT id, name, COALESCE(department,'') AS dept, COALESCE(is_active,0) AS active "
             "  FROM employees WHERE COALESCE(TRIM(name),'') <> ''").fetchall()]
@@ -3477,18 +3482,21 @@ def admin_diag_counsellor_standardize():
         plan = []   # {'variant','canonical','emp','count'}
         for variant, canonical in _COUNSELLOR_STANDARDISE_MAP:
             emp = by_norm.get(_norm(canonical))
-            # Match clients by the exact (case-insensitive) variant string.
+            # Match records by the exact (case-insensitive) variant string, across the
+            # client master AND the registration snapshot.
             cnt = conn.execute(
-                "SELECT COUNT(*) AS n FROM plab_clients WHERE LOWER(TRIM(counsellor)) = LOWER(?)",
-                (variant,)).fetchone()['n']
+                "SELECT (SELECT COUNT(*) FROM plab_clients WHERE LOWER(TRIM(counsellor)) = LOWER(?)) "
+                "     + (SELECT COUNT(*) FROM client_registrations WHERE LOWER(TRIM(counsellor_name)) = LOWER(?)) AS n",
+                (variant, variant)).fetchone()['n']
             plan.append({'variant': variant, 'canonical': canonical, 'emp': emp, 'count': cnt})
 
         if request.method == 'POST' and request.form.get('apply') == '1':
             done = 0
             for p in plan:
-                if not p['emp'] or not p['count']:
+                if not p['emp']:
                     continue
                 e = p['emp']
+                # Client master (plab_clients) — the free-text counsellor field.
                 conn.execute(
                     "UPDATE plab_clients SET counsellor = ?, counsellor_id = ?, "
                     "  counsellor_email = COALESCE(NULLIF(counsellor_email,''), ?), "
@@ -3496,9 +3504,18 @@ def admin_diag_counsellor_standardize():
                     "  updated_at = CURRENT_TIMESTAMP "
                     " WHERE LOWER(TRIM(counsellor)) = LOWER(?)",
                     (e['name'], e['id'], e['email'], e['phone'], p['variant']))
+                # Registration snapshot (client_registrations.counsellor_name) — keep it
+                # in step so both sources show the same standardised name + employee link.
+                try:
+                    conn.execute(
+                        "UPDATE client_registrations SET counsellor_name = ?, counsellor_id = ? "
+                        " WHERE LOWER(TRIM(counsellor_name)) = LOWER(?)",
+                        (e['name'], e['id'], p['variant']))
+                except Exception:
+                    conn.rollback()
                 done += 1
             conn.commit()
-            flash(f'Standardised {done} counsellor name group(s).', 'success')
+            flash(f'Standardised {done} counsellor name group(s) across client master + registrations.', 'success')
             return redirect(url_for('admin_diag_counsellor_standardize'))
 
         def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
