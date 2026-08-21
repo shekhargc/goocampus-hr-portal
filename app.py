@@ -3434,6 +3434,113 @@ def admin_diag_counsellor_names():
         except Exception: pass
 
 
+# Founder-confirmed counsellor name standardisation (2026-08-20). Each variant string
+# that appears on client records maps to the canonical EMPLOYEE it should become. The
+# canonical name is resolved to a live employee at run time (so counsellor_id is set
+# too); if that employee doesn't exist the mapping is skipped and shown as unresolved.
+_COUNSELLOR_STANDARDISE_MAP = [
+    ('Gopikrishnan', 'Gopi Krishnan A'),
+    ('Krish',        'Gopi Krishnan A'),
+    ('Kiran',        'Kiran D R'),
+    ('Robin',        'Robin Johnson J'),
+    ('Adhithya',     'Adithya A'),
+]
+
+
+@app.route('/admin/diag/counsellor-standardize', methods=['GET', 'POST'])
+@login_required
+def admin_diag_counsellor_standardize():
+    """Preview + apply the founder-confirmed counsellor name merges. Preview shows how
+    many clients each variant touches and the employee it will become; only Apply
+    writes. Admin only, read-only until Apply. (founder 2026-08-20)"""
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    def _norm(s):
+        s = (s or '').lower()
+        s = re.sub(r'\bdr\b\.?', ' ', s)
+        s = re.sub(r'[^a-z0-9\s]', ' ', s)
+        return re.sub(r'\s+', ' ', s).strip()
+
+    conn = get_db()
+    try:
+        emps = [dict(r) for r in conn.execute(
+            "SELECT id, name, COALESCE(email,'') AS email, COALESCE(phone,'') AS phone, "
+            "       COALESCE(is_active,0) AS active FROM employees "
+            " WHERE COALESCE(TRIM(name),'') <> ''").fetchall()]
+        by_norm = {}
+        for e in sorted(emps, key=lambda x: x['active'], reverse=True):  # prefer an active match
+            by_norm.setdefault(_norm(e['name']), e)
+
+        plan = []   # {'variant','canonical','emp','count'}
+        for variant, canonical in _COUNSELLOR_STANDARDISE_MAP:
+            emp = by_norm.get(_norm(canonical))
+            # Match clients by the exact (case-insensitive) variant string.
+            cnt = conn.execute(
+                "SELECT COUNT(*) AS n FROM plab_clients WHERE LOWER(TRIM(counsellor)) = LOWER(?)",
+                (variant,)).fetchone()['n']
+            plan.append({'variant': variant, 'canonical': canonical, 'emp': emp, 'count': cnt})
+
+        if request.method == 'POST' and request.form.get('apply') == '1':
+            done = 0
+            for p in plan:
+                if not p['emp'] or not p['count']:
+                    continue
+                e = p['emp']
+                conn.execute(
+                    "UPDATE plab_clients SET counsellor = ?, counsellor_id = ?, "
+                    "  counsellor_email = COALESCE(NULLIF(counsellor_email,''), ?), "
+                    "  counsellor_number = COALESCE(NULLIF(counsellor_number,''), ?), "
+                    "  updated_at = CURRENT_TIMESTAMP "
+                    " WHERE LOWER(TRIM(counsellor)) = LOWER(?)",
+                    (e['name'], e['id'], e['email'], e['phone'], p['variant']))
+                done += 1
+            conn.commit()
+            flash(f'Standardised {done} counsellor name group(s).', 'success')
+            return redirect(url_for('admin_diag_counsellor_standardize'))
+
+        def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        total = sum(p['count'] for p in plan if p['emp'])
+        unresolved = [p for p in plan if not p['emp']]
+        rows = ''.join(
+            f"<tr><td style='color:#b91c1c;'>{_esc(p['variant'])}</td>"
+            f"<td style='text-align:right;'>{p['count']}</td>"
+            + (f"<td style='color:#0f766e;font-weight:600;'>&rarr; {_esc(p['canonical'])}"
+               f"{'' if p['emp']['active'] else ' <span style=color:#b91c1c;>[inactive]</span>'}</td>"
+               if p['emp'] else f"<td style='color:#b91c1c;'>&rarr; {_esc(p['canonical'])} &mdash; NOT an employee (skipped)</td>")
+            + "</tr>"
+            for p in plan)
+        html = f"""<!doctype html><meta charset=utf-8><title>Standardise counsellor names</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:820px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('admin_diag_counsellor_names')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to the name audit</a></p>
+  <h2 style="color:#2952A3;">Standardise counsellor names</h2>
+  <p style="color:#555;">Your confirmed merges. Each variant on client records becomes the canonical employee (and gets linked to that
+  employee, so future syncs keep the right name). Review the counts, then Apply.</p>
+  <div style="background:#F0FDF4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin:14px 0;">
+    <b>{total}</b> client record(s) will be updated across <b>{len([p for p in plan if p['emp'] and p['count']])}</b> merge(s).
+  </div>
+  {'<form method=post style="margin:12px 0;"><input type=hidden name=apply value=1><button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply &mdash; standardise ' + str(total) + ' records</button></form>' if total else '<p style=color:#888;>Nothing to update.</p>'}
+  <table style="width:100%;border-collapse:collapse;font-size:0.9rem;margin-top:12px;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Variant on clients</th><th style="text-align:right;">Clients</th><th>Becomes</th></tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
+  {('<p style="color:#b45309;font-size:.9rem;margin-top:16px;">Note: <b>' + _esc(', '.join(p['canonical'] for p in unresolved)) + '</b> are not in the employee list, so those are skipped. Add them as (inactive) employees first if you want their clients linked; otherwise their names stay as-is.') if unresolved else ''}
+  <p style="color:#888;font-size:.82rem;margin-top:14px;">Joyce and Daniel (ex-employees not in the portal) are left untouched &mdash; there's no employee record to link them to.</p>
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_diag_counsellor_standardize: %s", e)
+        flash(f'Standardise error: {e}', 'error')
+        return redirect(url_for('admin_diag_counsellor_names'))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _counsellor_options_with_staff(pathway='plab'):
     """Counsellor dropdown options = the configured lookup names PLUS every active
     Sales/Operations employee, so the PLAB add/edit forms offer real team members
