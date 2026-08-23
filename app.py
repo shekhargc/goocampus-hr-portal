@@ -3559,6 +3559,257 @@ def admin_diag_counsellor_standardize():
         except Exception: pass
 
 
+# ── HR: import employee details from the Zoho "Employee View" .xls ──────────────
+# Excel header -> employees column. Fill-blanks-only (never overwrite). Status /
+# is_active are deliberately NOT imported (HR owns those via the resign flow).
+_EMP_IMPORT_MAP = {
+    'department': 'department', 'title': 'title', 'date of joining': 'joining_date',
+    'date of exit': 'last_working_day', 'other email': 'other_email', 'birth date': 'dob',
+    'personal mobile': 'personal_phone', 'address': 'address', 'employee type': 'employee_type',
+    'gender': 'gender', 'pan card number': 'pan', 'aadhaar card number': 'aadhaar',
+}
+_EMP_IMPORT_NEW_COLS = ('pan', 'aadhaar', 'gender', 'other_email', 'employee_type')
+_EMP_TARGET_COLS = ['department', 'title', 'joining_date', 'last_working_day', 'other_email',
+                    'dob', 'personal_phone', 'address', 'employee_type', 'gender', 'pan',
+                    'aadhaar', 'reporting_to']
+
+
+def _emp_xls_rows(raw):
+    """Parse the uploaded .xls into a list of dicts: {email, first, last, reporting_to,
+    <mapped employee cols>}. Excel serial dates -> YYYY-MM-DD; mobiles/ids -> digit
+    strings. Header-driven so column order doesn't matter."""
+    import xlrd as _xlrd
+    wb = _xlrd.open_workbook(file_contents=raw)
+    sh = wb.sheet_by_index(0)
+    if sh.nrows < 2:
+        return []
+    hdr = {str(sh.cell_value(0, c)).strip().lower(): c for c in range(sh.ncols)}
+
+    def _cell(r, key):
+        c = hdr.get(key)
+        return sh.cell_value(r, c) if c is not None else ''
+
+    def _date(v):
+        if v in ('', None):
+            return ''
+        try:
+            return _xlrd.xldate.xldate_as_datetime(float(v), wb.datemode).strftime('%Y-%m-%d')
+        except Exception:
+            return str(v).strip()
+
+    def _txt(v):
+        if v in ('', None):
+            return ''
+        if isinstance(v, float):          # ints came through as floats (mobiles, ids)
+            return str(int(v)) if v == int(v) else str(v)
+        return str(v).strip()
+
+    out = []
+    for r in range(1, sh.nrows):
+        email = _txt(_cell(r, 'email id')).lower().strip()
+        row = {
+            'email': email,
+            'first': _txt(_cell(r, 'first name')),
+            'last': _txt(_cell(r, 'last name')),
+            'reporting_to': _txt(_cell(r, 'reporting to')),
+            'employee status': _txt(_cell(r, 'employee status')),
+            'department': _txt(_cell(r, 'department')),
+            'title': _txt(_cell(r, 'title')),
+            'joining_date': _date(_cell(r, 'date of joining')),
+            'last_working_day': _date(_cell(r, 'date of exit')),
+            'other_email': _txt(_cell(r, 'other email')).lower(),
+            'dob': _date(_cell(r, 'birth date')),
+            'personal_phone': _txt(_cell(r, 'personal mobile')),
+            'address': _txt(_cell(r, 'address')),
+            'employee_type': _txt(_cell(r, 'employee type')),
+            'gender': _txt(_cell(r, 'gender')),
+            'pan': _txt(_cell(r, 'pan card number')).upper(),
+            'aadhaar': _txt(_cell(r, 'aadhaar card number')),
+        }
+        if email or (row['first'] or row['last']):
+            out.append(row)
+    return out
+
+
+@app.route('/admin/hr/import-employees', methods=['GET', 'POST'])
+@login_required
+def admin_hr_import_employees():
+    """Enrich employee records from the Zoho 'Employee View' .xls (fill-blanks only),
+    normalise any 'Counsellor' department to Sales, and create Joyce & Daniel. Upload
+    -> preview -> Apply. Admin only. (founder 2026-08-23)"""
+    import base64 as _b64, json as _json
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    def _norm(s):
+        s = (s or '').lower()
+        s = re.sub(r'[^a-z0-9\s]', ' ', s)
+        return re.sub(r'\s+', ' ', s).strip()
+    def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    conn = get_db()
+    try:
+        for col in _EMP_IMPORT_NEW_COLS:
+            try:
+                conn.execute(f'ALTER TABLE employees ADD COLUMN IF NOT EXISTS {col} TEXT'); conn.commit()
+            except Exception:
+                conn.rollback()
+
+        action = request.form.get('action') if request.method == 'POST' else None
+
+        # Parse rows: from the uploaded file (preview) or the carried payload (apply).
+        rows = []
+        if action == 'preview' and request.files.get('file'):
+            rows = _emp_xls_rows(request.files['file'].read())
+        elif action == 'apply' and request.form.get('payload'):
+            try:
+                rows = _json.loads(_b64.b64decode(request.form['payload']).decode('utf-8'))
+            except Exception:
+                rows = []
+
+        # Current employees, keyed by email + a name index for reporting_to resolution.
+        emps = [dict(r) for r in conn.execute(
+            "SELECT id, name, LOWER(COALESCE(email,'')) AS em, " +
+            ", ".join(_EMP_TARGET_COLS) + " FROM employees").fetchall()]
+        by_email = {e['em']: e for e in emps if e['em']}
+        by_name = {}
+        for e in emps:
+            by_name.setdefault(_norm(e['name']), e['id'])
+
+        def _blank(v):
+            return v is None or str(v).strip() == ''
+
+        # Build the fill plan for matched rows.
+        matched, unmatched = [], []
+        for row in rows:
+            e = by_email.get((row.get('email') or '').lower())
+            if not e:
+                unmatched.append(row)
+                continue
+            fills = {}
+            for col in _EMP_TARGET_COLS:
+                if col == 'reporting_to':
+                    rid = by_name.get(_norm(row.get('reporting_to')))
+                    if rid and _blank(e.get('reporting_to')):
+                        fills['reporting_to'] = rid
+                    continue
+                val = (row.get(col) or '').strip() if isinstance(row.get(col), str) else row.get(col)
+                if val and _blank(e.get(col)):
+                    fills[col] = val
+            if fills:
+                matched.append({'emp': e, 'fills': fills, 'row': row})
+
+        # Counsellor department -> Sales (portal-side cleanup).
+        counsel_dept = [dict(r) for r in conn.execute(
+            "SELECT id, name, department FROM employees WHERE LOWER(COALESCE(department,'')) LIKE 'counsel%'").fetchall()]
+        # Joyce / Daniel — create if missing.
+        need_create = []
+        for nm in ('Joyce', 'Daniel'):
+            ex = conn.execute("SELECT id FROM employees WHERE LOWER(TRIM(name)) LIKE ?",
+                              (nm.lower() + '%',)).fetchone()
+            if not ex:
+                need_create.append(nm)
+
+        # ---- APPLY ----
+        if action == 'apply':
+            n_fill = 0
+            for m in matched:
+                cols = list(m['fills'].keys())
+                sets = ', '.join(f"{c} = ?" for c in cols)
+                vals = [m['fills'][c] for c in cols] + [m['emp']['id']]
+                try:
+                    conn.execute(f"UPDATE employees SET {sets} WHERE id = ?", vals)
+                    n_fill += 1
+                except Exception:
+                    conn.rollback()
+            n_dept = 0
+            if counsel_dept:
+                conn.execute("UPDATE employees SET department = 'Sales' WHERE LOWER(COALESCE(department,'')) LIKE 'counsel%'")
+                n_dept = len(counsel_dept)
+            n_new = 0
+            for nm in need_create:
+                try:
+                    conn.execute(
+                        "INSERT INTO employees (name, emp_code, password, department, is_active, "
+                        " employment_status, created_at) VALUES (?, ?, ?, 'Sales', 0, 'resigned', CURRENT_TIMESTAMP)",
+                        (nm, 'EX-' + nm.upper()[:8], hash_password(nm.lower())))
+                    n_new += 1
+                except Exception:
+                    conn.rollback()
+            conn.commit()
+            flash(f'Imported details for {n_fill} employee(s); moved {n_dept} counsellor-dept to Sales; created {n_new} new (Joyce/Daniel).', 'success')
+            return redirect(url_for('admin_hr_import_employees'))
+
+        # ---- PREVIEW / UPLOAD FORM ----
+        if action != 'preview':
+            html = f"""<!doctype html><meta charset=utf-8><title>Import employee details</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('dashboard')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to dashboard</a></p>
+  <h2 style="color:#2952A3;">Import employee details from Excel</h2>
+  <p style="color:#555;">Upload the Zoho <b>Employee View (.xls)</b>. It matches each row to an employee by their
+  email and shows exactly what will be filled in. <b>Fill-blanks only</b> &mdash; nothing already in the portal is overwritten.
+  It will also move any <b>Counsellor department &rarr; Sales</b> and create <b>Joyce &amp; Daniel</b>.</p>
+  <form method=post enctype="multipart/form-data" style="margin:18px 0;">
+    <input type=hidden name=action value=preview>
+    <input type=file name=file accept=".xls,.xlsx" required style="display:block;margin-bottom:14px;">
+    <button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Preview changes</button>
+  </form>
+</div>"""
+            return html
+
+        # Preview tables
+        fill_rows = ''.join(
+            f"<tr><td style='font-weight:600;'>{_esc(m['emp']['name'])}</td>"
+            f"<td>{_esc(m['emp']['em'])}</td>"
+            f"<td>{_esc(', '.join(sorted(m['fills'].keys())))}</td></tr>"
+            for m in sorted(matched, key=lambda x: x['emp']['name'].lower()))
+        unm_rows = ''.join(
+            f"<tr><td>{_esc((r.get('first','') + ' ' + r.get('last','')).strip())}</td><td>{_esc(r.get('email'))}</td><td>{_esc(r.get('department'))}</td></tr>"
+            for r in unmatched)
+        payload = _b64.b64encode(_json.dumps(rows).encode('utf-8')).decode('ascii')
+        html = f"""<!doctype html><meta charset=utf-8><title>Import preview</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:960px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('admin_hr_import_employees')}" style="color:#F57C1F;text-decoration:none;">&larr; Start over</a></p>
+  <h2 style="color:#2952A3;">Import preview &mdash; nothing changed yet</h2>
+  <div style="background:#EFF6FF;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;margin:14px 0;">
+    <b>{len(matched)}</b> employee(s) will get missing details filled &middot;
+    <b>{len(counsel_dept)}</b> in a "Counsellor" department &rarr; Sales &middot;
+    creating <b>{_esc(', '.join(need_create)) or 'none'}</b> &middot;
+    <b>{len(unmatched)}</b> Excel row(s) had no matching employee (skipped).
+  </div>
+  <form method=post style="margin:12px 0;">
+    <input type=hidden name=action value=apply>
+    <input type=hidden name=payload value="{payload}">
+    <button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply changes</button>
+  </form>
+  <h3 style="color:#2952A3;font-size:1rem;">Details to fill ({len(matched)})</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Employee</th><th>Email</th><th>Fields to fill (were blank)</th></tr></thead>
+    <tbody>{fill_rows or '<tr><td colspan=3 style=color:#888;>Nothing to fill &mdash; all matched employees already have these details.</td></tr>'}</tbody>
+  </table>
+  <h3 style="color:#b45309;font-size:1rem;margin-top:22px;">Counsellor department &rarr; Sales ({len(counsel_dept)})</h3>
+  <p style="color:#777;font-size:.84rem;">{_esc(', '.join(c['name'] for c in counsel_dept)) or 'None — no employee is in a Counsellor department.'}</p>
+  <h3 style="color:#b91c1c;font-size:1rem;margin-top:22px;">No matching employee &mdash; skipped ({len(unmatched)})</h3>
+  <p style="color:#777;font-size:.84rem;">These Excel people aren't in the portal (matched by email). Tell me if you want them added as new records too.</p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Name</th><th>Email</th><th>Dept</th></tr></thead>
+    <tbody>{unm_rows or '<tr><td colspan=3 style=color:#888;>All Excel rows matched an employee.</td></tr>'}</tbody>
+  </table>
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_hr_import_employees: %s", e)
+        flash(f'Employee import error: {e}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def _counsellor_options_with_staff(pathway='plab'):
     """Counsellor dropdown options = the configured lookup names PLUS every active
     Sales/Operations employee, so the PLAB add/edit forms offer real team members
