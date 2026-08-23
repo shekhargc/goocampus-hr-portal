@@ -3710,7 +3710,8 @@ def admin_hr_import_employees():
 
         # Counsellor department -> Sales (portal-side cleanup).
         counsel_dept = [dict(r) for r in conn.execute(
-            "SELECT id, name, department FROM employees WHERE LOWER(COALESCE(department,'')) LIKE 'counsel%'").fetchall()]
+            "SELECT id, name, department FROM employees WHERE LOWER(COALESCE(department,'')) LIKE ?",
+            ('counsel%',)).fetchall()]
         # Joyce / Daniel — create if missing.
         need_create = []
         for nm in ('Joyce', 'Daniel'):
@@ -3733,7 +3734,8 @@ def admin_hr_import_employees():
                     conn.rollback()
             n_dept = 0
             if counsel_dept:
-                conn.execute("UPDATE employees SET department = 'Sales' WHERE LOWER(COALESCE(department,'')) LIKE 'counsel%'")
+                conn.execute("UPDATE employees SET department = 'Sales' WHERE LOWER(COALESCE(department,'')) LIKE ?",
+                             ('counsel%',))
                 n_dept = len(counsel_dept)
             n_new = 0
             for nm in need_create:
