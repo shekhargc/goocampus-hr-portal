@@ -537,7 +537,7 @@ def ops_uae_client_edit_page(client_id):
         # Dropdown options for Plan Type, Account Status, Current Stage,
         # Switched Program, Counsellor, Lead Source. Sourced from
         # lookup_options where pathway='uae'.
-        **section_client_lookups('uae'),
+        **section_client_lookups('uae', current=client.get('counsellor')),
         **section_client_products('uae'),
     )
 
