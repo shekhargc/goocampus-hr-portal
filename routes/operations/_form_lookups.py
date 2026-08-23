@@ -120,12 +120,16 @@ def section_client_products(pathway):
 # corresponding edit/add form. Keys here MUST match the {% for x in <var> %}
 # variable names already used in the matching template.
 
-def section_client_lookups(pathway):
+def section_client_lookups(pathway, current=None):
     """Client registration / edit form (ops_*_client_edit_form.html).
 
     PLAB form (ops_plab_form.html) uses these dropdowns. AMC / Consulting
     edit forms historically used plain text inputs for the same fields —
     after this lookup wiring they should switch to <select>.
+
+    `current` = the client's existing counsellor value; always included in the
+    options so editing an OLD record (whose counsellor is now an inactive employee)
+    can never drop the name on save. (founder 2026-08-23)
     """
     # Counsellors = the configured lookup names PLUS every current Sales/Operations
     # employee, so a client's counsellor can be set to an actual team member (e.g.
@@ -142,6 +146,8 @@ def section_client_lookups(pathway):
         conn.close()
     except Exception:
         pass
+    if current and str(current).strip():
+        counsellors.append(str(current).strip())
     counsellors = sorted({c for c in counsellors if c}, key=str.lower)
     return {
         'plan_types':           get_lookup_options('plan_type',          pathway=pathway),

@@ -3450,6 +3450,11 @@ _COUNSELLOR_STANDARDISE_MAP = [
     ('Robin',        'Robin Johnson J'),
     ('Adhithya',     'Adithya A'),
     ('Jeswin',       'Jeswin Jacob'),
+    # Residual spelling variants surfaced by the audit (2026-08-23).
+    ('Gopi krishnan', 'Gopi Krishnan A'),
+    ('Kiran DR',      'Kiran D R'),
+    ('Ralph',         'Ralph Leander D Cruz'),
+    ('Alfiya',        'Alfiya Naaz'),
 ]
 
 
@@ -3831,11 +3836,14 @@ def admin_hr_import_employees():
         except Exception: pass
 
 
-def _counsellor_options_with_staff(pathway='plab'):
+def _counsellor_options_with_staff(pathway='plab', current=None):
     """Counsellor dropdown options = the configured lookup names PLUS every active
     Sales/Operations employee, so the PLAB add/edit forms offer real team members
     (e.g. an ops person who owns a transferred client) like the other pathways'
-    edit forms now do via section_client_lookups. (founder 2026-08-20)"""
+    edit forms now do via section_client_lookups. (founder 2026-08-20)
+
+    `current` = the client's existing counsellor; always kept in the options so
+    editing an old record can never drop an inactive name on save. (2026-08-23)"""
     opts = list(get_lookup_options('counsellor', pathway=pathway) or [])
     try:
         conn = get_db()
@@ -3847,6 +3855,8 @@ def _counsellor_options_with_staff(pathway='plab'):
         conn.close()
     except Exception:
         pass
+    if current and str(current).strip():
+        opts.append(str(current).strip())
     return sorted({o for o in opts if o}, key=str.lower)
 
 
@@ -29901,7 +29911,7 @@ def ops_plab_edit(client_id):
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
-                           counsellors=_counsellor_options_with_staff('plab'),
+                           counsellors=_counsellor_options_with_staff('plab', current=client.get('counsellor')),
                            upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')

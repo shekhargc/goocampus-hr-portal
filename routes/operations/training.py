@@ -521,7 +521,7 @@ def ops_training_client_edit_page(client_id):
         # Dropdown options for Plan Type, Account Status, Current Stage,
         # Switched Program, Counsellor, Lead Source. Sourced from
         # lookup_options where pathway='training'.
-        **section_client_lookups('training'),
+        **section_client_lookups('training', current=client.get('counsellor')),
         **section_client_products('training'),
     )
 
