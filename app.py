@@ -3569,7 +3569,9 @@ _EMP_IMPORT_MAP = {
     'gender': 'gender', 'pan card number': 'pan', 'aadhaar card number': 'aadhaar',
 }
 _EMP_IMPORT_NEW_COLS = ('pan', 'aadhaar', 'gender', 'other_email', 'employee_type')
-_EMP_TARGET_COLS = ['department', 'title', 'joining_date', 'last_working_day', 'other_email',
+# Candidate target columns. The employee "Title" maps to `designation` (the employees
+# table has no `title` column). The route filters this to columns that actually exist.
+_EMP_TARGET_COLS = ['department', 'designation', 'joining_date', 'last_working_day', 'other_email',
                     'dob', 'personal_phone', 'address', 'employee_type', 'gender', 'pan',
                     'aadhaar', 'reporting_to']
 
@@ -3614,7 +3616,7 @@ def _emp_xls_rows(raw):
             'reporting_to': _txt(_cell(r, 'reporting to')),
             'employee status': _txt(_cell(r, 'employee status')),
             'department': _txt(_cell(r, 'department')),
-            'title': _txt(_cell(r, 'title')),
+            'designation': _txt(_cell(r, 'title')),
             'joining_date': _date(_cell(r, 'date of joining')),
             'last_working_day': _date(_cell(r, 'date of exit')),
             'other_email': _txt(_cell(r, 'other email')).lower(),
@@ -3657,6 +3659,11 @@ def admin_hr_import_employees():
             except Exception:
                 conn.rollback()
 
+        # Only touch columns that actually exist on this DB's employees table.
+        ecols = {r['column_name'] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'employees'").fetchall()}
+        target_cols = [c for c in _EMP_TARGET_COLS if c in ecols]
+
         action = request.form.get('action') if request.method == 'POST' else None
 
         # Parse rows: from the uploaded file (preview) or the carried payload (apply).
@@ -3672,7 +3679,7 @@ def admin_hr_import_employees():
         # Current employees, keyed by email + a name index for reporting_to resolution.
         emps = [dict(r) for r in conn.execute(
             "SELECT id, name, LOWER(COALESCE(email,'')) AS em, " +
-            ", ".join(_EMP_TARGET_COLS) + " FROM employees").fetchall()]
+            ", ".join(target_cols) + " FROM employees").fetchall()]
         by_email = {e['em']: e for e in emps if e['em']}
         by_name = {}
         for e in emps:
@@ -3689,7 +3696,7 @@ def admin_hr_import_employees():
                 unmatched.append(row)
                 continue
             fills = {}
-            for col in _EMP_TARGET_COLS:
+            for col in target_cols:
                 if col == 'reporting_to':
                     rid = by_name.get(_norm(row.get('reporting_to')))
                     if rid and _blank(e.get('reporting_to')):
