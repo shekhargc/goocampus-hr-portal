@@ -3568,10 +3568,12 @@ _EMP_IMPORT_MAP = {
     'personal mobile': 'personal_phone', 'address': 'address', 'employee type': 'employee_type',
     'gender': 'gender', 'pan card number': 'pan', 'aadhaar card number': 'aadhaar',
 }
-_EMP_IMPORT_NEW_COLS = ('pan', 'aadhaar', 'gender', 'other_email', 'employee_type')
-# Candidate target columns. The employee "Title" maps to `designation` (the employees
-# table has no `title` column). The route filters this to columns that actually exist.
-_EMP_TARGET_COLS = ['department', 'designation', 'joining_date', 'last_working_day', 'other_email',
+_EMP_IMPORT_NEW_COLS = ('pan', 'aadhaar', 'gender', 'employee_type')
+# Candidate target columns. Excel "Title" -> `designation` (no `title` column); Excel
+# "Other Email" (personal) -> the existing `personal_email` field; the @goocampus.in
+# "Email ID" is the official login email and is the match key. The route filters this
+# list to columns that actually exist.
+_EMP_TARGET_COLS = ['department', 'designation', 'joining_date', 'last_working_day', 'personal_email',
                     'dob', 'personal_phone', 'address', 'employee_type', 'gender', 'pan',
                     'aadhaar', 'reporting_to']
 
@@ -3619,7 +3621,7 @@ def _emp_xls_rows(raw):
             'designation': _txt(_cell(r, 'title')),
             'joining_date': _date(_cell(r, 'date of joining')),
             'last_working_day': _date(_cell(r, 'date of exit')),
-            'other_email': _txt(_cell(r, 'other email')).lower(),
+            'personal_email': _txt(_cell(r, 'other email')).lower(),
             'dob': _date(_cell(r, 'birth date')),
             'personal_phone': _txt(_cell(r, 'personal mobile')),
             'address': _txt(_cell(r, 'address')),
@@ -3678,12 +3680,15 @@ def admin_hr_import_employees():
 
         # Current employees, keyed by email + a name index for reporting_to resolution.
         emps = [dict(r) for r in conn.execute(
-            "SELECT id, name, LOWER(COALESCE(email,'')) AS em, " +
+            "SELECT id, name, LOWER(TRIM(COALESCE(email,''))) AS em, " +
             ", ".join(target_cols) + " FROM employees").fetchall()]
         by_email = {e['em']: e for e in emps if e['em']}
-        by_name = {}
+        by_name = {}                 # normalized name -> id (for reporting_to)
+        fullname_emps = {}           # normalized name -> [emp,...] (for the match fallback)
         for e in emps:
-            by_name.setdefault(_norm(e['name']), e['id'])
+            nk = _norm(e['name'])
+            by_name.setdefault(nk, e['id'])
+            fullname_emps.setdefault(nk, []).append(e)
 
         def _blank(v):
             return v is None or str(v).strip() == ''
@@ -3691,7 +3696,14 @@ def admin_hr_import_employees():
         # Build the fill plan for matched rows.
         matched, unmatched = [], []
         for row in rows:
-            e = by_email.get((row.get('email') or '').lower())
+            e = by_email.get((row.get('email') or '').strip().lower())
+            if not e:
+                # Fallback: match by full name, but ONLY when it's unambiguous, so two
+                # different people who share a name (e.g. the two "Chandan A") are never
+                # crossed — those stay unmatched for manual handling.
+                cands = fullname_emps.get(_norm((row.get('first', '') + ' ' + row.get('last', '')).strip()))
+                if cands and len(cands) == 1:
+                    e = cands[0]
             if not e:
                 unmatched.append(row)
                 continue
