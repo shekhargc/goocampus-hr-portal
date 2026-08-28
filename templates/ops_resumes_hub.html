@@ -13,11 +13,16 @@
   </div>
 
   <form method="GET" style="background:#fff;border-radius:12px;padding:14px 18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-    <input type="text" name="q" value="{{ q }}" placeholder="Search by client name or registration number…"
-           style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:0.9rem;">
+    <div class="autocomplete-wrap" style="flex:1;min-width:240px;">
+      <input type="search" id="ops-search" name="q" value="{{ q }}" data-pathway="all" autocomplete="off"
+             placeholder="Search by client name or registration number…"
+             style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:0.9rem;">
+      <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
     <button type="submit" style="padding:9px 20px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;">Search</button>
     {% if q %}<a href="{{ url_for('ops_resumes_hub') }}" style="color:var(--gray-500);text-decoration:none;font-size:0.85rem;">Clear</a>{% endif %}
   </form>
+  {% include '_ops_name_search.html' %}
 
   <div style="background:#fff;border-radius:12px;padding:6px 6px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;font-size:0.86rem;min-width:760px;">
