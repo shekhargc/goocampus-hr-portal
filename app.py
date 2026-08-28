@@ -4955,13 +4955,20 @@ def client_dashboard():
     # Strip a leading Dr / Dr. / Doctor prefix — including "Dr.Rachana" (no space) —
     # so the template's single "Dr." never doubles. Won't touch names like "Drake".
     _clean_name = _re.sub(r'^\s*(?:dr\.\s*|dr\s+|doctor\s+)', '', _raw_name, flags=_re.I).strip() or 'Doctor'
+    # Latest resume/CV (uploaded by the team) — the client sees the current version.
+    _resume = None
+    try:
+        _rc = get_db(); _r = _client_latest_resume(_rc, account['id']); _rc.close()
+        _resume = dict(_r) if _r else None
+    except Exception:
+        _resume = None
     _tpl = 'client_dashboard.html' if _onboarded else 'client_dashboard_onboarding.html'
     return render_template(_tpl,
         account=account, registrations=registrations, doc_requests=doc_requests,
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
         photo_doc=photo_doc, profile_locked=_locked, client_name_clean=_clean_name,
         primary_reg_id=(_primary['id'] if _primary else None),
-        onboarding_stages=onboarding_stages,
+        onboarding_stages=onboarding_stages, resume=_resume,
         first_login=session.get('first_login', False))
 
 
@@ -30434,6 +30441,221 @@ def ops_client_contract_download(client_id):
         except Exception as e:
             logging.error(f"contract_download presign: {e}")
     return "Contract temporarily unavailable", 503
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Client Resume / CV — versioned uploads (team uploads; client sees the latest)
+# ══════════════════════════════════════════════════════════════════════════════
+_RESUME_CT = {
+    'pdf': 'application/pdf', 'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+}
+
+
+def _ensure_client_resumes(conn):
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_resumes (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT,
+            client_id INTEGER,
+            pathway TEXT,
+            version INTEGER DEFAULT 1,
+            r2_key TEXT,
+            filename TEXT,
+            content_type TEXT,
+            file_size INTEGER DEFAULT 0,
+            uploaded_by INTEGER,
+            uploaded_by_name TEXT,
+            notes TEXT,
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_client_resumes_reg ON client_resumes (registration_number)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+
+def build_client_resume_ctx(conn, client):
+    """Resume panel context for a plab_clients dict: latest version + full history.
+    Keyed by registration_number so it aligns with the ops profile. (founder 2026-08-23)"""
+    reg = (client.get('registration_number') or '').strip()
+    if not reg:
+        return {'count': 0, 'latest': None, 'versions': [], 'client_id': client.get('id')}
+    _ensure_client_resumes(conn)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, version, filename, content_type, file_size, uploaded_by_name, notes, uploaded_at "
+        "FROM client_resumes WHERE registration_number = ? ORDER BY version DESC", (reg,)).fetchall()]
+    return {'count': len(rows), 'latest': rows[0] if rows else None,
+            'versions': rows, 'client_id': client.get('id')}
+
+
+def _resume_row(conn, client_id, version=None):
+    """The requested resume row for a client (latest if version is None)."""
+    c = conn.execute("SELECT registration_number FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not c or not c['registration_number']:
+        return None
+    reg = c['registration_number']
+    if version:
+        return conn.execute("SELECT * FROM client_resumes WHERE registration_number = ? AND version = ?",
+                            (reg, version)).fetchone()
+    return conn.execute("SELECT * FROM client_resumes WHERE registration_number = ? ORDER BY version DESC LIMIT 1",
+                        (reg,)).fetchone()
+
+
+@app.route('/operations/client/<int:client_id>/resume/upload', methods=['POST'])
+@admin_required
+def ops_client_resume_upload(client_id):
+    """Team uploads a resume/CV for a client -> R2 -> a new version row."""
+    back = request.referrer or url_for('ops_main_dashboard')
+    conn = get_db()
+    _ensure_client_resumes(conn)
+    client = conn.execute("SELECT id, registration_number, COALESCE(pathway,'plab') AS pathway FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close(); flash('Client not found', 'error'); return redirect(back)
+    reg = client['registration_number'] or f'client_{client_id}'
+    file = request.files.get('file')
+    if not file or not file.filename:
+        conn.close(); flash('No file selected', 'error'); return redirect(back)
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
+    if ext not in _RESUME_CT:
+        conn.close(); flash('Resume must be a PDF, DOC, DOCX or image.', 'error'); return redirect(back)
+    file_bytes = file.read()
+    if len(file_bytes) > 15 * 1024 * 1024:
+        conn.close(); flash('File too large (max 15 MB)', 'error'); return redirect(back)
+    from core import storage
+    if not storage.is_configured():
+        conn.close(); flash('File storage not configured', 'error'); return redirect(back)
+    try:
+        version = conn.execute("SELECT COALESCE(MAX(version),0)+1 AS v FROM client_resumes WHERE registration_number = ?",
+                               (reg,)).fetchone()['v']
+        r2_key = storage.make_doc_key(client['pathway'], reg, f'Resume_v{version}', file.filename)
+        if not storage.upload_bytes(r2_key, file_bytes, _RESUME_CT.get(ext, 'application/octet-stream')):
+            conn.close(); flash('Upload to storage failed', 'error'); return redirect(back)
+        u = get_user()
+        conn.execute(
+            "INSERT INTO client_resumes (registration_number, client_id, pathway, version, r2_key, "
+            " filename, content_type, file_size, uploaded_by, uploaded_by_name, notes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (reg, client_id, client['pathway'], version, r2_key, file.filename,
+             _RESUME_CT.get(ext, 'application/octet-stream'), len(file_bytes),
+             session.get('user_id'), (u['name'] if u else '') or '',
+             (request.form.get('notes') or '').strip()))
+        conn.commit()
+        flash(f'Resume v{version} uploaded.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        flash(f'Resume upload failed: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(back)
+
+
+def _serve_resume(row, reg, download=False):
+    if not row or not row['r2_key']:
+        return "No resume on file", 404
+    try:
+        from core import storage
+        fn = None
+        if download:
+            ext = (row['filename'] or 'resume').rsplit('.', 1)[-1] if '.' in (row['filename'] or '') else 'pdf'
+            fn = (reg or 'resume').replace('/', '_') + f"_resume_v{row['version']}." + ext
+        url = storage.presigned_get_url(row['r2_key'], filename_for_download=fn) if download \
+            else storage.presigned_get_url(row['r2_key'])
+        if url:
+            return redirect(url, code=302)
+    except Exception as e:
+        logging.error(f"resume serve presign: {e}")
+    return "Resume temporarily unavailable", 503
+
+
+@app.route('/operations/client/<int:client_id>/resume/view')
+@app.route('/operations/client/<int:client_id>/resume/view/<int:version>')
+@admin_required
+def ops_client_resume_view(client_id, version=None):
+    conn = get_db(); row = _resume_row(conn, client_id, version)
+    reg = row['registration_number'] if row else ''
+    conn.close()
+    return _serve_resume(row, reg, download=False)
+
+
+@app.route('/operations/client/<int:client_id>/resume/download')
+@app.route('/operations/client/<int:client_id>/resume/download/<int:version>')
+@admin_required
+def ops_client_resume_download(client_id, version=None):
+    conn = get_db(); row = _resume_row(conn, client_id, version)
+    reg = row['registration_number'] if row else ''
+    conn.close()
+    return _serve_resume(row, reg, download=True)
+
+
+def _client_latest_resume(conn, account_id):
+    """Latest resume across ALL of a client's registrations (combo clients)."""
+    _ensure_client_resumes(conn)
+    regs = [r['registration_number'] for r in conn.execute(
+        "SELECT registration_number FROM client_registrations WHERE account_id = ? "
+        "AND registration_number IS NOT NULL", (account_id,)).fetchall()]
+    if not regs:
+        return None
+    ph = ','.join(['?'] * len(regs))
+    return conn.execute(
+        f"SELECT * FROM client_resumes WHERE registration_number IN ({ph}) "
+        f"ORDER BY uploaded_at DESC, version DESC LIMIT 1", regs).fetchone()
+
+
+@app.route('/client/resume/view')
+@client_required
+def client_resume_view():
+    conn = get_db(); row = _client_latest_resume(conn, session.get('user_id')); conn.close()
+    return _serve_resume(row, row['registration_number'] if row else '', download=False)
+
+
+@app.route('/client/resume/download')
+@client_required
+def client_resume_download():
+    conn = get_db(); row = _client_latest_resume(conn, session.get('user_id')); conn.close()
+    return _serve_resume(row, row['registration_number'] if row else '', download=True)
+
+
+@app.route('/operations/resumes')
+@admin_required
+def ops_resumes_hub():
+    """Central hub: every client who has a resume — latest version, count, last update,
+    with View/Download. Searchable by name or registration number. (founder 2026-08-23)"""
+    user = get_user()
+    q = (request.args.get('q') or '').strip()
+    conn = get_db()
+    _ensure_client_resumes(conn)
+    where, params = '', []
+    if q:
+        where = ("WHERE (LOWER(COALESCE(pc.first_name,'') || ' ' || COALESCE(pc.last_name,'')) LIKE ? "
+                 "OR LOWER(COALESCE(r.registration_number,'')) LIKE ?)")
+        params = [f'%{q.lower()}%', f'%{q.lower()}%']
+    rows = []
+    try:
+        rows = [dict(x) for x in conn.execute(f"""
+            SELECT DISTINCT ON (r.registration_number)
+                   r.registration_number AS reg, r.client_id, r.version, r.filename,
+                   r.uploaded_at, r.uploaded_by_name, COALESCE(r.pathway,'plab') AS pathway,
+                   (SELECT COUNT(*) FROM client_resumes r2 WHERE r2.registration_number = r.registration_number) AS versions,
+                   pc.prefix, pc.first_name, pc.last_name
+            FROM client_resumes r
+            LEFT JOIN plab_clients pc ON pc.registration_number = r.registration_number
+            {where}
+            ORDER BY r.registration_number, r.version DESC
+        """, params).fetchall()]
+        rows.sort(key=lambda x: str(x.get('uploaded_at') or ''), reverse=True)
+        total = conn.execute("SELECT COUNT(DISTINCT registration_number) AS c FROM client_resumes").fetchone()['c']
+    except Exception as e:
+        logging.error("ops_resumes_hub: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        total = 0
+    conn.close()
+    return render_template('ops_resumes_hub.html', rows=rows, q=q, total=total,
+                           active_ops_page='resumes', user=user)
+
 
 @app.route('/admin/plab-contracts-bulk', methods=['GET', 'POST'])
 @admin_required

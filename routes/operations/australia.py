@@ -520,10 +520,12 @@ def ops_australia_client_detail(client_id):
         except Exception: pass
 
     try:
-        from app import build_client_address_ctx
+        from app import build_client_address_ctx, build_client_resume_ctx
         address_ctx = build_client_address_ctx(conn, dict(client))
+        resume_ctx = build_client_resume_ctx(conn, dict(client))
     except Exception:
         address_ctx = None
+        resume_ctx = None
     conn.close()
 
     return render_template(
@@ -534,6 +536,7 @@ def ops_australia_client_detail(client_id):
         user=user,
         client=client,
         address=address_ctx,
+        resume=resume_ctx,
         package_services=package_services,
         sections=sections,
         amount_paid=amount_paid,

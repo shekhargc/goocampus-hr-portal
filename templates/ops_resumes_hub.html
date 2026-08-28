@@ -1,0 +1,65 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Resumes / CVs - Operations{% endblock %}
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="margin-bottom:18px;">
+    <h1 style="margin:0;font-size:1.35rem;font-weight:700;color:var(--navy);">Resumes / CVs</h1>
+    <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">
+      Every client who has a CV on file — the latest version, how many versions, and when it was last updated.
+      <b>{{ total }}</b> client{{ '' if total == 1 else 's' }} with a resume.
+      To add a CV for a client who isn't listed, open their profile and use the Resume panel.
+    </p>
+  </div>
+
+  <form method="GET" style="background:#fff;border-radius:12px;padding:14px 18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+    <div class="autocomplete-wrap" style="flex:1;min-width:240px;">
+      <input type="search" id="ops-search" name="q" value="{{ q }}" data-pathway="all" autocomplete="off"
+             placeholder="Search by client name or registration number…"
+             style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:0.9rem;">
+      <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
+    <button type="submit" style="padding:9px 20px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;">Search</button>
+    {% if q %}<a href="{{ url_for('ops_resumes_hub') }}" style="color:var(--gray-500);text-decoration:none;font-size:0.85rem;">Clear</a>{% endif %}
+  </form>
+  {% include '_ops_name_search.html' %}
+
+  <div style="background:#fff;border-radius:12px;padding:6px 6px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.86rem;min-width:760px;">
+      <thead>
+        <tr style="text-align:left;color:var(--gray-500);border-bottom:2px solid var(--gray-100);">
+          <th style="padding:10px 12px;">Client</th>
+          <th style="padding:10px 12px;">Reg. No.</th>
+          <th style="padding:10px 12px;">Pathway</th>
+          <th style="padding:10px 12px;text-align:center;">Latest</th>
+          <th style="padding:10px 12px;text-align:center;">Versions</th>
+          <th style="padding:10px 12px;">Last updated</th>
+          <th style="padding:10px 12px;">By</th>
+          <th style="padding:10px 12px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px 12px;font-weight:600;color:var(--navy);">{{ [r.prefix, r.first_name, r.last_name]|select|join(' ') or '—' }}</td>
+          <td style="padding:10px 12px;color:var(--gray-600);">{{ r.reg|format_reg if r.reg else '—' }}</td>
+          <td style="padding:10px 12px;color:var(--gray-600);text-transform:capitalize;">{{ r.pathway }}</td>
+          <td style="padding:10px 12px;text-align:center;"><span style="background:#dcfce7;color:#15803d;font-weight:700;font-size:11px;padding:3px 8px;border-radius:20px;">v{{ r.version }}</span></td>
+          <td style="padding:10px 12px;text-align:center;color:var(--gray-600);">{{ r.versions }}</td>
+          <td style="padding:10px 12px;color:var(--gray-600);">{{ r.uploaded_at|format_date }}</td>
+          <td style="padding:10px 12px;color:var(--gray-600);">{{ r.uploaded_by_name or '—' }}</td>
+          <td style="padding:10px 12px;white-space:nowrap;">
+            <a href="{{ url_for('ops_client_resume_view', client_id=r.client_id) }}" target="_blank" style="padding:6px 12px;background:var(--navy);color:#fff;border-radius:6px;text-decoration:none;font-weight:600;font-size:12.5px;">View</a>
+            <a href="{{ url_for('ops_client_resume_download', client_id=r.client_id) }}" style="padding:6px 12px;background:#fff;color:var(--navy);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:12.5px;">Download</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="padding:20px;text-align:center;color:var(--gray-400);">
+          {% if q %}No resumes match “{{ q }}”.{% else %}No resumes uploaded yet. Open a client's profile and use the Resume panel to add one.{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
