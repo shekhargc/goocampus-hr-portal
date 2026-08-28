@@ -573,6 +573,10 @@ def ops_portfolio_client_edit_save(client_id):
                         continue
                     try: val = int(val)
                     except (TypeError, ValueError): continue
+                elif col == 'plan_type':
+                    # Never blank an existing plan type on an empty submit either.
+                    if not val:
+                        continue
                 sets.append(f"{col} = ?")
                 params.append(val)
         if sets:

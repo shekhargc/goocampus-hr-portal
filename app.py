@@ -2966,7 +2966,12 @@ def admin_consulting_product_backfill():
             "SELECT pc.id, pc.registration_number, pc.prefix, pc.first_name, pc.last_name, pc.plan_type, "
             "  (SELECT cr.product_id FROM client_registrations cr "
             "     WHERE UPPER(TRIM(cr.registration_number)) = UPPER(TRIM(pc.registration_number)) "
-            "       AND cr.product_id IS NOT NULL ORDER BY cr.id DESC LIMIT 1) AS reg_product_id "
+            "       AND cr.product_id IS NOT NULL ORDER BY cr.id DESC LIMIT 1) AS reg_product_id, "
+            # The plan type from the client's registration (came from the sales lead and
+            # is never edited there) — used to restore a plan type wiped off the master.
+            "  (SELECT cr.plan_type FROM client_registrations cr "
+            "     WHERE UPPER(TRIM(cr.registration_number)) = UPPER(TRIM(pc.registration_number)) "
+            "       AND COALESCE(NULLIF(TRIM(cr.plan_type),''),'') <> '' ORDER BY cr.id DESC LIMIT 1) AS reg_plan_type "
             "  FROM plab_clients pc "
             " WHERE COALESCE(pc.pathway,'plab') = 'consulting' AND pc.product_id IS NULL "
             " ORDER BY pc.id DESC").fetchall()]
@@ -2995,23 +3000,42 @@ def admin_consulting_product_backfill():
 
         if request.method == 'POST' and request.form.get('apply') == '1':
             n = 0
+            npt = 0
             for r in matched:
                 conn.execute("UPDATE plab_clients SET product_id = ?, updated_at = CURRENT_TIMESTAMP "
                              "WHERE id = ? AND product_id IS NULL", (r['pid'], r['id']))
+                # Also restore a plan type wiped off the master, from the registration
+                # (the lead's plan type is untouched). Fill-blanks only.
+                rpt = (r.get('reg_plan_type') or '').strip()
+                if rpt and not (r.get('plan_type') or '').strip():
+                    conn.execute(
+                        "UPDATE plab_clients SET plan_type = ? "
+                        "WHERE id = ? AND COALESCE(NULLIF(TRIM(plan_type),''),'') = ''",
+                        (rpt, r['id']))
+                    npt += 1
                 n += 1
             conn.commit()
-            flash(f'Linked {n} Standard Consulting client(s) to their product. '
-                  f'{len(unmatched)} could not be matched (blank/unknown plan type) — set those manually.',
+            flash(f'Linked {n} Standard Consulting client(s) to their product'
+                  + (f' and restored {npt} plan type(s) from the registration' if npt else '')
+                  + f'. {len(unmatched)} could not be matched (blank/unknown plan type) — set those manually.',
                   'success')
             return redirect(url_for('admin_consulting_product_backfill'))
 
         from collections import Counter
         by_prod = Counter(r['pname'] for r in matched)
         def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        def _pt_cell(r):
+            pt = (r.get('plan_type') or '').strip()
+            rpt = (r.get('reg_plan_type') or '').strip()
+            if pt:
+                return _esc(pt)
+            if rpt:
+                return f"<span style='color:#0f766e;'>&rarr; {_esc(rpt)} <span style='color:#888;font-size:.72rem;'>(restore from lead)</span></span>"
+            return "<span style='color:#b91c1c;'>(blank)</span>"
         rows_html = ''.join(
             f"<tr><td>{_esc(r['registration_number'])}</td>"
             f"<td>{_esc(((r.get('first_name') or '') + ' ' + (r.get('last_name') or '')).strip())}</td>"
-            f"<td>{_esc(r.get('plan_type'))}</td>"
+            f"<td>{_pt_cell(r)}</td>"
             f"<td style='font-weight:600;color:#0f766e;'>&rarr; {_esc(r['pname'])}</td>"
             f"<td style='font-size:0.76rem;color:#888;'>{_esc(r.get('src'))}</td></tr>"
             for r in matched[:600])
@@ -29938,7 +29962,7 @@ def ops_plab_edit(client_id):
                 mobile=?, whatsapp1=?, whatsapp2=?, email=?, dob=?, city=?, state=?,
                 instagram=?, facebook=?, linkedin=?,
                 father_name=?, father_phone=?, mother_name=?, mother_phone=?, parents_email=?,
-                joined_stage=?, plan_type=?, product_id=COALESCE(?, product_id),
+                joined_stage=?, plan_type=COALESCE(NULLIF(?,''), plan_type), product_id=COALESCE(?, product_id),
                 account_status=?, current_stage=?, switched_program=?,
                 dropped_date=?,
                 counsellor=?, counsellor_email=?, counsellor_number=?,
