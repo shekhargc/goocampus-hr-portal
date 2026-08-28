@@ -875,6 +875,12 @@
                 <span class="ops-nav-text">Webinars &amp; Conferences</span>
             </a>
             {% endif %}
+            {% if can_access('portfolio_pathway','mentorship','view') %}
+            <a href="/operations/portfolio/mentorship" class="ops-nav-item {% if active_ops_page == 'portfolio-mentorship' %}active{% endif %}" data-tooltip="Mentorship Sessions">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+                <span class="ops-nav-text">Mentorship Sessions</span>
+            </a>
+            {% endif %}
 
             <!-- Shared cross-pathway pages (Reports / Settings / Vendors) -->
             <div class="ops-nav-group-label">Shared</div>
