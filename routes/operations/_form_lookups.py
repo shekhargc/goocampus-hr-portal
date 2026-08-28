@@ -50,6 +50,13 @@ _VENDOR_COUNTRY = {
 }
 
 
+# Vendor categories that are SHARED across every pathway — a provider added under
+# any one pathway shows in all pathways' forms. Mentorship providers (the mentor
+# doctors) mentor clients regardless of pathway, so the list is one shared pool.
+# (founder 2026-08-23) — other categories stay pathway-scoped by country.
+_SHARED_VENDOR_CATEGORIES = {'mentorship'}
+
+
 def vendor_names_for(category, pathway, fallback_lookup=None):
     """Return centralised vendor names for a category + pathway.
 
@@ -58,15 +65,25 @@ def vendor_names_for(category, pathway, fallback_lookup=None):
     this is the option list for a vendor <select>. Falls back to the
     pathway-scoped lookup_options list (fallback_lookup) when the
     centralised vendor list is empty, so existing forms never go blank.
+
+    For categories in _SHARED_VENDOR_CATEGORIES (e.g. Mentorship), the country
+    scope is dropped so the SAME provider list appears on every pathway's form.
     """
-    country = _VENDOR_COUNTRY.get((pathway or '').strip().lower(), 'UK Pathway')
+    shared = (category or '').strip().lower() in _SHARED_VENDOR_CATEGORIES
+    country = None if shared else _VENDOR_COUNTRY.get((pathway or '').strip().lower(), 'UK Pathway')
     try:
         vendors = get_vendors_by_category(category, country)
         names = [v['name'] for v in vendors] if vendors else []
     except Exception:
         names = []
     if names:
-        return names
+        # De-duplicate by name (a shared provider may be registered under >1 pathway).
+        seen, out = set(), []
+        for n in names:
+            k = (n or '').strip().lower()
+            if k and k not in seen:
+                seen.add(k); out.append(n)
+        return out
     if fallback_lookup:
         return get_lookup_options(fallback_lookup, pathway=pathway) or []
     return []
