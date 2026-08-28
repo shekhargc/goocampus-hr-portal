@@ -705,6 +705,21 @@ def ops_consulting_client_edit_page(client_id):
     if cur and cur not in merged:
         merged.append(cur)
     lookups['counsellors'] = sorted({m for m in merged if m}, key=str.lower)
+    # Product dropdown = consulting products PLUS the client's CURRENT product even if
+    # it's tagged under another pathway (e.g. "AMC Consulting"). Without this the
+    # dropdown showed blank for such clients and a save could wipe the product.
+    _plist = list((section_client_products('consulting') or {}).get('products') or [])
+    _cpid = client.get('product_id')
+    if _cpid and not any((p.get('id') == _cpid) for p in _plist):
+        try:
+            _pc = get_db()
+            _pr = _pc.execute("SELECT id, name FROM products_services WHERE id = ?", (_cpid,)).fetchone()
+            _pc.close()
+            if _pr:
+                _plist.append({'id': _pr['id'], 'name': _pr['name']})
+                _plist.sort(key=lambda p: (p.get('name') or '').lower())
+        except Exception:
+            pass
     return render_template(
         'ops_consulting_client_edit_form.html',
         user=user,
@@ -713,8 +728,8 @@ def ops_consulting_client_edit_page(client_id):
         pathway_name='Standard Consulting',
         active_ops_page='consulting-clients',
         active_pathway='consulting',
+        products=_plist,
         **lookups,
-        **section_client_products('consulting'),
     )
 
 
@@ -741,7 +756,16 @@ def ops_consulting_client_edit_save(client_id):
                     except ValueError: val = 0
                 # product_id: empty selection -> NULL (legacy rows stay clean).
                 elif col == 'product_id':
-                    val = val or None
+                    # Never blank an existing product on an empty submit (e.g. the edit
+                    # dropdown had no matching option for a cross-pathway product). Keep it.
+                    if not val:
+                        continue
+                    try: val = int(val)
+                    except (TypeError, ValueError): continue
+                elif col == 'plan_type':
+                    # Never blank an existing plan type on an empty submit either.
+                    if not val:
+                        continue
                 sets.append(f"{col} = ?")
                 params.append(val)
         if sets:

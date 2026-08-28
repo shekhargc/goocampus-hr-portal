@@ -642,7 +642,16 @@ def ops_australia_client_edit_save(client_id):
                         val = 0
                 # product_id: empty selection -> NULL (legacy rows stay clean).
                 elif col == 'product_id':
-                    val = val or None
+                    # Never blank an existing product on an empty submit (e.g. the edit
+                    # dropdown had no matching option for a cross-pathway product). Keep it.
+                    if not val:
+                        continue
+                    try: val = int(val)
+                    except (TypeError, ValueError): continue
+                elif col == 'plan_type':
+                    # Never blank an existing plan type on an empty submit either.
+                    if not val:
+                        continue
                 sets.append(f"{col} = ?")
                 params.append(val)
         if sets:
