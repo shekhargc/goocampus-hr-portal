@@ -412,6 +412,10 @@
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17 14v7M14 17.5h7"/></svg></span>
                 <span class="ops-nav-text">Bulk Add / Edit</span>
             </a>
+            <a href="/operations/resumes" class="ops-nav-item {% if active_ops_page == 'resumes' %}active{% endif %}" data-tooltip="Resumes / CVs — every client's latest CV + versions">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><circle cx="12" cy="13" r="2"/><path d="M9 18a3 3 0 016 0"/></svg></span>
+                <span class="ops-nav-text">Resumes / CVs</span>
+            </a>
             {% if session.is_admin or can_access('sales','sales_verification','view') or can_request_transfer %}
             <a href="/verifications/sales" class="ops-nav-item {% if active_ops_page == 'verify-sales' %}active{% endif %}" data-tooltip="Sales Team Verification — fill balance details (all pathways)">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>

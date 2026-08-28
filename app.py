@@ -30618,6 +30618,45 @@ def client_resume_download():
     return _serve_resume(row, row['registration_number'] if row else '', download=True)
 
 
+@app.route('/operations/resumes')
+@admin_required
+def ops_resumes_hub():
+    """Central hub: every client who has a resume — latest version, count, last update,
+    with View/Download. Searchable by name or registration number. (founder 2026-08-23)"""
+    user = get_user()
+    q = (request.args.get('q') or '').strip()
+    conn = get_db()
+    _ensure_client_resumes(conn)
+    where, params = '', []
+    if q:
+        where = ("WHERE (LOWER(COALESCE(pc.first_name,'') || ' ' || COALESCE(pc.last_name,'')) LIKE ? "
+                 "OR LOWER(COALESCE(r.registration_number,'')) LIKE ?)")
+        params = [f'%{q.lower()}%', f'%{q.lower()}%']
+    rows = []
+    try:
+        rows = [dict(x) for x in conn.execute(f"""
+            SELECT DISTINCT ON (r.registration_number)
+                   r.registration_number AS reg, r.client_id, r.version, r.filename,
+                   r.uploaded_at, r.uploaded_by_name, COALESCE(r.pathway,'plab') AS pathway,
+                   (SELECT COUNT(*) FROM client_resumes r2 WHERE r2.registration_number = r.registration_number) AS versions,
+                   pc.prefix, pc.first_name, pc.last_name
+            FROM client_resumes r
+            LEFT JOIN plab_clients pc ON pc.registration_number = r.registration_number
+            {where}
+            ORDER BY r.registration_number, r.version DESC
+        """, params).fetchall()]
+        rows.sort(key=lambda x: str(x.get('uploaded_at') or ''), reverse=True)
+        total = conn.execute("SELECT COUNT(DISTINCT registration_number) AS c FROM client_resumes").fetchone()['c']
+    except Exception as e:
+        logging.error("ops_resumes_hub: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        total = 0
+    conn.close()
+    return render_template('ops_resumes_hub.html', rows=rows, q=q, total=total,
+                           active_ops_page='resumes', user=user)
+
+
 @app.route('/admin/plab-contracts-bulk', methods=['GET', 'POST'])
 @admin_required
 def admin_plab_contracts_bulk():
