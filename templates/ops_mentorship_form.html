@@ -50,33 +50,6 @@
             <!-- ===== SESSION DETAILS ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Session Details</h3>
 
-            <!-- Vendor-first: pick the Provider, then Service narrows to that vendor's deliverables -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Program Provider (Vendor)</label>
-                    <select name="program_provider" id="mentorship_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Provider</option>
-                        {% for mp in mentorship_providers %}
-                        <option value="{{ mp }}" {% if record and record.program_provider == mp %}selected{% endif %}>{{ mp }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Service / Deliverable</label>
-                    <select name="service" id="mentorship_service_select" data-current="{{ record.service if record and record.service else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Service</option>
-                        {% for s in mentorship_services %}
-                        <option value="{{ s }}" {% if record and record.service == s %}selected{% endif %}>{{ s }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Service Description</label>
-                <textarea name="service_description" rows="2" placeholder="Describe the service..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ record.service_description or '' if record else '' }}</textarea>
-            </div>
-
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Session Date *</label>
@@ -114,9 +87,40 @@
                     </select>
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Fee Currency</label>
-                    <input type="text" name="fee_currency" value="{{ record.fee_currency or '' if record else '' }}" placeholder="e.g., INR, GBP" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Program Provider (Vendor)</label>
+                    <select name="program_provider" id="mentorship_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Program Provider</option>
+                        {% for pp in mentorship_providers %}
+                        <option value="{{ pp }}" {% if record and record.program_provider == pp %}selected{% endif %}>{{ pp }}</option>
+                        {% endfor %}
+                        {# Preserve a legacy free-text provider that isn't in the centralised list #}
+                        {% if record and record.program_provider and record.program_provider not in mentorship_providers %}
+                        <option value="{{ record.program_provider }}" selected>{{ record.program_provider }} (current)</option>
+                        {% endif %}
+                    </select>
                 </div>
+            </div>
+
+            <!-- Vendor-first: Service narrows to the chosen Program Provider's deliverables -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Service / Deliverable</label>
+                    <select name="service" id="mentorship_service_select" data-current="{{ record.service if record and record.service else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Service / Deliverable</option>
+                        {% for s in mentorship_services %}
+                        <option value="{{ s }}" {% if record and record.service == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Fee Currency</label>
+                    <input type="text" name="fee_currency" value="{{ record.fee_currency or '' if record else '' }}" placeholder="e.g., INR, USD" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Service Description</label>
+                <textarea name="service_description" rows="3" placeholder="Describe the service / deliverable..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ record.service_description or '' if record else '' }}</textarea>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">

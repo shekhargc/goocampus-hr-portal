@@ -36241,7 +36241,7 @@ def ops_mentorship_add():
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
-    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_vendors = get_vendors_by_category('Mentorship')
     mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=None,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
@@ -36283,7 +36283,7 @@ def ops_mentorship_edit(rid):
         flash('Mentorship session updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
-    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_vendors = get_vendors_by_category('Mentorship')
     mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=record,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
