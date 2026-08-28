@@ -31925,7 +31925,8 @@ def ops_client_search_api():
             where = "COALESCE(pathway, 'plab') = ? AND " + where
             params = [pathway] + params
         rows = conn.execute(f'''
-            SELECT id, registration_number, prefix, first_name, last_name, COALESCE(pathway,'plab') AS pw
+            SELECT id, registration_number, prefix, first_name, last_name, COALESCE(pathway,'plab') AS pw,
+                   COALESCE(mobile,'') AS mobile, COALESCE(email,'') AS email
             FROM plab_clients
             WHERE {where}
             ORDER BY first_name, last_name
@@ -31937,12 +31938,83 @@ def ops_client_search_api():
             pw = r['pw']
             results.append({'id': r['id'], 'name': name.strip(), 'reg': r['registration_number'],
                             'display_reg': format_reg_filter(r['registration_number']),
+                            'mobile': r['mobile'], 'email': r['email'],
                             'pathway': pw, 'pathway_label': REFERRAL_PATHWAY_LABELS.get(pw, pw)})
     except Exception as e:
         logging.error(f"ops_client_search_api: {e}")
         results = []
     conn.close()
     return jsonify(results)
+
+
+@app.route('/admin/mentorship/backfill-contacts', methods=['GET', 'POST'])
+@admin_required
+def admin_mentorship_backfill_contacts():
+    """Fill the empty Mobile / Email on existing mentorship sessions from each client's
+    personal details (plab_clients, matched by registration_number). Fill-blanks only —
+    never overwrites a value already on the session. Preview then Apply. (founder 2026-08-24)"""
+    user = get_user()
+    if not (user and user.get('is_admin')):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        _needs = (
+            "((COALESCE(NULLIF(TRIM(m.mobile_number),''),'')='' AND COALESCE(NULLIF(TRIM(p.mobile),''),'')<>'') "
+            " OR (COALESCE(NULLIF(TRIM(m.candidate_email),''),'')='' AND COALESCE(NULLIF(TRIM(p.email),''),'')<>''))")
+        if request.method == 'POST' and request.form.get('apply') == '1':
+            conn.execute(
+                "UPDATE ops_mentorship m SET "
+                "  mobile_number = COALESCE(NULLIF(TRIM(m.mobile_number),''), p.mobile), "
+                "  candidate_email = COALESCE(NULLIF(TRIM(m.candidate_email),''), p.email) "
+                "FROM plab_clients p "
+                "WHERE p.registration_number = m.registration_number AND " + _needs)
+            conn.commit()
+            flash('Mentorship contact details backfilled from client records.', 'success')
+            return redirect(url_for('admin_mentorship_backfill_contacts'))
+        n = conn.execute(
+            "SELECT COUNT(*) AS c FROM ops_mentorship m JOIN plab_clients p "
+            "  ON p.registration_number = m.registration_number WHERE " + _needs).fetchone()['c']
+        sample = [dict(r) for r in conn.execute(
+            "SELECT m.id, m.registration_number AS reg, COALESCE(p.pathway,'plab') AS pathway, "
+            "  TRIM(COALESCE(p.prefix,'')||' '||COALESCE(p.first_name,'')||' '||COALESCE(p.last_name,'')) AS name, "
+            "  m.mobile_number AS cur_mobile, m.candidate_email AS cur_email, "
+            "  p.mobile AS new_mobile, p.email AS new_email "
+            "FROM ops_mentorship m JOIN plab_clients p ON p.registration_number = m.registration_number "
+            "WHERE " + _needs + " ORDER BY m.id DESC LIMIT 300").fetchall()]
+
+        def _esc(s): return (str(s or '')).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        rows_html = ''.join(
+            f"<tr><td>{_esc(r['name'])}</td><td>{_esc(r['reg'])}</td><td>{_esc(r['pathway'])}</td>"
+            f"<td>{_esc(r['cur_mobile']) or '<span style=color:#b91c1c>(blank)</span>'} &rarr; <b>{_esc(r['new_mobile'])}</b></td>"
+            f"<td>{_esc(r['cur_email']) or '<span style=color:#b91c1c>(blank)</span>'} &rarr; <b>{_esc(r['new_email'])}</b></td></tr>"
+            for r in sample)
+        html = f"""<!doctype html><meta charset=utf-8><title>Backfill mentorship contacts</title>
+<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#0A0A0A;">
+  <p><a href="{url_for('dashboard')}" style="color:#F57C1F;text-decoration:none;">&larr; Back to dashboard</a></p>
+  <h2 style="color:#2952A3;">Backfill mentorship Mobile / Email from client records</h2>
+  <p style="color:#555;">Fills the empty Mobile / Email on existing mentorship sessions from each client's personal details
+  (matched by registration number). <b>Fill-blanks only</b> &mdash; a value already on the session is never changed.</p>
+  <div style="background:#F0FDF4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin:14px 0;">
+    <b style="font-size:1.4rem;color:#0f766e;">{n}</b> mentorship session(s) will get a Mobile and/or Email filled in.
+  </div>
+  {'<form method=post style="margin:12px 0;"><input type=hidden name=apply value=1><button type=submit style="background:#F57C1F;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-size:15px;cursor:pointer;">Apply &mdash; backfill ' + str(n) + ' session(s)</button></form>' if n else '<p style=color:#888;>Nothing to fill &mdash; every session already has its contact details (or the client record has none).</p>'}
+  <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+    <thead><tr style="text-align:left;border-bottom:2px solid #eee;"><th>Client</th><th>Reg</th><th>Pathway</th><th>Mobile</th><th>Email</th></tr></thead>
+    <tbody>{rows_html or '<tr><td colspan=5 style=color:#888;>None.</td></tr>'}</tbody>
+  </table>
+  {('<p style=color:#888;font-size:.82rem;margin-top:10px;>Showing first 300 of ' + str(n) + '.</p>') if n > 300 else ''}
+</div>"""
+        return html
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("admin_mentorship_backfill_contacts: %s", e)
+        flash(f'Backfill error: {e}', 'error')
+        return redirect(url_for('dashboard'))
+    finally:
+        try: conn.close()
+        except Exception: pass
 
 
 @app.route('/operations/search')

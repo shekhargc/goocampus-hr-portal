@@ -255,7 +255,7 @@
             }).catch(() => hide());
     }
 
-    function selectItem(item) { searchInput.value = item.name; hiddenInput.value = item.reg; searchInput.style.borderColor = '#10B981'; hide(); }
+    function selectItem(item) { searchInput.value = item.name; hiddenInput.value = item.reg; var _mn=document.querySelector('[name=mobile_number]'); if(_mn && item.mobile) _mn.value = item.mobile; var _ce=document.querySelector('[name=candidate_email]'); if(_ce && item.email) _ce.value = item.email; searchInput.style.borderColor = '#10B981'; hide(); }
     function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
     function updateHighlight() { dropdown.querySelectorAll('[data-idx]').forEach((el, i) => { el.style.background = i === highlightIdx ? '#f9fafb' : 'white'; }); }
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
