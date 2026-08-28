@@ -12876,6 +12876,137 @@ def admin_calendar():
                          today=today,
                     active_section='company')
 
+
+@app.route('/hr/attendance-calendar')
+@admin_required
+def hr_attendance_calendar():
+    """Per-employee monthly attendance calendar: colour-codes each day as Present,
+    Work-from-home, Official travel, On leave (approved) / Applied (pending), Absent,
+    Holiday or Weekend — pulled from attendance_logs, wfh_requests,
+    official_travel_requests, leave_records and holidays. (founder 2026-08-24)"""
+    import calendar as _cal
+    user = get_user()
+    conn = get_db()
+    employees = conn.execute(
+        "SELECT id, name, department FROM employees "
+        "WHERE is_active = 1 AND COALESCE(emp_code,'') <> 'admin' ORDER BY name").fetchall()
+    emp_id = request.args.get('employee_id', type=int)
+    if not emp_id and employees:
+        emp_id = employees[0]['id']
+    now = datetime.now()
+    year = request.args.get('year', type=int) or now.year
+    month = request.args.get('month', type=int) or now.month
+    emp = conn.execute("SELECT id, name, department, emp_code, photo_url FROM employees WHERE id = ?",
+                       (emp_id,)).fetchone() if emp_id else None
+
+    first = f'{year}-{month:02d}-01'
+    ndays = _cal.monthrange(year, month)[1]
+    last = f'{year}-{month:02d}-{ndays:02d}'
+
+    def _dom(d):
+        s = str(d or '')[:10]
+        try:
+            return int(s[8:10]) if s[:7] == f'{year}-{month:02d}' else None
+        except Exception:
+            return None
+
+    days = {}  # day-of-month -> {'code','label','extra'}
+    if emp_id:
+        try:
+            # Layer order = LOW priority first; later layers overwrite.
+            _hol_raw = get_all_holidays() or {}
+            holidays = {}
+            for k, v in _hol_raw.items():
+                nm = ''
+                try:
+                    nm = (v.get('name') if hasattr(v, 'get') else (v['name'] if v and 'name' in v.keys() else '')) or ''
+                except Exception:
+                    nm = ''
+                holidays[str(k)[:10]] = nm
+            for dnum in range(1, ndays + 1):
+                dstr = f'{year}-{month:02d}-{dnum:02d}'
+                wd = _cal.weekday(year, month, dnum)  # 0=Mon..6=Sun
+                if dstr in holidays:
+                    days[dnum] = {'code': 'holiday', 'label': 'Holiday', 'extra': holidays[dstr]}
+                elif wd >= 5:
+                    days[dnum] = {'code': 'weekend', 'label': 'Weekend', 'extra': ''}
+                else:
+                    days[dnum] = {'code': 'none', 'label': '', 'extra': ''}
+            # Attendance (present / absent)
+            for r in conn.execute("SELECT attendance_date, status, actual_in FROM attendance_logs "
+                                  "WHERE employee_id = ? AND attendance_date BETWEEN ? AND ?",
+                                  (emp_id, first, last)).fetchall():
+                dn = _dom(r['attendance_date'])
+                if not dn:
+                    continue
+                st = (r['status'] or '').strip().lower()
+                if 'absent' in st:
+                    days[dn] = {'code': 'absent', 'label': 'Absent', 'extra': ''}
+                elif 'present' in st or (r['actual_in'] and str(r['actual_in']).strip()):
+                    days[dn] = {'code': 'present', 'label': 'Present', 'extra': ''}
+            # WFH (approved)
+            for r in conn.execute("SELECT from_date, to_date FROM wfh_requests "
+                                  "WHERE employee_id = ? AND LOWER(COALESCE(status,''))='approved' "
+                                  "AND from_date <= ? AND to_date >= ?", (emp_id, last, first)).fetchall():
+                for dn in range(1, ndays + 1):
+                    ds = f'{year}-{month:02d}-{dn:02d}'
+                    if str(r['from_date'])[:10] <= ds <= str(r['to_date'])[:10]:
+                        days[dn] = {'code': 'wfh', 'label': 'Work from home', 'extra': ''}
+            # Official travel / outstation (approved)
+            for r in conn.execute("SELECT from_date, to_date, city FROM official_travel_requests "
+                                  "WHERE employee_id = ? AND LOWER(COALESCE(status,''))='approved' "
+                                  "AND from_date <= ? AND to_date >= ?", (emp_id, last, first)).fetchall():
+                for dn in range(1, ndays + 1):
+                    ds = f'{year}-{month:02d}-{dn:02d}'
+                    if str(r['from_date'])[:10] <= ds <= str(r['to_date'])[:10]:
+                        days[dn] = {'code': 'travel', 'label': 'Official travel', 'extra': (r['city'] or '')}
+            # Leave — applied (pending) then approved (approved wins)
+            for r in conn.execute("SELECT leave_date, leave_type, status FROM leave_records "
+                                  "WHERE employee_id = ? AND leave_date BETWEEN ? AND ? "
+                                  "AND LOWER(COALESCE(status,'')) IN ('pending','applied') ORDER BY id",
+                                  (emp_id, first, last)).fetchall():
+                dn = _dom(r['leave_date'])
+                if dn:
+                    days[dn] = {'code': 'applied', 'label': 'Applied leave', 'extra': (r['leave_type'] or '').capitalize()}
+            for r in conn.execute("SELECT leave_date, leave_type, status FROM leave_records "
+                                  "WHERE employee_id = ? AND leave_date BETWEEN ? AND ? "
+                                  "AND LOWER(COALESCE(status,''))='approved' ORDER BY id",
+                                  (emp_id, first, last)).fetchall():
+                dn = _dom(r['leave_date'])
+                if dn:
+                    days[dn] = {'code': 'leave', 'label': 'On leave', 'extra': (r['leave_type'] or '').capitalize()}
+        except Exception as e:
+            logging.error(f"hr_attendance_calendar: {e}")
+            try: conn.rollback()
+            except Exception: pass
+    conn.close()
+
+    # Inferred "Present": a past/today working day with no leave / WFH / travel /
+    # absent record is treated as Present (green). Future working days stay blank
+    # until they arrive, so the calendar is always up-to-date and advances daily.
+    # Explicit leave/WFH/travel/absent (incl. future applications) already set above.
+    today_str = now.strftime('%Y-%m-%d')
+    for dnum in range(1, ndays + 1):
+        if (days.get(dnum) or {}).get('code') == 'none':
+            dstr = f'{year}-{month:02d}-{dnum:02d}'
+            if dstr <= today_str:
+                days[dnum] = {'code': 'present', 'label': 'Present', 'extra': ''}
+
+    # Month grid (weeks of day numbers; 0 = padding) + per-code summary.
+    weeks = _cal.monthcalendar(year, month)
+    summary = {}
+    for d in days.values():
+        summary[d['code']] = summary.get(d['code'], 0) + 1
+    pm, py = (12, year - 1) if month == 1 else (month - 1, year)
+    nm, ny = (1, year + 1) if month == 12 else (month + 1, year)
+    return render_template('hr_attendance_calendar.html', user=user, employees=employees,
+                           emp=emp, emp_id=emp_id, year=year, month=month,
+                           month_name=_cal.month_name[month], weeks=weeks, days=days,
+                           summary=summary, today=now.strftime('%Y-%m-%d'),
+                           prev_month=pm, prev_year=py, next_month=nm, next_year=ny,
+                           active_section='hr')
+
+
 @app.route('/admin/employee/<int:emp_id>')
 @admin_required
 def admin_employee_detail(emp_id):

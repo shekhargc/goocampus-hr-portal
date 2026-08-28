@@ -91,6 +91,7 @@
         </form>
         {% endif %}
         <a href="/admin/employee/{{ employee.id }}/edit" class="pf-btn pf-btn-primary">Edit Employee</a>
+        <a href="/hr/attendance-calendar?employee_id={{ employee.id }}" class="pf-btn pf-btn-ghost">📅 View Calendar</a>
         {% if est == 'active' %}<a href="/admin/employee/{{ employee.id }}/edit#exitFields" class="pf-btn pf-btn-danger">Run Exit Process</a>{% endif %}
       </div>
     </div>
