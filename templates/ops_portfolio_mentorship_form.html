@@ -5,7 +5,7 @@
 {% block ops_content %}
 <div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;">
-        <a href="/operations/mentorship" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Mentorship</a>
+        <a href="/operations/portfolio/mentorship" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Mentorship</a>
     </div>
 
     <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
@@ -17,35 +17,18 @@
         <form method="POST">
 
             <!-- ===== CLIENT ===== -->
-            {% if record %}
-            <!-- EDIT MODE — read-only registration + candidate (can't be changed) -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number</label>
-                    <input type="hidden" name="registration_number" value="{{ record.registration_number or '' }}" />
-                    <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate</label>
-                    <input type="text" value="{{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
-                </div>
-            </div>
-            {% else %}
-            <!-- ADD MODE — autocomplete search to pick a client -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Search Candidate Name *</label>
                 <div style="position:relative;">
-                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or (record.registration_number if record else '') }}" />
                     <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
-                        value=""
+                        value="{% if record %}{{ ((record.first_name or '') ~ ' ' ~ (record.last_name or '')) | dr_name }}{% endif %}"
                         required
                         style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                     <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
                 </div>
             </div>
-            {% endif %}
 
             <!-- ===== SESSION DETAILS ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Session Details</h3>
@@ -90,11 +73,11 @@
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Program Provider (Vendor)</label>
                     <select name="program_provider" id="mentorship_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Program Provider</option>
-                        {% for pp in mentorship_providers %}
+                        {% for pp in program_providers %}
                         <option value="{{ pp }}" {% if record and record.program_provider == pp %}selected{% endif %}>{{ pp }}</option>
                         {% endfor %}
                         {# Preserve a legacy free-text provider that isn't in the centralised list #}
-                        {% if record and record.program_provider and record.program_provider not in mentorship_providers %}
+                        {% if record and record.program_provider and record.program_provider not in program_providers %}
                         <option value="{{ record.program_provider }}" selected>{{ record.program_provider }} (current)</option>
                         {% endif %}
                     </select>
@@ -177,16 +160,17 @@
                 <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
                     {% if record %}Update Session{% else %}Add Session{% endif %}
                 </button>
-                <a href="/operations/mentorship" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+                <a href="/operations/portfolio/mentorship" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
             </div>
         </form>
     </div>
 </div>
 
+<!-- Vendor-first cascade: choosing a Program Provider narrows the Service list to
+     that vendor's deliverables (vendor_service_map, Portfolio). Falls back to the
+     full server-rendered Service list when no vendor is picked, the vendor has no
+     mapped services, or the fetch fails. Always preserves the record's current value. -->
 <script>
-// Vendor-first cascade: choosing a Provider narrows the Service list to that
-// vendor's deliverables (from vendor_service_map). Falls back to the full
-// Service list when no vendor is picked or the vendor has no mapped services.
 (function() {
     const vendorSel = document.getElementById('mentorship_vendor');
     const svcSel = document.getElementById('mentorship_service_select');
@@ -196,7 +180,7 @@
     function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
     function fill(list) {
         const keep = svcSel.value || current;
-        let html = '<option value="">Select Service</option>';
+        let html = '<option value="">Select…</option>';
         let hasKeep = false;
         list.forEach(s => { if (s === keep) hasKeep = true;
             html += '<option value="'+esc(s)+'"'+(s===keep?' selected':'')+'>'+esc(s)+'</option>'; });
@@ -206,7 +190,7 @@
     function load() {
         const v = vendorSel.value.trim();
         if (!v) { fill(ALL); return; }
-        fetch('/operations/api/vendor-services?pathway=plab&category=' +
+        fetch('/operations/api/vendor-services?pathway=portfolio&category=' +
               encodeURIComponent('Mentorship') + '&vendor=' + encodeURIComponent(v))
             .then(r => r.json())
             .then(list => fill(list && list.length ? list : ALL))
@@ -214,6 +198,9 @@
     }
     vendorSel.addEventListener('change', load);
 })();
+</script>
+
+<script>
 (function() {
     const searchInput = document.getElementById('client_search');
     const hiddenInput = document.getElementById('reg_number_val');
@@ -251,7 +238,7 @@
     });
 
     function fetchSuggestions(q) {
-        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+        fetch('/operations/api/client-search?pathway=portfolio&q=' + encodeURIComponent(q))
             .then(r => r.json())
             .then(data => {
                 items = data; highlightIdx = -1;

@@ -430,6 +430,7 @@ def ops_portfolio_client_detail(client_id):
         'research':   fetch('ops_research_publication', 'id DESC'),
         'courses':    fetch('ops_online_courses', 'id DESC'),
         'webinars':   fetch('ops_webinars_conferences', 'id DESC'),
+        'mentorship': fetch('ops_mentorship', 'id DESC'),
         # Stubbed to empty so any residual template loops still work.
         'test_bookings':    [],
         'training':         [],

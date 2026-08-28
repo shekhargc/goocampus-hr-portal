@@ -29453,6 +29453,7 @@ PORTFOLIO_SERVICE_COLUMNS = [
     ('research', 'Research & Publications',  ['ops_research_publication']),
     ('courses',  'Courses & Certifications', ['ops_online_courses']),
     ('webinars', 'Webinars & Conferences',   ['ops_webinars_conferences']),
+    ('mentorship', 'Mentorship',             ['ops_mentorship']),
 ]
 
 
@@ -36241,7 +36242,7 @@ def ops_mentorship_add():
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
-    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_vendors = get_vendors_by_category('Mentorship')
     mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=None,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
@@ -36283,7 +36284,7 @@ def ops_mentorship_edit(rid):
         flash('Mentorship session updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
-    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_vendors = get_vendors_by_category('Mentorship')
     mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=record,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
@@ -44715,6 +44716,7 @@ ACCESS_SECTION_CATALOG = [
             ('research',      'Research & Publications',   'Portfolio research project tracking (ops_research_publication)'),
             ('courses',       'Courses & Certifications',  'Portfolio courses & certifications (ops_online_courses)'),
             ('webinars',      'Webinars & Conferences',    'Portfolio event attendance log (ops_webinars_conferences)'),
+            ('mentorship',    'Mentorship Sessions',       'Portfolio mentorship session scheduling + tracker (ops_mentorship)'),
         ],
     },
     # ── Operations: Training (Phase 4 lightweight) ────────────────────
@@ -48288,6 +48290,11 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_mentorship_add':                _ap('consulting_pathway', 'mentorship', 'edit'),
     'ops_consulting_mentorship_edit':               _ap('consulting_pathway', 'mentorship', 'edit'),
     'ops_consulting_mentorship_delete':             _ap('consulting_pathway', 'mentorship', 'edit'),
+    'ops_portfolio_mentorship_list':                _ap('portfolio_pathway', 'mentorship'),
+    'ops_portfolio_mentorship_detail':              _ap('portfolio_pathway', 'mentorship'),
+    'ops_portfolio_mentorship_add':                 _ap('portfolio_pathway', 'mentorship', 'edit'),
+    'ops_portfolio_mentorship_edit':                _ap('portfolio_pathway', 'mentorship', 'edit'),
+    'ops_portfolio_mentorship_delete':              _ap('portfolio_pathway', 'mentorship', 'edit'),
     'ops_australia_mentorship_list':                _ap('australia_pathway', 'mentorship'),
     'ops_australia_mentorship_detail':              _ap('australia_pathway', 'mentorship'),
     'ops_australia_mentorship_add':                 _ap('australia_pathway', 'mentorship', 'edit'),
