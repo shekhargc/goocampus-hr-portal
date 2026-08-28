@@ -12981,6 +12981,17 @@ def hr_attendance_calendar():
             except Exception: pass
     conn.close()
 
+    # Inferred "Present": a past/today working day with no leave / WFH / travel /
+    # absent record is treated as Present (green). Future working days stay blank
+    # until they arrive, so the calendar is always up-to-date and advances daily.
+    # Explicit leave/WFH/travel/absent (incl. future applications) already set above.
+    today_str = now.strftime('%Y-%m-%d')
+    for dnum in range(1, ndays + 1):
+        if (days.get(dnum) or {}).get('code') == 'none':
+            dstr = f'{year}-{month:02d}-{dnum:02d}'
+            if dstr <= today_str:
+                days[dnum] = {'code': 'present', 'label': 'Present', 'extra': ''}
+
     # Month grid (weeks of day numbers; 0 = padding) + per-code summary.
     weeks = _cal.monthcalendar(year, month)
     summary = {}
