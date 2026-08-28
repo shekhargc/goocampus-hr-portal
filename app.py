@@ -29938,7 +29938,7 @@ def ops_plab_edit(client_id):
                 mobile=?, whatsapp1=?, whatsapp2=?, email=?, dob=?, city=?, state=?,
                 instagram=?, facebook=?, linkedin=?,
                 father_name=?, father_phone=?, mother_name=?, mother_phone=?, parents_email=?,
-                joined_stage=?, plan_type=?, product_id=?,
+                joined_stage=?, plan_type=?, product_id=COALESCE(?, product_id),
                 account_status=?, current_stage=?, switched_program=?,
                 dropped_date=?,
                 counsellor=?, counsellor_email=?, counsellor_number=?,
@@ -29971,7 +29971,8 @@ def ops_plab_edit(client_id):
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
                 f.get('joined_stage', ''), f.get('plan_type', ''),
-                f.get('product_id') or None,
+                # COALESCE(?, product_id) in SQL keeps the existing product on an empty submit.
+                (int(f.get('product_id')) if str(f.get('product_id') or '').strip().isdigit() else None),
                 f.get('account_status', 'In Process'), f.get('current_stage', ''),
                 f.get('switched_program', ''),
                 f.get('dropped_date', ''),
