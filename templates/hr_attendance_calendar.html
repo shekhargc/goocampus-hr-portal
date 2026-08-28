@@ -1,0 +1,89 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Attendance Calendar - GooCampus HR Portal{% endblock %}
+{% block section_content %}
+{% set COLORS = {
+  'present': ('#dcfce7', '#15803d', 'Present'),
+  'wfh':     ('#dbeafe', '#1d4ed8', 'Work from home'),
+  'travel':  ('#ede9fe', '#7c3aed', 'Official travel'),
+  'leave':   ('#fef3c7', '#b45309', 'On leave'),
+  'applied': ('#fef9c3', '#a16207', 'Applied (pending)'),
+  'absent':  ('#fee2e2', '#b91c1c', 'Absent'),
+  'holiday': ('#f3f4f6', '#6b7280', 'Holiday'),
+  'weekend': ('#f8fafc', '#9ca3af', 'Weekend'),
+  'none':    ('#ffffff', '#cbd5e1', 'No record'),
+} %}
+<div style="padding:22px 24px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+    <h1 style="margin:0;font-size:1.4rem;font-weight:700;color:var(--navy);">Attendance Calendar</h1>
+  </div>
+
+  <!-- Controls: employee + month nav -->
+  <form method="GET" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;background:#fff;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:18px;">
+    <label style="font-size:0.8rem;font-weight:700;color:var(--gray-500);">Employee</label>
+    <select name="employee_id" onchange="this.form.submit()" style="padding:9px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:0.9rem;min-width:220px;">
+      {% for e in employees %}
+      <option value="{{ e.id }}" {% if e.id == emp_id %}selected{% endif %}>{{ e.name }}{% if e.department %} · {{ e.department }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <span style="flex:1"></span>
+    <a href="?employee_id={{ emp_id }}&year={{ prev_year }}&month={{ prev_month }}" style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;text-decoration:none;color:var(--navy);font-weight:600;">&larr;</a>
+    <span style="font-weight:700;color:var(--navy);min-width:150px;text-align:center;">{{ month_name }} {{ year }}</span>
+    <a href="?employee_id={{ emp_id }}&year={{ next_year }}&month={{ next_month }}" style="padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;text-decoration:none;color:var(--navy);font-weight:600;">&rarr;</a>
+  </form>
+
+  {% if emp %}
+  <!-- Summary chips -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+    {% for code in ['present','wfh','travel','leave','applied','absent'] %}
+      {% if summary.get(code) %}
+      {% set c = COLORS[code] %}
+      <span style="background:{{ c[0] }};color:{{ c[1] }};font-weight:700;font-size:0.82rem;padding:5px 12px;border-radius:20px;">{{ c[2] }}: {{ summary[code] }}</span>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- Calendar grid -->
+  <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow-x:auto;">
+    <table style="width:100%;border-collapse:separate;border-spacing:6px;min-width:640px;">
+      <thead>
+        <tr>{% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+          <th style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;padding-bottom:4px;">{{ d }}</th>
+        {% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for week in weeks %}
+        <tr>
+          {% for dnum in week %}
+            {% if dnum == 0 %}
+            <td></td>
+            {% else %}
+              {% set info = days.get(dnum) or {'code':'none','label':'','extra':''} %}
+              {% set c = COLORS.get(info.code, COLORS['none']) %}
+              {% set is_today = today == '%04d-%02d-%02d'|format(year, month, dnum) %}
+              <td style="background:{{ c[0] }};border-radius:9px;height:74px;vertical-align:top;padding:7px 9px;{% if info.code == 'applied' %}border:1.5px dashed {{ c[1] }};{% elif is_today %}outline:2px solid var(--orange);{% else %}border:1px solid rgba(0,0,0,0.05);{% endif %}">
+                <div style="font-size:0.82rem;font-weight:700;color:{{ c[1] }};">{{ dnum }}</div>
+                {% if info.label %}<div style="font-size:0.7rem;font-weight:600;color:{{ c[1] }};margin-top:3px;line-height:1.2;">{{ info.label }}</div>{% endif %}
+                {% if info.extra %}<div style="font-size:0.65rem;color:{{ c[1] }};opacity:0.85;margin-top:1px;">{{ info.extra }}</div>{% endif %}
+              </td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Legend -->
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:0.8rem;color:var(--gray-600);">
+    {% for code in ['present','wfh','travel','leave','applied','absent','holiday','weekend','none'] %}
+      {% set c = COLORS[code] %}
+      <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:14px;height:14px;border-radius:4px;background:{{ c[0] }};border:1px solid {{ c[1] }};display:inline-block;"></span>{{ c[2] }}</span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--gray-500);">Select an employee to view their attendance calendar.</p>
+  {% endif %}
+</div>
+{% endblock %}
