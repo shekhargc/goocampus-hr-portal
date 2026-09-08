@@ -89,7 +89,7 @@
               <th style="padding:10px 12px;text-align:right;">Spent</th><th style="padding:10px 12px;text-align:right;">Received</th>
               <th style="padding:10px 12px;text-align:right;">Balance</th><th style="padding:10px 12px;text-align:center;">Bill</th>
               <th style="padding:10px 12px;text-align:center;">Voucher</th><th style="padding:10px 12px;">Notes</th>
-              {% if user.is_admin %}<th style="padding:10px 12px;"></th>{% endif %}
+              {% if can_manage %}<th style="padding:10px 12px;">Edit</th>{% endif %}
             </tr></thead>
             <tbody>
               {% for e in m.entries %}
@@ -109,11 +109,14 @@
                 </td>
                 <td style="padding:9px 12px;text-align:center;color:var(--gray-500);">{{ e.voucher_created if e.entry_type == 'expense' else '' }}</td>
                 <td style="padding:9px 12px;white-space:normal;max-width:200px;color:var(--gray-500);">{{ e.notes or '' }}</td>
-                {% if user.is_admin %}
-                <td style="padding:9px 12px;text-align:right;">
-                  <form method="POST" action="{{ url_for('hr_cash_expenses_delete', eid=e.id) }}" onsubmit="return confirm('Delete this entry? This cannot be undone.');" style="display:inline;">
+                {% if can_manage %}
+                <td style="padding:9px 12px;text-align:right;white-space:nowrap;">
+                  <a href="{{ url_for('hr_cash_entry_edit', eid=e.id) }}" title="Edit" style="color:var(--orange);font-weight:700;text-decoration:none;">✎</a>
+                  {% if user.is_admin %}
+                  <form method="POST" action="{{ url_for('hr_cash_expenses_delete', eid=e.id) }}" onsubmit="return confirm('Delete this entry? This cannot be undone.');" style="display:inline;margin-left:8px;">
                     <button type="submit" title="Delete" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:1rem;">✕</button>
                   </form>
+                  {% endif %}
                 </td>
                 {% endif %}
               </tr>

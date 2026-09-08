@@ -34352,6 +34352,80 @@ def hr_cash_expenses_delete(eid):
     return redirect(request.referrer or url_for('hr_cash_expenses'))
 
 
+@app.route('/hr/cash-expenses/edit/<int:eid>', methods=['GET', 'POST'])
+@admin_required
+def hr_cash_entry_edit(eid):
+    """Edit a cash entry (Cash Given or an expense). Management/admin only —
+    for fixing mistakes without deleting and re-entering."""
+    user = get_user()
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    if not _cash_can_manage(user):
+        conn.close(); flash('Access denied', 'error'); return redirect(url_for('hr_cash_expenses_report'))
+    row = conn.execute("SELECT * FROM cash_expenses WHERE id = ?", (eid,)).fetchone()
+    if not row:
+        conn.close(); flash('Entry not found', 'error'); return redirect(url_for('hr_cash_expenses_report'))
+    if request.method == 'POST':
+        try:
+            from core import storage
+            from werkzeug.utils import secure_filename
+            from uuid import uuid4
+            emp_id = int(request.form.get('employee_id')) if (request.form.get('employee_id') or '').isdigit() else row['employee_id']
+            er = conn.execute("SELECT name FROM employees WHERE id = ?", (emp_id,)).fetchone()
+            emp_name = (er['name'] if er else None) or row['employee_name']
+            if row['entry_type'] == 'received':
+                given_by = request.form.get('given_by', '')
+                desc = request.form.get('description', '') or (('From ' + given_by) if given_by else 'Cash received')
+                conn.execute('''UPDATE cash_expenses SET employee_id=?, employee_name=?, txn_date=?,
+                    amount=?, given_by=?, description=?, notes=? WHERE id=?''',
+                    (emp_id, emp_name, request.form.get('txn_date'), float(request.form.get('amount', 0) or 0),
+                     given_by, desc, request.form.get('notes', ''), eid))
+            else:
+                has_bill = 'Yes' if request.form.get('has_bill') == 'Yes' else 'No'
+                r2_key, bill_fn, bill_ct = row['r2_key'], row['bill_filename'], row['bill_content_type']
+                fs = request.files.get('bill_file')
+                if fs and fs.filename and storage.is_configured():
+                    raw = fs.read()
+                    if raw:
+                        safe = secure_filename(fs.filename) or 'bill'
+                        key = f"cash_expenses/{emp_id}/{uuid4().hex[:8]}_{safe}"
+                        if storage.upload_bytes(key, raw, fs.mimetype or 'application/octet-stream'):
+                            if r2_key:
+                                try: storage.delete_object(r2_key)
+                                except Exception: pass
+                            r2_key, bill_fn, bill_ct, has_bill = key, safe, (fs.mimetype or ''), 'Yes'
+                _vend = (request.form.get('vendor') or '').strip()
+                conn.execute('''UPDATE cash_expenses SET employee_id=?, employee_name=?, txn_date=?,
+                    category=?, vendor=?, description=?, amount=?, has_bill=?, r2_key=?, bill_filename=?,
+                    bill_content_type=?, voucher_created=?, notes=? WHERE id=?''',
+                    (emp_id, emp_name, request.form.get('txn_date'), request.form.get('category', ''), _vend,
+                     request.form.get('description', ''), float(request.form.get('amount', 0) or 0),
+                     has_bill, r2_key, bill_fn, bill_ct,
+                     'Yes' if request.form.get('voucher_created') == 'Yes' else 'No', request.form.get('notes', ''), eid))
+                if _vend:
+                    _ex = conn.execute("SELECT 1 FROM lookup_options WHERE category = 'cash_expense_vendor' AND value = ?", (_vend,)).fetchone()
+                    if not _ex:
+                        conn.execute("INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                                     "VALUES ('cash_expense_vendor', ?, ?, ?, TRUE)", (_vend, _vend, 100))
+            conn.commit()
+            conn.close()
+            flash('Entry updated', 'success')
+            return redirect(url_for('hr_cash_expenses_report'))
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error(f"hr_cash_entry_edit: {e}")
+            flash('Error updating entry', 'error')
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name", []).fetchall()
+    categories = get_lookup_options('cash_expense_category')
+    vendors = get_lookup_options('cash_expense_vendor')
+    from core import storage as _st
+    entry = dict(row)
+    conn.close()
+    return render_template('hr_cash_entry_edit.html', user=user, entry=entry, employees=employees,
+        categories=categories, vendors=vendors, r2_ok=_st.is_configured(), active_section='hr')
+
+
 @app.route('/hr/cash-expenses/lookup-add', methods=['POST'])
 @admin_required
 def hr_cash_expenses_lookup_add():
@@ -49408,6 +49482,7 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_expenses_receive':           _ap('hr', 'cash_expenses', 'edit'),
     'hr_cash_expenses_bill':              _ap('hr', 'cash_expenses'),
     'hr_cash_expenses_delete':            _ap('hr', 'cash_expenses', 'delete'),
+    'hr_cash_entry_edit':                 _ap('hr', 'cash_expenses', 'edit'),
     'hr_cash_expenses_lookup_add':        _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_expenses_lookup_remove':     _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_expenses_report':            _ap('hr', 'cash_expenses'),

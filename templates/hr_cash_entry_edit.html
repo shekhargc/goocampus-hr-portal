@@ -1,0 +1,83 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Edit Cash Entry{% endblock %}
+{% block section_content %}
+{% set is_recv = (entry.entry_type == 'received') %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:600px;margin:0 auto;">
+
+    <div style="margin-bottom:16px;">
+      <a href="{{ url_for('hr_cash_expenses_report') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← Cash Expenses Report</a>
+      <h1 style="margin:8px 0 0;font-size:1.3rem;font-weight:800;color:var(--navy);">Edit {{ 'Cash Given' if is_recv else 'Expense' }}</h1>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" style="background:#fff;border-radius:14px;padding:22px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;flex-direction:column;gap:14px;">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="ce-lbl">Date *</label><input type="date" name="txn_date" required value="{{ entry.txn_date or '' }}" class="ce-in"></div>
+        <div><label class="ce-lbl">Amount (₹) *</label><input type="number" name="amount" step="0.01" min="0" required value="{{ entry.amount }}" class="ce-in" style="font-weight:700;"></div>
+      </div>
+
+      {% if is_recv %}
+      <div><label class="ce-lbl">Given to *</label>
+        <select name="employee_id" required class="ce-in">
+          {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if entry.employee_id == e.id else '' }}>{{ e.name }}</option>{% endfor %}
+        </select></div>
+      <div><label class="ce-lbl">Given by</label><input type="text" name="given_by" value="{{ entry.given_by or '' }}" class="ce-in"></div>
+      {% else %}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="ce-lbl">Category</label>
+          <select name="category" class="ce-in">
+            <option value="">— Select —</option>
+            {% if entry.category and entry.category not in categories %}<option value="{{ entry.category }}" selected>{{ entry.category }}</option>{% endif %}
+            {% for c in categories %}<option value="{{ c }}" {{ 'selected' if c == entry.category else '' }}>{{ c }}</option>{% endfor %}
+          </select></div>
+        <div><label class="ce-lbl">Vendor</label>
+          <input list="ce_vendors" name="vendor" value="{{ entry.vendor or '' }}" class="ce-in" autocomplete="off">
+          <datalist id="ce_vendors">{% for v in vendors %}<option value="{{ v }}">{% endfor %}</datalist></div>
+      </div>
+      <div><label class="ce-lbl">Description</label><input type="text" name="description" value="{{ entry.description or '' }}" class="ce-in"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="ce-lbl">Spent by</label>
+          <select name="employee_id" class="ce-in">
+            {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if entry.employee_id == e.id else '' }}>{{ e.name }}</option>{% endfor %}
+          </select></div>
+        <div><label class="ce-lbl">Bill?</label>
+          <select name="has_bill" class="ce-in">
+            <option value="No" {{ 'selected' if entry.has_bill != 'Yes' else '' }}>No bill</option>
+            <option value="Yes" {{ 'selected' if entry.has_bill == 'Yes' else '' }}>Yes — have bill</option>
+          </select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
+        <div><label class="ce-lbl">{{ 'Replace bill' if entry.r2_key else 'Attach bill' }} {% if not r2_ok %}<span style="color:#dc2626;">(storage off)</span>{% endif %}</label>
+          <input type="file" name="bill_file" accept="image/*,.pdf" {{ 'disabled' if not r2_ok else '' }} style="width:100%;font-size:0.8rem;">
+          {% if entry.r2_key %}<div style="font-size:0.72rem;margin-top:3px;"><a href="{{ url_for('hr_cash_expenses_bill', eid=entry.id) }}" target="_blank" style="color:var(--orange);font-weight:600;">View current bill</a></div>{% endif %}
+        </div>
+        <div><label class="ce-lbl">Voucher created?</label>
+          <select name="voucher_created" class="ce-in">
+            <option value="No" {{ 'selected' if entry.voucher_created != 'Yes' else '' }}>No</option>
+            <option value="Yes" {{ 'selected' if entry.voucher_created == 'Yes' else '' }}>Yes</option>
+          </select></div>
+      </div>
+      {% endif %}
+
+      <div><label class="ce-lbl">Notes</label><input type="text" name="notes" value="{{ entry.notes or '' }}" class="ce-in"></div>
+
+      <div style="display:flex;gap:12px;align-items:center;margin-top:6px;">
+        <button type="submit" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save changes</button>
+        <a href="{{ url_for('hr_cash_expenses_report') }}" style="padding:11px 16px;color:var(--gray-500);text-decoration:none;">Cancel</a>
+      </div>
+    </form>
+
+    {% if user.is_admin %}
+    <form method="POST" action="{{ url_for('hr_cash_expenses_delete', eid=entry.id) }}" onsubmit="return confirm('Delete this entry permanently? This cannot be undone.');" style="margin-top:14px;">
+      <button type="submit" style="background:none;border:1px solid #fecaca;color:#dc2626;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.82rem;">Delete this entry</button>
+    </form>
+    {% endif %}
+
+  </div>
+</div>
+<style>
+  .ce-lbl{font-size:0.74rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:4px;}
+  .ce-in{width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:8px;box-sizing:border-box;}
+</style>
+{% endblock %}
