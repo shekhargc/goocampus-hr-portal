@@ -34831,6 +34831,125 @@ def hr_cash_pool_delete(did):
     return redirect(url_for('hr_cash_pool'))
 
 
+# ── One-time import of the June–August 2026 office-cash Excel (admin) ──────
+# 43 rows cleaned from "OFFICE CASH EXPENSE STATEMENT.xlsx": dates fixed via the
+# month block (Jun/Jul/Aug), categories + vendors derived from the descriptions.
+# Preview → Confirm; guarded against re-running. All rows imported as expenses
+# spent by the chosen member (Poornima). Rows: [date, category, vendor, desc, amount].
+_CASH_IMPORT_JUNAUG = [
+    ["2026-06-05", "Housekeeping", "", "Cleaning aunty", 8500.0],
+    ["2026-06-05", "Housekeeping", "", "office garbage", 300.0],
+    ["2026-06-05", "Courier & Postage", "India Post", "indian post ( b gift )", 2926.0],
+    ["2026-06-04", "Printing", "", "prabhakar (print) birthday, card's", 86.0],
+    ["2026-06-11", "Subscription", "", "news paper ( 6 moths )", 1350.0],
+    ["2026-06-16", "Utilities", "", "water bill", 1298.0],
+    ["2026-06-09", "Courier & Postage", "Porter", "porter ( kotak bank )", 132.0],
+    ["2026-06-10", "Courier & Postage", "Porter", "porter ( kotak bank )", 132.0],
+    ["2026-06-08", "Repairs & Maintenance", "", "filter water service", 700.0],
+    ["2026-06-16", "Courier & Postage", "India Post", "indian post ( b gift )", 3622.0],
+    ["2026-06-17", "Food & Refreshments", "Maa Bazar", "maa bazar", 3356.0],
+    ["2026-06-30", "Pooja / Festival", "", "agarbatti for poja", 255.0],
+    ["2026-06-26", "Pooja / Festival", "", "lemon and chilli ( office pooja)", 30.0],
+    ["2026-06-30", "Travelling", "", "harish petrol", 100.0],
+    ["2026-07-09", "Housekeeping", "", "Cleaning aunty", 8500.0],
+    ["2026-07-07", "Housekeeping", "", "office garbage", 300.0],
+    ["2026-07-07", "Courier & Postage", "Porter", "porter", 86.0],
+    ["2026-07-04", "Travelling", "Rapido", "rapido (praveen)", 121.0],
+    ["2026-07-17", "Pooja / Festival", "", "lemonand chilli", 30.0],
+    ["2026-07-20", "Utilities", "", "water bill", 1275.0],
+    ["2026-07-16", "Utilities", "Jio", "jio internent", 100.0],
+    ["2026-07-07", "Food & Refreshments", "", "tablets", 62.0],
+    ["2026-07-20", "Courier & Postage", "", "goocampus to jeswin shaju brochure courier", 248.0],
+    ["2026-07-14", "Food & Refreshments", "BigBasket", "office grocery bigbasket", 1094.86],
+    ["2026-07-24", "Courier & Postage", "India Post", "indian post ( b gift )", 2868.0],
+    ["2026-07-27", "Travelling", "", "harish petrol", 100.0],
+    ["2026-07-30", "Food & Refreshments", "", "office water ( bottle )", 300.0],
+    ["2026-07-29", "Repairs & Maintenance", "", "key for outside wash room", 30.0],
+    ["2026-08-06", "Repairs & Maintenance", "", "UPS serevice", 1100.0],
+    ["2026-08-06", "Housekeeping", "", "office garbage", 300.0],
+    ["2026-08-06", "Courier & Postage", "Kotak Bank", "kotak", 120.0],
+    ["2026-08-07", "Courier & Postage", "Kotak Bank", "kotak", 120.0],
+    ["2026-08-07", "Courier & Postage", "Porter", "manjunath sir mobile porter", 130.0],
+    ["2026-08-07", "Courier & Postage", "India Post", "marketsmojo indian post", 71.0],
+    ["2026-08-10", "Housekeeping", "", "Cleaning aunty", 8500.0],
+    ["2026-08-13", "Pooja / Festival", "", "lemon and chilli for office pooja", 30.0],
+    ["2026-08-13", "Pooja / Festival", "", "agarbatti for poja", 340.0],
+    ["2026-08-14", "Client Expenses", "", "welcome kit for doctor", 637.0],
+    ["2026-08-18", "Courier & Postage", "Blue Dart", "blue dart courier", 600.0],
+    ["2026-08-19", "Utilities", "", "mobile (manjunath sir)", 145.0],
+    ["2026-08-19", "Utilities", "", "office water bill and motor bill", 1792.0],
+    ["2026-08-19", "Courier & Postage", "Porter", "kotak bank porter", 120.0],
+    ["2026-08-20", "Courier & Postage", "India Post", "indian post ( b gift)", 1558.0],
+]
+_CASH_IMPORT_FLAG = 'junaug2026'
+
+
+@app.route('/hr/cash-expenses/import-jun-aug', methods=['GET', 'POST'])
+@admin_required
+def hr_cash_import_junaug():
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    already = conn.execute("SELECT 1 FROM lookup_options WHERE category = '_cash_import' AND value = ?",
+                           (_CASH_IMPORT_FLAG,)).fetchone()
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name", []).fetchall()
+    match = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 AND "
+                         "(LOWER(name) LIKE '%poornima%' OR LOWER(name) LIKE '%purnima%') ORDER BY id LIMIT 1", []).fetchone()
+
+    if request.method == 'POST':
+        if already:
+            conn.close(); flash('This sheet was already imported.', 'info'); return redirect(url_for('hr_cash_expenses_report'))
+        emp_id = int(request.form.get('employee_id')) if (request.form.get('employee_id') or '').isdigit() else (match['id'] if match else None)
+        if not emp_id:
+            conn.close(); flash('Pick the member (Spent by) first.', 'error'); return redirect(url_for('hr_cash_import_junaug'))
+        er = conn.execute("SELECT name FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        emp_name = er['name'] if er else ''
+        try:
+            # Ensure every category + vendor in the sheet exists in the dropdowns.
+            cats = sorted({r[1] for r in _CASH_IMPORT_JUNAUG if r[1]})
+            vends = sorted({r[2] for r in _CASH_IMPORT_JUNAUG if r[2]})
+            for _c in cats:
+                if not conn.execute("SELECT 1 FROM lookup_options WHERE category='cash_expense_category' AND value=?", (_c,)).fetchone():
+                    conn.execute("INSERT INTO lookup_options (category,label,value,sort_order,is_active) VALUES ('cash_expense_category',?,?,?,TRUE)", (_c, _c, 50))
+            for _v in vends:
+                if not conn.execute("SELECT 1 FROM lookup_options WHERE category='cash_expense_vendor' AND value=?", (_v,)).fetchone():
+                    conn.execute("INSERT INTO lookup_options (category,label,value,sort_order,is_active) VALUES ('cash_expense_vendor',?,?,?,TRUE)", (_v, _v, 50))
+            n = 0
+            for d, c, v, desc, amt in _CASH_IMPORT_JUNAUG:
+                nr = conn.execute('''INSERT INTO cash_expenses
+                    (entry_type, employee_id, employee_name, txn_date, category, vendor, description,
+                     amount, has_bill, voucher_created, notes, created_by)
+                    VALUES ('expense', ?, ?, ?, ?, ?, ?, ?, 'No', 'No', '[Imported Jun–Aug 2026]', ?) RETURNING id''',
+                    (emp_id, emp_name, d, c, v, desc, float(amt), session.get('user_id'))).fetchone()
+                _cash_audit(conn, nr['id'] if nr else None, 'create',
+                            f"Imported (Jun–Aug 2026 sheet) — {c} ₹{float(amt):,.2f}",
+                            {'txn_date': d, 'category': c, 'vendor': v, 'description': desc, 'amount': float(amt), 'spent_by': emp_name}, user)
+                n += 1
+            conn.execute("INSERT INTO lookup_options (category,label,value,sort_order,is_active) VALUES ('_cash_import',?,?,0,TRUE)",
+                         (_CASH_IMPORT_FLAG, _CASH_IMPORT_FLAG))
+            conn.commit()
+            conn.close()
+            flash(f'Imported {n} expenses for {emp_name} (Jun–Aug 2026).', 'success')
+            return redirect(url_for('hr_cash_expenses_report'))
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error(f"hr_cash_import_junaug: {e}")
+            conn.close()
+            flash('Import failed — nothing was written.', 'error')
+            return redirect(url_for('hr_cash_import_junaug'))
+
+    preview = [{'date': r[0], 'category': r[1], 'vendor': r[2], 'description': r[3],
+                'amount': float(r[4]), 'amount_fmt': f"{float(r[4]):,.2f}"} for r in _CASH_IMPORT_JUNAUG]
+    total = sum(p['amount'] for p in preview)
+    conn.close()
+    return render_template('hr_cash_import.html', user=user, preview=preview, total_fmt=f"{total:,.2f}",
+        employees=employees, match=(dict(match) if match else None), already=bool(already),
+        active_section='hr')
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # CLIENT REFUND WORKFLOW (founder 2026-08-06)
 # When ops sets a client to 'Dropped and Refunded', a refund worksheet opens:
@@ -49620,6 +49739,7 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_pool':                       _ap('hr', 'cash_pool'),
     'hr_cash_pool_add':                   _ap('hr', 'cash_pool', 'add'),
     'hr_cash_pool_delete':                _ap('hr', 'cash_pool', 'delete'),
+    'hr_cash_import_junaug':              _ap('hr', 'cash_pool'),
 
     # ── Company ───────────────────────────────────────────────────────────
     'access_master':                _ap('company', 'access_master'),
