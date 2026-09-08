@@ -60,6 +60,11 @@
     {# ── Month panels ── #}
     {% for m in months %}
     <div class="cxpanel" id="mp-{{ m.key }}" style="display:{{ 'block' if m.key == sel_month else 'none' }};">
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <span style="font-size:0.78rem;color:var(--gray-500);margin-right:2px;">Download {{ m.label }} <b>expenses only</b>:</span>
+        <a href="{{ url_for('hr_cash_expenses_report_export', month=m.key, emp=sel_emp) }}" style="background:#16a34a;color:#fff;padding:7px 13px;border-radius:8px;font-weight:700;text-decoration:none;font-size:0.8rem;">⬇ Excel</a>
+        <a href="{{ url_for('hr_cash_expenses_report_print', month=m.key, emp=sel_emp) }}" target="_blank" style="background:#dc2626;color:#fff;padding:7px 13px;border-radius:8px;font-weight:700;text-decoration:none;font-size:0.8rem;">⬇ PDF</a>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;">
         <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:12px 15px;">
           <div style="font-size:0.72rem;color:var(--gray-500);font-weight:700;">Opening balance</div>

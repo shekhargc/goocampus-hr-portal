@@ -34714,6 +34714,92 @@ def hr_cash_expenses_report():
         fy_label=f"Apr {sel_fy} – Mar {sel_fy + 1}", active_section='hr')
 
 
+def _cash_month_expenses(conn, user, can_manage, month, sel_emp):
+    """Fetch one month's EXPENSE rows (never Cash Given), scoped to the viewer.
+    Returns (rows, month_label, holder_label, total)."""
+    scope = ["entry_type = 'expense'", "COALESCE(is_deleted, FALSE) = FALSE", "txn_date LIKE ?"]
+    params = [f"{month}%"]
+    holder_label = 'All members'
+    if not can_manage:
+        scope.append("employee_id = ?"); params.append(user['id']); holder_label = user.get('name') or 'Me'
+    elif sel_emp.isdigit():
+        scope.append("employee_id = ?"); params.append(int(sel_emp))
+        er = conn.execute("SELECT name FROM employees WHERE id = ?", (int(sel_emp),)).fetchone()
+        holder_label = (er['name'] if er else 'Member')
+    rows = conn.execute("SELECT * FROM cash_expenses WHERE " + " AND ".join(scope) + " ORDER BY txn_date, id", params).fetchall()
+    y, m = int(month[:4]), int(month[5:7])
+    mlabel = f"{CASH_MONTH_NAMES[m - 1]} {y}"
+    total = sum(float(r['amount'] or 0) for r in rows)
+    return rows, mlabel, holder_label, total
+
+
+@app.route('/hr/cash-expenses/report/export')
+@admin_required
+def hr_cash_expenses_report_export():
+    """Download one month's expenses (only) as an Excel file."""
+    import re as _re
+    user = get_user()
+    month = (request.args.get('month') or '').strip()
+    if not _re.match(r'^\d{4}-\d{2}$', month):
+        flash('Pick a month first', 'error'); return redirect(url_for('hr_cash_expenses_report'))
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    can_manage = _cash_can_manage(user)
+    rows, mlabel, holder_label, total = _cash_month_expenses(conn, user, can_manage, month, (request.args.get('emp') or '').strip())
+    conn.close()
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    try:
+        from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+        clean = lambda s: ILLEGAL_CHARACTERS_RE.sub('', str(s)) if s is not None else ''
+    except Exception:
+        clean = lambda s: str(s) if s is not None else ''
+    wb = Workbook(); ws = wb.active; ws.title = mlabel[:31]
+    ws.append(['GooCampus — Cash Expenses'])
+    ws.append([f'Month: {mlabel}']); ws.append([f'Spent by: {holder_label}']); ws.append([])
+    hdr = ['#', 'Date', 'Category', 'Vendor', 'Description', 'Spent by', 'Amount (Rs)', 'Bill', 'Voucher', 'Notes']
+    ws.append(hdr)
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True, color='FFFFFF'); c.fill = PatternFill('solid', fgColor='2952A3')
+    for i, r in enumerate(rows, 1):
+        ws.append([i, r['txn_date'] or '', clean(r['category']), clean(r['vendor']), clean(r['description']),
+                   clean(r['employee_name']), float(r['amount'] or 0), r['has_bill'] or 'No',
+                   r['voucher_created'] or 'No', clean(r['notes'])])
+    ws.append([]); ws.append(['', '', '', '', '', 'TOTAL', round(total, 2)])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+    for j, wd in enumerate([5, 12, 20, 14, 40, 14, 13, 8, 9, 30], 1):
+        ws.column_dimensions[get_column_letter(j)].width = wd
+    buf = BytesIO(); wb.save(buf); buf.seek(0)
+    return send_file(buf, as_attachment=True,
+        download_name=f"Cash_Expenses_{CASH_MONTH_NAMES[int(month[5:7]) - 1]}_{month[:4]}.xlsx",
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@app.route('/hr/cash-expenses/report/print')
+@admin_required
+def hr_cash_expenses_report_print():
+    """Print-friendly one-month expenses page → browser 'Save as PDF'."""
+    import re as _re
+    user = get_user()
+    month = (request.args.get('month') or '').strip()
+    if not _re.match(r'^\d{4}-\d{2}$', month):
+        flash('Pick a month first', 'error'); return redirect(url_for('hr_cash_expenses_report'))
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    can_manage = _cash_can_manage(user)
+    rows, mlabel, holder_label, total = _cash_month_expenses(conn, user, can_manage, month, (request.args.get('emp') or '').strip())
+    conn.close()
+    entries = []
+    for i, r in enumerate(rows, 1):
+        d = dict(r); d['serial'] = i; d['amount_fmt'] = f"{float(d.get('amount') or 0):,.2f}"
+        entries.append(d)
+    return render_template('hr_cash_expenses_print.html', entries=entries, mlabel=mlabel,
+        holder_label=holder_label, total_fmt=f"{total:,.2f}", count=len(entries))
+
+
 # ── Cash Pool (ADMIN ONLY) ────────────────────────────────────────────────
 # Management (Santosh Shekhar) draws cash from the company bank by cheque; it
 # forms a kitty pool held by management, from which cash is handed to team
@@ -49732,6 +49818,8 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_expenses_delete':            _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_entry_edit':                 _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_entry_history':              _ap('hr', 'cash_expenses'),
+    'hr_cash_expenses_report_export':     _ap('hr', 'cash_expenses'),
+    'hr_cash_expenses_report_print':      _ap('hr', 'cash_expenses'),
     'hr_cash_expenses_lookup_add':        _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_expenses_lookup_remove':     _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_expenses_report':            _ap('hr', 'cash_expenses'),
