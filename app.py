@@ -34251,6 +34251,13 @@ def hr_cash_expenses_add():
              float(request.form.get('amount', 0) or 0), has_bill, r2_key, bill_fn, bill_ct,
              'Yes' if request.form.get('voucher_created') == 'Yes' else 'No',
              request.form.get('notes', ''), session.get('user_id')))
+        # Auto-add a newly typed vendor to the shared dropdown for next time.
+        _vend = (request.form.get('vendor') or '').strip()
+        if _vend:
+            _ex = conn.execute("SELECT 1 FROM lookup_options WHERE category = 'cash_expense_vendor' AND value = ?", (_vend,)).fetchone()
+            if not _ex:
+                conn.execute("INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                             "VALUES ('cash_expense_vendor', ?, ?, ?, TRUE)", (_vend, _vend, 100))
         conn.commit()
         flash('Expense recorded', 'success')
     except Exception as e:
@@ -34372,6 +34379,139 @@ def hr_cash_expenses_lookup_add():
             try: conn.close()
             except Exception: pass
     return redirect(url_for('hr_cash_expenses'))
+
+
+@app.route('/hr/cash-expenses/lookup-remove', methods=['POST'])
+@admin_required
+def hr_cash_expenses_lookup_remove():
+    """Remove (deactivate) a category or vendor from the dropdown. Kept as a
+    soft-delete (is_active=FALSE) so past entries that used it are untouched."""
+    kind = request.form.get('kind')
+    val = (request.form.get('value') or '').strip()
+    cat = 'cash_expense_category' if kind == 'category' else 'cash_expense_vendor'
+    if val:
+        conn = get_db()
+        try:
+            conn.execute("UPDATE lookup_options SET is_active = FALSE WHERE category = ? AND value = ?", (cat, val))
+            conn.commit()
+            flash(f'Removed {kind}: {val}', 'success')
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error(f"hr_cash_expenses_lookup_remove: {e}")
+            flash('Error removing from list', 'error')
+        finally:
+            try: conn.close()
+            except Exception: pass
+    return redirect(url_for('hr_cash_expenses'))
+
+
+@app.route('/hr/cash-expenses/report')
+@admin_required
+def hr_cash_expenses_report():
+    """Read-only report: balance summary on top + monthly tabs across the
+    financial year (Apr→Mar). Non-management sees only their own book."""
+    user = get_user()
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    can_manage = _cash_can_manage(user)
+    sel_emp = (request.args.get('emp') or '').strip()
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name", []).fetchall()
+
+    where, params = [], []
+    if not can_manage:
+        where.append("employee_id = ?"); params.append(user['id'])
+    elif sel_emp.isdigit():
+        where.append("employee_id = ?"); params.append(int(sel_emp))
+    wsql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    bal_sql = """SELECT employee_id, MAX(employee_name) AS employee_name,
+              COALESCE(SUM(CASE WHEN entry_type='received' THEN amount ELSE 0 END),0) AS credited,
+              COALESCE(SUM(CASE WHEN entry_type='expense'  THEN amount ELSE 0 END),0) AS debited
+            FROM cash_expenses {w} GROUP BY employee_id ORDER BY MAX(employee_name)"""
+    bal_rows = conn.execute(bal_sql.format(w=wsql), params).fetchall()
+    balances = []
+    for b in bal_rows:
+        cr = float(b['credited'] or 0); db_ = float(b['debited'] or 0)
+        balances.append({'employee_name': b['employee_name'] or '—', 'balance': cr - db_,
+                         'credited_fmt': f"{cr:,.2f}", 'debited_fmt': f"{db_:,.2f}", 'balance_fmt': f"{cr - db_:,.2f}"})
+    grand = {'balance': sum(x['balance'] for x in balances)}
+    grand['balance_fmt'] = f"{grand['balance']:,.2f}"
+
+    now = datetime.now()
+    cur_fy = now.year if now.month >= 4 else now.year - 1
+    try:
+        sel_fy = int(request.args.get('fy') or cur_fy)
+    except Exception:
+        sel_fy = cur_fy
+
+    def _fy_of(dstr):
+        try:
+            y = int(dstr[:4]); m = int(dstr[5:7]); return y if m >= 4 else y - 1
+        except Exception:
+            return None
+    yr = conn.execute(f"SELECT MIN(txn_date) AS mn, MAX(txn_date) AS mx FROM cash_expenses {wsql}", params).fetchone()
+    fys = {cur_fy, sel_fy}
+    if yr and yr['mn']:
+        a = _fy_of(yr['mn']); b = _fy_of(yr['mx'])
+        if a is not None and b is not None:
+            for y in range(min(a, cur_fy), max(b, cur_fy) + 1):
+                fys.add(y)
+    fy_list = sorted(fys, reverse=True)
+
+    rows = conn.execute(f"SELECT * FROM cash_expenses {wsql} ORDER BY txn_date, id", params).fetchall()
+
+    MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    def _delta(r):
+        a = float(r['amount'] or 0)
+        return a if r['entry_type'] == 'received' else -a
+
+    months = []
+    for i in range(12):
+        m = 4 + i
+        y = sel_fy if m <= 12 else sel_fy + 1
+        mm = m if m <= 12 else m - 12
+        prefix = f"{y:04d}-{mm:02d}"
+        mstart = f"{prefix}-01"
+        opening = sum(_delta(r) for r in rows if (r['txn_date'] or '') < mstart)
+        run = opening
+        received = spent = 0.0
+        m_entries = []
+        for r in rows:
+            if (r['txn_date'] or '').startswith(prefix):
+                d = dict(r); a = float(d.get('amount') or 0)
+                if d['entry_type'] == 'received':
+                    received += a
+                else:
+                    spent += a
+                run += _delta(r)
+                d['running_fmt'] = f"{run:,.2f}"; d['running'] = run
+                d['amount_fmt'] = f"{a:,.2f}"; d['serial'] = len(m_entries) + 1
+                m_entries.append(d)
+        closing = opening + received - spent
+        months.append({
+            'key': prefix, 'label': f"{MONTH_NAMES[mm - 1]} {y}", 'short': MONTH_NAMES[mm - 1], 'yy': y,
+            'entries': list(reversed(m_entries)), 'count': len(m_entries),
+            'received_fmt': f"{received:,.2f}", 'spent_fmt': f"{spent:,.2f}",
+            'opening_fmt': f"{opening:,.2f}", 'closing_fmt': f"{closing:,.2f}",
+        })
+
+    valid_keys = [m['key'] for m in months]
+    sel_month = request.args.get('month') or ''
+    if sel_month not in valid_keys:
+        cur_prefix = now.strftime('%Y-%m')
+        if cur_prefix in valid_keys:
+            sel_month = cur_prefix
+        else:
+            with_entries = [m['key'] for m in months if m['count'] > 0]
+            sel_month = with_entries[-1] if with_entries else months[0]['key']
+
+    conn.close()
+    return render_template('hr_cash_expenses_report.html', user=user, can_manage=can_manage,
+        balances=balances, grand=grand, months=months, sel_month=sel_month,
+        employees=employees, sel_emp=sel_emp, fy_list=fy_list, sel_fy=sel_fy,
+        fy_label=f"Apr {sel_fy} – Mar {sel_fy + 1}", active_section='hr')
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -49152,6 +49292,8 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_expenses_bill':              _ap('hr', 'cash_expenses'),
     'hr_cash_expenses_delete':            _ap('hr', 'cash_expenses', 'delete'),
     'hr_cash_expenses_lookup_add':        _ap('hr', 'cash_expenses', 'add'),
+    'hr_cash_expenses_lookup_remove':     _ap('hr', 'cash_expenses', 'add'),
+    'hr_cash_expenses_report':            _ap('hr', 'cash_expenses'),
 
     # ── Company ───────────────────────────────────────────────────────────
     'access_master':                _ap('company', 'access_master'),

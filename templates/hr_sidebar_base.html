@@ -114,9 +114,13 @@
 
     {% if can_access('hr','cash_expenses','view') %}
     <div class="sec-nav-group-label">Cash</div>
-    <a href="/hr/cash-expenses" class="sec-nav-item" data-tooltip="Cash Expenses — petty-cash ledger">
+    <a href="/hr/cash-expenses" class="sec-nav-item" data-tooltip="Cash Expenses — record expenses">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
         <span class="sec-nav-text">Cash Expenses</span>
+    </a>
+    <a href="/hr/cash-expenses/report" class="sec-nav-item" data-tooltip="Cash Expenses Report — monthly summary">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+        <span class="sec-nav-text">Cash Expenses Report</span>
     </a>
     {% endif %}
 
@@ -232,9 +236,13 @@
 
     {% if can_access('hr','cash_expenses','view') %}
     <div class="sec-nav-group-label">Cash</div>
-    <a href="/hr/cash-expenses" class="sec-nav-item" data-tooltip="Cash Expenses — my cash book">
+    <a href="/hr/cash-expenses" class="sec-nav-item" data-tooltip="Cash Expenses — record expenses">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
         <span class="sec-nav-text">Cash Expenses</span>
+    </a>
+    <a href="/hr/cash-expenses/report" class="sec-nav-item" data-tooltip="Cash Expenses Report — monthly summary">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+        <span class="sec-nav-text">Cash Expenses Report</span>
     </a>
     {% endif %}
 {% endif %}
