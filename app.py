@@ -34896,7 +34896,8 @@ def hr_cash_import_junaug():
                            (_CASH_IMPORT_FLAG,)).fetchone()
     employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name", []).fetchall()
     match = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 AND "
-                         "(LOWER(name) LIKE '%poornima%' OR LOWER(name) LIKE '%purnima%') ORDER BY id LIMIT 1", []).fetchone()
+                         "(LOWER(name) LIKE ? OR LOWER(name) LIKE ?) ORDER BY id LIMIT 1",
+                         ('%poornima%', '%purnima%')).fetchone()
 
     if request.method == 'POST':
         if already:
