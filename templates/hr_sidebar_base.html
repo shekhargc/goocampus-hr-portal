@@ -112,6 +112,14 @@
     </a>
     {% endif %}
 
+    {% if can_access('hr','cash_expenses','view') %}
+    <div class="sec-nav-group-label">Cash</div>
+    <a href="/hr/cash-expenses" class="sec-nav-item" data-tooltip="Cash Expenses — petty-cash ledger">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
+        <span class="sec-nav-text">Cash Expenses</span>
+    </a>
+    {% endif %}
+
     {# Self-service — admins/HR staff also apply for their own WFH / travel #}
     <div class="sec-nav-group-label">My Requests</div>
     <a href="/wfh/apply" class="sec-nav-item" data-tooltip="Apply WFH">
@@ -219,6 +227,14 @@
     <a href="/official-travel/approvals" class="sec-nav-item" data-tooltip="Official Travel Approvals">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
         <span class="sec-nav-text">Official Travel Approvals</span>
+    </a>
+    {% endif %}
+
+    {% if can_access('hr','cash_expenses','view') %}
+    <div class="sec-nav-group-label">Cash</div>
+    <a href="/hr/cash-expenses" class="sec-nav-item" data-tooltip="Cash Expenses — my cash book">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
+        <span class="sec-nav-text">Cash Expenses</span>
     </a>
     {% endif %}
 {% endif %}

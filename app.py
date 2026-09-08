@@ -34073,6 +34073,308 @@ def admin_refunds_add():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# CASH EXPENSES — petty-cash ledger under HR (founder 2026-09-08)
+# Per team member (the "holder"): management records Cash Received (credit),
+# the member records Cash Spent (debit). Balance = received − spent, per
+# holder. Expenses carry category + vendor (editable dropdowns), spent-by
+# (employee), an optional bill (Yes/No + a file in R2), voucher-created, notes.
+# Access: 'add' → log expenses; 'edit' (management) → also record cash given +
+# manage lists + see everyone; admins see all. Categories/vendors seeded from
+# the founder's old Excel, then editable in-app. History is NOT imported.
+# ══════════════════════════════════════════════════════════════════════════
+
+CASH_EXPENSE_CATEGORY_SEED = ['Office Expenses', 'Courier & Postage', 'Printing',
+    'Staff Welfare', 'Travelling', 'Subscription', 'Research', 'Pooja / Festival',
+    'Security', 'Stationery', 'Food & Refreshments', 'Repairs & Maintenance',
+    'Miscellaneous']
+CASH_EXPENSE_VENDOR_SEED = ['India Post', 'DTDC', 'Dunzo']
+
+
+def _ensure_cash_expenses(conn):
+    """Create the cash_expenses table + seed category/vendor dropdowns if empty.
+    Runs at request time so it survives Render cold starts (boot DDL can skip)."""
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS cash_expenses (
+            id SERIAL PRIMARY KEY,
+            entry_type TEXT DEFAULT 'expense',
+            employee_id INTEGER,
+            employee_name TEXT,
+            txn_date TEXT,
+            category TEXT,
+            vendor TEXT,
+            description TEXT,
+            amount NUMERIC(14,2) DEFAULT 0,
+            has_bill TEXT DEFAULT 'No',
+            r2_key TEXT,
+            bill_filename TEXT,
+            bill_content_type TEXT,
+            voucher_created TEXT DEFAULT 'No',
+            given_by TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"_ensure_cash_expenses table: {e}")
+    for _cat, _seed in (('cash_expense_category', CASH_EXPENSE_CATEGORY_SEED),
+                        ('cash_expense_vendor', CASH_EXPENSE_VENDOR_SEED)):
+        try:
+            n = conn.execute("SELECT COUNT(*) AS n FROM lookup_options WHERE category = ?", (_cat,)).fetchone()
+            if n and (n['n'] or 0) == 0:
+                for i, v in enumerate(_seed):
+                    conn.execute("INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                                 "VALUES (?, ?, ?, ?, TRUE)", (_cat, v, v, i))
+                conn.commit()
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error(f"_ensure_cash_expenses seed {_cat}: {e}")
+
+
+def _cash_can_manage(user):
+    """Management = admin, or a non-admin holding the 'edit' grant on Cash
+    Expenses. Management sees every holder's book, records cash given, and
+    manages the category/vendor lists. A plain 'add' user sees only their own."""
+    if not user:
+        return False
+    if user.get('is_admin'):
+        return True
+    try:
+        return has_section_permission(user, 'hr', 'cash_expenses', 'edit')
+    except Exception:
+        return False
+
+
+@app.route('/hr/cash-expenses')
+@admin_required
+def hr_cash_expenses():
+    from core import storage
+    user = get_user()
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    can_manage = _cash_can_manage(user)
+    sel_emp = (request.args.get('emp') or '').strip()
+
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name", []).fetchall()
+
+    bal_sql = """SELECT employee_id, MAX(employee_name) AS employee_name,
+              COALESCE(SUM(CASE WHEN entry_type='received' THEN amount ELSE 0 END),0) AS credited,
+              COALESCE(SUM(CASE WHEN entry_type='expense'  THEN amount ELSE 0 END),0) AS debited
+            FROM cash_expenses {w} GROUP BY employee_id ORDER BY MAX(employee_name)"""
+    if can_manage:
+        bal_rows = conn.execute(bal_sql.format(w=''), []).fetchall()
+    else:
+        bal_rows = conn.execute(bal_sql.format(w='WHERE employee_id = ?'), (user['id'],)).fetchall()
+    balances = []
+    for b in bal_rows:
+        cr = float(b['credited'] or 0); db_ = float(b['debited'] or 0)
+        balances.append({'employee_id': b['employee_id'], 'employee_name': b['employee_name'] or '—',
+                         'credited': cr, 'debited': db_, 'balance': cr - db_,
+                         'credited_fmt': f"{cr:,.2f}", 'debited_fmt': f"{db_:,.2f}",
+                         'balance_fmt': f"{cr - db_:,.2f}"})
+    grand = {'credited': sum(x['credited'] for x in balances),
+             'debited': sum(x['debited'] for x in balances),
+             'balance': sum(x['balance'] for x in balances)}
+    grand['balance_fmt'] = f"{grand['balance']:,.2f}"
+    grand['credited_fmt'] = f"{grand['credited']:,.2f}"
+    grand['debited_fmt'] = f"{grand['debited']:,.2f}"
+
+    where, params = [], []
+    single_holder = None
+    if not can_manage:
+        where.append("employee_id = ?"); params.append(user['id']); single_holder = user['id']
+    elif sel_emp.isdigit():
+        where.append("employee_id = ?"); params.append(int(sel_emp)); single_holder = int(sel_emp)
+    wsql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(f"SELECT * FROM cash_expenses {wsql} ORDER BY txn_date, id", params).fetchall()
+    running = 0.0
+    entries = []
+    for i, r in enumerate(rows):
+        d = dict(r)
+        amt = float(d.get('amount') or 0)
+        running += amt if d.get('entry_type') == 'received' else -amt
+        d['running_balance'] = running
+        d['running_fmt'] = f"{running:,.2f}"
+        d['amount_fmt'] = f"{amt:,.2f}"
+        d['serial'] = i + 1
+        entries.append(d)
+    entries.reverse()
+    show_running = single_holder is not None
+
+    categories = get_lookup_options('cash_expense_category')
+    vendors = get_lookup_options('cash_expense_vendor')
+    conn.close()
+    return render_template('hr_cash_expenses.html', user=user, can_manage=can_manage,
+        balances=balances, grand=grand, entries=entries, employees=employees,
+        categories=categories, vendors=vendors, sel_emp=sel_emp, show_running=show_running,
+        r2_ok=storage.is_configured(), today=datetime.now().strftime('%Y-%m-%d'),
+        active_section='hr')
+
+
+@app.route('/hr/cash-expenses/add', methods=['POST'])
+@admin_required
+def hr_cash_expenses_add():
+    user = get_user()
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    can_manage = _cash_can_manage(user)
+    emp_q = ''
+    try:
+        from core import storage
+        from werkzeug.utils import secure_filename
+        from uuid import uuid4
+        if can_manage and (request.form.get('employee_id') or '').isdigit():
+            emp_id = int(request.form.get('employee_id')); emp_q = str(emp_id)
+        else:
+            emp_id = user['id']
+        er = conn.execute("SELECT name FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        emp_name = (er['name'] if er else None) or user.get('name') or ''
+        has_bill = 'Yes' if request.form.get('has_bill') == 'Yes' else 'No'
+        r2_key = bill_fn = bill_ct = None
+        fs = request.files.get('bill_file')
+        if fs and fs.filename and storage.is_configured():
+            raw = fs.read()
+            if raw:
+                safe = secure_filename(fs.filename) or 'bill'
+                key = f"cash_expenses/{emp_id}/{uuid4().hex[:8]}_{safe}"
+                if storage.upload_bytes(key, raw, fs.mimetype or 'application/octet-stream'):
+                    r2_key, bill_fn, bill_ct, has_bill = key, safe, (fs.mimetype or ''), 'Yes'
+        conn.execute('''INSERT INTO cash_expenses
+            (entry_type, employee_id, employee_name, txn_date, category, vendor, description,
+             amount, has_bill, r2_key, bill_filename, bill_content_type, voucher_created, notes, created_by)
+            VALUES ('expense', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (emp_id, emp_name, request.form.get('txn_date'), request.form.get('category', ''),
+             request.form.get('vendor', ''), request.form.get('description', ''),
+             float(request.form.get('amount', 0) or 0), has_bill, r2_key, bill_fn, bill_ct,
+             'Yes' if request.form.get('voucher_created') == 'Yes' else 'No',
+             request.form.get('notes', ''), session.get('user_id')))
+        conn.commit()
+        flash('Expense recorded', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"hr_cash_expenses_add: {e}")
+        flash('Error recording expense', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('hr_cash_expenses', emp=emp_q) if emp_q else url_for('hr_cash_expenses'))
+
+
+@app.route('/hr/cash-expenses/receive', methods=['POST'])
+@admin_required
+def hr_cash_expenses_receive():
+    """Record cash handed to a member. Management only (enforced via the
+    'edit' permission in ACCESS_ROUTE_MAP)."""
+    user = get_user()
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    emp_q = ''
+    try:
+        if (request.form.get('employee_id') or '').isdigit():
+            emp_id = int(request.form.get('employee_id')); emp_q = str(emp_id)
+        else:
+            emp_id = user['id']
+        er = conn.execute("SELECT name FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        emp_name = (er['name'] if er else None) or ''
+        given_by = request.form.get('given_by', '')
+        desc = request.form.get('description', '') or (('From ' + given_by) if given_by else 'Cash received')
+        conn.execute('''INSERT INTO cash_expenses
+            (entry_type, employee_id, employee_name, txn_date, category, description,
+             amount, given_by, notes, created_by)
+            VALUES ('received', ?, ?, ?, 'Cash Received', ?, ?, ?, ?, ?)''',
+            (emp_id, emp_name, request.form.get('txn_date'), desc,
+             float(request.form.get('amount', 0) or 0), given_by,
+             request.form.get('notes', ''), session.get('user_id')))
+        conn.commit()
+        flash('Cash received recorded', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"hr_cash_expenses_receive: {e}")
+        flash('Error recording cash received', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('hr_cash_expenses', emp=emp_q) if emp_q else url_for('hr_cash_expenses'))
+
+
+@app.route('/hr/cash-expenses/bill/<int:eid>')
+@admin_required
+def hr_cash_expenses_bill(eid):
+    user = get_user()
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    row = conn.execute("SELECT * FROM cash_expenses WHERE id = ?", (eid,)).fetchone()
+    conn.close()
+    if not row or not row['r2_key']:
+        abort(404)
+    if not _cash_can_manage(user) and row['employee_id'] != user['id']:
+        abort(403)
+    from core import storage
+    url = storage.presigned_get_url(row['r2_key'])
+    return redirect(url) if url else abort(404)
+
+
+@app.route('/hr/cash-expenses/delete/<int:eid>', methods=['POST'])
+@admin_required
+def hr_cash_expenses_delete(eid):
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    try:
+        row = conn.execute("SELECT r2_key FROM cash_expenses WHERE id = ?", (eid,)).fetchone()
+        conn.execute("DELETE FROM cash_expenses WHERE id = ?", (eid,))
+        conn.commit()
+        if row and row['r2_key']:
+            try:
+                from core import storage
+                storage.delete_object(row['r2_key'])
+            except Exception: pass
+        flash('Entry deleted', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"hr_cash_expenses_delete: {e}")
+        flash('Error deleting entry', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(request.referrer or url_for('hr_cash_expenses'))
+
+
+@app.route('/hr/cash-expenses/lookup-add', methods=['POST'])
+@admin_required
+def hr_cash_expenses_lookup_add():
+    """Management adds a new category or vendor to the editable dropdowns."""
+    kind = request.form.get('kind')
+    val = (request.form.get('value') or '').strip()
+    cat = 'cash_expense_category' if kind == 'category' else 'cash_expense_vendor'
+    if val:
+        conn = get_db()
+        try:
+            exists = conn.execute("SELECT 1 FROM lookup_options WHERE category = ? AND value = ?", (cat, val)).fetchone()
+            if not exists:
+                conn.execute("INSERT INTO lookup_options (category, label, value, sort_order, is_active) "
+                             "VALUES (?, ?, ?, ?, TRUE)", (cat, val, val, 100))
+                conn.commit()
+                flash(f'Added {kind}: {val}', 'success')
+            else:
+                flash('That value already exists', 'info')
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error(f"hr_cash_expenses_lookup_add: {e}")
+            flash('Error adding to list', 'error')
+        finally:
+            try: conn.close()
+            except Exception: pass
+    return redirect(url_for('hr_cash_expenses'))
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # CLIENT REFUND WORKFLOW (founder 2026-08-06)
 # When ops sets a client to 'Dropped and Refunded', a refund worksheet opens:
 # total paid (ex-GST) minus an itemised spend list (consulting fee, welcome kit
@@ -45019,6 +45321,7 @@ ACCESS_SECTION_CATALOG = [
             ('employees',        'Employee Directory',  'Active employee list + profiles'),
             ('id_cards',         'ID Cards',            'ID card requests + generation'),
             ('letters',          'Letters',             'HR letter templates + generation'),
+            ('cash_expenses',    'Cash Expenses',       'Petty-cash ledger — cash received, expenses, per-member balance (edit = management: record cash given + see all)'),
         ],
     },
     # ── KRA ────────────────────────────────────────────────────────────────
@@ -48841,6 +49144,14 @@ ACCESS_ROUTE_MAP = {
     'approve_official_travel':            _ap('hr', 'official_travel', 'edit'),
     'reject_official_travel':             _ap('hr', 'official_travel', 'edit'),
     'cancel_official_travel':             _ap('hr', 'official_travel', 'edit'),
+    # Cash Expenses (petty-cash ledger). 'edit' = management (record cash given,
+    # manage lists, see all books); 'add' = a member logging their own expenses.
+    'hr_cash_expenses':                   _ap('hr', 'cash_expenses'),
+    'hr_cash_expenses_add':               _ap('hr', 'cash_expenses', 'add'),
+    'hr_cash_expenses_receive':           _ap('hr', 'cash_expenses', 'edit'),
+    'hr_cash_expenses_bill':              _ap('hr', 'cash_expenses'),
+    'hr_cash_expenses_delete':            _ap('hr', 'cash_expenses', 'delete'),
+    'hr_cash_expenses_lookup_add':        _ap('hr', 'cash_expenses', 'add'),
 
     # ── Company ───────────────────────────────────────────────────────────
     'access_master':                _ap('company', 'access_master'),
