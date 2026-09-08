@@ -1,0 +1,67 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Import Jun–Aug Cash{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1000px;margin:0 auto;">
+
+    <div style="margin-bottom:16px;">
+      <a href="{{ url_for('hr_cash_expenses') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← Cash Expenses</a>
+      <h1 style="margin:8px 0 0;font-size:1.3rem;font-weight:800;color:var(--navy);">Import June–August 2026 cash sheet</h1>
+      <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500);">{{ preview|length }} expenses · total <b>₹{{ total_fmt }}</b>. Cleaned from your Excel — dates fixed, categories &amp; vendors derived. Nothing is written until you press Confirm.</p>
+    </div>
+
+    {% if already %}
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-weight:600;font-size:0.9rem;">
+      ✓ This sheet has already been imported. Re-importing is blocked to avoid duplicates. You can view everything in the <a href="{{ url_for('hr_cash_expenses_report') }}" style="color:#1e40af;font-weight:700;">Report</a>.
+    </div>
+    {% endif %}
+
+    <form method="POST" style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;padding:18px 20px;margin-bottom:18px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+      <div>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Spent by *</label>
+        <select name="employee_id" required style="padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;min-width:240px;">
+          <option value="">— Select member —</option>
+          {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if match and match.id == e.id else '' }}>{{ e.name }}</option>{% endfor %}
+        </select>
+        {% if match %}<div style="font-size:0.72rem;color:#16a34a;margin-top:4px;">Matched “{{ match.name }}” from your employee list.</div>
+        {% else %}<div style="font-size:0.72rem;color:#dc2626;margin-top:4px;">No “Poornima/Purnima” found — pick the right member.</div>{% endif %}
+      </div>
+      <button type="submit" {{ 'disabled' if already else '' }}
+        style="background:{{ '#cbd5e1' if already else 'var(--orange)' }};color:#fff;padding:12px 24px;border:none;border-radius:9px;font-weight:800;cursor:{{ 'not-allowed' if already else 'pointer' }};font-size:0.92rem;"
+        onclick="return {{ 'false' if already else 'confirm(\'Import all ' ~ (preview|length) ~ ' expenses now?\')' }};">
+        {{ 'Already imported' if already else 'Confirm import (' ~ (preview|length) ~ ' rows)' }}
+      </button>
+    </form>
+
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:hidden;">
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+          <thead><tr style="background:var(--gray-50);color:var(--gray-600);text-align:left;">
+            <th style="padding:9px 12px;">#</th><th style="padding:9px 12px;">Date</th>
+            <th style="padding:9px 12px;">Category</th><th style="padding:9px 12px;">Vendor</th>
+            <th style="padding:9px 12px;">Description</th><th style="padding:9px 12px;text-align:right;">Amount</th>
+          </tr></thead>
+          <tbody>
+            {% for p in preview %}
+            <tr style="border-top:1px solid var(--gray-100);">
+              <td style="padding:8px 12px;color:var(--gray-500);">{{ loop.index }}</td>
+              <td style="padding:8px 12px;">{{ p.date }}</td>
+              <td style="padding:8px 12px;font-weight:600;">{{ p.category }}</td>
+              <td style="padding:8px 12px;">{{ p.vendor }}</td>
+              <td style="padding:8px 12px;white-space:normal;max-width:320px;">{{ p.description }}</td>
+              <td style="padding:8px 12px;text-align:right;color:#dc2626;font-weight:600;">₹{{ p.amount_fmt }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot><tr style="border-top:2px solid var(--gray-200);background:var(--gray-50);">
+            <td colspan="5" style="padding:10px 12px;text-align:right;font-weight:700;color:var(--navy);">Total</td>
+            <td style="padding:10px 12px;text-align:right;font-weight:800;color:var(--navy);">₹{{ total_fmt }}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <p style="font-size:0.76rem;color:var(--gray-500);margin-top:12px;">After import you can retag or fix any row in the Report (✎), e.g. move the “b&nbsp;gift” India-Post rows to Staff Welfare if you prefer.</p>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cash Expenses — {{ mlabel }}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a1f2e; margin: 0; padding: 28px 34px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #2952a3; padding-bottom: 12px; margin-bottom: 18px; }
+  .title { font-size: 1.4rem; font-weight: 800; color: #2952a3; margin: 0; }
+  .sub { font-size: 0.9rem; color: #5a6078; margin: 4px 0 0; }
+  .meta { text-align: right; font-size: 0.82rem; color: #5a6078; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  thead th { background: #f0f2f8; text-align: left; padding: 8px 10px; border-bottom: 1.5px solid #cbd5e1; color: #2952a3; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid #eceef3; vertical-align: top; }
+  .r { text-align: right; }
+  tfoot td { padding: 10px; font-weight: 800; border-top: 2px solid #2952a3; color: #2952a3; }
+  .bar { position: sticky; top: 0; background: #fff; padding-bottom: 14px; }
+  .btn { background: #f57c1f; color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 700; cursor: pointer; font-size: 0.9rem; }
+  .btn.sec { background: #fff; color: #2952a3; border: 1px solid #cbd5e1; margin-left: 8px; }
+  .note { font-size: 0.72rem; color: #94a3b8; margin-top: 14px; }
+  @media print {
+    body { padding: 0; }
+    .bar { display: none; }
+    thead th { background: #f0f2f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <button class="btn" onclick="window.print()">Save as PDF / Print</button>
+    <button class="btn sec" onclick="window.close()">Close</button>
+  </div>
+
+  <div class="head">
+    <div>
+      <p class="title">Cash Expenses</p>
+      <p class="sub">{{ mlabel }} · Spent by: {{ holder_label }}</p>
+    </div>
+    <div class="meta">
+      GooCampus<br>{{ count }} expense{{ '' if count == 1 else 's' }}<br><b>Total: &#8377;{{ total_fmt }}</b>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Date</th><th>Category</th><th>Vendor</th><th>Description</th>
+        <th>Spent by</th><th class="r">Amount</th><th>Bill</th><th>Voucher</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td>{{ e.serial }}</td>
+        <td>{{ e.txn_date or '' }}</td>
+        <td>{{ e.category or '' }}</td>
+        <td>{{ e.vendor or '' }}</td>
+        <td>{{ e.description or '' }}</td>
+        <td>{{ e.employee_name or '' }}</td>
+        <td class="r">&#8377;{{ e.amount_fmt }}</td>
+        <td>{{ e.has_bill or 'No' }}</td>
+        <td>{{ e.voucher_created or 'No' }}</td>
+        <td>{{ e.notes or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:24px;">No expenses recorded for {{ mlabel }}.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if entries %}
+    <tfoot>
+      <tr><td colspan="6" class="r">TOTAL</td><td class="r">&#8377;{{ total_fmt }}</td><td colspan="3"></td></tr>
+    </tfoot>
+    {% endif %}
+  </table>
+
+  <p class="note">Expenses only — cash received / handed to team members is not included in this statement.</p>
+
+  <script>
+    // Open the print dialog automatically so "Save as PDF" is one step.
+    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 350); });
+  </script>
+</body>
+</html>
