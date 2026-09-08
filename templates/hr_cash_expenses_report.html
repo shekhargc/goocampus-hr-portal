@@ -1,0 +1,221 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Cash Expenses Report{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1180px;margin:0 auto;">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+      <div>
+        <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">Cash Expenses Report</h1>
+        <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500);">Financial year {{ fy_label }} — month by month.</p>
+      </div>
+      <a href="{{ url_for('hr_cash_expenses') }}" style="background:var(--orange);color:#fff;padding:10px 16px;border-radius:9px;font-weight:700;text-decoration:none;font-size:0.85rem;">＋ Add / record cash</a>
+    </div>
+
+    {# ── Filters ── #}
+    <form method="GET" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+      <label style="font-size:0.8rem;font-weight:700;color:var(--gray-600);">Year:</label>
+      <select name="fy" onchange="this.form.submit()" style="padding:8px 11px;border:1px solid var(--gray-200);border-radius:8px;">
+        {% for y in fy_list %}<option value="{{ y }}" {{ 'selected' if y == sel_fy else '' }}>Apr {{ y }} – Mar {{ y + 1 }}</option>{% endfor %}
+      </select>
+      {% if can_manage %}
+      <label style="font-size:0.8rem;font-weight:700;color:var(--gray-600);margin-left:6px;">Member:</label>
+      <select name="emp" onchange="this.form.submit()" style="padding:8px 11px;border:1px solid var(--gray-200);border-radius:8px;">
+        <option value="">All members</option>
+        {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if sel_emp|string == e.id|string else '' }}>{{ e.name }}</option>{% endfor %}
+      </select>
+      {% endif %}
+    </form>
+
+    {# ── Summary cards ── #}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-bottom:20px;">
+      {% for b in balances %}
+      <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px 16px;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--gray-600);">{{ b.employee_name }}</div>
+        <div style="font-size:1.35rem;font-weight:800;margin:4px 0 2px;color:{{ 'var(--navy)' if b.balance >= 0 else '#dc2626' }};">₹{{ b.balance_fmt }}</div>
+        <div style="font-size:0.7rem;color:var(--gray-500);">Received ₹{{ b.credited_fmt }} · Spent ₹{{ b.debited_fmt }}</div>
+      </div>
+      {% else %}
+      <div style="grid-column:1/-1;background:#fff;border:1px dashed var(--gray-200);border-radius:12px;padding:16px;text-align:center;color:var(--gray-500);font-size:0.88rem;">No cash entries yet.</div>
+      {% endfor %}
+      {% if can_manage and balances|length > 1 %}
+      <div style="background:var(--navy);color:#fff;border-radius:12px;padding:14px 16px;">
+        <div style="font-size:0.78rem;font-weight:700;opacity:0.85;">Total in hand</div>
+        <div style="font-size:1.35rem;font-weight:800;margin:4px 0 2px;">₹{{ grand.balance_fmt }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── Month tabs ── #}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+      {% for m in months %}
+      <button type="button" class="cxtab" data-key="{{ m.key }}" onclick="cxTab('{{ m.key }}')"
+        style="padding:7px 13px;border-radius:8px;border:1px solid var(--gray-200);cursor:pointer;font-size:0.8rem;font-weight:700;
+               background:{{ 'var(--navy)' if m.key == sel_month else '#fff' }};color:{{ '#fff' if m.key == sel_month else 'var(--gray-600)' }};">
+        {{ m.short }} {{ '%02d'|format(m.yy % 100) }}{% if m.count %} <span style="opacity:0.7;font-weight:600;">· {{ m.count }}</span>{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+
+    {# ── Month panels ── #}
+    {% for m in months %}
+    <div class="cxpanel" id="mp-{{ m.key }}" style="display:{{ 'block' if m.key == sel_month else 'none' }};">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;">
+        <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:12px 15px;">
+          <div style="font-size:0.72rem;color:var(--gray-500);font-weight:700;">Opening balance</div>
+          <div style="font-size:1.15rem;font-weight:800;color:var(--navy);">₹{{ m.opening_fmt }}</div>
+        </div>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 15px;">
+          <div style="font-size:0.72rem;color:#16a34a;font-weight:700;">Received</div>
+          <div style="font-size:1.15rem;font-weight:800;color:#16a34a;">₹{{ m.received_fmt }}</div>
+        </div>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 15px;">
+          <div style="font-size:0.72rem;color:#dc2626;font-weight:700;">Spent</div>
+          <div style="font-size:1.15rem;font-weight:800;color:#dc2626;">₹{{ m.spent_fmt }}</div>
+        </div>
+        <div style="background:var(--navy);color:#fff;border-radius:12px;padding:12px 15px;">
+          <div style="font-size:0.72rem;opacity:0.85;font-weight:700;">Closing balance</div>
+          <div style="font-size:1.15rem;font-weight:800;">₹{{ m.closing_fmt }}</div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:hidden;">
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+            <thead><tr style="background:var(--gray-50);color:var(--gray-600);text-align:left;">
+              <th style="padding:10px 12px;">#</th><th style="padding:10px 12px;">Date</th>
+              <th style="padding:10px 12px;">Category</th><th style="padding:10px 12px;">Vendor</th>
+              <th style="padding:10px 12px;">Description</th><th style="padding:10px 12px;">Spent by</th>
+              <th style="padding:10px 12px;text-align:right;">Spent</th><th style="padding:10px 12px;text-align:right;">Received</th>
+              <th style="padding:10px 12px;text-align:right;">Balance</th><th style="padding:10px 12px;text-align:center;">Bill</th>
+              <th style="padding:10px 12px;text-align:center;">Voucher</th><th style="padding:10px 12px;">Notes</th>
+              <th style="padding:10px 12px;text-align:center;">Actions</th>
+            </tr></thead>
+            <tbody>
+              {% for e in m.entries %}
+              <tr style="border-top:1px solid var(--gray-100);{{ 'background:#f0fdf4;' if e.entry_type == 'received' else '' }}">
+                <td style="padding:9px 12px;color:var(--gray-500);">{{ e.serial }}</td>
+                <td style="padding:9px 12px;">{{ e.txn_date or '' }}</td>
+                <td style="padding:9px 12px;font-weight:600;">{{ e.category or '' }}</td>
+                <td style="padding:9px 12px;">{{ e.vendor or '' }}</td>
+                <td style="padding:9px 12px;white-space:normal;max-width:230px;">{{ e.description or '' }}</td>
+                <td style="padding:9px 12px;">{{ e.employee_name or '' }}</td>
+                <td style="padding:9px 12px;text-align:right;color:#dc2626;font-weight:600;">{{ ('₹' + e.amount_fmt) if e.entry_type == 'expense' else '' }}</td>
+                <td style="padding:9px 12px;text-align:right;color:#16a34a;font-weight:600;">{{ ('₹' + e.amount_fmt) if e.entry_type == 'received' else '' }}</td>
+                <td style="padding:9px 12px;text-align:right;font-weight:700;color:{{ 'var(--navy)' if e.running >= 0 else '#dc2626' }};">₹{{ e.running_fmt }}</td>
+                <td style="padding:9px 12px;text-align:center;">
+                  {% if e.r2_key %}<a href="{{ url_for('hr_cash_expenses_bill', eid=e.id) }}" target="_blank" style="color:var(--orange);font-weight:700;text-decoration:none;">View</a>
+                  {% elif e.entry_type == 'expense' %}<span style="color:var(--gray-500);">{{ e.has_bill or 'No' }}</span>{% endif %}
+                </td>
+                <td style="padding:9px 12px;text-align:center;color:var(--gray-500);">{{ e.voucher_created if e.entry_type == 'expense' else '' }}</td>
+                <td style="padding:9px 12px;white-space:normal;max-width:200px;color:var(--gray-500);">{{ e.notes or '' }}</td>
+                <td style="padding:9px 12px;text-align:center;white-space:nowrap;">
+                  {% if e.entry_type == 'expense' and (can_manage or e.employee_id == my_id) %}
+                  <button type="button" onclick="cxHist({{ e.id }})" title="View history &amp; details" style="background:none;border:none;color:var(--navy);cursor:pointer;font-size:0.95rem;">👁</button>
+                  <a href="{{ url_for('hr_cash_entry_edit', eid=e.id) }}" title="Edit" style="color:var(--orange);font-weight:700;text-decoration:none;margin-left:6px;">✎</a>
+                  <form method="POST" action="{{ url_for('hr_cash_expenses_delete', eid=e.id) }}" onsubmit="return confirm('Delete this expense? It moves to the deleted log, with its full history kept.');" style="display:inline;margin-left:6px;">
+                    <button type="submit" title="Delete" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:1rem;">✕</button>
+                  </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="13" style="padding:24px;text-align:center;color:var(--gray-500);">No entries in {{ m.label }}.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    {# ── Deleted expenses log ── #}
+    {% if deleted %}
+    <details style="margin-top:18px;background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:hidden;">
+      <summary style="cursor:pointer;padding:13px 16px;font-weight:700;color:var(--gray-600);font-size:0.88rem;list-style:none;">🗑 Deleted expenses ({{ deleted|length }}) — kept for the record</summary>
+      <div style="overflow-x:auto;border-top:1px solid var(--gray-100);">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+          <thead><tr style="background:var(--gray-50);color:var(--gray-600);text-align:left;">
+            <th style="padding:9px 12px;">Date</th><th style="padding:9px 12px;">Category</th><th style="padding:9px 12px;">Vendor</th>
+            <th style="padding:9px 12px;">Description</th><th style="padding:9px 12px;">Spent by</th>
+            <th style="padding:9px 12px;text-align:right;">Amount</th><th style="padding:9px 12px;text-align:center;">History</th>
+          </tr></thead>
+          <tbody>
+            {% for e in deleted %}
+            <tr style="border-top:1px solid var(--gray-100);color:var(--gray-500);text-decoration:line-through;">
+              <td style="padding:8px 12px;">{{ e.txn_date or '' }}</td>
+              <td style="padding:8px 12px;">{{ e.category or '' }}</td>
+              <td style="padding:8px 12px;">{{ e.vendor or '' }}</td>
+              <td style="padding:8px 12px;white-space:normal;max-width:220px;">{{ e.description or '' }}</td>
+              <td style="padding:8px 12px;">{{ e.employee_name or '' }}</td>
+              <td style="padding:8px 12px;text-align:right;">₹{{ e.amount_fmt }}</td>
+              <td style="padding:8px 12px;text-align:center;text-decoration:none;">
+                <button type="button" onclick="cxHist({{ e.id }})" title="View history" style="background:none;border:none;color:var(--navy);cursor:pointer;font-size:0.95rem;">👁</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+
+  </div>
+</div>
+
+{# ── Right-side history / details panel ── #}
+<div id="cx-drawer-bg" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.35);z-index:1200;" onclick="cxHistClose()"></div>
+<div id="cx-drawer" style="display:none;position:fixed;top:0;right:0;height:100vh;width:100%;max-width:420px;background:#fff;z-index:1201;box-shadow:-8px 0 30px rgba(0,0,0,0.18);overflow-y:auto;">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--gray-100);position:sticky;top:0;background:#fff;">
+    <span style="font-weight:800;color:var(--navy);font-size:1.05rem;">Expense details &amp; history</span>
+    <button type="button" onclick="cxHistClose()" style="background:none;border:none;font-size:1.15rem;color:var(--gray-500);cursor:pointer;">✕</button>
+  </div>
+  <div id="cx-drawer-body" style="padding:18px 20px;">
+    <div style="color:var(--gray-500);">Loading…</div>
+  </div>
+</div>
+
+<script>
+  function cxTab(key){
+    document.querySelectorAll('.cxpanel').forEach(function(p){p.style.display = (p.id === 'mp-'+key) ? 'block' : 'none';});
+    document.querySelectorAll('.cxtab').forEach(function(b){
+      var on = b.getAttribute('data-key') === key;
+      b.style.background = on ? 'var(--navy)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--gray-600)';
+    });
+  }
+  function cxEsc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function cxHistClose(){ document.getElementById('cx-drawer').style.display='none'; document.getElementById('cx-drawer-bg').style.display='none'; }
+  function cxHist(id){
+    var bg=document.getElementById('cx-drawer-bg'), dr=document.getElementById('cx-drawer'), body=document.getElementById('cx-drawer-body');
+    bg.style.display='block'; dr.style.display='block'; body.innerHTML='<div style="color:#5a6078">Loading…</div>';
+    fetch('/hr/cash-expenses/history/'+id).then(function(r){return r.json();}).then(function(d){
+      if(d.error){ body.innerHTML='<div style="color:#dc2626">Could not load ('+cxEsc(d.error)+').</div>'; return; }
+      var t=d.detail, rows=[
+        ['Date',t.txn_date],['Category',t.category],['Vendor',t.vendor],['Description',t.description],
+        ['Amount','₹'+t.amount],['Spent by',t.spent_by],['Bill',t.has_bill],['Voucher',t.voucher_created],['Notes',t.notes]
+      ];
+      var html='';
+      if(t.is_deleted){ html+='<div style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:8px 12px;font-weight:700;font-size:0.82rem;margin-bottom:14px;">This expense has been deleted.</div>'; }
+      html+='<div style="border:1px solid var(--line,#e6e8ef);border-radius:12px;overflow:hidden;margin-bottom:18px;">';
+      rows.forEach(function(r,i){ html+='<div style="display:flex;padding:8px 12px;'+(i%2?'background:#f6f7fa;':'')+'"><div style="width:110px;color:#5a6078;font-size:0.78rem;font-weight:700;">'+r[0]+'</div><div style="flex:1;font-size:0.85rem;">'+cxEsc(r[1]||'—')+'</div></div>'; });
+      html+='</div>';
+      html+='<div style="font-weight:800;color:var(--navy);font-size:0.9rem;margin-bottom:10px;">History</div>';
+      if(!d.history.length){ html+='<div style="color:#5a6078;font-size:0.85rem;">No history recorded.</div>'; }
+      else {
+        html+='<div style="display:flex;flex-direction:column;gap:10px;">';
+        d.history.forEach(function(h){
+          var col = h.action==='delete'?'#dc2626':(h.action==='create'?'#16a34a':'#2952a3');
+          html+='<div style="border-left:3px solid '+col+';padding:2px 0 2px 12px;">'
+              +'<div style="font-weight:700;font-size:0.82rem;color:'+col+';text-transform:capitalize;">'+cxEsc(h.action)+'</div>'
+              +'<div style="font-size:0.82rem;color:#1a1f2e;margin:2px 0;">'+cxEsc(h.summary)+'</div>'
+              +'<div style="font-size:0.72rem;color:#5a6078;">'+cxEsc(h.by)+' · '+cxEsc(h.at)+'</div></div>';
+        });
+        html+='</div>';
+      }
+      body.innerHTML=html;
+    }).catch(function(){ body.innerHTML='<div style="color:#dc2626">Could not load history.</div>'; });
+  }
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')cxHistClose();});
+</script>
+{% endblock %}

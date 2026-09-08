@@ -1,0 +1,278 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Cash Expenses{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1080px;margin:0 auto;">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
+      <div>
+        <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">Cash Expenses</h1>
+        <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500);">Record expenses here. Full month-by-month picture in the <a href="{{ url_for('hr_cash_expenses_report') }}" style="color:var(--orange);font-weight:600;">Report</a>.</p>
+      </div>
+      <a href="{{ url_for('hr_cash_expenses_report') }}" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);padding:10px 16px;border-radius:9px;font-weight:700;text-decoration:none;font-size:0.85rem;">View Report →</a>
+    </div>
+
+    {# ── Balance strip ── #}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-bottom:18px;">
+      {% for b in balances %}
+      <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px 16px;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--gray-600);">{{ b.employee_name }}</div>
+        <div style="font-size:1.35rem;font-weight:800;margin:4px 0 2px;color:{{ 'var(--navy)' if b.balance >= 0 else '#dc2626' }};">₹{{ b.balance_fmt }}</div>
+        <div style="font-size:0.7rem;color:var(--gray-500);">in hand</div>
+      </div>
+      {% else %}
+      <div style="grid-column:1/-1;background:#fff;border:1px dashed var(--gray-200);border-radius:12px;padding:16px;text-align:center;color:var(--gray-500);font-size:0.88rem;">No cash entries yet.</div>
+      {% endfor %}
+      {% if can_manage and balances|length > 1 %}
+      <div style="background:var(--navy);color:#fff;border-radius:12px;padding:14px 16px;">
+        <div style="font-size:0.78rem;font-weight:700;opacity:0.85;">Total in hand</div>
+        <div style="font-size:1.35rem;font-weight:800;margin:4px 0 2px;">₹{{ grand.balance_fmt }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── Actions ── #}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px;">
+      <button type="button" onclick="cxOpen('m-expense')" style="background:var(--orange);color:#fff;padding:11px 20px;border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:0.9rem;">＋ Add Expense</button>
+      {% if can_manage %}
+      <button type="button" onclick="cxOpen('m-receive')" style="background:#16a34a;color:#fff;padding:11px 20px;border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:0.9rem;">＋ Record Cash Given</button>
+      {% endif %}
+      <button type="button" onclick="cxOpen('m-lists')" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);padding:11px 18px;border-radius:9px;font-weight:700;cursor:pointer;font-size:0.9rem;">⚙ Manage lists</button>
+    </div>
+
+    {# ── Cash Given — month by month ── #}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:hidden;margin-bottom:20px;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span style="font-weight:700;color:var(--navy);font-size:0.9rem;">Cash Given — month by month</span>
+        <form method="GET" style="display:flex;align-items:center;gap:8px;">
+          <select name="fy" onchange="this.form.submit()" style="padding:7px 10px;border:1px solid var(--gray-200);border-radius:8px;font-size:0.8rem;">
+            {% for y in fy_list %}<option value="{{ y }}" {{ 'selected' if y == sel_fy else '' }}>Apr {{ y }} – Mar {{ y + 1 }}</option>{% endfor %}
+          </select>
+        </form>
+      </div>
+      <div style="padding:12px 16px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+          {% for m in cg_months %}
+          <button type="button" class="cgtab" data-key="{{ m.key }}" onclick="cgTab('{{ m.key }}')"
+            style="padding:6px 11px;border-radius:8px;border:1px solid var(--gray-200);cursor:pointer;font-size:0.78rem;font-weight:700;
+                   background:{{ 'var(--navy)' if m.key == cg_sel else '#fff' }};color:{{ '#fff' if m.key == cg_sel else 'var(--gray-600)' }};">
+            {{ m.short }} {{ '%02d'|format(m.yy % 100) }}{% if m.count %} <span style="opacity:0.7;">· ₹{{ m.received_fmt }}</span>{% endif %}
+          </button>
+          {% endfor %}
+        </div>
+        {% for m in cg_months %}
+        <div class="cgpanel" id="cg-{{ m.key }}" style="display:{{ 'block' if m.key == cg_sel else 'none' }};">
+          <div style="font-size:0.82rem;color:var(--gray-600);margin-bottom:8px;">Cash given in <b>{{ m.label }}</b>: <b style="color:#16a34a;">₹{{ m.received_fmt }}</b></div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+              <thead><tr style="background:var(--gray-50);color:var(--gray-600);text-align:left;">
+                <th style="padding:8px 12px;">Date</th><th style="padding:8px 12px;">Given to</th>
+                <th style="padding:8px 12px;">Given by</th><th style="padding:8px 12px;text-align:right;">Amount</th>
+                <th style="padding:8px 12px;">Notes</th>{% if can_manage %}<th style="padding:8px 12px;">Edit</th>{% endif %}
+              </tr></thead>
+              <tbody>
+                {% for e in m.entries %}
+                <tr style="border-top:1px solid var(--gray-100);">
+                  <td style="padding:8px 12px;">{{ e.txn_date or '' }}</td>
+                  <td style="padding:8px 12px;font-weight:600;">{{ e.employee_name or '' }}</td>
+                  <td style="padding:8px 12px;">{{ e.given_by or '' }}</td>
+                  <td style="padding:8px 12px;text-align:right;color:#16a34a;font-weight:700;">₹{{ e.amount_fmt }}</td>
+                  <td style="padding:8px 12px;white-space:normal;max-width:220px;color:var(--gray-500);">{{ e.notes or '' }}</td>
+                  {% if can_manage %}
+                  <td style="padding:8px 12px;white-space:nowrap;">
+                    <a href="{{ url_for('hr_cash_entry_edit', eid=e.id) }}" title="Edit" style="color:var(--orange);font-weight:700;text-decoration:none;">✎</a>
+                    <form method="POST" action="{{ url_for('hr_cash_expenses_delete', eid=e.id) }}" onsubmit="return confirm('Delete this Cash Given entry? This removes it from the pool and the member balance.');" style="display:inline;margin-left:8px;">
+                      <button type="submit" title="Delete" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:1rem;">✕</button>
+                    </form>
+                  </td>
+                  {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="padding:18px;text-align:center;color:var(--gray-500);">No cash given in {{ m.label }}.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ── Recent entries ── #}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:700;color:var(--navy);font-size:0.9rem;">Recent entries</span>
+        <a href="{{ url_for('hr_cash_expenses_report') }}" style="font-size:0.8rem;color:var(--orange);font-weight:600;text-decoration:none;">See full report →</a>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+          <thead><tr style="background:var(--gray-50);color:var(--gray-600);text-align:left;">
+            <th style="padding:9px 12px;">Date</th><th style="padding:9px 12px;">Category</th>
+            <th style="padding:9px 12px;">Vendor</th><th style="padding:9px 12px;">Description</th>
+            <th style="padding:9px 12px;">Spent by</th>
+            <th style="padding:9px 12px;text-align:right;">Spent</th><th style="padding:9px 12px;text-align:right;">Received</th>
+            <th style="padding:9px 12px;text-align:center;">Bill</th>
+          </tr></thead>
+          <tbody>
+            {% for e in entries[:8] %}
+            <tr style="border-top:1px solid var(--gray-100);{{ 'background:#f0fdf4;' if e.entry_type == 'received' else '' }}">
+              <td style="padding:8px 12px;">{{ e.txn_date or '' }}</td>
+              <td style="padding:8px 12px;font-weight:600;">{{ e.category or '' }}</td>
+              <td style="padding:8px 12px;">{{ e.vendor or '' }}</td>
+              <td style="padding:8px 12px;white-space:normal;max-width:220px;">{{ e.description or '' }}</td>
+              <td style="padding:8px 12px;">{{ e.employee_name or '' }}</td>
+              <td style="padding:8px 12px;text-align:right;color:#dc2626;font-weight:600;">{{ ('₹' + e.amount_fmt) if e.entry_type == 'expense' else '' }}</td>
+              <td style="padding:8px 12px;text-align:right;color:#16a34a;font-weight:600;">{{ ('₹' + e.amount_fmt) if e.entry_type == 'received' else '' }}</td>
+              <td style="padding:8px 12px;text-align:center;">
+                {% if e.r2_key %}<a href="{{ url_for('hr_cash_expenses_bill', eid=e.id) }}" target="_blank" style="color:var(--orange);font-weight:700;text-decoration:none;">View</a>
+                {% elif e.entry_type == 'expense' %}<span style="color:var(--gray-500);">{{ e.has_bill or 'No' }}</span>{% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" style="padding:22px;text-align:center;color:var(--gray-500);">No entries yet — add your first expense above.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════ MODALS ═══════════════ #}
+
+<div id="m-expense" class="cx-modal" style="display:none;">
+  <div class="cx-card">
+    <div class="cx-head"><span>Add Expense</span><button type="button" onclick="cxClose('m-expense')" class="cx-x">✕</button></div>
+    <form method="POST" action="{{ url_for('hr_cash_expenses_add') }}" enctype="multipart/form-data" class="cx-body">
+      <div class="cx-grid2">
+        <div><label class="cx-lbl">Date *</label><input type="date" name="txn_date" required value="{{ today }}" class="cx-in"></div>
+        <div><label class="cx-lbl">Amount (₹) *</label><input type="number" name="amount" step="0.01" min="0" required class="cx-in" style="font-weight:700;"></div>
+      </div>
+      <div class="cx-grid2">
+        <div><label class="cx-lbl">Category</label>
+          <select name="category" class="cx-in"><option value="">— Select —</option>{% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select></div>
+        <div><label class="cx-lbl">Vendor</label>
+          <input list="cx_vendors" name="vendor" placeholder="Choose or type a new one" class="cx-in" autocomplete="off">
+          <datalist id="cx_vendors">{% for v in vendors %}<option value="{{ v }}">{% endfor %}</datalist></div>
+      </div>
+      <div><label class="cx-lbl">Description</label><input type="text" name="description" placeholder="What it was for" class="cx-in"></div>
+      <div class="cx-grid2">
+        <div><label class="cx-lbl">Spent by</label>
+          {% if can_manage %}
+          <select name="employee_id" class="cx-in">{% for e in employees %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select>
+          {% else %}<input type="text" value="{{ user.name }}" disabled class="cx-in" style="background:var(--gray-50);color:var(--gray-500);">{% endif %}
+        </div>
+        <div><label class="cx-lbl">Bill?</label>
+          <select name="has_bill" class="cx-in"><option value="No">No bill</option><option value="Yes">Yes — have bill</option></select></div>
+      </div>
+      <div class="cx-grid2" style="align-items:end;">
+        <div><label class="cx-lbl">Attach bill {% if not r2_ok %}<span style="color:#dc2626;">(storage off)</span>{% endif %}</label>
+          <input type="file" name="bill_file" accept="image/*,.pdf" {{ 'disabled' if not r2_ok else '' }} style="width:100%;font-size:0.8rem;"></div>
+        <div><label class="cx-lbl">Voucher created?</label>
+          <select name="voucher_created" class="cx-in"><option value="No">No</option><option value="Yes">Yes</option></select></div>
+      </div>
+      <div><label class="cx-lbl">Notes</label><input type="text" name="notes" class="cx-in"></div>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button type="submit" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Record Expense</button>
+        <button type="button" onclick="cxClose('m-expense')" style="padding:11px 16px;background:none;border:none;color:var(--gray-500);cursor:pointer;">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if can_manage %}
+<div id="m-receive" class="cx-modal" style="display:none;">
+  <div class="cx-card">
+    <div class="cx-head"><span>Record Cash Given</span><button type="button" onclick="cxClose('m-receive')" class="cx-x">✕</button></div>
+    <form method="POST" action="{{ url_for('hr_cash_expenses_receive') }}" class="cx-body">
+      <div><label class="cx-lbl">Given to *</label>
+        <select name="employee_id" required class="cx-in"><option value="">— Select member —</option>{% for e in employees %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></div>
+      <div class="cx-grid2">
+        <div><label class="cx-lbl">Date *</label><input type="date" name="txn_date" required value="{{ today }}" class="cx-in"></div>
+        <div><label class="cx-lbl">Amount (₹) *</label><input type="number" name="amount" step="0.01" min="0" required class="cx-in" style="font-weight:700;"></div>
+      </div>
+      <div><label class="cx-lbl">Given by</label><input type="text" name="given_by" placeholder="e.g. Santosh / Management" class="cx-in"></div>
+      <div><label class="cx-lbl">Notes</label><input type="text" name="notes" class="cx-in"></div>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button type="submit" style="background:#16a34a;color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Record Cash Given</button>
+        <button type="button" onclick="cxClose('m-receive')" style="padding:11px 16px;background:none;border:none;color:var(--gray-500);cursor:pointer;">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div id="m-lists" class="cx-modal" style="display:none;">
+  <div class="cx-card">
+    <div class="cx-head"><span>Manage lists</span><button type="button" onclick="cxClose('m-lists')" class="cx-x">✕</button></div>
+    <div class="cx-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+          <div style="font-weight:700;color:var(--navy);font-size:0.85rem;margin-bottom:8px;">Categories</div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;max-height:220px;overflow:auto;">
+            {% for c in categories %}
+            <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gray-50);border-radius:7px;padding:5px 10px;font-size:0.82rem;">
+              <span>{{ c }}</span>
+              <form method="POST" action="{{ url_for('hr_cash_expenses_lookup_remove') }}" onsubmit="return confirm('Remove “{{ c }}” from the category list? Past entries keep it.');" style="margin:0;">
+                <input type="hidden" name="kind" value="category"><input type="hidden" name="value" value="{{ c }}">
+                <button type="submit" title="Remove" style="background:none;border:none;color:#cbd5e1;cursor:pointer;">✕</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          <form method="POST" action="{{ url_for('hr_cash_expenses_lookup_add') }}" style="display:flex;gap:6px;">
+            <input type="hidden" name="kind" value="category">
+            <input type="text" name="value" placeholder="New category" required class="cx-in" style="flex:1;">
+            <button type="submit" style="background:var(--gray-100);border:1px solid var(--gray-200);border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;">Add</button>
+          </form>
+        </div>
+        <div>
+          <div style="font-weight:700;color:var(--navy);font-size:0.85rem;margin-bottom:8px;">Vendors</div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;max-height:220px;overflow:auto;">
+            {% for v in vendors %}
+            <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gray-50);border-radius:7px;padding:5px 10px;font-size:0.82rem;">
+              <span>{{ v }}</span>
+              <form method="POST" action="{{ url_for('hr_cash_expenses_lookup_remove') }}" onsubmit="return confirm('Remove “{{ v }}” from the vendor list? Past entries keep it.');" style="margin:0;">
+                <input type="hidden" name="kind" value="vendor"><input type="hidden" name="value" value="{{ v }}">
+                <button type="submit" title="Remove" style="background:none;border:none;color:#cbd5e1;cursor:pointer;">✕</button>
+              </form>
+            </div>
+            {% else %}<span style="font-size:0.78rem;color:var(--gray-500);">No vendors yet — they’re added automatically as you use them.</span>{% endfor %}
+          </div>
+          <form method="POST" action="{{ url_for('hr_cash_expenses_lookup_add') }}" style="display:flex;gap:6px;">
+            <input type="hidden" name="kind" value="vendor">
+            <input type="text" name="value" placeholder="New vendor" required class="cx-in" style="flex:1;">
+            <button type="submit" style="background:var(--gray-100);border:1px solid var(--gray-200);border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;">Add</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .cx-modal{position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:1000;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;}
+  .cx-card{background:#fff;border-radius:16px;width:100%;max-width:560px;box-shadow:0 20px 50px rgba(0,0,0,0.25);}
+  .cx-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--gray-100);font-weight:800;color:var(--navy);font-size:1.05rem;}
+  .cx-x{background:none;border:none;font-size:1.1rem;color:var(--gray-500);cursor:pointer;}
+  .cx-body{padding:18px 20px 22px;display:flex;flex-direction:column;gap:13px;}
+  .cx-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .cx-lbl{font-size:0.74rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:4px;}
+  .cx-in{width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:8px;box-sizing:border-box;}
+</style>
+<script>
+  function cxOpen(id){var m=document.getElementById(id);if(m)m.style.display='flex';}
+  function cxClose(id){var m=document.getElementById(id);if(m)m.style.display='none';}
+  function cgTab(key){
+    document.querySelectorAll('.cgpanel').forEach(function(p){p.style.display=(p.id==='cg-'+key)?'block':'none';});
+    document.querySelectorAll('.cgtab').forEach(function(b){
+      var on=b.getAttribute('data-key')===key;
+      b.style.background=on?'var(--navy)':'#fff';b.style.color=on?'#fff':'var(--gray-600)';
+    });
+  }
+  document.querySelectorAll('.cx-modal').forEach(function(m){
+    m.addEventListener('click',function(e){if(e.target===m)m.style.display='none';});
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')document.querySelectorAll('.cx-modal').forEach(function(m){m.style.display='none';});});
+</script>
+{% endblock %}
