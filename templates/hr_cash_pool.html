@@ -1,0 +1,126 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Cash Pool{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1120px;margin:0 auto;">
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
+      <div>
+        <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">Cash Pool <span style="font-size:0.7rem;background:var(--navy);color:#fff;padding:2px 8px;border-radius:20px;vertical-align:middle;">Admin only</span></h1>
+        <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500);">Cash you draw from the company bank, and what you hand to the team. Pool = drawn − given.</p>
+      </div>
+      <button type="button" onclick="cpOpen()" style="background:var(--orange);color:#fff;padding:11px 20px;border:none;border-radius:9px;font-weight:700;cursor:pointer;font-size:0.9rem;">＋ Record Cash Draw</button>
+    </div>
+
+    {# ── Summary ── #}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:22px;">
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:16px 18px;">
+        <div style="font-size:0.78rem;font-weight:700;color:#16a34a;">Total drawn from bank</div>
+        <div style="font-size:1.5rem;font-weight:800;margin-top:4px;color:#16a34a;">₹{{ total_drawn_fmt }}</div>
+      </div>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:14px;padding:16px 18px;">
+        <div style="font-size:0.78rem;font-weight:700;color:#dc2626;">Given to team</div>
+        <div style="font-size:1.5rem;font-weight:800;margin-top:4px;color:#dc2626;">₹{{ total_given_fmt }}</div>
+      </div>
+      <div style="background:var(--navy);color:#fff;border-radius:14px;padding:16px 18px;">
+        <div style="font-size:0.78rem;font-weight:700;opacity:0.85;">In pool (with you)</div>
+        <div style="font-size:1.5rem;font-weight:800;margin-top:4px;color:{{ '#fff' if in_pool >= 0 else '#fecaca' }};">₹{{ in_pool_fmt }}</div>
+        <div style="font-size:0.7rem;opacity:0.8;margin-top:2px;">{{ 'cash still in hand' if in_pool >= 0 else 'given out more than drawn' }}</div>
+      </div>
+    </div>
+
+    {# ── Ledger ── #}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+          <thead><tr style="background:var(--gray-50);color:var(--gray-600);text-align:left;">
+            <th style="padding:10px 12px;">Date</th>
+            <th style="padding:10px 12px;">Detail</th>
+            <th style="padding:10px 12px;">Cheque #</th>
+            <th style="padding:10px 12px;">Bank</th>
+            <th style="padding:10px 12px;">By</th>
+            <th style="padding:10px 12px;text-align:right;">Drawn (+)</th>
+            <th style="padding:10px 12px;text-align:right;">Given (−)</th>
+            <th style="padding:10px 12px;text-align:right;">In pool</th>
+            <th style="padding:10px 12px;">Notes</th>
+            <th style="padding:10px 12px;"></th>
+          </tr></thead>
+          <tbody>
+            {% for e in events %}
+            <tr style="border-top:1px solid var(--gray-100);{{ 'background:#f0fdf4;' if e.kind == 'draw' else '' }}">
+              <td style="padding:9px 12px;">{{ e.date }}</td>
+              <td style="padding:9px 12px;font-weight:600;">
+                {% if e.kind == 'draw' %}Drawn from bank{% else %}Cash to {{ e.to }}{% endif %}
+              </td>
+              <td style="padding:9px 12px;">{{ e.cheque }}</td>
+              <td style="padding:9px 12px;">{{ e.bank }}</td>
+              <td style="padding:9px 12px;">
+                {{ e.by }}{% if e.kind == 'draw' and e.auth %}<div style="font-size:0.7rem;color:var(--gray-500);">auth: {{ e.auth }}</div>{% endif %}
+              </td>
+              <td style="padding:9px 12px;text-align:right;color:#16a34a;font-weight:700;">{{ ('₹' + e.amount_fmt) if e.kind == 'draw' else '' }}</td>
+              <td style="padding:9px 12px;text-align:right;color:#dc2626;font-weight:700;">{{ ('₹' + e.amount_fmt) if e.kind == 'give' else '' }}</td>
+              <td style="padding:9px 12px;text-align:right;font-weight:800;color:{{ 'var(--navy)' if e.running >= 0 else '#dc2626' }};">₹{{ e.running_fmt }}</td>
+              <td style="padding:9px 12px;white-space:normal;max-width:200px;color:var(--gray-500);">{{ e.notes }}</td>
+              <td style="padding:9px 12px;text-align:right;">
+                {% if e.kind == 'draw' %}
+                <form method="POST" action="{{ url_for('hr_cash_pool_delete', did=e.id) }}" onsubmit="return confirm('Delete this cash draw? This cannot be undone.');" style="display:inline;">
+                  <button type="submit" title="Delete" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:1rem;">✕</button>
+                </form>
+                {% else %}<span style="font-size:0.68rem;color:#cbd5e1;">in Cash Expenses</span>{% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" style="padding:26px;text-align:center;color:var(--gray-500);">No cash draws yet. Record your first bank withdrawal above.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Modal: Record Cash Draw ── #}
+<div id="cp-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:1000;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:560px;box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--gray-100);font-weight:800;color:var(--navy);font-size:1.05rem;">
+      <span>Record Cash Draw</span>
+      <button type="button" onclick="cpClose()" style="background:none;border:none;font-size:1.1rem;color:var(--gray-500);cursor:pointer;">✕</button>
+    </div>
+    <form method="POST" action="{{ url_for('hr_cash_pool_add') }}" style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:13px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="cp-lbl">Date of draw *</label><input type="date" name="draw_date" required value="{{ today }}" class="cp-in"></div>
+        <div><label class="cp-lbl">Amount (₹) *</label><input type="number" name="amount" step="0.01" min="0" required class="cp-in" style="font-weight:700;"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="cp-lbl">Cheque number</label><input type="text" name="cheque_number" placeholder="e.g. 004512" class="cp-in"></div>
+        <div><label class="cp-lbl">Bank</label><input type="text" name="bank" placeholder="e.g. HDFC — Current A/c" class="cp-in"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label class="cp-lbl">Authorized by</label><input type="text" name="authorized_by" value="{{ user.name }}" class="cp-in"></div>
+        <div><label class="cp-lbl">Drawn by (sent to bank)</label>
+          <select name="drawn_by" class="cp-in">
+            <option value="">— Select —</option>
+            {% for e in employees %}<option value="{{ e.name }}">{{ e.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div><label class="cp-lbl">Notes</label><input type="text" name="notes" class="cp-in"></div>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button type="submit" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Record Draw</button>
+        <button type="button" onclick="cpClose()" style="padding:11px 16px;background:none;border:none;color:var(--gray-500);cursor:pointer;">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .cp-lbl{font-size:0.74rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:4px;}
+  .cp-in{width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:8px;box-sizing:border-box;}
+</style>
+<script>
+  function cpOpen(){document.getElementById('cp-modal').style.display='flex';}
+  function cpClose(){document.getElementById('cp-modal').style.display='none';}
+  document.getElementById('cp-modal').addEventListener('click',function(e){if(e.target===this)this.style.display='none';});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')cpClose();});
+</script>
+{% endblock %}

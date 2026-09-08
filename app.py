@@ -34514,6 +34514,123 @@ def hr_cash_expenses_report():
         fy_label=f"Apr {sel_fy} – Mar {sel_fy + 1}", active_section='hr')
 
 
+# ── Cash Pool (ADMIN ONLY) ────────────────────────────────────────────────
+# Management (Santosh Shekhar) draws cash from the company bank by cheque; it
+# forms a kitty pool held by management, from which cash is handed to team
+# members (the 'received' rows in cash_expenses). Pool balance = total drawn
+# − total given to the team. Admin-only; not a grantable Access Master section.
+
+def _ensure_cash_draws(conn):
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS cash_draws (
+            id SERIAL PRIMARY KEY,
+            draw_date TEXT,
+            cheque_number TEXT,
+            bank TEXT,
+            amount NUMERIC(14,2) DEFAULT 0,
+            authorized_by TEXT,
+            drawn_by TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"_ensure_cash_draws: {e}")
+
+
+@app.route('/hr/cash-pool')
+@admin_required
+def hr_cash_pool():
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_cash_expenses(conn); _ensure_cash_draws(conn)
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name", []).fetchall()
+    draws = conn.execute("SELECT * FROM cash_draws ORDER BY draw_date, id", []).fetchall()
+    gives = conn.execute("SELECT * FROM cash_expenses WHERE entry_type = 'received' ORDER BY txn_date, id", []).fetchall()
+
+    events = []
+    for d in draws:
+        events.append({'kind': 'draw', 'date': d['draw_date'] or '', 'amount': float(d['amount'] or 0),
+            'cheque': d['cheque_number'] or '', 'bank': d['bank'] or '', 'to': '',
+            'by': d['drawn_by'] or '', 'auth': d['authorized_by'] or '', 'notes': d['notes'] or '', 'id': d['id']})
+    for g in gives:
+        events.append({'kind': 'give', 'date': g['txn_date'] or '', 'amount': float(g['amount'] or 0),
+            'cheque': '', 'bank': '', 'to': g['employee_name'] or '', 'by': g['given_by'] or '',
+            'auth': '', 'notes': g['notes'] or '', 'id': g['id']})
+    events.sort(key=lambda e: (e['date'], 0 if e['kind'] == 'draw' else 1))
+    run = 0.0
+    for e in events:
+        run += e['amount'] if e['kind'] == 'draw' else -e['amount']
+        e['running'] = run; e['running_fmt'] = f"{run:,.2f}"; e['amount_fmt'] = f"{e['amount']:,.2f}"
+    events.reverse()
+
+    total_drawn = sum(float(d['amount'] or 0) for d in draws)
+    total_given = sum(float(g['amount'] or 0) for g in gives)
+    in_pool = total_drawn - total_given
+    conn.close()
+    return render_template('hr_cash_pool.html', user=user, events=events, employees=employees,
+        total_drawn_fmt=f"{total_drawn:,.2f}", total_given_fmt=f"{total_given:,.2f}",
+        in_pool=in_pool, in_pool_fmt=f"{in_pool:,.2f}",
+        today=datetime.now().strftime('%Y-%m-%d'), active_section='hr')
+
+
+@app.route('/hr/cash-pool/add', methods=['POST'])
+@admin_required
+def hr_cash_pool_add():
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_cash_draws(conn)
+    try:
+        conn.execute('''INSERT INTO cash_draws
+            (draw_date, cheque_number, bank, amount, authorized_by, drawn_by, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (request.form.get('draw_date'), request.form.get('cheque_number', ''),
+             request.form.get('bank', ''), float(request.form.get('amount', 0) or 0),
+             request.form.get('authorized_by', ''), request.form.get('drawn_by', ''),
+             request.form.get('notes', ''), session.get('user_id')))
+        conn.commit()
+        flash('Cash draw recorded', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"hr_cash_pool_add: {e}")
+        flash('Error recording cash draw', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('hr_cash_pool'))
+
+
+@app.route('/hr/cash-pool/delete/<int:did>', methods=['POST'])
+@admin_required
+def hr_cash_pool_delete(did):
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_cash_draws(conn)
+    try:
+        conn.execute("DELETE FROM cash_draws WHERE id = ?", (did,))
+        conn.commit()
+        flash('Cash draw deleted', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"hr_cash_pool_delete: {e}")
+        flash('Error deleting cash draw', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('hr_cash_pool'))
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # CLIENT REFUND WORKFLOW (founder 2026-08-06)
 # When ops sets a client to 'Dropped and Refunded', a refund worksheet opens:
@@ -49294,6 +49411,11 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_expenses_lookup_add':        _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_expenses_lookup_remove':     _ap('hr', 'cash_expenses', 'add'),
     'hr_cash_expenses_report':            _ap('hr', 'cash_expenses'),
+    # Cash Pool — admin only (routes also hard-check is_admin). 'cash_pool' is
+    # deliberately NOT a catalogue sub-section, so no non-admin can be granted it.
+    'hr_cash_pool':                       _ap('hr', 'cash_pool'),
+    'hr_cash_pool_add':                   _ap('hr', 'cash_pool', 'add'),
+    'hr_cash_pool_delete':                _ap('hr', 'cash_pool', 'delete'),
 
     # ── Company ───────────────────────────────────────────────────────────
     'access_master':                _ap('company', 'access_master'),
