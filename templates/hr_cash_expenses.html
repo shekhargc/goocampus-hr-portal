@@ -9,10 +9,7 @@
         <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">Cash Expenses</h1>
         <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500);">Record expenses here. Full month-by-month picture in the <a href="{{ url_for('hr_cash_expenses_report') }}" style="color:var(--orange);font-weight:600;">Report</a>.</p>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        {% if user.is_admin %}<a href="{{ url_for('hr_cash_import_junaug') }}" style="background:#fff;border:1px solid var(--gray-200);color:var(--gray-600);padding:10px 14px;border-radius:9px;font-weight:700;text-decoration:none;font-size:0.85rem;">⬆ Import Jun–Aug</a>{% endif %}
-        <a href="{{ url_for('hr_cash_expenses_report') }}" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);padding:10px 16px;border-radius:9px;font-weight:700;text-decoration:none;font-size:0.85rem;">View Report →</a>
-      </div>
+      <a href="{{ url_for('hr_cash_expenses_report') }}" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);padding:10px 16px;border-radius:9px;font-weight:700;text-decoration:none;font-size:0.85rem;">View Report →</a>
     </div>
 
     {# ── Balance strip ── #}
