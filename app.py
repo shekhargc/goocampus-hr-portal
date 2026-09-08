@@ -35037,6 +35037,34 @@ def hr_cash_import_junaug():
         active_section='hr')
 
 
+@app.route('/hr/cash-expenses/clear-import-notes')
+@admin_required
+def hr_cash_clear_import_notes():
+    """One-time cleanup: blank the '[Imported Jun–Aug 2026]' note left on the
+    bulk-imported rows (provenance stays in each row's history). Admin only;
+    safe to re-run (matches nothing after the first pass)."""
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_cash_expenses(conn)
+    try:
+        n = conn.execute("SELECT COUNT(*) AS n FROM cash_expenses WHERE notes LIKE ?", ('[Imported %',)).fetchone()
+        cnt = (n['n'] if n else 0) or 0
+        conn.execute("UPDATE cash_expenses SET notes = '' WHERE notes LIKE ?", ('[Imported %',))
+        conn.commit()
+        flash(f'Cleared the import note from {cnt} row(s).', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"hr_cash_clear_import_notes: {e}")
+        flash('Could not clear the notes.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('hr_cash_expenses_report'))
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # CLIENT REFUND WORKFLOW (founder 2026-08-06)
 # When ops sets a client to 'Dropped and Refunded', a refund worksheet opens:
@@ -49829,6 +49857,7 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_pool_add':                   _ap('hr', 'cash_pool', 'add'),
     'hr_cash_pool_delete':                _ap('hr', 'cash_pool', 'delete'),
     'hr_cash_import_junaug':              _ap('hr', 'cash_pool'),
+    'hr_cash_clear_import_notes':         _ap('hr', 'cash_pool'),
 
     # ── Company ───────────────────────────────────────────────────────────
     'access_master':                _ap('company', 'access_master'),
