@@ -15,7 +15,8 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from pg_admin.data import tables as _tables
 from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
-                             plans_admin, users_admin, coupons_admin)
+                             plans_admin, users_admin, coupons_admin,
+                             bookings_admin)
 
 
 def register_pg_admin(app):
@@ -28,6 +29,7 @@ def register_pg_admin(app):
                _tables.ensure_pg_cutoffs_table,
                _tables.ensure_pg_colleges_table,
                _tables.ensure_pg_favorites_table,
+               _tables.ensure_pg_bookings_table,
                _plans_tables.ensure_pg_plans_tables,
                _plans_tables.seed_pg_pricing_defaults):
         try:
@@ -63,6 +65,15 @@ def register_pg_admin(app):
     # Public photo redirect (no key: it's public content; only published+active served)
     app.add_url_rule('/api/pg/mentors/<int:mentor_id>/photo', 'api_pg_mentor_photo',
                      api.api_pg_mentor_photo, methods=['GET'])
+
+    # ── Mentor session requests (goocampus.in book form → portal) ──
+    app.add_url_rule('/api/pg/bookings', 'api_pg_bookings',
+                     api.api_pg_bookings, methods=['GET', 'POST'])
+    # Admin: Session Requests management (true-admin gated inside)
+    app.add_url_rule('/admin/pg/bookings', 'pg_bookings_admin',
+                     bookings_admin.bookings_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/bookings/<int:booking_id>/update', 'pg_booking_update',
+                     bookings_admin.booking_update, methods=['POST'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',

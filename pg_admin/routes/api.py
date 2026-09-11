@@ -1322,3 +1322,72 @@ def api_pg_checkout_verify():
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
+
+
+def api_pg_bookings():
+    """GET  /api/pg/bookings  → the logged-in doctor's session requests.
+       POST /api/pg/bookings {mentor_id, session_mode, reason} → record INTEREST
+            in a paid session (no time — the team schedules it after calling).
+    Auth: X-PG-Key + the doctor's Bearer token. (founder 2026-09-11)"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        token = _bearer_token()
+        user = _pg_user_by_token(conn, token) if token else None
+        if not user:
+            return jsonify({'ok': False, 'error': 'not_logged_in'}), 401
+
+        if request.method == 'POST':
+            body = request.get_json(silent=True) or {}
+            try:
+                mentor_id = int(body.get('mentor_id'))
+            except (TypeError, ValueError):
+                return jsonify({'ok': False, 'error': 'bad_mentor'}), 400
+            mode = (body.get('session_mode') or 'video').strip()[:20]
+            reason = (body.get('reason') or '').strip()[:2000]
+            m = conn.execute("SELECT id, name, specialization, counselling_fee "
+                             "FROM pg_mentors WHERE id = ?", (mentor_id,)).fetchone()
+            if not m:
+                return jsonify({'ok': False, 'error': 'mentor_not_found'}), 404
+            row = conn.execute('''INSERT INTO pg_bookings
+                (mentor_id, mentor_name, mentor_specialization, user_id, user_name, user_mobile,
+                 user_email, session_mode, reason, fee, status, payment_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending') RETURNING id''',
+                (m['id'], m['name'] or '', m['specialization'] or '', user['id'],
+                 user.get('name') or '', user.get('mobile') or '', user.get('email') or '',
+                 mode, reason, m['counselling_fee'])).fetchone()
+            bid = row['id']
+            bnum = f"GCPG-{bid:06d}"
+            conn.execute("UPDATE pg_bookings SET booking_number = ? WHERE id = ?", (bnum, bid))
+            conn.commit()
+            return jsonify({'ok': True, 'booking_number': bnum, 'status': 'pending',
+                            'id': bid, 'mentor_name': m['name']})
+
+        rows = conn.execute("SELECT * FROM pg_bookings WHERE user_id = ? ORDER BY id DESC",
+                            (user['id'],)).fetchall()
+        out = []
+        for r in rows:
+            # 'contacted' is internal (team is coordinating) — the doctor still sees "awaiting".
+            st = 'pending' if r['status'] in ('pending', 'contacted') else r['status']
+            out.append({
+                'id': r['id'], 'booking_number': r['booking_number'] or '',
+                'mentor_id': r['mentor_id'], 'mentor_name': r['mentor_name'] or '',
+                'mentor_specialization': r['mentor_specialization'] or '',
+                'appointment_date': r['scheduled_date'] or '',
+                'appointment_time': r['scheduled_time'] or '',
+                'session_mode': r['session_mode'] or 'video', 'reason': r['reason'] or '',
+                'status': st, 'fee': float(r['fee']) if r['fee'] is not None else None,
+                'payment_status': r['payment_status'] or 'pending',
+                'meeting_link': r['meeting_link'] or '',
+                'created_at': str(r['created_at'])[:10] if r['created_at'] else '',
+            })
+        return jsonify({'ok': True, 'bookings': out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"api_pg_bookings: {e}")
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
