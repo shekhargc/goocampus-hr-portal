@@ -353,3 +353,46 @@ def ensure_pg_favorites_table():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+def ensure_pg_bookings_table():
+    """Mentor session-REQUESTS from goocampus.in (founder 2026-09-11). A doctor
+    expresses INTEREST in a paid session with a mentor (no time picked); the team
+    calls back, coordinates the slot with the mentor, then confirms. Managed in
+    the goocampus.org admin (Session Requests). status: pending → contacted →
+    confirmed → completed / rejected / cancelled."""
+    conn = get_db()
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_bookings (
+            id SERIAL PRIMARY KEY,
+            booking_number TEXT,
+            mentor_id INTEGER,
+            mentor_name TEXT DEFAULT '',
+            mentor_specialization TEXT DEFAULT '',
+            user_id INTEGER,
+            user_name TEXT DEFAULT '',
+            user_mobile TEXT DEFAULT '',
+            user_email TEXT DEFAULT '',
+            session_mode TEXT DEFAULT 'video',
+            reason TEXT DEFAULT '',
+            fee NUMERIC(12,2),
+            status TEXT DEFAULT 'pending',
+            payment_status TEXT DEFAULT 'pending',
+            scheduled_date TEXT DEFAULT '',
+            scheduled_time TEXT DEFAULT '',
+            meeting_link TEXT DEFAULT '',
+            admin_notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_bookings_user ON pg_bookings (user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_bookings_status ON pg_bookings (status)")
+        conn.commit()
+        logging.info("pg_bookings table ensured successfully")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"ensure_pg_bookings_table: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass

@@ -1,0 +1,79 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Session Requests{% endblock %}
+{% block section_content %}
+{% set badge = {'pending':'#b45309;background:#fef3c7','contacted':'#1d4ed8;background:#dbeafe','confirmed':'#15803d;background:#dcfce7','completed':'#3730a3;background:#e0e7ff','rejected':'#b91c1c;background:#fee2e2','cancelled':'#4b5563;background:#f3f4f6'} %}
+<div style="padding:24px;background:var(--gray-50, #f6f7fa);min-height:100vh;">
+  <div style="max-width:1080px;margin:0 auto;">
+
+    <div style="margin-bottom:14px;">
+      <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy, #2952a3);">Mentor Session Requests</h1>
+      <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500, #64748b);">Doctors who asked for a paid mentor session on goocampus.in. Call them back, fix a slot with the mentor, then confirm the date/time here.</p>
+    </div>
+
+    {# ── Status filter tabs ── #}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+      <a href="{{ url_for('pg_bookings_admin') }}" style="padding:7px 13px;border-radius:8px;text-decoration:none;font-size:0.82rem;font-weight:700;border:1px solid var(--gray-200,#e2e8f0);{{ 'background:var(--navy,#2952a3);color:#fff;' if not status_filter else 'background:#fff;color:var(--gray-600,#475569);' }}">All ({{ counts.get('all',0) }})</a>
+      {% for s in statuses %}
+      <a href="{{ url_for('pg_bookings_admin', status=s) }}" style="padding:7px 13px;border-radius:8px;text-decoration:none;font-size:0.82rem;font-weight:700;border:1px solid var(--gray-200,#e2e8f0);{{ 'background:var(--navy,#2952a3);color:#fff;' if status_filter == s else 'background:#fff;color:var(--gray-600,#475569);' }}">{{ status_labels[s] }} ({{ counts.get(s,0) }})</a>
+      {% endfor %}
+    </div>
+
+    {% for b in bookings %}
+    <div style="background:#fff;border:1px solid var(--gray-200,#e2e8f0);border-radius:14px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-weight:800;color:var(--navy,#2952a3);">{{ b.user_name or 'Doctor' }}</span>
+            <span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:20px;color:{{ badge.get(b.status,'#4b5563;background:#f3f4f6') }};">{{ status_labels.get(b.status, b.status) }}</span>
+            <span style="font-size:0.72rem;color:var(--gray-500,#94a3b8);">{{ b.booking_number }}</span>
+          </div>
+          <div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:3px;">
+            📱 {{ b.user_mobile or '—' }}{% if b.user_email %} · ✉ {{ b.user_email }}{% endif %}
+          </div>
+          <div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:6px;">
+            <b>Mentor:</b> Dr. {{ b.mentor_name }}{% if b.mentor_specialization %} · {{ b.mentor_specialization }}{% endif %}{% if b.fee is not none %} · <span style="color:var(--orange,#f57c1f);font-weight:700;">₹{{ '%.0f'|format(b.fee) }}/session</span>{% endif %}
+          </div>
+          <div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:2px;"><b>Mode:</b> {{ 'Phone call' if b.session_mode == 'phone' else 'Video call' }}</div>
+          {% if b.reason %}<div style="font-size:0.85rem;color:var(--ink,#1a1f2e);margin-top:8px;background:var(--gray-50,#f6f7fa);border-radius:8px;padding:8px 12px;"><b>Wants to discuss:</b> {{ b.reason }}</div>{% endif %}
+        </div>
+        <div style="font-size:0.72rem;color:var(--gray-500,#94a3b8);white-space:nowrap;">Requested {{ b.created_at.strftime('%d %b %Y') if b.created_at and b.created_at.strftime is defined else (b.created_at|string)[:10] }}</div>
+      </div>
+
+      <form method="POST" action="{{ url_for('pg_booking_update', booking_id=b.id) }}" style="margin-top:14px;border-top:1px solid var(--gray-100,#f1f5f9);padding-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;">
+        <input type="hidden" name="return_status" value="{{ status_filter }}">
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--gray-600,#475569);display:block;margin-bottom:3px;">Status</label>
+          <select name="status" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200,#e2e8f0);border-radius:8px;">
+            {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if b.status == s else '' }}>{{ status_labels[s] }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--gray-600,#475569);display:block;margin-bottom:3px;">Scheduled date</label>
+          <input type="date" name="scheduled_date" value="{{ b.scheduled_date or '' }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200,#e2e8f0);border-radius:8px;">
+        </div>
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--gray-600,#475569);display:block;margin-bottom:3px;">Scheduled time</label>
+          <input type="time" name="scheduled_time" value="{{ b.scheduled_time or '' }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200,#e2e8f0);border-radius:8px;">
+        </div>
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--gray-600,#475569);display:block;margin-bottom:3px;">Meeting link</label>
+          <input type="text" name="meeting_link" value="{{ b.meeting_link or '' }}" placeholder="Zoom / Meet URL" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200,#e2e8f0);border-radius:8px;">
+        </div>
+        <div style="grid-column:1/-1;">
+          <label style="font-size:0.72rem;font-weight:700;color:var(--gray-600,#475569);display:block;margin-bottom:3px;">Team notes (call outcome, mentor confirmation…)</label>
+          <input type="text" name="admin_notes" value="{{ b.admin_notes or '' }}" style="width:100%;padding:8px 10px;border:1px solid var(--gray-200,#e2e8f0);border-radius:8px;">
+        </div>
+        <div style="grid-column:1/-1;">
+          <button type="submit" style="background:var(--orange,#f57c1f);color:#fff;padding:9px 20px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save</button>
+        </div>
+      </form>
+    </div>
+    {% else %}
+    <div style="background:#fff;border:1px dashed var(--gray-200,#e2e8f0);border-radius:14px;padding:40px;text-align:center;color:var(--gray-500,#94a3b8);">
+      No session requests{{ ' in this status' if status_filter else ' yet' }}. They appear here the moment a doctor requests a mentor session on goocampus.in.
+    </div>
+    {% endfor %}
+
+  </div>
+</div>
+{% endblock %}
