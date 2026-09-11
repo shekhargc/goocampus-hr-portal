@@ -251,11 +251,14 @@ def ops_consulting_research_edit_save(rid):
         # older schemas missing optional columns (e.g. upload_published_copy).
         try:
             db_cols = {
-                row['name'] for row in conn.execute(
-                    "PRAGMA table_info(ops_research_publication)"
+                row['column_name'] for row in conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'ops_research_publication'"
                 ).fetchall()
             }
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
             db_cols = set(AU_RESEARCH_EDITABLE_COLUMNS)
 
         sets, params = [], []
@@ -332,11 +335,14 @@ def ops_consulting_research_add_save():
         # Discover live columns (older schemas may not have upload_published_copy).
         try:
             db_cols = {
-                row['name'] for row in conn.execute(
-                    "PRAGMA table_info(ops_research_publication)"
+                row['column_name'] for row in conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'ops_research_publication'"
                 ).fetchall()
             }
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
             db_cols = set(AU_RESEARCH_EDITABLE_COLUMNS)
         cols = ['registration_number', 'pathway']
         vals = [reg, 'consulting']
