@@ -376,6 +376,8 @@ def ensure_pg_bookings_table():
             session_mode TEXT DEFAULT 'video',
             reason TEXT DEFAULT '',
             fee NUMERIC(12,2),
+            currency TEXT DEFAULT '',
+            medical_status TEXT DEFAULT '',
             status TEXT DEFAULT 'pending',
             payment_status TEXT DEFAULT 'pending',
             scheduled_date TEXT DEFAULT '',
@@ -385,6 +387,9 @@ def ensure_pg_bookings_table():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Added 2026-09-13: mentor fee currency snapshot + doctor's medical status.
+        conn.execute("ALTER TABLE pg_bookings ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_bookings ADD COLUMN IF NOT EXISTS medical_status TEXT DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_bookings_user ON pg_bookings (user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_bookings_status ON pg_bookings (status)")
         conn.commit()

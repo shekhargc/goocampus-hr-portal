@@ -1346,17 +1346,19 @@ def api_pg_bookings():
                 return jsonify({'ok': False, 'error': 'bad_mentor'}), 400
             mode = (body.get('session_mode') or 'video').strip()[:20]
             reason = (body.get('reason') or '').strip()[:2000]
-            m = conn.execute("SELECT id, name, specialization, counselling_fee "
+            medical_status = (body.get('medical_status') or '').strip()[:60]
+            m = conn.execute("SELECT id, name, specialization, counselling_fee, pricing_currency "
                              "FROM pg_mentors WHERE id = ?", (mentor_id,)).fetchone()
             if not m:
                 return jsonify({'ok': False, 'error': 'mentor_not_found'}), 404
+            currency = (m['pricing_currency'] or '')  # snapshot the mentor's fee currency (e.g. GBP)
             row = conn.execute('''INSERT INTO pg_bookings
                 (mentor_id, mentor_name, mentor_specialization, user_id, user_name, user_mobile,
-                 user_email, session_mode, reason, fee, status, payment_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending') RETURNING id''',
+                 user_email, session_mode, reason, fee, currency, medical_status, status, payment_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending') RETURNING id''',
                 (m['id'], m['name'] or '', m['specialization'] or '', user['id'],
                  user.get('name') or '', user.get('mobile') or '', user.get('email') or '',
-                 mode, reason, m['counselling_fee'])).fetchone()
+                 mode, reason, m['counselling_fee'], currency, medical_status)).fetchone()
             bid = row['id']
             bnum = f"GCPG-{bid:06d}"
             conn.execute("UPDATE pg_bookings SET booking_number = ? WHERE id = ?", (bnum, bid))
@@ -1378,6 +1380,8 @@ def api_pg_bookings():
                 'appointment_time': r['scheduled_time'] or '',
                 'session_mode': r['session_mode'] or 'video', 'reason': r['reason'] or '',
                 'status': st, 'fee': float(r['fee']) if r['fee'] is not None else None,
+                'currency': (r['currency'] or '') if 'currency' in r.keys() else '',
+                'medical_status': (r['medical_status'] or '') if 'medical_status' in r.keys() else '',
                 'payment_status': r['payment_status'] or 'pending',
                 'meeting_link': r['meeting_link'] or '',
                 'created_at': str(r['created_at'])[:10] if r['created_at'] else '',

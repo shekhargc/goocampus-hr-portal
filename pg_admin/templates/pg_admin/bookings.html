@@ -34,6 +34,7 @@
             <b>Mentor:</b> Dr. {{ b.mentor_name }}{% if b.mentor_specialization %} · {{ b.mentor_specialization }}{% endif %}{% if b.fee is not none %} · <span style="color:var(--orange,#f57c1f);font-weight:700;">₹{{ '%.0f'|format(b.fee) }}/session</span>{% endif %}
           </div>
           <div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:2px;"><b>Mode:</b> {{ 'Phone call' if b.session_mode == 'phone' else 'Video call' }}</div>
+          {% if b.medical_status %}<div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:2px;"><b>Doctor's status:</b> <span style="background:#e0e7ff;color:#3730a3;padding:1px 8px;border-radius:20px;font-weight:600;">{{ b.medical_status }}</span></div>{% endif %}
           {% if b.reason %}<div style="font-size:0.85rem;color:var(--ink,#1a1f2e);margin-top:8px;background:var(--gray-50,#f6f7fa);border-radius:8px;padding:8px 12px;"><b>Wants to discuss:</b> {{ b.reason }}</div>{% endif %}
         </div>
         <div style="font-size:0.72rem;color:var(--gray-500,#94a3b8);white-space:nowrap;">Requested {{ b.created_at.strftime('%d %b %Y') if b.created_at and b.created_at.strftime is defined else (b.created_at|string)[:10] }}</div>
