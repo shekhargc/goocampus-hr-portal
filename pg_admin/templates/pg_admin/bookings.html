@@ -2,6 +2,7 @@
 {% block title %}Session Requests{% endblock %}
 {% block section_content %}
 {% set badge = {'pending':'#b45309;background:#fef3c7','contacted':'#1d4ed8;background:#dbeafe','confirmed':'#15803d;background:#dcfce7','completed':'#3730a3;background:#e0e7ff','rejected':'#b91c1c;background:#fee2e2','cancelled':'#4b5563;background:#f3f4f6'} %}
+{% set cursym = {'GBP':'£','INR':'₹','USD':'$','EUR':'€','AUD':'A$','CAD':'C$'} %}
 <div style="padding:24px;background:var(--gray-50, #f6f7fa);min-height:100vh;">
   <div style="max-width:1080px;margin:0 auto;">
 
@@ -31,9 +32,10 @@
             📱 {{ b.user_mobile or '—' }}{% if b.user_email %} · ✉ {{ b.user_email }}{% endif %}
           </div>
           <div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:6px;">
-            <b>Mentor:</b> Dr. {{ b.mentor_name }}{% if b.mentor_specialization %} · {{ b.mentor_specialization }}{% endif %}{% if b.fee is not none %} · <span style="color:var(--orange,#f57c1f);font-weight:700;">₹{{ '%.0f'|format(b.fee) }}/session</span>{% endif %}
+            <b>Mentor:</b> Dr. {{ b.mentor_name }}{% if b.mentor_specialization %} · {{ b.mentor_specialization }}{% endif %}{% if b.fee is not none %}{% set _cc = (b.currency or 'INR')|upper %} · <span style="color:var(--orange,#f57c1f);font-weight:700;">{{ cursym.get(_cc, _cc ~ ' ') }}{{ '%.0f'|format(b.fee) }}/session</span>{% endif %}
           </div>
           <div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:2px;"><b>Mode:</b> {{ 'Phone call' if b.session_mode == 'phone' else 'Video call' }}</div>
+          {% if b.medical_status %}<div style="font-size:0.82rem;color:var(--gray-600,#475569);margin-top:2px;"><b>Doctor's status:</b> <span style="background:#e0e7ff;color:#3730a3;padding:1px 8px;border-radius:20px;font-weight:600;">{{ b.medical_status }}</span></div>{% endif %}
           {% if b.reason %}<div style="font-size:0.85rem;color:var(--ink,#1a1f2e);margin-top:8px;background:var(--gray-50,#f6f7fa);border-radius:8px;padding:8px 12px;"><b>Wants to discuss:</b> {{ b.reason }}</div>{% endif %}
         </div>
         <div style="font-size:0.72rem;color:var(--gray-500,#94a3b8);white-space:nowrap;">Requested {{ b.created_at.strftime('%d %b %Y') if b.created_at and b.created_at.strftime is defined else (b.created_at|string)[:10] }}</div>
