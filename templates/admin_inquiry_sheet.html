@@ -69,9 +69,19 @@ function onEditInstalled(e){
     sh.getRange(row,11).setValue(new Date());
   }catch(err){}
 }
-// Run ONCE to add headers + install the edit trigger.
+// Lock every read-only column so callers can only edit Status/Owner/Remark/Next follow-up.
+function lockColumns_(sh){
+  sh.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(function(p){ if(p.getDescription()==='GC-LOCK') p.remove(); });
+  var rows = Math.max(sh.getMaxRows(),1000);
+  [ sh.getRange(1,1,rows,6), sh.getRange(1,11,rows,1), sh.getRange(1,1,1,HEADERS.length) ].forEach(function(rg){
+    var pr = rg.protect().setDescription('GC-LOCK');
+    pr.getEditors().forEach(function(u){ try{ pr.removeEditor(u); }catch(e){} });
+    try{ pr.setDomainEdit(false); }catch(e){}
+  });
+}
+// Run ONCE (re-run any time) to add headers, lock columns, and install the edit trigger.
 function setup(){
-  ensureHeaders_(sh_());
+  var sh = sh_(); ensureHeaders_(sh); lockColumns_(sh);
   ScriptApp.getProjectTriggers().forEach(function(t){ if(t.getHandlerFunction()==='onEditInstalled') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('onEditInstalled').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
 }</textarea>
