@@ -38986,6 +38986,7 @@ def sales_inquiry_status(inq_id):
             try: conn.rollback()
             except Exception: pass
     conn.close()
+    _sheet_push_async(inq_id)   # reflect the change in the Google Sheet
     return redirect(url_for('sales_inquiry_view', inq_id=inq_id))
 
 
@@ -39008,6 +39009,7 @@ def sales_inquiry_followup(inq_id):
             try: conn.rollback()
             except Exception: pass
     conn.close()
+    _sheet_push_async(inq_id)   # reflect the change in the Google Sheet
     return redirect(url_for('sales_inquiry_view', inq_id=inq_id))
 
 
@@ -39032,7 +39034,210 @@ def sales_inquiry_convert(inq_id):
         except Exception: pass
         flash('Could not convert the inquiry. Please try again.', 'error')
     conn.close()
+    _sheet_push_async(inq_id)   # reflect Converted in the Sheet
     return redirect(url_for('sales_leads_view', lead_id=inq_id))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# INQUIRY ↔ GOOGLE SHEET LIVE SYNC (founder 2026-09-15)
+# Website inquiries mirror to a private Google Sheet so sales can work them
+# there. Two-way on a few columns: Status / Owner / Remark / Next follow-up
+# edited in the Sheet flow back to the CRM; core fields are pushed one-way and
+# locked in the Sheet. Bridge = a bound Apps Script (no Google Cloud): the
+# portal POSTs rows to the script's Web App URL; the script's onEdit POSTs
+# changes to /api/inquiry-sheet/update. Guarded by a shared secret.
+# ══════════════════════════════════════════════════════════════════════════
+
+def _ensure_inquiry_sheet(conn):
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS inquiry_sheet_config (
+            id INTEGER PRIMARY KEY,
+            webapp_url TEXT DEFAULT '',
+            shared_secret TEXT DEFAULT '',
+            enabled INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        try:
+            conn.execute("ALTER TABLE sales_leads ADD COLUMN next_followup TEXT DEFAULT ''"); conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        if not conn.execute("SELECT id FROM inquiry_sheet_config WHERE id = 1").fetchone():
+            import secrets as _secrets
+            conn.execute("INSERT INTO inquiry_sheet_config (id, shared_secret, enabled) VALUES (1, ?, 0)",
+                         (_secrets.token_urlsafe(24),))
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"_ensure_inquiry_sheet: {e}")
+
+
+def _inquiry_sheet_cfg(conn):
+    _ensure_inquiry_sheet(conn)
+    r = conn.execute("SELECT * FROM inquiry_sheet_config WHERE id = 1").fetchone()
+    return dict(r) if r else {'webapp_url': '', 'shared_secret': '', 'enabled': 0}
+
+
+def _inquiry_sheet_payload(conn, inq_id):
+    r = conn.execute("""SELECT sl.*, e.name AS owner_name FROM sales_leads sl
+                     LEFT JOIN employees e ON sl.owner_employee_id = e.id
+                         WHERE sl.id = ?""", (inq_id,)).fetchone()
+    if not r:
+        return None
+    fu = conn.execute("SELECT note FROM sales_lead_followups WHERE lead_id = ? ORDER BY id DESC LIMIT 1",
+                      (inq_id,)).fetchone()
+    return {
+        'id': r['id'], 'name': r.get('lead_name') or '', 'phone': r.get('phone') or '',
+        'email': r.get('email') or '', 'source': r.get('source') or '',
+        'received_on': str(r.get('created_at'))[:16] if r.get('created_at') else '',
+        'status': r.get('inquiry_status') or 'New', 'owner': r.get('owner_name') or '',
+        'remark': (fu['note'] if fu else ''), 'next_followup': r.get('next_followup') or '',
+    }
+
+
+def push_inquiry_to_sheet(inq_id):
+    """Best-effort push of one inquiry to the Sheet. Never breaks the caller."""
+    try:
+        conn = get_db()
+        cfg = _inquiry_sheet_cfg(conn)
+        if not cfg.get('enabled') or not cfg.get('webapp_url'):
+            conn.close(); return
+        payload = _inquiry_sheet_payload(conn, inq_id)
+        conn.close()
+        if not payload:
+            return
+        import requests as _rq
+        _rq.post(cfg['webapp_url'], json={'secret': cfg['shared_secret'], 'action': 'upsert',
+                                          'rows': [payload]}, timeout=8)
+    except Exception as e:
+        logging.error(f"push_inquiry_to_sheet({inq_id}): {e}")
+
+
+def _sheet_push_async(inq_id):
+    """Fire-and-forget so a slow Sheet never blocks the web request."""
+    try:
+        import threading
+        threading.Thread(target=push_inquiry_to_sheet, args=(inq_id,), daemon=True).start()
+    except Exception:
+        pass
+
+
+def push_all_inquiries_to_sheet():
+    conn = get_db()
+    cfg = _inquiry_sheet_cfg(conn)
+    if not cfg.get('enabled') or not cfg.get('webapp_url'):
+        conn.close(); return 0
+    ids = [r['id'] for r in conn.execute(
+        "SELECT id FROM sales_leads WHERE COALESCE(is_inquiry,0)=1 ORDER BY id").fetchall()]
+    rows = [p for p in (_inquiry_sheet_payload(conn, i) for i in ids) if p]
+    conn.close()
+    if not rows:
+        return 0
+    import requests as _rq
+    for k in range(0, len(rows), 100):
+        _rq.post(cfg['webapp_url'], json={'secret': cfg['shared_secret'], 'action': 'upsert',
+                                          'rows': rows[k:k + 100]}, timeout=30)
+    return len(rows)
+
+
+@app.route('/admin/inquiry-sheet')
+@login_required
+def admin_inquiry_sheet():
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    cfg = _inquiry_sheet_cfg(conn)
+    n_inq = conn.execute("SELECT COUNT(*) AS n FROM sales_leads WHERE COALESCE(is_inquiry,0)=1").fetchone()['n']
+    conn.close()
+    webhook_url = request.url_root.rstrip('/') + '/api/inquiry-sheet/update'
+    return render_template('admin_inquiry_sheet.html', cfg=cfg, webhook_url=webhook_url,
+                           n_inq=n_inq, active_section='sales')
+
+
+@app.route('/admin/inquiry-sheet/save', methods=['POST'])
+@login_required
+def admin_inquiry_sheet_save():
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    _ensure_inquiry_sheet(conn)
+    try:
+        url = (request.form.get('webapp_url') or '').strip()
+        enabled = 1 if request.form.get('enabled') == 'on' else 0
+        conn.execute("UPDATE inquiry_sheet_config SET webapp_url = ?, enabled = ?, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = 1", (url, enabled))
+        conn.commit()
+        flash('Sheet sync settings saved.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"admin_inquiry_sheet_save: {e}")
+        flash('Could not save settings.', 'error')
+    conn.close()
+    return redirect(url_for('admin_inquiry_sheet'))
+
+
+@app.route('/admin/inquiry-sheet/resync', methods=['POST'])
+@login_required
+def admin_inquiry_sheet_resync():
+    user = get_user()
+    if not user or not user.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    try:
+        n = push_all_inquiries_to_sheet()
+        flash(f'Sent {n} inquiries to the Sheet.', 'success')
+    except Exception as e:
+        logging.error(f"admin_inquiry_sheet_resync: {e}")
+        flash('Re-sync failed — check the Web App URL is pasted and the script is deployed.', 'error')
+    return redirect(url_for('admin_inquiry_sheet'))
+
+
+@app.route('/api/inquiry-sheet/update', methods=['POST'])
+def api_inquiry_sheet_update():
+    """Inbound from the Sheet's Apps Script: a team member edited an allowed
+    column. Guarded by the shared secret. Only touches inquiries + only the
+    editable fields (Status / Owner / Remark / Next follow-up)."""
+    body = request.get_json(silent=True) or {}
+    conn = get_db()
+    cfg = _inquiry_sheet_cfg(conn)
+    if not cfg.get('shared_secret') or body.get('secret') != cfg['shared_secret']:
+        conn.close(); return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    try:
+        try:
+            inq_id = int(body.get('id'))
+        except (TypeError, ValueError):
+            conn.close(); return jsonify({'ok': False, 'error': 'bad_id'}), 400
+        if not conn.execute("SELECT id FROM sales_leads WHERE id = ? AND COALESCE(is_inquiry,0)=1",
+                            (inq_id,)).fetchone():
+            conn.close(); return jsonify({'ok': False, 'error': 'not_found'}), 404
+        status = (body.get('status') or '').strip()
+        owner_name = (body.get('owner') or '').strip()
+        remark = (body.get('remark') or '').strip()
+        nextf = (body.get('next_followup') or '').strip()
+        if status in INQUIRY_STATUSES:
+            conn.execute("UPDATE sales_leads SET inquiry_status = ? WHERE id = ?", (status, inq_id))
+        conn.execute("UPDATE sales_leads SET next_followup = ? WHERE id = ?", (nextf, inq_id))
+        if owner_name:
+            emp = conn.execute("SELECT id FROM employees WHERE is_active = 1 AND LOWER(name) = LOWER(?) LIMIT 1",
+                               (owner_name,)).fetchone()
+            if emp:
+                conn.execute("UPDATE sales_leads SET owner_employee_id = ? WHERE id = ?", (emp['id'], inq_id))
+        if remark:
+            last = conn.execute("SELECT note FROM sales_lead_followups WHERE lead_id = ? ORDER BY id DESC LIMIT 1",
+                               (inq_id,)).fetchone()
+            if not last or (last['note'] or '').strip() != remark:
+                conn.execute("INSERT INTO sales_lead_followups (lead_id, note, created_by_name) "
+                             "VALUES (?, ?, 'Google Sheet')", (inq_id, remark))
+        conn.commit(); conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback(); conn.close()
+        except Exception: pass
+        logging.error(f"api_inquiry_sheet_update: {e}")
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
 
 
 @app.route('/sales/leads')
@@ -40107,17 +40312,20 @@ def api_pg_lead():
         stage_id = stage['id'] if stage else None
         # is_inquiry=1 → lands in Sales → Inquiries (not the hot Leads board);
         # is_hot=0 → a website enquiry is not yet a hot lead. (founder 2026-08-07)
-        conn.execute(
+        _newlead = conn.execute(
             "INSERT INTO sales_leads (lead_name, phone, email, source, stage_id, is_hot, "
             "is_inquiry, inquiry_status, notes, created_at) "
-            "VALUES (?, ?, ?, ?, ?, 0, 1, 'New', ?, CURRENT_TIMESTAMP)",
-            (name, phone, email, PG_INQUIRY_SOURCE, stage_id, notes))
+            "VALUES (?, ?, ?, ?, ?, 0, 1, 'New', ?, CURRENT_TIMESTAMP) RETURNING id",
+            (name, phone, email, PG_INQUIRY_SOURCE, stage_id, notes)).fetchone()
         conn.commit()
+        _new_inq_id = _newlead['id'] if _newlead else None
         try:
             sales_emails = _dept_emails(conn, ['Sales'])
         except Exception:
             sales_emails = []
         conn.close()
+        if _new_inq_id:
+            _sheet_push_async(_new_inq_id)   # mirror the new inquiry to the Google Sheet
         # Alert the sales team that a website lead came in.
         if sales_emails:
             try:

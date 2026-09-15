@@ -1,0 +1,110 @@
+{% extends "sales_sidebar_base.html" %}
+{% block title %}Inquiries ↔ Google Sheet{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50,#f6f7fa);min-height:100vh;">
+  <div style="max-width:920px;margin:0 auto;">
+
+    <div style="margin-bottom:16px;">
+      <a href="{{ url_for('sales_inquiries_list') }}" style="font-size:0.82rem;color:var(--gray-500,#64748b);text-decoration:none;">← Inquiries</a>
+      <h1 style="margin:8px 0 0;font-size:1.35rem;font-weight:800;color:var(--navy,#2952a3);">Inquiries ↔ Google Sheet sync</h1>
+      <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500,#64748b);">Mirror website inquiries to a private Google Sheet. Your team can edit <b>Status / Owner / Remark / Next follow-up</b> in the Sheet and it flows back here. The rest is read-only.</p>
+    </div>
+
+    {# Status #}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+      <span style="font-size:0.8rem;font-weight:700;padding:5px 12px;border-radius:20px;{{ 'background:#dcfce7;color:#15803d;' if cfg.enabled else 'background:#f3f4f6;color:#4b5563;' }}">{{ 'Sync ON' if cfg.enabled else 'Sync OFF' }}</span>
+      <span style="font-size:0.8rem;font-weight:700;padding:5px 12px;border-radius:20px;{{ 'background:#dcfce7;color:#15803d;' if cfg.webapp_url else 'background:#fef3c7;color:#b45309;' }}">{{ 'Web App URL set' if cfg.webapp_url else 'Web App URL not set yet' }}</span>
+      <span style="font-size:0.8rem;font-weight:700;padding:5px 12px;border-radius:20px;background:#e0e7ff;color:#3730a3;">{{ n_inq }} inquiries</span>
+    </div>
+
+    {# Step 1: the script #}
+    <div style="background:#fff;border:1px solid var(--gray-200,#e2e8f0);border-radius:14px;padding:20px;margin-bottom:16px;">
+      <div style="font-weight:800;color:var(--navy,#2952a3);margin-bottom:6px;">1 · Paste this into your Sheet's Apps Script</div>
+      <p style="font-size:0.82rem;color:var(--gray-600,#475569);margin:0 0 10px;">In your blank Google Sheet: <b>Extensions → Apps Script</b>. Delete anything in <code>Code.gs</code>, paste all of this, and <b>Save</b> (💾). It already has your address + secret baked in — don't edit it.</p>
+      <textarea readonly onclick="this.select()" style="width:100%;height:260px;font-family:ui-monospace,Menlo,monospace;font-size:11px;border:1px solid var(--gray-200,#e2e8f0);border-radius:8px;padding:10px;white-space:pre;overflow:auto;">// GooCampus — Inquiries ↔ portal sync. Paste as-is; do not edit.
+var PORTAL_WEBHOOK = '{{ webhook_url }}';
+var SECRET = '{{ cfg.shared_secret }}';
+var HEADERS = ['ID','Name','Phone','Email','Source','Received on','Status','Owner','Remark','Next follow-up','Last synced'];
+var EDIT_COLS = [7,8,9,10]; // Status, Owner, Remark, Next follow-up (1-based)
+
+function sh_(){ return SpreadsheetApp.getActiveSpreadsheet().getSheets()[0]; }
+function json_(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+
+function ensureHeaders_(sh){
+  if (sh.getRange(1,1).getValue() !== 'ID'){
+    sh.getRange(1,1,1,HEADERS.length).setValues([HEADERS]).setFontWeight('bold').setBackground('#2952a3').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+  }
+}
+function rowById_(sh,id){
+  var n = Math.max(sh.getLastRow()-1,0); if(n===0) return -1;
+  var ids = sh.getRange(2,1,n,1).getValues();
+  for (var i=0;i<ids.length;i++){ if(String(ids[i][0])===String(id)) return i+2; }
+  return -1;
+}
+// Portal -> Sheet
+function doPost(e){
+  try{
+    var b = JSON.parse(e.postData.contents);
+    if (b.secret !== SECRET) return json_({ok:false,error:'unauthorized'});
+    var sh = sh_(); ensureHeaders_(sh);
+    (b.rows||[]).forEach(function(r){
+      var vals = [r.id,r.name,r.phone,r.email,r.source,r.received_on,r.status,r.owner,r.remark,r.next_followup,new Date()];
+      var rn = rowById_(sh, r.id); if (rn===-1){ rn = Math.max(sh.getLastRow()+1,2); }
+      sh.getRange(rn,1,1,HEADERS.length).setValues([vals]);
+    });
+    return json_({ok:true});
+  }catch(err){ return json_({ok:false,error:String(err)}); }
+}
+// Sheet -> Portal (installable on-edit trigger)
+function onEditInstalled(e){
+  try{
+    var sh = e.range.getSheet(); if (sh.getIndex()!==1) return;
+    var row = e.range.getRow(), col = e.range.getColumn();
+    if (row < 2 || EDIT_COLS.indexOf(col)===-1) return;
+    var v = sh.getRange(row,1,1,HEADERS.length).getValues()[0];
+    if (!v[0]) return;
+    UrlFetchApp.fetch(PORTAL_WEBHOOK,{method:'post',contentType:'application/json',muteHttpExceptions:true,
+      payload:JSON.stringify({secret:SECRET,id:v[0],status:v[6],owner:v[7],remark:v[8],next_followup:v[9]})});
+    sh.getRange(row,11).setValue(new Date());
+  }catch(err){}
+}
+// Run ONCE to add headers + install the edit trigger.
+function setup(){
+  ensureHeaders_(sh_());
+  ScriptApp.getProjectTriggers().forEach(function(t){ if(t.getHandlerFunction()==='onEditInstalled') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('onEditInstalled').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
+}</textarea>
+    </div>
+
+    {# Step 2 #}
+    <div style="background:#fff;border:1px solid var(--gray-200,#e2e8f0);border-radius:14px;padding:20px;margin-bottom:16px;">
+      <div style="font-weight:800;color:var(--navy,#2952a3);margin-bottom:6px;">2 · Run <code>setup</code> once, then Deploy</div>
+      <ol style="font-size:0.85rem;color:var(--gray-700,#334155);line-height:1.7;margin:0;padding-left:20px;">
+        <li>Top of the editor: pick <b>setup</b> in the function dropdown → click <b>Run</b> → <b>Allow</b> when Google asks for permission. (Adds the headers + turns on the live "edit → portal" link.)</li>
+        <li>Click <b>Deploy → New deployment</b> → the ⚙ gear → <b>Web app</b>. Set <b>Execute as: Me</b> and <b>Who has access: Anyone</b> → <b>Deploy</b> → Allow.</li>
+        <li>Copy the <b>Web app URL</b> it gives you and paste it below.</li>
+      </ol>
+    </div>
+
+    {# Step 3: paste URL + enable #}
+    <form method="POST" action="{{ url_for('admin_inquiry_sheet_save') }}" style="background:#fff;border:1px solid var(--gray-200,#e2e8f0);border-radius:14px;padding:20px;margin-bottom:16px;">
+      <div style="font-weight:800;color:var(--navy,#2952a3);margin-bottom:10px;">3 · Paste the Web App URL &amp; turn it on</div>
+      <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600,#475569);display:block;margin-bottom:5px;">Web App URL (from step 2)</label>
+      <input type="text" name="webapp_url" value="{{ cfg.webapp_url or '' }}" placeholder="https://script.google.com/macros/s/…/exec" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200,#e2e8f0);border-radius:8px;margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;font-weight:600;color:var(--gray-700,#334155);cursor:pointer;margin-bottom:14px;">
+        <input type="checkbox" name="enabled" {{ 'checked' if cfg.enabled else '' }}> Sync enabled (leads flow to the Sheet; Sheet edits flow back)
+      </label>
+      <button type="submit" style="background:var(--orange,#f57c1f);color:#fff;padding:10px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save</button>
+    </form>
+
+    {# Step 4: backfill #}
+    <form method="POST" action="{{ url_for('admin_inquiry_sheet_resync') }}" style="background:#fff;border:1px solid var(--gray-200,#e2e8f0);border-radius:14px;padding:20px;">
+      <div style="font-weight:800;color:var(--navy,#2952a3);margin-bottom:6px;">4 · Fill the Sheet with existing inquiries</div>
+      <p style="font-size:0.82rem;color:var(--gray-600,#475569);margin:0 0 12px;">Sends all <b>{{ n_inq }}</b> current inquiries into the Sheet. Safe to run any time — it updates rows, never duplicates. (New inquiries appear automatically from now on.)</p>
+      <button type="submit" {{ 'disabled' if not (cfg.enabled and cfg.webapp_url) else '' }} style="background:{{ '#16a34a' if (cfg.enabled and cfg.webapp_url) else '#cbd5e1' }};color:#fff;padding:10px 22px;border:none;border-radius:8px;font-weight:700;cursor:{{ 'pointer' if (cfg.enabled and cfg.webapp_url) else 'not-allowed' }};">Re-sync all {{ n_inq }} inquiries →</button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}
