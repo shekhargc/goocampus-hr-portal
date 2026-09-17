@@ -319,3 +319,80 @@ def seed_pg_pricing_defaults():
             conn.close()
         except Exception:
             pass
+
+
+# ── PGCP counselling packages (from the 2026 brochure, founder 2026-09-17) ──
+# Free / Starter / Standard / Premium, shown on the same pricing page. Run-once
+# (guarded by a hidden marker feature) + additive — never resurrects a package
+# the founder later edits or deletes. Everything is editable in /admin/pg/plans.
+_PGCP_FEATURES = [
+    # code, name, description, unit, sort_order
+    ('pgcp_authority',            'Counselling Authority Support', '', 'text', 200),
+    ('pgcp_pre_counselling',      'Pre-counselling information', 'Rank predictor, cutoff analysis, updated fee structures', 'boolean', 201),
+    ('pgcp_notifications',        'Notification & deadline reminders', 'Real-time WhatsApp updates, deadline alerts', 'boolean', 202),
+    ('pgcp_admission_counselling','Admission counselling', '1-to-1 personalised counselling, process walkthroughs', 'boolean', 203),
+    ('pgcp_process_eligibility',  'Process & Eligibility clauses', 'State-wise process, eligibility clauses, top colleges', 'boolean', 204),
+    ('pgcp_registration',         'Registration support', 'AIQ / MCC + State Authority application', 'boolean', 205),
+    ('pgcp_college_selector',     'College selector', 'Infrastructure, OPD load, stipend & department reports', 'boolean', 206),
+    ('pgcp_documentation',        'Documentation support', 'Mandatory document list, templates & proof-reading', 'boolean', 207),
+    ('pgcp_option_entry',         'Expert option entry support', 'Round 1, 2, mop-up strategy & priority option list', 'boolean', 208),
+    ('pgcp_specialty_pref',       'Specialty preference ordering', 'Guided ordering of your specialty preferences', 'boolean', 209),
+    ('pgcp_specialty_mentorship', 'Specialty-specific mentorship', 'Specialty insights, work-life advice, doctor connects', 'boolean', 210),
+    ('pgcp_nri_quota',            'NRI / NRI-sponsored quota guidance', 'NRI-quota documentation, templates & expert review', 'boolean', 211),
+    ('pgcp_stray_vacancy',        'Stray vacancy guidance', 'Real-time seat matrix, last-minute vacancy alerts', 'boolean', 212),
+    ('pgcp_post_allotment',       'Post seat allotment guidance', 'Security deposit tracking, post-admission formalities', 'boolean', 213),
+    ('pgcp_neet_specialist',      'NEET specialist until allotment', 'Dedicated NEET counsellor with unlimited sessions', 'boolean', 214),
+]
+_PGCP_PLANS = [
+    # code, name, price, tax_note(tagline), badge, is_featured, sort_order, authority_note, included_feature_codes
+    ('pgcp_free', 'Free', 0, 'No card needed', '', 0, 20, '',
+        ['pgcp_pre_counselling']),
+    ('pgcp_starter', 'Starter', 30000, 'incl. all taxes', '', 0, 21, 'All India / MCC + Home State only',
+        ['pgcp_pre_counselling', 'pgcp_notifications', 'pgcp_process_eligibility', 'pgcp_college_selector', 'pgcp_option_entry', 'pgcp_specialty_pref']),
+    ('pgcp_standard', 'Standard', 100000, '+ GST', '', 0, 22, 'All India / MCC + Home State',
+        ['pgcp_pre_counselling', 'pgcp_notifications', 'pgcp_admission_counselling', 'pgcp_process_eligibility', 'pgcp_registration', 'pgcp_college_selector', 'pgcp_documentation', 'pgcp_option_entry', 'pgcp_specialty_pref', 'pgcp_post_allotment']),
+    ('pgcp_premium', 'Premium', 200000, '+ GST', 'Most Chosen', 1, 23, 'All India / MCC + Home State + All Open States',
+        ['pgcp_pre_counselling', 'pgcp_notifications', 'pgcp_admission_counselling', 'pgcp_process_eligibility', 'pgcp_registration', 'pgcp_college_selector', 'pgcp_documentation', 'pgcp_option_entry', 'pgcp_specialty_pref', 'pgcp_specialty_mentorship', 'pgcp_nri_quota', 'pgcp_stray_vacancy', 'pgcp_post_allotment', 'pgcp_neet_specialist']),
+]
+
+
+def seed_pgcp_counselling_packages():
+    """Seed the 4 brochure counselling packages once (Free/Starter/Standard/Premium).
+    Guarded by a hidden marker so it runs exactly once and never resurrects edits."""
+    conn = get_db()
+    try:
+        if conn.execute("SELECT 1 FROM pg_features WHERE code = '_pgcp_seed_v1'").fetchone():
+            return
+        existing = {r['code'] for r in conn.execute("SELECT code FROM pg_features").fetchall()}
+        for code, name, desc, unit, sort in _PGCP_FEATURES:
+            if code in existing:
+                continue
+            conn.execute("INSERT INTO pg_features (code, name, description, unit, resource_kind, sort_order) "
+                         "VALUES (?,?,?,?,?,?)", (code, name, desc, unit, 'counselling', sort))
+        pcodes = {r['code'] for r in conn.execute("SELECT code FROM pg_plans").fetchall()}
+        for code, name, price, tax_note, badge, featured, sort, authnote, incl in _PGCP_PLANS:
+            if code in pcodes:
+                continue
+            conn.execute("INSERT INTO pg_plans (code, name, tagline, plan_kind, price, currency, "
+                         "billing_period, is_featured, badge_text, cta_label, sort_order, is_active, is_public) "
+                         "VALUES (?,?,?,?,?,?,?,?,?,?,?,1,1)",
+                         (code, name, tax_note, 'counselling', price, 'INR', 'one_time',
+                          featured, badge, 'Talk to a Counsellor', sort))
+            pid = conn.execute("SELECT id FROM pg_plans WHERE code = ?", (code,)).fetchone()['id']
+            if authnote:
+                conn.execute("INSERT INTO pg_plan_features (plan_id, feature_code, value_type, note) "
+                             "VALUES (?,?,'unlimited',?) ON CONFLICT DO NOTHING", (pid, 'pgcp_authority', authnote))
+            for fc in incl:
+                conn.execute("INSERT INTO pg_plan_features (plan_id, feature_code, value_type) "
+                             "VALUES (?,?,'unlimited') ON CONFLICT DO NOTHING", (pid, fc))
+        conn.execute("INSERT INTO pg_features (code, name, unit, resource_kind, is_active, sort_order) "
+                     "VALUES ('_pgcp_seed_v1','(pgcp seed marker)','boolean','_meta',0,9999) ON CONFLICT DO NOTHING")
+        conn.commit()
+        logging.info("pg pricing: seeded PGCP counselling packages (Free/Starter/Standard/Premium)")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"seed_pgcp_counselling_packages: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass

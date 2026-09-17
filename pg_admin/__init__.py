@@ -31,7 +31,8 @@ def register_pg_admin(app):
                _tables.ensure_pg_favorites_table,
                _tables.ensure_pg_bookings_table,
                _plans_tables.ensure_pg_plans_tables,
-               _plans_tables.seed_pg_pricing_defaults):
+               _plans_tables.seed_pg_pricing_defaults,
+               _plans_tables.seed_pgcp_counselling_packages):
         try:
             fn()
         except Exception as e:
