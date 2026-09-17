@@ -349,9 +349,9 @@ _PGCP_PLANS = [
         ['pgcp_pre_counselling']),
     ('pgcp_starter', 'Starter', 30000, 'incl. all taxes', '', 0, 21, 'All India / MCC + Home State only',
         ['pgcp_pre_counselling', 'pgcp_notifications', 'pgcp_process_eligibility', 'pgcp_college_selector', 'pgcp_option_entry', 'pgcp_specialty_pref']),
-    ('pgcp_standard', 'Standard', 100000, '+ GST', '', 0, 22, 'All India / MCC + Home State',
+    ('pgcp_standard', 'Standard', 100000, '+ GST', 'Most Chosen', 1, 22, 'All India / MCC + Home State',
         ['pgcp_pre_counselling', 'pgcp_notifications', 'pgcp_admission_counselling', 'pgcp_process_eligibility', 'pgcp_registration', 'pgcp_college_selector', 'pgcp_documentation', 'pgcp_option_entry', 'pgcp_specialty_pref', 'pgcp_post_allotment']),
-    ('pgcp_premium', 'Premium', 200000, '+ GST', 'Most Chosen', 1, 23, 'All India / MCC + Home State + All Open States',
+    ('pgcp_premium', 'Premium', 200000, '+ GST', '', 0, 23, 'All India / MCC + Home State + All Open States',
         ['pgcp_pre_counselling', 'pgcp_notifications', 'pgcp_admission_counselling', 'pgcp_process_eligibility', 'pgcp_registration', 'pgcp_college_selector', 'pgcp_documentation', 'pgcp_option_entry', 'pgcp_specialty_pref', 'pgcp_specialty_mentorship', 'pgcp_nri_quota', 'pgcp_stray_vacancy', 'pgcp_post_allotment', 'pgcp_neet_specialist']),
 ]
 
@@ -361,7 +361,7 @@ def seed_pgcp_counselling_packages():
     Guarded by a hidden marker so it runs exactly once and never resurrects edits."""
     conn = get_db()
     try:
-        if conn.execute("SELECT 1 FROM pg_features WHERE code = '_pgcp_seed_v1'").fetchone():
+        if conn.execute("SELECT 1 FROM pg_features WHERE code = '_pgcp_seed_v2'").fetchone():
             return
         existing = {r['code'] for r in conn.execute("SELECT code FROM pg_features").fetchall()}
         for code, name, desc, unit, sort in _PGCP_FEATURES:
@@ -385,8 +385,14 @@ def seed_pgcp_counselling_packages():
             for fc in incl:
                 conn.execute("INSERT INTO pg_plan_features (plan_id, feature_code, value_type) "
                              "VALUES (?,?,'unlimited') ON CONFLICT DO NOTHING", (pid, fc))
+        # Hide the original default 'free' plan (kept, NOT deleted — it powers free-tier
+        # entitlements for logged-in doctors) so only the 4 counselling packages show.
+        conn.execute("UPDATE pg_plans SET is_public = 0 WHERE code = 'free'")
+        # Most-popular badge on Standard (₹1L), not Premium.
+        conn.execute("UPDATE pg_plans SET is_featured = 1, badge_text = 'Most Chosen' WHERE code = 'pgcp_standard'")
+        conn.execute("UPDATE pg_plans SET is_featured = 0, badge_text = '' WHERE code = 'pgcp_premium'")
         conn.execute("INSERT INTO pg_features (code, name, unit, resource_kind, is_active, sort_order) "
-                     "VALUES ('_pgcp_seed_v1','(pgcp seed marker)','boolean','_meta',0,9999) ON CONFLICT DO NOTHING")
+                     "VALUES ('_pgcp_seed_v2','(pgcp seed marker)','boolean','_meta',0,9999) ON CONFLICT DO NOTHING")
         conn.commit()
         logging.info("pg pricing: seeded PGCP counselling packages (Free/Starter/Standard/Premium)")
     except Exception as e:
