@@ -81,6 +81,17 @@ def ensure_college_master_tables():
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_college_alias_master ON pg_college_alias (master_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_college_alias_key ON pg_college_alias (alias_key)")
+
+        # Import runs in a background thread (big files can outlast a web request),
+        # so its progress/result is written here for the admin page to show.
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_college_import_log (
+            id SERIAL PRIMARY KEY,
+            job TEXT,                              -- 'workbook' | 'matching'
+            status TEXT DEFAULT 'running',         -- running | done | error
+            detail TEXT DEFAULT '',
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            finished_at TIMESTAMP
+        )''')
         conn.commit()
         logging.info("pg_college_master tables ensured")
     except Exception as e:

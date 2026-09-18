@@ -80,6 +80,43 @@ def _stats(conn):
     return st
 
 
+
+
+def _ensure_log(conn):
+    conn.execute('''CREATE TABLE IF NOT EXISTS pg_college_import_log (
+        id SERIAL PRIMARY KEY, job TEXT, status TEXT DEFAULT 'running',
+        detail TEXT DEFAULT '', started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        finished_at TIMESTAMP)''')
+
+
+def _log_start(job):
+    """Insert a 'running' log row, return its id (own connection)."""
+    conn = get_db()
+    try:
+        _ensure_log(conn)
+        lid = conn.execute("INSERT INTO pg_college_import_log (job, status) VALUES (?, 'running') RETURNING id",
+                           [job]).fetchone()['id']
+        conn.commit()
+        return lid
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+def _log_finish(conn, lid, status, detail):
+    conn.execute("UPDATE pg_college_import_log SET status=?, detail=?, finished_at=CURRENT_TIMESTAMP WHERE id=?",
+                 [status, detail[:1000], lid])
+    conn.commit()
+
+
+def _latest_log(conn, job):
+    try:
+        return conn.execute("SELECT * FROM pg_college_import_log WHERE job=? ORDER BY id DESC LIMIT 1",
+                            [job]).fetchone()
+    except Exception:
+        return None
+
+
 @login_required
 def college_master_admin():
     u = _require_admin()
@@ -87,35 +124,30 @@ def college_master_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
     try:
+        _ensure_log(conn); conn.commit()
         stats = _stats(conn)
+        wb_log = _latest_log(conn, 'workbook')
+        mt_log = _latest_log(conn, 'matching')
     finally:
         conn.close()
-    return render_template('pg_admin/college_master.html', stats=stats, active_section='goocampus_in')
+    running = (wb_log and wb_log['status'] == 'running') or (mt_log and mt_log['status'] == 'running')
+    return render_template('pg_admin/college_master.html', stats=stats,
+                           wb_log=wb_log, mt_log=mt_log, running=running,
+                           active_section='goocampus_in')
 
 
-@login_required
-def college_master_upload_workbook():
-    u = _require_admin()
-    if not u:
-        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
-    fs = request.files.get('workbook')
-    if not fs or not fs.filename:
-        flash('Choose the college DB workbook (.xlsx) first.', 'error')
-        return redirect(url_for('pg_college_master_admin'))
-    # Fixed master column order (so every college inserts with the same shape and
-    # we can BULK-insert instead of one round-trip per row → no request timeout).
-    master_attrs = list(_MASTER_COLS.values()) + list(_MASTER_NUM.values())
+# ── Workbook import (runs in a background thread) ─────────────────────────────
+def _run_workbook(data, lid):
     conn = get_db()
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(fs.read()), read_only=True, data_only=True)
-        # --- Pass 1: parse both sheets in memory (no DB yet) ---
+        master_attrs = list(_MASTER_COLS.values()) + list(_MASTER_NUM.values())
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
         masters = {}       # (kind, master_key) -> [name, *fixed-order values]
-        courses_raw = []   # list of ((kind, master_key), [course values])
+        courses_raw = []   # ((kind, master_key), [course values])
         for sheet, kind in _SHEET_KIND.items():
             if sheet not in wb.sheetnames:
                 continue
-            ws = wb[sheet]
-            rows = ws.iter_rows(values_only=True)
+            rows = wb[sheet].iter_rows(values_only=True)
             idx = {h: i for i, h in enumerate([_s(h) for h in next(rows)])}
             for r in rows:
                 if not r:
@@ -124,8 +156,7 @@ def college_master_upload_workbook():
                 if not name:
                     continue
                 state = _s(r[idx['State']]) if 'State' in idx else ''
-                mkey = _norm(name) + '|' + _norm(state)
-                gkey = (kind, mkey)
+                gkey = (kind, _norm(name) + '|' + _norm(state))
                 if gkey not in masters:
                     vals = [name]
                     for hdr in _MASTER_COLS:
@@ -138,7 +169,6 @@ def college_master_upload_workbook():
                     courses_raw.append((gkey, cv))
         wb.close()
 
-        # --- Clean rebuild, then bulk write (few round-trips total) ---
         conn.execute("DELETE FROM pg_college_alias")
         conn.execute("DELETE FROM pg_college_course")
         conn.execute("DELETE FROM pg_college_master")
@@ -154,8 +184,8 @@ def college_master_upload_workbook():
 
         alias_rows = [(idmap[k], v[0], _norm(v[0]), 'canonical') for k, v in masters.items()]
         conn.execute_batch(
-            "INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source) "
-            "VALUES (?,?,?,?)", alias_rows, page_size=1000)
+            "INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source) VALUES (?,?,?,?)",
+            alias_rows, page_size=1000)
 
         course_batch = [[idmap[gkey]] + cv for gkey, cv in courses_raw]
         ccols = 'master_id,' + ','.join(_COURSE_COLS.values())
@@ -163,17 +193,98 @@ def college_master_upload_workbook():
         conn.execute_batch(f"INSERT INTO pg_college_course ({ccols}) VALUES ({cph})",
                            course_batch, page_size=1000)
         conn.commit()
-        flash(f'Imported {len(master_batch)} colleges + {len(course_batch)} courses. '
-              'Now upload the matching list to link cut-offs.', 'success')
+        _log_finish(conn, lid, 'done',
+                    f'Imported {len(master_batch)} colleges + {len(course_batch)} courses. '
+                    'Now upload the matching list to link cut-offs.')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
-        logging.error(f"college_master_upload_workbook: {e}")
-        flash(f'Import failed: {e}', 'error')
+        logging.error(f"_run_workbook: {e}")
+        try: _log_finish(conn, lid, 'error', f'Import failed: {e}')
+        except Exception: pass
     finally:
         try: conn.close()
         except Exception: pass
+
+
+@login_required
+def college_master_upload_workbook():
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    fs = request.files.get('workbook')
+    if not fs or not fs.filename:
+        flash('Choose the college DB workbook (.xlsx) first.', 'error')
+        return redirect(url_for('pg_college_master_admin'))
+    data = fs.read()
+    lid = _log_start('workbook')
+    import threading
+    threading.Thread(target=_run_workbook, args=(data, lid), daemon=True).start()
+    flash('Import started — reading the workbook and loading colleges. This page refreshes '
+          'itself; the result will show here in a few seconds.', 'info')
     return redirect(url_for('pg_college_master_admin'))
+
+
+# ── Matching / cut-off linker (runs in a background thread) ───────────────────
+def _run_matching(data, lid):
+    conn = get_db()
+    try:
+        name2mid = {}   # canonical norm(name) -> master_id (prefer medical)
+        for row in conn.execute(
+                "SELECT a.master_id, a.alias_key, m.kind FROM pg_college_alias a "
+                "JOIN pg_college_master m ON m.id = a.master_id "
+                "WHERE a.alias_source='canonical'").fetchall():
+            k = row['alias_key']
+            if k not in name2mid or row['kind'] == 'medical':
+                name2mid[k] = row['master_id']
+        if not name2mid:
+            _log_finish(conn, lid, 'error', 'Upload the college DB workbook first.')
+            return
+
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        rows = list(wb.worksheets[0].iter_rows(values_only=True)); wb.close()
+        hr = next(i for i, r in enumerate(rows[:6]) if r and any(_s(c) == 'Match Type' for c in r))
+        hdr = [_s(c) for c in rows[hr]]
+        ci = hdr.index('Cut-off (Master) College Name'); di = hdr.index('DB Matched College Name')
+        pairs = {}
+        for r in rows[hr + 1:]:
+            if r and _s(r[ci]):
+                pairs[_s(r[ci])] = _s(r[di])
+        for cut, db in _SPECIAL_CUTOFF.items():
+            pairs.setdefault(cut, db)
+
+        cut_names = [r['institute'] for r in
+                     conn.execute("SELECT DISTINCT institute FROM pg_cutoffs "
+                                  "WHERE COALESCE(institute,'') <> ''").fetchall()]
+        conn.execute("DELETE FROM pg_college_alias WHERE alias_source='cutoff'")
+        linked, leftover = [], []
+        for cut in cut_names:
+            db = pairs.get(cut, cut)
+            mid = name2mid.get(_norm(db)) or name2mid.get(_norm(cut))
+            if mid:
+                linked.append((mid, cut, _norm(cut), 'cutoff'))
+            else:
+                leftover.append(cut)
+        if linked:
+            conn.execute_batch(
+                "INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source) VALUES (?,?,?,?)",
+                linked, page_size=1000)
+        conn.commit()
+        msg = f'Linked {len(linked)} of {len(cut_names)} cut-off colleges to the master.'
+        if leftover:
+            msg += ' Unlinked: ' + '; '.join(leftover[:8]) + (' …' if len(leftover) > 8 else '')
+        else:
+            msg += ' 100% linked ✓'
+        _log_finish(conn, lid, 'done', msg)
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"_run_matching: {e}")
+        try: _log_finish(conn, lid, 'error', f'Matching import failed: {e}')
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
 
 
 @login_required
@@ -185,64 +296,10 @@ def college_master_upload_matching():
     if not fs or not fs.filename:
         flash('Choose the matching list (.xlsx) first.', 'error')
         return redirect(url_for('pg_college_master_admin'))
-    conn = get_db()
-    try:
-        # canonical name -> master_id (prefer medical when a name is in both kinds)
-        name2mid = {}
-        for row in conn.execute("SELECT master_id, alias_key, "
-                                "(SELECT kind FROM pg_college_master m WHERE m.id = a.master_id) AS kind "
-                                "FROM pg_college_alias a WHERE alias_source='canonical'").fetchall():
-            k = row['alias_key']
-            if k not in name2mid or row['kind'] == 'medical':
-                name2mid[k] = row['master_id']
-        if not name2mid:
-            conn.close()
-            flash('Upload the college DB workbook first.', 'error')
-            return redirect(url_for('pg_college_master_admin'))
-
-        wb = openpyxl.load_workbook(io.BytesIO(fs.read()), read_only=True, data_only=True)
-        ws = wb.worksheets[0]
-        rows = list(ws.iter_rows(values_only=True)); wb.close()
-        hr = next(i for i, r in enumerate(rows[:6]) if r and any(_s(c) == 'Match Type' for c in r))
-        hdr = [_s(c) for c in rows[hr]]
-        ci = hdr.index('Cut-off (Master) College Name'); di = hdr.index('DB Matched College Name')
-        pairs = {}   # cut-off name -> DB name
-        for r in rows[hr + 1:]:
-            if r and _s(r[ci]):
-                pairs[_s(r[ci])] = _s(r[di])
-        for cut, db in _SPECIAL_CUTOFF.items():
-            pairs.setdefault(cut, db)
-
-        # distinct cut-off institutes actually in the cut-off data
-        cut_names = [r['institute'] for r in
-                     conn.execute("SELECT DISTINCT institute FROM pg_cutoffs "
-                                  "WHERE COALESCE(institute,'') <> ''").fetchall()]
-        conn.execute("DELETE FROM pg_college_alias WHERE alias_source='cutoff'")
-        linked, leftover = [], []
-        for cut in cut_names:
-            db = pairs.get(cut, cut)          # matching-file DB name, else the cut-off name itself
-            mid = name2mid.get(_norm(db)) or name2mid.get(_norm(cut))
-            if mid:
-                linked.append((mid, cut, _norm(cut), 'cutoff'))
-            else:
-                leftover.append(cut)
-        if linked:
-            conn.execute_batch(
-                "INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source) "
-                "VALUES (?,?,?,?)", linked, page_size=1000)
-        conn.commit()
-        msg = f'Linked {len(linked)} of {len(cut_names)} cut-off colleges to the master.'
-        if leftover:
-            msg += ' Unlinked: ' + '; '.join(leftover[:8]) + (' …' if len(leftover) > 8 else '')
-            flash(msg, 'info')
-        else:
-            flash(msg + ' 100% linked ✓', 'success')
-    except Exception as e:
-        try: conn.rollback()
-        except Exception: pass
-        logging.error(f"college_master_upload_matching: {e}")
-        flash(f'Matching import failed: {e}', 'error')
-    finally:
-        try: conn.close()
-        except Exception: pass
+    data = fs.read()
+    lid = _log_start('matching')
+    import threading
+    threading.Thread(target=_run_matching, args=(data, lid), daemon=True).start()
+    flash('Linking started — matching cut-off colleges to the master. This page refreshes '
+          'itself; the result will show here in a few seconds.', 'info')
     return redirect(url_for('pg_college_master_admin'))
