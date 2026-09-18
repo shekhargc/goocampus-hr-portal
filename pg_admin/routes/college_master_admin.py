@@ -424,3 +424,68 @@ def college_master_purge_blank():
         try: conn.close()
         except Exception: pass
     return redirect(url_for('pg_college_master_cutoff_audit'))
+
+
+# ── College Database browser (view-only) ─────────────────────────────────────
+@login_required
+def college_database_list():
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    q = _s(request.args.get('q'))
+    kind = _s(request.args.get('kind'))
+    state = _s(request.args.get('state'))
+    conn = get_db()
+    rows, states, total = [], [], 0
+    try:
+        where, params = [], []
+        if q:
+            where.append("m.college_name ILIKE ?"); params.append('%' + q + '%')
+        if kind in ('medical', 'dnb'):
+            where.append("m.kind = ?"); params.append(kind)
+        if state:
+            where.append("m.state = ?"); params.append(state)
+        wsql = (' WHERE ' + ' AND '.join(where)) if where else ''
+        total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_college_master m{wsql}", params).fetchone()['n']
+        rows = conn.execute(
+            f"SELECT m.id, m.college_name, m.kind, m.city, m.state, m.college_type, m.logo_url, "
+            f"(SELECT COUNT(*) FROM pg_college_course c WHERE c.master_id = m.id) AS n_courses "
+            f"FROM pg_college_master m{wsql} ORDER BY m.college_name LIMIT 400", params).fetchall()
+        states = [r['state'] for r in conn.execute(
+            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+    finally:
+        conn.close()
+    return render_template('pg_admin/college_database.html', rows=rows, total=total,
+                           states=states, q=q, kind=kind, state=state,
+                           active_section='goocampus_in')
+
+
+@login_required
+def college_profile(master_id):
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        m = conn.execute("SELECT * FROM pg_college_master WHERE id = ?", [master_id]).fetchone()
+        if not m:
+            flash('College not found', 'error')
+            return redirect(url_for('pg_college_database_list'))
+        courses = conn.execute(
+            "SELECT * FROM pg_college_course WHERE master_id = ? ORDER BY course", [master_id]).fetchall()
+        aliases = conn.execute(
+            "SELECT alias_name, alias_source FROM pg_college_alias WHERE master_id = ? "
+            "ORDER BY alias_source, alias_name", [master_id]).fetchall()
+        names = [a['alias_name'] for a in aliases]
+        cutoffs = []
+        if names:
+            ph = ','.join(['?'] * len(names))
+            cutoffs = conn.execute(
+                f"SELECT course, category, quota, seat_type, r1, r2, r3, r4, stray, closing_rank, "
+                f"fee, stipend, stipend_yr2, stipend_yr3, bond_years, penalty "
+                f"FROM pg_cutoffs WHERE institute IN ({ph}) "
+                f"ORDER BY course, category, quota", names).fetchall()
+    finally:
+        conn.close()
+    return render_template('pg_admin/college_profile.html', m=m, courses=courses,
+                           aliases=aliases, cutoffs=cutoffs, active_section='goocampus_in')

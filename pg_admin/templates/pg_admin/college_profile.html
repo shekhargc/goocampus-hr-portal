@@ -1,0 +1,154 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}{{ m.college_name }} · College Database{% endblock %}
+
+{% macro field(label, value) %}
+  {% if value not in (None, '', 'None') %}
+  <div style="padding:8px 0;border-bottom:1px solid var(--gray-100);">
+    <div style="font-size:0.72rem;color:var(--gray-400);text-transform:uppercase;letter-spacing:.03em;">{{ label }}</div>
+    <div style="font-size:0.9rem;color:var(--gray-800);margin-top:2px;">{{ value }}</div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="margin-bottom:12px;">
+    <a href="{{ url_for('pg_college_database_list') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← College Database</a>
+  </div>
+
+  {# Header #}
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:16px;display:flex;gap:16px;align-items:center;">
+    {% if m.logo_url %}<img src="{{ m.logo_url }}" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:8px;background:#f8fafc;border:1px solid var(--gray-100);">{% endif %}
+    <div style="flex:1;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <h1 style="margin:0;font-size:1.3rem;font-weight:700;color:var(--navy);">{{ m.college_name }}</h1>
+        <span style="font-size:0.74rem;font-weight:700;padding:3px 10px;border-radius:20px;
+                     background:{{ '#dbeafe' if m.kind=='medical' else '#cffafe' }};
+                     color:{{ '#1e40af' if m.kind=='medical' else '#155e75' }};">
+          {{ 'Medical college' if m.kind=='medical' else 'DNB hospital' }}</span>
+      </div>
+      <div style="font-size:0.86rem;color:var(--gray-500);margin-top:4px;">
+        {{ m.city }}{% if m.city and m.state %}, {% endif %}{{ m.state }}
+        {% if m.college_type %} · {{ m.college_type }}{% endif %}
+        {% if m.official_website %} · <a href="{{ m.official_website }}" target="_blank" rel="noopener" style="color:var(--orange,#f57c1f);text-decoration:none;">Website ↗</a>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px;">
+    {# Overview #}
+    <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.8rem;font-weight:700;color:var(--navy);margin-bottom:6px;">Overview</div>
+      {{ field('University', m.university) }}
+      {{ field('District', m.district) }}
+      {{ field('Country', m.country) }}
+      {{ field('College type', m.college_type) }}
+      {{ field('Accreditation', m.accreditation) }}
+      {{ field('Stream', m.college_stream) }}
+      {{ field('Established', m.established_year) }}
+    </div>
+    {# Location & climate #}
+    <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.8rem;font-weight:700;color:var(--navy);margin-bottom:6px;">Location &amp; climate</div>
+      {{ field('Nearest airport', m.nearest_airport) }}
+      {{ field('Winter min temp', m.winter_min_temp) }}
+      {{ field('Summer max temp', m.summer_max_temp) }}
+      {{ field('Latitude', m.latitude) }}
+      {{ field('Longitude', m.longitude) }}
+    </div>
+    {# Facilities & fees #}
+    <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.8rem;font-weight:700;color:var(--navy);margin-bottom:6px;">Facilities &amp; fees</div>
+      {{ field('OPD', m.opd) }}
+      {{ field('IPD', m.ipd) }}
+      {{ field('Bed count', m.bed_count) }}
+      {% set mess = (m.mess_fee_min or m.mess_fee_max) %}
+      {% if mess %}{{ field('Mess fee', (m.mess_fee_currency or '') ~ ' ' ~ ('%0.0f'|format(m.mess_fee_min) if m.mess_fee_min else '') ~ (' – ' ~ '%0.0f'|format(m.mess_fee_max) if m.mess_fee_max else '')) }}{% endif %}
+      {% set host = (m.hostel_fee_min or m.hostel_fee_max) %}
+      {% if host %}{{ field('Hostel fee', (m.hostel_fee_currency or '') ~ ' ' ~ ('%0.0f'|format(m.hostel_fee_min) if m.hostel_fee_min else '') ~ (' – ' ~ '%0.0f'|format(m.hostel_fee_max) if m.hostel_fee_max else '')) }}{% endif %}
+    </div>
+  </div>
+
+  {# Courses #}
+  <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
+    <div style="font-size:0.9rem;font-weight:700;color:var(--navy);margin-bottom:10px;">Courses ({{ courses|length }})</div>
+    {% if courses %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.84rem;white-space:nowrap;">
+        <thead><tr style="background:#f1f5f9;text-align:left;">
+          <th style="padding:8px 10px;">Course</th><th style="padding:8px 10px;">Level</th>
+          <th style="padding:8px 10px;">Stream</th><th style="padding:8px 10px;text-align:right;">Seats</th>
+          <th style="padding:8px 10px;">Duration</th><th style="padding:8px 10px;">Entrance</th>
+        </tr></thead>
+        <tbody>
+          {% for c in courses %}
+          <tr style="border-top:1px solid var(--gray-100);">
+            <td style="padding:7px 10px;font-weight:600;">{{ c.course }}</td>
+            <td style="padding:7px 10px;">{{ c.course_level }}</td>
+            <td style="padding:7px 10px;">{{ c.course_stream }}</td>
+            <td style="padding:7px 10px;text-align:right;">{{ c.seat_intake }}</td>
+            <td style="padding:7px 10px;">{{ c.duration_years }}{% if c.duration_years %} yr{% endif %}</td>
+            <td style="padding:7px 10px;">{{ c.entrance_exams }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div style="font-size:0.85rem;color:var(--gray-400);">No course rows.</div>{% endif %}
+  </div>
+
+  {# Linked cut-off + stipend #}
+  <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
+    <div style="font-size:0.9rem;font-weight:700;color:var(--navy);margin-bottom:4px;">Cut-off ranks &amp; stipend ({{ cutoffs|length }} rows)</div>
+    <div style="font-size:0.8rem;color:var(--gray-500);margin-bottom:10px;">Linked from the 2025 cut-off dataset via this college's names.</div>
+    {% if cutoffs %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+        <thead><tr style="background:#f1f5f9;text-align:left;">
+          <th style="padding:7px 9px;">Course</th><th style="padding:7px 9px;">Category</th>
+          <th style="padding:7px 9px;">Quota</th><th style="padding:7px 9px;">Seat</th>
+          <th style="padding:7px 9px;text-align:right;">R1</th><th style="padding:7px 9px;text-align:right;">R2</th>
+          <th style="padding:7px 9px;text-align:right;">R3</th><th style="padding:7px 9px;text-align:right;">R4</th>
+          <th style="padding:7px 9px;text-align:right;">Stray</th>
+          <th style="padding:7px 9px;text-align:right;">Stipend Y1</th><th style="padding:7px 9px;text-align:right;">Bond</th>
+          <th style="padding:7px 9px;text-align:right;">Penalty</th>
+        </tr></thead>
+        <tbody>
+          {% for c in cutoffs %}
+          <tr style="border-top:1px solid var(--gray-100);">
+            <td style="padding:6px 9px;font-weight:600;">{{ c.course }}</td>
+            <td style="padding:6px 9px;">{{ c.category }}</td>
+            <td style="padding:6px 9px;">{{ c.quota }}</td>
+            <td style="padding:6px 9px;">{{ c.seat_type }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ c.r1 if c.r1 is not none else '' }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ c.r2 if c.r2 is not none else '' }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ c.r3 if c.r3 is not none else '' }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ c.r4 if c.r4 is not none else '' }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ c.stray if c.stray is not none else '' }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ '%0.0f'|format(c.stipend) if c.stipend is not none else '' }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ c.bond_years if c.bond_years is not none else '' }}</td>
+            <td style="padding:6px 9px;text-align:right;">{{ '%0.0f'|format(c.penalty) if c.penalty is not none else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div style="font-size:0.85rem;color:var(--gray-400);">No cut-off rows linked to this college.</div>{% endif %}
+  </div>
+
+  {# Aliases #}
+  {% if aliases %}
+  <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+    <div style="font-size:0.8rem;font-weight:700;color:var(--navy);margin-bottom:8px;">Also known as</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      {% for a in aliases %}
+      <span style="font-size:0.78rem;padding:4px 10px;border-radius:20px;background:#f1f5f9;color:var(--gray-600);"
+            title="{{ a.alias_source }}">{{ a.alias_name }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
