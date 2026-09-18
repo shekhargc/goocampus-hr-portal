@@ -17,7 +17,7 @@ from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.data import college_master_tables as _college_master
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
-                             bookings_admin)
+                             bookings_admin, college_master_admin)
 
 
 def register_pg_admin(app):
@@ -77,6 +77,14 @@ def register_pg_admin(app):
                      bookings_admin.bookings_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/bookings/<int:booking_id>/update', 'pg_booking_update',
                      bookings_admin.booking_update, methods=['POST'])
+
+    # ── College Master admin (unified Medical + DNB master; cut-off linker) ──
+    app.add_url_rule('/admin/pg/college-master', 'pg_college_master_admin',
+                     college_master_admin.college_master_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-master/upload-workbook', 'pg_college_master_upload_workbook',
+                     college_master_admin.college_master_upload_workbook, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-master/upload-matching', 'pg_college_master_upload_matching',
+                     college_master_admin.college_master_upload_matching, methods=['POST'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
