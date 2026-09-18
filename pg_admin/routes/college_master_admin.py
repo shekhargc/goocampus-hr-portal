@@ -584,3 +584,51 @@ def college_profile(master_id):
                            aliases=aliases, cutoffs=cutoffs,
                            cutoffs_by_course=cutoffs_by_course, money=money,
                            other_names=other_names, active_section='goocampus_in')
+
+
+# ── Stipend · Bond · Penalty section (one row per college; ranges when they vary) ──
+@login_required
+def college_stipend():
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    cat = _s(request.args.get('cat'))
+    state = _s(request.args.get('state'))
+    sort = _s(request.args.get('sort')) or 'stipend_desc'
+    order = {'stipend_desc': 's1_max DESC NULLS LAST',
+             'stipend_asc': 's1_max ASC NULLS LAST',
+             'name': 'college_name ASC'}.get(sort, 's1_max DESC NULLS LAST')
+    conn = get_db()
+    rows, states, total = [], [], 0
+    try:
+        _ensure_course_categories(conn)
+        where, params = [], []
+        if state:
+            where.append("m.state = ?"); params.append(state)
+        if cat in _CAT_KEYS:
+            where.append("EXISTS (SELECT 1 FROM pg_college_course cc "
+                         "WHERE cc.master_id = m.id AND cc.course_category = ?)")
+            params.append(cat)
+        wsql = (' AND ' + ' AND '.join(where)) if where else ''
+        base = (
+            "SELECT a.master_id AS id, m.college_name, m.kind, m.state, m.college_type, "
+            "MIN(c.stipend) AS s1_min, MAX(c.stipend) AS s1_max, "
+            "MIN(c.stipend_yr2) AS s2_min, MAX(c.stipend_yr2) AS s2_max, "
+            "MIN(c.stipend_yr3) AS s3_min, MAX(c.stipend_yr3) AS s3_max, "
+            "MIN(c.bond_years) AS b_min, MAX(c.bond_years) AS b_max, "
+            "MIN(c.penalty) AS p_min, MAX(c.penalty) AS p_max "
+            "FROM pg_cutoffs c "
+            "JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g')) "
+            "JOIN pg_college_master m ON m.id = a.master_id "
+            "WHERE (c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL)" + wsql +
+            " GROUP BY a.master_id, m.college_name, m.kind, m.state, m.college_type "
+            "ORDER BY " + order + " LIMIT 600")
+        rows = conn.execute(base, params).fetchall()
+        total = len(rows)
+        states = [r['state'] for r in conn.execute(
+            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+    finally:
+        conn.close()
+    return render_template('pg_admin/college_stipend.html', rows=rows, total=total,
+                           states=states, cat=cat, state=state, sort=sort,
+                           cat_labels=_CAT_LABELS, active_section='goocampus_in')

@@ -93,6 +93,8 @@ def register_pg_admin(app):
                      college_master_admin.college_database_list, methods=['GET'])
     app.add_url_rule('/admin/pg/college-database/<int:master_id>', 'pg_college_profile',
                      college_master_admin.college_profile, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-stipend', 'pg_college_stipend',
+                     college_master_admin.college_stipend, methods=['GET'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
