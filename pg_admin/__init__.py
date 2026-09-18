@@ -87,6 +87,8 @@ def register_pg_admin(app):
                      college_master_admin.college_master_upload_matching, methods=['POST'])
     app.add_url_rule('/admin/pg/college-master/cutoff-audit', 'pg_college_master_cutoff_audit',
                      college_master_admin.college_master_cutoff_audit, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-master/purge-blank-cutoffs', 'pg_college_master_purge_blank',
+                     college_master_admin.college_master_purge_blank, methods=['POST'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',

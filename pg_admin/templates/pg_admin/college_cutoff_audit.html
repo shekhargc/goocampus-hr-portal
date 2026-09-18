@@ -54,7 +54,17 @@
         <div style="font-size:0.78rem;color:var(--gray-500);">colleges exist ONLY as blank rows (would lose all their data if deleted)</div></div>
     </div>
     {% if (db.blank_only_colleges or 0) == 0 %}
-    <div style="font-size:0.86rem;color:#166534;font-weight:600;">✓ Safe to remove — every one of these colleges also has ranked rows, so no stipend/bond/penalty data would be lost.</div>
+    <div style="font-size:0.86rem;color:#166534;font-weight:600;margin-bottom:12px;">✓ Safe to remove — every one of these colleges also has ranked rows, so no stipend/bond/penalty data would be lost.</div>
+    {% if (db.no_rank or 0) > 0 %}
+    <form method="POST" action="{{ url_for('pg_college_master_purge_blank') }}"
+          onsubmit="return confirm('Delete {{ db.no_rank }} blank-rank rows from the LIVE cut-off data? The dataset will drop to {{ db.with_rank }} rows. This cannot be undone.');">
+      <button type="submit"
+              style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:0.86rem;font-weight:700;cursor:pointer;">
+        🗑 Remove {{ '{:,}'.format(db.no_rank) }} blank-rank rows
+      </button>
+      <span style="font-size:0.78rem;color:var(--gray-400);margin-left:10px;">Live change · asks for confirmation</span>
+    </form>
+    {% endif %}
     {% else %}
     <div style="font-size:0.86rem;color:#92400e;font-weight:600;">⚠ Not a clean delete — {{ db.blank_only_colleges }} colleges would lose their stipend/bond/penalty entirely. e.g. {{ blank_only_names[:6]|join('; ') }}{% if blank_only_names|length > 6 %} …{% endif %}</div>
     {% endif %}

@@ -387,3 +387,40 @@ def college_master_cutoff_audit():
                            db=db, verdict=verdict, total_gap=total_gap,
                            blank_only_names=blank_only_names,
                            active_section='goocampus_in')
+
+
+# ── Purge the blank-rank cut-off rows (destructive; server-side safety re-check) ──
+@login_required
+def college_master_purge_blank():
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        _rank = ("(r1 IS NOT NULL OR r2 IS NOT NULL OR r3 IS NOT NULL OR r4 IS NOT NULL "
+                 "OR stray IS NOT NULL OR closing_rank IS NOT NULL)")
+        # SAFETY: refuse if any college would lose all its data (exists only as blank rows).
+        blank_only = conn.execute(
+            f"SELECT COUNT(*) AS n FROM ("
+            f"  SELECT DISTINCT institute FROM pg_cutoffs WHERE NOT {_rank} AND COALESCE(institute,'')<>'' "
+            f"  EXCEPT SELECT DISTINCT institute FROM pg_cutoffs WHERE {_rank}) t").fetchone()['n']
+        if blank_only and blank_only > 0:
+            conn.rollback()
+            flash(f'Refused — {blank_only} college(s) exist only as blank-rank rows and would lose '
+                  'their stipend/bond/penalty. Nothing was deleted.', 'error')
+            return redirect(url_for('pg_college_master_cutoff_audit'))
+        before = conn.execute("SELECT COUNT(*) AS n FROM pg_cutoffs").fetchone()['n']
+        conn.execute(f"DELETE FROM pg_cutoffs WHERE NOT {_rank}")
+        after = conn.execute("SELECT COUNT(*) AS n FROM pg_cutoffs").fetchone()['n']
+        conn.commit()
+        flash(f'Removed {before - after} blank-rank rows. Cut-off dataset is now {after:,} rows '
+              '(all with a rank).', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"college_master_purge_blank: {e}")
+        flash(f'Delete failed: {e}', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_college_master_cutoff_audit'))
