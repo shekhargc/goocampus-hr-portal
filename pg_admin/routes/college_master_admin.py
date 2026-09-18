@@ -338,6 +338,22 @@ def college_master_cutoff_audit():
         db['no_rank'] = one(f"SELECT COUNT(*) AS n FROM pg_cutoffs WHERE NOT {_rank}")
         db['is_reference'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=1")
         db['institutes'] = one("SELECT COUNT(DISTINCT institute) AS n FROM pg_cutoffs WHERE COALESCE(institute,'') <> ''")
+        # Of the blank-rank rows: how many carry stipend/bond/penalty, and how many
+        # belong to a college that has NO ranked row anywhere (its data lives ONLY here).
+        _money = ("(stipend IS NOT NULL OR stipend_yr2 IS NOT NULL OR stipend_yr3 IS NOT NULL "
+                  "OR bond_years IS NOT NULL OR penalty IS NOT NULL)")
+        db['blank_with_money'] = one(f"SELECT COUNT(*) AS n FROM pg_cutoffs WHERE NOT {_rank} AND {_money}")
+        db['blank_only_colleges'] = one(
+            f"SELECT COUNT(*) AS n FROM ("
+            f"  SELECT DISTINCT institute FROM pg_cutoffs WHERE NOT {_rank} AND COALESCE(institute,'')<>'' "
+            f"  EXCEPT "
+            f"  SELECT DISTINCT institute FROM pg_cutoffs WHERE {_rank}) t")
+        try:
+            blank_only_names = [r['institute'] for r in conn.execute(
+                f"SELECT DISTINCT institute FROM pg_cutoffs WHERE NOT {_rank} AND COALESCE(institute,'')<>'' "
+                f"EXCEPT SELECT DISTINCT institute FROM pg_cutoffs WHERE {_rank} LIMIT 15").fetchall()]
+        except Exception:
+            conn.rollback(); blank_only_names = []
         db['states'] = one("SELECT COUNT(DISTINCT state) AS n FROM pg_cutoffs WHERE COALESCE(state,'') <> ''")
         db['courses'] = one("SELECT COUNT(DISTINCT course) AS n FROM pg_cutoffs WHERE COALESCE(course,'') <> ''")
         db['stipend'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs WHERE stipend IS NOT NULL")
@@ -369,4 +385,5 @@ def college_master_cutoff_audit():
     return render_template('pg_admin/college_cutoff_audit.html',
                            file=_CUTOFF_FILE, rows_cmp=rows_cmp, years=years,
                            db=db, verdict=verdict, total_gap=total_gap,
+                           blank_only_names=blank_only_names,
                            active_section='goocampus_in')

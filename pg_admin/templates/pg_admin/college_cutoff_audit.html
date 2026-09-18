@@ -43,6 +43,23 @@
     </p>
   </div>
 
+  <!-- Safe-to-delete check for the 495 blank-rank rows -->
+  <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;
+              border-left:5px solid {{ '#16a34a' if (db.blank_only_colleges or 0) == 0 else '#b45309' }};">
+    <div style="font-size:0.8rem;color:var(--gray-500);font-weight:700;margin-bottom:10px;">Can we safely remove the blank-rank rows?</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:8px;">
+      <div><div style="font-size:1.4rem;font-weight:800;color:var(--navy);">{{ '{:,}'.format(db.blank_with_money or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">of the {{ '{:,}'.format(db.no_rank or 0) }} blank rows carry stipend / bond / penalty</div></div>
+      <div><div style="font-size:1.4rem;font-weight:800;color:{{ '#16a34a' if (db.blank_only_colleges or 0) == 0 else '#b45309' }};">{{ '{:,}'.format(db.blank_only_colleges or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">colleges exist ONLY as blank rows (would lose all their data if deleted)</div></div>
+    </div>
+    {% if (db.blank_only_colleges or 0) == 0 %}
+    <div style="font-size:0.86rem;color:#166534;font-weight:600;">✓ Safe to remove — every one of these colleges also has ranked rows, so no stipend/bond/penalty data would be lost.</div>
+    {% else %}
+    <div style="font-size:0.86rem;color:#92400e;font-weight:600;">⚠ Not a clean delete — {{ db.blank_only_colleges }} colleges would lose their stipend/bond/penalty entirely. e.g. {{ blank_only_names[:6]|join('; ') }}{% if blank_only_names|length > 6 %} …{% endif %}</div>
+    {% endif %}
+  </div>
+
   <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:18px;">
     <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
       <thead><tr style="background:#f1f5f9;text-align:left;">
