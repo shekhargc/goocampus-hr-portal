@@ -67,6 +67,27 @@ def _num(v):
         return None
 
 
+# Course buckets for the College Database tabs (founder 2026-09-18).
+_CAT_LABELS = [('mbbs', 'MBBS (UG)'), ('mdms', 'MD / MS'),
+               ('super', 'Super Speciality'), ('diploma', 'Diploma'), ('dnb', 'DNB')]
+_CAT_KEYS = [k for k, _l in _CAT_LABELS]
+
+
+def _course_cat(course, level, kind):
+    """Bucket a course row: mbbs | mdms | super | diploma | dnb."""
+    c = _s(course).upper()
+    lv = _s(level).lower()
+    if kind == 'dnb':
+        return 'dnb'
+    if 'under grad' in lv or c.startswith('MBBS'):
+        return 'mbbs'
+    if c.startswith('M.CH') or c.startswith('MCH') or c.startswith('DM ') or c.startswith('DM-') or c.startswith('DM.'):
+        return 'super'
+    if 'diploma' in lv or c.startswith('DIPLOMA'):
+        return 'diploma'
+    return 'mdms'   # MD / MS and other PG-medical
+
+
 def _require_admin():
     u = get_user()
     return u if (u and u.get('is_admin')) else None
@@ -174,6 +195,7 @@ def _run_workbook(data, lid):
                     masters[gkey] = vals
                 cv = [_s(r[idx[hdr]]) if hdr in idx else '' for hdr in _COURSE_COLS]
                 if any(cv):
+                    cv.append(_course_cat(cv[0], cv[1], kind))   # cv[0]=course, cv[1]=course_level
                     courses_raw.append((gkey, cv))
         wb.close()
 
@@ -196,8 +218,8 @@ def _run_workbook(data, lid):
             alias_rows, page_size=1000)
 
         course_batch = [[idmap[gkey]] + cv for gkey, cv in courses_raw]
-        ccols = 'master_id,' + ','.join(_COURSE_COLS.values())
-        cph = ','.join(['?'] * (1 + len(_COURSE_COLS)))
+        ccols = 'master_id,' + ','.join(_COURSE_COLS.values()) + ',course_category'
+        cph = ','.join(['?'] * (2 + len(_COURSE_COLS)))
         conn.execute_batch(f"INSERT INTO pg_college_course ({ccols}) VALUES ({cph})",
                            course_batch, page_size=1000)
         conn.commit()
@@ -427,22 +449,63 @@ def college_master_purge_blank():
 
 
 # ── College Database browser (view-only) ─────────────────────────────────────
+def _ensure_course_categories(conn):
+    """Backfill course_category for rows imported before the column existed.
+    One set-based UPDATE (fast); falls back to a row loop only on error. The CASE
+    mirrors _course_cat(); % are doubled because the db shim passes params."""
+    try:
+        pending = conn.execute("SELECT 1 FROM pg_college_course "
+                               "WHERE COALESCE(course_category,'') = '' LIMIT 1").fetchone()
+        if not pending:
+            return
+    except Exception:
+        conn.rollback(); return
+    try:
+        conn.execute(
+            "UPDATE pg_college_course AS c SET course_category = CASE "
+            "  WHEN m.kind = 'dnb' THEN 'dnb' "
+            "  WHEN c.course_level ILIKE '%%under grad%%' OR c.course ILIKE 'MBBS%%' THEN 'mbbs' "
+            "  WHEN c.course ILIKE 'M.CH%%' OR c.course ILIKE 'MCH%%' OR c.course ILIKE 'DM %%' "
+            "       OR c.course ILIKE 'DM-%%' OR c.course ILIKE 'DM.%%' THEN 'super' "
+            "  WHEN c.course_level ILIKE '%%diploma%%' OR c.course ILIKE 'DIPLOMA%%' THEN 'diploma' "
+            "  ELSE 'mdms' END "
+            "FROM pg_college_master AS m "
+            "WHERE m.id = c.master_id AND COALESCE(c.course_category,'') = ''")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"_ensure_course_categories set-update failed, falling back: {e}")
+        try:
+            todo = conn.execute(
+                "SELECT c.id, c.course, c.course_level, m.kind FROM pg_college_course c "
+                "JOIN pg_college_master m ON m.id = c.master_id "
+                "WHERE COALESCE(c.course_category,'') = ''").fetchall()
+            updates = [(_course_cat(r['course'], r['course_level'], r['kind']), r['id']) for r in todo]
+            conn.executemany("UPDATE pg_college_course SET course_category = ? WHERE id = ?", updates)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+
 @login_required
 def college_database_list():
     u = _require_admin()
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     q = _s(request.args.get('q'))
-    kind = _s(request.args.get('kind'))
+    cat = _s(request.args.get('cat'))
     state = _s(request.args.get('state'))
     conn = get_db()
-    rows, states, total = [], [], 0
+    rows, states, total, cat_counts = [], [], 0, {}
     try:
+        _ensure_course_categories(conn)
         where, params = [], []
         if q:
             where.append("m.college_name ILIKE ?"); params.append('%' + q + '%')
-        if kind in ('medical', 'dnb'):
-            where.append("m.kind = ?"); params.append(kind)
+        if cat in _CAT_KEYS:
+            where.append("EXISTS (SELECT 1 FROM pg_college_course c "
+                         "WHERE c.master_id = m.id AND c.course_category = ?)")
+            params.append(cat)
         if state:
             where.append("m.state = ?"); params.append(state)
         wsql = (' WHERE ' + ' AND '.join(where)) if where else ''
@@ -455,13 +518,28 @@ def college_database_list():
             "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
         all_names = [r['college_name'] for r in conn.execute(
             "SELECT college_name FROM pg_college_master ORDER BY college_name").fetchall()]
-        n_medical = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master WHERE kind='medical'").fetchone()['n']
-        n_dnb = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master WHERE kind='dnb'").fetchone()['n']
+        # colleges offering ≥1 course in each bucket
+        for r in conn.execute("SELECT course_category AS cat, COUNT(DISTINCT master_id) AS n "
+                              "FROM pg_college_course GROUP BY course_category").fetchall():
+            cat_counts[r['cat']] = r['n']
+        n_total = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master").fetchone()['n']
+        # which buckets each shown college offers (for card chips)
+        order = {k: i for i, (k, _l) in enumerate(_CAT_LABELS)}
+        cat_by_college = {}
+        ids = [r['id'] for r in rows]
+        if ids:
+            ph = ','.join(['?'] * len(ids))
+            for r in conn.execute(f"SELECT DISTINCT master_id, course_category FROM pg_college_course "
+                                  f"WHERE master_id IN ({ph})", ids).fetchall():
+                cat_by_college.setdefault(r['master_id'], set()).add(r['course_category'])
+        cat_by_college = {k: sorted([c for c in v if c in order], key=lambda c: order[c])
+                          for k, v in cat_by_college.items()}
     finally:
         conn.close()
     return render_template('pg_admin/college_database.html', rows=rows, total=total,
-                           states=states, q=q, kind=kind, state=state, all_names=all_names,
-                           n_medical=n_medical, n_dnb=n_dnb,
+                           states=states, q=q, cat=cat, state=state, all_names=all_names,
+                           cat_labels=_CAT_LABELS, cat_counts=cat_counts, n_total=n_total,
+                           cat_by_college=cat_by_college, cat_label_map=dict(_CAT_LABELS),
                            active_section='goocampus_in')
 
 

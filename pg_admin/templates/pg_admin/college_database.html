@@ -13,20 +13,20 @@
     <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Every Indian PG college — Medical &amp; DNB — with full profile, courses and 2025 cut-off / stipend data.</p>
   </div>
 
-  <!-- Type Tabs -->
+  <!-- Course-level Tabs -->
   <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--gray-200);flex-wrap:wrap;">
-    {% set tabs = [('', 'All colleges', total if not kind else (n_medical + n_dnb)), ('medical', 'Medical colleges', n_medical), ('dnb', 'DNB hospitals', n_dnb)] %}
-    {% for val, label, cnt in tabs %}
-    <a href="{{ url_for('pg_college_database_list') }}?kind={{ val }}{% if state %}&state={{ state }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
-       style="padding:0.65rem 1.3rem;font-weight:{{ '700' if kind==val else '500' }};font-size:0.88rem;text-decoration:none;color:{{ 'var(--orange)' if kind==val else 'var(--gray-500)' }};border-bottom:{{ '3px solid var(--orange)' if kind==val else 'none' }};margin-bottom:-2px;">
-      {{ label }} <span style="font-size:0.78rem;color:var(--gray-400);">({{ '{:,}'.format(cnt) }})</span>
+    {% for val, label in ([('', 'All')] + cat_labels) %}
+    {% set cnt = n_total if val=='' else (cat_counts.get(val, 0)) %}
+    <a href="{{ url_for('pg_college_database_list') }}?cat={{ val }}{% if state %}&state={{ state }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+       style="padding:0.65rem 1.15rem;font-weight:{{ '700' if cat==val else '500' }};font-size:0.86rem;text-decoration:none;color:{{ 'var(--orange)' if cat==val else 'var(--gray-500)' }};border-bottom:{{ '3px solid var(--orange)' if cat==val else 'none' }};margin-bottom:-2px;">
+      {{ label }} <span style="font-size:0.76rem;color:var(--gray-400);">({{ '{:,}'.format(cnt) }})</span>
     </a>
     {% endfor %}
   </div>
 
   <!-- Search & Filters -->
   <form method="GET" id="filterForm" style="margin-bottom:1.2rem;">
-    <input type="hidden" name="kind" value="{{ kind }}">
+    <input type="hidden" name="cat" value="{{ cat }}">
     <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
       <div style="position:relative;flex:1;min-width:240px;">
         <input type="text" name="q" id="collegeSearch" value="{{ q }}" placeholder="Search college by name…" autocomplete="off"
@@ -38,7 +38,7 @@
         {% for s in states %}<option value="{{ s }}" {{ 'selected' if state==s else '' }}>{{ s }}</option>{% endfor %}
       </select>
       <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1.1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
-      {% if q or state %}<a href="{{ url_for('pg_college_database_list') }}?kind={{ kind }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset</a>{% endif %}
+      {% if q or state %}<a href="{{ url_for('pg_college_database_list') }}?cat={{ cat }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset</a>{% endif %}
     </div>
   </form>
 
@@ -62,12 +62,14 @@
           <h3 style="margin:0;font-size:0.86rem;font-weight:700;color:white;line-height:1.25;flex:1;">{{ c.college_name }}</h3>
         </div>
         <div style="padding:0.7rem 1rem 0.85rem;">
-          <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.55rem;">
-            <span style="font-size:0.62rem;font-weight:700;padding:2px 7px;border-radius:3px;text-transform:uppercase;
-                         background:{{ '#dbeafe' if c.kind=='medical' else '#cffafe' }};color:{{ '#1e40af' if c.kind=='medical' else '#155e75' }};">
-              {{ 'Medical' if c.kind=='medical' else 'DNB' }}</span>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.55rem;">
+            {% for ck in cat_by_college.get(c.id, []) %}
+            <span style="font-size:0.62rem;font-weight:700;padding:2px 7px;border-radius:3px;
+                         background:{{ '#dbeafe' if ck=='mbbs' else ('#e0e7ff' if ck=='mdms' else ('#fae8ff' if ck=='super' else ('#dcfce7' if ck=='diploma' else '#cffafe'))) }};
+                         color:{{ '#1e40af' if ck=='mbbs' else ('#3730a3' if ck=='mdms' else ('#86198f' if ck=='super' else ('#166534' if ck=='diploma' else '#155e75'))) }};">
+              {{ cat_label_map.get(ck, ck) }}</span>
+            {% endfor %}
             {% if c.college_type %}<span style="background:var(--gray-100);color:var(--gray-600);font-size:0.62rem;font-weight:600;padding:2px 7px;border-radius:3px;">{{ c.college_type }}</span>{% endif %}
-            <span style="background:var(--orange-light);color:var(--orange-dark);font-size:0.62rem;font-weight:600;padding:2px 7px;border-radius:3px;">{{ c.n_courses }} course{{ '' if c.n_courses==1 else 's' }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--gray-100);padding-top:0.5rem;">
             <span style="font-size:0.78rem;color:var(--gray-500);">

@@ -67,9 +67,12 @@ def ensure_college_master_tables():
             academic_eligibility TEXT DEFAULT '',
             duration_total_months TEXT DEFAULT '',
             duration_years TEXT DEFAULT '',
-            duration_months TEXT DEFAULT ''
+            duration_months TEXT DEFAULT '',
+            course_category TEXT DEFAULT ''   -- mbbs|mdms|super|diploma|dnb (for the tabs)
         )''')
+        conn.execute("ALTER TABLE pg_college_course ADD COLUMN IF NOT EXISTS course_category TEXT DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_college_course_master ON pg_college_course (master_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_college_course_cat ON pg_college_course (course_category)")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_college_alias (
             id SERIAL PRIMARY KEY,
