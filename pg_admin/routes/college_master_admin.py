@@ -43,6 +43,14 @@ _SPECIAL_CUTOFF = {
         'Government Medical College, Faizabad (Ayodhya)',
 }
 
+# Fingerprint of the cut-off master file the founder shared, for the audit compare
+# ("GooCampus NEET PG 2025 - MASTER only.xlsx"; computed 2026-09-18).
+_CUTOFF_FILE = {
+    'name': 'GooCampus NEET PG 2025 - MASTER only.xlsx',
+    'rows': 37666, 'institutes': 847, 'states': 33, 'courses': 99, 'year': '2025',
+    'stipend': 37609, 'bond': 37189, 'penalty': 37609,
+}
+
 
 def _s(v):
     return (str(v).strip() if v is not None else '')
@@ -303,3 +311,55 @@ def college_master_upload_matching():
     flash('Linking started — matching cut-off colleges to the master. This page refreshes '
           'itself; the result will show here in a few seconds.', 'info')
     return redirect(url_for('pg_college_master_admin'))
+
+
+# ── Read-only audit: compare the loaded cut-offs vs the shared master file ─────
+@login_required
+def college_master_cutoff_audit():
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    db = {}
+    years = []
+    try:
+        def one(q):
+            try:
+                return conn.execute(q).fetchone()['n']
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+                return None
+        db['rows'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs")
+        db['institutes'] = one("SELECT COUNT(DISTINCT institute) AS n FROM pg_cutoffs WHERE COALESCE(institute,'') <> ''")
+        db['states'] = one("SELECT COUNT(DISTINCT state) AS n FROM pg_cutoffs WHERE COALESCE(state,'') <> ''")
+        db['courses'] = one("SELECT COUNT(DISTINCT course) AS n FROM pg_cutoffs WHERE COALESCE(course,'') <> ''")
+        db['stipend'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs WHERE stipend IS NOT NULL")
+        db['bond'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs WHERE bond_years IS NOT NULL")
+        db['penalty'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs WHERE penalty IS NOT NULL")
+        try:
+            years = [dict(r) for r in conn.execute(
+                "SELECT year, COUNT(*) AS n FROM pg_cutoffs GROUP BY year ORDER BY year").fetchall()]
+        except Exception:
+            conn.rollback()
+        # cut-offs whose institute name did NOT resolve to a master college
+        db['linked'] = one("SELECT COUNT(DISTINCT c.institute) AS n FROM pg_cutoffs c "
+                           "JOIN pg_college_alias a ON a.alias_key = "
+                           "btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g')) "
+                           "WHERE COALESCE(c.institute,'') <> ''")
+    finally:
+        conn.close()
+
+    rows_cmp = [
+        ('Total cut-off rows', _CUTOFF_FILE['rows'], db.get('rows')),
+        ('Distinct colleges',  _CUTOFF_FILE['institutes'], db.get('institutes')),
+        ('Distinct states',    _CUTOFF_FILE['states'], db.get('states')),
+        ('Distinct courses',   _CUTOFF_FILE['courses'], db.get('courses')),
+        ('Rows with Stipend Yr1', _CUTOFF_FILE['stipend'], db.get('stipend')),
+        ('Rows with Bond years',  _CUTOFF_FILE['bond'], db.get('bond')),
+        ('Rows with Penalty',     _CUTOFF_FILE['penalty'], db.get('penalty')),
+    ]
+    verdict = all(exp == got for _l, exp, got in rows_cmp)
+    return render_template('pg_admin/college_cutoff_audit.html',
+                           file=_CUTOFF_FILE, rows_cmp=rows_cmp, years=years,
+                           db=db, verdict=verdict, active_section='goocampus_in')
