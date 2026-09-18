@@ -453,10 +453,15 @@ def college_database_list():
             f"FROM pg_college_master m{wsql} ORDER BY m.college_name LIMIT 400", params).fetchall()
         states = [r['state'] for r in conn.execute(
             "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+        all_names = [r['college_name'] for r in conn.execute(
+            "SELECT college_name FROM pg_college_master ORDER BY college_name").fetchall()]
+        n_medical = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master WHERE kind='medical'").fetchone()['n']
+        n_dnb = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master WHERE kind='dnb'").fetchone()['n']
     finally:
         conn.close()
     return render_template('pg_admin/college_database.html', rows=rows, total=total,
-                           states=states, q=q, kind=kind, state=state,
+                           states=states, q=q, kind=kind, state=state, all_names=all_names,
+                           n_medical=n_medical, n_dnb=n_dnb,
                            active_section='goocampus_in')
 
 
@@ -487,5 +492,17 @@ def college_profile(master_id):
                 f"ORDER BY course, category, quota", names).fetchall()
     finally:
         conn.close()
+    # Group cut-offs by course + pull a representative stipend/bond/penalty (college-level).
+    cutoffs_by_course, money = {}, {}
+    for c in cutoffs:
+        cutoffs_by_course.setdefault(c['course'] or '—', []).append(c)
+        for k in ('stipend', 'stipend_yr2', 'stipend_yr3', 'bond_years', 'penalty'):
+            if k not in money and c[k] is not None:
+                money[k] = c[k]
+    # Non-canonical names only, for the "also known as" chips near the top.
+    other_names = sorted({a['alias_name'] for a in aliases
+                          if _norm(a['alias_name']) != _norm(m['college_name'])})
     return render_template('pg_admin/college_profile.html', m=m, courses=courses,
-                           aliases=aliases, cutoffs=cutoffs, active_section='goocampus_in')
+                           aliases=aliases, cutoffs=cutoffs,
+                           cutoffs_by_course=cutoffs_by_course, money=money,
+                           other_names=other_names, active_section='goocampus_in')
