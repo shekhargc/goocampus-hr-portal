@@ -331,6 +331,12 @@ def college_master_cutoff_audit():
                 except Exception: pass
                 return None
         db['rows'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs")
+        # Rows that carry an actual cut-off rank in ANY round (R1-R4 / Stray / closing).
+        _rank = ("(r1 IS NOT NULL OR r2 IS NOT NULL OR r3 IS NOT NULL OR r4 IS NOT NULL "
+                 "OR stray IS NOT NULL OR closing_rank IS NOT NULL)")
+        db['with_rank'] = one(f"SELECT COUNT(*) AS n FROM pg_cutoffs WHERE {_rank}")
+        db['no_rank'] = one(f"SELECT COUNT(*) AS n FROM pg_cutoffs WHERE NOT {_rank}")
+        db['is_reference'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=1")
         db['institutes'] = one("SELECT COUNT(DISTINCT institute) AS n FROM pg_cutoffs WHERE COALESCE(institute,'') <> ''")
         db['states'] = one("SELECT COUNT(DISTINCT state) AS n FROM pg_cutoffs WHERE COALESCE(state,'') <> ''")
         db['courses'] = one("SELECT COUNT(DISTINCT course) AS n FROM pg_cutoffs WHERE COALESCE(course,'') <> ''")
@@ -351,15 +357,16 @@ def college_master_cutoff_audit():
         conn.close()
 
     rows_cmp = [
-        ('Total cut-off rows', _CUTOFF_FILE['rows'], db.get('rows')),
+        ('Cut-off rows (with a rank in any round)', _CUTOFF_FILE['rows'], db.get('with_rank')),
         ('Distinct colleges',  _CUTOFF_FILE['institutes'], db.get('institutes')),
         ('Distinct states',    _CUTOFF_FILE['states'], db.get('states')),
         ('Distinct courses',   _CUTOFF_FILE['courses'], db.get('courses')),
-        ('Rows with Stipend Yr1', _CUTOFF_FILE['stipend'], db.get('stipend')),
-        ('Rows with Bond years',  _CUTOFF_FILE['bond'], db.get('bond')),
-        ('Rows with Penalty',     _CUTOFF_FILE['penalty'], db.get('penalty')),
     ]
+    # The real question: do the RANKED rows match the file? Extra blank-rank rows
+    # (stipend/bond/penalty-only) are expected and explain any total-row gap.
     verdict = all(exp == got for _l, exp, got in rows_cmp)
+    total_gap = (db.get('rows') or 0) - (db.get('with_rank') or 0)
     return render_template('pg_admin/college_cutoff_audit.html',
                            file=_CUTOFF_FILE, rows_cmp=rows_cmp, years=years,
-                           db=db, verdict=verdict, active_section='goocampus_in')
+                           db=db, verdict=verdict, total_gap=total_gap,
+                           active_section='goocampus_in')

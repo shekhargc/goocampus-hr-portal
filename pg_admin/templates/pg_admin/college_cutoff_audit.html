@@ -14,11 +14,33 @@
   </p>
 
   <!-- Verdict banner -->
-  <div style="padding:14px 18px;border-radius:12px;margin-bottom:20px;font-weight:700;font-size:0.95rem;
+  <div style="padding:14px 18px;border-radius:12px;margin-bottom:16px;font-weight:700;font-size:0.95rem;
               background:{{ '#DCFCE7' if verdict else '#FEE2E2' }};
               color:{{ '#166534' if verdict else '#991B1B' }};">
-    {% if verdict %}✓ Identical — the loaded cut-off data matches your master file exactly. No changes.
-    {% else %}✗ Differences found — see the highlighted rows below.{% endif %}
+    {% if verdict %}✓ Match — every ranked cut-off row matches your master file.
+    {% else %}✗ The ranked rows differ from your file — see the highlighted rows below.{% endif %}
+  </div>
+
+  <!-- Rank coverage — explains the total-row gap -->
+  <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
+    <div style="font-size:0.8rem;color:var(--gray-500);font-weight:700;margin-bottom:10px;">Rank coverage in the system</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+      <div><div style="font-size:1.5rem;font-weight:800;color:var(--navy);">{{ '{:,}'.format(db.rows or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Total rows in system</div></div>
+      <div><div style="font-size:1.5rem;font-weight:800;color:#16a34a;">{{ '{:,}'.format(db.with_rank or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Rows with a rank (≥1 round)</div></div>
+      <div><div style="font-size:1.5rem;font-weight:800;color:#b45309;">{{ '{:,}'.format(db.no_rank or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Rows with NO rank in any round</div></div>
+      <div><div style="font-size:1.5rem;font-weight:800;color:#64748b;">{{ '{:,}'.format(db.is_reference or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Flagged reference-only</div></div>
+    </div>
+    <p style="margin:12px 0 0;font-size:0.84rem;color:var(--gray-600);">
+      Your file had <b>{{ '{:,}'.format(file.rows) }}</b> rows, all with a rank. The system has
+      <b>{{ '{:,}'.format(total_gap) }}</b> extra rows with <b>no cut-off rank in any round</b> —
+      these carry stipend / bond / penalty for a college but no rank, so they're kept for that data
+      and hidden from the predictor.
+      {% if (db.with_rank or 0) == file.rows %}That accounts for the entire difference — your ranked data is intact.{% endif %}
+    </p>
   </div>
 
   <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:18px;">
