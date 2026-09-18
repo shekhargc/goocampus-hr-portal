@@ -102,25 +102,21 @@ def college_master_upload_workbook():
     if not fs or not fs.filename:
         flash('Choose the college DB workbook (.xlsx) first.', 'error')
         return redirect(url_for('pg_college_master_admin'))
+    # Fixed master column order (so every college inserts with the same shape and
+    # we can BULK-insert instead of one round-trip per row → no request timeout).
+    master_attrs = list(_MASTER_COLS.values()) + list(_MASTER_NUM.values())
     conn = get_db()
     try:
         wb = openpyxl.load_workbook(io.BytesIO(fs.read()), read_only=True, data_only=True)
-        # Clean rebuild (master ids reset, so aliases + courses go too; re-run matching after).
-        conn.execute("DELETE FROM pg_college_alias")
-        conn.execute("DELETE FROM pg_college_course")
-        conn.execute("DELETE FROM pg_college_master")
-        conn.commit()
-        n_master = n_course = 0
-        alias_rows = []
+        # --- Pass 1: parse both sheets in memory (no DB yet) ---
+        masters = {}       # (kind, master_key) -> [name, *fixed-order values]
+        courses_raw = []   # list of ((kind, master_key), [course values])
         for sheet, kind in _SHEET_KIND.items():
             if sheet not in wb.sheetnames:
                 continue
             ws = wb[sheet]
             rows = ws.iter_rows(values_only=True)
-            header = [_s(h) for h in next(rows)]
-            idx = {h: i for i, h in enumerate(header)}
-            seen = {}   # master_key -> master_id
-            course_batch = []
+            idx = {h: i for i, h in enumerate([_s(h) for h in next(rows)])}
             for r in rows:
                 if not r:
                     continue
@@ -128,43 +124,47 @@ def college_master_upload_workbook():
                 if not name:
                     continue
                 state = _s(r[idx['State']]) if 'State' in idx else ''
-                key = _norm(name) + '|' + _norm(state)
-                mid = seen.get(key)
-                if mid is None:
-                    cols = ['kind', 'master_key']
-                    vals = [kind, key]
-                    for hdr, attr in _MASTER_COLS.items():
-                        if hdr in idx:
-                            cols.append(attr); vals.append(_s(r[idx[hdr]]))
-                    for hdr, attr in _MASTER_NUM.items():
-                        if hdr in idx:
-                            cols.append(attr); vals.append(_num(r[idx[hdr]]))
-                    ph = ','.join(['?'] * len(cols))
-                    mid = conn.execute(
-                        f"INSERT INTO pg_college_master ({','.join(cols)}) VALUES ({ph}) RETURNING id",
-                        vals).fetchone()['id']
-                    seen[key] = mid
-                    n_master += 1
-                    alias_rows.append((mid, name, _norm(name), 'canonical'))
-                # course row
-                cv = [mid]
-                for hdr, attr in _COURSE_COLS.items():
-                    cv.append(_s(r[idx[hdr]]) if hdr in idx else '')
-                if any(cv[1:]):
-                    course_batch.append(cv)
-            if course_batch:
-                ccols = 'master_id,' + ','.join(_COURSE_COLS.values())
-                cph = ','.join(['?'] * (1 + len(_COURSE_COLS)))
-                conn.execute_batch(f"INSERT INTO pg_college_course ({ccols}) VALUES ({cph})",
-                                   course_batch, page_size=1000)
-                n_course += len(course_batch)
+                mkey = _norm(name) + '|' + _norm(state)
+                gkey = (kind, mkey)
+                if gkey not in masters:
+                    vals = [name]
+                    for hdr in _MASTER_COLS:
+                        vals.append(_s(r[idx[hdr]]) if hdr in idx else '')
+                    for hdr in _MASTER_NUM:
+                        vals.append(_num(r[idx[hdr]]) if hdr in idx else None)
+                    masters[gkey] = vals
+                cv = [_s(r[idx[hdr]]) if hdr in idx else '' for hdr in _COURSE_COLS]
+                if any(cv):
+                    courses_raw.append((gkey, cv))
         wb.close()
-        if alias_rows:
-            conn.execute_batch(
-                "INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source) "
-                "VALUES (?,?,?,?)", alias_rows, page_size=1000)
+
+        # --- Clean rebuild, then bulk write (few round-trips total) ---
+        conn.execute("DELETE FROM pg_college_alias")
+        conn.execute("DELETE FROM pg_college_course")
+        conn.execute("DELETE FROM pg_college_master")
+
+        mcols = 'kind,master_key,' + ','.join(master_attrs)
+        mph = ','.join(['?'] * (2 + len(master_attrs)))
+        master_batch = [[k[0], k[1]] + v[1:] for k, v in masters.items()]
+        conn.execute_batch(f"INSERT INTO pg_college_master ({mcols}) VALUES ({mph})",
+                           master_batch, page_size=1000)
+
+        idmap = {(row['kind'], row['master_key']): row['id']
+                 for row in conn.execute("SELECT id, kind, master_key FROM pg_college_master").fetchall()}
+
+        alias_rows = [(idmap[k], v[0], _norm(v[0]), 'canonical') for k, v in masters.items()]
+        conn.execute_batch(
+            "INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source) "
+            "VALUES (?,?,?,?)", alias_rows, page_size=1000)
+
+        course_batch = [[idmap[gkey]] + cv for gkey, cv in courses_raw]
+        ccols = 'master_id,' + ','.join(_COURSE_COLS.values())
+        cph = ','.join(['?'] * (1 + len(_COURSE_COLS)))
+        conn.execute_batch(f"INSERT INTO pg_college_course ({ccols}) VALUES ({cph})",
+                           course_batch, page_size=1000)
         conn.commit()
-        flash(f'Imported {n_master} colleges + {n_course} courses. Now upload the matching list to link cut-offs.', 'success')
+        flash(f'Imported {len(master_batch)} colleges + {len(course_batch)} courses. '
+              'Now upload the matching list to link cut-offs.', 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
