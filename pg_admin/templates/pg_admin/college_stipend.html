@@ -1,0 +1,124 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Stipend · Bond · Penalty · goocampus.in{% endblock %}
+
+{% macro money(mn, mx, prefix='₹', suffix='') %}
+  {% if mn is none and mx is none %}<span style="color:var(--gray-300);">—</span>
+  {% elif mn == mx %}{{ prefix }}{{ '{:,.0f}'.format(mn) }}{{ suffix }}
+  {% else %}{{ prefix }}{{ '{:,.0f}'.format(mn) }}{{ suffix }}<br><span style="color:var(--gray-400);font-size:0.72rem;">– {{ prefix }}{{ '{:,.0f}'.format(mx) }}{{ suffix }}</span>{% endif %}
+{% endmacro %}
+
+{% block section_content %}
+<div style="max-width:1300px;margin:0 auto;padding:2rem 1.5rem;">
+
+  <div style="margin-bottom:1.2rem;">
+    <h1 style="font-size:1.6rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem 0;">
+      <span style="margin-right:6px;">💰</span>Stipend · Bond · Penalty
+    </h1>
+    <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Monthly stipend, service bond and mid-way penalty per college (NEET-PG 2025 · MD/MS &amp; DNB). A range is shown where it differs across a college's courses.</p>
+  </div>
+
+  <!-- Two tabs: MD/MS vs DNB -->
+  <div style="display:flex;gap:0;margin-bottom:1rem;border-bottom:2px solid var(--gray-200);flex-wrap:wrap;">
+    {% for val, label in [('medical', 'MD / MS — Medical Colleges'), ('dnb', 'DNB — Hospitals')] %}
+    <a href="{{ url_for('pg_college_stipend') }}?kind={{ val }}&sort={{ sort }}"
+       style="padding:0.65rem 1.3rem;font-weight:{{ '700' if kind==val else '500' }};font-size:0.88rem;text-decoration:none;color:{{ 'var(--orange)' if kind==val else 'var(--gray-500)' }};border-bottom:{{ '3px solid var(--orange)' if kind==val else 'none' }};margin-bottom:-2px;">
+      {{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- Filters -->
+  <form method="GET" id="stipendForm" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <div style="position:relative;flex:1;min-width:240px;">
+      <input type="text" name="q" id="stipendSearch" value="{{ q }}" placeholder="Search college by name…" autocomplete="off"
+             style="width:100%;padding:0.55rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+      <div id="stipendSuggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 0.4rem 0.4rem;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+    </div>
+    <select name="state" onchange="this.form.submit()" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;min-width:150px;">
+      <option value="">All states</option>
+      {% for s in states %}<option value="{{ s }}" {{ 'selected' if state==s else '' }}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="sort" onchange="this.form.submit()" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+      <option value="name" {{ 'selected' if sort=='name' else '' }}>College name (A–Z)</option>
+      <option value="stipend_desc" {{ 'selected' if sort=='stipend_desc' else '' }}>Stipend: high → low</option>
+      <option value="stipend_asc" {{ 'selected' if sort=='stipend_asc' else '' }}>Stipend: low → high</option>
+    </select>
+    <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
+    {% if q or state %}<a href="{{ url_for('pg_college_stipend') }}?kind={{ kind }}&sort={{ sort }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset</a>{% endif %}
+    <span style="background:var(--navy);color:white;padding:0.45rem 1rem;border-radius:0.5rem;font-size:0.82rem;"><strong>{{ '{:,}'.format(total) }}</strong> colleges</span>
+  </form>
+
+  <div style="background:white;border:1px solid var(--gray-200);border-radius:0.75rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;table-layout:fixed;">
+      <colgroup>
+        <col style="width:30%;"><col style="width:11%;"><col style="width:13%;"><col style="width:12%;">
+        <col style="width:12%;"><col style="width:10%;"><col style="width:12%;">
+      </colgroup>
+      {% set hstyle = 'padding:0.6rem 0.7rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);background:var(--gray-50);' %}
+      <thead><tr style="text-align:left;">
+        <th style="{{ hstyle }}">College</th>
+        <th style="{{ hstyle }}">State</th>
+        <th style="{{ hstyle }}text-align:right;">Stipend Yr 1</th>
+        <th style="{{ hstyle }}text-align:right;">Yr 2</th>
+        <th style="{{ hstyle }}text-align:right;">Yr 3</th>
+        <th style="{{ hstyle }}text-align:right;">Bond</th>
+        <th style="{{ hstyle }}text-align:right;">Penalty</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-top:1px solid var(--gray-100);{% if r.id %}cursor:pointer;{% endif %}"
+            {% if r.id %}onclick="window.location='{{ url_for('pg_college_stipend_detail', master_id=r.id) }}?kind={{ kind }}'"{% endif %}>
+          <td style="padding:0.55rem 0.7rem;vertical-align:top;">
+            <span style="font-weight:600;color:var(--navy);">{{ r.institute }}</span>
+            <span style="font-size:0.68rem;color:var(--gray-400);margin-left:4px;white-space:nowrap;">· {{ r.n_courses }} course{{ '' if r.n_courses==1 else 's' }}</span>
+          </td>
+          <td style="padding:0.55rem 0.7rem;color:var(--gray-600);vertical-align:top;">{{ r.state }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;font-weight:700;color:var(--navy);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.s1_min, r.s1_max) }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.s2_min, r.s2_max) }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.s3_min, r.s3_max) }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.b_min, r.b_max, prefix='', suffix=' yr') }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.p_min, r.p_max) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--gray-400);">No stipend data for this filter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if pages > 1 %}
+  {% set base = url_for('pg_college_stipend') ~ '?kind=' ~ kind ~ '&sort=' ~ sort ~ ('&state=' ~ state if state else '') ~ ('&q=' ~ q if q else '') %}
+  <div style="display:flex;justify-content:center;align-items:center;gap:0.4rem;margin-top:1.2rem;flex-wrap:wrap;">
+    {% if page > 1 %}<a href="{{ base }}&page={{ page-1 }}" style="padding:0.4rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--navy);font-size:0.82rem;">← Prev</a>{% endif %}
+    <span style="font-size:0.82rem;color:var(--gray-500);">Page {{ page }} of {{ pages }} · showing {{ rows|length }} of {{ '{:,}'.format(total) }}</span>
+    {% if page < pages %}<a href="{{ base }}&page={{ page+1 }}" style="padding:0.4rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--navy);font-size:0.82rem;">Next →</a>{% endif %}
+  </div>
+  {% endif %}
+  <p style="margin:0.8rem 0 0;font-size:0.78rem;color:var(--gray-400);">Click any row to see that college's <b>per-speciality</b> stipend/bond/penalty. A two-line value (e.g. ₹85,000 / – ₹1,10,000) is the min–max across the college's specialities.</p>
+</div>
+
+<script>
+(function() {
+  var allNames = {{ all_names | tojson }};
+  var input = document.getElementById('stipendSearch');
+  var box = document.getElementById('stipendSuggest');
+  if (input && box) {
+    input.addEventListener('input', function() {
+      var val = this.value.toLowerCase().trim(); box.innerHTML = '';
+      if (val.length < 1) { box.style.display = 'none'; return; }
+      var matches = allNames.filter(function(n){ return n.toLowerCase().indexOf(val) !== -1; }).slice(0, 10);
+      if (!matches.length) { box.style.display = 'none'; return; }
+      matches.forEach(function(m){
+        var d = document.createElement('div'); d.textContent = m;
+        d.style.cssText = 'padding:0.45rem 0.75rem;font-size:0.83rem;cursor:pointer;border-bottom:1px solid #f3f4f6;';
+        d.onmouseover = function(){ this.style.background = '#f9fafb'; };
+        d.onmouseout = function(){ this.style.background = 'white'; };
+        d.onclick = function(){ input.value = m; box.style.display = 'none'; document.getElementById('stipendForm').submit(); };
+        box.appendChild(d);
+      });
+      box.style.display = 'block';
+    });
+    input.addEventListener('blur', function(){ setTimeout(function(){ box.style.display = 'none'; }, 200); });
+  }
+})();
+</script>
+{% endblock %}

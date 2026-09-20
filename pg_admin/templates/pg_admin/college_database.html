@@ -1,0 +1,118 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}College Database · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
+
+  <!-- Header -->
+  <div style="margin-bottom:1.4rem;">
+    <h1 style="font-size:1.6rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem 0;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" style="vertical-align:-4px;margin-right:6px;"><path d="M3 21h18"/><path d="M5 21V8l7-4 7 4v13"/><path d="M9 21v-6h6v6"/></svg>
+      College Database
+    </h1>
+    <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Every Indian PG college — Medical &amp; DNB — with full profile, courses and 2025 cut-off / stipend data.</p>
+  </div>
+
+  <!-- Course-level Tabs -->
+  <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--gray-200);flex-wrap:wrap;">
+    {% for val, label in ([('', 'All')] + cat_labels) %}
+    {% set cnt = n_total if val=='' else (cat_counts.get(val, 0)) %}
+    <a href="{{ url_for('pg_college_database_list') }}?cat={{ val }}{% if state %}&state={{ state }}{% endif %}{% if q %}&q={{ q }}{% endif %}"
+       style="padding:0.65rem 1.15rem;font-weight:{{ '700' if cat==val else '500' }};font-size:0.86rem;text-decoration:none;color:{{ 'var(--orange)' if cat==val else 'var(--gray-500)' }};border-bottom:{{ '3px solid var(--orange)' if cat==val else 'none' }};margin-bottom:-2px;">
+      {{ label }} <span style="font-size:0.76rem;color:var(--gray-400);">({{ '{:,}'.format(cnt) }})</span>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Search & Filters -->
+  <form method="GET" id="filterForm" style="margin-bottom:1.2rem;">
+    <input type="hidden" name="cat" value="{{ cat }}">
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+      <div style="position:relative;flex:1;min-width:240px;">
+        <input type="text" name="q" id="collegeSearch" value="{{ q }}" placeholder="Search college by name…" autocomplete="off"
+               style="width:100%;padding:0.55rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+        <div id="searchSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 0.4rem 0.4rem;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+      </div>
+      <select name="state" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;min-width:150px;">
+        <option value="">All states</option>
+        {% for s in states %}<option value="{{ s }}" {{ 'selected' if state==s else '' }}>{{ s }}</option>{% endfor %}
+      </select>
+      <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1.1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
+      {% if q or state %}<a href="{{ url_for('pg_college_database_list') }}?cat={{ cat }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset</a>{% endif %}
+    </div>
+  </form>
+
+  <!-- Stats Bar -->
+  <div style="margin-bottom:1.3rem;">
+    <span style="background:var(--navy);color:white;padding:0.5rem 1.1rem;border-radius:0.5rem;font-size:0.85rem;">
+      <strong>{{ '{:,}'.format(total) }}</strong> college{{ '' if total==1 else 's' }}{% if total > 400 %} · showing first 400{% endif %}
+    </span>
+  </div>
+
+  <!-- Card Grid -->
+  {% if rows %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:1.1rem;">
+    {% for c in rows %}
+    <a href="{{ url_for('pg_college_profile', master_id=c.id) }}" style="text-decoration:none;color:inherit;">
+      <div style="background:white;border:1px solid var(--gray-200);border-radius:0.65rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:box-shadow 0.2s, transform 0.15s;cursor:pointer;height:100%;"
+           onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,0.09)';this.style.transform='translateY(-1px)'"
+           onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)';this.style.transform='none'">
+        <div style="background:linear-gradient(135deg, var(--navy), var(--navy-light));padding:0.75rem 1rem;display:flex;align-items:center;gap:0.5rem;">
+          {% if c.logo_url %}<img src="{{ c.logo_url }}" alt="" style="width:26px;height:26px;object-fit:contain;border-radius:5px;background:#fff;flex-shrink:0;">{% else %}<span style="font-size:1.05rem;flex-shrink:0;">🏥</span>{% endif %}
+          <h3 style="margin:0;font-size:0.86rem;font-weight:700;color:white;line-height:1.25;flex:1;">{{ c.college_name }}</h3>
+        </div>
+        <div style="padding:0.7rem 1rem 0.85rem;">
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.55rem;">
+            {% for ck in cat_by_college.get(c.id, []) %}
+            <span style="font-size:0.62rem;font-weight:700;padding:2px 7px;border-radius:3px;
+                         background:{{ '#dbeafe' if ck=='mbbs' else ('#e0e7ff' if ck=='mdms' else ('#fae8ff' if ck=='super' else ('#dcfce7' if ck=='diploma' else '#cffafe'))) }};
+                         color:{{ '#1e40af' if ck=='mbbs' else ('#3730a3' if ck=='mdms' else ('#86198f' if ck=='super' else ('#166534' if ck=='diploma' else '#155e75'))) }};">
+              {{ cat_label_map.get(ck, ck) }}</span>
+            {% endfor %}
+            {% if c.college_type %}<span style="background:var(--gray-100);color:var(--gray-600);font-size:0.62rem;font-weight:600;padding:2px 7px;border-radius:3px;">{{ c.college_type }}</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--gray-100);padding-top:0.5rem;">
+            <span style="font-size:0.78rem;color:var(--gray-500);">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              {{ c.city }}{% if c.city and c.state %}, {% endif %}{{ c.state }}</span>
+            <span style="color:var(--orange);font-size:0.78rem;font-weight:600;">View →</span>
+          </div>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:3rem;text-align:center;color:var(--gray-500);">
+    <p style="margin:0 0 0.5rem 0;font-weight:600;">No colleges found</p>
+    <p style="margin:0;font-size:0.85rem;">Try a different search or filter.</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function() {
+  var allNames = {{ all_names | tojson }};
+  var input = document.getElementById('collegeSearch');
+  var box = document.getElementById('searchSuggestions');
+  if (input && box) {
+    input.addEventListener('input', function() {
+      var val = this.value.toLowerCase().trim(); box.innerHTML = '';
+      if (val.length < 1) { box.style.display = 'none'; return; }
+      var matches = allNames.filter(function(n){ return n.toLowerCase().indexOf(val) !== -1; }).slice(0, 10);
+      if (!matches.length) { box.style.display = 'none'; return; }
+      matches.forEach(function(m){
+        var d = document.createElement('div'); d.textContent = m;
+        d.style.cssText = 'padding:0.45rem 0.75rem;font-size:0.83rem;cursor:pointer;border-bottom:1px solid #f3f4f6;';
+        d.onmouseover = function(){ this.style.background = '#f9fafb'; };
+        d.onmouseout = function(){ this.style.background = 'white'; };
+        d.onclick = function(){ input.value = m; box.style.display = 'none'; document.getElementById('filterForm').submit(); };
+        box.appendChild(d);
+      });
+      box.style.display = 'block';
+    });
+    input.addEventListener('blur', function(){ setTimeout(function(){ box.style.display = 'none'; }, 200); });
+  }
+})();
+</script>
+{% endblock %}

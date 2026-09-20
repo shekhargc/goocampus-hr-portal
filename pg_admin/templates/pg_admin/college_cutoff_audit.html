@@ -1,0 +1,115 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Cut-off Audit · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="margin-bottom:8px;">
+    <a href="{{ url_for('pg_college_master_admin') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← College Master</a>
+  </div>
+  <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Cut-off data audit</h1>
+  <p style="margin:0 0 18px;font-size:0.88rem;color:var(--gray-500);max-width:820px;">
+    Compares the cut-off data <b>currently loaded in the system</b> against the master file you
+    shared — <b>{{ file.name }}</b>. Read-only: this page changes nothing.
+  </p>
+
+  <!-- Verdict banner -->
+  <div style="padding:14px 18px;border-radius:12px;margin-bottom:16px;font-weight:700;font-size:0.95rem;
+              background:{{ '#DCFCE7' if verdict else '#FEE2E2' }};
+              color:{{ '#166534' if verdict else '#991B1B' }};">
+    {% if verdict %}✓ Match — every ranked cut-off row matches your master file.
+    {% else %}✗ The ranked rows differ from your file — see the highlighted rows below.{% endif %}
+  </div>
+
+  <!-- Rank coverage — explains the total-row gap -->
+  <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;">
+    <div style="font-size:0.8rem;color:var(--gray-500);font-weight:700;margin-bottom:10px;">Rank coverage in the system</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+      <div><div style="font-size:1.5rem;font-weight:800;color:var(--navy);">{{ '{:,}'.format(db.rows or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Total rows in system</div></div>
+      <div><div style="font-size:1.5rem;font-weight:800;color:#16a34a;">{{ '{:,}'.format(db.with_rank or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Rows with a rank (≥1 round)</div></div>
+      <div><div style="font-size:1.5rem;font-weight:800;color:#b45309;">{{ '{:,}'.format(db.no_rank or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Rows with NO rank in any round</div></div>
+      <div><div style="font-size:1.5rem;font-weight:800;color:#64748b;">{{ '{:,}'.format(db.is_reference or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">Flagged reference-only</div></div>
+    </div>
+    <p style="margin:12px 0 0;font-size:0.84rem;color:var(--gray-600);">
+      Your file had <b>{{ '{:,}'.format(file.rows) }}</b> rows, all with a rank. The system has
+      <b>{{ '{:,}'.format(total_gap) }}</b> extra rows with <b>no cut-off rank in any round</b> —
+      these carry stipend / bond / penalty for a college but no rank, so they're kept for that data
+      and hidden from the predictor.
+      {% if (db.with_rank or 0) == file.rows %}That accounts for the entire difference — your ranked data is intact.{% endif %}
+    </p>
+  </div>
+
+  <!-- Safe-to-delete check for the 495 blank-rank rows -->
+  <div style="background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:16px;
+              border-left:5px solid {{ '#16a34a' if (db.blank_only_colleges or 0) == 0 else '#b45309' }};">
+    <div style="font-size:0.8rem;color:var(--gray-500);font-weight:700;margin-bottom:10px;">Can we safely remove the blank-rank rows?</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:8px;">
+      <div><div style="font-size:1.4rem;font-weight:800;color:var(--navy);">{{ '{:,}'.format(db.blank_with_money or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">of the {{ '{:,}'.format(db.no_rank or 0) }} blank rows carry stipend / bond / penalty</div></div>
+      <div><div style="font-size:1.4rem;font-weight:800;color:{{ '#16a34a' if (db.blank_only_colleges or 0) == 0 else '#b45309' }};">{{ '{:,}'.format(db.blank_only_colleges or 0) }}</div>
+        <div style="font-size:0.78rem;color:var(--gray-500);">colleges exist ONLY as blank rows (would lose all their data if deleted)</div></div>
+    </div>
+    {% if (db.blank_only_colleges or 0) == 0 %}
+    <div style="font-size:0.86rem;color:#166534;font-weight:600;margin-bottom:12px;">✓ Safe to remove — every one of these colleges also has ranked rows, so no stipend/bond/penalty data would be lost.</div>
+    {% if (db.no_rank or 0) > 0 %}
+    <form method="POST" action="{{ url_for('pg_college_master_purge_blank') }}"
+          onsubmit="return confirm('Delete {{ db.no_rank }} blank-rank rows from the LIVE cut-off data? The dataset will drop to {{ db.with_rank }} rows. This cannot be undone.');">
+      <button type="submit"
+              style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:0.86rem;font-weight:700;cursor:pointer;">
+        🗑 Remove {{ '{:,}'.format(db.no_rank) }} blank-rank rows
+      </button>
+      <span style="font-size:0.78rem;color:var(--gray-400);margin-left:10px;">Live change · asks for confirmation</span>
+    </form>
+    {% endif %}
+    {% else %}
+    <div style="font-size:0.86rem;color:#92400e;font-weight:600;">⚠ Not a clean delete — {{ db.blank_only_colleges }} colleges would lose their stipend/bond/penalty entirely. e.g. {{ blank_only_names[:6]|join('; ') }}{% if blank_only_names|length > 6 %} …{% endif %}</div>
+    {% endif %}
+  </div>
+
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:18px;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+      <thead><tr style="background:#f1f5f9;text-align:left;">
+        <th style="padding:10px;">Measure</th>
+        <th style="padding:10px;text-align:right;">Your file</th>
+        <th style="padding:10px;text-align:right;">In the system</th>
+        <th style="padding:10px;text-align:center;">Match</th>
+      </tr></thead>
+      <tbody>
+        {% for label, exp, got in rows_cmp %}
+        {% set ok = (exp == got) %}
+        <tr style="border-bottom:1px solid var(--gray-100);background:{{ '#fff' if ok else '#FEF2F2' }};">
+          <td style="padding:9px 10px;">{{ label }}</td>
+          <td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;">{{ '{:,}'.format(exp) }}</td>
+          <td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;">
+            {{ '{:,}'.format(got) if got is not none else '—' }}</td>
+          <td style="padding:9px 10px;text-align:center;">{{ '✓' if ok else '✗' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:240px;background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.8rem;color:var(--gray-500);margin-bottom:8px;font-weight:700;">Rows loaded by year</div>
+      {% if years %}
+        {% for y in years %}
+        <div style="display:flex;justify-content:space-between;font-size:0.88rem;padding:3px 0;">
+          <span>{{ y.year }}</span><span style="font-variant-numeric:tabular-nums;">{{ '{:,}'.format(y.n) }}</span>
+        </div>
+        {% endfor %}
+      {% else %}<div style="font-size:0.85rem;color:var(--gray-400);">No rows found.</div>{% endif %}
+    </div>
+    <div style="flex:1;min-width:240px;background:white;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.8rem;color:var(--gray-500);margin-bottom:8px;font-weight:700;">Cut-off ↔ college master link</div>
+      <div style="font-size:1.6rem;font-weight:800;color:#16a34a;">{{ '{:,}'.format(db.linked or 0) }}</div>
+      <div style="font-size:0.82rem;color:var(--gray-500);">of {{ '{:,}'.format(db.institutes or 0) }} cut-off colleges resolve to a master profile</div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

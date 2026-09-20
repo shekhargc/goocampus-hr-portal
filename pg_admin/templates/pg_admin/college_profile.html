@@ -1,0 +1,189 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}{{ m.college_name }} · College Database{% endblock %}
+
+{% macro fact(label, value) %}
+  {% if value not in (None, '', 'None') %}
+  <div style="display:flex;justify-content:space-between;gap:0.75rem;font-size:0.82rem;">
+    <span style="color:var(--gray-500);">{{ label }}</span>
+    <span style="font-weight:600;color:var(--navy);text-align:right;">{{ value }}</span>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% block section_content %}
+<div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
+
+  <div style="margin-bottom:1rem;">
+    <a href="{{ url_for('pg_college_database_list') }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to College Database</a>
+  </div>
+
+  <!-- Hero -->
+  <div style="background:linear-gradient(135deg, var(--navy), var(--navy-light));border-radius:0.85rem 0.85rem 0 0;padding:2rem 2rem 1.5rem;color:white;">
+    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;flex-wrap:wrap;">
+      <span style="background:{{ 'rgba(59,130,246,.35)' if m.kind=='medical' else 'rgba(6,182,212,.35)' }};padding:3px 10px;border-radius:4px;font-size:0.72rem;font-weight:700;">
+        {{ 'MEDICAL COLLEGE' if m.kind=='medical' else 'DNB HOSPITAL' }}</span>
+      {% if m.college_type %}<span style="background:rgba(255,255,255,0.15);padding:3px 10px;border-radius:4px;font-size:0.72rem;font-weight:600;">{{ m.college_type }}</span>{% endif %}
+    </div>
+    <h1 style="margin:0 0 0.4rem 0;font-size:1.7rem;font-weight:800;line-height:1.2;">{{ m.college_name }}</h1>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:0.88rem;opacity:0.9;">
+      {% if m.city or m.state %}<span>📍 {{ m.city }}{% if m.city and m.state %}, {% endif %}{{ m.state }}</span>{% endif %}
+      {% if m.established_year %}<span>📅 Est. {{ m.established_year }}</span>{% endif %}
+      {% if m.university %}<span>🎓 {{ m.university }}</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- Also-known-as + quick info bar -->
+  <div style="background:white;border:1px solid var(--gray-200);border-top:none;padding:0.9rem 2rem;display:flex;gap:0.8rem;flex-wrap:wrap;align-items:center;">
+    {% if other_names %}
+    <span style="font-size:0.74rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.03em;">Also known as</span>
+    {% for n in other_names %}
+    <span style="font-size:0.8rem;font-weight:600;color:var(--navy);background:var(--orange-light);border:1px solid #fde3c4;padding:3px 10px;border-radius:9999px;">{{ n }}</span>
+    {% endfor %}
+    <span style="width:1px;height:18px;background:var(--gray-200);"></span>
+    {% endif %}
+    {% if m.accreditation %}<span style="font-size:0.8rem;font-weight:600;color:#166534;background:#dcfce7;padding:4px 10px;border-radius:4px;">{{ m.accreditation }}</span>{% endif %}
+    {% if m.official_website %}<a href="{{ m.official_website }}" target="_blank" rel="noopener" style="font-size:0.8rem;font-weight:600;color:var(--orange);text-decoration:none;">Website ↗</a>{% endif %}
+    <span style="font-size:0.8rem;font-weight:600;color:var(--gray-600);background:var(--gray-100);padding:4px 10px;border-radius:4px;">{{ courses|length }} course{{ '' if courses|length==1 else 's' }}</span>
+    <span style="font-size:0.8rem;font-weight:600;color:var(--gray-600);background:var(--gray-100);padding:4px 10px;border-radius:4px;">{{ cutoffs|length }} cut-off row{{ '' if cutoffs|length==1 else 's' }}</span>
+  </div>
+
+  <!-- Two column -->
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:1.25rem;margin-top:1.25rem;">
+
+    <!-- LEFT -->
+    <div>
+      <!-- Cut-off ranks & stipend -->
+      <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;margin-bottom:1.25rem;">
+        <div style="padding:1rem 1.5rem;background:linear-gradient(135deg, var(--navy), #2d4a7a);color:white;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <h2 style="font-size:1rem;font-weight:700;margin:0;">NEET-PG 2025 Cut-off Ranks</h2>
+            <p style="margin:0.2rem 0 0 0;font-size:0.78rem;opacity:0.8;">Closing ranks by course, category &amp; quota</p>
+          </div>
+        </div>
+        {% if cutoffs_by_course %}
+          {% for course, rows in cutoffs_by_course.items() %}
+          <div style="padding:0.9rem 1.5rem;border-bottom:1px solid var(--gray-100);">
+            <h3 style="font-size:0.86rem;font-weight:700;color:var(--navy);margin:0 0 0.6rem 0;">{{ course }}</h3>
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:0.8rem;white-space:nowrap;">
+                <thead><tr style="background:var(--gray-50);">
+                  {% for h in ['Category','Quota','Seat','R1','R2','R3','R4','Stray'] %}
+                  <th style="padding:0.45rem 0.55rem;text-align:{{ 'left' if h in ['Category','Quota','Seat'] else 'right' }};font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);">{{ h }}</th>
+                  {% endfor %}
+                </tr></thead>
+                <tbody>
+                  {% for c in rows %}
+                  <tr style="border-bottom:1px solid var(--gray-100);">
+                    <td style="padding:0.4rem 0.55rem;"><span style="background:var(--gray-100);padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;color:var(--gray-700);">{{ c.category }}</span></td>
+                    <td style="padding:0.4rem 0.55rem;color:var(--gray-600);">{{ c.quota }}</td>
+                    <td style="padding:0.4rem 0.55rem;color:var(--gray-600);">{{ c.seat_type }}</td>
+                    {% for v in [c.r1, c.r2, c.r3, c.r4, c.stray] %}
+                    <td style="padding:0.4rem 0.55rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:{{ 'var(--orange)' if v is not none else 'var(--gray-300)' }};">{{ '{:,}'.format(v) if v is not none else '—' }}</td>
+                    {% endfor %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+        <div style="padding:1.5rem;text-align:center;color:var(--gray-400);font-size:0.85rem;">No cut-off rows linked to this college.</div>
+        {% endif %}
+      </div>
+
+      <!-- Courses -->
+      <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;">
+        <div style="padding:1rem 1.5rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);">
+          <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0;">Courses ({{ courses|length }})</h2>
+        </div>
+        {% if courses %}
+        <div style="padding:0.5rem 1.5rem 1rem;overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+            <thead><tr style="background:var(--gray-50);">
+              {% for h in ['Course','Level','Stream','Seats','Duration','Entrance'] %}
+              <th style="padding:0.5rem;text-align:{{ 'right' if h=='Seats' else 'left' }};font-weight:700;color:var(--navy);font-size:0.7rem;text-transform:uppercase;border-bottom:2px solid var(--gray-200);">{{ h }}</th>
+              {% endfor %}
+            </tr></thead>
+            <tbody>
+              {% for c in courses %}
+              <tr style="border-bottom:1px solid var(--gray-100);">
+                <td style="padding:0.45rem 0.5rem;font-weight:600;color:var(--navy);">{{ c.course }}</td>
+                <td style="padding:0.45rem 0.5rem;color:var(--gray-600);">{{ c.course_level }}</td>
+                <td style="padding:0.45rem 0.5rem;color:var(--gray-600);">{{ c.course_stream }}</td>
+                <td style="padding:0.45rem 0.5rem;text-align:right;font-variant-numeric:tabular-nums;">{{ c.seat_intake }}</td>
+                <td style="padding:0.45rem 0.5rem;color:var(--gray-600);">{{ c.duration_years }}{% if c.duration_years %} yr{% endif %}</td>
+                <td style="padding:0.45rem 0.5rem;color:var(--gray-600);">{{ c.entrance_exams }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}<div style="padding:1.5rem;text-align:center;color:var(--gray-400);font-size:0.85rem;">No course rows.</div>{% endif %}
+      </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div>
+      <!-- Stipend / Bond / Penalty -->
+      {% if money %}
+      <div style="background:linear-gradient(135deg, var(--orange-light), #fff9f2);border:1px solid #fde3c4;border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
+        <h3 style="font-size:0.9rem;font-weight:700;color:var(--orange-dark);margin:0 0 0.8rem 0;">💰 Stipend · Bond · Penalty</h3>
+        <div style="display:flex;flex-direction:column;gap:0.6rem;">
+          {{ fact('Stipend Yr 1', '₹' ~ '{:,.0f}'.format(money.stipend) ~ '/mo' if money.stipend is defined and money.stipend is not none else '') }}
+          {{ fact('Stipend Yr 2', '₹' ~ '{:,.0f}'.format(money.stipend_yr2) ~ '/mo' if money.stipend_yr2 is defined and money.stipend_yr2 is not none else '') }}
+          {{ fact('Stipend Yr 3', '₹' ~ '{:,.0f}'.format(money.stipend_yr3) ~ '/mo' if money.stipend_yr3 is defined and money.stipend_yr3 is not none else '') }}
+          {{ fact('Bond', (money.bond_years|string) ~ ' year(s)' if money.bond_years is defined and money.bond_years is not none else '') }}
+          {{ fact('Bond penalty', '₹' ~ '{:,.0f}'.format(money.penalty) if money.penalty is defined and money.penalty is not none else '') }}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Quick Facts -->
+      <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
+        <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Quick Facts</h3>
+        <div style="display:flex;flex-direction:column;gap:0.65rem;">
+          {{ fact('University', m.university) }}
+          {{ fact('District', m.district) }}
+          {{ fact('State', m.state) }}
+          {{ fact('Country', m.country) }}
+          {{ fact('Type', m.college_type) }}
+          {{ fact('Accreditation', m.accreditation) }}
+          {{ fact('Stream', m.college_stream) }}
+          {{ fact('Established', m.established_year) }}
+        </div>
+      </div>
+
+      <!-- Facilities & fees -->
+      {% set has_fac = m.opd or m.ipd or m.bed_count or m.mess_fee_min or m.hostel_fee_min %}
+      {% if has_fac %}
+      <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
+        <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Facilities &amp; fees</h3>
+        <div style="display:flex;flex-direction:column;gap:0.65rem;">
+          {{ fact('OPD', m.opd) }}
+          {{ fact('IPD', m.ipd) }}
+          {{ fact('Bed count', m.bed_count) }}
+          {% if m.mess_fee_min or m.mess_fee_max %}{{ fact('Mess fee', (m.mess_fee_currency or '₹') ~ ' ' ~ ('{:,.0f}'.format(m.mess_fee_min) if m.mess_fee_min else '') ~ (' – ' ~ '{:,.0f}'.format(m.mess_fee_max) if m.mess_fee_max else '')) }}{% endif %}
+          {% if m.hostel_fee_min or m.hostel_fee_max %}{{ fact('Hostel fee', (m.hostel_fee_currency or '₹') ~ ' ' ~ ('{:,.0f}'.format(m.hostel_fee_min) if m.hostel_fee_min else '') ~ (' – ' ~ '{:,.0f}'.format(m.hostel_fee_max) if m.hostel_fee_max else '')) }}{% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Location & climate -->
+      {% set has_loc = m.nearest_airport or m.winter_min_temp or m.summer_max_temp or m.latitude %}
+      {% if has_loc %}
+      <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;">
+        <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Location &amp; climate</h3>
+        <div style="display:flex;flex-direction:column;gap:0.65rem;">
+          {{ fact('Nearest airport', m.nearest_airport) }}
+          {{ fact('Winter min', m.winter_min_temp) }}
+          {{ fact('Summer max', m.summer_max_temp) }}
+          {{ fact('Latitude', m.latitude) }}
+          {{ fact('Longitude', m.longitude) }}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

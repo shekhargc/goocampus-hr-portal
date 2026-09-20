@@ -14,9 +14,10 @@ import logging
 from jinja2 import ChoiceLoader, FileSystemLoader
 from pg_admin.data import tables as _tables
 from pg_admin.data import plans_tables as _plans_tables
+from pg_admin.data import college_master_tables as _college_master
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
-                             bookings_admin)
+                             bookings_admin, college_master_admin)
 
 
 def register_pg_admin(app):
@@ -32,7 +33,8 @@ def register_pg_admin(app):
                _tables.ensure_pg_bookings_table,
                _plans_tables.ensure_pg_plans_tables,
                _plans_tables.seed_pg_pricing_defaults,
-               _plans_tables.seed_pgcp_counselling_packages):
+               _plans_tables.seed_pgcp_counselling_packages,
+               _college_master.ensure_college_master_tables):
         try:
             fn()
         except Exception as e:
@@ -75,6 +77,26 @@ def register_pg_admin(app):
                      bookings_admin.bookings_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/bookings/<int:booking_id>/update', 'pg_booking_update',
                      bookings_admin.booking_update, methods=['POST'])
+
+    # ── College Master admin (unified Medical + DNB master; cut-off linker) ──
+    app.add_url_rule('/admin/pg/college-master', 'pg_college_master_admin',
+                     college_master_admin.college_master_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-master/upload-workbook', 'pg_college_master_upload_workbook',
+                     college_master_admin.college_master_upload_workbook, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-master/upload-matching', 'pg_college_master_upload_matching',
+                     college_master_admin.college_master_upload_matching, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-master/cutoff-audit', 'pg_college_master_cutoff_audit',
+                     college_master_admin.college_master_cutoff_audit, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-master/purge-blank-cutoffs', 'pg_college_master_purge_blank',
+                     college_master_admin.college_master_purge_blank, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-database', 'pg_college_database_list',
+                     college_master_admin.college_database_list, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-database/<int:master_id>', 'pg_college_profile',
+                     college_master_admin.college_profile, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-stipend', 'pg_college_stipend',
+                     college_master_admin.college_stipend, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-stipend/<int:master_id>', 'pg_college_stipend_detail',
+                     college_master_admin.college_stipend_detail, methods=['GET'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
