@@ -17,7 +17,7 @@ from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.data import college_master_tables as _college_master
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
-                             bookings_admin, college_master_admin)
+                             bookings_admin, college_master_admin, api_college)
 
 
 def register_pg_admin(app):
@@ -97,6 +97,18 @@ def register_pg_admin(app):
                      college_master_admin.college_stipend, methods=['GET'])
     app.add_url_rule('/admin/pg/college-stipend/<int:master_id>', 'pg_college_stipend_detail',
                      college_master_admin.college_stipend_detail, methods=['GET'])
+
+    # ── Public API for goocampus.in: PG College Database + Stipend (X-PG-Key) ──
+    app.add_url_rule('/api/pg/pg-colleges', 'api_pg_pg_colleges',
+                     api_college.api_pg_pg_colleges, methods=['GET'])
+    app.add_url_rule('/api/pg/pg-colleges/facets', 'api_pg_pg_colleges_facets',
+                     api_college.api_pg_pg_colleges_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/pg-colleges/<int:college_id>', 'api_pg_pg_college_detail',
+                     api_college.api_pg_pg_college_detail, methods=['GET'])
+    app.add_url_rule('/api/pg/stipend', 'api_pg_stipend',
+                     api_college.api_pg_stipend, methods=['GET'])
+    app.add_url_rule('/api/pg/stipend/<int:college_id>', 'api_pg_stipend_detail',
+                     api_college.api_pg_stipend_detail, methods=['GET'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
