@@ -38,7 +38,7 @@
       <option value="stipend_asc" {{ 'selected' if sort=='stipend_asc' else '' }}>Stipend: low → high</option>
       <option value="name" {{ 'selected' if sort=='name' else '' }}>College name (A–Z)</option>
     </select>
-    <span style="background:var(--navy);color:white;padding:0.45rem 1rem;border-radius:0.5rem;font-size:0.82rem;"><strong>{{ '{:,}'.format(total) }}</strong> colleges{% if total >= 600 %} (first 600){% endif %}</span>
+    <span style="background:var(--navy);color:white;padding:0.45rem 1rem;border-radius:0.5rem;font-size:0.82rem;"><strong>{{ '{:,}'.format(total) }}</strong> colleges</span>
   </form>
 
   <div style="background:white;border:1px solid var(--gray-200);border-radius:0.75rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
@@ -59,11 +59,11 @@
       </tr></thead>
       <tbody>
         {% for r in rows %}
-        <tr style="border-top:1px solid var(--gray-100);cursor:pointer;"
-            onclick="window.location='{{ url_for('pg_college_stipend_detail', master_id=r.id) }}?kind={{ kind }}'">
+        <tr style="border-top:1px solid var(--gray-100);{% if r.id %}cursor:pointer;{% endif %}"
+            {% if r.id %}onclick="window.location='{{ url_for('pg_college_stipend_detail', master_id=r.id) }}?kind={{ kind }}'"{% endif %}>
           <td style="padding:0.55rem 0.7rem;vertical-align:top;">
-            <span style="font-weight:600;color:var(--navy);">{{ r.college_name }}</span>
-            <span style="font-size:0.6rem;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:4px;white-space:nowrap;background:{{ '#dbeafe' if r.kind=='medical' else '#cffafe' }};color:{{ '#1e40af' if r.kind=='medical' else '#155e75' }};">{{ 'MD/MS' if r.kind=='medical' else 'DNB' }}</span>
+            <span style="font-weight:600;color:var(--navy);">{{ r.institute }}</span>
+            <span style="font-size:0.68rem;color:var(--gray-400);margin-left:4px;white-space:nowrap;">· {{ r.n_courses }} course{{ '' if r.n_courses==1 else 's' }}</span>
           </td>
           <td style="padding:0.55rem 0.7rem;color:var(--gray-600);vertical-align:top;">{{ r.state }}</td>
           <td style="padding:0.55rem 0.7rem;text-align:right;font-weight:700;color:var(--navy);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.s1_min, r.s1_max) }}</td>

@@ -49,6 +49,7 @@ _CUTOFF_FILE = {
     'name': 'GooCampus NEET PG 2025 - MASTER only.xlsx',
     'rows': 37666, 'institutes': 847, 'states': 33, 'courses': 99, 'year': '2025',
     'stipend': 37609, 'bond': 37189, 'penalty': 37609,
+    'med_institutes': 721, 'dnb_institutes': 154,   # by degree family (28 in both)
 }
 
 
@@ -360,6 +361,11 @@ def college_master_cutoff_audit():
         db['no_rank'] = one(f"SELECT COUNT(*) AS n FROM pg_cutoffs WHERE NOT {_rank}")
         db['is_reference'] = one("SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=1")
         db['institutes'] = one("SELECT COUNT(DISTINCT institute) AS n FROM pg_cutoffs WHERE COALESCE(institute,'') <> ''")
+        # Stipend section: distinct institutes by degree family (mirrors the two tabs).
+        db['med_institutes'] = one("SELECT COUNT(DISTINCT institute) AS n FROM pg_cutoffs "
+                                   "WHERE UPPER(COALESCE(degree,'')) NOT LIKE '%%DNB%%' AND COALESCE(institute,'') <> ''")
+        db['dnb_institutes'] = one("SELECT COUNT(DISTINCT institute) AS n FROM pg_cutoffs "
+                                   "WHERE UPPER(COALESCE(degree,'')) LIKE '%%DNB%%' AND COALESCE(institute,'') <> ''")
         # Of the blank-rank rows: how many carry stipend/bond/penalty, and how many
         # belong to a college that has NO ranked row anywhere (its data lives ONLY here).
         _money = ("(stipend IS NOT NULL OR stipend_yr2 IS NOT NULL OR stipend_yr3 IS NOT NULL "
@@ -399,6 +405,8 @@ def college_master_cutoff_audit():
         ('Distinct colleges',  _CUTOFF_FILE['institutes'], db.get('institutes')),
         ('Distinct states',    _CUTOFF_FILE['states'], db.get('states')),
         ('Distinct courses',   _CUTOFF_FILE['courses'], db.get('courses')),
+        ('Stipend — MD/MS colleges', _CUTOFF_FILE['med_institutes'], db.get('med_institutes')),
+        ('Stipend — DNB colleges',   _CUTOFF_FILE['dnb_institutes'], db.get('dnb_institutes')),
     ]
     # The real question: do the RANKED rows match the file? Extra blank-rank rows
     # (stipend/bond/penalty-only) are expected and explain any total-row gap.
@@ -586,7 +594,19 @@ def college_profile(master_id):
                            other_names=other_names, active_section='goocampus_in')
 
 
-# ── Stipend · Bond · Penalty section (one row per college; ranges when they vary) ──
+# ── Stipend · Bond · Penalty section ─────────────────────────────────────────
+# Driven DIRECTLY by the cut-off data (pg_cutoffs), split by DEGREE family so it
+# mirrors the Excel exactly: MD/MS side = degrees without 'DNB' (MD/MS/PG-Diploma/
+# MCh/MPH); DNB side = degrees containing 'DNB' (DNB/DNB-Diploma). A college with
+# both (e.g. a medical college with DNB-quota seats) shows in both tabs, each with
+# only that family's courses.
+def _stipend_family(kind):
+    """Return (deg_sql_clause, deg_param) for the degree family filter."""
+    if kind == 'dnb':
+        return "UPPER(COALESCE(c.degree,'')) LIKE ?", '%DNB%'
+    return "UPPER(COALESCE(c.degree,'')) NOT LIKE ?", '%DNB%'
+
+
 @login_required
 def college_stipend():
     u = _require_admin()
@@ -599,31 +619,33 @@ def college_stipend():
     sort = _s(request.args.get('sort')) or 'stipend_desc'
     order = {'stipend_desc': 's1_max DESC NULLS LAST',
              'stipend_asc': 's1_max ASC NULLS LAST',
-             'name': 'college_name ASC'}.get(sort, 's1_max DESC NULLS LAST')
+             'name': 'institute ASC'}.get(sort, 's1_max DESC NULLS LAST')
+    deg_clause, deg_param = _stipend_family(kind)
     conn = get_db()
     rows, states, total = [], [], 0
     try:
-        where, params = ["m.kind = ?"], [kind]
+        where = [deg_clause,
+                 "(c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL)"]
+        params = [deg_param]
         if state:
-            where.append("m.state = ?"); params.append(state)
-        wsql = ' AND ' + ' AND '.join(where)
+            where.append("c.state = ?"); params.append(state)
         base = (
-            "SELECT a.master_id AS id, m.college_name, m.kind, m.state, m.college_type, "
+            "SELECT c.institute AS institute, MAX(c.state) AS state, "
             "MIN(c.stipend) AS s1_min, MAX(c.stipend) AS s1_max, "
             "MIN(c.stipend_yr2) AS s2_min, MAX(c.stipend_yr2) AS s2_max, "
             "MIN(c.stipend_yr3) AS s3_min, MAX(c.stipend_yr3) AS s3_max, "
             "MIN(c.bond_years) AS b_min, MAX(c.bond_years) AS b_max, "
-            "MIN(c.penalty) AS p_min, MAX(c.penalty) AS p_max "
+            "MIN(c.penalty) AS p_min, MAX(c.penalty) AS p_max, "
+            "COUNT(DISTINCT c.course) AS n_courses, "
+            "MAX(a.master_id) AS id "
             "FROM pg_cutoffs c "
-            "JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g')) "
-            "JOIN pg_college_master m ON m.id = a.master_id "
-            "WHERE (c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL)" + wsql +
-            " GROUP BY a.master_id, m.college_name, m.kind, m.state, m.college_type "
-            "ORDER BY " + order + " LIMIT 600")
+            "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g')) "
+            "WHERE " + " AND ".join(where) +
+            " GROUP BY c.institute ORDER BY " + order)
         rows = conn.execute(base, params).fetchall()
         total = len(rows)
         states = [r['state'] for r in conn.execute(
-            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+            "SELECT DISTINCT state FROM pg_cutoffs WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
     finally:
         conn.close()
     return render_template('pg_admin/college_stipend.html', rows=rows, total=total,
@@ -633,30 +655,33 @@ def college_stipend():
 
 @login_required
 def college_stipend_detail(master_id):
-    """Per-speciality stipend/bond/penalty for one college (constant within a course)."""
+    """Per-speciality stipend/bond/penalty for one college, for ONE degree family."""
     u = _require_admin()
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
-    back_kind = _s(request.args.get('kind')) or 'medical'
+    kind = _s(request.args.get('kind'))
+    if kind not in ('medical', 'dnb'):
+        kind = 'medical'
+    deg_clause, deg_param = _stipend_family(kind)
     conn = get_db()
     try:
         m = conn.execute("SELECT * FROM pg_college_master WHERE id = ?", [master_id]).fetchone()
         if not m:
             flash('College not found', 'error')
-            return redirect(url_for('pg_college_stipend'))
+            return redirect(url_for('pg_college_stipend', kind=kind))
         names = [a['alias_name'] for a in conn.execute(
             "SELECT alias_name FROM pg_college_alias WHERE master_id = ?", [master_id]).fetchall()]
         specialities = []
         if names:
             ph = ','.join(['?'] * len(names))
             specialities = conn.execute(
-                f"SELECT course, MAX(stipend) AS s1, MAX(stipend_yr2) AS s2, MAX(stipend_yr3) AS s3, "
-                f"MAX(bond_years) AS bond, MAX(penalty) AS penalty "
-                f"FROM pg_cutoffs WHERE institute IN ({ph}) "
-                f"AND (stipend IS NOT NULL OR bond_years IS NOT NULL OR penalty IS NOT NULL) "
-                f"GROUP BY course ORDER BY course", names).fetchall()
+                f"SELECT c.course AS course, MAX(c.degree) AS degree, "
+                f"MAX(c.stipend) AS s1, MAX(c.stipend_yr2) AS s2, MAX(c.stipend_yr3) AS s3, "
+                f"MAX(c.bond_years) AS bond, MAX(c.penalty) AS penalty "
+                f"FROM pg_cutoffs c WHERE c.institute IN ({ph}) AND " + deg_clause +
+                " GROUP BY c.course ORDER BY c.course", names + [deg_param]).fetchall()
     finally:
         conn.close()
     return render_template('pg_admin/college_stipend_detail.html', m=m,
-                           specialities=specialities, back_kind=back_kind,
+                           specialities=specialities, back_kind=kind, kind=kind,
                            active_section='goocampus_in')
