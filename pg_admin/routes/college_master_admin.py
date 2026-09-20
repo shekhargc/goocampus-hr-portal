@@ -607,6 +607,9 @@ def _stipend_family(kind):
     return "UPPER(COALESCE(c.degree,'')) NOT LIKE ?", '%DNB%'
 
 
+_STIPEND_PER_PAGE = 100
+
+
 @login_required
 def college_stipend():
     u = _require_admin()
@@ -616,41 +619,60 @@ def college_stipend():
     if kind not in ('medical', 'dnb'):
         kind = 'medical'                    # always one of the two tabs (no "all")
     state = _s(request.args.get('state'))
-    sort = _s(request.args.get('sort')) or 'stipend_desc'
-    order = {'stipend_desc': 's1_max DESC NULLS LAST',
-             'stipend_asc': 's1_max ASC NULLS LAST',
-             'name': 'institute ASC'}.get(sort, 's1_max DESC NULLS LAST')
+    q = _s(request.args.get('q'))
+    sort = _s(request.args.get('sort')) or 'name'
+    order = {'name': 'college_name ASC',
+             'stipend_desc': 's1_max DESC NULLS LAST, college_name ASC',
+             'stipend_asc': 's1_max ASC NULLS LAST, college_name ASC'}.get(sort, 'college_name ASC')
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except Exception:
+        page = 1
     deg_clause, deg_param = _stipend_family(kind)
     conn = get_db()
-    rows, states, total = [], [], 0
+    rows, states, total, all_names = [], [], 0, []
     try:
+        # Grouped by the MASTER college so the name is the SAME canonical name shown
+        # everywhere (College Database + Stipend); driven by cut-off degree family.
         where = [deg_clause,
                  "(c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL)"]
         params = [deg_param]
         if state:
-            where.append("c.state = ?"); params.append(state)
-        base = (
-            "SELECT c.institute AS institute, MAX(c.state) AS state, "
+            where.append("m.state = ?"); params.append(state)
+        if q:
+            where.append("m.college_name ILIKE ?"); params.append('%' + q + '%')
+        frm = (" FROM pg_cutoffs c "
+               "JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g')) "
+               "JOIN pg_college_master m ON m.id = a.master_id "
+               "WHERE " + " AND ".join(where) +
+               " GROUP BY m.id, m.college_name, m.state, m.kind")
+        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT m.id" + frm + ") t", params).fetchone()['n']
+        offset = (page - 1) * _STIPEND_PER_PAGE
+        rows = conn.execute(
+            "SELECT m.id AS id, m.college_name AS name, m.state AS state, m.kind AS kind, "
             "MIN(c.stipend) AS s1_min, MAX(c.stipend) AS s1_max, "
             "MIN(c.stipend_yr2) AS s2_min, MAX(c.stipend_yr2) AS s2_max, "
             "MIN(c.stipend_yr3) AS s3_min, MAX(c.stipend_yr3) AS s3_max, "
             "MIN(c.bond_years) AS b_min, MAX(c.bond_years) AS b_max, "
             "MIN(c.penalty) AS p_min, MAX(c.penalty) AS p_max, "
-            "COUNT(DISTINCT c.course) AS n_courses, "
-            "MAX(a.master_id) AS id "
-            "FROM pg_cutoffs c "
-            "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g')) "
-            "WHERE " + " AND ".join(where) +
-            " GROUP BY c.institute ORDER BY " + order)
-        rows = conn.execute(base, params).fetchall()
-        total = len(rows)
+            "COUNT(DISTINCT c.course) AS n_courses" + frm +
+            " ORDER BY " + order + " LIMIT ? OFFSET ?", params + [_STIPEND_PER_PAGE, offset]).fetchall()
         states = [r['state'] for r in conn.execute(
-            "SELECT DISTINCT state FROM pg_cutoffs WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+        # autocomplete names for THIS family (with stipend data), ignoring paging/filters
+        all_names = [r['college_name'] for r in conn.execute(
+            "SELECT DISTINCT m.college_name FROM pg_cutoffs c "
+            "JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g')) "
+            "JOIN pg_college_master m ON m.id = a.master_id "
+            "WHERE " + deg_clause + " AND (c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL) "
+            "ORDER BY m.college_name", [deg_param]).fetchall()]
     finally:
         conn.close()
+    pages = max(1, (total + _STIPEND_PER_PAGE - 1) // _STIPEND_PER_PAGE)
     return render_template('pg_admin/college_stipend.html', rows=rows, total=total,
-                           states=states, kind=kind, state=state, sort=sort,
-                           active_section='goocampus_in')
+                           states=states, kind=kind, state=state, sort=sort, q=q,
+                           page=page, pages=pages, per_page=_STIPEND_PER_PAGE,
+                           all_names=all_names, active_section='goocampus_in')
 
 
 @login_required
@@ -679,6 +701,7 @@ def college_stipend_detail(master_id):
                 f"MAX(c.stipend) AS s1, MAX(c.stipend_yr2) AS s2, MAX(c.stipend_yr3) AS s3, "
                 f"MAX(c.bond_years) AS bond, MAX(c.penalty) AS penalty "
                 f"FROM pg_cutoffs c WHERE c.institute IN ({ph}) AND " + deg_clause +
+                " AND (c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL) "
                 " GROUP BY c.course ORDER BY c.course", names + [deg_param]).fetchall()
     finally:
         conn.close()

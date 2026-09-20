@@ -20,24 +20,31 @@
   <!-- Two tabs: MD/MS vs DNB -->
   <div style="display:flex;gap:0;margin-bottom:1rem;border-bottom:2px solid var(--gray-200);flex-wrap:wrap;">
     {% for val, label in [('medical', 'MD / MS — Medical Colleges'), ('dnb', 'DNB — Hospitals')] %}
-    <a href="{{ url_for('pg_college_stipend') }}?kind={{ val }}{% if state %}&state={{ state }}{% endif %}&sort={{ sort }}"
+    <a href="{{ url_for('pg_college_stipend') }}?kind={{ val }}&sort={{ sort }}"
        style="padding:0.65rem 1.3rem;font-weight:{{ '700' if kind==val else '500' }};font-size:0.88rem;text-decoration:none;color:{{ 'var(--orange)' if kind==val else 'var(--gray-500)' }};border-bottom:{{ '3px solid var(--orange)' if kind==val else 'none' }};margin-bottom:-2px;">
       {{ label }}</a>
     {% endfor %}
   </div>
 
   <!-- Filters -->
-  <form method="GET" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+  <form method="GET" id="stipendForm" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
     <input type="hidden" name="kind" value="{{ kind }}">
-    <select name="state" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;min-width:150px;">
+    <div style="position:relative;flex:1;min-width:240px;">
+      <input type="text" name="q" id="stipendSearch" value="{{ q }}" placeholder="Search college by name…" autocomplete="off"
+             style="width:100%;padding:0.55rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+      <div id="stipendSuggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 0.4rem 0.4rem;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+    </div>
+    <select name="state" onchange="this.form.submit()" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;min-width:150px;">
       <option value="">All states</option>
       {% for s in states %}<option value="{{ s }}" {{ 'selected' if state==s else '' }}>{{ s }}</option>{% endfor %}
     </select>
-    <select name="sort" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+    <select name="sort" onchange="this.form.submit()" style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+      <option value="name" {{ 'selected' if sort=='name' else '' }}>College name (A–Z)</option>
       <option value="stipend_desc" {{ 'selected' if sort=='stipend_desc' else '' }}>Stipend: high → low</option>
       <option value="stipend_asc" {{ 'selected' if sort=='stipend_asc' else '' }}>Stipend: low → high</option>
-      <option value="name" {{ 'selected' if sort=='name' else '' }}>College name (A–Z)</option>
     </select>
+    <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
+    {% if q or state %}<a href="{{ url_for('pg_college_stipend') }}?kind={{ kind }}&sort={{ sort }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset</a>{% endif %}
     <span style="background:var(--navy);color:white;padding:0.45rem 1rem;border-radius:0.5rem;font-size:0.82rem;"><strong>{{ '{:,}'.format(total) }}</strong> colleges</span>
   </form>
 
@@ -78,6 +85,40 @@
       </tbody>
     </table>
   </div>
+  {% if pages > 1 %}
+  {% set base = url_for('pg_college_stipend') ~ '?kind=' ~ kind ~ '&sort=' ~ sort ~ ('&state=' ~ state if state else '') ~ ('&q=' ~ q if q else '') %}
+  <div style="display:flex;justify-content:center;align-items:center;gap:0.4rem;margin-top:1.2rem;flex-wrap:wrap;">
+    {% if page > 1 %}<a href="{{ base }}&page={{ page-1 }}" style="padding:0.4rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--navy);font-size:0.82rem;">← Prev</a>{% endif %}
+    <span style="font-size:0.82rem;color:var(--gray-500);">Page {{ page }} of {{ pages }} · showing {{ rows|length }} of {{ '{:,}'.format(total) }}</span>
+    {% if page < pages %}<a href="{{ base }}&page={{ page+1 }}" style="padding:0.4rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;text-decoration:none;color:var(--navy);font-size:0.82rem;">Next →</a>{% endif %}
+  </div>
+  {% endif %}
   <p style="margin:0.8rem 0 0;font-size:0.78rem;color:var(--gray-400);">Click any row to see that college's <b>per-speciality</b> stipend/bond/penalty. A two-line value (e.g. ₹85,000 / – ₹1,10,000) is the min–max across the college's specialities.</p>
 </div>
+
+<script>
+(function() {
+  var allNames = {{ all_names | tojson }};
+  var input = document.getElementById('stipendSearch');
+  var box = document.getElementById('stipendSuggest');
+  if (input && box) {
+    input.addEventListener('input', function() {
+      var val = this.value.toLowerCase().trim(); box.innerHTML = '';
+      if (val.length < 1) { box.style.display = 'none'; return; }
+      var matches = allNames.filter(function(n){ return n.toLowerCase().indexOf(val) !== -1; }).slice(0, 10);
+      if (!matches.length) { box.style.display = 'none'; return; }
+      matches.forEach(function(m){
+        var d = document.createElement('div'); d.textContent = m;
+        d.style.cssText = 'padding:0.45rem 0.75rem;font-size:0.83rem;cursor:pointer;border-bottom:1px solid #f3f4f6;';
+        d.onmouseover = function(){ this.style.background = '#f9fafb'; };
+        d.onmouseout = function(){ this.style.background = 'white'; };
+        d.onclick = function(){ input.value = m; box.style.display = 'none'; document.getElementById('stipendForm').submit(); };
+        box.appendChild(d);
+      });
+      box.style.display = 'block';
+    });
+    input.addEventListener('blur', function(){ setTimeout(function(){ box.style.display = 'none'; }, 200); });
+  }
+})();
+</script>
 {% endblock %}
