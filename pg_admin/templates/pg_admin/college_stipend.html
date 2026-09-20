@@ -17,13 +17,18 @@
     <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Monthly stipend, service bond and mid-way penalty per college (NEET-PG 2025 · MD/MS &amp; DNB). A range is shown where it differs across a college's courses.</p>
   </div>
 
+  <!-- Two tabs: MD/MS vs DNB -->
+  <div style="display:flex;gap:0;margin-bottom:1rem;border-bottom:2px solid var(--gray-200);flex-wrap:wrap;">
+    {% for val, label in [('medical', 'MD / MS — Medical Colleges'), ('dnb', 'DNB — Hospitals')] %}
+    <a href="{{ url_for('pg_college_stipend') }}?kind={{ val }}{% if state %}&state={{ state }}{% endif %}&sort={{ sort }}"
+       style="padding:0.65rem 1.3rem;font-weight:{{ '700' if kind==val else '500' }};font-size:0.88rem;text-decoration:none;color:{{ 'var(--orange)' if kind==val else 'var(--gray-500)' }};border-bottom:{{ '3px solid var(--orange)' if kind==val else 'none' }};margin-bottom:-2px;">
+      {{ label }}</a>
+    {% endfor %}
+  </div>
+
   <!-- Filters -->
   <form method="GET" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
-    <select name="kind" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
-      <option value="" {{ 'selected' if not kind else '' }}>MD/MS &amp; DNB (all)</option>
-      <option value="medical" {{ 'selected' if kind=='medical' else '' }}>MD / MS (Medical colleges)</option>
-      <option value="dnb" {{ 'selected' if kind=='dnb' else '' }}>DNB (hospitals)</option>
-    </select>
+    <input type="hidden" name="kind" value="{{ kind }}">
     <select name="state" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;min-width:150px;">
       <option value="">All states</option>
       {% for s in states %}<option value="{{ s }}" {{ 'selected' if state==s else '' }}>{{ s }}</option>{% endfor %}
@@ -55,7 +60,7 @@
       <tbody>
         {% for r in rows %}
         <tr style="border-top:1px solid var(--gray-100);cursor:pointer;"
-            onclick="window.location='{{ url_for('pg_college_profile', master_id=r.id) }}'">
+            onclick="window.location='{{ url_for('pg_college_stipend_detail', master_id=r.id) }}?kind={{ kind }}'">
           <td style="padding:0.55rem 0.7rem;vertical-align:top;">
             <span style="font-weight:600;color:var(--navy);">{{ r.college_name }}</span>
             <span style="font-size:0.6rem;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:4px;white-space:nowrap;background:{{ '#dbeafe' if r.kind=='medical' else '#cffafe' }};color:{{ '#1e40af' if r.kind=='medical' else '#155e75' }};">{{ 'MD/MS' if r.kind=='medical' else 'DNB' }}</span>
@@ -73,6 +78,6 @@
       </tbody>
     </table>
   </div>
-  <p style="margin:0.8rem 0 0;font-size:0.78rem;color:var(--gray-400);">Click any row to open the college profile. A two-line value (e.g. ₹85,000 / – ₹1,10,000) means the figure differs across that college's courses. Stipend/bond/penalty exist only for MD/MS &amp; DNB, so those are the only colleges listed.</p>
+  <p style="margin:0.8rem 0 0;font-size:0.78rem;color:var(--gray-400);">Click any row to see that college's <b>per-speciality</b> stipend/bond/penalty. A two-line value (e.g. ₹85,000 / – ₹1,10,000) is the min–max across the college's specialities.</p>
 </div>
 {% endblock %}

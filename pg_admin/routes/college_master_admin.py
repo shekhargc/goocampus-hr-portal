@@ -592,7 +592,9 @@ def college_stipend():
     u = _require_admin()
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
-    kind = _s(request.args.get('kind'))   # '' | medical (MD/MS) | dnb
+    kind = _s(request.args.get('kind'))
+    if kind not in ('medical', 'dnb'):
+        kind = 'medical'                    # always one of the two tabs (no "all")
     state = _s(request.args.get('state'))
     sort = _s(request.args.get('sort')) or 'stipend_desc'
     order = {'stipend_desc': 's1_max DESC NULLS LAST',
@@ -601,12 +603,10 @@ def college_stipend():
     conn = get_db()
     rows, states, total = [], [], 0
     try:
-        where, params = [], []
+        where, params = ["m.kind = ?"], [kind]
         if state:
             where.append("m.state = ?"); params.append(state)
-        if kind in ('medical', 'dnb'):
-            where.append("m.kind = ?"); params.append(kind)
-        wsql = (' AND ' + ' AND '.join(where)) if where else ''
+        wsql = ' AND ' + ' AND '.join(where)
         base = (
             "SELECT a.master_id AS id, m.college_name, m.kind, m.state, m.college_type, "
             "MIN(c.stipend) AS s1_min, MAX(c.stipend) AS s1_max, "
@@ -628,4 +628,35 @@ def college_stipend():
         conn.close()
     return render_template('pg_admin/college_stipend.html', rows=rows, total=total,
                            states=states, kind=kind, state=state, sort=sort,
+                           active_section='goocampus_in')
+
+
+@login_required
+def college_stipend_detail(master_id):
+    """Per-speciality stipend/bond/penalty for one college (constant within a course)."""
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    back_kind = _s(request.args.get('kind')) or 'medical'
+    conn = get_db()
+    try:
+        m = conn.execute("SELECT * FROM pg_college_master WHERE id = ?", [master_id]).fetchone()
+        if not m:
+            flash('College not found', 'error')
+            return redirect(url_for('pg_college_stipend'))
+        names = [a['alias_name'] for a in conn.execute(
+            "SELECT alias_name FROM pg_college_alias WHERE master_id = ?", [master_id]).fetchall()]
+        specialities = []
+        if names:
+            ph = ','.join(['?'] * len(names))
+            specialities = conn.execute(
+                f"SELECT course, MAX(stipend) AS s1, MAX(stipend_yr2) AS s2, MAX(stipend_yr3) AS s3, "
+                f"MAX(bond_years) AS bond, MAX(penalty) AS penalty "
+                f"FROM pg_cutoffs WHERE institute IN ({ph}) "
+                f"AND (stipend IS NOT NULL OR bond_years IS NOT NULL OR penalty IS NOT NULL) "
+                f"GROUP BY course ORDER BY course", names).fetchall()
+    finally:
+        conn.close()
+    return render_template('pg_admin/college_stipend_detail.html', m=m,
+                           specialities=specialities, back_kind=back_kind,
                            active_section='goocampus_in')
