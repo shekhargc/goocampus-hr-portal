@@ -1,0 +1,257 @@
+"""Public API for the unified PG College Database + Stipend/Bond/Penalty
+(founder 2026-09-20). Read-only, X-PG-Key guarded, consumed by goocampus.in.
+
+Backed by pg_college_master / pg_college_course / pg_college_alias (the college
+DB) + pg_cutoffs (predictor + stipend). Mirrors the goocampus.org admin screens:
+  GET /api/pg/pg-colleges                list + filters + pagination
+  GET /api/pg/pg-colleges/facets         states + course-level tab counts
+  GET /api/pg/pg-colleges/<id>           full college profile
+  GET /api/pg/stipend                    stipend list (family=medical|dnb)
+  GET /api/pg/stipend/<id>               per-speciality stipend detail
+"""
+import logging
+from flask import request, jsonify
+from db import get_db
+from pg_admin.routes.api import _authorized
+
+_PER_PAGE = 100
+_CAT_LABELS = [('mbbs', 'MBBS (UG)'), ('mdms', 'MD / MS'),
+               ('super', 'Super Speciality'), ('diploma', 'Diploma'), ('dnb', 'DNB')]
+_CAT_KEYS = [k for k, _l in _CAT_LABELS]
+_NORM = "btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
+
+
+def _page():
+    try:
+        return max(1, int(request.args.get('page', 1)))
+    except Exception:
+        return 1
+
+
+def _fam(family):
+    """(degree-clause, param) for the stipend degree family."""
+    if family == 'dnb':
+        return "UPPER(COALESCE(c.degree,'')) LIKE ?", '%DNB%'
+    return "UPPER(COALESCE(c.degree,'')) NOT LIKE ?", '%DNB%'
+
+
+def _num(v):
+    return float(v) if v is not None else None
+
+
+# ── College Database ─────────────────────────────────────────────────────────
+def api_pg_pg_colleges():
+    """GET /api/pg/pg-colleges?cat=&state=&q=&page="""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    cat = (request.args.get('cat') or '').strip()
+    state = (request.args.get('state') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    page = _page()
+    conn = get_db()
+    try:
+        where, params = ["1=1"], []
+        if q:
+            where.append("m.college_name ILIKE ?"); params.append('%' + q + '%')
+        if cat in _CAT_KEYS:
+            where.append("EXISTS (SELECT 1 FROM pg_college_course cc "
+                         "WHERE cc.master_id = m.id AND cc.course_category = ?)")
+            params.append(cat)
+        if state:
+            where.append("m.state = ?"); params.append(state)
+        wsql = " WHERE " + " AND ".join(where)
+        total = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master m" + wsql,
+                             params).fetchone()['n']
+        offset = (page - 1) * _PER_PAGE
+        rows = conn.execute(
+            "SELECT m.id, m.college_name, m.kind, m.city, m.state, m.college_type, m.logo_url, "
+            "(SELECT COUNT(*) FROM pg_college_course c WHERE c.master_id = m.id) AS n_courses "
+            "FROM pg_college_master m" + wsql +
+            " ORDER BY m.college_name LIMIT ? OFFSET ?", params + [_PER_PAGE, offset]).fetchall()
+        ids = [r['id'] for r in rows]
+        cats = {}
+        if ids:
+            ph = ','.join(['?'] * len(ids))
+            order = {k: i for i, (k, _l) in enumerate(_CAT_LABELS)}
+            for r in conn.execute(f"SELECT DISTINCT master_id, course_category FROM pg_college_course "
+                                  f"WHERE master_id IN ({ph})", ids).fetchall():
+                cats.setdefault(r['master_id'], set()).add(r['course_category'])
+            cats = {k: sorted([c for c in v if c in order], key=lambda c: order[c])
+                    for k, v in cats.items()}
+        colleges = [{
+            'id': r['id'], 'name': r['college_name'], 'kind': r['kind'],
+            'city': r['city'], 'state': r['state'], 'college_type': r['college_type'],
+            'logo_url': r['logo_url'], 'n_courses': r['n_courses'],
+            'categories': cats.get(r['id'], []),
+        } for r in rows]
+    except Exception as e:
+        logging.error("api_pg_pg_colleges: %s", e)
+        conn.close()
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+    pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
+    return jsonify({'ok': True, 'colleges': colleges, 'count': len(colleges),
+                    'total': total, 'page': page, 'pages': pages, 'per_page': _PER_PAGE})
+
+
+def api_pg_pg_colleges_facets():
+    """GET /api/pg/pg-colleges/facets → states + course-level tab counts."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    out = {'ok': True, 'states': [], 'categories': [], 'total': 0}
+    try:
+        out['states'] = [r['state'] for r in conn.execute(
+            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+        counts = {r['course_category']: r['n'] for r in conn.execute(
+            "SELECT course_category, COUNT(DISTINCT master_id) AS n FROM pg_college_course "
+            "GROUP BY course_category").fetchall()}
+        out['categories'] = [{'key': k, 'label': lbl, 'count': counts.get(k, 0)} for k, lbl in _CAT_LABELS]
+        out['total'] = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master").fetchone()['n']
+    except Exception as e:
+        logging.error("api_pg_pg_colleges_facets: %s", e)
+    finally:
+        conn.close()
+    return jsonify(out)
+
+
+def api_pg_pg_college_detail(college_id):
+    """GET /api/pg/pg-colleges/<id> → full profile + courses + cut-offs + stipend."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        m = conn.execute("SELECT * FROM pg_college_master WHERE id = ?", [college_id]).fetchone()
+        if not m:
+            conn.close()
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        college = dict(m)
+        courses = [dict(r) for r in conn.execute(
+            "SELECT course, course_level, course_stream, seat_intake, exam_type, entrance_exams, "
+            "entrance_exam_eligibility, academic_eligibility, duration_years, duration_months, course_category "
+            "FROM pg_college_course WHERE master_id = ? ORDER BY course", [college_id]).fetchall()]
+        aliases = [r['alias_name'] for r in conn.execute(
+            "SELECT alias_name FROM pg_college_alias WHERE master_id = ? ORDER BY alias_name",
+            [college_id]).fetchall()]
+        names = [r['alias_name'] for r in conn.execute(
+            "SELECT alias_name FROM pg_college_alias WHERE master_id = ?", [college_id]).fetchall()]
+        cutoffs, stipend = [], []
+        if names:
+            ph = ','.join(['?'] * len(names))
+            cutoffs = [dict(r) for r in conn.execute(
+                f"SELECT course, category, quota, seat_type, r1, r2, r3, r4, stray, closing_rank, degree "
+                f"FROM pg_cutoffs WHERE institute IN ({ph}) ORDER BY course, category, quota",
+                names).fetchall()]
+            stipend = [dict(r) for r in conn.execute(
+                f"SELECT c.course AS course, MAX(c.degree) AS degree, MAX(c.stipend) AS stipend_yr1, "
+                f"MAX(c.stipend_yr2) AS stipend_yr2, MAX(c.stipend_yr3) AS stipend_yr3, "
+                f"MAX(c.bond_years) AS bond_years, MAX(c.penalty) AS penalty "
+                f"FROM pg_cutoffs c WHERE c.institute IN ({ph}) "
+                f"AND (c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL) "
+                f"GROUP BY c.course ORDER BY c.course", names).fetchall()]
+    except Exception as e:
+        logging.error("api_pg_pg_college_detail: %s", e)
+        conn.close()
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return jsonify({'ok': True, 'college': college, 'courses': courses,
+                    'cutoffs': cutoffs, 'stipend': stipend, 'aliases': aliases})
+
+
+# ── Stipend · Bond · Penalty ─────────────────────────────────────────────────
+def api_pg_stipend():
+    """GET /api/pg/stipend?family=medical|dnb&state=&q=&page= → one row per college
+    with min–max stipend/bond/penalty across its specialities."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    family = (request.args.get('family') or 'medical').strip()
+    if family not in ('medical', 'dnb'):
+        family = 'medical'
+    state = (request.args.get('state') or '').strip()
+    q = (request.args.get('q') or '').strip()
+    page = _page()
+    deg_clause, deg_param = _fam(family)
+    conn = get_db()
+    try:
+        where = [deg_clause,
+                 "(c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL)"]
+        params = [deg_param]
+        if state:
+            where.append("c.state = ?"); params.append(state)
+        if q:
+            where.append("c.institute ILIKE ?"); params.append('%' + q + '%')
+        wsql = " WHERE " + " AND ".join(where)
+        total = conn.execute("SELECT COUNT(DISTINCT c.institute) AS n FROM pg_cutoffs c" + wsql,
+                             params).fetchone()['n']
+        offset = (page - 1) * _PER_PAGE
+        rows = conn.execute(
+            "SELECT c.institute AS institute, MAX(c.state) AS state, "
+            "MIN(c.stipend) AS s1_min, MAX(c.stipend) AS s1_max, "
+            "MIN(c.stipend_yr2) AS s2_min, MAX(c.stipend_yr2) AS s2_max, "
+            "MIN(c.stipend_yr3) AS s3_min, MAX(c.stipend_yr3) AS s3_max, "
+            "MIN(c.bond_years) AS b_min, MAX(c.bond_years) AS b_max, "
+            "MIN(c.penalty) AS p_min, MAX(c.penalty) AS p_max, "
+            "COUNT(DISTINCT c.course) AS n_courses, MAX(a.master_id) AS id "
+            "FROM pg_cutoffs c "
+            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORM}"
+            + wsql + " GROUP BY c.institute ORDER BY c.institute LIMIT ? OFFSET ?",
+            params + [_PER_PAGE, offset]).fetchall()
+        colleges = [{
+            'id': r['id'], 'name': r['institute'], 'state': r['state'], 'n_courses': r['n_courses'],
+            'stipend_yr1': [_num(r['s1_min']), _num(r['s1_max'])],
+            'stipend_yr2': [_num(r['s2_min']), _num(r['s2_max'])],
+            'stipend_yr3': [_num(r['s3_min']), _num(r['s3_max'])],
+            'bond_years': [_num(r['b_min']), _num(r['b_max'])],
+            'penalty': [_num(r['p_min']), _num(r['p_max'])],
+        } for r in rows]
+    except Exception as e:
+        logging.error("api_pg_stipend: %s", e)
+        conn.close()
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+    pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
+    return jsonify({'ok': True, 'family': family, 'colleges': colleges, 'count': len(colleges),
+                    'total': total, 'page': page, 'pages': pages, 'per_page': _PER_PAGE})
+
+
+def api_pg_stipend_detail(college_id):
+    """GET /api/pg/stipend/<master_id>?family=medical|dnb → per-speciality figures."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    family = (request.args.get('family') or 'medical').strip()
+    if family not in ('medical', 'dnb'):
+        family = 'medical'
+    deg_clause, deg_param = _fam(family)
+    conn = get_db()
+    try:
+        m = conn.execute("SELECT id, college_name, kind, city, state FROM pg_college_master "
+                         "WHERE id = ?", [college_id]).fetchone()
+        if not m:
+            conn.close()
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        names = [r['alias_name'] for r in conn.execute(
+            "SELECT alias_name FROM pg_college_alias WHERE master_id = ?", [college_id]).fetchall()]
+        specialities = []
+        if names:
+            ph = ','.join(['?'] * len(names))
+            specialities = [dict(r) for r in conn.execute(
+                f"SELECT c.course AS course, MAX(c.degree) AS degree, MAX(c.stipend) AS stipend_yr1, "
+                f"MAX(c.stipend_yr2) AS stipend_yr2, MAX(c.stipend_yr3) AS stipend_yr3, "
+                f"MAX(c.bond_years) AS bond_years, MAX(c.penalty) AS penalty "
+                f"FROM pg_cutoffs c WHERE c.institute IN ({ph}) AND " + deg_clause +
+                " AND (c.stipend IS NOT NULL OR c.bond_years IS NOT NULL OR c.penalty IS NOT NULL) "
+                " GROUP BY c.course ORDER BY c.course", names + [deg_param]).fetchall()]
+    except Exception as e:
+        logging.error("api_pg_stipend_detail: %s", e)
+        conn.close()
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return jsonify({'ok': True, 'family': family, 'college': dict(m), 'specialities': specialities})
