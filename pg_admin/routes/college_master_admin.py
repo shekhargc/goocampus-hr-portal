@@ -592,7 +592,7 @@ def college_stipend():
     u = _require_admin()
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
-    cat = _s(request.args.get('cat'))
+    kind = _s(request.args.get('kind'))   # '' | medical (MD/MS) | dnb
     state = _s(request.args.get('state'))
     sort = _s(request.args.get('sort')) or 'stipend_desc'
     order = {'stipend_desc': 's1_max DESC NULLS LAST',
@@ -601,14 +601,11 @@ def college_stipend():
     conn = get_db()
     rows, states, total = [], [], 0
     try:
-        _ensure_course_categories(conn)
         where, params = [], []
         if state:
             where.append("m.state = ?"); params.append(state)
-        if cat in _CAT_KEYS:
-            where.append("EXISTS (SELECT 1 FROM pg_college_course cc "
-                         "WHERE cc.master_id = m.id AND cc.course_category = ?)")
-            params.append(cat)
+        if kind in ('medical', 'dnb'):
+            where.append("m.kind = ?"); params.append(kind)
         wsql = (' AND ' + ' AND '.join(where)) if where else ''
         base = (
             "SELECT a.master_id AS id, m.college_name, m.kind, m.state, m.college_type, "
@@ -630,5 +627,5 @@ def college_stipend():
     finally:
         conn.close()
     return render_template('pg_admin/college_stipend.html', rows=rows, total=total,
-                           states=states, cat=cat, state=state, sort=sort,
-                           cat_labels=_CAT_LABELS, active_section='goocampus_in')
+                           states=states, kind=kind, state=state, sort=sort,
+                           active_section='goocampus_in')

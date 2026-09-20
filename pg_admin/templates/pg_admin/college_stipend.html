@@ -4,7 +4,7 @@
 {% macro money(mn, mx, prefix='₹', suffix='') %}
   {% if mn is none and mx is none %}<span style="color:var(--gray-300);">—</span>
   {% elif mn == mx %}{{ prefix }}{{ '{:,.0f}'.format(mn) }}{{ suffix }}
-  {% else %}{{ prefix }}{{ '{:,.0f}'.format(mn) }}{{ suffix }} <span style="color:var(--gray-400);">–</span> {{ prefix }}{{ '{:,.0f}'.format(mx) }}{{ suffix }}{% endif %}
+  {% else %}{{ prefix }}{{ '{:,.0f}'.format(mn) }}{{ suffix }}<br><span style="color:var(--gray-400);font-size:0.72rem;">– {{ prefix }}{{ '{:,.0f}'.format(mx) }}{{ suffix }}</span>{% endif %}
 {% endmacro %}
 
 {% block section_content %}
@@ -14,22 +14,17 @@
     <h1 style="font-size:1.6rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem 0;">
       <span style="margin-right:6px;">💰</span>Stipend · Bond · Penalty
     </h1>
-    <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Monthly stipend, service bond and mid-way penalty per college (NEET-PG 2025). A range is shown where it differs across a college's courses.</p>
-  </div>
-
-  <!-- Tabs -->
-  <div style="display:flex;gap:0;margin-bottom:1rem;border-bottom:2px solid var(--gray-200);flex-wrap:wrap;">
-    {% for val, label in ([('', 'All')] + cat_labels) %}
-    <a href="{{ url_for('pg_college_stipend') }}?cat={{ val }}{% if state %}&state={{ state }}{% endif %}&sort={{ sort }}"
-       style="padding:0.6rem 1.1rem;font-weight:{{ '700' if cat==val else '500' }};font-size:0.85rem;text-decoration:none;color:{{ 'var(--orange)' if cat==val else 'var(--gray-500)' }};border-bottom:{{ '3px solid var(--orange)' if cat==val else 'none' }};margin-bottom:-2px;">
-      {{ label }}</a>
-    {% endfor %}
+    <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Monthly stipend, service bond and mid-way penalty per college (NEET-PG 2025 · MD/MS &amp; DNB). A range is shown where it differs across a college's courses.</p>
   </div>
 
   <!-- Filters -->
   <form method="GET" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
-    <input type="hidden" name="cat" value="{{ cat }}">
-    <select name="state" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;min-width:160px;">
+    <select name="kind" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+      <option value="" {{ 'selected' if not kind else '' }}>MD/MS &amp; DNB (all)</option>
+      <option value="medical" {{ 'selected' if kind=='medical' else '' }}>MD / MS (Medical colleges)</option>
+      <option value="dnb" {{ 'selected' if kind=='dnb' else '' }}>DNB (hospitals)</option>
+    </select>
+    <select name="state" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;min-width:150px;">
       <option value="">All states</option>
       {% for s in states %}<option value="{{ s }}" {{ 'selected' if state==s else '' }}>{{ s }}</option>{% endfor %}
     </select>
@@ -42,40 +37,42 @@
   </form>
 
   <div style="background:white;border:1px solid var(--gray-200);border-radius:0.75rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:0.84rem;white-space:nowrap;">
-        <thead><tr style="background:var(--gray-50);text-align:left;">
-          {% set hstyle = 'padding:0.6rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);' %}
-          <th style="{{ hstyle }}position:sticky;left:0;background:var(--gray-50);z-index:1;">College</th>
-          <th style="{{ hstyle }}">State</th>
-          <th style="{{ hstyle }}text-align:right;">Stipend Yr 1</th>
-          <th style="{{ hstyle }}text-align:right;">Yr 2</th>
-          <th style="{{ hstyle }}text-align:right;">Yr 3</th>
-          <th style="{{ hstyle }}text-align:right;">Bond</th>
-          <th style="{{ hstyle }}text-align:right;">Penalty</th>
-        </tr></thead>
-        <tbody>
-          {% for r in rows %}
-          <tr style="border-top:1px solid var(--gray-100);cursor:pointer;"
-              onclick="window.location='{{ url_for('pg_college_profile', master_id=r.id) }}'">
-            <td style="padding:0.55rem 0.9rem;position:sticky;left:0;background:white;">
-              <span style="font-weight:600;color:var(--navy);">{{ r.college_name }}</span>
-              <span style="font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;background:{{ '#dbeafe' if r.kind=='medical' else '#cffafe' }};color:{{ '#1e40af' if r.kind=='medical' else '#155e75' }};">{{ 'MED' if r.kind=='medical' else 'DNB' }}</span>
-            </td>
-            <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.state }}</td>
-            <td style="padding:0.55rem 0.9rem;text-align:right;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;">{{ money(r.s1_min, r.s1_max) }}</td>
-            <td style="padding:0.55rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-600);">{{ money(r.s2_min, r.s2_max) }}</td>
-            <td style="padding:0.55rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-600);">{{ money(r.s3_min, r.s3_max) }}</td>
-            <td style="padding:0.55rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-600);">{{ money(r.b_min, r.b_max, prefix='', suffix=' yr') }}</td>
-            <td style="padding:0.55rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-600);">{{ money(r.p_min, r.p_max) }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--gray-400);">No stipend data for this filter.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;table-layout:fixed;">
+      <colgroup>
+        <col style="width:30%;"><col style="width:11%;"><col style="width:13%;"><col style="width:12%;">
+        <col style="width:12%;"><col style="width:10%;"><col style="width:12%;">
+      </colgroup>
+      {% set hstyle = 'padding:0.6rem 0.7rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);background:var(--gray-50);' %}
+      <thead><tr style="text-align:left;">
+        <th style="{{ hstyle }}">College</th>
+        <th style="{{ hstyle }}">State</th>
+        <th style="{{ hstyle }}text-align:right;">Stipend Yr 1</th>
+        <th style="{{ hstyle }}text-align:right;">Yr 2</th>
+        <th style="{{ hstyle }}text-align:right;">Yr 3</th>
+        <th style="{{ hstyle }}text-align:right;">Bond</th>
+        <th style="{{ hstyle }}text-align:right;">Penalty</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-top:1px solid var(--gray-100);cursor:pointer;"
+            onclick="window.location='{{ url_for('pg_college_profile', master_id=r.id) }}'">
+          <td style="padding:0.55rem 0.7rem;vertical-align:top;">
+            <span style="font-weight:600;color:var(--navy);">{{ r.college_name }}</span>
+            <span style="font-size:0.6rem;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:4px;white-space:nowrap;background:{{ '#dbeafe' if r.kind=='medical' else '#cffafe' }};color:{{ '#1e40af' if r.kind=='medical' else '#155e75' }};">{{ 'MD/MS' if r.kind=='medical' else 'DNB' }}</span>
+          </td>
+          <td style="padding:0.55rem 0.7rem;color:var(--gray-600);vertical-align:top;">{{ r.state }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;font-weight:700;color:var(--navy);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.s1_min, r.s1_max) }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.s2_min, r.s2_max) }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.s3_min, r.s3_max) }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.b_min, r.b_max, prefix='', suffix=' yr') }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;color:var(--gray-600);vertical-align:top;font-variant-numeric:tabular-nums;">{{ money(r.p_min, r.p_max) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--gray-400);">No stipend data for this filter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-  <p style="margin:0.8rem 0 0;font-size:0.78rem;color:var(--gray-400);">Click any row to open the college profile. Ranges (e.g. ₹85,000 – ₹1,10,000) mean the figure differs across that college's courses.</p>
+  <p style="margin:0.8rem 0 0;font-size:0.78rem;color:var(--gray-400);">Click any row to open the college profile. A two-line value (e.g. ₹85,000 / – ₹1,10,000) means the figure differs across that college's courses. Stipend/bond/penalty exist only for MD/MS &amp; DNB, so those are the only colleges listed.</p>
 </div>
 {% endblock %}
