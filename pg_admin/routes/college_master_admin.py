@@ -61,6 +61,12 @@ def _norm(v):
     return re.sub(r'[^a-z0-9]+', ' ', _s(v).lower()).strip()
 
 
+def _norm_state(v):
+    """State key for de-dupe: drops the joining word 'and' so 'Jammu and Kashmir'
+    and 'Jammu Kashmir' collapse to one college (can't merge two real states)."""
+    return re.sub(r'\s+', ' ', re.sub(r'\band\b', ' ', _norm(v))).strip()
+
+
 def _num(v):
     try:
         return float(str(v).replace(',', '').strip()) if _s(v) else None
@@ -186,7 +192,7 @@ def _run_workbook(data, lid):
                 if not name:
                     continue
                 state = _s(r[idx['State']]) if 'State' in idx else ''
-                gkey = (kind, _norm(name) + '|' + _norm(state))
+                gkey = (kind, _norm(name) + '|' + _norm_state(state))
                 if gkey not in masters:
                     vals = [name]
                     for hdr in _MASTER_COLS:
