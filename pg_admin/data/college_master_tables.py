@@ -95,6 +95,20 @@ def ensure_college_master_tables():
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             finished_at TIMESTAMP
         )''')
+
+        # A doctor's saved colleges (star/favourite), keyed to THIS master (not the
+        # old pg_colleges). user_id = pg_users.id; shared across College Database,
+        # Stipend and Predictor since they all resolve to a master id.
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_college_favorites (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            master_id INTEGER NOT NULL,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_college_favorites "
+                     "ON pg_college_favorites (user_id, master_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_college_favorites_user "
+                     "ON pg_college_favorites (user_id)")
         conn.commit()
         logging.info("pg_college_master tables ensured")
     except Exception as e:

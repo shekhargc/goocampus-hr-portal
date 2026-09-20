@@ -109,6 +109,11 @@ def register_pg_admin(app):
                      api_college.api_pg_stipend, methods=['GET'])
     app.add_url_rule('/api/pg/stipend/<int:college_id>', 'api_pg_stipend_detail',
                      api_college.api_pg_stipend_detail, methods=['GET'])
+    # Doctor's saved colleges (star), shared across College DB / Stipend / Predictor
+    app.add_url_rule('/api/pg/college-favorites', 'api_pg_college_favorites',
+                     api_college.api_pg_college_favorites, methods=['GET', 'POST'])
+    app.add_url_rule('/api/pg/college-favorites/<int:master_id>', 'api_pg_college_favorite_delete',
+                     api_college.api_pg_college_favorite_delete, methods=['DELETE'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',

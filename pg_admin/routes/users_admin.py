@@ -186,6 +186,14 @@ def user_detail(user_id):
             "SELECT feature_code, period_key, item_key, hits, first_used_at, last_used_at "
             "FROM pg_usage_items WHERE user_id = ? ORDER BY last_used_at DESC LIMIT 50",
             (user_id,)).fetchall()]
+        # Saved colleges (star) for this doctor — keyed to the unified college master.
+        try:
+            favorites = [dict(r) for r in conn.execute(
+                "SELECT m.id, m.college_name, m.kind, m.city, m.state, m.college_type, f.added_at "
+                "FROM pg_college_favorites f JOIN pg_college_master m ON m.id = f.master_id "
+                "WHERE f.user_id = ? ORDER BY f.added_at DESC", (user_id,)).fetchall()]
+        except Exception:
+            conn.rollback(); favorites = []
     except Exception as e:
         conn.rollback()
         logging.error("user_detail: %s", e)
@@ -199,7 +207,7 @@ def user_detail(user_id):
 
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
-                           active_section='goocampus_in')
+                           favorites=favorites, active_section='goocampus_in')
 
 
 @login_required

@@ -386,6 +386,16 @@ def api_pg_predictor():
             f"  FROM pg_cutoffs WHERE {where_sql} "
             "  ORDER BY closing_rank ASC NULLS LAST, institute ASC LIMIT ?",
             params + [limit]).fetchall()
+        # Resolve each institute → unified college-master id so the site can link a
+        # predicted college to its full profile (founder 2026-09-21). alias_key is the
+        # normalised name; build a lookup once and attach below.
+        key2master = {}
+        try:
+            for mr in conn.execute(
+                    "SELECT alias_key, master_id FROM pg_college_alias").fetchall():
+                key2master.setdefault(mr['alias_key'], mr['master_id'])
+        except Exception:
+            key2master = {}
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -404,10 +414,13 @@ def api_pg_predictor():
             return 'good'
         return 'reach'
 
+    import re as _re
     results = []
     for r in rows:
         d = as_dict(r)
         d['chance'] = _chance(d.get('closing_rank'))
+        _k = _re.sub(r'[^a-z0-9]+', ' ', (d.get('institute') or '').lower()).strip()
+        d['pg_college_id'] = key2master.get(_k)   # → /api/pg/pg-colleges/<id>, or None
         results.append(d)
     return jsonify({'ok': True, 'year': year, 'rank': rank,
                     'count': len(results), 'total': total,
