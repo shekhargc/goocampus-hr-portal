@@ -45,13 +45,14 @@
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:0.84rem;white-space:nowrap;">
         <thead><tr style="background:var(--gray-50);text-align:left;">
-          <th style="padding:0.6rem 0.9rem;position:sticky;left:0;background:var(--gray-50);">College</th>
-          <th style="padding:0.6rem 0.9rem;">State</th>
-          <th style="padding:0.6rem 0.9rem;text-align:right;">Stipend Yr 1</th>
-          <th style="padding:0.6rem 0.9rem;text-align:right;">Yr 2</th>
-          <th style="padding:0.6rem 0.9rem;text-align:right;">Yr 3</th>
-          <th style="padding:0.6rem 0.9rem;text-align:right;">Bond</th>
-          <th style="padding:0.6rem 0.9rem;text-align:right;">Penalty</th>
+          {% set hstyle = 'padding:0.6rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);' %}
+          <th style="{{ hstyle }}position:sticky;left:0;background:var(--gray-50);z-index:1;">College</th>
+          <th style="{{ hstyle }}">State</th>
+          <th style="{{ hstyle }}text-align:right;">Stipend Yr 1</th>
+          <th style="{{ hstyle }}text-align:right;">Yr 2</th>
+          <th style="{{ hstyle }}text-align:right;">Yr 3</th>
+          <th style="{{ hstyle }}text-align:right;">Bond</th>
+          <th style="{{ hstyle }}text-align:right;">Penalty</th>
         </tr></thead>
         <tbody>
           {% for r in rows %}
