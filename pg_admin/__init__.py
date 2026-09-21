@@ -93,6 +93,10 @@ def register_pg_admin(app):
                      college_master_admin.college_database_list, methods=['GET'])
     app.add_url_rule('/admin/pg/college-database/<int:master_id>', 'pg_college_profile',
                      college_master_admin.college_profile, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-database/<int:master_id>/edit', 'pg_college_edit',
+                     college_master_admin.college_edit, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-database/<int:master_id>/save', 'pg_college_edit_save',
+                     college_master_admin.college_edit_save, methods=['POST'])
     app.add_url_rule('/admin/pg/college-stipend', 'pg_college_stipend',
                      college_master_admin.college_stipend, methods=['GET'])
     app.add_url_rule('/admin/pg/college-stipend/<int:master_id>', 'pg_college_stipend_detail',

@@ -712,3 +712,68 @@ def college_stipend_detail(master_id):
     return render_template('pg_admin/college_stipend_detail.html', m=m,
                            specialities=specialities, back_kind=kind, kind=kind,
                            active_section='goocampus_in')
+
+
+# ── Edit a college's master fields (team fills logos / corrects data) ─────────
+_EDIT_FIELDS = [
+    ('college_name', 'College name', 'text'), ('university', 'University', 'text'),
+    ('logo_url', 'Logo URL', 'text'), ('official_website', 'Official website', 'text'),
+    ('city', 'City', 'text'), ('state', 'State', 'text'), ('district', 'District', 'text'),
+    ('country', 'Country', 'text'), ('college_type', 'College type', 'text'),
+    ('accreditation', 'Accreditation', 'text'), ('college_stream', 'Stream', 'text'),
+    ('established_year', 'Established year', 'text'), ('nearest_airport', 'Nearest airport', 'text'),
+    ('winter_min_temp', 'Winter min temp', 'text'), ('summer_max_temp', 'Summer max temp', 'text'),
+    ('latitude', 'Latitude', 'text'), ('longitude', 'Longitude', 'text'),
+    ('opd', 'OPD', 'text'), ('ipd', 'IPD', 'text'), ('bed_count', 'Bed count', 'text'),
+    ('mess_fee_min', 'Mess fee min', 'num'), ('mess_fee_max', 'Mess fee max', 'num'),
+    ('mess_fee_currency', 'Mess fee currency', 'text'),
+    ('hostel_fee_min', 'Hostel fee min', 'num'), ('hostel_fee_max', 'Hostel fee max', 'num'),
+    ('hostel_fee_currency', 'Hostel fee currency', 'text'),
+]
+
+
+@login_required
+def college_edit(master_id):
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        m = conn.execute("SELECT * FROM pg_college_master WHERE id = ?", [master_id]).fetchone()
+    finally:
+        conn.close()
+    if not m:
+        flash('College not found', 'error')
+        return redirect(url_for('pg_college_database_list'))
+    return render_template('pg_admin/college_edit.html', m=m, fields=_EDIT_FIELDS,
+                           active_section='goocampus_in')
+
+
+@login_required
+def college_edit_save(master_id):
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM pg_college_master WHERE id = ?", [master_id]).fetchone():
+            conn.close(); flash('College not found', 'error')
+            return redirect(url_for('pg_college_database_list'))
+        cols, vals = [], []
+        for col, _label, kind in _EDIT_FIELDS:
+            raw = request.form.get(col, '')
+            cols.append(f"{col} = ?")
+            vals.append(_num(raw) if kind == 'num' else _s(raw))
+        vals.append(master_id)
+        conn.execute(f"UPDATE pg_college_master SET {', '.join(cols)} WHERE id = ?", vals)
+        conn.commit()
+        flash('Saved.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"college_edit_save: {e}")
+        flash(f'Save failed: {e}', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_college_profile', master_id=master_id))
