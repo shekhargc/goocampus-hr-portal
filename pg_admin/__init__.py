@@ -15,9 +15,11 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from pg_admin.data import tables as _tables
 from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.data import college_master_tables as _college_master
+from pg_admin.data import pgcp_tables as _pgcp_tables
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
-                             bookings_admin, college_master_admin, api_college)
+                             bookings_admin, college_master_admin, api_college,
+                             pgcp_admin, api_pgcp)
 
 
 def register_pg_admin(app):
@@ -34,7 +36,8 @@ def register_pg_admin(app):
                _plans_tables.ensure_pg_plans_tables,
                _plans_tables.seed_pg_pricing_defaults,
                _plans_tables.seed_pgcp_counselling_packages,
-               _college_master.ensure_college_master_tables):
+               _college_master.ensure_college_master_tables,
+               _pgcp_tables.ensure_pgcp_tables):
         try:
             fn()
         except Exception as e:
@@ -118,6 +121,20 @@ def register_pg_admin(app):
                      api_college.api_pg_college_favorites, methods=['GET', 'POST'])
     app.add_url_rule('/api/pg/college-favorites/<int:master_id>', 'api_pg_college_favorite_delete',
                      api_college.api_pg_college_favorite_delete, methods=['DELETE'])
+
+    # ── Indian PGCP onboarding — admin + doctor API ──
+    app.add_url_rule('/admin/pg/pgcp', 'pg_pgcp_admin',
+                     pgcp_admin.pgcp_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/pgcp/create', 'pg_pgcp_invite_create',
+                     pgcp_admin.pgcp_invite_create, methods=['POST'])
+    app.add_url_rule('/admin/pg/pgcp/<int:invite_id>', 'pg_pgcp_submission',
+                     pgcp_admin.pgcp_submission, methods=['GET'])
+    app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/cancel', 'pg_pgcp_invite_cancel',
+                     pgcp_admin.pgcp_invite_cancel, methods=['POST'])
+    app.add_url_rule('/api/pg/pgcp/onboarding', 'api_pgcp_onboarding',
+                     api_pgcp.api_pgcp_onboarding, methods=['GET', 'POST'])
+    app.add_url_rule('/api/pg/pgcp/onboarding/submit', 'api_pgcp_submit',
+                     api_pgcp.api_pgcp_submit, methods=['POST'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
