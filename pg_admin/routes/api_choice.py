@@ -7,6 +7,7 @@ import logging
 from flask import request, jsonify
 from db import get_db
 from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
+from pg_admin.data import entitlements
 
 _PER_PAGE = 100
 _NORMSQL = "btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
@@ -127,6 +128,55 @@ def _user(conn):
         return None
 
 
+def _tier(conn, user_id):
+    """Resolve the doctor's plan tier for choice-list gating:
+       free | starter | standard | premium."""
+    try:
+        plan, _sub = entitlements.effective_plan(conn, user_id)
+    except Exception:
+        plan = None
+    code = ((plan or {}).get('code') or '').lower()
+    kind = ((plan or {}).get('plan_kind') or '').lower()
+    for t in ('premium', 'standard', 'starter'):
+        if t in code:
+            return t
+    if kind and kind not in ('free', 'counselling'):
+        return 'starter'   # any other paid kind unlocks at least Starter
+    return 'free'
+
+
+def _choice_gate(conn, uid, tier, scope):
+    """Return an error message if this doctor can't create a set of `scope`, else None."""
+    if tier == 'free':
+        return 'Upgrade to Starter to build your choice list.'
+    counts = {r['scope']: r['n'] for r in conn.execute(
+        "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? GROUP BY scope",
+        [uid]).fetchall()}
+    if scope == 'mcc' and counts.get('mcc', 0) >= 1:
+        return 'You already have an MCC (All-India) choice set.'
+    if scope == 'state' and tier in ('starter', 'standard') and counts.get('state', 0) >= 1:
+        return 'Your plan includes one (home) state counselling. Upgrade to Premium for more states.'
+    return None
+
+
+def api_pg_choice_entitlement():
+    """GET /api/pg/choice-entitlement → what the doctor's plan unlocks for choice lists."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        user = _user(conn)
+        if not user:
+            return jsonify({'ok': False, 'error': 'no_token'}), 401
+        tier = _tier(conn, user['id'])
+        can = tier in ('starter', 'standard', 'premium')
+        return jsonify({'ok': True, 'tier': tier, 'can_build': can,
+                        'mcc': can, 'state': ('any' if tier == 'premium' else ('home' if can else False)),
+                        'message': ('' if can else 'Upgrade to Starter to build your choice list.')})
+    finally:
+        conn.close()
+
+
 def _generate_round(conn, set_id, rnd, authority, dg, quota, category, rank):
     """Fill one round sheet from the cut-offs (that round's closing rank)."""
     col = {1: 'r1', 2: 'r2', 3: 'r3'}[rnd]
@@ -180,6 +230,10 @@ def api_pg_choice_sets():
                 "FROM pg_choice_sets s WHERE s.user_id = ? ORDER BY s.id DESC", [uid]).fetchall()]
             return jsonify({'ok': True, 'sets': sets})
         body = request.get_json(silent=True) or {}
+        scope = (body.get('scope') or 'mcc').strip()
+        gate = _choice_gate(conn, uid, _tier(conn, uid), scope)
+        if gate:
+            return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
         try:
             rank = int(body.get('rank'))
         except (TypeError, ValueError):
@@ -191,7 +245,7 @@ def api_pg_choice_sets():
         sid = conn.execute(
             "INSERT INTO pg_choice_sets (user_id, label, scope, authority, degree_group, state, "
             "quota, category, rank) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id",
-            [uid, (body.get('label') or '').strip(), (body.get('scope') or 'mcc').strip(),
+            [uid, (body.get('label') or '').strip(), scope,
              authority, dg, (body.get('state') or '').strip(), quota, category, rank]).fetchone()['id']
         for rnd in (1, 2, 3):
             _generate_round(conn, sid, rnd, authority, dg, quota, category, rank)

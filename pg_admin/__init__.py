@@ -143,6 +143,8 @@ def register_pg_admin(app):
                      api_choice.api_pg_cutoff_explorer, methods=['GET'])
     app.add_url_rule('/api/pg/cutoff-explorer/facets', 'api_pg_cutoff_facets',
                      api_choice.api_pg_cutoff_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/choice-entitlement', 'api_pg_choice_entitlement',
+                     api_choice.api_pg_choice_entitlement, methods=['GET'])
     app.add_url_rule('/api/pg/choice-sets', 'api_pg_choice_sets',
                      api_choice.api_pg_choice_sets, methods=['GET', 'POST'])
     app.add_url_rule('/api/pg/choice-sets/<int:set_id>', 'api_pg_choice_set',
