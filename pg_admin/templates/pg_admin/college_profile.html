@@ -13,8 +13,9 @@
 {% block section_content %}
 <div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
 
-  <div style="margin-bottom:1rem;">
+  <div style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;">
     <a href="{{ url_for('pg_college_database_list') }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to College Database</a>
+    <a href="{{ url_for('pg_college_edit', master_id=m.id) }}" style="font-size:0.82rem;font-weight:600;color:var(--navy);text-decoration:none;border:1px solid var(--gray-200);background:#fff;border-radius:8px;padding:6px 12px;">✎ Edit details</a>
   </div>
 
   <!-- Hero -->

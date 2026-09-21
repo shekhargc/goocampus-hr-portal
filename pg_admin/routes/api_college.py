@@ -146,9 +146,10 @@ def api_pg_pg_college_detail(college_id):
         if names:
             ph = ','.join(['?'] * len(names))
             cutoffs = [dict(r) for r in conn.execute(
-                f"SELECT course, category, quota, seat_type, r1, r2, r3, r4, stray, closing_rank, degree "
-                f"FROM pg_cutoffs WHERE institute IN ({ph}) ORDER BY course, category, quota",
-                names).fetchall()]
+                f"SELECT course, category, quota, seat_type, authority, state, "
+                f"r1, r2, r3, r4, stray, closing_rank, degree "
+                f"FROM pg_cutoffs WHERE institute IN ({ph}) "
+                f"ORDER BY authority, course, category, quota", names).fetchall()]
             stipend = [dict(r) for r in conn.execute(
                 f"SELECT c.course AS course, MAX(c.degree) AS degree, MAX(c.stipend) AS stipend_yr1, "
                 f"MAX(c.stipend_yr2) AS stipend_yr2, MAX(c.stipend_yr3) AS stipend_yr3, "

@@ -1,0 +1,35 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Edit · {{ m.college_name }}{% endblock %}
+
+{% block section_content %}
+<div style="max-width:900px;margin:0 auto;padding:2rem 1.5rem;">
+
+  <div style="margin-bottom:1rem;">
+    <a href="{{ url_for('pg_college_profile', master_id=m.id) }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to profile</a>
+  </div>
+  <h1 style="font-size:1.4rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem 0;">Edit college</h1>
+  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.86rem;">
+    {{ m.college_name }} · <span style="font-weight:600;">{{ 'Medical' if m.kind=='medical' else 'DNB' }}</span>.
+    Courses &amp; cut-offs come from the imports and aren't edited here — just the college's own details.
+  </p>
+
+  <form method="POST" action="{{ url_for('pg_college_edit_save', master_id=m.id) }}"
+        style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;">
+      {% for col, label, kind in fields %}
+      <div>
+        <label style="display:block;font-size:0.74rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em;">{{ label }}</label>
+        <input type="{{ 'number' if kind=='num' else 'text' }}" {% if kind=='num' %}step="any"{% endif %}
+               name="{{ col }}" value="{{ m[col] if m[col] is not none else '' }}"
+               style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+      </div>
+      {% endfor %}
+    </div>
+    <div style="margin-top:1.4rem;display:flex;gap:0.7rem;align-items:center;">
+      <button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:0.6rem 1.4rem;font-weight:700;font-size:0.9rem;cursor:pointer;">Save changes</button>
+      <a href="{{ url_for('pg_college_profile', master_id=m.id) }}" style="color:var(--gray-500);text-decoration:none;font-size:0.86rem;">Cancel</a>
+      {% if m.logo_url %}<img src="{{ m.logo_url }}" alt="logo preview" style="height:34px;margin-left:auto;object-fit:contain;border:1px solid var(--gray-100);border-radius:6px;background:#f8fafc;padding:2px;">{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

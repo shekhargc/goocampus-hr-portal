@@ -1,0 +1,83 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}PGCP · {{ inv.client_name or inv.mobile }}{% endblock %}
+
+{% macro row(label, value) %}
+  <div style="display:flex;justify-content:space-between;gap:1rem;padding:6px 0;border-bottom:1px solid var(--gray-100);font-size:0.86rem;">
+    <span style="color:var(--gray-500);">{{ label }}</span>
+    <span style="font-weight:600;color:var(--navy);text-align:right;">{{ value if value not in (None,'','None') else '—' }}</span>
+  </div>
+{% endmacro %}
+
+{% block section_content %}
+<div style="max-width:960px;margin:0 auto;padding:2rem 1.5rem;">
+  <div style="margin-bottom:1rem;"><a href="{{ url_for('pg_pgcp_admin') }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Indian PGCP</a></div>
+
+  <div style="background:linear-gradient(135deg,var(--navy),var(--navy-light));border-radius:12px;padding:1.4rem 1.8rem;color:white;margin-bottom:1.2rem;">
+    <h1 style="margin:0;font-size:1.35rem;font-weight:800;">{{ inv.client_name or 'PGCP client' }}</h1>
+    <div style="font-size:0.86rem;opacity:0.9;margin-top:0.3rem;">
+      {{ inv.mobile }}{% if inv.email %} · {{ inv.email }}{% endif %} ·
+      {{ 'Internal (free Premium)' if inv.client_type=='internal' else 'Paying' }} ·
+      Status: {{ (onb.status if onb else inv.status) }}</div>
+  </div>
+
+  {% if not onb %}
+  <div style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.5rem;color:var(--gray-500);">
+    The client hasn't started onboarding yet. Invited amount:
+    {% if inv.invited_amount is not none %}₹{{ '{:,.0f}'.format(inv.invited_amount) }}{% if inv.discount %} − ₹{{ '{:,.0f}'.format(inv.discount) }} discount{% endif %}{% else %}—{% endif %}.
+  </div>
+  {% else %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.2rem;">
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.3rem;">
+      <h3 style="margin:0 0 0.6rem;font-size:0.95rem;color:var(--navy);">1 · Personal</h3>
+      {% if onb.photo_url %}<img src="{{ onb.photo_url }}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;margin-bottom:0.6rem;">{% endif %}
+      {{ row('Official name', onb.official_name) }}
+      {{ row('Mobile', onb.mobile) }}
+      {{ row('Email', onb.email) }}
+      {{ row('State', onb.state) }}
+      {{ row('City', onb.city) }}
+    </div>
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.3rem;">
+      <h3 style="margin:0 0 0.6rem;font-size:0.95rem;color:var(--navy);">2 · Academic</h3>
+      {{ row('MBBS college', onb.mbbs_college) }}
+      {{ row('MBBS year', onb.mbbs_year) }}
+      {{ row('NEET attempt', onb.neet_attempt) }}
+      {% if onb.neet_attempt == 'second' %}
+      {{ row('Previous year', onb.prev_year) }}
+      {{ row('Previous score', onb.prev_score) }}
+      {{ row('Previous rank', onb.prev_rank) }}
+      {% endif %}
+      {{ row('NEET-PG 2026 score', onb.neetpg2026_score) }}
+      {{ row('NEET-PG 2026 rank', onb.neetpg2026_rank) }}
+    </div>
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.3rem;">
+      <h3 style="margin:0 0 0.6rem;font-size:0.95rem;color:var(--navy);">3 · Preferences</h3>
+      {{ row('Specialities', parsed.specialities | join(', ')) }}
+      {{ row('Only one speciality', 'Yes' if onb.only_one_speciality else 'No') }}
+      {{ row('Preferred states', 'Anywhere in India' if onb.anywhere_india else (parsed.preferred_states | join(', '))) }}
+      {{ row('Preferred colleges', parsed.preferred_colleges | join(', ')) }}
+      {{ row('Seat preference order', parsed.seat_pref_order | join(' → ')) }}
+      {% if onb.nri_interested %}
+      {{ row('NRI sponsor', onb.sponsor_name) }}
+      {{ row('Relationship', onb.sponsor_relationship) }}
+      {{ row('Country', onb.sponsor_country) }}
+      {% endif %}
+      {% if parsed.fee_bands %}
+      <div style="margin-top:0.5rem;font-size:0.8rem;color:var(--gray-500);">Fee bands per speciality:</div>
+      {% for spec, band in parsed.fee_bands.items() %}
+      {{ row(spec, '₹' ~ (band.min or '?') ~ ' – ₹' ~ (band.max or '?')) }}
+      {% endfor %}
+      {% endif %}
+    </div>
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.3rem;">
+      <h3 style="margin:0 0 0.6rem;font-size:0.95rem;color:var(--navy);">4 · Payment</h3>
+      {{ row('Invited amount', ('₹' ~ '{:,.0f}'.format(inv.invited_amount)) if inv.invited_amount is not none else '—') }}
+      {{ row('Discount', ('₹' ~ '{:,.0f}'.format(inv.discount)) if inv.discount else '—') }}
+      {{ row('Payment mode', onb.payment_mode) }}
+      {{ row('Payment ref', onb.payment_ref) }}
+      {{ row('Amount paid', ('₹' ~ '{:,.0f}'.format(onb.amount_paid)) if onb.amount_paid is not none else '—') }}
+      {{ row('Submitted at', onb.submitted_at) }}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

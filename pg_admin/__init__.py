@@ -15,9 +15,12 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from pg_admin.data import tables as _tables
 from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.data import college_master_tables as _college_master
+from pg_admin.data import pgcp_tables as _pgcp_tables
+from pg_admin.data import choice_tables as _choice_tables
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
-                             bookings_admin, college_master_admin, api_college)
+                             bookings_admin, college_master_admin, api_college,
+                             pgcp_admin, api_pgcp, api_choice)
 
 
 def register_pg_admin(app):
@@ -34,7 +37,9 @@ def register_pg_admin(app):
                _plans_tables.ensure_pg_plans_tables,
                _plans_tables.seed_pg_pricing_defaults,
                _plans_tables.seed_pgcp_counselling_packages,
-               _college_master.ensure_college_master_tables):
+               _college_master.ensure_college_master_tables,
+               _pgcp_tables.ensure_pgcp_tables,
+               _choice_tables.ensure_choice_tables):
         try:
             fn()
         except Exception as e:
@@ -93,6 +98,10 @@ def register_pg_admin(app):
                      college_master_admin.college_database_list, methods=['GET'])
     app.add_url_rule('/admin/pg/college-database/<int:master_id>', 'pg_college_profile',
                      college_master_admin.college_profile, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-database/<int:master_id>/edit', 'pg_college_edit',
+                     college_master_admin.college_edit, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-database/<int:master_id>/save', 'pg_college_edit_save',
+                     college_master_admin.college_edit_save, methods=['POST'])
     app.add_url_rule('/admin/pg/college-stipend', 'pg_college_stipend',
                      college_master_admin.college_stipend, methods=['GET'])
     app.add_url_rule('/admin/pg/college-stipend/<int:master_id>', 'pg_college_stipend_detail',
@@ -114,6 +123,36 @@ def register_pg_admin(app):
                      api_college.api_pg_college_favorites, methods=['GET', 'POST'])
     app.add_url_rule('/api/pg/college-favorites/<int:master_id>', 'api_pg_college_favorite_delete',
                      api_college.api_pg_college_favorite_delete, methods=['DELETE'])
+
+    # ── Indian PGCP onboarding — admin + doctor API ──
+    app.add_url_rule('/admin/pg/pgcp', 'pg_pgcp_admin',
+                     pgcp_admin.pgcp_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/pgcp/create', 'pg_pgcp_invite_create',
+                     pgcp_admin.pgcp_invite_create, methods=['POST'])
+    app.add_url_rule('/admin/pg/pgcp/<int:invite_id>', 'pg_pgcp_submission',
+                     pgcp_admin.pgcp_submission, methods=['GET'])
+    app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/cancel', 'pg_pgcp_invite_cancel',
+                     pgcp_admin.pgcp_invite_cancel, methods=['POST'])
+    app.add_url_rule('/api/pg/pgcp/onboarding', 'api_pgcp_onboarding',
+                     api_pgcp.api_pgcp_onboarding, methods=['GET', 'POST'])
+    app.add_url_rule('/api/pg/pgcp/onboarding/submit', 'api_pgcp_submit',
+                     api_pgcp.api_pgcp_submit, methods=['POST'])
+
+    # ── Cutoff Explorer + Choice-List builder ──
+    app.add_url_rule('/api/pg/cutoff-explorer', 'api_pg_cutoff_explorer',
+                     api_choice.api_pg_cutoff_explorer, methods=['GET'])
+    app.add_url_rule('/api/pg/cutoff-explorer/facets', 'api_pg_cutoff_facets',
+                     api_choice.api_pg_cutoff_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/choice-sets', 'api_pg_choice_sets',
+                     api_choice.api_pg_choice_sets, methods=['GET', 'POST'])
+    app.add_url_rule('/api/pg/choice-sets/<int:set_id>', 'api_pg_choice_set',
+                     api_choice.api_pg_choice_set, methods=['GET', 'DELETE'])
+    app.add_url_rule('/api/pg/choice-sets/<int:set_id>/items', 'api_pg_choice_items',
+                     api_choice.api_pg_choice_items, methods=['POST'])
+    app.add_url_rule('/api/pg/choice-sets/<int:set_id>/reorder', 'api_pg_choice_reorder',
+                     api_choice.api_pg_choice_reorder, methods=['POST'])
+    app.add_url_rule('/api/pg/choice-items/<int:item_id>', 'api_pg_choice_item_delete',
+                     api_choice.api_pg_choice_item_delete, methods=['DELETE'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',

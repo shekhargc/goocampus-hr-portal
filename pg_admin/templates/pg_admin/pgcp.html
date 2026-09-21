@@ -1,0 +1,84 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Indian PGCP · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
+
+  <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem 0;">Indian PGCP counselling</h1>
+  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.88rem;">
+    Invite a client, then they log in on goocampus.in and complete the 4-step onboarding
+    (Personal → Academic → Preferences → Payment).
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+    <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                background:{{ '#DCFCE7' if cat=='success' else '#FEE2E2' }};
+                color:{{ '#166534' if cat=='success' else '#991B1B' }};">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Create invitation -->
+  <details style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.4rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <summary style="font-weight:700;color:var(--navy);cursor:pointer;">+ New invitation</summary>
+    <form method="POST" action="{{ url_for('pg_pgcp_invite_create') }}"
+          style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:1rem;">
+      {% macro fld(name, label, ph='', type='text') %}
+      <div><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">{{ label }}</label>
+        <input type="{{ type }}" name="{{ name }}" placeholder="{{ ph }}" {% if type=='number' %}step="any"{% endif %}
+               style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;"></div>
+      {% endmacro %}
+      {{ fld('client_name', 'Client name') }}
+      {{ fld('mobile', 'Mobile (login)', '+91…') }}
+      {{ fld('email', 'Email', '', 'email') }}
+      <div><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Client type</label>
+        <select name="client_type" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;">
+          <option value="paying">Paying (new client)</option>
+          <option value="internal">Internal (Consulting/UAE — free Premium)</option>
+        </select></div>
+      {{ fld('invited_amount', 'Invited amount ₹', '', 'number') }}
+      {{ fld('discount', 'Discount ₹', '0', 'number') }}
+      {{ fld('plan_code', 'Plan code (optional)', 'pgcp_premium') }}
+      {{ fld('notes', 'Notes') }}
+      <div style="grid-column:1/-1;"><button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:0.6rem 1.4rem;font-weight:700;cursor:pointer;">Create invitation</button></div>
+    </form>
+  </details>
+
+  <!-- Invitations -->
+  <div style="background:white;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      {% set hs = 'padding:0.65rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
+      <thead><tr>
+        <th style="{{ hs }}">Client</th><th style="{{ hs }}">Mobile</th><th style="{{ hs }}">Type</th>
+        <th style="{{ hs }}text-align:right;">Amount</th><th style="{{ hs }}">Progress</th>
+        <th style="{{ hs }}">Status</th><th style="{{ hs }}"></th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:0.6rem 0.9rem;font-weight:600;color:var(--navy);">{{ r.client_name or '—' }}</td>
+          <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{{ r.mobile }}</td>
+          <td style="padding:0.6rem 0.9rem;">{{ 'Internal' if r.client_type=='internal' else 'Paying' }}</td>
+          <td style="padding:0.6rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;">
+            {% if r.invited_amount is not none %}₹{{ '{:,.0f}'.format(r.invited_amount) }}{% if r.discount %} <span style="color:var(--gray-400);font-size:0.78rem;">− ₹{{ '{:,.0f}'.format(r.discount) }}</span>{% endif %}{% else %}—{% endif %}</td>
+          <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{% if r.onb_step %}Step {{ r.onb_step }} / 4{% else %}Not started{% endif %}</td>
+          <td style="padding:0.6rem 0.9rem;">
+            <span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:20px;
+              background:{{ '#dcfce7' if r.status in ['submitted','paid','completed'] else ('#f3f4f6' if r.status=='cancelled' else '#fef9c3') }};
+              color:{{ '#166534' if r.status in ['submitted','paid','completed'] else ('#6b7280' if r.status=='cancelled' else '#854d0e') }};">{{ r.status }}</span></td>
+          <td style="padding:0.6rem 0.9rem;text-align:right;white-space:nowrap;">
+            <a href="{{ url_for('pg_pgcp_submission', invite_id=r.id) }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.82rem;">View</a>
+            {% if r.status != 'cancelled' %}
+            <form method="POST" action="{{ url_for('pg_pgcp_invite_cancel', invite_id=r.id) }}" style="display:inline;" onsubmit="return confirm('Cancel this invitation?');">
+              <button type="submit" style="background:none;border:none;color:#dc2626;font-weight:600;font-size:0.82rem;cursor:pointer;margin-left:8px;">Cancel</button></form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--gray-400);">No invitations yet — create one above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
