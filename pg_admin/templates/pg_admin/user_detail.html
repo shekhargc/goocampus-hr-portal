@@ -118,6 +118,28 @@
       </table>
     </div>
     {% endif %}
+
+    <div class="ud-card">
+      <h3><i class="fa-solid fa-star" style="color:#f59e0b;"></i> Saved colleges (favourites)
+        <span style="margin-left:auto;font-size:0.78rem;color:var(--gray-500);font-weight:600;">{{ favorites|length }}</span></h3>
+      {% if favorites %}
+      <table class="ud-table">
+        <thead><tr><th>College</th><th>Type</th><th>Location</th><th>Saved</th></tr></thead>
+        <tbody>
+          {% for f in favorites %}
+          <tr>
+            <td><a href="/admin/pg/college-database/{{ f.id }}" style="color:var(--navy);font-weight:600;text-decoration:none;">{{ f.college_name }}</a></td>
+            <td><span style="font-size:0.7rem;font-weight:700;padding:1px 7px;border-radius:3px;background:{{ '#dbeafe' if f.kind=='medical' else '#cffafe' }};color:{{ '#1e40af' if f.kind=='medical' else '#155e75' }};">{{ 'Medical' if f.kind=='medical' else 'DNB' }}</span></td>
+            <td style="color:var(--gray-500)">{{ f.city }}{% if f.city and f.state %}, {% endif %}{{ f.state }}</td>
+            <td style="color:var(--gray-500)">{{ f.added_at.strftime('%d %b %Y') if f.added_at else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="font-size:0.85rem;color:var(--gray-400);margin:0.4rem 0 0;">This doctor hasn't starred any colleges yet.</p>
+      {% endif %}
+    </div>
   </div>
 
   <!-- RIGHT — plan + entitlements -->

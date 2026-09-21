@@ -12,7 +12,7 @@ DB) + pg_cutoffs (predictor + stipend). Mirrors the goocampus.org admin screens:
 import logging
 from flask import request, jsonify
 from db import get_db
-from pg_admin.routes.api import _authorized
+from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
 
 _PER_PAGE = 100
 _CAT_LABELS = [('mbbs', 'MBBS (UG)'), ('mdms', 'MD / MS'),
@@ -78,11 +78,16 @@ def api_pg_pg_colleges():
                 cats.setdefault(r['master_id'], set()).add(r['course_category'])
             cats = {k: sorted([c for c in v if c in order], key=lambda c: order[c])
                     for k, v in cats.items()}
+        fav = set()
+        u = _fav_user(conn)
+        if u:
+            fav = _fav_ids(conn, u['id'])
         colleges = [{
             'id': r['id'], 'name': r['college_name'], 'kind': r['kind'],
             'city': r['city'], 'state': r['state'], 'college_type': r['college_type'],
             'logo_url': r['logo_url'], 'n_courses': r['n_courses'],
             'categories': cats.get(r['id'], []),
+            'is_favorite': r['id'] in fav,
         } for r in rows]
     except Exception as e:
         logging.error("api_pg_pg_colleges: %s", e)
@@ -158,8 +163,18 @@ def api_pg_pg_college_detail(college_id):
     finally:
         try: conn.close()
         except Exception: pass
+    is_fav = False
+    try:
+        conn2 = get_db()
+        u = _fav_user(conn2)
+        if u:
+            is_fav = college_id in _fav_ids(conn2, u['id'])
+        conn2.close()
+    except Exception:
+        pass
     return jsonify({'ok': True, 'college': college, 'courses': courses,
-                    'cutoffs': cutoffs, 'stipend': stipend, 'aliases': aliases})
+                    'cutoffs': cutoffs, 'stipend': stipend, 'aliases': aliases,
+                    'is_favorite': is_fav})
 
 
 # ── Stipend · Bond · Penalty ─────────────────────────────────────────────────
@@ -200,6 +215,10 @@ def api_pg_stipend():
             f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORM}"
             + wsql + " GROUP BY c.institute ORDER BY c.institute LIMIT ? OFFSET ?",
             params + [_PER_PAGE, offset]).fetchall()
+        fav = set()
+        u = _fav_user(conn)
+        if u:
+            fav = _fav_ids(conn, u['id'])
         colleges = [{
             'id': r['id'], 'name': r['institute'], 'state': r['state'], 'n_courses': r['n_courses'],
             'stipend_yr1': [_num(r['s1_min']), _num(r['s1_max'])],
@@ -207,6 +226,7 @@ def api_pg_stipend():
             'stipend_yr3': [_num(r['s3_min']), _num(r['s3_max'])],
             'bond_years': [_num(r['b_min']), _num(r['b_max'])],
             'penalty': [_num(r['p_min']), _num(r['p_max'])],
+            'is_favorite': (r['id'] in fav) if r['id'] else False,
         } for r in rows]
     except Exception as e:
         logging.error("api_pg_stipend: %s", e)
@@ -255,3 +275,92 @@ def api_pg_stipend_detail(college_id):
         try: conn.close()
         except Exception: pass
     return jsonify({'ok': True, 'family': family, 'college': dict(m), 'specialities': specialities})
+
+
+# ── Favourites (doctor's saved colleges, keyed to the master) ────────────────
+def _fav_user(conn):
+    """Resolve the logged-in doctor from the Bearer token, or None (optional)."""
+    tok = _bearer_token()
+    if not tok:
+        return None
+    try:
+        return _pg_user_by_token(conn, tok)
+    except Exception:
+        return None
+
+
+def _fav_ids(conn, user_id):
+    return {r['master_id'] for r in conn.execute(
+        "SELECT master_id FROM pg_college_favorites WHERE user_id = ?", [user_id]).fetchall()}
+
+
+def api_pg_college_favorites():
+    """/api/pg/college-favorites  (X-PG-Key + doctor Bearer token)
+       GET  → { ok, favorites:[ {id, name, kind, city, state, college_type, logo_url, added_at} ] }
+       POST { master_id } → idempotent add
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    tok = _bearer_token()
+    if not tok:
+        return jsonify({'ok': False, 'error': 'no_token'}), 401
+    conn = get_db()
+    try:
+        user = _pg_user_by_token(conn, tok)
+        if not user:
+            return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        uid = user['id']
+        if request.method == 'GET':
+            rows = conn.execute(
+                "SELECT m.id, m.college_name, m.kind, m.city, m.state, m.college_type, "
+                "m.logo_url, f.added_at "
+                "FROM pg_college_favorites f JOIN pg_college_master m ON m.id = f.master_id "
+                "WHERE f.user_id = ? ORDER BY f.added_at DESC", [uid]).fetchall()
+            favs = [{'id': r['id'], 'name': r['college_name'], 'kind': r['kind'],
+                     'city': r['city'], 'state': r['state'], 'college_type': r['college_type'],
+                     'logo_url': r['logo_url'], 'added_at': str(r['added_at'])} for r in rows]
+            return jsonify({'ok': True, 'favorites': favs, 'count': len(favs)})
+        # POST — add one
+        body = request.get_json(silent=True) or {}
+        try:
+            mid = int(body.get('master_id'))
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'error': 'master_id required'}), 400
+        if not conn.execute("SELECT 1 FROM pg_college_master WHERE id = ?", [mid]).fetchone():
+            return jsonify({'ok': False, 'error': 'unknown master_id'}), 404
+        conn.execute("INSERT INTO pg_college_favorites (user_id, master_id) VALUES (?, ?) "
+                     "ON CONFLICT (user_id, master_id) DO NOTHING", [uid, mid])
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_college_favorites: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_pg_college_favorite_delete(master_id):
+    """DELETE /api/pg/college-favorites/<master_id> → remove one (X-PG-Key + Bearer)."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    tok = _bearer_token()
+    if not tok:
+        return jsonify({'ok': False, 'error': 'no_token'}), 401
+    conn = get_db()
+    try:
+        user = _pg_user_by_token(conn, tok)
+        if not user:
+            return jsonify({'ok': False, 'error': 'invalid_token'}), 401
+        conn.execute("DELETE FROM pg_college_favorites WHERE user_id = ? AND master_id = ?",
+                     [user['id'], master_id])
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_college_favorite_delete: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
