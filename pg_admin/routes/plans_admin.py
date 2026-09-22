@@ -468,11 +468,17 @@ def plan_features_grid():
             "WHERE plan_kind = 'counselling' AND COALESCE(is_active,1)=1 "
             "ORDER BY sort_order, id").fetchall()]
         features = [dict(r) for r in conn.execute(
-            "SELECT code, name, description, resource_kind FROM pg_features "
-            "WHERE COALESCE(is_active,1)=1 AND resource_kind IN ('dashboard','counselling') "
-            "ORDER BY CASE resource_kind WHEN 'dashboard' THEN 0 ELSE 1 END, sort_order, name").fetchall()]
+            "SELECT code, name, description, resource_kind, sort_order FROM pg_features "
+            "WHERE COALESCE(is_active,1)=1 AND resource_kind IN ('dashboard','counselling')").fetchall()]
         for r in conn.execute("SELECT plan_id, feature_code, value_type FROM pg_plan_features").fetchall():
             cells[(r['plan_id'], r['feature_code'])] = (r['value_type'] or 'off') != 'off'
+        # Order: included in the most plans first → not-included last (clean staircase);
+        # ties keep dashboard-features above services, then sort_order.
+        def _cnt(code):
+            return sum(1 for p in plans if cells.get((p['id'], code)))
+        features.sort(key=lambda f: (-_cnt(f['code']),
+                                     0 if f['resource_kind'] == 'dashboard' else 1,
+                                     f.get('sort_order') or 0))
     finally:
         conn.close()
     return render_template('pg_admin/plan_features.html', user=user, plans=plans,

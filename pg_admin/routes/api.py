@@ -897,23 +897,34 @@ def api_pg_plans():
         matrix = {}
         for r in conn.execute("SELECT * FROM pg_plan_features").fetchall():
             matrix.setdefault(r['plan_id'], {})[r['feature_code']] = dict(r)
+
+        def _incl(pid, code):
+            g = matrix.get(pid, {}).get(code)
+            return bool(g and g['value_type'] != 'off')
+        # ONE global row order for the whole comparison: features included in the most
+        # plans first, features in none last (so the top plan's blanks sink to the bottom).
+        inc_count = {code: sum(1 for p in plans if _incl(p['id'], code)) for code in feats}
+        ordered_codes = sorted(feats.keys(),
+                               key=lambda c: (-inc_count[c], feats[c].get('sort_order') or 0, c))
         out = []
         for p in plans:
             grants = matrix.get(p['id'], {})
             features = []
-            for code, f in feats.items():
+            for code in ordered_codes:
+                f = feats[code]
                 g = grants.get(code)
                 if not g or g['value_type'] == 'off':
                     included, display = False, None
+                elif f['unit'] == 'boolean':
+                    included, display = True, 'Included'      # boolean = just a tick
                 elif g['value_type'] == 'unlimited':
                     included, display = True, 'Unlimited'
-                elif f['unit'] == 'boolean':
-                    included, display = True, 'Included'
                 elif g['limit_value'] is not None:
                     included, display = True, int(g['limit_value'])
                 else:
                     included, display = True, 'Unlimited'
                 features.append({'code': code, 'name': f['name'], 'unit': f['unit'],
+                                 'kind': f.get('resource_kind') or '',
                                  'included': included, 'value': display,
                                  'note': g['note'] if g else ''})
             try:
