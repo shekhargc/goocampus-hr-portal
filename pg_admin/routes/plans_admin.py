@@ -455,6 +455,11 @@ def plan_features_grid():
     user = _require_admin()
     if not user:
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    try:
+        from pg_admin.data import plans_tables as _pt
+        _pt.ensure_dashboard_gating_features()   # self-heal: all sections present even after a cold start
+    except Exception:
+        pass
     conn = get_db()
     plans, features, cells = [], [], {}
     try:
