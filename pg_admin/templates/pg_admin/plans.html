@@ -146,6 +146,7 @@
     <div class="pp-feat-lines">
       {% for f in features %}
         {% set g = p.features.get(f.code) %}
+        {% if not (f.code == 'pgcp_authority' and (not g or g.value_type == 'off')) %}
         <div class="fl {% if not g or g.value_type == 'off' %}off{% endif %}">
           <span class="k">{{ f.name }}</span>
           <span class="v">
@@ -156,6 +157,7 @@
             {% else %}✓{% endif %}
           </span>
         </div>
+        {% endif %}
       {% endfor %}
     </div>
     <div class="pp-card-cta" style="background:{{ p.accent_color or '#2952A3' }}">

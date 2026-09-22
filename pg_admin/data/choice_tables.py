@@ -56,6 +56,19 @@ def ensure_choice_tables():
         conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS fee NUMERIC(14,2)")
         conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_choice_items_set ON pg_choice_items (set_id, round, position)")
+
+        # A doctor's locked states for counselling. role 'home' = their home state
+        # (set once in onboarding, locked); 'other' = extra states allowed by plan
+        # (Standard +1, Premium many). Once set, locked (cannot be changed).
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_doctor_states (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            role TEXT DEFAULT 'other',        -- home | other
+            locked INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_doctor_states_user ON pg_doctor_states (user_id)")
         conn.commit()
         logging.info("pg_choice tables ensured")
     except Exception as e:

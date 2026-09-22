@@ -917,6 +917,9 @@ def api_pg_plans():
                 f = feats[code]
                 g = grants.get(code)
                 note = (g.get('note') or '') if g else ''
+                # Authority Support: don't show at all on plans that don't include it (e.g. Free)
+                if code == 'pgcp_authority' and (not g or g['value_type'] == 'off'):
+                    continue
                 if not g or g['value_type'] == 'off':
                     included, display = False, None
                 elif note:

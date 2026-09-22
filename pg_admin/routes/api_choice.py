@@ -179,9 +179,9 @@ def _plan_label(conn, user_id):
         return 'Free'
 
 
-def _choice_gate(conn, uid, scope):
-    """Return an error message if this doctor can't create a set of `scope`, else None.
-    Reads the editable Plan Features matrix (dash_choice_list / dash_all_states)."""
+def _choice_gate(conn, uid, scope, state=''):
+    """Return an error message if this doctor can't create this set, else None.
+    A state set must use one of the doctor's LOCKED states (home / plan-allowed other)."""
     if not _plan_has(conn, uid, 'dash_choice_list'):
         return 'Upgrade to build your choice list.'
     counts = {r['scope']: r['n'] for r in conn.execute(
@@ -189,8 +189,10 @@ def _choice_gate(conn, uid, scope):
         [uid]).fetchall()}
     if scope == 'mcc' and counts.get('mcc', 0) >= 1:
         return 'You already have an MCC (All-India) choice set.'
-    if scope == 'state' and not _plan_has(conn, uid, 'dash_all_states') and counts.get('state', 0) >= 1:
-        return 'Your plan includes one (home) state counselling. Upgrade for more states.'
+    if scope == 'state':
+        locked = {s['state'].strip().lower() for s in _doctor_states(conn, uid)}
+        if not state or state.strip().lower() not in locked:
+            return 'Set this state as your home/other state in onboarding before building its choice list.'
     return None
 
 
@@ -204,9 +206,14 @@ def api_pg_choice_entitlement():
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
         can = _plan_has(conn, user['id'], 'dash_choice_list')
-        allstates = _plan_has(conn, user['id'], 'dash_all_states')
+        home_ok, max_other = _state_limits(conn, user['id'])
+        states = _doctor_states(conn, user['id'])
         return jsonify({'ok': True, 'plan': _plan_label(conn, user['id']), 'can_build': can,
-                        'mcc': can, 'state': ('any' if allstates else ('home' if can else False)),
+                        'mcc': can,
+                        'state': ('any' if max_other is None else ('home' if can else False)),
+                        'home_state': next((s['state'] for s in states if s['role'] == 'home'), None),
+                        'locked_states': [s['state'] for s in states],
+                        'allowed_other_states': ('any' if max_other is None else max_other),
                         'cutoff_explorer': _plan_has(conn, user['id'], 'dash_cutoff_explorer'),
                         'message': ('' if can else 'Upgrade to build your choice list.')})
     finally:
@@ -301,7 +308,7 @@ def api_pg_choice_sets():
             return jsonify({'ok': True, 'sets': sets})
         body = request.get_json(silent=True) or {}
         scope = (body.get('scope') or 'mcc').strip()
-        gate = _choice_gate(conn, uid, scope)
+        gate = _choice_gate(conn, uid, scope, (body.get('state') or '').strip())
         if gate:
             return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
         try:
@@ -464,6 +471,86 @@ def api_pg_choice_reorder(set_id):
         try: conn.rollback()
         except Exception: pass
         logging.error("api_pg_choice_reorder: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+# ── Doctor's locked states (home + plan-allowed extras) ──────────────────────
+def _state_limits(conn, uid):
+    """How many states this doctor can have. home_ok = any paid plan with choice list;
+    max_other = None (unlimited) | 1 | 0, from dash_all_states / dash_extra_state."""
+    home_ok = _plan_has(conn, uid, 'dash_choice_list')
+    if _plan_has(conn, uid, 'dash_all_states'):
+        max_other = None
+    elif _plan_has(conn, uid, 'dash_extra_state'):
+        max_other = 1
+    else:
+        max_other = 0
+    return home_ok, max_other
+
+
+def _doctor_states(conn, uid):
+    return [dict(r) for r in conn.execute(
+        "SELECT state, role, locked FROM pg_doctor_states WHERE user_id = ? ORDER BY "
+        "CASE role WHEN 'home' THEN 0 ELSE 1 END, id", [uid]).fetchall()]
+
+
+def api_pg_my_states():
+    """/api/pg/my-states  (X-PG-Key + doctor Bearer)
+       GET → { states:[{state,role,locked}], home, allowed_other, can_add_other }
+       POST { state, role:'home'|'other' } → set + lock (home once; 'other' up to plan limit)."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        user = _user(conn)
+        if not user:
+            return jsonify({'ok': False, 'error': 'no_token'}), 401
+        uid = user['id']
+        home_ok, max_other = _state_limits(conn, uid)
+
+        def _payload():
+            states = _doctor_states(conn, uid)
+            home = next((s['state'] for s in states if s['role'] == 'home'), None)
+            others = [s for s in states if s['role'] == 'other']
+            can_add_other = home_ok and (max_other is None or len(others) < max_other)
+            return {'ok': True, 'states': states, 'home': home,
+                    'allowed_other': ('any' if max_other is None else max_other),
+                    'can_add_other': can_add_other, 'can_set_home': home_ok and not home}
+
+        if request.method == 'GET':
+            return jsonify(_payload())
+
+        body = request.get_json(silent=True) or {}
+        state = (body.get('state') or '').strip()
+        role = (body.get('role') or 'other').strip()
+        if not state:
+            return jsonify({'ok': False, 'error': 'state required'}), 400
+        if not home_ok:
+            return jsonify({'ok': False, 'error': 'not_entitled',
+                            'message': 'Upgrade to set your counselling states.'}), 403
+        existing = _doctor_states(conn, uid)
+        if role == 'home':
+            if any(s['role'] == 'home' for s in existing):
+                return jsonify({'ok': False, 'error': 'home_locked',
+                                'message': 'Home state is already set and locked.'}), 409
+        else:
+            others = [s for s in existing if s['role'] == 'other']
+            if max_other is not None and len(others) >= max_other:
+                msg = ('Your plan does not include extra states.' if max_other == 0
+                       else 'You have used your extra-state allowance. Upgrade for more.')
+                return jsonify({'ok': False, 'error': 'limit', 'message': msg}), 403
+        if any(s['state'].strip().lower() == state.lower() for s in existing):
+            return jsonify({'ok': True, 'already': True})   # idempotent
+        conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) VALUES (?,?,?,1)",
+                     [uid, state, 'home' if role == 'home' else 'other'])
+        conn.commit()
+        return jsonify(_payload())
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_my_states: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
