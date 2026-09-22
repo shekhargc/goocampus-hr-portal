@@ -395,6 +395,38 @@ def plan_diag():
     admin = _require_admin()
     if not admin:
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    from flask import Response
+    # ── Token lookup: what user + plan does the goocampus.in session token resolve to? ──
+    token = (request.args.get('token') or '').strip()
+    if token:
+        from pg_admin.routes.api import _pg_user_by_token
+        conn = get_db()
+        out = [f"Token lookup: …{token[-8:]}"]
+        try:
+            u = _pg_user_by_token(conn, token)
+            if not u:
+                out.append("→ TOKEN INVALID/EXPIRED. The API would return 401 → the frontend falls "
+                           "back to Free. Re-login on goocampus.in to mint a fresh token.")
+            else:
+                u = dict(u)
+                out.append(f"→ resolves to user_id={u.get('id')}  name={u.get('name')!r}  "
+                           f"mobile={u.get('mobile')!r}")
+                sub = conn.execute(
+                    "SELECT s.status, p.name AS plan_name, p.code AS plan_code, p.plan_kind "
+                    "FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
+                    "WHERE s.user_id = ? AND s.status='active' "
+                    "AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP) "
+                    "ORDER BY s.id DESC LIMIT 1", [u['id']]).fetchone()
+                if sub:
+                    sub = dict(sub)
+                    out.append(f"→ THIS TOKEN'S PLAN: {sub['plan_name']} ({sub['plan_code']}, "
+                               f"kind={sub['plan_kind']})  ← what /api/pg/entitlements returns for it")
+                else:
+                    out.append("→ THIS TOKEN'S PLAN: Free (no active paid subscription on this user)."
+                               "  If this user_id is NOT the one you granted Starter to, that's the bug.")
+        finally:
+            conn.close()
+        return Response("\n".join(out), mimetype='text/plain')
     mobile = (request.args.get('mobile') or '').strip()
     digits = _re.sub(r'\D', '', mobile)[-10:]
     conn = get_db()
