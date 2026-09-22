@@ -82,12 +82,20 @@ def plans_admin():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
 
+    try:   # self-heal: one clean feature list + one free plan, even after a cold start
+        from pg_admin.data import plans_tables as _pt
+        _pt.consolidate_free_plan()
+        _pt.cleanup_legacy_features()
+        _pt.ensure_dashboard_gating_features()
+    except Exception:
+        pass
     conn = get_db()
     plans, features, matrix = [], [], {}
     stats = {'total': 0, 'active': 0, 'paid': 0, 'subscribers': 0}
     try:
         plans = [dict(r) for r in conn.execute(
-            "SELECT * FROM pg_plans ORDER BY sort_order, id").fetchall()]
+            "SELECT * FROM pg_plans WHERE COALESCE(plan_kind,'') <> 'retired' "
+            "ORDER BY sort_order, id").fetchall()]
         features = [dict(r) for r in conn.execute(
             "SELECT * FROM pg_features WHERE COALESCE(is_active,1)=1 "
             "ORDER BY sort_order, id").fetchall()]
@@ -457,7 +465,9 @@ def plan_features_grid():
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
     try:
         from pg_admin.data import plans_tables as _pt
-        _pt.ensure_dashboard_gating_features()   # self-heal: all sections present even after a cold start
+        _pt.consolidate_free_plan()
+        _pt.cleanup_legacy_features()
+        _pt.ensure_dashboard_gating_features()   # self-heal: one clean list + one free plan
     except Exception:
         pass
     conn = get_db()
