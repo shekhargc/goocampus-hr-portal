@@ -465,7 +465,7 @@ def plan_features_grid():
     try:
         plans = [dict(r) for r in conn.execute(
             "SELECT id, code, name, price FROM pg_plans "
-            "WHERE plan_kind = 'counselling' AND COALESCE(is_active,1)=1 "
+            "WHERE plan_kind IN ('free','counselling') AND COALESCE(is_active,1)=1 AND COALESCE(is_public,1)=1 "
             "ORDER BY sort_order, id").fetchall()]
         features = [dict(r) for r in conn.execute(
             "SELECT code, name, description, resource_kind, sort_order FROM pg_features "
@@ -492,7 +492,7 @@ def plan_features_save():
     conn = get_db()
     try:
         plans = [dict(r) for r in conn.execute(
-            "SELECT id FROM pg_plans WHERE plan_kind = 'counselling' AND COALESCE(is_active,1)=1").fetchall()]
+            "SELECT id FROM pg_plans WHERE plan_kind IN ('free','counselling') AND COALESCE(is_active,1)=1 AND COALESCE(is_public,1)=1").fetchall()]
         feats = [r['code'] for r in conn.execute(
             "SELECT code FROM pg_features WHERE COALESCE(is_active,1)=1 "
             "AND resource_kind IN ('dashboard','counselling')").fetchall()]

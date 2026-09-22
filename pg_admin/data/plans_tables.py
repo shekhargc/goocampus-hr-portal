@@ -455,3 +455,25 @@ def ensure_dashboard_gating_features():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+def consolidate_free_plan():
+    """One Free plan, not two. Promote the real Free package (pgcp_free) to be the
+    free-tier ANCHOR (plan_kind='free') and retire the old standalone 'free' plan
+    (kept in the DB, just inactive + hidden + no longer the anchor). Idempotent."""
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM pg_plans WHERE code = 'pgcp_free'").fetchone():
+            return
+        conn.execute("UPDATE pg_plans SET plan_kind = 'free' WHERE code = 'pgcp_free'")
+        conn.execute("UPDATE pg_plans SET plan_kind = 'retired', is_active = 0, is_public = 0 "
+                     "WHERE code = 'free'")
+        conn.commit()
+        logging.info("pg pricing: consolidated to a single free plan (pgcp_free)")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"consolidate_free_plan: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass
