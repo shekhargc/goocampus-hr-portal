@@ -93,7 +93,12 @@ def api_pg_otp_verify():
         conn.execute("DELETE FROM pg_otps WHERE mobile = ?", (mobile,))
         token = secrets.token_urlsafe(32)
         token_exp = datetime.utcnow() + timedelta(days=30)
-        user = conn.execute("SELECT id, name FROM pg_users WHERE mobile = ?", (mobile,)).fetchone()
+        # Match by the LAST 10 DIGITS (tolerant of a stored +91/country code) and reuse
+        # the OLDEST account, so an existing record isn't missed → no duplicate signup.
+        user = conn.execute(
+            "SELECT id, name FROM pg_users "
+            "WHERE RIGHT(regexp_replace(COALESCE(mobile,''), '\\D', '', 'g'), 10) = ? "
+            "ORDER BY id ASC LIMIT 1", (mobile,)).fetchone()
         if user:
             uid, uname = user['id'], (user['name'] or '')
             # If the site now sends a name and we don't have one, capture it.
