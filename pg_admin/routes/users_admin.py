@@ -386,3 +386,53 @@ def user_reset_usage(user_id):
         except Exception:
             pass
     return redirect(url_for('pg_user_detail', user_id=user_id))
+
+
+def plan_diag():
+    """GET /admin/pg/diag/plan?mobile=… — every pg_users row for a mobile + each one's
+    active plan. Reveals duplicate accounts / which record got the grant. (founder 2026-09-22)"""
+    import re as _re
+    admin = _require_admin()
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    mobile = (request.args.get('mobile') or '').strip()
+    digits = _re.sub(r'\D', '', mobile)[-10:]
+    conn = get_db()
+    rows = []
+    try:
+        users = conn.execute(
+            "SELECT id, name, mobile, email, created_at FROM pg_users "
+            "WHERE RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? ORDER BY id",
+            [digits]).fetchall() if digits else []
+        for u in users:
+            subs = [dict(s) for s in conn.execute(
+                "SELECT s.id, s.status, s.expires_at, s.source, s.created_at, p.name AS plan_name, "
+                "p.code AS plan_code FROM pg_subscriptions s LEFT JOIN pg_plans p ON p.id = s.plan_id "
+                "WHERE s.user_id = ? ORDER BY s.id DESC", [u['id']]).fetchall()]
+            active = next((x for x in subs if x['status'] == 'active'
+                           and (x['expires_at'] is None or True)), None)
+            rows.append({'user': dict(u), 'active': active, 'subs': subs})
+    finally:
+        conn.close()
+    # plain-text so it's readable without a template
+    out = [f"Mobile query: {mobile}  (matching last-10: {digits})",
+           f"pg_users records found: {len(rows)}", ""]
+    for r in rows:
+        u = r['user']
+        out.append(f"• user_id={u['id']}  name={u.get('name')!r}  mobile={u.get('mobile')!r}  "
+                   f"created={u.get('created_at')}")
+        if r['active']:
+            a = r['active']
+            out.append(f"    ACTIVE PLAN: {a.get('plan_name')} ({a.get('plan_code')})  "
+                       f"source={a.get('source')}  expires={a.get('expires_at')}")
+        else:
+            out.append("    ACTIVE PLAN: (none → free tier)")
+        for s in r['subs']:
+            out.append(f"    sub#{s['id']} {s['status']} {s.get('plan_name')} "
+                       f"src={s.get('source')} created={s.get('created_at')}")
+        out.append("")
+    if not rows:
+        out.append("→ No pg_users record for this mobile. The doctor must log in on goocampus.in "
+                   "with this exact number first (OTP), which creates the account.")
+    from flask import Response
+    return Response("\n".join(out), mimetype='text/plain')
