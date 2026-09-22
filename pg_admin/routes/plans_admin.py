@@ -113,6 +113,15 @@ def plans_admin():
             p['subscribers'] = counts.get(p['id'], 0)
             p['highlights_list'] = _as_list(p.get('highlights'))
             p['features'] = matrix.get(p['id'], {})
+            # Per-plan order: this plan's included items on top, blanks at the bottom
+            # (dashboard features before services, then sort_order).
+            def _inc(f, pf=p['features']):
+                g = pf.get(f['code'])
+                return bool(g and (g.get('value_type') or 'off') != 'off')
+            p['feat_order'] = sorted(
+                features, key=lambda f: (0 if _inc(f) else 1,
+                                         0 if (f.get('resource_kind') == 'dashboard') else 1,
+                                         f.get('sort_order') or 0))
         stats = {
             'total': len(plans),
             'active': sum(1 for p in plans if p.get('is_active')),
