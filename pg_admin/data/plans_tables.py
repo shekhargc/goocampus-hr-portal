@@ -477,3 +477,32 @@ def consolidate_free_plan():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+# Pre-PGCP generic features, superseded by the dashboard features + counselling
+# services. Retired so the plan cards show one clean list. (founder 2026-09-22)
+_LEGACY_FEATURE_CODES = [
+    'predictor_access', 'predictor_states', 'predictor_searches',
+    'pdf_library', 'pdf_documents', 'pdf_downloads',
+    'mentor_directory', 'mentor_sessions', 'mentor_paid_booking',
+    'college_shortlist', 'counselling_call', 'priority_support',
+]
+
+
+def cleanup_legacy_features():
+    """Deactivate the old generic feature catalogue (kept in DB, just hidden) so the
+    plan matrix shows only the built dashboard features + counselling services. Idempotent."""
+    conn = get_db()
+    try:
+        ph = ','.join(['?'] * len(_LEGACY_FEATURE_CODES))
+        conn.execute(f"UPDATE pg_features SET is_active = 0 WHERE code IN ({ph})",
+                     _LEGACY_FEATURE_CODES)
+        conn.commit()
+        logging.info("pg pricing: retired legacy generic features")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"cleanup_legacy_features: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass

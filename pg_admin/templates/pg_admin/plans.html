@@ -149,9 +149,9 @@
         <div class="fl {% if not g %}off{% endif %}">
           <span class="k">{{ f.name }}</span>
           <span class="v">
-            {% if not g %}—
+            {% if not g or g.value_type == 'off' %}—
+            {% elif f.unit == 'boolean' %}✓
             {% elif g.value_type == 'unlimited' %}Unlimited
-            {% elif f.unit == 'boolean' %}Included
             {% elif g.limit_value is not none %}{{ g.limit_value }}
             {% else %}Unlimited{% endif %}
           </span>
