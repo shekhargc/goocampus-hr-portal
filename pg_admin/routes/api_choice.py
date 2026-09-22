@@ -144,15 +144,29 @@ def _user(conn):
 
 
 def _plan_has(conn, user_id, feature_code):
-    """True if the doctor's effective plan includes this feature (read from the
-    editable Plan Features matrix, i.e. pg_plan_features value_type != 'off')."""
+    """True if the doctor's effective plan includes this feature. Reads the editable
+    Plan Features matrix (pg_plan_features); if the matrix has NO entry for this
+    feature (e.g. the one-time seed didn't run), falls back to a sensible default by
+    plan tier so a paid plan still unlocks the right things."""
     try:
         plan, _sub = entitlements.effective_plan(conn, user_id)
         if not plan:
             return False
         fm = entitlements.plan_feature_map(conn, plan['id'])
         v = fm.get(feature_code)
-        return bool(v and (v.get('value_type') or 'off') != 'off')
+        if v is not None:                       # explicit matrix value wins (on OR off)
+            return (v.get('value_type') or 'off') != 'off'
+        # no explicit mapping → default by plan tier
+        code = (plan.get('code') or '').lower()
+        paid = any(t in code for t in ('starter', 'standard', 'premium'))
+        premium = 'premium' in code
+        if feature_code == 'dash_all_states':
+            return premium
+        if feature_code == 'dash_choice_list':
+            return paid
+        if feature_code == 'dash_cutoff_explorer':
+            return True
+        return False
     except Exception:
         return False
 

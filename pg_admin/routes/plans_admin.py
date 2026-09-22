@@ -487,15 +487,12 @@ def plan_features_save():
         for p in plans:
             for fc in feats:
                 on = request.form.get(f"cell_{p['id']}_{fc}") == 'on'
-                if on:
-                    conn.execute(
-                        "INSERT INTO pg_plan_features (plan_id, feature_code, value_type) "
-                        "VALUES (?,?, 'unlimited') "
-                        "ON CONFLICT (plan_id, feature_code) DO UPDATE SET value_type = 'unlimited'",
-                        (p['id'], fc))
-                else:
-                    conn.execute("DELETE FROM pg_plan_features WHERE plan_id = ? AND feature_code = ?",
-                                 (p['id'], fc))
+                vt = 'unlimited' if on else 'off'
+                conn.execute(
+                    "INSERT INTO pg_plan_features (plan_id, feature_code, value_type) "
+                    "VALUES (?,?,?) "
+                    "ON CONFLICT (plan_id, feature_code) DO UPDATE SET value_type = EXCLUDED.value_type",
+                    (p['id'], fc, vt))
         conn.commit()
         flash('Plan features saved.', 'success')
     except Exception as e:
