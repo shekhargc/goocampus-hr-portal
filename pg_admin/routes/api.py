@@ -978,8 +978,12 @@ def api_pg_entitlements():
     conn = get_db()
     try:
         uid = _resolve_pg_user(conn)
+        ent = entitlements.summary(conn, uid)
+        # Surface plan/features at the TOP LEVEL too (flat contract), in addition to the
+        # nested `entitlements` — so both { plan } and { entitlements: { plan } } work.
         return jsonify({'ok': True, 'logged_in': bool(uid),
-                        'entitlements': entitlements.summary(conn, uid)})
+                        'entitlements': ent,
+                        'plan': ent.get('plan'), 'features': ent.get('features')})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
