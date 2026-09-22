@@ -227,6 +227,8 @@ def register_pg_admin(app):
                      users_admin.users_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/users/<int:user_id>', 'pg_user_detail',
                      users_admin.user_detail, methods=['GET'])
+    app.add_url_rule('/admin/pg/diag/plan', 'pg_plan_diag',
+                     users_admin.plan_diag, methods=['GET'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/save', 'pg_user_save',
                      users_admin.user_save, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/block', 'pg_user_block',
