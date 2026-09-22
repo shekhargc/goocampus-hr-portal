@@ -463,9 +463,9 @@ def plan_features_grid():
             "WHERE plan_kind = 'counselling' AND COALESCE(is_active,1)=1 "
             "ORDER BY sort_order, id").fetchall()]
         features = [dict(r) for r in conn.execute(
-            "SELECT code, name, description FROM pg_features "
-            "WHERE COALESCE(is_active,1)=1 AND resource_kind = 'counselling' "
-            "ORDER BY sort_order, name").fetchall()]
+            "SELECT code, name, description, resource_kind FROM pg_features "
+            "WHERE COALESCE(is_active,1)=1 AND resource_kind IN ('dashboard','counselling') "
+            "ORDER BY CASE resource_kind WHEN 'dashboard' THEN 0 ELSE 1 END, sort_order, name").fetchall()]
         for r in conn.execute("SELECT plan_id, feature_code, value_type FROM pg_plan_features").fetchall():
             cells[(r['plan_id'], r['feature_code'])] = (r['value_type'] or 'off') != 'off'
     finally:
@@ -483,7 +483,13 @@ def plan_features_save():
         plans = [dict(r) for r in conn.execute(
             "SELECT id FROM pg_plans WHERE plan_kind = 'counselling' AND COALESCE(is_active,1)=1").fetchall()]
         feats = [r['code'] for r in conn.execute(
-            "SELECT code FROM pg_features WHERE COALESCE(is_active,1)=1 AND resource_kind = 'counselling'").fetchall()]
+            "SELECT code FROM pg_features WHERE COALESCE(is_active,1)=1 "
+            "AND resource_kind IN ('dashboard','counselling')").fetchall()]
+        # Rename: apply any edited feature names (applies everywhere they're shown).
+        for fc in feats:
+            nm = (request.form.get(f"name_{fc}") or '').strip()
+            if nm:
+                conn.execute("UPDATE pg_features SET name = ? WHERE code = ?", (nm, fc))
         for p in plans:
             for fc in feats:
                 on = request.form.get(f"cell_{p['id']}_{fc}") == 'on'
