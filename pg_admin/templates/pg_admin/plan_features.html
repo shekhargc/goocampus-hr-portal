@@ -33,21 +33,20 @@
           </tr>
         </thead>
         <tbody>
-          {% set ns = namespace(group='') %}
           {% for f in features %}
-          {% if f.resource_kind != ns.group %}
-            {% set ns.group = f.resource_kind %}
-            <tr><td colspan="{{ plans|length + 1 }}" style="padding:0.7rem 1rem 0.4rem;background:#f8fafc;position:sticky;left:0;">
-              <span style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--orange);">
-                {{ 'Dashboard features (built)' if f.resource_kind == 'dashboard' else 'Counselling services (offered)' }}</span></td></tr>
-          {% endif %}
           <tr style="border-top:1px solid var(--gray-100);">
             <td style="padding:0.5rem 1rem;position:sticky;left:0;background:white;">
-              <input type="text" name="name_{{ f.code }}" value="{{ f.name }}"
-                     style="width:100%;max-width:320px;font-weight:600;color:var(--navy);border:1px solid transparent;border-radius:6px;padding:4px 6px;font-size:0.86rem;background:transparent;"
-                     onfocus="this.style.borderColor='var(--gray-300)';this.style.background='#fff';"
-                     onblur="this.style.borderColor='transparent';this.style.background='transparent';"
-                     title="Click to rename — applies everywhere">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:0.58rem;font-weight:800;padding:2px 6px;border-radius:4px;flex-shrink:0;text-transform:uppercase;
+                             background:{{ '#e0e7ff' if f.resource_kind == 'dashboard' else '#f1f5f9' }};
+                             color:{{ '#3730a3' if f.resource_kind == 'dashboard' else '#64748b' }};"
+                      title="{{ 'A feature built into the dashboard' if f.resource_kind == 'dashboard' else 'A counselling service you offer' }}">{{ 'FEATURE' if f.resource_kind == 'dashboard' else 'SERVICE' }}</span>
+                <input type="text" name="name_{{ f.code }}" value="{{ f.name }}"
+                       style="width:100%;max-width:300px;font-weight:600;color:var(--navy);border:1px solid transparent;border-radius:6px;padding:4px 6px;font-size:0.86rem;background:transparent;"
+                       onfocus="this.style.borderColor='var(--gray-300)';this.style.background='#fff';"
+                       onblur="this.style.borderColor='transparent';this.style.background='transparent';"
+                       title="Click to rename — applies everywhere">
+              </div>
               {% if f.description %}<div style="font-size:0.72rem;color:var(--gray-500);padding-left:6px;">{{ f.description }}</div>{% endif %}
             </td>
             {% for p in plans %}
