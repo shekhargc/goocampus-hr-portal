@@ -87,6 +87,7 @@ def plans_admin():
         _pt.consolidate_free_plan()
         _pt.cleanup_legacy_features()
         _pt.ensure_dashboard_gating_features()
+        _pt.set_pgcp_authority_notes()
     except Exception:
         pass
     conn = get_db()
@@ -118,7 +119,8 @@ def plans_admin():
         def _incl_count(code):
             return sum(1 for p in plans
                        if (matrix.get(p['id'], {}).get(code) or {}).get('value_type', 'off') != 'off')
-        features.sort(key=lambda f: (-_incl_count(f['code']),
+        features.sort(key=lambda f: (0 if f['code'] == 'pgcp_authority' else 1,   # pin to top
+                                     -_incl_count(f['code']),
                                      0 if (f.get('resource_kind') == 'dashboard') else 1,
                                      f.get('sort_order') or 0))
         stats = {
@@ -476,6 +478,7 @@ def plan_features_grid():
         _pt.consolidate_free_plan()
         _pt.cleanup_legacy_features()
         _pt.ensure_dashboard_gating_features()   # self-heal: one clean list + one free plan
+        _pt.set_pgcp_authority_notes()
     except Exception:
         pass
     conn = get_db()

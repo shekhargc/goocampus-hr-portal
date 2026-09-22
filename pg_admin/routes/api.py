@@ -906,7 +906,8 @@ def api_pg_plans():
         inc_count = {code: sum(1 for p in plans if _incl(p['id'], code)) for code in feats}
         ordered_codes = sorted(
             feats.keys(),
-            key=lambda c: (-inc_count[c], 0 if (feats[c].get('resource_kind') == 'dashboard') else 1,
+            key=lambda c: (0 if c == 'pgcp_authority' else 1,   # pin Authority Support to the very top
+                           -inc_count[c], 0 if (feats[c].get('resource_kind') == 'dashboard') else 1,
                            feats[c].get('sort_order') or 0, c))
         out = []
         for p in plans:

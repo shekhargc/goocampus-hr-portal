@@ -40,6 +40,7 @@ def register_pg_admin(app):
                _plans_tables.consolidate_free_plan,
                _plans_tables.cleanup_legacy_features,
                _plans_tables.ensure_dashboard_gating_features,
+               _plans_tables.set_pgcp_authority_notes,
                _college_master.ensure_college_master_tables,
                _pgcp_tables.ensure_pgcp_tables,
                _choice_tables.ensure_choice_tables):

@@ -506,3 +506,41 @@ def cleanup_legacy_features():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+# Counselling Authority Support scope, per plan (founder 2026-09-22). Shown at the
+# TOP of the pricing card with the scope text under it.
+_AUTH_NOTES = {
+    'pgcp_starter':  'All India / MCC + Home State only',
+    'pgcp_standard': 'All India / MCC + Home State only + 1 Other State',
+    'pgcp_premium':  'All India / MCC + Home State only + All Open States',
+}
+
+
+def set_pgcp_authority_notes():
+    """Set the per-plan Counselling Authority Support scope text once (v2 marker),
+    so founder edits later aren't overwritten on boot."""
+    conn = get_db()
+    try:
+        if conn.execute("SELECT 1 FROM pg_features WHERE code = '_auth_notes_v2'").fetchone():
+            return
+        for plan_code, note in _AUTH_NOTES.items():
+            row = conn.execute("SELECT id FROM pg_plans WHERE code = ?", (plan_code,)).fetchone()
+            if row:
+                conn.execute(
+                    "INSERT INTO pg_plan_features (plan_id, feature_code, value_type, note) "
+                    "VALUES (?, 'pgcp_authority', 'unlimited', ?) "
+                    "ON CONFLICT (plan_id, feature_code) DO UPDATE SET note = EXCLUDED.note, "
+                    "value_type = 'unlimited'", (row['id'], note))
+        conn.execute("INSERT INTO pg_features (code, name, unit, resource_kind, is_active, sort_order) "
+                     "VALUES ('_auth_notes_v2','(auth notes marker)','boolean','_meta',0,9997) "
+                     "ON CONFLICT (code) DO NOTHING")
+        conn.commit()
+        logging.info("pg pricing: set counselling authority notes v2")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"set_pgcp_authority_notes: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass
