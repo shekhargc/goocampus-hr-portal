@@ -416,7 +416,8 @@ _DASH_FEATURES = [
     ('dash_favourites',      'Favourite colleges (star)', 'Save colleges across the dashboard', 'boolean', 104),
     ('dash_mentors',         'Mentors — browse & request session', 'Browse mentors, request a paid session', 'boolean', 105),
     ('dash_choice_list',     'Choice-List builder (Round 1/2/3)', 'Auto-build round-wise choice sheets, edit & export', 'boolean', 106),
-    ('dash_all_states',      'Choice list — all states', 'Choice sets for any state (else home state only)', 'boolean', 107),
+    ('dash_extra_state',     'Choice list — one other state', 'Add ONE state beyond the home state', 'boolean', 107),
+    ('dash_all_states',      'Choice list — all states', 'Add any/multiple states (else home + limit)', 'boolean', 108),
 ]
 _FREE_SECTIONS = ['dash_predictor', 'dash_cutoff_explorer', 'dash_college_db',
                   'dash_stipend', 'dash_favourites', 'dash_mentors']
@@ -424,6 +425,7 @@ _ALL_PLANS = ['pgcp_free', 'pgcp_starter', 'pgcp_standard', 'pgcp_premium']
 # feature_code -> plan codes included by default
 _DASH_DEFAULTS = {c: list(_ALL_PLANS) for c in _FREE_SECTIONS}
 _DASH_DEFAULTS['dash_choice_list'] = ['pgcp_starter', 'pgcp_standard', 'pgcp_premium']
+_DASH_DEFAULTS['dash_extra_state'] = ['pgcp_standard', 'pgcp_premium']
 _DASH_DEFAULTS['dash_all_states'] = ['pgcp_premium']
 
 
