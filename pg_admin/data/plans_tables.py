@@ -404,43 +404,50 @@ def seed_pgcp_counselling_packages():
         except Exception: pass
 
 
-# Dashboard-gating features (the actual sections the app unlocks by plan). Seeded
-# once with sensible defaults, then fully editable on the Plan Features page.
+# Dashboard sections + gated features — every section the app has, shown on the
+# Plan Features page. Names here are DEFAULTS only; the founder can rename any of
+# them on that page. ALL boolean (included / not).
+# sort_order 100-107 keeps these ABOVE the counselling services (200+).
 _DASH_FEATURES = [
-    ('dash_choice_list', 'Choice-List builder (R1/R2/R3 sheets)',
-     'Auto-build round-wise choice sheets, edit & export', 'boolean', 250),
-    ('dash_all_states', 'Choice list — all states',
-     'Build state choice sets for any state (else home state only)', 'boolean', 251),
-    ('dash_cutoff_explorer', 'Cutoff Explorer (manual filter)', '', 'boolean', 252),
+    ('dash_predictor',       'College Predictor (by rank)', 'Rank-based college prediction', 'boolean', 100),
+    ('dash_cutoff_explorer', 'Cutoff Explorer (filter cut-offs)', 'Browse cut-offs by college/quota/category', 'boolean', 101),
+    ('dash_college_db',      'College Database', 'Browse colleges + full profiles', 'boolean', 102),
+    ('dash_stipend',         'Stipend · Bond · Penalty', 'Stipend/bond/penalty by college & speciality', 'boolean', 103),
+    ('dash_favourites',      'Favourite colleges (star)', 'Save colleges across the dashboard', 'boolean', 104),
+    ('dash_mentors',         'Mentors — browse & request session', 'Browse mentors, request a paid session', 'boolean', 105),
+    ('dash_choice_list',     'Choice-List builder (Round 1/2/3)', 'Auto-build round-wise choice sheets, edit & export', 'boolean', 106),
+    ('dash_all_states',      'Choice list — all states', 'Choice sets for any state (else home state only)', 'boolean', 107),
 ]
-# feature_code -> plan codes that include it by default
-_DASH_DEFAULTS = {
-    'dash_choice_list':     ['pgcp_starter', 'pgcp_standard', 'pgcp_premium'],
-    'dash_all_states':      ['pgcp_premium'],
-    'dash_cutoff_explorer': ['pgcp_free', 'pgcp_starter', 'pgcp_standard', 'pgcp_premium'],
-}
+_FREE_SECTIONS = ['dash_predictor', 'dash_cutoff_explorer', 'dash_college_db',
+                  'dash_stipend', 'dash_favourites', 'dash_mentors']
+_ALL_PLANS = ['pgcp_free', 'pgcp_starter', 'pgcp_standard', 'pgcp_premium']
+# feature_code -> plan codes included by default
+_DASH_DEFAULTS = {c: list(_ALL_PLANS) for c in _FREE_SECTIONS}
+_DASH_DEFAULTS['dash_choice_list'] = ['pgcp_starter', 'pgcp_standard', 'pgcp_premium']
+_DASH_DEFAULTS['dash_all_states'] = ['pgcp_premium']
 
 
 def ensure_dashboard_gating_features():
-    """Add the dashboard-gating features + default plan mapping once (guarded)."""
+    """Keep the dashboard features present + their default plan mapping. Runs every
+    boot but is purely additive (ON CONFLICT DO NOTHING) — it fills gaps for any new
+    feature and NEVER overwrites the founder's edits on the Plan Features page."""
     conn = get_db()
     try:
-        if conn.execute("SELECT 1 FROM pg_features WHERE code = '_dash_seed_v1'").fetchone():
-            return
         for code, name, desc, unit, sort in _DASH_FEATURES:
             conn.execute("INSERT INTO pg_features (code, name, description, unit, resource_kind, sort_order) "
-                         "VALUES (?,?,?,?, 'counselling', ?) ON CONFLICT (code) DO NOTHING",
+                         "VALUES (?,?,?,?, 'dashboard', ?) ON CONFLICT (code) DO NOTHING",
                          (code, name, desc, unit, sort))
+            # keep grouping + order current for pre-existing rows (never touch name → founder can rename)
+            conn.execute("UPDATE pg_features SET resource_kind='dashboard', sort_order=? WHERE code=?",
+                         (sort, code))
         for fc, plan_codes in _DASH_DEFAULTS.items():
             for pc in plan_codes:
                 row = conn.execute("SELECT id FROM pg_plans WHERE code = ?", (pc,)).fetchone()
                 if row:
                     conn.execute("INSERT INTO pg_plan_features (plan_id, feature_code, value_type) "
                                  "VALUES (?,?, 'unlimited') ON CONFLICT DO NOTHING", (row['id'], fc))
-        conn.execute("INSERT INTO pg_features (code, name, unit, resource_kind, is_active, sort_order) "
-                     "VALUES ('_dash_seed_v1','(dash seed marker)','boolean','_meta',0,9998) ON CONFLICT DO NOTHING")
         conn.commit()
-        logging.info("pg pricing: seeded dashboard-gating features")
+        logging.info("pg pricing: ensured dashboard features")
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
