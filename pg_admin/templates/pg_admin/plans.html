@@ -144,7 +144,7 @@
     <ul class="pp-hl">{% for h in p.highlights_list %}<li>{{ h }}</li>{% endfor %}</ul>
     {% endif %}
     <div class="pp-feat-lines">
-      {% for f in p.feat_order %}
+      {% for f in features %}
         {% set g = p.features.get(f.code) %}
         <div class="fl {% if not g or g.value_type == 'off' %}off{% endif %}">
           <span class="k">{{ f.name }}</span>
