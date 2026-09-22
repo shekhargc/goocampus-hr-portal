@@ -37,6 +37,7 @@ def register_pg_admin(app):
                _plans_tables.ensure_pg_plans_tables,
                _plans_tables.seed_pg_pricing_defaults,
                _plans_tables.seed_pgcp_counselling_packages,
+               _plans_tables.consolidate_free_plan,
                _plans_tables.ensure_dashboard_gating_features,
                _college_master.ensure_college_master_tables,
                _pgcp_tables.ensure_pgcp_tables,
