@@ -898,35 +898,31 @@ def api_pg_plans():
         for r in conn.execute("SELECT * FROM pg_plan_features").fetchall():
             matrix.setdefault(r['plan_id'], {})[r['feature_code']] = dict(r)
 
-        def _incl(pid, code):
-            g = matrix.get(pid, {}).get(code)
-            return bool(g and g['value_type'] != 'off')
-        # ONE global row order for the whole comparison: features included in the most
-        # plans first, features in none last (so the top plan's blanks sink to the bottom).
-        inc_count = {code: sum(1 for p in plans if _incl(p['id'], code)) for code in feats}
-        ordered_codes = sorted(feats.keys(),
-                               key=lambda c: (-inc_count[c], feats[c].get('sort_order') or 0, c))
         out = []
         for p in plans:
             grants = matrix.get(p['id'], {})
             features = []
-            for code in ordered_codes:
-                f = feats[code]
+            for code, f in feats.items():
                 g = grants.get(code)
+                note = (g.get('note') or '') if g else ''
                 if not g or g['value_type'] == 'off':
                     included, display = False, None
+                elif note:
+                    included, display = True, note            # e.g. authority scope text
                 elif f['unit'] == 'boolean':
                     included, display = True, 'Included'      # boolean = just a tick
-                elif g['value_type'] == 'unlimited':
-                    included, display = True, 'Unlimited'
                 elif g['limit_value'] is not None:
                     included, display = True, int(g['limit_value'])
                 else:
-                    included, display = True, 'Unlimited'
+                    included, display = True, 'Included'      # never show 'Unlimited' for these
                 features.append({'code': code, 'name': f['name'], 'unit': f['unit'],
                                  'kind': f.get('resource_kind') or '',
                                  'included': included, 'value': display,
-                                 'note': g['note'] if g else ''})
+                                 'note': g['note'] if g else '',
+                                 'sort_order': f.get('sort_order') or 0})
+            # per-plan order: this plan's included items first, then blanks
+            features.sort(key=lambda x: (0 if x['included'] else 1,
+                                         0 if x['kind'] == 'dashboard' else 1, x['sort_order']))
             try:
                 highlights = json.loads(p.get('highlights') or '[]')
             except Exception:
