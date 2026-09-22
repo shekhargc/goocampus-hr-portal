@@ -898,11 +898,22 @@ def api_pg_plans():
         for r in conn.execute("SELECT * FROM pg_plan_features").fetchall():
             matrix.setdefault(r['plan_id'], {})[r['feature_code']] = dict(r)
 
+        def _incl(pid, code):
+            g = matrix.get(pid, {}).get(code)
+            return bool(g and g['value_type'] != 'off')
+        # ONE global order for ALL plans (rows align across columns): included in the
+        # most plans first; nested plans → every plan's ticks sit at the top.
+        inc_count = {code: sum(1 for p in plans if _incl(p['id'], code)) for code in feats}
+        ordered_codes = sorted(
+            feats.keys(),
+            key=lambda c: (-inc_count[c], 0 if (feats[c].get('resource_kind') == 'dashboard') else 1,
+                           feats[c].get('sort_order') or 0, c))
         out = []
         for p in plans:
             grants = matrix.get(p['id'], {})
             features = []
-            for code, f in feats.items():
+            for code in ordered_codes:
+                f = feats[code]
                 g = grants.get(code)
                 note = (g.get('note') or '') if g else ''
                 if not g or g['value_type'] == 'off':
@@ -918,11 +929,7 @@ def api_pg_plans():
                 features.append({'code': code, 'name': f['name'], 'unit': f['unit'],
                                  'kind': f.get('resource_kind') or '',
                                  'included': included, 'value': display,
-                                 'note': g['note'] if g else '',
-                                 'sort_order': f.get('sort_order') or 0})
-            # per-plan order: this plan's included items first, then blanks
-            features.sort(key=lambda x: (0 if x['included'] else 1,
-                                         0 if x['kind'] == 'dashboard' else 1, x['sort_order']))
+                                 'note': g['note'] if g else ''})
             try:
                 highlights = json.loads(p.get('highlights') or '[]')
             except Exception:
