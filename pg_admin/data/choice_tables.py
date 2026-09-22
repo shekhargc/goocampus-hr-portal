@@ -27,9 +27,13 @@ def ensure_choice_tables():
             quota TEXT DEFAULT '',
             category TEXT DEFAULT '',
             rank INTEGER,
+            specialties TEXT DEFAULT '[]',       -- ordered ["MD - Dermatology", ...]
+            quota_categories TEXT DEFAULT '[]',  -- [{"quota":..,"categories":[..]}, ...]
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS specialties TEXT DEFAULT '[]'")
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS quota_categories TEXT DEFAULT '[]'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_choice_sets_user ON pg_choice_sets (user_id)")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_choice_items (
@@ -43,10 +47,14 @@ def ensure_choice_tables():
             quota TEXT DEFAULT '',
             category TEXT DEFAULT '',
             closing_rank INTEGER,               -- that round's historical closing rank
-            chance TEXT DEFAULT '',             -- high | good | reach
+            chance TEXT DEFAULT '',             -- strong|high|good|borderline|verylow
+            fee NUMERIC(14,2),
+            currency TEXT DEFAULT 'INR',
             source TEXT DEFAULT 'predicted',    -- predicted | manual
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS fee NUMERIC(14,2)")
+        conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_choice_items_set ON pg_choice_items (set_id, round, position)")
         conn.commit()
         logging.info("pg_choice tables ensured")

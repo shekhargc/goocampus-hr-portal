@@ -446,3 +446,63 @@ def plan_compare():
             conn.close()
         except Exception:
             pass
+
+
+# ── Plan Features grid — tick which services/features each plan includes ──────
+def plan_features_grid():
+    """A simple matrix: features (rows) × counselling plans (columns), tick per cell.
+    Writes the same pg_plan_features the app reads for gating. (founder 2026-09-22)"""
+    user = _require_admin()
+    if not user:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    plans, features, cells = [], [], {}
+    try:
+        plans = [dict(r) for r in conn.execute(
+            "SELECT id, code, name, price FROM pg_plans "
+            "WHERE plan_kind = 'counselling' AND COALESCE(is_active,1)=1 "
+            "ORDER BY sort_order, id").fetchall()]
+        features = [dict(r) for r in conn.execute(
+            "SELECT code, name, description FROM pg_features "
+            "WHERE COALESCE(is_active,1)=1 AND resource_kind = 'counselling' "
+            "ORDER BY sort_order, name").fetchall()]
+        for r in conn.execute("SELECT plan_id, feature_code, value_type FROM pg_plan_features").fetchall():
+            cells[(r['plan_id'], r['feature_code'])] = (r['value_type'] or 'off') != 'off'
+    finally:
+        conn.close()
+    return render_template('pg_admin/plan_features.html', user=user, plans=plans,
+                           features=features, cells=cells, active_section='goocampus_in')
+
+
+def plan_features_save():
+    user = _require_admin()
+    if not user:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        plans = [dict(r) for r in conn.execute(
+            "SELECT id FROM pg_plans WHERE plan_kind = 'counselling' AND COALESCE(is_active,1)=1").fetchall()]
+        feats = [r['code'] for r in conn.execute(
+            "SELECT code FROM pg_features WHERE COALESCE(is_active,1)=1 AND resource_kind = 'counselling'").fetchall()]
+        for p in plans:
+            for fc in feats:
+                on = request.form.get(f"cell_{p['id']}_{fc}") == 'on'
+                if on:
+                    conn.execute(
+                        "INSERT INTO pg_plan_features (plan_id, feature_code, value_type) "
+                        "VALUES (?,?, 'unlimited') "
+                        "ON CONFLICT (plan_id, feature_code) DO UPDATE SET value_type = 'unlimited'",
+                        (p['id'], fc))
+                else:
+                    conn.execute("DELETE FROM pg_plan_features WHERE plan_id = ? AND feature_code = ?",
+                                 (p['id'], fc))
+        conn.commit()
+        flash('Plan features saved.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("plan_features_save: %s", e)
+        flash(f'Save failed: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_plan_features'))

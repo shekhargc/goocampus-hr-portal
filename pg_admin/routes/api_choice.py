@@ -3,10 +3,12 @@ X-PG-Key for the explorer (read-only); + doctor Bearer token for choice lists.
 (founder 2026-09-21)
 """
 import re
+import json
 import logging
 from flask import request, jsonify
 from db import get_db
 from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
+from pg_admin.data import entitlements
 
 _PER_PAGE = 100
 _NORMSQL = "btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
@@ -28,13 +30,27 @@ def _deg_clause(dg):
 
 
 def _chance(rank, cr):
+    """5-level banding. Reachable when the candidate's rank <= the seat's closing rank."""
     if not cr or not rank:
         return 'unknown'
-    if rank <= cr * 0.75:
+    if rank <= cr * 0.5:
+        return 'strong'
+    if rank <= cr * 0.77:
         return 'high'
     if rank <= cr:
         return 'good'
-    return 'reach'
+    if rank <= cr * 1.18:
+        return 'borderline'
+    return 'verylow'
+
+
+_DEG_PREFIX = re.compile(
+    r'^\s*(MD|MS|M\.?Ch|DM|DNB|PG[- ]?Diploma(?:\s+in)?|Diploma(?:\s+in)?)\s*[-–:]?\s*', re.I)
+
+
+def _spec_core(s):
+    """'MD - Dermatology' -> 'Dermatology' for prefix-tolerant course matching."""
+    return _DEG_PREFIX.sub('', s or '').strip()
 
 
 # ── Cutoff Explorer (browse cut-offs by filter, NOT by rank) ─────────────────
@@ -127,8 +143,69 @@ def _user(conn):
         return None
 
 
-def _generate_round(conn, set_id, rnd, authority, dg, quota, category, rank):
-    """Fill one round sheet from the cut-offs (that round's closing rank)."""
+def _plan_has(conn, user_id, feature_code):
+    """True if the doctor's effective plan includes this feature (read from the
+    editable Plan Features matrix, i.e. pg_plan_features value_type != 'off')."""
+    try:
+        plan, _sub = entitlements.effective_plan(conn, user_id)
+        if not plan:
+            return False
+        fm = entitlements.plan_feature_map(conn, plan['id'])
+        v = fm.get(feature_code)
+        return bool(v and (v.get('value_type') or 'off') != 'off')
+    except Exception:
+        return False
+
+
+def _plan_label(conn, user_id):
+    try:
+        plan, _sub = entitlements.effective_plan(conn, user_id)
+        return (plan or {}).get('name') or 'Free'
+    except Exception:
+        return 'Free'
+
+
+def _choice_gate(conn, uid, scope):
+    """Return an error message if this doctor can't create a set of `scope`, else None.
+    Reads the editable Plan Features matrix (dash_choice_list / dash_all_states)."""
+    if not _plan_has(conn, uid, 'dash_choice_list'):
+        return 'Upgrade to build your choice list.'
+    counts = {r['scope']: r['n'] for r in conn.execute(
+        "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? GROUP BY scope",
+        [uid]).fetchall()}
+    if scope == 'mcc' and counts.get('mcc', 0) >= 1:
+        return 'You already have an MCC (All-India) choice set.'
+    if scope == 'state' and not _plan_has(conn, uid, 'dash_all_states') and counts.get('state', 0) >= 1:
+        return 'Your plan includes one (home) state counselling. Upgrade for more states.'
+    return None
+
+
+def api_pg_choice_entitlement():
+    """GET /api/pg/choice-entitlement → what the doctor's plan unlocks for choice lists."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        user = _user(conn)
+        if not user:
+            return jsonify({'ok': False, 'error': 'no_token'}), 401
+        can = _plan_has(conn, user['id'], 'dash_choice_list')
+        allstates = _plan_has(conn, user['id'], 'dash_all_states')
+        return jsonify({'ok': True, 'plan': _plan_label(conn, user['id']), 'can_build': can,
+                        'mcc': can, 'state': ('any' if allstates else ('home' if can else False)),
+                        'cutoff_explorer': _plan_has(conn, user['id'], 'dash_cutoff_explorer'),
+                        'message': ('' if can else 'Upgrade to build your choice list.')})
+    finally:
+        conn.close()
+
+
+_ROUND_CAP = 200   # max colleges auto-seeded per round sheet
+
+
+def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, rank):
+    """Fill one round sheet from the cut-offs, honouring specialties[] + quota_categories[].
+    Reach is filtered IN SQL (HAVING) so the cap keeps reachable colleges, not the most
+    competitive unreachable ones. Ordered by specialty preference, then closing rank."""
     col = {1: 'r1', 2: 'r2', 3: 'r3'}[rnd]
     where, params = [f"c.{col} IS NOT NULL", "COALESCE(c.is_reference,0)=0"], []
     dgc, dgp = _deg_clause(dg)
@@ -136,31 +213,60 @@ def _generate_round(conn, set_id, rnd, authority, dg, quota, category, rank):
         where.append(dgc); params.append(dgp)
     if authority:
         where.append("c.authority ILIKE ?"); params.append('%' + authority + '%')
-    if quota:
-        where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(quota)
-    if category:
-        where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(category)
+    # specialties[] → OR of (exact course OR contains the core keyword)
+    if specialties:
+        ors = []
+        for sp in specialties:
+            ors.append("(LOWER(TRIM(c.course)) = LOWER(TRIM(?)) OR c.course ILIKE ?)")
+            params.extend([sp, '%' + _spec_core(sp) + '%'])
+        where.append("(" + " OR ".join(ors) + ")")
+    # quota_categories[] → OR of (quota match AND category IN (...))
+    if quota_cats:
+        qors = []
+        for pair in quota_cats:
+            qv = (pair.get('quota') or '').strip()
+            cats = [c for c in (pair.get('categories') or []) if (c or '').strip()]
+            if not qv or not cats:
+                continue
+            ph = ','.join(['LOWER(TRIM(?))'] * len(cats))
+            qors.append(f"(LOWER(TRIM(c.quota)) = LOWER(TRIM(?)) AND LOWER(TRIM(c.category)) IN ({ph}))")
+            params.append(qv); params.extend(cats)
+        if qors:
+            where.append("(" + " OR ".join(qors) + ")")
+    # reach floor IN SQL: keep seats the candidate can plausibly enter (down to a try-luck stretch)
+    having = ""
+    if rank:
+        having = f" HAVING MIN(c.{col}) >= ?"
+        floor_val = int(rank * 0.7)
     rows = conn.execute(
         f"SELECT c.institute, c.course, c.quota, c.category, MIN(c.{col}) AS cr, "
-        "MAX(a.master_id) AS master_id "
+        "MAX(a.master_id) AS master_id, MAX(c.fee) AS fee "
         "FROM pg_cutoffs c "
         f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} "
         "WHERE " + " AND ".join(where) +
-        " GROUP BY c.institute, c.course, c.quota, c.category "
-        f"ORDER BY MIN(c.{col}) ASC LIMIT 400", params).fetchall()
-    items, pos = [], 0
-    for r in rows:
-        cr = r['cr']
-        if rank and cr and rank > cr * 1.15:     # too far out of reach → leave for manual add
-            continue
-        pos += 1
+        " GROUP BY c.institute, c.course, c.quota, c.category" + having,
+        params + ([floor_val] if rank else [])).fetchall()
+    # specialty preference index for ordering
+    cores = [(_spec_core(sp).lower(), i) for i, sp in enumerate(specialties or [])]
+
+    def _spec_idx(course):
+        cl = (course or '').lower()
+        for core, i in cores:
+            if core and core in cl:
+                return i
+        return len(cores)
+    ordered = sorted([dict(r) for r in rows],
+                     key=lambda r: (_spec_idx(r['course']), r['cr'] if r['cr'] is not None else 10**9))
+    items = []
+    for pos, r in enumerate(ordered[:_ROUND_CAP], start=1):
         items.append([set_id, rnd, pos, r['master_id'], r['institute'], r['course'],
-                      r['quota'], r['category'], cr, _chance(rank, cr), 'predicted'])
+                      r['quota'], r['category'], r['cr'], _chance(rank, r['cr']),
+                      r['fee'], 'INR', 'predicted'])
     if items:
         conn.execute_batch(
             "INSERT INTO pg_choice_items (set_id, round, position, master_id, institute, course, "
-            "quota, category, closing_rank, chance, source) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            items, page_size=500)
+            "quota, category, closing_rank, chance, fee, currency, source) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", items, page_size=500)
 
 
 def api_pg_choice_sets():
@@ -180,6 +286,10 @@ def api_pg_choice_sets():
                 "FROM pg_choice_sets s WHERE s.user_id = ? ORDER BY s.id DESC", [uid]).fetchall()]
             return jsonify({'ok': True, 'sets': sets})
         body = request.get_json(silent=True) or {}
+        scope = (body.get('scope') or 'mcc').strip()
+        gate = _choice_gate(conn, uid, scope)
+        if gate:
+            return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
         try:
             rank = int(body.get('rank'))
         except (TypeError, ValueError):
@@ -188,13 +298,18 @@ def api_pg_choice_sets():
         dg = (body.get('degree_group') or 'mdms').strip()
         quota = (body.get('quota') or '').strip()
         category = (body.get('category') or '').strip()
+        specialties = [s for s in (body.get('specialties') or []) if (s or '').strip()]
+        quota_cats = body.get('quota_categories') or []
+        if not quota_cats and quota:                       # legacy fallback → one pair
+            quota_cats = [{'quota': quota, 'categories': [category] if category else []}]
         sid = conn.execute(
             "INSERT INTO pg_choice_sets (user_id, label, scope, authority, degree_group, state, "
-            "quota, category, rank) VALUES (?,?,?,?,?,?,?,?,?) RETURNING id",
-            [uid, (body.get('label') or '').strip(), (body.get('scope') or 'mcc').strip(),
-             authority, dg, (body.get('state') or '').strip(), quota, category, rank]).fetchone()['id']
+            "quota, category, rank, specialties, quota_categories) VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+            [uid, (body.get('label') or '').strip(), scope, authority, dg,
+             (body.get('state') or '').strip(), quota, category, rank,
+             json.dumps(specialties), json.dumps(quota_cats)]).fetchone()['id']
         for rnd in (1, 2, 3):
-            _generate_round(conn, sid, rnd, authority, dg, quota, category, rank)
+            _generate_round(conn, sid, rnd, authority, dg, specialties, quota_cats, rank)
         conn.commit()
         return jsonify({'ok': True, 'set_id': sid})
     except Exception as e:
@@ -230,7 +345,13 @@ def api_pg_choice_set(set_id):
         rounds = {1: [], 2: [], 3: []}
         for it in items:
             rounds.setdefault(it['round'], []).append(it)
-        return jsonify({'ok': True, 'set': dict(s), 'rounds': rounds})
+        sset = dict(s)
+        for k, default in (('specialties', []), ('quota_categories', [])):
+            try:
+                sset[k] = json.loads(sset.get(k) or '[]')
+            except Exception:
+                sset[k] = default
+        return jsonify({'ok': True, 'set': sset, 'rounds': rounds})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
