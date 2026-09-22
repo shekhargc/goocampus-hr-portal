@@ -402,3 +402,49 @@ def seed_pgcp_counselling_packages():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+# Dashboard-gating features (the actual sections the app unlocks by plan). Seeded
+# once with sensible defaults, then fully editable on the Plan Features page.
+_DASH_FEATURES = [
+    ('dash_choice_list', 'Choice-List builder (R1/R2/R3 sheets)',
+     'Auto-build round-wise choice sheets, edit & export', 'boolean', 250),
+    ('dash_all_states', 'Choice list — all states',
+     'Build state choice sets for any state (else home state only)', 'boolean', 251),
+    ('dash_cutoff_explorer', 'Cutoff Explorer (manual filter)', '', 'boolean', 252),
+]
+# feature_code -> plan codes that include it by default
+_DASH_DEFAULTS = {
+    'dash_choice_list':     ['pgcp_starter', 'pgcp_standard', 'pgcp_premium'],
+    'dash_all_states':      ['pgcp_premium'],
+    'dash_cutoff_explorer': ['pgcp_free', 'pgcp_starter', 'pgcp_standard', 'pgcp_premium'],
+}
+
+
+def ensure_dashboard_gating_features():
+    """Add the dashboard-gating features + default plan mapping once (guarded)."""
+    conn = get_db()
+    try:
+        if conn.execute("SELECT 1 FROM pg_features WHERE code = '_dash_seed_v1'").fetchone():
+            return
+        for code, name, desc, unit, sort in _DASH_FEATURES:
+            conn.execute("INSERT INTO pg_features (code, name, description, unit, resource_kind, sort_order) "
+                         "VALUES (?,?,?,?, 'counselling', ?) ON CONFLICT (code) DO NOTHING",
+                         (code, name, desc, unit, sort))
+        for fc, plan_codes in _DASH_DEFAULTS.items():
+            for pc in plan_codes:
+                row = conn.execute("SELECT id FROM pg_plans WHERE code = ?", (pc,)).fetchone()
+                if row:
+                    conn.execute("INSERT INTO pg_plan_features (plan_id, feature_code, value_type) "
+                                 "VALUES (?,?, 'unlimited') ON CONFLICT DO NOTHING", (row['id'], fc))
+        conn.execute("INSERT INTO pg_features (code, name, unit, resource_kind, is_active, sort_order) "
+                     "VALUES ('_dash_seed_v1','(dash seed marker)','boolean','_meta',0,9998) ON CONFLICT DO NOTHING")
+        conn.commit()
+        logging.info("pg pricing: seeded dashboard-gating features")
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"ensure_dashboard_gating_features: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass

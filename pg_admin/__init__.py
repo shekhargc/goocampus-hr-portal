@@ -37,6 +37,7 @@ def register_pg_admin(app):
                _plans_tables.ensure_pg_plans_tables,
                _plans_tables.seed_pg_pricing_defaults,
                _plans_tables.seed_pgcp_counselling_packages,
+               _plans_tables.ensure_dashboard_gating_features,
                _college_master.ensure_college_master_tables,
                _pgcp_tables.ensure_pgcp_tables,
                _choice_tables.ensure_choice_tables):
@@ -209,6 +210,10 @@ def register_pg_admin(app):
                      plans_admin.plan_duplicate, methods=['POST'])
     app.add_url_rule('/admin/pg/plans/feature/save', 'pg_feature_save',
                      plans_admin.feature_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/plan-features', 'pg_plan_features',
+                     plans_admin.plan_features_grid, methods=['GET'])
+    app.add_url_rule('/admin/pg/plan-features/save', 'pg_plan_features_save',
+                     plans_admin.plan_features_save, methods=['POST'])
     app.add_url_rule('/admin/pg/plans/compare.json', 'pg_plan_compare',
                      plans_admin.plan_compare, methods=['GET'])
 

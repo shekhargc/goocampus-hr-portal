@@ -128,34 +128,40 @@ def _user(conn):
         return None
 
 
-def _tier(conn, user_id):
-    """Resolve the doctor's plan tier for choice-list gating:
-       free | starter | standard | premium."""
+def _plan_has(conn, user_id, feature_code):
+    """True if the doctor's effective plan includes this feature (read from the
+    editable Plan Features matrix, i.e. pg_plan_features value_type != 'off')."""
     try:
         plan, _sub = entitlements.effective_plan(conn, user_id)
+        if not plan:
+            return False
+        fm = entitlements.plan_feature_map(conn, plan['id'])
+        v = fm.get(feature_code)
+        return bool(v and (v.get('value_type') or 'off') != 'off')
     except Exception:
-        plan = None
-    code = ((plan or {}).get('code') or '').lower()
-    kind = ((plan or {}).get('plan_kind') or '').lower()
-    for t in ('premium', 'standard', 'starter'):
-        if t in code:
-            return t
-    if kind and kind not in ('free', 'counselling'):
-        return 'starter'   # any other paid kind unlocks at least Starter
-    return 'free'
+        return False
 
 
-def _choice_gate(conn, uid, tier, scope):
-    """Return an error message if this doctor can't create a set of `scope`, else None."""
-    if tier == 'free':
-        return 'Upgrade to Starter to build your choice list.'
+def _plan_label(conn, user_id):
+    try:
+        plan, _sub = entitlements.effective_plan(conn, user_id)
+        return (plan or {}).get('name') or 'Free'
+    except Exception:
+        return 'Free'
+
+
+def _choice_gate(conn, uid, scope):
+    """Return an error message if this doctor can't create a set of `scope`, else None.
+    Reads the editable Plan Features matrix (dash_choice_list / dash_all_states)."""
+    if not _plan_has(conn, uid, 'dash_choice_list'):
+        return 'Upgrade to build your choice list.'
     counts = {r['scope']: r['n'] for r in conn.execute(
         "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? GROUP BY scope",
         [uid]).fetchall()}
     if scope == 'mcc' and counts.get('mcc', 0) >= 1:
         return 'You already have an MCC (All-India) choice set.'
-    if scope == 'state' and tier in ('starter', 'standard') and counts.get('state', 0) >= 1:
-        return 'Your plan includes one (home) state counselling. Upgrade to Premium for more states.'
+    if scope == 'state' and not _plan_has(conn, uid, 'dash_all_states') and counts.get('state', 0) >= 1:
+        return 'Your plan includes one (home) state counselling. Upgrade for more states.'
     return None
 
 
@@ -168,11 +174,12 @@ def api_pg_choice_entitlement():
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        tier = _tier(conn, user['id'])
-        can = tier in ('starter', 'standard', 'premium')
-        return jsonify({'ok': True, 'tier': tier, 'can_build': can,
-                        'mcc': can, 'state': ('any' if tier == 'premium' else ('home' if can else False)),
-                        'message': ('' if can else 'Upgrade to Starter to build your choice list.')})
+        can = _plan_has(conn, user['id'], 'dash_choice_list')
+        allstates = _plan_has(conn, user['id'], 'dash_all_states')
+        return jsonify({'ok': True, 'plan': _plan_label(conn, user['id']), 'can_build': can,
+                        'mcc': can, 'state': ('any' if allstates else ('home' if can else False)),
+                        'cutoff_explorer': _plan_has(conn, user['id'], 'dash_cutoff_explorer'),
+                        'message': ('' if can else 'Upgrade to build your choice list.')})
     finally:
         conn.close()
 
@@ -231,7 +238,7 @@ def api_pg_choice_sets():
             return jsonify({'ok': True, 'sets': sets})
         body = request.get_json(silent=True) or {}
         scope = (body.get('scope') or 'mcc').strip()
-        gate = _choice_gate(conn, uid, _tier(conn, uid), scope)
+        gate = _choice_gate(conn, uid, scope)
         if gate:
             return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
         try:
