@@ -133,3 +133,40 @@ def pgcp_submission(invite_id):
         }
     return render_template('pg_admin/pgcp_submission.html', inv=inv, onb=onb, parsed=parsed,
                            active_section='goocampus_in')
+
+
+def pgcp_client_search():
+    """GET /admin/pg/pgcp/client-search?q= → existing clients (name/mobile/pathway) for the
+    internal-invite picker, from the ops client master (plab_clients). (founder 2026-09-23)"""
+    from flask import jsonify
+    u = _admin()
+    if not u:
+        return jsonify([]), 403
+    q = _s(request.args.get('q'))
+    out = []
+    if len(q) < 2:
+        return jsonify(out)
+    conn = get_db()
+    try:
+        like = f"%{q}%"
+        rows = conn.execute(
+            "SELECT registration_number AS reg, "
+            "TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, "
+            "COALESCE(pathway,'') AS pathway, mobile "
+            "FROM plab_clients "
+            "WHERE (first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? OR registration_number ILIKE ?) "
+            "AND COALESCE(mobile,'') <> '' ORDER BY first_name LIMIT 30",
+            (like, like, like, like)).fetchall()
+        seen = set()
+        for r in rows:
+            r = dict(r)
+            key = (r['name'].strip().lower(), (r['mobile'] or '').strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(r)
+    except Exception as e:
+        logging.error("pgcp_client_search: %s", e)
+    finally:
+        conn.close()
+    return jsonify(out)

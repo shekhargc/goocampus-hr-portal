@@ -21,18 +21,25 @@
   <!-- Create invitation -->
   <details style="background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.4rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
     <summary style="font-weight:700;color:var(--navy);cursor:pointer;">+ New invitation</summary>
+    <div style="margin-top:1rem;position:relative;max-width:520px;">
+      <label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Find an existing client (internal) — pulls their mobile</label>
+      <input type="text" id="pgcpClientSearch" placeholder="Search client by name / mobile…" autocomplete="off"
+             style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+      <div id="pgcpClientSuggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 8px 8px;max-height:240px;overflow-y:auto;z-index:60;box-shadow:0 6px 16px rgba(0,0,0,0.12);"></div>
+      <div style="font-size:0.74rem;color:var(--gray-400);margin-top:4px;">Pick one to auto-fill name + mobile below (sets type to Internal). Or fill the fields manually for a new paying client.</div>
+    </div>
     <form method="POST" action="{{ url_for('pg_pgcp_invite_create') }}"
           style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:1rem;">
       {% macro fld(name, label, ph='', type='text') %}
       <div><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">{{ label }}</label>
-        <input type="{{ type }}" name="{{ name }}" placeholder="{{ ph }}" {% if type=='number' %}step="any"{% endif %}
+        <input type="{{ type }}" name="{{ name }}" id="pgcp_f_{{ name }}" placeholder="{{ ph }}" {% if type=='number' %}step="any"{% endif %}
                style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;"></div>
       {% endmacro %}
       {{ fld('client_name', 'Client name') }}
       {{ fld('mobile', 'Mobile (login)', '+91…') }}
       {{ fld('email', 'Email', '', 'email') }}
       <div><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Client type</label>
-        <select name="client_type" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;">
+        <select name="client_type" id="pgcp_f_client_type" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;">
           <option value="paying">Paying (new client)</option>
           <option value="internal">Internal (Consulting/UAE — free Premium)</option>
         </select></div>
@@ -81,4 +88,49 @@
     </table>
   </div>
 </div>
+
+<script>
+(function(){
+  var input = document.getElementById('pgcpClientSearch');
+  var box = document.getElementById('pgcpClientSuggest');
+  if (!input || !box) return;
+  var t = null;
+  function esc(s){ return (s||'').replace(/</g,'&lt;'); }
+  input.addEventListener('input', function(){
+    var q = this.value.trim();
+    clearTimeout(t);
+    if (q.length < 2){ box.style.display='none'; return; }
+    t = setTimeout(function(){
+      fetch('{{ url_for("pg_pgcp_client_search") }}?q=' + encodeURIComponent(q))
+        .then(function(r){ return r.json(); })
+        .then(function(list){
+          box.innerHTML = '';
+          if (!list.length){ box.style.display='none'; return; }
+          list.forEach(function(c){
+            var d = document.createElement('div');
+            d.style.cssText = 'padding:0.5rem 0.75rem;font-size:0.85rem;cursor:pointer;border-bottom:1px solid #f1f5f9;';
+            d.innerHTML = '<b>' + esc(c.name) + '</b> · ' + esc(c.mobile || '—') +
+                          (c.pathway ? ' <span style="color:#94a3b8;">('+esc(c.pathway)+')</span>' : '') +
+                          (c.reg ? ' <span style="color:#cbd5e1;">'+esc(c.reg)+'</span>' : '');
+            d.onmouseover = function(){ this.style.background='#f8fafc'; };
+            d.onmouseout = function(){ this.style.background='#fff'; };
+            d.onclick = function(){
+              var nm = document.getElementById('pgcp_f_client_name');
+              var mob = document.getElementById('pgcp_f_mobile');
+              var ct = document.getElementById('pgcp_f_client_type');
+              if (nm) nm.value = c.name || '';
+              if (mob) mob.value = c.mobile || '';
+              if (ct) ct.value = 'internal';   // picking an existing client = internal
+              box.style.display='none';
+              input.value = c.name || '';
+            };
+            box.appendChild(d);
+          });
+          box.style.display='block';
+        }).catch(function(){ box.style.display='none'; });
+    }, 220);
+  });
+  input.addEventListener('blur', function(){ setTimeout(function(){ box.style.display='none'; }, 200); });
+})();
+</script>
 {% endblock %}

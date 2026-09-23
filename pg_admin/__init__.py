@@ -133,6 +133,8 @@ def register_pg_admin(app):
                      pgcp_admin.pgcp_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/create', 'pg_pgcp_invite_create',
                      pgcp_admin.pgcp_invite_create, methods=['POST'])
+    app.add_url_rule('/admin/pg/pgcp/client-search', 'pg_pgcp_client_search',
+                     pgcp_admin.pgcp_client_search, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/<int:invite_id>', 'pg_pgcp_submission',
                      pgcp_admin.pgcp_submission, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/cancel', 'pg_pgcp_invite_cancel',
