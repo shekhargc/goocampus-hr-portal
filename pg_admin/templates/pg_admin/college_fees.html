@@ -6,9 +6,10 @@
 
   <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem;">College Fees</h1>
   <p style="margin:0 0 1rem;color:var(--gray-500);font-size:0.88rem;">
-    Course × college fee structure by <b>quota &amp; category</b> — the same data the
-    goocampus.in fee explorer serves. Fees differ by seat type (Govt vs Management/Paid vs NRI),
-    so each row is one college · course · quota · category.
+    <b>Annual tuition fee</b> per college · course · quota · category, taken from the
+    <b>Fees</b> column of the NEET-PG cut-off file — the same data the goocampus.in fee explorer
+    serves. Fees differ by seat type (Govt vs Management/Paid vs NRI), so each row is one
+    college · course · quota · category, shown per year.
   </p>
 
   {% if priced_seats == 0 %}
@@ -93,7 +94,7 @@
           <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.category or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;color:var(--gray-500);">{{ r.state or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:var(--navy);">
-            {% if r.fee %}₹{{ '{:,.0f}'.format(r.fee) }}{% else %}—{% endif %}</td>
+            {% if r.fee %}₹{{ '{:,.0f}'.format(r.fee) }}<div style="font-size:0.68rem;font-weight:500;color:var(--gray-400);">/ year{% if r.fee_year %} · {{ r.fee_year }}{% endif %}</div>{% else %}—{% endif %}</td>
         </tr>
         {% else %}
         <tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--gray-400);">No priced seats match these filters.</td></tr>
