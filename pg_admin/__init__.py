@@ -137,6 +137,8 @@ def register_pg_admin(app):
                      pgcp_admin.pgcp_client_search, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/send-email', 'pg_pgcp_send_email',
                      pgcp_admin.pgcp_send_email, methods=['POST'])
+    app.add_url_rule('/admin/pg/pgcp/test-email', 'pg_pgcp_test_email',
+                     pgcp_admin.pgcp_test_email, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/<int:invite_id>', 'pg_pgcp_submission',
                      pgcp_admin.pgcp_submission, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/cancel', 'pg_pgcp_invite_cancel',

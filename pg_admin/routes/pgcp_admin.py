@@ -257,3 +257,21 @@ def pgcp_send_email(invite_id):
     flash(('Invite email ' + msg) if ok else ('Could not send: ' + msg),
           'success' if ok else 'error')
     return redirect(url_for('pg_pgcp_admin'))
+
+
+def pgcp_test_email():
+    """GET /admin/pg/pgcp/test-email?to=…&type=internal|paying — send a SAMPLE invite
+    email so the team can preview it. Admin-gated. (founder 2026-09-23)"""
+    from flask import Response
+    u = _admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    to = _s(request.args.get('to')) or 'shekhar@goocampus.in'
+    ctype = _s(request.args.get('type')) or 'internal'
+    sample = {'client_name': 'Dr. Test User', 'mobile': '9611996500', 'email': to,
+              'client_type': 'internal' if ctype != 'paying' else 'paying',
+              'invited_amount': 30000, 'discount': 5000}
+    ok, msg = _send_pgcp_invite_email(sample)
+    return Response(("✅ Test invite email (" + sample['client_type'] + ") " + msg
+                     + f"\nCheck the inbox of {to}.") if ok
+                    else ("❌ Could not send: " + msg), mimetype='text/plain')
