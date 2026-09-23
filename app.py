@@ -10513,6 +10513,20 @@ def admin_reg_status():
         if r['ops_status'] == 'verified':
             return "fully verified (not in any queue)"
         return "?"
+    def action_cell(r):
+        # Offer "Force submit" only for a MAIN registration the client hasn't submitted
+        # yet (draft). The auto-created add-on sibling (form_status='submitted' with
+        # client_submitted_at NULL) is deliberately excluded — it is not a fillable form.
+        if (not r['client_submitted_at']) and r['form_status'] != 'submitted':
+            return (f"<td><form method=POST action='/admin/maintenance/reg-force-submit' "
+                    f"onsubmit=\"return confirm('Force-submit this registration into Sales Verification and notify the sales member? Use only when the client has completed their details.')\" style='margin:0'>"
+                    f"<input type=hidden name=reg_id value='{r['id']}'>"
+                    f"<input type=hidden name=email value='{email}'>"
+                    f"<button style='padding:5px 10px;background:#F58220;color:#fff;border:none;border-radius:5px;cursor:pointer'>Force submit → Sales Verification</button>"
+                    f"</form></td>")
+        if r['client_submitted_at']:
+            return "<td style='color:#16a34a'>already submitted</td>"
+        return "<td style='color:#94a3b8'>— (auto add-on)</td>"
     trs = "".join(
         f"<tr><td>{r['id']}</td><td>{r['reg'] or '—'}</td><td>{(r['first_name'] or '')} {(r['last_name'] or '')}</td>"
         f"<td>{r['product_name'] or '—'}</td><td><b>{r['form_status']}</b></td><td>{r['sales_completed']}</td>"
@@ -10521,11 +10535,17 @@ def admin_reg_status():
         f"<td>{r['ops_status'] or '—'}</td><td>{r['joined_stage'] or '—'}</td>"
         f"<td>{r['counsellor_name'] or r['counsellor_id'] or '—'}</td>"
         f"<td>{r['invited_by_name'] or '—'}</td>"
-        f"<td style='color:#0369a1'>{why(r)}</td></tr>"
+        f"<td style='color:#0369a1'>{why(r)}</td>{action_cell(r)}</tr>"
         for r in rows)
+    from flask import get_flashed_messages
+    flashes = "".join(
+        f"<div style='padding:10px 14px;border-radius:8px;margin-bottom:10px;font-size:14px;"
+        f"background:{'#dcfce7' if c=='success' else ('#fee2e2' if c=='error' else '#e0f2fe')};"
+        f"color:{'#166534' if c=='success' else ('#991b1b' if c=='error' else '#075985')}'>{m}</div>"
+        for c, m in get_flashed_messages(with_categories=True))
     html = (f"<!doctype html><meta charset=utf-8><title>Reg status</title>"
             f"<body style='font-family:system-ui;padding:24px;color:#1e293b'>"
-            f"<h2>Registration status &mdash; {email}</h2>"
+            f"<h2>Registration status &mdash; {email}</h2>{flashes}"
             f"<form><input name=email value='{email}' style='padding:8px;width:320px'> "
             f"<button style='padding:8px 14px'>Check</button></form>"
             f"<p>{len(rows)} registration(s) found.</p>"
@@ -10533,8 +10553,53 @@ def admin_reg_status():
             f"<tr style='background:#f1f5f9'><th>ID</th><th>Reg</th><th>Name</th><th>Product</th>"
             f"<th>form_status</th><th>sales_done</th><th>sales done by</th><th>client_submitted_at</th>"
             f"<th>ops_status</th><th>joined_stage</th><th>counsellor</th><th>invited by</th>"
-            f"<th>Queue status</th></tr>{trs}</table></body>")
+            f"<th>Queue status</th><th>Action</th></tr>{trs}</table></body>")
     return html
+
+
+@app.route('/admin/maintenance/reg-force-submit', methods=['POST'])
+@admin_required
+def admin_reg_force_submit():
+    """Push a MAIN registration that the client has completed but not submitted into
+    Sales Verification: set form_status='submitted' + client_submitted_at=now, then fire
+    the same sales-verification notification the real Submit sends. Guarded so it can't
+    touch an already-submitted reg or an auto-created combined add-on sibling."""
+    try:
+        reg_id = int(request.form.get('reg_id') or 0)
+    except (TypeError, ValueError):
+        reg_id = 0
+    back = url_for('admin_reg_status', email=(request.form.get('email') or '').strip())
+    if not reg_id:
+        flash('No registration id given.', 'error')
+        return redirect(back)
+    conn = get_db()
+    try:
+        reg = conn.execute("SELECT id, form_status, client_submitted_at, ops_status "
+                           "FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+        if not reg:
+            conn.close(); flash('Registration not found.', 'error'); return redirect(back)
+        if reg['client_submitted_at']:
+            conn.close(); flash('That registration is already submitted — nothing to do.', 'info'); return redirect(back)
+        if reg['form_status'] == 'submitted':
+            # form_status='submitted' + client_submitted_at NULL is the auto-created add-on.
+            conn.close()
+            flash('That is an auto-created combined add-on, not a fillable registration — it rides along with the main one. Not changed.', 'error')
+            return redirect(back)
+        conn.execute("UPDATE client_registrations SET form_status='submitted', "
+                     "client_submitted_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id = ?",
+                     (reg_id,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        try: conn.rollback(); conn.close()
+        except Exception: pass
+        logging.error("admin_reg_force_submit: %s", e)
+        flash(f'Could not submit: {e}', 'error')
+        return redirect(back)
+    # Fire the standard sales-verification notification (sales member + ops/mgmt).
+    _notify_client_submitted(reg_id)
+    flash('Registration pushed into Sales Verification and the sales member has been notified.', 'success')
+    return redirect(back)
 
 
 @app.route('/admin/maintenance/client-login-check', methods=['GET'])
@@ -38815,11 +38880,20 @@ def _lead_reg_status_map(conn, leads):
                     f"       COALESCE(sales_completed,0) AS sales_completed, "
                     f"       COALESCE(ops_status,'') AS ops_status, "
                     f"       COALESCE(wc_confirmed,0) AS wc_confirmed "
-                    f"FROM client_registrations WHERE invitation_id IN ({ph}) ORDER BY id DESC", vals).fetchall():
+                    f"FROM client_registrations WHERE invitation_id IN ({ph}) "
+                    # Ignore the auto-created combined add-on (e.g. the AMC 1 / Training
+                    # sibling of an AMC Consulting signup): it is born form_status='submitted'
+                    # with client_submitted_at NULL, and the badge must reflect the MAIN
+                    # registration the client actually fills — not this hidden add-on.
+                    f"AND NOT (COALESCE(form_status,'')='submitted' AND client_submitted_at IS NULL) "
+                    f"ORDER BY id DESC", vals).fetchall():
                 if r['invitation_id'] in reg_by_inv:
                     continue
                 reg_by_inv[r['invitation_id']] = {
-                    'submitted': bool(r['client_submitted_at']) or (r['form_status'] == 'submitted'),
+                    # 'Submitted' means the client actually pressed Submit (this timestamp
+                    # is set only then). Do NOT treat form_status='submitted' alone as
+                    # submitted — that flag is also set on auto-created add-ons.
+                    'submitted': bool(r['client_submitted_at']),
                     'sales_completed': bool(r['sales_completed']),
                     'ops_verified': (r['ops_status'] == 'verified'),
                     'wc_confirmed': bool(r['wc_confirmed'])}
