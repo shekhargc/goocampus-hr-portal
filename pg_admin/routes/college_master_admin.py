@@ -714,6 +714,87 @@ def college_stipend_detail(master_id):
                            active_section='goocampus_in')
 
 
+# ── College Fees section (course × college fees by quota / category) ─────────
+# Same cut-off data (pg_cutoffs.fee), but the grain is per QUOTA + CATEGORY seat,
+# because fees differ by seat type (Govt vs Management/Paid vs NRI). This is the
+# team-side mirror of the goocampus.in /api/pg/fees explorer — also lets us confirm
+# how much fee data the uploaded cut-offs actually carry.
+_FEES_PER_PAGE = 100
+
+
+@login_required
+def college_fees():
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    kind = _s(request.args.get('kind'))
+    if kind not in ('medical', 'dnb', ''):
+        kind = ''
+    state = _s(request.args.get('state'))
+    quota = _s(request.args.get('quota'))
+    category = _s(request.args.get('category'))
+    q = _s(request.args.get('q'))
+    sort = _s(request.args.get('sort')) or 'fee_asc'
+    order = {'fee_asc': 'fee ASC NULLS LAST, institute ASC',
+             'fee_desc': 'fee DESC NULLS LAST, institute ASC',
+             'name': 'institute ASC, course ASC'}.get(sort, 'fee ASC NULLS LAST, institute ASC')
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except Exception:
+        page = 1
+    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 0"]
+    params = []
+    if kind == 'dnb':
+        where.append("UPPER(COALESCE(c.degree,'')) LIKE ?"); params.append('%DNB%')
+    elif kind == 'medical':
+        where.append("UPPER(COALESCE(c.degree,'')) NOT LIKE ?"); params.append('%DNB%')
+    if state:
+        where.append("c.state = ?"); params.append(state)
+    if quota:
+        where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(quota)
+    if category:
+        where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(category)
+    if q:
+        where.append("(c.institute ILIKE ? OR c.course ILIKE ?)"); params.extend(['%'+q+'%', '%'+q+'%'])
+    wsql = " WHERE " + " AND ".join(where)
+    grp = " GROUP BY c.institute, c.course, c.quota, c.category "
+    conn = get_db()
+    rows, states, quotas, cats, total, priced_seats = [], [], [], [], 0, 0
+    try:
+        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + wsql + grp + ") t",
+                             params).fetchone()['n']
+        offset = (page - 1) * _FEES_PER_PAGE
+        rows = conn.execute(
+            "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
+            "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
+            "MAX(c.institute_type) AS institute_type, MAX(c.fee) AS fee, "
+            "MAX(a.master_id) AS id FROM pg_cutoffs c "
+            "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
+            + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",
+            params + [_FEES_PER_PAGE, offset]).fetchall()
+        # coverage: how many priced seat-rows exist at all (any filter off)
+        priced_seats = conn.execute(
+            "SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 "
+            "AND fee IS NOT NULL AND fee > 0").fetchone()['n']
+        states = [r['state'] for r in conn.execute(
+            "SELECT DISTINCT state FROM pg_cutoffs WHERE COALESCE(state,'')<>'' AND fee IS NOT NULL AND fee>0 "
+            "ORDER BY state").fetchall()]
+        quotas = [r['quota'] for r in conn.execute(
+            "SELECT DISTINCT quota FROM pg_cutoffs WHERE COALESCE(quota,'')<>'' AND fee IS NOT NULL AND fee>0 "
+            "ORDER BY quota").fetchall()]
+        cats = [r['category'] for r in conn.execute(
+            "SELECT DISTINCT category FROM pg_cutoffs WHERE COALESCE(category,'')<>'' AND fee IS NOT NULL AND fee>0 "
+            "ORDER BY category").fetchall()]
+    finally:
+        conn.close()
+    pages = max(1, (total + _FEES_PER_PAGE - 1) // _FEES_PER_PAGE)
+    return render_template('pg_admin/college_fees.html', rows=rows, total=total,
+                           priced_seats=priced_seats, states=states, quotas=quotas,
+                           categories=cats, kind=kind, state=state, quota=quota,
+                           category=category, q=q, sort=sort, page=page, pages=pages,
+                           per_page=_FEES_PER_PAGE, active_section='goocampus_in')
+
+
 # ── Edit a college's master fields (team fills logos / corrects data) ─────────
 _EDIT_FIELDS = [
     ('college_name', 'College name', 'text'), ('university', 'University', 'text'),

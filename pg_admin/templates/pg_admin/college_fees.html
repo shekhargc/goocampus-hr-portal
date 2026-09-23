@@ -1,0 +1,115 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}College Fees · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
+
+  <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem;">College Fees</h1>
+  <p style="margin:0 0 1rem;color:var(--gray-500);font-size:0.88rem;">
+    Course × college fee structure by <b>quota &amp; category</b> — the same data the
+    goocampus.in fee explorer serves. Fees differ by seat type (Govt vs Management/Paid vs NRI),
+    so each row is one college · course · quota · category.
+  </p>
+
+  {% if priced_seats == 0 %}
+  <div style="padding:12px 16px;border-radius:8px;background:#FEF3C7;color:#92400E;font-size:0.88rem;margin-bottom:1.2rem;">
+    <b>No fee data found in the cut-offs yet.</b> The uploaded cut-off file doesn't carry a fee
+    column with values, so this section (and the goocampus.in fee explorer) will be empty until
+    fees are added to the cut-off import.
+  </div>
+  {% else %}
+  <div style="font-size:0.82rem;color:var(--gray-500);margin-bottom:1rem;">
+    <b style="color:var(--navy);">{{ '{:,}'.format(priced_seats) }}</b> priced seats in the data
+    · <b style="color:var(--navy);">{{ '{:,}'.format(total) }}</b> match your filters.
+  </div>
+  {% endif %}
+
+  <!-- Filters -->
+  <form method="GET" style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:1.2rem;">
+    <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Family</label>
+      <select name="kind" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+        <option value="" {{ 'selected' if not kind }}>All</option>
+        <option value="medical" {{ 'selected' if kind=='medical' }}>MD / MS</option>
+        <option value="dnb" {{ 'selected' if kind=='dnb' }}>DNB</option>
+      </select>
+    </div>
+    <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">State</label>
+      <select name="state" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
+        <option value="">All states</option>
+        {% for s in states %}<option value="{{ s }}" {{ 'selected' if s==state }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Quota</label>
+      <select name="quota" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
+        <option value="">All quotas</option>
+        {% for qv in quotas %}<option value="{{ qv }}" {{ 'selected' if qv==quota }}>{{ qv }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Category</label>
+      <select name="category" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:160px;">
+        <option value="">All categories</option>
+        {% for cv in categories %}<option value="{{ cv }}" {{ 'selected' if cv==category }}>{{ cv }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Sort by fee</label>
+      <select name="sort" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+        <option value="fee_asc" {{ 'selected' if sort=='fee_asc' }}>Fee: low → high</option>
+        <option value="fee_desc" {{ 'selected' if sort=='fee_desc' }}>Fee: high → low</option>
+        <option value="name" {{ 'selected' if sort=='name' }}>College name</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:180px;">
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Search college / course</label>
+      <input name="q" value="{{ q }}" placeholder="e.g. Radiodiagnosis, AIIMS…"
+             style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;box-sizing:border-box;">
+    </div>
+    <button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:7px;padding:0.5rem 1.1rem;font-weight:700;font-size:0.85rem;cursor:pointer;">Apply</button>
+    <a href="/admin/pg/college-fees" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;padding-bottom:0.5rem;">Reset</a>
+  </form>
+
+  <!-- Table -->
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+      {% set hs = 'padding:0.6rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
+      <thead><tr>
+        <th style="{{ hs }}">College</th><th style="{{ hs }}">Course</th>
+        <th style="{{ hs }}">Quota</th><th style="{{ hs }}">Category</th>
+        <th style="{{ hs }}">State</th><th style="{{ hs }}text-align:right;">Fee</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:0.55rem 0.9rem;font-weight:600;color:var(--navy);">
+            {% if r.id %}<a href="/admin/pg/college-database/{{ r.id }}" style="color:var(--navy);text-decoration:none;">{{ r.institute }}</a>{% else %}{{ r.institute }}{% endif %}
+            {% if r.institute_type %}<div style="font-size:0.7rem;color:var(--gray-400);font-weight:500;">{{ r.institute_type }}</div>{% endif %}
+          </td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-700);">{{ r.course }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.quota or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.category or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-500);">{{ r.state or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:var(--navy);">
+            {% if r.fee %}₹{{ '{:,.0f}'.format(r.fee) }}{% else %}—{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--gray-400);">No priced seats match these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if pages > 1 %}
+  {% set qs = '&kind=' ~ kind ~ '&state=' ~ state ~ '&quota=' ~ quota ~ '&category=' ~ category ~ '&sort=' ~ sort ~ '&q=' ~ q %}
+  <div style="display:flex;justify-content:center;align-items:center;gap:0.8rem;margin-top:1.2rem;font-size:0.85rem;">
+    {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" style="color:var(--orange);text-decoration:none;font-weight:600;">← Prev</a>{% endif %}
+    <span style="color:var(--gray-500);">Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a href="?page={{ page+1 }}{{ qs }}" style="color:var(--orange);text-decoration:none;font-weight:600;">Next →</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
