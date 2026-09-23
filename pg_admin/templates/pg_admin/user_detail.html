@@ -4,304 +4,394 @@
 {% block section_extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-  .ud-top { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
-  .ud-back { color:var(--gray-500); text-decoration:none; font-size:0.85rem; }
-  .ud-name { font-size:1.6rem; font-weight:800; color:var(--navy); margin:0.3rem 0 0.1rem; }
-  .ud-sub { color:var(--gray-500); font-size:0.9rem; }
-  .ud-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:1.25rem; }
-  @media (max-width:900px){ .ud-grid{ grid-template-columns:1fr; } }
-  .ud-card { background:#fff; border:1px solid var(--gray-200); border-radius:0.7rem; padding:1.2rem 1.3rem; margin-bottom:1.25rem; }
-  .ud-card h3 { font-size:0.95rem; font-weight:700; color:var(--navy); margin:0 0 0.9rem; display:flex; align-items:center; gap:0.5rem; }
-  .ud-f { margin-bottom:0.75rem; } .ud-f label { display:block; font-size:0.76rem; font-weight:600; color:var(--navy); margin-bottom:0.2rem; }
-  .ud-f input, .ud-f select, .ud-f textarea { width:100%; padding:0.5rem 0.6rem; border:1px solid var(--gray-300);
-      border-radius:0.45rem; font-size:0.86rem; font-family:inherit; }
-  .ud-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem 0.9rem; }
-  .btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.9rem; border-radius:0.45rem; border:none;
-      font-size:0.85rem; font-weight:600; cursor:pointer; text-decoration:none; }
+  .pw { padding:1.25rem; background:var(--gray-50); min-height:100vh; }
+  .card { background:#fff; border-radius:12px; padding:1.25rem 1.35rem; margin-bottom:1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08); border:1px solid var(--gray-200); }
+  .card h3 { font-size:1rem; font-weight:700; color:var(--navy); margin:0 0 0.9rem; display:flex; align-items:center; gap:0.5rem; padding-bottom:0.7rem; border-bottom:2px solid var(--orange); }
+  .card h3 .n { margin-left:auto; font-size:0.78rem; color:var(--gray-500); font-weight:600; }
+  .back { color:var(--gray-500); text-decoration:none; font-size:0.85rem; }
+  /* hero */
+  .hero { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; }
+  .hero-l { display:flex; align-items:flex-start; gap:1.1rem; flex-wrap:wrap; }
+  .avatar { width:84px; height:84px; border-radius:50%; background:#FFF7ED; border:3px solid #FED7AA; display:flex; align-items:center; justify-content:center; font-size:1.8rem; font-weight:800; color:#F97316; flex:none; }
+  .hero-name { margin:0 0 0.4rem; font-size:1.7rem; font-weight:800; color:var(--navy); }
+  .pill { display:inline-block; padding:0.2rem 0.65rem; border-radius:999px; font-size:0.72rem; font-weight:700; vertical-align:middle; }
+  .pill-orange { background:#FEF3E7; color:#C2410C; border:1px solid #FDBA74; }
+  .pill-blue { background:#EEF2FF; color:#3730A3; border:1px solid #C7D2FE; }
+  .pill-green { background:#ECFDF5; color:#065F46; } .pill-gray { background:var(--gray-100); color:var(--gray-500); }
+  .pill-red { background:#FEE2E2; color:#B91C1C; }
+  .info-strip { display:flex; flex-wrap:wrap; gap:0.4rem 1.5rem; border-top:1px solid var(--gray-100); margin-top:1rem; padding-top:0.85rem; }
+  .info-strip span.k { color:var(--gray-500); font-weight:500; font-size:0.82rem; }
+  .info-strip span.v { color:var(--navy); font-weight:600; font-size:0.82rem; }
+  /* stat cards */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1rem; margin-bottom:1.25rem; }
+  .stat { background:#fff; border-radius:12px; padding:0.9rem 1rem; box-shadow:0 1px 3px rgba(0,0,0,0.08); border:1px solid var(--gray-200); }
+  .stat .l { margin:0 0 0.4rem; font-size:0.66rem; font-weight:700; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.5px; }
+  .stat .v { margin:0; font-size:1.15rem; font-weight:800; color:var(--navy); }
+  .grid2 { display:grid; grid-template-columns:1.4fr 1fr; gap:1.25rem; }
+  @media (max-width:900px){ .grid2{ grid-template-columns:1fr; } }
+  .f { margin-bottom:0.7rem; } .f label { display:block; font-size:0.74rem; font-weight:600; color:var(--navy); margin-bottom:0.2rem; }
+  .f input, .f select, .f textarea { width:100%; padding:0.5rem 0.6rem; border:1px solid var(--gray-300); border-radius:0.45rem; font-size:0.86rem; font-family:inherit; box-sizing:border-box; }
+  .fg2 { display:grid; grid-template-columns:1fr 1fr; gap:0.3rem 0.9rem; }
+  .btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.9rem; border-radius:0.45rem; border:none; font-size:0.85rem; font-weight:600; cursor:pointer; text-decoration:none; }
   .btn-primary { background:var(--orange); color:#fff; } .btn-ghost { background:var(--gray-100); color:var(--navy); border:1px solid var(--gray-300); }
   .btn-danger { background:#fee2e2; color:#b91c1c; } .btn-navy { background:var(--navy); color:#fff; }
-  .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
-  .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-500); }
-  .chip-red { background:#fee2e2; color:#b91c1c; } .chip-blue { background:#dbeafe; color:#1e40af; }
-  .ud-plan-now { background:linear-gradient(160deg,#f0f6ff,#eaf0fb); border:1px solid #cfe0f7; border-radius:0.6rem; padding:0.9rem 1rem; margin-bottom:1rem; }
-  .ud-plan-now .big { font-size:1.15rem; font-weight:800; color:var(--navy); }
+  .tbl { width:100%; border-collapse:collapse; font-size:0.83rem; }
+  .tbl th { text-align:left; color:var(--gray-500); font-weight:600; padding:0.4rem 0.5rem; border-bottom:1px solid var(--gray-200); font-size:0.72rem; text-transform:uppercase; }
+  .tbl td { padding:0.45rem 0.5rem; border-bottom:1px solid var(--gray-100); }
   .ent-row { display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0; border-top:1px solid var(--gray-100); font-size:0.84rem; }
   .ent-row:first-child { border-top:none; }
-  .ent-bar { height:6px; background:var(--gray-200); border-radius:3px; overflow:hidden; width:90px; }
-  .ent-bar > span { display:block; height:100%; background:var(--orange); }
-  .ud-table { width:100%; border-collapse:collapse; font-size:0.83rem; }
-  .ud-table th { text-align:left; color:var(--gray-500); font-weight:600; padding:0.4rem 0.5rem; border-bottom:1px solid var(--gray-200); font-size:0.74rem; text-transform:uppercase; }
-  .ud-table td { padding:0.45rem 0.5rem; border-bottom:1px solid var(--gray-100); }
-  /* Choice sheets */
-  .cs-set { border:1px solid var(--gray-200); border-radius:0.7rem; margin-bottom:1rem; overflow:hidden; }
-  .cs-head { display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; padding:0.8rem 1rem; background:linear-gradient(160deg,#f8fafc,#f1f5f9); border-bottom:1px solid var(--gray-200); }
-  .cs-head .lbl { font-weight:800; color:var(--navy); font-size:0.95rem; }
-  .cs-meta { font-size:0.76rem; color:var(--gray-500); }
-  .cs-rounds { display:grid; grid-template-columns:repeat(3,1fr); gap:0; }
-  @media (max-width:800px){ .cs-rounds{ grid-template-columns:1fr; } }
-  .cs-round { border-right:1px solid var(--gray-100); padding:0.6rem 0.75rem; }
-  .cs-round:last-child { border-right:none; }
-  .cs-round h4 { margin:0 0 0.5rem; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.4px; color:var(--gray-500); font-weight:700; display:flex; justify-content:space-between; }
-  .cs-item { padding:0.4rem 0; border-top:1px solid var(--gray-100); font-size:0.8rem; display:flex; gap:0.5rem; align-items:flex-start; }
-  .cs-item:first-of-type { border-top:none; }
-  .cs-item .pos { color:var(--gray-400); font-weight:700; min-width:1.2rem; }
-  .cs-item .nm { color:var(--navy); font-weight:600; line-height:1.25; }
-  .cs-item .cr { color:var(--gray-500); font-size:0.72rem; }
-  .cs-empty { color:var(--gray-400); font-size:0.78rem; padding:0.4rem 0; }
-  .ch { display:inline-block; padding:0.05rem 0.4rem; border-radius:0.8rem; font-size:0.64rem; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; }
-  .ch-strong { background:#dcfce7; color:#166534; } .ch-high { background:#d1fae5; color:#047857; }
-  .ch-good { background:#dbeafe; color:#1e40af; } .ch-borderline { background:#fef3c7; color:#92400e; }
-  .ch-verylow { background:#fee2e2; color:#b91c1c; }
-  .pgcp-banner { display:flex; align-items:center; gap:0.9rem; flex-wrap:wrap; background:linear-gradient(160deg,#fff7ed,#ffedd5); border:1px solid #fed7aa; border-radius:0.7rem; padding:0.85rem 1.1rem; margin-bottom:1.25rem; }
-  .pgcp-banner .t { font-weight:700; color:#9a3412; font-size:0.9rem; }
+  .chip { display:inline-block; padding:0.12rem 0.5rem; border-radius:1rem; font-size:0.7rem; font-weight:600; }
+  .chip-green{background:#dcfce7;color:#166534;} .chip-blue{background:#dbeafe;color:#1e40af;}
+  .chip-gray{background:var(--gray-100);color:var(--gray-500);} .chip-red{background:#fee2e2;color:#b91c1c;}
+  /* choice */
+  .cs-set { border:1px solid var(--gray-200); border-radius:12px; margin-bottom:1.1rem; overflow:hidden; }
+  .cs-head { padding:0.85rem 1.1rem; background:linear-gradient(160deg,#f8fafc,#f1f5f9); border-bottom:1px solid var(--gray-200); }
+  .cs-head .lbl { font-weight:800; color:var(--navy); font-size:1rem; }
+  .cs-meta { font-size:0.76rem; color:var(--gray-500); margin-top:0.2rem; }
+  .cs-team { font-size:0.74rem; color:#9a3412; background:#fff7ed; border:1px solid #fed7aa; padding:0.15rem 0.55rem; border-radius:6px; display:inline-block; margin-top:0.4rem; }
+  .cs-tabs { display:flex; gap:0.2rem; padding:0.5rem 1.1rem 0; background:#fff; border-bottom:1px solid var(--gray-200); }
+  .cs-tab { background:none; border:none; border-bottom:3px solid transparent; padding:0.5rem 0.9rem; font-size:0.85rem; font-weight:700; color:var(--gray-500); cursor:pointer; }
+  .cs-tab.active { color:var(--navy); border-bottom-color:var(--orange); }
+  .cs-body { padding:0.4rem 1.1rem 1rem; }
+  .cs-item { display:flex; gap:0.6rem; align-items:center; padding:0.55rem 0.4rem; border-bottom:1px solid var(--gray-100); }
+  .cs-item .pos { color:var(--gray-400); font-weight:800; min-width:1.5rem; text-align:center; font-size:0.9rem; }
+  .cs-item .nm { color:var(--navy); font-weight:600; font-size:0.87rem; line-height:1.25; }
+  .cs-item .cr { color:var(--gray-500); font-size:0.74rem; margin-top:0.1rem; }
+  .cs-ctrls { display:flex; gap:0.25rem; align-items:center; }
+  .cs-ctrls button { width:28px; height:28px; border-radius:6px; border:1px solid var(--gray-300); background:#fff; cursor:pointer; color:var(--gray-600); font-size:0.8rem; }
+  .cs-ctrls button:hover { background:var(--gray-100); }
+  .cs-ctrls button.del:hover { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
+  .ch { display:inline-block; padding:0.05rem 0.45rem; border-radius:0.8rem; font-size:0.62rem; font-weight:700; text-transform:uppercase; }
+  .ch-strong{background:#dcfce7;color:#166534;} .ch-high{background:#d1fae5;color:#047857;}
+  .ch-good{background:#dbeafe;color:#1e40af;} .ch-borderline{background:#fef3c7;color:#92400e;}
+  .ch-verylow{background:#fee2e2;color:#b91c1c;} .ch-unknown{background:var(--gray-100);color:var(--gray-500);}
+  .team-badge { font-size:0.6rem; font-weight:700; color:#9a3412; background:#fff7ed; border:1px solid #fed7aa; padding:0 0.35rem; border-radius:4px; text-transform:uppercase; }
+  .cs-add { margin-top:0.7rem; position:relative; }
+  .cs-add input { width:100%; padding:0.5rem 0.7rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; box-sizing:border-box; }
+  .cs-sug { display:none; position:absolute; left:0; right:0; top:100%; background:#fff; border:1px solid var(--gray-200); border-top:none; border-radius:0 0 8px 8px; max-height:260px; overflow-y:auto; z-index:40; box-shadow:0 8px 20px rgba(0,0,0,0.12); }
+  .cs-sug div { padding:0.5rem 0.7rem; font-size:0.82rem; cursor:pointer; border-bottom:1px solid #f1f5f9; }
+  .cs-sug div:hover { background:#f8fafc; }
+  .cs-empty { color:var(--gray-400); font-size:0.82rem; padding:0.6rem 0; }
 </style>
 {% endblock %}
 
 {% block section_content %}
-<div class="ud-top">
-  <div>
-    <a class="ud-back" href="/admin/pg/users"><i class="fa-solid fa-arrow-left"></i> All doctors</a>
-    <h1 class="ud-name">{{ d.name or 'Unnamed doctor' }}
-      {% if d.is_blocked %}<span class="chip chip-red">Blocked</span>{% endif %}</h1>
-    <div class="ud-sub">{{ d.mobile }}{% if d.email %} · {{ d.email }}{% endif %}
-      · joined {{ d.created_at.strftime('%d %b %Y') if d.created_at else '—' }}</div>
-  </div>
-  <div style="display:flex; gap:0.5rem;">
-    <form method="POST" action="/admin/pg/users/{{ d.id }}/block" onsubmit="return confirm('{{ 'Unblock' if d.is_blocked else 'Block' }} this doctor?')">
-      <button class="btn {{ 'btn-ghost' if d.is_blocked else 'btn-danger' }}" type="submit">
-        <i class="fa-solid fa-{{ 'unlock' if d.is_blocked else 'ban' }}"></i> {{ 'Unblock' if d.is_blocked else 'Block' }}</button>
-    </form>
-  </div>
-</div>
+<div class="pw">
+  <a class="back" href="/admin/pg/users"><i class="fa-solid fa-arrow-left"></i> All doctors</a>
 
-{% if pgcp_inv %}
-<div class="pgcp-banner">
-  <i class="fa-solid fa-stethoscope" style="color:#ea580c;font-size:1.3rem;"></i>
-  <div style="flex:1;min-width:200px;">
-    <div class="t">Indian PGCP client
-      {% if pgcp_inv.client_type=='internal' %}<span class="chip chip-blue" style="margin-left:0.3rem;">Internal · Premium</span>
-      {% else %}<span class="chip chip-gray" style="margin-left:0.3rem;">Paying</span>{% endif %}
-    </div>
-    <div style="font-size:0.8rem;color:var(--gray-600);margin-top:0.15rem;">
-      {% if pgcp_inv.onb_step %}Onboarding step {{ pgcp_inv.onb_step }} / 4{% else %}Onboarding not started{% endif %}
-      · status {{ pgcp_inv.onb_status or pgcp_inv.status }}
-      {% if pgcp_inv.invited_amount is not none %} · fee ₹{{ '{:,.0f}'.format(pgcp_inv.invited_amount - (pgcp_inv.discount or 0)) }}{% endif %}
-    </div>
-  </div>
-  <a class="btn btn-ghost" href="{{ url_for('pg_pgcp_submission', invite_id=pgcp_inv.id) }}"><i class="fa-solid fa-eye"></i> View PGCP submission</a>
-</div>
-{% endif %}
-
-<div class="ud-grid">
-  <!-- LEFT — profile -->
-  <div>
-    <form method="POST" action="/admin/pg/users/{{ d.id }}/save">
-      <div class="ud-card">
-        <h3><i class="fa-solid fa-user"></i> Profile</h3>
-        <div class="ud-grid2">
-          <div class="ud-f"><label>Name</label><input name="name" value="{{ d.name or '' }}"></div>
-          <div class="ud-f"><label>Email</label><input name="email" value="{{ d.email or '' }}"></div>
-          <div class="ud-f"><label>NEET-PG year</label><input name="neet_pg_year" value="{{ d.neet_pg_year or '' }}"></div>
-          <div class="ud-f"><label>NEET-PG rank</label><input type="number" name="neet_pg_rank" value="{{ d.neet_pg_rank or '' }}"></div>
-          <div class="ud-f"><label>Target speciality</label><input name="target_speciality" value="{{ d.target_speciality or '' }}"></div>
-          <div class="ud-f"><label>College</label><input name="college" value="{{ d.college or '' }}"></div>
-          <div class="ud-f"><label>City</label><input name="city" value="{{ d.city or '' }}"></div>
-          <div class="ud-f"><label>State</label><input name="state" value="{{ d.state or '' }}"></div>
-          <div class="ud-f"><label>Source</label><input name="source" value="{{ d.source or '' }}" placeholder="how they found us"></div>
-          <div class="ud-f"><label>Tags</label><input name="tags" value="{{ d.tags or '' }}" placeholder="comma separated"></div>
-        </div>
-        <div class="ud-f"><label>Admin notes</label><textarea name="admin_notes" rows="2">{{ d.admin_notes or '' }}</textarea></div>
-        <button class="btn btn-primary" type="submit"><i class="fa-solid fa-check"></i> Save profile</button>
-        <span style="font-size:0.76rem; color:var(--gray-400); margin-left:0.5rem;">Mobile is the login and can't be changed here.</span>
-      </div>
-    </form>
-
-    <div class="ud-card">
-      <h3><i class="fa-solid fa-clock-rotate-left"></i> Plan history</h3>
-      {% if subs %}
-      <table class="ud-table">
-        <thead><tr><th>Plan</th><th>Status</th><th>Started</th><th>Ends</th><th>Source</th><th></th></tr></thead>
-        <tbody>
-          {% for s in subs %}
-          <tr>
-            <td><b>{{ s.plan_name or s.plan_id }}</b>{% if s.coupon_code %}<div style="font-size:0.72rem; color:var(--gray-500)">coupon {{ s.coupon_code }}</div>{% endif %}</td>
-            <td>{% if s.status == 'active' and (not s.expires_at or s.expires_at.strftime('%Y') >= '2000') %}
-                  <span class="chip chip-green">Active</span>
-                {% elif s.status == 'cancelled' %}<span class="chip chip-gray">Cancelled</span>
-                {% else %}<span class="chip chip-gray">{{ s.status }}</span>{% endif %}</td>
-            <td>{{ s.started_at.strftime('%d %b %Y') if s.started_at else '—' }}</td>
-            <td>{{ s.expires_at.strftime('%d %b %Y') if s.expires_at else 'No expiry' }}</td>
-            <td style="font-size:0.78rem; color:var(--gray-500)">{{ s.source or '' }}</td>
-            <td>{% if s.status == 'active' %}
-              <form method="POST" action="/admin/pg/subscriptions/{{ s.id }}/cancel" onsubmit="return confirm('Cancel this subscription? The doctor drops to Free.')">
-                <button class="btn btn-ghost" style="padding:0.25rem 0.5rem; font-size:0.76rem;" type="submit">Cancel</button></form>
-            {% endif %}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}<p style="color:var(--gray-500); font-size:0.86rem;">On the Free plan — no paid subscription yet.</p>{% endif %}
-    </div>
-
-    {% if recent %}
-    <div class="ud-card">
-      <h3><i class="fa-solid fa-chart-simple"></i> Recent activity</h3>
-      <table class="ud-table">
-        <thead><tr><th>Feature</th><th>Item</th><th>Period</th><th>Uses</th><th>Last used</th></tr></thead>
-        <tbody>
-          {% for r in recent %}
-          <tr><td>{{ r.feature_code }}</td><td style="color:var(--gray-500)">{{ r.item_key or '—' }}</td>
-            <td>{{ r.period_key }}</td><td>{{ r.hits }}</td>
-            <td>{{ r.last_used_at.strftime('%d %b, %H:%M') if r.last_used_at else '' }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-
-    <div class="ud-card">
-      <h3><i class="fa-solid fa-star" style="color:#f59e0b;"></i> Saved colleges (favourites)
-        <span style="margin-left:auto;font-size:0.78rem;color:var(--gray-500);font-weight:600;">{{ favorites|length }}</span></h3>
-      {% if favorites %}
-      <table class="ud-table">
-        <thead><tr><th>College</th><th>Type</th><th>Location</th><th>Saved</th></tr></thead>
-        <tbody>
-          {% for f in favorites %}
-          <tr>
-            <td><a href="/admin/pg/college-database/{{ f.id }}" style="color:var(--navy);font-weight:600;text-decoration:none;">{{ f.college_name }}</a></td>
-            <td><span style="font-size:0.7rem;font-weight:700;padding:1px 7px;border-radius:3px;background:{{ '#dbeafe' if f.kind=='medical' else '#cffafe' }};color:{{ '#1e40af' if f.kind=='medical' else '#155e75' }};">{{ 'Medical' if f.kind=='medical' else 'DNB' }}</span></td>
-            <td style="color:var(--gray-500)">{{ f.city }}{% if f.city and f.state %}, {% endif %}{{ f.state }}</td>
-            <td style="color:var(--gray-500)">{{ f.added_at.strftime('%d %b %Y') if f.added_at else '' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p style="font-size:0.85rem;color:var(--gray-400);margin:0.4rem 0 0;">This doctor hasn't starred any colleges yet.</p>
-      {% endif %}
-    </div>
-  </div>
-
-  <!-- RIGHT — plan + entitlements -->
-  <div>
-    <div class="ud-card">
-      <h3><i class="fa-solid fa-crown"></i> Current plan</h3>
-      <div class="ud-plan-now">
-        <div class="big">{{ ent.plan.name }}</div>
-        <div style="font-size:0.82rem; color:var(--gray-600); margin-top:0.2rem;">
-          {% if ent.subscription.active %}
-            {% if ent.subscription.expires_at %}Renews/expires {{ ent.subscription.expires_at[:10] }}{% else %}Active, no expiry{% endif %}
-          {% else %}Free plan{% endif %}
+  <!-- HERO -->
+  <div class="card" style="margin-top:0.6rem;">
+    <div class="hero">
+      <div class="hero-l">
+        <div class="avatar">{{ (d.name or 'D')[:1]|upper }}{{ (d.name.split()[1][:1]|upper) if d.name and d.name.split()|length > 1 else '' }}</div>
+        <div>
+          <h1 class="hero-name">{{ d.name or 'Unnamed doctor' }}
+            {% if pgcp_inv %}<span class="pill pill-orange">PGCP · {{ 'Internal' if pgcp_inv.client_type=='internal' else 'Paying' }}</span>{% endif %}
+            {% if d.is_blocked %}<span class="pill pill-red">Blocked</span>{% endif %}
+          </h1>
+          <div style="font-size:0.85rem;color:var(--gray-500);">{{ d.mobile }}</div>
+          <div style="margin-top:0.5rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
+            <span class="pill pill-green">{{ ent.plan.name }}</span>
+            {% if states %}<span class="pill pill-blue">{{ states|selectattr('role','equalto','home')|map(attribute='state')|first or (states[0].state) }}{% if states|length > 1 %} +{{ states|length - 1 }}{% endif %}</span>{% endif %}
+          </div>
         </div>
       </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        {% if pgcp_inv %}<a class="btn btn-ghost" href="{{ url_for('pg_pgcp_submission', invite_id=pgcp_inv.id) }}"><i class="fa-solid fa-eye"></i> PGCP submission</a>{% endif %}
+        <form method="POST" action="/admin/pg/users/{{ d.id }}/block" onsubmit="return confirm('{{ 'Unblock' if d.is_blocked else 'Block' }} this doctor?')">
+          <button class="btn {{ 'btn-ghost' if d.is_blocked else 'btn-danger' }}" type="submit">
+            <i class="fa-solid fa-{{ 'unlock' if d.is_blocked else 'ban' }}"></i> {{ 'Unblock' if d.is_blocked else 'Block' }}</button>
+        </form>
+      </div>
+    </div>
+    <div class="info-strip">
+      <span><span class="k">Email:</span> <span class="v">{{ d.email or '—' }}</span></span>
+      <span><span class="k">Joined:</span> <span class="v">{{ d.created_at.strftime('%d %b %Y') if d.created_at else '—' }}</span></span>
+      <span><span class="k">Target:</span> <span class="v">{{ d.target_speciality or '—' }}</span></span>
+      <span><span class="k">College:</span> <span class="v">{{ d.college or '—' }}</span></span>
+      {% if pgcp_inv %}<span><span class="k">PGCP onboarding:</span> <span class="v">{% if pgcp_inv.onb_step %}Step {{ pgcp_inv.onb_step }}/4{% else %}Not started{% endif %}</span></span>{% endif %}
+    </div>
+  </div>
 
-      <form method="POST" action="/admin/pg/users/{{ d.id }}/grant-plan">
-        <div class="ud-f"><label>Grant / change plan</label>
-          <select name="plan_id" required>
-            <option value="">Choose a plan…</option>
-            {% for p in plans %}<option value="{{ p.id }}">{{ p.name }}
-              {% if p.price and p.price > 0 %}(₹{{ '{:,.0f}'.format(p.price) }}){% else %}(Free){% endif %}</option>{% endfor %}
-          </select></div>
-        <div class="ud-grid2">
-          <div class="ud-f"><label>Duration (days)</label><input type="number" name="duration_days" placeholder="plan default"></div>
-          <div class="ud-f"><label>Note</label><input name="notes" placeholder="e.g. comp / phone sale"></div>
+  <!-- STAT CARDS -->
+  <div class="stats">
+    <div class="stat"><p class="l">Current plan</p><p class="v">{{ ent.plan.name }}</p></div>
+    <div class="stat"><p class="l">NEET-PG rank</p><p class="v">{{ '{:,}'.format(d.neet_pg_rank) if d.neet_pg_rank else '—' }}{% if d.neet_pg_year %} <span style="font-size:0.7rem;color:var(--gray-400);font-weight:600;">'{{ d.neet_pg_year[-2:] }}</span>{% endif %}</p></div>
+    <div class="stat"><p class="l">Choice sheets</p><p class="v">{{ choice_sets|length }}</p></div>
+    <div class="stat"><p class="l">Saved colleges</p><p class="v">{{ favorites|length }}</p></div>
+  </div>
+
+  <div class="grid2">
+    <!-- LEFT -->
+    <div>
+      <form method="POST" action="/admin/pg/users/{{ d.id }}/save">
+        <div class="card">
+          <h3><i class="fa-solid fa-user"></i> Personal &amp; academic details</h3>
+          <div class="fg2">
+            <div class="f"><label>Name</label><input name="name" value="{{ d.name or '' }}"></div>
+            <div class="f"><label>Email</label><input name="email" value="{{ d.email or '' }}"></div>
+            <div class="f"><label>NEET-PG year</label><input name="neet_pg_year" value="{{ d.neet_pg_year or '' }}"></div>
+            <div class="f"><label>NEET-PG rank</label><input type="number" name="neet_pg_rank" value="{{ d.neet_pg_rank or '' }}"></div>
+            <div class="f"><label>Target speciality</label><input name="target_speciality" value="{{ d.target_speciality or '' }}"></div>
+            <div class="f"><label>College</label><input name="college" value="{{ d.college or '' }}"></div>
+            <div class="f"><label>City</label><input name="city" value="{{ d.city or '' }}"></div>
+            <div class="f"><label>State</label><input name="state" value="{{ d.state or '' }}"></div>
+            <div class="f"><label>Source</label><input name="source" value="{{ d.source or '' }}" placeholder="how they found us"></div>
+            <div class="f"><label>Tags</label><input name="tags" value="{{ d.tags or '' }}" placeholder="comma separated"></div>
+          </div>
+          <div class="f"><label>Admin notes</label><textarea name="admin_notes" rows="2">{{ d.admin_notes or '' }}</textarea></div>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-check"></i> Save profile</button>
+          <span style="font-size:0.76rem;color:var(--gray-400);margin-left:0.5rem;">Mobile is the login and can't be changed here.</span>
         </div>
-        <button class="btn btn-navy" type="submit"><i class="fa-solid fa-gift"></i> Grant plan</button>
-        <div style="font-size:0.74rem; color:var(--gray-400); margin-top:0.4rem;">
-          Recorded as an admin grant (₹0), separate from paid revenue.</div>
       </form>
-    </div>
 
-    <div class="ud-card">
-      <h3><i class="fa-solid fa-key"></i> What they can access
-        <form method="POST" action="/admin/pg/users/{{ d.id }}/reset-usage" style="margin-left:auto;"
-              onsubmit="return confirm('Reset ALL usage counters for this doctor?')">
-          <button class="btn btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.74rem;" type="submit">Reset usage</button></form>
-      </h3>
-      {% for code, f in ent.features.items() %}
-      <div class="ent-row">
-        <div>{{ f.name }}
-          {% if not f.allowed %}<span class="chip chip-gray" style="font-size:0.66rem;">off</span>{% endif %}</div>
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          {% if f.unlimited %}<span class="chip chip-blue">Unlimited</span>
-          {% elif f.unit == 'boolean' %}
-            {% if f.allowed %}<span class="chip chip-green">Yes</span>{% else %}<span class="chip chip-gray">No</span>{% endif %}
-          {% elif f.limit is not none %}
-            <span style="font-size:0.78rem; color:var(--gray-600)">{{ f.used }}/{{ f.limit }}</span>
-            <span class="ent-bar"><span style="width:{{ (100 if f.limit == 0 else (f.used / f.limit * 100)) | round | int }}%"></span></span>
-          {% else %}<span class="chip chip-gray">—</span>{% endif %}
-        </div>
+      <div class="card">
+        <h3><i class="fa-solid fa-clock-rotate-left"></i> Plan history</h3>
+        {% if subs %}
+        <table class="tbl">
+          <thead><tr><th>Plan</th><th>Status</th><th>Started</th><th>Ends</th><th>Source</th><th></th></tr></thead>
+          <tbody>
+            {% for s in subs %}
+            <tr>
+              <td><b>{{ s.plan_name or s.plan_id }}</b>{% if s.coupon_code %}<div style="font-size:0.72rem;color:var(--gray-500)">coupon {{ s.coupon_code }}</div>{% endif %}</td>
+              <td>{% if s.status == 'active' %}<span class="chip chip-green">Active</span>
+                  {% elif s.status == 'cancelled' %}<span class="chip chip-gray">Cancelled</span>
+                  {% else %}<span class="chip chip-gray">{{ s.status }}</span>{% endif %}</td>
+              <td>{{ s.started_at.strftime('%d %b %Y') if s.started_at else '—' }}</td>
+              <td>{{ s.expires_at.strftime('%d %b %Y') if s.expires_at else 'No expiry' }}</td>
+              <td style="font-size:0.78rem;color:var(--gray-500)">{{ s.source or '' }}</td>
+              <td>{% if s.status == 'active' %}
+                <form method="POST" action="/admin/pg/subscriptions/{{ s.id }}/cancel" onsubmit="return confirm('Cancel this subscription? The doctor drops to Free.')">
+                  <button class="btn btn-ghost" style="padding:0.25rem 0.5rem;font-size:0.76rem;" type="submit">Cancel</button></form>
+              {% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p style="color:var(--gray-500);font-size:0.86rem;">On the Free plan — no paid subscription yet.</p>{% endif %}
       </div>
-      {% endfor %}
-    </div>
 
-    <div class="ud-card">
-      <h3><i class="fa-solid fa-location-dot"></i> Counselling states
-        <span style="margin-left:auto;font-size:0.78rem;color:var(--gray-500);font-weight:600;">{{ states|length }}</span></h3>
-      {% if states %}
-        {% for st in states %}
-        <div class="ent-row">
-          <div>{{ st.state }}
-            {% if st.role=='home' %}<span class="chip chip-blue" style="font-size:0.66rem;">Home</span>
-            {% else %}<span class="chip chip-gray" style="font-size:0.66rem;">Other</span>{% endif %}</div>
-          {% if st.locked %}<span style="font-size:0.72rem;color:var(--gray-400)"><i class="fa-solid fa-lock"></i> locked</span>{% endif %}
-        </div>
-        {% endfor %}
-      {% else %}
-      <p style="font-size:0.85rem;color:var(--gray-400);margin:0.4rem 0 0;">No state chosen yet (home state is set during onboarding).</p>
-      {% endif %}
-    </div>
-  </div>
-</div>
-
-<!-- Choice sheets (round-wise lists the doctor / team built) -->
-<div class="ud-card" style="margin-top:0.25rem;">
-  <h3><i class="fa-solid fa-list-ol"></i> Choice lists
-    <span style="margin-left:auto;font-size:0.78rem;color:var(--gray-500);font-weight:600;">{{ choice_sets|length }} sheet{{ '' if choice_sets|length==1 else 's' }}</span></h3>
-
-  {% if not choice_sets %}
-  <p style="font-size:0.85rem;color:var(--gray-400);margin:0.2rem 0 0;">This doctor hasn't built any choice lists yet. They build them from their dashboard (Choice-list is a Starter+ feature).</p>
-  {% else %}
-    {% set chance_lbl = {'strong':'Strong','high':'High','good':'Good','borderline':'Border','verylow':'Reach'} %}
-    {% for s in choice_sets %}
-    <div class="cs-set">
-      <div class="cs-head">
-        <span class="lbl">{{ s.label or (s.authority or 'Choice list') }}</span>
-        {% if s.scope=='state' %}<span class="chip chip-blue">{{ s.state or 'State' }}</span>
-        {% else %}<span class="chip chip-gray">MCC / All-India</span>{% endif %}
-        <span class="cs-meta">
-          {% if s.rank %}Rank {{ '{:,}'.format(s.rank) }}{% endif %}
-          {% if s.degree_group %} · {{ 'DNB' if s.degree_group=='dnb' else 'MD/MS' }}{% endif %}
-          {% if s.specialties %} · {{ s.specialties|length }} specialit{{ 'y' if s.specialties|length==1 else 'ies' }}{% endif %}
-          · {{ s.total }} colleges
-        </span>
+      <div class="card">
+        <h3><i class="fa-solid fa-star" style="color:#f59e0b;"></i> Saved colleges <span class="n">{{ favorites|length }}</span></h3>
+        {% if favorites %}
+        <table class="tbl">
+          <thead><tr><th>College</th><th>Type</th><th>Location</th><th>Saved</th></tr></thead>
+          <tbody>
+            {% for f in favorites %}
+            <tr>
+              <td><a href="/admin/pg/college-database/{{ f.id }}" style="color:var(--navy);font-weight:600;text-decoration:none;">{{ f.college_name }}</a></td>
+              <td><span class="chip {{ 'chip-blue' if f.kind=='medical' else 'chip-gray' }}">{{ 'Medical' if f.kind=='medical' else 'DNB' }}</span></td>
+              <td style="color:var(--gray-500)">{{ f.city }}{% if f.city and f.state %}, {% endif %}{{ f.state }}</td>
+              <td style="color:var(--gray-500)">{{ f.added_at.strftime('%d %b %Y') if f.added_at else '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<p style="font-size:0.85rem;color:var(--gray-400);margin:0.2rem 0 0;">No starred colleges yet.</p>{% endif %}
       </div>
-      <div class="cs-rounds">
-        {% for rnd in [1,2,3] %}
-        {% set items = s.rounds.get(rnd, []) %}
-        <div class="cs-round">
-          <h4>Round {{ rnd }} <span style="color:var(--gray-400);font-weight:600;">{{ items|length }}</span></h4>
-          {% if items %}
-            {% for it in items %}
-            <div class="cs-item">
-              <span class="pos">{{ loop.index }}</span>
-              <div style="flex:1;min-width:0;">
-                <div class="nm">
-                  {% if it.master_id %}<a href="/admin/pg/college-database/{{ it.master_id }}" style="color:var(--navy);text-decoration:none;">{{ it.institute }}</a>{% else %}{{ it.institute }}{% endif %}
-                </div>
-                <div class="cr">{{ it.course }}{% if it.quota %} · {{ it.quota }}{% endif %}{% if it.category %} · {{ it.category }}{% endif %}{% if it.closing_rank %} · CR {{ '{:,}'.format(it.closing_rank) }}{% endif %}</div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="card">
+        <h3><i class="fa-solid fa-crown"></i> Current plan</h3>
+        <div style="background:linear-gradient(160deg,#f0f6ff,#eaf0fb);border:1px solid #cfe0f7;border-radius:0.6rem;padding:0.9rem 1rem;margin-bottom:1rem;">
+          <div style="font-size:1.15rem;font-weight:800;color:var(--navy);">{{ ent.plan.name }}</div>
+          <div style="font-size:0.82rem;color:var(--gray-600);margin-top:0.2rem;">
+            {% if ent.subscription.active %}{% if ent.subscription.expires_at %}Renews/expires {{ ent.subscription.expires_at[:10] }}{% else %}Active, no expiry{% endif %}{% else %}Free plan{% endif %}
+          </div>
+        </div>
+        <form method="POST" action="/admin/pg/users/{{ d.id }}/grant-plan">
+          <div class="f"><label>Grant / change plan</label>
+            <select name="plan_id" required>
+              <option value="">Choose a plan…</option>
+              {% for p in plans %}<option value="{{ p.id }}">{{ p.name }}{% if p.price and p.price > 0 %} (₹{{ '{:,.0f}'.format(p.price) }}){% else %} (Free){% endif %}</option>{% endfor %}
+            </select></div>
+          <div class="fg2">
+            <div class="f"><label>Duration (days)</label><input type="number" name="duration_days" placeholder="plan default"></div>
+            <div class="f"><label>Note</label><input name="notes" placeholder="e.g. comp / phone sale"></div>
+          </div>
+          <button class="btn btn-navy" type="submit"><i class="fa-solid fa-gift"></i> Grant plan</button>
+          <div style="font-size:0.74rem;color:var(--gray-400);margin-top:0.4rem;">Recorded as an admin grant (₹0), separate from paid revenue.</div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3><i class="fa-solid fa-location-dot"></i> Counselling states <span class="n">{{ states|length }}</span></h3>
+        {% if states %}
+          {% for st in states %}
+          <div class="ent-row">
+            <div>{{ st.state }}
+              {% if st.role=='home' %}<span class="chip chip-blue" style="font-size:0.64rem;">Home</span>{% else %}<span class="chip chip-gray" style="font-size:0.64rem;">Other</span>{% endif %}</div>
+            {% if st.locked %}<span style="font-size:0.72rem;color:var(--gray-400)"><i class="fa-solid fa-lock"></i> locked</span>{% endif %}
+          </div>
+          {% endfor %}
+        {% else %}<p style="font-size:0.85rem;color:var(--gray-400);margin:0.2rem 0 0;">No state chosen yet.</p>{% endif %}
+      </div>
+
+      <!-- Plan coverage — minimized (team already knows it) -->
+      <div class="card">
+        <details>
+          <summary style="cursor:pointer;font-weight:700;color:var(--navy);font-size:0.95rem;"><i class="fa-solid fa-key"></i> What this plan covers <span style="font-weight:500;color:var(--gray-400);font-size:0.8rem;">(click to expand)</span></summary>
+          <div style="margin-top:0.8rem;">
+            {% for code, f in ent.features.items() %}
+            <div class="ent-row">
+              <div>{{ f.name }}{% if not f.allowed %}<span class="chip chip-gray" style="font-size:0.62rem;">off</span>{% endif %}</div>
+              <div>
+                {% if f.unit == 'boolean' %}{% if f.allowed %}<span class="chip chip-green">Yes</span>{% else %}<span class="chip chip-gray">No</span>{% endif %}
+                {% elif f.unlimited %}<span class="chip chip-blue">Included</span>
+                {% elif f.limit is not none %}<span style="font-size:0.78rem;color:var(--gray-600)">{{ f.used }}/{{ f.limit }}</span>
+                {% else %}<span class="chip chip-gray">—</span>{% endif %}
               </div>
-              {% if it.chance %}<span class="ch ch-{{ it.chance }}">{{ chance_lbl.get(it.chance, it.chance) }}</span>{% endif %}
             </div>
             {% endfor %}
-          {% else %}
-          <div class="cs-empty">No colleges in this round.</div>
-          {% endif %}
-        </div>
-        {% endfor %}
+            <form method="POST" action="/admin/pg/users/{{ d.id }}/reset-usage" style="margin-top:0.6rem;" onsubmit="return confirm('Reset ALL usage counters for this doctor?')">
+              <button class="btn btn-ghost" style="padding:0.2rem 0.6rem;font-size:0.74rem;" type="submit">Reset usage counters</button></form>
+          </div>
+        </details>
       </div>
     </div>
-    {% endfor %}
-  {% endif %}
+  </div>
+
+  <!-- CHOICE LISTS (editable) -->
+  <div class="card">
+    <h3><i class="fa-solid fa-list-ol"></i> Choice lists <span class="n">{{ choice_sets|length }} sheet{{ '' if choice_sets|length==1 else 's' }}</span></h3>
+    <p style="font-size:0.8rem;color:var(--gray-500);margin:-0.3rem 0 0.9rem;">
+      Edit on the doctor's behalf — reorder, add or remove colleges. Every change you make is
+      tagged <span class="team-badge">Team</span> so the doctor sees it came from GooCampus.</p>
+    {% if not choice_sets %}
+    <p class="cs-empty">This doctor hasn't built any choice lists yet. They build them from their dashboard (a Starter+ feature).</p>
+    {% else %}
+    <div id="choiceRoot"></div>
+    {% endif %}
+  </div>
 </div>
+
+{% if choice_sets %}
+<script>
+window.CHOICE = {{ choice_json|safe }};
+(function(){
+  var CH_LBL = {strong:'Strong',high:'High',good:'Good',borderline:'Border',verylow:'Reach',unknown:'—'};
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function nfmt(n){ return (n==null||n==='')?'':Number(n).toLocaleString('en-IN'); }
+  var root = document.getElementById('choiceRoot');
+  var active = {};   // setId -> active round
+
+  function crText(it){
+    var bits = [];
+    if(it.course) bits.push(esc(it.course));
+    if(it.quota) bits.push(esc(it.quota));
+    if(it.category) bits.push(esc(it.category));
+    if(it.closing_rank) bits.push('CR '+nfmt(it.closing_rank));
+    return bits.join(' · ');
+  }
+
+  function renderRound(setId){
+    var s = window.CHOICE.find(function(x){ return x.id===setId; });
+    var rnd = active[setId] || 1;
+    var items = (s.rounds[String(rnd)]||[]);
+    var body = document.getElementById('csbody_'+setId);
+    var html = '';
+    if(!items.length){ html += '<div class="cs-empty">No colleges in Round '+rnd+' yet. Add one below.</div>'; }
+    items.forEach(function(it, i){
+      var team = it.added_by==='team' ? ' <span class="team-badge" title="Added by '+esc(it.added_by_name||'GooCampus team')+'">Team</span>' : '';
+      var nm = it.master_id ? '<a href="/admin/pg/college-database/'+it.master_id+'" style="color:var(--navy);text-decoration:none;">'+esc(it.institute)+'</a>' : esc(it.institute);
+      html += '<div class="cs-item">'
+        + '<span class="pos">'+(i+1)+'</span>'
+        + '<div style="flex:1;min-width:0;"><div class="nm">'+nm+team+'</div><div class="cr">'+crText(it)+'</div></div>'
+        + (it.chance ? '<span class="ch ch-'+it.chance+'">'+(CH_LBL[it.chance]||it.chance)+'</span>' : '')
+        + '<div class="cs-ctrls">'
+        + '<button title="Move up" '+(i===0?'disabled style="opacity:.35;"':'')+' onclick="CS.move('+setId+','+it.id+',\'up\')">&#9650;</button>'
+        + '<button title="Move down" '+(i===items.length-1?'disabled style="opacity:.35;"':'')+' onclick="CS.move('+setId+','+it.id+',\'down\')">&#9660;</button>'
+        + '<button class="del" title="Remove" onclick="CS.del('+setId+','+it.id+')">&times;</button>'
+        + '</div></div>';
+    });
+    body.innerHTML = html;
+    // tab active state + counts
+    [1,2,3].forEach(function(r){
+      var tab = document.getElementById('cstab_'+setId+'_'+r);
+      if(tab){ tab.className = 'cs-tab'+(r===rnd?' active':''); tab.querySelector('.cnt').textContent = (s.rounds[String(r)]||[]).length; }
+    });
+  }
+
+  function renderSet(s){
+    var el = document.createElement('div'); el.className = 'cs-set';
+    var meta = [];
+    if(s.rank) meta.push('Rank '+nfmt(s.rank));
+    meta.push(s.degree_group==='dnb'?'DNB':'MD/MS');
+    if(s.specialties && s.specialties.length) meta.push(s.specialties.length+' specialit'+(s.specialties.length===1?'y':'ies'));
+    meta.push(s.total+' colleges');
+    var scopeChip = s.scope==='state' ? '<span class="chip chip-blue">'+esc(s.state||'State')+'</span>' : '<span class="chip chip-gray">MCC / All-India</span>';
+    var teamLine = s.team_edited_at ? '<div class="cs-team"><i class="fa-solid fa-pen"></i> Last edited by GooCampus team ('+esc(s.team_edited_by||'team')+') · '+esc(s.team_edited_at)+'</div>' : '';
+    el.innerHTML =
+      '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip
+        + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+'</div>'
+      + '<div class="cs-tabs">'
+        + [1,2,3].map(function(r){ return '<button class="cs-tab" id="cstab_'+s.id+'_'+r+'" onclick="CS.tab('+s.id+','+r+')">Round '+r+' <span class="cnt" style="color:var(--gray-400);">0</span></button>'; }).join('')
+      + '</div>'
+      + '<div class="cs-body"><div id="csbody_'+s.id+'"></div>'
+        + '<div class="cs-add"><input id="csq_'+s.id+'" placeholder="Add a college to this round — type a name…" autocomplete="off" oninput="CS.search('+s.id+')">'
+        + '<div class="cs-sug" id="cssug_'+s.id+'"></div></div>'
+      + '</div>';
+    root.appendChild(el);
+    active[s.id] = 1;
+    renderRound(s.id);
+  }
+
+  var CS = {
+    tab: function(setId, rnd){ active[setId]=rnd; renderRound(setId); var q=document.getElementById('csq_'+setId); if(q){q.value='';} var sg=document.getElementById('cssug_'+setId); if(sg){sg.style.display='none';} },
+    _post: function(url, body, setId){
+      return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if(!j.ok){ alert('Could not save: '+(j.error||'error')); return; }
+          var s = window.CHOICE.find(function(x){ return x.id===setId; });
+          if(j.items){ s.rounds[String(j.round)] = j.items; }
+          s.total = (s.rounds['1']||[]).length + (s.rounds['2']||[]).length + (s.rounds['3']||[]).length;
+          s.team_edited_at = 'just now'; renderRound(setId);
+          var head = document.querySelectorAll('.cs-set')[window.CHOICE.indexOf(s)];
+        }).catch(function(){ alert('Network error — not saved.'); });
+    },
+    move: function(setId, itemId, dir){ this._post('/admin/pg/choice-items/'+itemId+'/move', {dir:dir}, setId); },
+    del: function(setId, itemId){ if(confirm('Remove this college from the round?')) this._post('/admin/pg/choice-items/'+itemId+'/delete', {}, setId); },
+    add: function(setId, cand){
+      var rnd = active[setId]||1;
+      this._post('/admin/pg/choice-sets/'+setId+'/add', {round:rnd, institute:cand.institute, course:cand.course, quota:cand.quota, category:cand.category, master_id:cand.master_id, closing_rank:cand.cr}, setId);
+      var q=document.getElementById('csq_'+setId); if(q){q.value='';}
+      document.getElementById('cssug_'+setId).style.display='none';
+    },
+    search: function(setId){
+      var q = document.getElementById('csq_'+setId); var box = document.getElementById('cssug_'+setId);
+      var rnd = active[setId]||1; var term = q.value.trim();
+      clearTimeout(q._t);
+      if(term.length<2){ box.style.display='none'; return; }
+      q._t = setTimeout(function(){
+        fetch('/admin/pg/choice-sets/'+setId+'/cutoff-search?round='+rnd+'&q='+encodeURIComponent(term))
+          .then(function(r){ return r.json(); })
+          .then(function(j){
+            var rows = (j && j.rows) || []; box.innerHTML='';
+            if(!rows.length){ box.style.display='none'; return; }
+            rows.forEach(function(c){
+              var d = document.createElement('div');
+              d.innerHTML = '<b>'+esc(c.institute)+'</b> <span style="color:#94a3b8;">'+esc(c.course||'')+'</span>'
+                + ' <span style="color:#cbd5e1;">'+esc(c.quota||'')+(c.category?(' · '+esc(c.category)):'')+(c.cr?(' · CR '+nfmt(c.cr)):'')+'</span>'
+                + (c.chance?' <span class="ch ch-'+c.chance+'">'+(CH_LBL[c.chance]||c.chance)+'</span>':'');
+              d.onclick = function(){ CS.add(setId, c); };
+              box.appendChild(d);
+            });
+            box.style.display='block';
+          }).catch(function(){ box.style.display='none'; });
+      }, 220);
+    }
+  };
+  window.CS = CS;
+  window.CHOICE.forEach(renderSet);
+  document.addEventListener('click', function(e){
+    document.querySelectorAll('.cs-sug').forEach(function(b){
+      if(!b.parentElement.contains(e.target)) b.style.display='none';
+    });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

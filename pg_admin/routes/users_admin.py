@@ -233,6 +233,26 @@ def user_detail(user_id):
         except Exception:
             conn.rollback(); choice_sets = []
 
+        # JSON-safe copy for the editable in-page UI (renders + re-renders from JS).
+        def _item_json(it):
+            return {'id': it['id'], 'position': it['position'], 'master_id': it.get('master_id'),
+                    'institute': it.get('institute') or '', 'course': it.get('course') or '',
+                    'quota': it.get('quota') or '', 'category': it.get('category') or '',
+                    'closing_rank': it.get('closing_rank'), 'chance': it.get('chance') or '',
+                    'added_by': it.get('added_by') or 'client',
+                    'added_by_name': it.get('added_by_name') or ''}
+        choice_json = []
+        for s in choice_sets:
+            choice_json.append({
+                'id': s['id'], 'label': s.get('label') or '', 'scope': s.get('scope') or 'mcc',
+                'state': s.get('state') or '', 'authority': s.get('authority') or '',
+                'rank': s.get('rank'), 'degree_group': s.get('degree_group') or 'mdms',
+                'specialties': s.get('specialties') or [], 'total': s.get('total') or 0,
+                'team_edited_at': str(s['team_edited_at'])[:16] if s.get('team_edited_at') else '',
+                'team_edited_by': s.get('team_edited_by') or '',
+                'rounds': {str(r): [_item_json(it) for it in s['rounds'].get(r, [])] for r in (1, 2, 3)},
+            })
+
         # If this doctor was invited into Indian PGCP, surface the invitation + onboarding.
         pgcp_inv = None
         try:
@@ -259,10 +279,12 @@ def user_detail(user_id):
         except Exception:
             pass
 
+    import json as _json2
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
                            favorites=favorites, states=states, choice_sets=choice_sets,
-                           pgcp_inv=pgcp_inv, active_section='goocampus_in')
+                           choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
+                           active_section='goocampus_in')
 
 
 @login_required

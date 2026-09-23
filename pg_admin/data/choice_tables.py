@@ -34,6 +34,10 @@ def ensure_choice_tables():
         )''')
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS specialties TEXT DEFAULT '[]'")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS quota_categories TEXT DEFAULT '[]'")
+        # Stamp when the GooCampus team last edited this sheet on the client's behalf,
+        # so the goocampus.in dashboard can flag "Updated by the GooCampus team".
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_at TIMESTAMP")
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_by TEXT DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_choice_sets_user ON pg_choice_sets (user_id)")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_choice_items (
@@ -55,6 +59,11 @@ def ensure_choice_tables():
         )''')
         conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS fee NUMERIC(14,2)")
         conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR'")
+        # Attribution: who put a row here — 'client' (the doctor on goocampus.in) or
+        # 'team' (GooCampus staff editing on their behalf from the org admin). Lets the
+        # client dashboard show "added by GooCampus team" on team edits.
+        conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS added_by TEXT DEFAULT 'client'")
+        conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS added_by_name TEXT DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_choice_items_set ON pg_choice_items (set_id, round, position)")
 
         # A doctor's locked states for counselling. role 'home' = their home state

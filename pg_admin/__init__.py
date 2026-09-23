@@ -20,7 +20,7 @@ from pg_admin.data import choice_tables as _choice_tables
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
                              bookings_admin, college_master_admin, api_college,
-                             pgcp_admin, api_pgcp, api_choice)
+                             pgcp_admin, api_pgcp, api_choice, choice_admin)
 
 
 def register_pg_admin(app):
@@ -167,6 +167,17 @@ def register_pg_admin(app):
                      api_choice.api_pg_choice_reorder, methods=['POST'])
     app.add_url_rule('/api/pg/choice-items/<int:item_id>', 'api_pg_choice_item_delete',
                      api_choice.api_pg_choice_item_delete, methods=['DELETE'])
+    # Team-side choice-sheet editing (goocampus.org admin, on the client's behalf)
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/cutoff-search', 'pg_choice_cutoff_search',
+                     choice_admin.choice_cutoff_search, methods=['GET'])
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/add', 'pg_choice_add',
+                     choice_admin.choice_add, methods=['POST'])
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/reorder', 'pg_choice_reorder',
+                     choice_admin.choice_reorder, methods=['POST'])
+    app.add_url_rule('/admin/pg/choice-items/<int:item_id>/move', 'pg_choice_move',
+                     choice_admin.choice_move, methods=['POST'])
+    app.add_url_rule('/admin/pg/choice-items/<int:item_id>/delete', 'pg_choice_delete',
+                     choice_admin.choice_delete, methods=['POST'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
