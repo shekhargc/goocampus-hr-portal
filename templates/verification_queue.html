@@ -56,8 +56,28 @@
           <td style="text-align:right;">
             {# Verified already — the row is only still here for the welcome call. #}
             {% if r.row_stage == 'welcome_call' %}
-              <span class="vq-tag {{ 'vq-hold' if r.on_hold else 'vq-open' }}">{{ 'Call on hold' if r.on_hold else 'Verified' }}</span>
-              <a href="{{ r.action_url }}" class="vq-btn vq-wc">{{ ('Release Hold →' if r.on_hold else 'Welcome Call →') if mode == 'fill' else 'Book Welcome Call →' }}</a>
+              {% if r.on_hold %}
+                <span class="vq-tag vq-hold">Call on hold</span>
+                <a href="{{ r.action_url }}" class="vq-btn vq-wc">{{ 'Release Hold →' if mode == 'fill' else 'Book Welcome Call →' }}</a>
+              {% elif r.wc_status == 'proposed' %}
+                {# Ops proposed a time and is waiting on the client — read-only on both screens. #}
+                <span class="vq-tag" style="background:#dbeafe;color:#1e40af;">Awaiting client confirmation</span>
+                <a href="{{ r.action_url }}" class="vq-btn vq-wc">{{ 'View →' if mode == 'fill' else 'Welcome Call →' }}</a>
+              {% elif r.wc_status == 'requested' %}
+                {# Client picked a slot — waiting on the ops team to confirm it. #}
+                <span class="vq-tag" style="background:#fef3c7;color:#92400e;">Client requested a time</span>
+                <a href="{{ r.action_url }}" class="vq-btn vq-wc">{{ 'View →' if mode == 'fill' else 'Confirm Welcome Call →' }}</a>
+              {% else %}
+                <span class="vq-tag vq-open">Verified</span>
+                <a href="{{ r.action_url }}" class="vq-btn vq-wc">{{ 'Welcome Call →' if mode == 'fill' else 'Book Welcome Call →' }}</a>
+              {% endif %}
+            {% elif r.row_stage == 'onboard' %}
+              {# Call confirmed — waiting for it to happen, then Ops closes onboarding here. #}
+              <span class="vq-tag" style="background:#dcfce7;color:#166534;">Welcome call confirmed{% if r.wc_date %} · {{ r.wc_date }}{% if r.wc_time %} {{ r.wc_time }}{% endif %}{% endif %}</span>
+              <form method="POST" action="/admin/client/{{ r.id }}/onboarding/complete" style="display:inline;"
+                    onsubmit="return confirm('Mark onboarding complete for this client? Do this after the welcome call has actually happened — the client will be fully onboarded and removed from this list.');">
+                <button type="submit" class="vq-btn vq-verify">Complete onboarding →</button>
+              </form>
             {% else %}
               <a href="{{ r.action_url }}" class="vq-btn {{ 'vq-verify' if mode=='verify' else 'vq-fill' }}">{{ 'Verify & Approve →' if mode=='verify' else 'Fill Details →' }}</a>
             {% endif %}

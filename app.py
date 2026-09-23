@@ -1644,10 +1644,12 @@ def client_register(token):
                          (closure_meta.get('wc_hold_note', '') or '', reg_num))
         elif _wc_mode == 'completed':
             # Welcome call already done BEFORE onboarding — record it as confirmed with
-            # the past date/time so the client sees it done (no scheduler).
+            # the past date/time so the client sees it done (no scheduler). Also close
+            # onboarding so it doesn't surface the post-call 'Complete onboarding' step.
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS onboarding_closed INTEGER DEFAULT 0")
             conn.execute("UPDATE client_registrations SET wc_confirmed = 1, wc_status = 'confirmed', "
                          "wc_scheduled_date = ?, wc_scheduled_time = ?, wc_by = ?, wc_hold_note = ?, "
-                         "wc_confirmed_at = CURRENT_TIMESTAMP WHERE registration_number = ?",
+                         "wc_confirmed_at = CURRENT_TIMESTAMP, onboarding_closed = 1 WHERE registration_number = ?",
                          (closure_meta.get('wc_completed_date', '') or '',
                           closure_meta.get('wc_completed_time', '') or '',
                           closure_meta.get('wc_completed_by', '') or '',
@@ -9698,11 +9700,14 @@ def admin_client_welcome_call_complete(reg_id):
     wc_by = (request.form.get('wc_completed_by', '') or '').strip()
     notes = (request.form.get('wc_completed_notes', '') or '').strip()
     try:
+        # The call already happened → this IS the completion, so close onboarding too
+        # (no separate post-call 'Complete onboarding' step needed for these).
+        conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS onboarding_closed INTEGER DEFAULT 0")
         conn.execute(
             "UPDATE client_registrations SET wc_confirmed=1, wc_status='confirmed', "
             "wc_scheduled_date=?, wc_scheduled_time=?, wc_by=?, wc_hold_note=?, "
-            "wc_confirmed_at=CURRENT_TIMESTAMP, welcome_call_hold=0, updated_at=CURRENT_TIMESTAMP "
-            "WHERE id=?",
+            "wc_confirmed_at=CURRENT_TIMESTAMP, welcome_call_hold=0, onboarding_closed=1, "
+            "updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (date_s, time_s, wc_by, notes, reg_id))
         conn.commit()
     except Exception as e:
@@ -9731,6 +9736,47 @@ def admin_client_welcome_call_complete(reg_id):
         logging.warning(f"welcome_call_complete onboarding sync {reg_id}: {_oe}")
     flash('Welcome call marked as already completed — no notification sent to the client. Onboarding updated.', 'success')
     return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#operations')
+
+
+@app.route('/admin/client/<int:reg_id>/onboarding/complete', methods=['POST'])
+@login_required
+def admin_client_onboarding_complete(reg_id):
+    """Post-call close: after the welcome call has actually happened, Ops clicks
+    'Complete onboarding' on the verification list to finish onboarding and drop the row.
+    Sets onboarding_closed=1 and recomputes the onboarding record. (founder 2026-09-23)"""
+    conn = get_db()
+    reg = conn.execute("SELECT id, registration_number FROM client_registrations WHERE id = ?",
+                       (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('admin_clients_list'))
+    try:
+        conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS onboarding_closed INTEGER DEFAULT 0")
+        conn.execute("UPDATE client_registrations SET onboarding_closed = 1, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        try: conn.rollback(); conn.close()
+        except Exception: pass
+        logging.error(f"onboarding_complete {reg_id}: {e}")
+        flash(f'Could not complete onboarding: {e}', 'error')
+        return redirect(request.referrer or url_for('verification_ops'))
+    # Finalize the ops onboarding record (best-effort).
+    try:
+        conn3 = get_db()
+        pc = conn3.execute("SELECT id FROM plab_clients WHERE registration_number = ?",
+                           (reg['registration_number'],)).fetchone()
+        if pc:
+            _ensure_client_onboarding(conn3, pc['id'], reg['registration_number'])
+            _recompute_onboarding(conn3, pc['id'])
+            conn3.commit()
+        conn3.close()
+    except Exception as _oe:
+        logging.warning(f"onboarding_complete recompute {reg_id}: {_oe}")
+    flash('Onboarding completed — the client is now fully onboarded and cleared from the queue.', 'success')
+    return redirect(request.referrer or url_for('verification_ops'))
 
 
 def _notify_welcome_call_confirmed(reg_id):
