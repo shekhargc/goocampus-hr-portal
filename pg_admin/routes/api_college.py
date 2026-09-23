@@ -287,6 +287,7 @@ def _fee_filters():
         'course': (request.args.get('course') or '').strip(),
         'quota': (request.args.get('quota') or '').strip(),
         'category': (request.args.get('category') or '').strip(),
+        'college_type': (request.args.get('college_type') or '').strip(),
         'q': (request.args.get('q') or '').strip(),
     }
 
@@ -307,6 +308,8 @@ def _fee_where(f):
         where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(f['quota'])
     if f['category']:
         where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(f['category'])
+    if f['college_type']:
+        where.append("LOWER(TRIM(c.institute_type)) = LOWER(TRIM(?))"); params.append(f['college_type'])
     if f['q']:
         where.append("(c.institute ILIKE ? OR c.course ILIKE ?)")
         params.extend(['%' + f['q'] + '%', '%' + f['q'] + '%'])
@@ -392,7 +395,7 @@ def api_pg_fees_facets():
         params.append('%DNB%')
     wsql = " WHERE " + " AND ".join(base)
     conn = get_db()
-    out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': []}
+    out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': [], 'college_types': []}
     try:
         def distinct(col):
             return [r[col] for r in conn.execute(
@@ -402,6 +405,7 @@ def api_pg_fees_facets():
         out['courses'] = distinct('course')
         out['quotas'] = distinct('quota')
         out['categories'] = distinct('category')
+        out['college_types'] = distinct('institute_type')
     except Exception as e:
         logging.error("api_pg_fees_facets: %s", e)
     finally:
