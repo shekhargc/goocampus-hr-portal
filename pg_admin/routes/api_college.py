@@ -293,7 +293,9 @@ def _fee_filters():
 
 def _fee_where(f):
     """Build the WHERE for a fee query. Only real, priced seats."""
-    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 0"]
+    # fee > 1 drops the ~148 placeholder ₹1 rows (fee not filled in the source) + blanks,
+    # so the explorer only shows genuine tuition (there is a clean gap: no real fee is ≤ ₹1).
+    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 1"]
     params = []
     if f['family'] in ('medical', 'dnb'):
         dc, dp = _fam(f['family']); where.append(dc); params.append(dp)
@@ -383,7 +385,7 @@ def api_pg_fees_facets():
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     fam = (request.args.get('family') or '').strip()
-    base = ["COALESCE(is_reference,0)=0", "fee IS NOT NULL", "fee > 0"]
+    base = ["COALESCE(is_reference,0)=0", "fee IS NOT NULL", "fee > 1"]
     params = []
     if fam in ('medical', 'dnb'):
         base.append("UPPER(COALESCE(degree,'')) " + ("LIKE ?" if fam == 'dnb' else "NOT LIKE ?"))
@@ -435,7 +437,7 @@ def api_pg_fees_college(college_id):
                 "SELECT c.course AS course, MAX(c.degree) AS degree, c.quota AS quota, "
                 "c.category AS category, MAX(c.fee) AS fee, MAX(c.year) AS fee_year FROM pg_cutoffs c "
                 f"WHERE c.institute IN ({ph}) AND COALESCE(c.is_reference,0)=0 "
-                "AND c.fee IS NOT NULL AND c.fee > 0" + extra +
+                "AND c.fee IS NOT NULL AND c.fee > 1" + extra +
                 " GROUP BY c.course, c.quota, c.category ORDER BY c.course, c.quota, c.category",
                 names + xp).fetchall()]
     except Exception as e:

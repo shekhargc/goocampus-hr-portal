@@ -877,7 +877,7 @@ def college_fees():
         page = max(1, int(request.args.get('page', 1)))
     except Exception:
         page = 1
-    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 0"]
+    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 1"]
     params = []
     if kind == 'dnb':
         where.append("UPPER(COALESCE(c.degree,'')) LIKE ?"); params.append('%DNB%')
@@ -910,15 +910,15 @@ def college_fees():
         # coverage: how many priced seat-rows exist at all (any filter off)
         priced_seats = conn.execute(
             "SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 "
-            "AND fee IS NOT NULL AND fee > 0").fetchone()['n']
+            "AND fee IS NOT NULL AND fee > 1").fetchone()['n']
         states = [r['state'] for r in conn.execute(
-            "SELECT DISTINCT state FROM pg_cutoffs WHERE COALESCE(state,'')<>'' AND fee IS NOT NULL AND fee>0 "
+            "SELECT DISTINCT state FROM pg_cutoffs WHERE COALESCE(state,'')<>'' AND fee IS NOT NULL AND fee>1 "
             "ORDER BY state").fetchall()]
         quotas = [r['quota'] for r in conn.execute(
-            "SELECT DISTINCT quota FROM pg_cutoffs WHERE COALESCE(quota,'')<>'' AND fee IS NOT NULL AND fee>0 "
+            "SELECT DISTINCT quota FROM pg_cutoffs WHERE COALESCE(quota,'')<>'' AND fee IS NOT NULL AND fee>1 "
             "ORDER BY quota").fetchall()]
         cats = [r['category'] for r in conn.execute(
-            "SELECT DISTINCT category FROM pg_cutoffs WHERE COALESCE(category,'')<>'' AND fee IS NOT NULL AND fee>0 "
+            "SELECT DISTINCT category FROM pg_cutoffs WHERE COALESCE(category,'')<>'' AND fee IS NOT NULL AND fee>1 "
             "ORDER BY category").fetchall()]
     finally:
         conn.close()
