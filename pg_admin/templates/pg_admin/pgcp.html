@@ -76,6 +76,12 @@
           <td style="padding:0.6rem 0.9rem;text-align:right;white-space:nowrap;">
             <a href="{{ url_for('pg_pgcp_submission', invite_id=r.id) }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.82rem;">View</a>
             {% if r.status != 'cancelled' %}
+            <form method="POST" action="{{ url_for('pg_pgcp_send_email', invite_id=r.id) }}" style="display:inline;">
+              <button type="submit" title="{{ 'Send invite to ' ~ r.email if r.email else 'No email on file' }}"
+                      {{ 'disabled' if not r.email else '' }}
+                      style="background:none;border:none;color:{{ 'var(--navy)' if r.email else 'var(--gray-300)' }};font-weight:600;font-size:0.82rem;cursor:{{ 'pointer' if r.email else 'not-allowed' }};margin-left:8px;">✉ Send invite</button></form>
+            {% endif %}
+            {% if r.status != 'cancelled' %}
             <form method="POST" action="{{ url_for('pg_pgcp_invite_cancel', invite_id=r.id) }}" style="display:inline;" onsubmit="return confirm('Cancel this invitation?');">
               <button type="submit" style="background:none;border:none;color:#dc2626;font-weight:600;font-size:0.82rem;cursor:pointer;margin-left:8px;">Cancel</button></form>
             {% endif %}
@@ -117,9 +123,11 @@
             d.onclick = function(){
               var nm = document.getElementById('pgcp_f_client_name');
               var mob = document.getElementById('pgcp_f_mobile');
+              var em = document.getElementById('pgcp_f_email');
               var ct = document.getElementById('pgcp_f_client_type');
               if (nm) nm.value = c.name || '';
               if (mob) mob.value = c.mobile || '';
+              if (em && c.email) em.value = c.email;
               if (ct) ct.value = 'internal';   // picking an existing client = internal
               box.style.display='none';
               input.value = c.name || '';
