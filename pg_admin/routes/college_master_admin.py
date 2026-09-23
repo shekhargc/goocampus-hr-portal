@@ -600,6 +600,141 @@ def college_profile(master_id):
                            other_names=other_names, active_section='goocampus_in')
 
 
+# ── Duplicate colleges: detector + surgical merge ────────────────────────────
+# The master keys a college by (kind, normalised name, normalised state), and
+# _norm_state collapses 'and'/'&'. Rows imported before that normalisation left
+# duplicates (e.g. 'Jammu & Kashmir' vs 'Jammu and Kashmir'). This finds those
+# leftover dupes and merges them WITHOUT a destructive re-import — it keeps the
+# lowest id and repoints aliases / courses / favourites / choice items / predictor
+# links, so master ids (and everything pointing at them) survive. (founder 2026-09-23)
+_DUP_NAME_KEY = "btrim(regexp_replace(lower(COALESCE(m.college_name,'')), '[^a-z0-9]+', ' ', 'g'))"
+_DUP_STATE_KEY = ("btrim(regexp_replace(regexp_replace(regexp_replace("
+                  "lower(COALESCE(m.state,'')), '[^a-z0-9]+', ' ', 'g'), "
+                  "'\\yand\\y', ' ', 'g'), ' +', ' ', 'g'))")
+
+
+def _dup_groups(conn):
+    """Master rows that share (kind, normalised name, normalised state) — the leftover
+    duplicates. Returns [{kind, ids:[...], detail}] with >1 row each."""
+    rows = conn.execute(
+        f"SELECT m.kind AS kind, {_DUP_NAME_KEY} AS nk, {_DUP_STATE_KEY} AS sk, "
+        "COUNT(*) AS n, string_agg(m.id::text, ',' ORDER BY m.id) AS ids, "
+        "string_agg(m.college_name || ' — ' || COALESCE(m.state,'') || '  (#' || m.id::text || ')', "
+        "'   |   ' ORDER BY m.id) AS detail "
+        "FROM pg_college_master m "
+        f"GROUP BY m.kind, {_DUP_NAME_KEY}, {_DUP_STATE_KEY} "
+        "HAVING COUNT(*) > 1 ORDER BY n DESC, detail").fetchall()
+    out = []
+    for r in rows:
+        out.append({'kind': r['kind'], 'ids': [int(x) for x in r['ids'].split(',')],
+                    'detail': r['detail']})
+    return out
+
+
+@login_required
+def college_dupes():
+    """GET /admin/pg/college-dupes — read-only preview of duplicate colleges."""
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    from flask import get_flashed_messages
+    conn = get_db()
+    groups, err = [], ''
+    try:
+        groups = _dup_groups(conn)
+    except Exception as e:
+        err = str(e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    flashes = "".join(
+        f"<div style='padding:10px 14px;border-radius:8px;margin:0 0 10px;font-size:14px;"
+        f"background:{'#dcfce7' if c=='success' else ('#fee2e2' if c=='error' else '#e0f2fe')};"
+        f"color:{'#166534' if c=='success' else ('#991b1b' if c=='error' else '#075985')}'>{m}</div>"
+        for c, m in get_flashed_messages(with_categories=True))
+    trs = "".join(
+        f"<tr><td style='padding:6px 10px'>{g['kind']}</td>"
+        f"<td style='padding:6px 10px'>{len(g['ids'])}</td>"
+        f"<td style='padding:6px 10px'>keep #{min(g['ids'])}, merge {', '.join('#'+str(i) for i in g['ids'] if i != min(g['ids']))}</td>"
+        f"<td style='padding:6px 10px;color:#475569'>{g['detail']}</td></tr>"
+        for g in groups)
+    merge_btn = (
+        "<form method='POST' action='/admin/pg/college-dupes/merge' "
+        "onsubmit=\"return confirm('Merge all duplicate colleges? The lowest-id row is kept and everything is repointed to it. This cannot be auto-undone.');\">"
+        f"<button style='padding:9px 16px;background:#F58220;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer'>Merge all {len(groups)} duplicate group(s)</button>"
+        "</form>") if groups else ""
+    html = (
+        "<!doctype html><meta charset=utf-8><title>Duplicate colleges</title>"
+        "<body style='font-family:system-ui;padding:24px;color:#1e293b;max-width:1100px;margin:0 auto'>"
+        "<h2>Duplicate colleges in the master</h2>"
+        + flashes
+        + (f"<p style='color:#991b1b'>Error: {err}</p>" if err else "")
+        + (f"<p><b>{len(groups)}</b> duplicate group(s) found — same college (kind + name + state) stored more than once. "
+           "Merging keeps the lowest id and repoints aliases, courses, favourites, choice items and predictor links to it.</p>"
+           + merge_btn
+           + "<table border=1 cellpadding=0 cellspacing=0 style='border-collapse:collapse;font-size:13px;margin-top:14px;width:100%'>"
+             "<tr style='background:#f1f5f9'><th style='padding:6px 10px'>Kind</th><th style='padding:6px 10px'>Rows</th>"
+             "<th style='padding:6px 10px'>Action</th><th style='padding:6px 10px'>Colleges (id)</th></tr>"
+           + trs + "</table>"
+           if groups else "<p style='color:#166534'>✅ No duplicate colleges found.</p>")
+        + "</body>")
+    return html
+
+
+@login_required
+def college_dupes_merge():
+    """POST /admin/pg/college-dupes/merge — merge every duplicate group surgically."""
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    merged_groups, deleted = 0, 0
+    try:
+        groups = _dup_groups(conn)
+        has_choice = bool(conn.execute("SELECT 1 FROM information_schema.tables "
+                                       "WHERE table_name='pg_choice_items'").fetchone())
+        has_pgcol = bool(conn.execute("SELECT 1 FROM information_schema.columns "
+                                      "WHERE table_name='pg_users' AND column_name='pg_college_id'").fetchone())
+        for g in groups:
+            ids = g['ids']
+            keep = min(ids)
+            dups = [i for i in ids if i != keep]
+            for d in dups:
+                # favourites: drop rows that would collide on (user_id, master_id), then repoint
+                conn.execute("DELETE FROM pg_college_favorites f WHERE f.master_id=? "
+                             "AND EXISTS (SELECT 1 FROM pg_college_favorites k "
+                             "WHERE k.user_id=f.user_id AND k.master_id=?)", [d, keep])
+                conn.execute("UPDATE pg_college_favorites SET master_id=? WHERE master_id=?", [keep, d])
+                conn.execute("UPDATE pg_college_course SET master_id=? WHERE master_id=?", [keep, d])
+                conn.execute("UPDATE pg_college_alias  SET master_id=? WHERE master_id=?", [keep, d])
+                if has_choice:
+                    conn.execute("UPDATE pg_choice_items SET master_id=? WHERE master_id=?", [keep, d])
+                if has_pgcol:
+                    conn.execute("UPDATE pg_users SET pg_college_id=? WHERE pg_college_id=?", [keep, d])
+                conn.execute("DELETE FROM pg_college_master WHERE id=?", [d])
+                deleted += 1
+            # de-dupe the kept row's aliases + courses that doubled up from the merge
+            conn.execute("DELETE FROM pg_college_alias a USING pg_college_alias b "
+                         "WHERE a.master_id=? AND b.master_id=? AND a.alias_key=b.alias_key AND a.id>b.id",
+                         [keep, keep])
+            conn.execute("DELETE FROM pg_college_course a USING pg_college_course b "
+                         "WHERE a.master_id=? AND b.master_id=? AND lower(COALESCE(a.course,''))=lower(COALESCE(b.course,'')) "
+                         "AND COALESCE(a.course_category,'')=COALESCE(b.course_category,'') AND a.id>b.id",
+                         [keep, keep])
+            merged_groups += 1
+        conn.commit()
+        flash(f'Merged {merged_groups} duplicate group(s); removed {deleted} duplicate college row(s).', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"college_dupes_merge: {e}")
+        flash(f'Merge failed (nothing changed): {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_college_dupes'))
+
+
 # ── Stipend · Bond · Penalty section ─────────────────────────────────────────
 # Driven DIRECTLY by the cut-off data (pg_cutoffs), split by DEGREE family so it
 # mirrors the Excel exactly: MD/MS side = degrees without 'DNB' (MD/MS/PG-Diploma/
