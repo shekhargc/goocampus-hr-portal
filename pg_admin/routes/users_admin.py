@@ -194,6 +194,60 @@ def user_detail(user_id):
                 "WHERE f.user_id = ? ORDER BY f.added_at DESC", (user_id,)).fetchall()]
         except Exception:
             conn.rollback(); favorites = []
+
+        # Counselling states the doctor has locked (home + plan-allowed extras).
+        try:
+            states = [dict(r) for r in conn.execute(
+                "SELECT state, role, locked, created_at FROM pg_doctor_states "
+                "WHERE user_id = ? ORDER BY (role='home') DESC, created_at", (user_id,)).fetchall()]
+        except Exception:
+            conn.rollback(); states = []
+
+        # Choice sheets the doctor has built — each set carries its 3 round sheets.
+        choice_sets = []
+        try:
+            _sets = [dict(r) for r in conn.execute(
+                "SELECT * FROM pg_choice_sets WHERE user_id = ? ORDER BY created_at DESC",
+                (user_id,)).fetchall()]
+            _items = [dict(r) for r in conn.execute(
+                "SELECT i.* FROM pg_choice_items i JOIN pg_choice_sets s ON s.id = i.set_id "
+                "WHERE s.user_id = ? ORDER BY i.set_id, i.round, i.position, i.id",
+                (user_id,)).fetchall()]
+            import json as _json
+            def _parse(v, dflt):
+                try: return _json.loads(v) if v else dflt
+                except Exception: return dflt
+            for s in _sets:
+                s['specialties'] = _parse(s.get('specialties'), [])
+                s['quota_categories'] = _parse(s.get('quota_categories'), [])
+                s['rounds'] = {1: [], 2: [], 3: []}
+                s['total'] = 0
+                choice_sets.append(s)
+            _by_id = {s['id']: s for s in choice_sets}
+            for it in _items:
+                s = _by_id.get(it['set_id'])
+                if not s:
+                    continue
+                s['rounds'].setdefault(it['round'], []).append(it)
+                s['total'] += 1
+        except Exception:
+            conn.rollback(); choice_sets = []
+
+        # If this doctor was invited into Indian PGCP, surface the invitation + onboarding.
+        pgcp_inv = None
+        try:
+            digits = ''.join(ch for ch in (doctor.get('mobile') or '') if ch.isdigit())[-10:]
+            if digits:
+                r = conn.execute(
+                    "SELECT i.id, i.client_name, i.client_type, i.status, i.invited_amount, i.discount, "
+                    "o.step AS onb_step, o.status AS onb_status, o.submitted_at AS onb_submitted "
+                    "FROM pg_pgcp_invitations i "
+                    "LEFT JOIN pg_pgcp_onboarding o ON o.invitation_id = i.id "
+                    "WHERE RIGHT(regexp_replace(COALESCE(i.mobile,''),'\\D','','g'),10) = ? "
+                    "ORDER BY i.created_at DESC LIMIT 1", (digits,)).fetchone()
+                pgcp_inv = dict(r) if r else None
+        except Exception:
+            conn.rollback(); pgcp_inv = None
     except Exception as e:
         conn.rollback()
         logging.error("user_detail: %s", e)
@@ -207,7 +261,8 @@ def user_detail(user_id):
 
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
-                           favorites=favorites, active_section='goocampus_in')
+                           favorites=favorites, states=states, choice_sets=choice_sets,
+                           pgcp_inv=pgcp_inv, active_section='goocampus_in')
 
 
 @login_required
