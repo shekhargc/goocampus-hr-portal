@@ -902,7 +902,7 @@ def college_fees():
         rows = conn.execute(
             "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
-            "MAX(c.institute_type) AS institute_type, MAX(c.fee) AS fee, "
+            "MAX(c.institute_type) AS institute_type, MAX(c.fee) AS fee, MAX(c.year) AS fee_year, "
             "MAX(a.master_id) AS id FROM pg_cutoffs c "
             "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
             + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",

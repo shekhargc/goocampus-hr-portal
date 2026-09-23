@@ -355,7 +355,7 @@ def api_pg_fees():
             "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
             "MAX(c.institute_type) AS institute_type, MAX(c.seat_type) AS seat_type, "
-            "MAX(c.fee) AS fee, MAX(a.master_id) AS id "
+            "MAX(c.fee) AS fee, MAX(c.year) AS fee_year, MAX(a.master_id) AS id "
             "FROM pg_cutoffs c "
             f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORM}"
             + wsql + grp + hsql + f" ORDER BY {order}, institute ASC LIMIT ? OFFSET ?",
@@ -363,7 +363,8 @@ def api_pg_fees():
         out = [{'id': r['id'], 'institute': r['institute'], 'course': r['course'],
                 'degree': r['degree'], 'quota': r['quota'], 'category': r['category'],
                 'state': r['state'], 'institute_type': r['institute_type'],
-                'seat_type': r['seat_type'], 'fee': _num(r['fee'])} for r in rows]
+                'seat_type': r['seat_type'], 'fee': _num(r['fee']),
+                'fee_year': r['fee_year'], 'fee_period': 'year'} for r in rows]
     except Exception as e:
         logging.error("api_pg_fees: %s", e)
         conn.close()
@@ -429,9 +430,10 @@ def api_pg_fees_college(college_id):
                 extra = " AND UPPER(COALESCE(c.degree,'')) " + ("LIKE ?" if fam == 'dnb' else "NOT LIKE ?")
                 xp.append('%DNB%')
             rows = [{'course': r['course'], 'degree': r['degree'], 'quota': r['quota'],
-                     'category': r['category'], 'fee': _num(r['fee'])} for r in conn.execute(
+                     'category': r['category'], 'fee': _num(r['fee']),
+                     'fee_year': r['fee_year'], 'fee_period': 'year'} for r in conn.execute(
                 "SELECT c.course AS course, MAX(c.degree) AS degree, c.quota AS quota, "
-                "c.category AS category, MAX(c.fee) AS fee FROM pg_cutoffs c "
+                "c.category AS category, MAX(c.fee) AS fee, MAX(c.year) AS fee_year FROM pg_cutoffs c "
                 f"WHERE c.institute IN ({ph}) AND COALESCE(c.is_reference,0)=0 "
                 "AND c.fee IS NOT NULL AND c.fee > 0" + extra +
                 " GROUP BY c.course, c.quota, c.category ORDER BY c.course, c.quota, c.category",
