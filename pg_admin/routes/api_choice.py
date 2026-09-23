@@ -62,6 +62,7 @@ def api_pg_cutoff_explorer():
     quota = (request.args.get('quota') or '').strip()
     category = (request.args.get('category') or '').strip()
     state = (request.args.get('state') or '').strip()
+    college_type = (request.args.get('college_type') or '').strip()
     course = (request.args.get('course') or '').strip()
     q = (request.args.get('q') or '').strip()
     dg = (request.args.get('degree_group') or '').strip()
@@ -80,6 +81,8 @@ def api_pg_cutoff_explorer():
             where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(category)
         if state:
             where.append("c.state ILIKE ?"); params.append('%' + state + '%')
+        if college_type:
+            where.append("c.institute_type ILIKE ?"); params.append('%' + college_type + '%')
         if course:
             where.append("c.course ILIKE ?"); params.append('%' + course + '%')
         if q:
@@ -89,11 +92,13 @@ def api_pg_cutoff_explorer():
         offset = (page - 1) * _PER_PAGE
         rows = conn.execute(
             "SELECT c.institute, c.course, c.authority, c.quota, c.category, c.degree, c.state, "
+            "c.institute_type, "
             "c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank, MAX(a.master_id) AS pg_college_id "
             "FROM pg_cutoffs c "
             f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL}"
             + wsql +
             " GROUP BY c.institute, c.course, c.authority, c.quota, c.category, c.degree, c.state, "
+            "c.institute_type, "
             "c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank "
             "ORDER BY c.closing_rank ASC NULLS LAST, c.institute ASC LIMIT ? OFFSET ?",
             params + [_PER_PAGE, offset]).fetchall()
@@ -115,7 +120,8 @@ def api_pg_cutoff_facets():
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     conn = get_db()
-    out = {'ok': True, 'authorities': [], 'quotas': [], 'categories': [], 'states': []}
+    out = {'ok': True, 'authorities': [], 'quotas': [], 'categories': [], 'states': [],
+           'college_types': []}
     try:
         def distinct(col):
             return [r[col] for r in conn.execute(
@@ -125,6 +131,7 @@ def api_pg_cutoff_facets():
         out['quotas'] = distinct('quota')
         out['categories'] = distinct('category')
         out['states'] = distinct('state')
+        out['college_types'] = distinct('institute_type')
     except Exception as e:
         logging.error("api_pg_cutoff_facets: %s", e)
     finally:

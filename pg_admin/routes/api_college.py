@@ -283,6 +283,7 @@ def _fee_filters():
     """Common filters for the fee endpoints, from the query string."""
     return {
         'family': (request.args.get('family') or '').strip(),
+        'authority': (request.args.get('authority') or '').strip(),
         'state': (request.args.get('state') or '').strip(),
         'course': (request.args.get('course') or '').strip(),
         'quota': (request.args.get('quota') or '').strip(),
@@ -300,6 +301,8 @@ def _fee_where(f):
     params = []
     if f['family'] in ('medical', 'dnb'):
         dc, dp = _fam(f['family']); where.append(dc); params.append(dp)
+    if f['authority']:
+        where.append("c.authority ILIKE ?"); params.append('%' + f['authority'] + '%')
     if f['state']:
         where.append("c.state = ?"); params.append(f['state'])
     if f['course']:
@@ -395,7 +398,8 @@ def api_pg_fees_facets():
         params.append('%DNB%')
     wsql = " WHERE " + " AND ".join(base)
     conn = get_db()
-    out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': [], 'college_types': []}
+    out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': [],
+           'college_types': [], 'authorities': []}
     try:
         def distinct(col):
             return [r[col] for r in conn.execute(
@@ -406,6 +410,7 @@ def api_pg_fees_facets():
         out['quotas'] = distinct('quota')
         out['categories'] = distinct('category')
         out['college_types'] = distinct('institute_type')
+        out['authorities'] = distinct('authority')
     except Exception as e:
         logging.error("api_pg_fees_facets: %s", e)
     finally:
