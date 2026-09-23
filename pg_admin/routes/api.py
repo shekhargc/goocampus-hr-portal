@@ -117,6 +117,12 @@ def api_pg_otp_verify():
                                (mobile, sname, token, token_exp)).fetchone()['id']
             uname = sname
         conn.commit()
+        # Internal PGCP clients (Consulting/UAE) get free ₹2L Premium automatically on login.
+        try:
+            from pg_admin.routes.api_pgcp import auto_grant_internal_premium
+            auto_grant_internal_premium(conn, uid, mobile)
+        except Exception:
+            pass
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

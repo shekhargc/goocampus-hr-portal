@@ -166,3 +166,49 @@ def api_pgcp_submit():
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
+
+
+def auto_grant_internal_premium(conn, user_id, mobile):
+    """On login: if this doctor's mobile has an INTERNAL PGCP invitation and they're not
+    already on a paid counselling plan, grant them Premium FREE (once). Idempotent."""
+    from datetime import datetime as _dt, timedelta as _td
+    try:
+        mob = re.sub(r'\D', '', str(mobile or ''))[-10:]
+        if not mob:
+            return
+        inv = conn.execute(
+            "SELECT id FROM pg_pgcp_invitations WHERE client_type = 'internal' "
+            "AND status <> 'cancelled' "
+            "AND RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? "
+            "ORDER BY id DESC LIMIT 1", [mob]).fetchone()
+        if not inv:
+            return
+        # Already on an active PAID counselling plan? Respect it — don't override.
+        active = conn.execute(
+            "SELECT p.plan_kind FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
+            "WHERE s.user_id = ? AND s.status = 'active' "
+            "AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP) LIMIT 1",
+            [user_id]).fetchone()
+        if active and (active['plan_kind'] or '') == 'counselling':
+            return
+        prem = conn.execute("SELECT id, duration_days FROM pg_plans "
+                            "WHERE code = 'pgcp_premium' AND COALESCE(is_active,1)=1").fetchone()
+        if not prem:
+            return
+        exp = None
+        if prem['duration_days']:
+            try:
+                exp = (_dt.utcnow() + _td(days=int(prem['duration_days']))).strftime('%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                exp = None
+        conn.execute("UPDATE pg_subscriptions SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP "
+                     "WHERE user_id = ? AND status = 'active'", [user_id])
+        conn.execute("INSERT INTO pg_subscriptions (user_id, plan_id, status, expires_at, price_paid, source) "
+                     "VALUES (?, ?, 'active', ?, 0, 'internal_auto')", [user_id, prem['id'], exp])
+        conn.execute("UPDATE pg_pgcp_invitations SET status = 'completed' WHERE id = ?", [inv['id']])
+        conn.commit()
+        logging.info("PGCP internal auto-Premium granted to user_id=%s", user_id)
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("auto_grant_internal_premium: %s", e)
