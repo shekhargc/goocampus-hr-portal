@@ -770,8 +770,15 @@ def api_pg_neetpg_pdfs():
     quota = (request.args.get('quota') or request.args.get('quota_category') or '').strip()
     q = (request.args.get('q') or '').strip()
 
+    # Hidden on the goocampus.in dashboard (founder 2026-09-23): the Cut-off PDFs and
+    # our self-generated Stipend/Bond/Penalty PDF are no longer shown to doctors — the
+    # live Stipend·Bond·Penalty data section replaces the latter, and cut-offs move out
+    # of the doctor dashboard. They STAY in the goocampus.org College admin (nothing is
+    # deleted); this only stops the public feed. The two official AIQ-MCC document types
+    # (mcc_profile = College Profiles, mcc_bond_doc = Bond & Penalty) still show.
     where = ["COALESCE(is_active, 1) = 1", "COALESCE(is_published, 0) = 1",
-             "file_data IS NOT NULL", "COALESCE(file_size, 0) > 0"]
+             "file_data IS NOT NULL", "COALESCE(file_size, 0) > 0",
+             "doc_type NOT IN ('cutoff', 'stipend_bond_penalty')"]
     params = []
     if category:
         where.append("category = ?"); params.append(category)
@@ -803,6 +810,7 @@ def api_pg_neetpg_pdfs():
                 f"SELECT DISTINCT {col} FROM neetpg_pdfs "
                 "  WHERE COALESCE(is_active,1)=1 AND COALESCE(is_published,0)=1 "
                 f"    AND file_data IS NOT NULL AND COALESCE({col},'') <> '' "
+                "    AND doc_type NOT IN ('cutoff', 'stipend_bond_penalty') "
                 f"  ORDER BY {col}").fetchall()]
     except Exception as e:
         try: conn.rollback()
