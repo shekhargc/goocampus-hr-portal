@@ -278,6 +278,174 @@ def api_pg_stipend_detail(college_id):
     return jsonify({'ok': True, 'family': family, 'college': dict(m), 'specialities': specialities})
 
 
+# ── Fee explorer (course × college fees by quota / category) ─────────────────
+def _fee_filters():
+    """Common filters for the fee endpoints, from the query string."""
+    return {
+        'family': (request.args.get('family') or '').strip(),
+        'state': (request.args.get('state') or '').strip(),
+        'course': (request.args.get('course') or '').strip(),
+        'quota': (request.args.get('quota') or '').strip(),
+        'category': (request.args.get('category') or '').strip(),
+        'q': (request.args.get('q') or '').strip(),
+    }
+
+
+def _fee_where(f):
+    """Build the WHERE for a fee query. Only real, priced seats."""
+    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 0"]
+    params = []
+    if f['family'] in ('medical', 'dnb'):
+        dc, dp = _fam(f['family']); where.append(dc); params.append(dp)
+    if f['state']:
+        where.append("c.state = ?"); params.append(f['state'])
+    if f['course']:
+        where.append("c.course ILIKE ?"); params.append('%' + f['course'] + '%')
+    if f['quota']:
+        where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(f['quota'])
+    if f['category']:
+        where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(f['category'])
+    if f['q']:
+        where.append("(c.institute ILIKE ? OR c.course ILIKE ?)")
+        params.extend(['%' + f['q'] + '%', '%' + f['q'] + '%'])
+    return where, params
+
+
+def _int_arg(name):
+    try:
+        v = request.args.get(name)
+        return int(float(v)) if v not in (None, '') else None
+    except (TypeError, ValueError):
+        return None
+
+
+def api_pg_fees():
+    """GET /api/pg/fees — course-vs-college fee structure by quota/category.
+
+    One row per (college × course × quota × category) with its fee, so a doctor can
+    explore/compare fees. Filters: family=medical|dnb, state, course, quota, category,
+    q (name search), fee_min, fee_max; sort=fee_asc|fee_desc|college; paginated.
+    Reads pg_cutoffs.fee (the same cut-off library) — nothing extra to upload.
+    """
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    f = _fee_filters()
+    fee_min, fee_max = _int_arg('fee_min'), _int_arg('fee_max')
+    sort = (request.args.get('sort') or 'fee_asc').strip()
+    page = _page()
+    where, params = _fee_where(f)
+    wsql = " WHERE " + " AND ".join(where)
+    having, hparams = [], []
+    if fee_min is not None:
+        having.append("MAX(c.fee) >= ?"); hparams.append(fee_min)
+    if fee_max is not None:
+        having.append("MAX(c.fee) <= ?"); hparams.append(fee_max)
+    hsql = (" HAVING " + " AND ".join(having)) if having else ""
+    order = {'fee_desc': "fee DESC NULLS LAST",
+             'college': "institute ASC, course ASC",
+             'fee_asc': "fee ASC NULLS LAST"}.get(sort, "fee ASC NULLS LAST")
+    grp = " GROUP BY c.institute, c.course, c.quota, c.category "
+    conn = get_db()
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + wsql + grp + hsql + ") t",
+            params + hparams).fetchone()['n']
+        offset = (page - 1) * _PER_PAGE
+        rows = conn.execute(
+            "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
+            "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
+            "MAX(c.institute_type) AS institute_type, MAX(c.seat_type) AS seat_type, "
+            "MAX(c.fee) AS fee, MAX(a.master_id) AS id "
+            "FROM pg_cutoffs c "
+            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORM}"
+            + wsql + grp + hsql + f" ORDER BY {order}, institute ASC LIMIT ? OFFSET ?",
+            params + hparams + [_PER_PAGE, offset]).fetchall()
+        out = [{'id': r['id'], 'institute': r['institute'], 'course': r['course'],
+                'degree': r['degree'], 'quota': r['quota'], 'category': r['category'],
+                'state': r['state'], 'institute_type': r['institute_type'],
+                'seat_type': r['seat_type'], 'fee': _num(r['fee'])} for r in rows]
+    except Exception as e:
+        logging.error("api_pg_fees: %s", e)
+        conn.close()
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+    pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
+    return jsonify({'ok': True, 'rows': out, 'count': len(out), 'total': total,
+                    'page': page, 'pages': pages, 'per_page': _PER_PAGE})
+
+
+def api_pg_fees_facets():
+    """GET /api/pg/fees/facets?family= → distinct states/courses/quotas/categories that
+    have priced seats, to populate the explorer's filter dropdowns."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    fam = (request.args.get('family') or '').strip()
+    base = ["COALESCE(is_reference,0)=0", "fee IS NOT NULL", "fee > 0"]
+    params = []
+    if fam in ('medical', 'dnb'):
+        base.append("UPPER(COALESCE(degree,'')) " + ("LIKE ?" if fam == 'dnb' else "NOT LIKE ?"))
+        params.append('%DNB%')
+    wsql = " WHERE " + " AND ".join(base)
+    conn = get_db()
+    out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': []}
+    try:
+        def distinct(col):
+            return [r[col] for r in conn.execute(
+                f"SELECT DISTINCT {col} FROM pg_cutoffs" + wsql
+                + f" AND COALESCE({col},'')<>'' ORDER BY {col}", params).fetchall()]
+        out['states'] = distinct('state')
+        out['courses'] = distinct('course')
+        out['quotas'] = distinct('quota')
+        out['categories'] = distinct('category')
+    except Exception as e:
+        logging.error("api_pg_fees_facets: %s", e)
+    finally:
+        conn.close()
+    return jsonify(out)
+
+
+def api_pg_fees_college(college_id):
+    """GET /api/pg/fees/<master_id>?family= → every priced course × quota × category for
+    one college (the drill-down from the explorer)."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    fam = (request.args.get('family') or '').strip()
+    conn = get_db()
+    try:
+        m = conn.execute("SELECT id, college_name, kind, city, state FROM pg_college_master "
+                         "WHERE id = ?", [college_id]).fetchone()
+        if not m:
+            conn.close()
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        names = [r['alias_name'] for r in conn.execute(
+            "SELECT alias_name FROM pg_college_alias WHERE master_id = ?", [college_id]).fetchall()]
+        rows = []
+        if names:
+            ph = ','.join(['?'] * len(names))
+            extra, xp = "", []
+            if fam in ('medical', 'dnb'):
+                extra = " AND UPPER(COALESCE(c.degree,'')) " + ("LIKE ?" if fam == 'dnb' else "NOT LIKE ?")
+                xp.append('%DNB%')
+            rows = [{'course': r['course'], 'degree': r['degree'], 'quota': r['quota'],
+                     'category': r['category'], 'fee': _num(r['fee'])} for r in conn.execute(
+                "SELECT c.course AS course, MAX(c.degree) AS degree, c.quota AS quota, "
+                "c.category AS category, MAX(c.fee) AS fee FROM pg_cutoffs c "
+                f"WHERE c.institute IN ({ph}) AND COALESCE(c.is_reference,0)=0 "
+                "AND c.fee IS NOT NULL AND c.fee > 0" + extra +
+                " GROUP BY c.course, c.quota, c.category ORDER BY c.course, c.quota, c.category",
+                names + xp).fetchall()]
+    except Exception as e:
+        logging.error("api_pg_fees_college: %s", e)
+        conn.close()
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return jsonify({'ok': True, 'college': dict(m), 'fees': rows})
+
+
 # ── Favourites (doctor's saved colleges, keyed to the master) ────────────────
 def _fav_user(conn):
     """Resolve the logged-in doctor from the Bearer token, or None (optional)."""

@@ -110,6 +110,8 @@ def register_pg_admin(app):
                      college_master_admin.college_stipend, methods=['GET'])
     app.add_url_rule('/admin/pg/college-stipend/<int:master_id>', 'pg_college_stipend_detail',
                      college_master_admin.college_stipend_detail, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-fees', 'pg_college_fees',
+                     college_master_admin.college_fees, methods=['GET'])
 
     # ── Public API for goocampus.in: PG College Database + Stipend (X-PG-Key) ──
     app.add_url_rule('/api/pg/pg-colleges', 'api_pg_pg_colleges',
@@ -122,6 +124,13 @@ def register_pg_admin(app):
                      api_college.api_pg_stipend, methods=['GET'])
     app.add_url_rule('/api/pg/stipend/<int:college_id>', 'api_pg_stipend_detail',
                      api_college.api_pg_stipend_detail, methods=['GET'])
+    # Fee explorer (course × college fees by quota/category)
+    app.add_url_rule('/api/pg/fees', 'api_pg_fees',
+                     api_college.api_pg_fees, methods=['GET'])
+    app.add_url_rule('/api/pg/fees/facets', 'api_pg_fees_facets',
+                     api_college.api_pg_fees_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/fees/<int:college_id>', 'api_pg_fees_college',
+                     api_college.api_pg_fees_college, methods=['GET'])
     # Doctor's saved colleges (star), shared across College DB / Stipend / Predictor
     app.add_url_rule('/api/pg/college-favorites', 'api_pg_college_favorites',
                      api_college.api_pg_college_favorites, methods=['GET', 'POST'])
