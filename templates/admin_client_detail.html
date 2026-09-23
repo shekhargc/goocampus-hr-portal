@@ -1207,6 +1207,18 @@
                 <div class="form-group"><label>Note to client (optional)</label><input type="text" name="wc_proposed_note" placeholder="e.g. this slot suits your counsellor better"></div>
                 <button type="submit" class="button" style="background:#2563eb;">Propose time to client</button>
             </form>
+            <form method="POST" action="/admin/client/{{ reg.id }}/welcome-call/complete" style="margin-top:1rem;padding-top:0.9rem;border-top:1px dashed var(--gray-200);"
+                  onsubmit="return confirm('Mark this welcome call as already completed? The client will NOT be notified, any pending time request is cancelled, and the client will be onboarded.');">
+                <div style="font-size:0.85rem;font-weight:600;color:#166534;margin-bottom:0.35rem;">&#10003; Welcome call already completed (offline)</div>
+                <div style="font-size:0.8rem;color:var(--gray-500);margin-bottom:0.6rem;">Use this when the call has actually happened. It records the call as done, sends the client <b>no notification</b>, cancels any pending time request, and onboards the client.</div>
+                <div class="form-row" style="flex-wrap:wrap;gap:1rem;">
+                    <div class="form-group"><label>Call date</label><input type="date" name="wc_completed_date"></div>
+                    <div class="form-group"><label>Call time (optional)</label><input type="text" name="wc_completed_time" placeholder="e.g. 3:00 PM"></div>
+                    <div class="form-group"><label>Call by</label><select name="wc_completed_by"><option value="">— Select team member —</option>{% for c in counsellors %}<option value="{{ c.name }}"{% if reg.wc_by == c.name %} selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+                </div>
+                <div class="form-group"><label>Note (optional)</label><input type="text" name="wc_completed_notes" placeholder="e.g. call done on WhatsApp, client briefed"></div>
+                <button type="submit" class="button" style="background:#16a34a;">Mark completed — no client notification</button>
+            </form>
             {% elif reg.ops_status != 'verified' %}
             <p style="color:var(--gray-500);font-size:0.9rem;">Verify this registration in the section above first &mdash; then you can confirm or propose the welcome-call time.</p>
             {% endif %}

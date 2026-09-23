@@ -9679,6 +9679,60 @@ def admin_client_welcome_call_confirm(reg_id):
     return redirect(url_for('admin_client_detail', reg_id=reg_id))
 
 
+@app.route('/admin/client/<int:reg_id>/welcome-call/complete', methods=['POST'])
+@login_required
+def admin_client_welcome_call_complete(reg_id):
+    """Mark a welcome call as ALREADY DONE (offline) — the same 'welcome call already
+    completed' option Sales has at closure, but applied to an existing registration.
+    Records it as confirmed WITHOUT notifying the client (no proposal / no ics), cancels
+    any pending proposal, clears the hold, and recomputes onboarding so the client can be
+    onboarded. Use when the call actually happened but was never confirmed in the system."""
+    conn = get_db()
+    reg = conn.execute("SELECT * FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('admin_clients_list'))
+    date_s = (request.form.get('wc_completed_date', '') or '').strip() or datetime.now().strftime('%Y-%m-%d')
+    time_s = (request.form.get('wc_completed_time', '') or '').strip()
+    wc_by = (request.form.get('wc_completed_by', '') or '').strip()
+    notes = (request.form.get('wc_completed_notes', '') or '').strip()
+    try:
+        conn.execute(
+            "UPDATE client_registrations SET wc_confirmed=1, wc_status='confirmed', "
+            "wc_scheduled_date=?, wc_scheduled_time=?, wc_by=?, wc_hold_note=?, "
+            "wc_confirmed_at=CURRENT_TIMESTAMP, welcome_call_hold=0, updated_at=CURRENT_TIMESTAMP "
+            "WHERE id=?",
+            (date_s, time_s, wc_by, notes, reg_id))
+        conn.commit()
+    except Exception as e:
+        conn.rollback(); conn.close()
+        logging.error(f"welcome_call_complete {reg_id}: {e}")
+        flash(f'Could not mark the welcome call completed: {e}', 'error')
+        return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#operations')
+    conn.close()
+    # Sync onto the ops onboarding record + recompute onboarding — SAME as a normal
+    # confirmation, but WITHOUT emailing the client or the team (call was already done).
+    try:
+        conn3 = get_db()
+        pc = conn3.execute("SELECT id FROM plab_clients WHERE registration_number = ?",
+                           (reg['registration_number'],)).fetchone()
+        if pc:
+            _ensure_client_onboarding(conn3, pc['id'], reg['registration_number'])
+            conn3.execute("UPDATE client_onboarding SET welcome_call_confirmed = 1, "
+                          "welcome_call_date = ?, welcome_call_time = ?, welcome_call_by = ?, "
+                          "welcome_call_notes = COALESCE(NULLIF(?, ''), welcome_call_notes), "
+                          "updated_at = CURRENT_TIMESTAMP WHERE client_id = ?",
+                          (date_s, time_s, wc_by, notes, pc['id']))
+            _recompute_onboarding(conn3, pc['id'])
+            conn3.commit()
+        conn3.close()
+    except Exception as _oe:
+        logging.warning(f"welcome_call_complete onboarding sync {reg_id}: {_oe}")
+    flash('Welcome call marked as already completed — no notification sent to the client. Onboarding updated.', 'success')
+    return redirect(url_for('admin_client_detail', reg_id=reg_id) + '#operations')
+
+
 def _notify_welcome_call_confirmed(reg_id):
     """Send the CONFIRMED welcome-call emails: the client gets a branded email +
     .ics; the lead's sales member, the Operations team and the caller get a
