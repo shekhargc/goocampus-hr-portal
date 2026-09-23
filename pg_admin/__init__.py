@@ -98,6 +98,10 @@ def register_pg_admin(app):
                      college_master_admin.college_master_cutoff_audit, methods=['GET'])
     app.add_url_rule('/admin/pg/college-master/purge-blank-cutoffs', 'pg_college_master_purge_blank',
                      college_master_admin.college_master_purge_blank, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-dupes', 'pg_college_dupes',
+                     college_master_admin.college_dupes, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-dupes/merge', 'pg_college_dupes_merge',
+                     college_master_admin.college_dupes_merge, methods=['POST'])
     app.add_url_rule('/admin/pg/college-database', 'pg_college_database_list',
                      college_master_admin.college_database_list, methods=['GET'])
     app.add_url_rule('/admin/pg/college-database/<int:master_id>', 'pg_college_profile',
