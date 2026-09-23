@@ -58,18 +58,20 @@ def pgcp_invite_create():
         flash('Mobile is required (it links the invite to the doctor login).', 'error')
         return redirect(url_for('pg_pgcp_admin'))
     conn = get_db()
+    inv = None
     try:
-        conn.execute(
+        iid = conn.execute(
             "INSERT INTO pg_pgcp_invitations (token, client_name, mobile, email, client_type, "
             "invited_amount, discount, plan_code, notes, created_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id",
             [secrets.token_urlsafe(12), _s(request.form.get('client_name')), mobile,
              _s(request.form.get('email')),
              _s(request.form.get('client_type')) or 'paying',
              _num(request.form.get('invited_amount')), _num(request.form.get('discount')) or 0,
              _s(request.form.get('plan_code')), _s(request.form.get('notes')),
-             _s(u.get('name') or u.get('username') or '')])
+             _s(u.get('name') or u.get('username') or '')]).fetchone()['id']
         conn.commit()
+        inv = dict(conn.execute("SELECT * FROM pg_pgcp_invitations WHERE id = ?", [iid]).fetchone())
         flash('Invitation created. The doctor can now log in on goocampus.in and start onboarding.', 'success')
     except Exception as e:
         try: conn.rollback()
@@ -78,6 +80,11 @@ def pgcp_invite_create():
         flash(f'Could not create invitation: {e}', 'error')
     finally:
         conn.close()
+    if inv:   # auto-send the invite email on create
+        ok, msg = _send_pgcp_invite_email(inv)
+        flash(('Invite email ' + msg) if ok
+              else ('Invitation saved, but email not sent (' + msg + '). Use “Send invite” once an email is added.'),
+              'success' if ok else 'info')
     return redirect(url_for('pg_pgcp_admin'))
 
 
@@ -152,7 +159,7 @@ def pgcp_client_search():
         rows = conn.execute(
             "SELECT registration_number AS reg, "
             "TRIM(COALESCE(first_name,'')||' '||COALESCE(last_name,'')) AS name, "
-            "COALESCE(pathway,'') AS pathway, mobile "
+            "COALESCE(pathway,'') AS pathway, mobile, COALESCE(email,'') AS email "
             "FROM plab_clients "
             "WHERE (first_name ILIKE ? OR last_name ILIKE ? OR mobile ILIKE ? OR registration_number ILIKE ?) "
             "AND COALESCE(mobile,'') <> '' ORDER BY first_name LIMIT 30",
@@ -170,3 +177,83 @@ def pgcp_client_search():
     finally:
         conn.close()
     return jsonify(out)
+
+
+_LOGIN_URL = 'https://goocampus.in'
+
+
+def _send_pgcp_invite_email(inv):
+    """Compose + send the branded PGCP invite email. Internal = complimentary Premium
+    (included in their existing package); paying = fee + log-in. Returns (ok, msg)."""
+    email = _s(inv.get('email'))
+    if not email:
+        return False, 'no email on file'
+    try:
+        from email_utils import send_email, render_branded_email, brand_button, brand_callout
+    except Exception as e:
+        logging.error("pgcp email import: %s", e)
+        return False, 'email module unavailable'
+    name = _s(inv.get('client_name')) or 'Doctor'
+    mobile = _s(inv.get('mobile'))
+    if inv.get('client_type') == 'internal':
+        subject = 'Your India PG Counselling is included — log in to GooCampus'
+        inner = (
+            f"<p>Dear {name},</p>"
+            "<p>As a valued GooCampus client, we're delighted to include our "
+            "<b>Premium India PG Counselling</b> service in your existing package — "
+            "<b>at no additional cost</b>.</p>"
+            + brand_callout("This Premium India PG Counselling package is normally <b>₹2,00,000</b>. "
+                            "For you it is <b>complimentary</b> — included as part of your existing "
+                            "consulting package. There is nothing more to pay.")
+            + "<p>It gives you the full counselling dashboard: college predictor, cut-off explorer, "
+              "stipend / bond / penalty, college database, your round-wise choice lists "
+              "(All-India / MCC + all states), mentor access, and expert option-entry support.</p>"
+            + f"<p>To get started, simply log in with your mobile number <b>{mobile}</b> — your "
+              "Premium access is already active:</p>"
+            + brand_button('Log in to your dashboard', _LOGIN_URL)
+            + "<p style='font-size:13px;color:#64748b;'>Open goocampus.in on your phone, enter your "
+              "mobile, and verify the OTP we send on WhatsApp.</p>"
+        )
+    else:
+        amt = (inv.get('invited_amount') or 0) - (inv.get('discount') or 0)
+        disc = inv.get('discount') or 0
+        subject = 'Your GooCampus India PG Counselling invitation'
+        fee = ''
+        if inv.get('invited_amount'):
+            fee = brand_callout(f"Your counselling fee: <b>₹{amt:,.0f}</b>"
+                                + (f" (after ₹{disc:,.0f} discount)" if disc else ""))
+        inner = (
+            f"<p>Dear {name},</p>"
+            "<p>You're invited to <b>GooCampus India PG Counselling</b>.</p>"
+            + fee
+            + f"<p>Log in with your mobile <b>{mobile}</b> to complete your onboarding and payment:</p>"
+            + brand_button('Log in to your dashboard', _LOGIN_URL)
+            + "<p style='font-size:13px;color:#64748b;'>Open goocampus.in on your phone, enter your "
+              "mobile, and verify the OTP we send on WhatsApp.</p>"
+        )
+    body = render_branded_email('GooCampus India PG Counselling', inner)
+    try:
+        ok = send_email([email], subject, body)
+        return bool(ok), ('sent to ' + email if ok else 'send failed')
+    except Exception as e:
+        logging.error("pgcp send_email: %s", e)
+        return False, str(e)
+
+
+@login_required
+def pgcp_send_email(invite_id):
+    u = _admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        inv = conn.execute("SELECT * FROM pg_pgcp_invitations WHERE id = ?", [invite_id]).fetchone()
+    finally:
+        conn.close()
+    if not inv:
+        flash('Invitation not found', 'error')
+        return redirect(url_for('pg_pgcp_admin'))
+    ok, msg = _send_pgcp_invite_email(dict(inv))
+    flash(('Invite email ' + msg) if ok else ('Could not send: ' + msg),
+          'success' if ok else 'error')
+    return redirect(url_for('pg_pgcp_admin'))
