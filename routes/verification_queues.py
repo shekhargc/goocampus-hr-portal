@@ -39,6 +39,35 @@ PATHWAY_EDIT_ENDPOINT = {
     'uae':        'ops_uae_client_edit_page',
 }
 
+_ONB_CLOSED_READY = False
+
+
+def _ensure_onboarding_closed(conn):
+    """Add client_registrations.onboarding_closed once + backfill existing confirmed
+    clients as CLOSED. From founder 2026-09-23: after a welcome call is confirmed the row
+    now STAYS in the Ops queue (green 'Welcome call confirmed') with a 'Complete onboarding'
+    button, so ops closes it only AFTER the call happens. The backfill marks everything
+    already confirmed before this went live as closed, so they don't flood back in — only
+    NEW confirmations show the post-call step. Runs once per process; the
+    information_schema guard makes the one-time backfill idempotent."""
+    global _ONB_CLOSED_READY
+    if _ONB_CLOSED_READY:
+        return
+    try:
+        exists = conn.execute(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='client_registrations' AND column_name='onboarding_closed'").fetchone()
+        if not exists:
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN onboarding_closed INTEGER DEFAULT 0")
+            conn.execute("UPDATE client_registrations SET onboarding_closed = 1 "
+                         "WHERE COALESCE(wc_confirmed,0) = 1")
+            conn.commit()
+        _ONB_CLOSED_READY = True
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.warning(f"_ensure_onboarding_closed: {e}")
+
 
 def _can_fill(user):
     # Governed by its own Access Master permission now: Sales > Sales
@@ -99,13 +128,14 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     # registration vanished from Sales the moment sales verified it — before ops
     # had even looked — and sales could no longer reach their own Hold toggle
     # (founder 2026-07-17).
-    # SALES keeps a verified record only while the welcome call is still in their
-    # court — so they can hold/release it. The moment OPS takes it over (confirms,
-    # or proposes a reschedule) sales loses it and can no longer re-hold and
-    # interrupt the flow (founder 2026-07-17). OPS keeps it right through until the
-    # call is confirmed.
-    _WC_SALES = ("COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.wc_confirmed,0) = 0 "
-                 "AND COALESCE(cr.wc_status,'') <> 'proposed'")
+    # SALES keeps a verified record until the welcome call is confirmed. When OPS has
+    # proposed a time and is awaiting the client, the row STAYS on Sales too but shows
+    # read-only as "Awaiting client confirmation" so the sales member knows the state
+    # (founder 2026-09-23). Re-holding a proposed/confirmed call is already blocked
+    # server-side (admin_client_welcome_call_hold), so sales can't interrupt the flow.
+    # OPS keeps it right through until the call is confirmed.
+    _ensure_onboarding_closed(conn)
+    _WC_SALES = "COALESCE(cr.sales_completed,0) = 1 AND COALESCE(cr.wc_confirmed,0) = 0"
     params = []
     if stage == 'fill':
         where = ("cr.client_submitted_at IS NOT NULL AND ("
@@ -116,9 +146,13 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
             params.append(uid)
         order = "COALESCE(cr.sales_completed_at, cr.client_submitted_at)"
     else:
+        # Ops keeps the row through the whole tail: not-yet-verified, verified-but-call-
+        # not-confirmed (book the call), AND confirmed-but-not-yet-closed (post-call
+        # 'Complete onboarding'). It only drops once onboarding_closed=1.
         where = ("COALESCE(cr.sales_completed,0) = 1 AND cr.client_submitted_at IS NOT NULL AND ("
                  "COALESCE(cr.ops_status,'') <> 'verified'"
-                 f" OR COALESCE(cr.wc_confirmed,0) = 0)")
+                 " OR COALESCE(cr.wc_confirmed,0) = 0"
+                 " OR COALESCE(cr.onboarding_closed,0) = 0)")
         order = "cr.sales_completed_at"
     rows = conn.execute(f"""
         SELECT cr.id, cr.registration_number, cr.prefix, cr.first_name, cr.last_name,
@@ -127,6 +161,9 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
                COALESCE(cr.ops_status,'') AS ops_status,
                COALESCE(cr.wc_confirmed,0) AS wc_confirmed,
                COALESCE(cr.welcome_call_hold,0) AS welcome_call_hold,
+               COALESCE(cr.wc_status,'') AS wc_status,
+               COALESCE(cr.onboarding_closed,0) AS onboarding_closed,
+               cr.wc_scheduled_date, cr.wc_scheduled_time,
                ps.name AS product_name, ps.pathway AS pathway
           FROM client_registrations cr
           LEFT JOIN products_services ps ON ps.id = cr.product_id
@@ -135,14 +172,19 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
     """, params).fetchall()
     out = []
     for r in rows:
-        # Is this row still here only because the welcome call is open? That's
-        # per-queue: Sales is done once it has verified (its remaining job is the
-        # Hold), Ops is done once it has verified (its remaining job is booking).
+        # Ops-side tail states: 'welcome_call' = verified, call not yet confirmed (book it);
+        # 'onboard' = call confirmed but onboarding not closed (Complete onboarding after
+        # the call). Sales side only ever has the 'welcome_call' (hold/booking) state.
+        onboard_row = (stage == 'verify' and r['ops_status'] == 'verified'
+                       and r['wc_confirmed'] and not r['onboarding_closed'])
         if stage == 'fill':
             wc_row = (r['sales_completed'] == 1 and not r['wc_confirmed'])
         else:
             wc_row = (r['ops_status'] == 'verified' and not r['wc_confirmed'])
-        if wc_row:
+        if onboard_row:
+            row_stage = 'onboard'
+            when = r['sales_completed_at']
+        elif wc_row:
             row_stage = 'welcome_call'
             when = r['sales_completed_at']
         else:
@@ -163,6 +205,9 @@ def _newreg_rows(conn, stage, uid=None, is_admin=False):
             'when': when,
             'row_stage': row_stage,
             'on_hold': bool(r['welcome_call_hold']),
+            'wc_status': r['wc_status'],
+            'wc_date': r['wc_scheduled_date'] or '',
+            'wc_time': r['wc_scheduled_time'] or '',
             # ?from= keeps the client page in this section's sidebar instead of
             # dropping the user into Clients (founder 2026-07-17).
             'action_url': (url_for('admin_client_detail', reg_id=r['id'])
