@@ -200,6 +200,8 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/events', 'api_pg_events', api_events.api_pg_events, methods=['GET'])
     app.add_url_rule('/api/pg/events/ticket/<ticket_code>', 'api_pg_event_ticket',
                      api_events.api_pg_event_ticket, methods=['GET'])
+    app.add_url_rule('/api/pg/events/registrations', 'api_pg_event_registrations',
+                     api_events.api_pg_event_registrations, methods=['GET'])
     app.add_url_rule('/api/pg/events/<slug>/register', 'api_pg_event_register',
                      api_events.api_pg_event_register, methods=['POST'])
     app.add_url_rule('/api/pg/events/<slug>', 'api_pg_event', api_events.api_pg_event, methods=['GET'])
