@@ -254,7 +254,47 @@
     </div>
   </div>
 
-  <!-- CHOICE LISTS (editable) -->
+  <!-- DASHBOARD ACTIVITY (goocampus.in usage) -->
+<div class="card">
+  <h3><i class="fa-solid fa-chart-line"></i> Dashboard activity
+    <span class="n">{{ '{:,}'.format(activity.total or 0) }} event{{ '' if activity.total==1 else 's' }}{% if activity.last_seen %} · last {{ activity.last_seen.strftime('%d %b, %H:%M') }}{% endif %}</span></h3>
+  {% if not activity.total %}
+  <p style="font-size:0.85rem;color:var(--gray-400);margin:0.2rem 0 0;">No dashboard activity recorded yet for this doctor.</p>
+  {% else %}
+  {% macro minilist(title, items) %}
+  <div>
+    <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:0.5rem;">{{ title }}</div>
+    {% if items %}{% set mx = items[0].c or 1 %}{% for it in items %}
+    <div style="margin-bottom:0.4rem;">
+      <div style="display:flex;justify-content:space-between;font-size:0.8rem;"><span style="color:var(--navy);font-weight:600;max-width:78%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ it.v }}</span><span style="color:var(--gray-500)">{{ it.c }}</span></div>
+      <div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden;"><span style="display:block;height:100%;width:{{ (it.c/mx*100)|round|int }}%;background:var(--orange);"></span></div>
+    </div>{% endfor %}{% else %}<div style="font-size:0.8rem;color:var(--gray-400);">—</div>{% endif %}
+  </div>
+  {% endmacro %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1.2rem;margin-bottom:1rem;">
+    {{ minilist('Sections used', activity.sections) }}
+    {{ minilist('Searches', activity.searches) }}
+    {{ minilist('Specialities', activity.specialities) }}
+    {{ minilist('Colleges opened', activity.colleges) }}
+  </div>
+  <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:0.4rem;">Recent activity</div>
+  <table class="tbl">
+    <thead><tr><th>When</th><th>Section</th><th>Action</th><th>Details</th></tr></thead>
+    <tbody>
+      {% for e in activity.events[:15] %}
+      <tr>
+        <td style="color:var(--gray-500);white-space:nowrap;">{{ e.created_at.strftime('%d %b %H:%M') if e.created_at else '' }}</td>
+        <td style="color:var(--gray-600)">{{ e.section or '—' }}</td>
+        <td style="color:var(--gray-600)">{{ e.event_type or '—' }}</td>
+        <td style="color:var(--gray-500)">{% if e.q %}"{{ e.q }}" {% endif %}{% if e.college_name %}· {{ e.college_name }}{% endif %}{% if e.speciality %}· {{ e.speciality }}{% endif %}{% if e.quota %}· {{ e.quota }}{% endif %}{% if e.category %}· {{ e.category }}{% endif %}{% if e.state %}· {{ e.state }}{% endif %}{% if e.rank %}· rank {{ '{:,}'.format(e.rank) }}{% endif %}{% if e.fee_min or e.fee_max %}· ₹{{ '{:,.0f}'.format(e.fee_min or 0) }}–{{ '{:,.0f}'.format(e.fee_max or 0) }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<!-- CHOICE LISTS (editable) -->
   <div class="card">
     <h3><i class="fa-solid fa-list-ol"></i> Choice lists <span class="n">{{ choice_sets|length }} sheet{{ '' if choice_sets|length==1 else 's' }}</span></h3>
     <p style="font-size:0.8rem;color:var(--gray-500);margin:-0.3rem 0 0.9rem;">

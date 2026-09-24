@@ -268,6 +268,34 @@ def user_detail(user_id):
                 pgcp_inv = dict(r) if r else None
         except Exception:
             conn.rollback(); pgcp_inv = None
+
+        # Dashboard activity (goocampus.in usage tracking) for THIS doctor.
+        activity = {'total': 0, 'last_seen': None, 'sections': [], 'searches': [],
+                    'specialities': [], 'colleges': [], 'events': []}
+        try:
+            def _act(sql):
+                return [dict(r) for r in conn.execute(sql, (user_id,)).fetchall()]
+            activity['total'] = conn.execute(
+                "SELECT COUNT(*) AS c FROM pg_user_events WHERE user_id = ?", (user_id,)).fetchone()['c']
+            activity['last_seen'] = conn.execute(
+                "SELECT MAX(created_at) AS c FROM pg_user_events WHERE user_id = ?", (user_id,)).fetchone()['c']
+            activity['sections'] = _act(
+                "SELECT section AS v, COUNT(*) AS c FROM pg_user_events WHERE user_id = ? "
+                "AND COALESCE(TRIM(section),'')<>'' GROUP BY section ORDER BY c DESC LIMIT 8")
+            activity['searches'] = _act(
+                "SELECT q AS v, COUNT(*) AS c FROM pg_user_events WHERE user_id = ? "
+                "AND COALESCE(TRIM(q),'')<>'' GROUP BY q ORDER BY c DESC LIMIT 10")
+            activity['specialities'] = _act(
+                "SELECT speciality AS v, COUNT(*) AS c FROM pg_user_events WHERE user_id = ? "
+                "AND COALESCE(TRIM(speciality),'')<>'' GROUP BY speciality ORDER BY c DESC LIMIT 10")
+            activity['colleges'] = _act(
+                "SELECT college_name AS v, COUNT(*) AS c FROM pg_user_events WHERE user_id = ? "
+                "AND COALESCE(TRIM(college_name),'')<>'' GROUP BY college_name ORDER BY c DESC LIMIT 10")
+            activity['events'] = _act(
+                "SELECT created_at, section, event_type, q, college_name, speciality, quota, category, "
+                "state, fee_min, fee_max, rank FROM pg_user_events WHERE user_id = ? ORDER BY id DESC LIMIT 40")
+        except Exception:
+            conn.rollback()
     except Exception as e:
         conn.rollback()
         logging.error("user_detail: %s", e)
@@ -289,7 +317,7 @@ def user_detail(user_id):
                            subs=subs, plans=plans, ent=ent, recent=recent,
                            favorites=favorites, states=states, choice_sets=choice_sets,
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
-                           choice_team_editable=choice_team_editable,
+                           choice_team_editable=choice_team_editable, activity=activity,
                            active_section='goocampus_in')
 
 

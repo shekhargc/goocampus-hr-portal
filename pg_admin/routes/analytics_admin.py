@@ -60,13 +60,14 @@ def analytics_admin():
         rr = one(f"SELECT COUNT(*) AS c, ROUND(AVG(rank)) AS avg_rank, MIN(rank) AS lo, MAX(rank) AS hi "
                  f"{base} AND rank IS NOT NULL")
         data['ranks'] = dict(rr) if rr else {}
-        # Recent activity feed
+        # Recent activity feed — qualify the time clause (both tables have created_at)
+        TW_E = TW.replace('created_at', 'e.created_at')
         data['recent'] = rows(
             "SELECT e.created_at, e.section, e.event_type, e.q, e.college_name, e.speciality, "
             "e.quota, e.category, e.state, e.fee_min, e.fee_max, e.rank, "
             "COALESCE(pu.name, pu.mobile, '—') AS who "
             "FROM pg_user_events e LEFT JOIN pg_users pu ON pu.id = e.user_id "
-            f"WHERE {TW} ORDER BY e.id DESC LIMIT 60")
+            f"WHERE {TW_E} ORDER BY e.id DESC LIMIT 60")
     except Exception as e:
         logging.error("analytics_admin: %s", e)
         flash(f'Analytics query failed: {e}', 'error')
