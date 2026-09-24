@@ -96,11 +96,13 @@ def api_pg_otp_verify():
         # Match by the LAST 10 DIGITS (tolerant of a stored +91/country code) and reuse
         # the OLDEST account, so an existing record isn't missed → no duplicate signup.
         user = conn.execute(
-            "SELECT id, name FROM pg_users "
+            "SELECT id, name, COALESCE(state,'') AS state FROM pg_users "
             "WHERE RIGHT(regexp_replace(COALESCE(mobile,''), '\\D', '', 'g'), 10) = ? "
             "ORDER BY id ASC LIMIT 1", (mobile,)).fetchone()
+        is_new = not bool(user)          # account created this call
+        ustate = ''
         if user:
-            uid, uname = user['id'], (user['name'] or '')
+            uid, uname, ustate = user['id'], (user['name'] or ''), user['state']
             # If the site now sends a name and we don't have one, capture it.
             if sname and not uname:
                 conn.execute("UPDATE pg_users SET name = ?, session_token = ?, token_expires_at = ?, "
@@ -130,7 +132,9 @@ def api_pg_otp_verify():
         logging.error("api_pg_otp_verify: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     conn.close()
-    return jsonify({'ok': True, 'token': token,
+    # onboarded = profile complete (name + home/domicile state) → frontend can skip onboarding
+    onboarded = bool((uname or '').strip()) and bool((ustate or '').strip())
+    return jsonify({'ok': True, 'token': token, 'is_new': is_new, 'onboarded': onboarded,
                     'user': {'id': uid, 'name': uname, 'mobile': mobile}})
 
 
@@ -1162,6 +1166,10 @@ def api_pg_profile():
             if not f.get('editable') or f['key'] not in data:
                 continue
             k = f['key']
+            # Home / domicile state LOCKS after the first save (it also sets the choice-list
+            # home state) — ignore later changes so it can't diverge (server-side lock).
+            if k == 'state' and (row.get('state') or '').strip():
+                continue
             val = data.get(k)
             if k in _PG_INT_FIELDS:
                 s = str(val).strip() if val is not None else ''
