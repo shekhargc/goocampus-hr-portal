@@ -1088,18 +1088,19 @@ def _bearer_token():
 # dynamically — add a field here (and its pg_users column) and it auto-appears on
 # goocampus.in with no change on their side. 'editable': False = show read-only.
 PG_PROFILE_BLUEPRINT = [
-    {'key': 'name',              'label': 'Full Name',         'type': 'text',   'editable': True,  'required': True},
-    {'key': 'email',             'label': 'Email',             'type': 'email',  'editable': True},
-    {'key': 'mobile',            'label': 'Mobile',            'type': 'tel',    'editable': False},
-    {'key': 'neet_pg_year',      'label': 'NEET-PG Year',      'type': 'text',   'editable': True},
-    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank',      'type': 'number', 'editable': True},
-    {'key': 'target_speciality', 'label': 'Target Speciality', 'type': 'text',   'editable': True},
-    {'key': 'college',           'label': 'MBBS College',      'type': 'text',   'editable': True},
-    {'key': 'state',             'label': 'State',             'type': 'text',   'editable': True},
-    {'key': 'city',              'label': 'City',              'type': 'text',   'editable': True},
-    {'key': 'photo_url',         'label': 'Profile Photo',     'type': 'image',  'editable': True},
+    {'key': 'name',              'label': 'Full Name',                 'type': 'text',   'editable': True,  'required': True},
+    {'key': 'state',             'label': 'Home / Domicile State',     'type': 'text',   'editable': True,  'required': True},
+    {'key': 'neet_pg_year',      'label': 'NEET-PG Year',              'type': 'text',   'editable': True},
+    {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True},
+    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True},
+    {'key': 'target_speciality', 'label': 'Target Speciality',         'type': 'text',   'editable': True},
+    {'key': 'college',           'label': 'MBBS College',              'type': 'text',   'editable': True},
+    {'key': 'city',              'label': 'City',                      'type': 'text',   'editable': True},
+    {'key': 'email',             'label': 'Email',                     'type': 'email',  'editable': True},
+    {'key': 'mobile',            'label': 'Mobile',                    'type': 'tel',    'editable': False},
+    {'key': 'photo_url',         'label': 'Profile Photo',             'type': 'image',  'editable': True},
 ]
-_PG_INT_FIELDS = {'neet_pg_rank'}
+_PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score'}
 
 
 def _pg_user_by_token(conn, token):
@@ -1125,6 +1126,12 @@ def api_pg_profile():
         return jsonify({'ok': False, 'error': 'no_token'}), 401
     conn = get_db()
     try:
+        # NEET-PG score column (added 2026-09-24 when the 2026 results dropped).
+        try:
+            conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS neet_pg_score INTEGER")
+            conn.commit()
+        except Exception:
+            conn.rollback()
         row = _pg_user_by_token(conn, token)
         if not row:
             return jsonify({'ok': False, 'error': 'invalid_token'}), 401
@@ -1168,6 +1175,20 @@ def api_pg_profile():
             f"UPDATE pg_users SET {', '.join(sets)}, updated_by = 'goocampus.in', "
             f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", params)
         conn.commit()
+
+        # The Home / Domicile State also becomes the doctor's LOCKED home state for the
+        # free home-state choice list — set once, so the choice list opens right away.
+        st = (data.get('state') or '').strip()
+        if st:
+            try:
+                has_home = conn.execute("SELECT 1 FROM pg_doctor_states WHERE user_id = ? "
+                                        "AND role = 'home'", (row['id'],)).fetchone()
+                if not has_home:
+                    conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) "
+                                 "VALUES (?,?, 'home', 1)", (row['id'], st))
+                    conn.commit()
+            except Exception:
+                conn.rollback()
         return jsonify({'ok': True, 'updated': len(sets)})
     except Exception as e:
         try: conn.rollback()
