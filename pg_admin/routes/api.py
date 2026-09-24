@@ -1493,6 +1493,45 @@ def admin_pg_pay_test_verify():
     return jsonify({'ok': ok, 'payment_id': pid, 'error': ('' if ok else 'signature_mismatch')})
 
 
+def admin_pg_predictor_diag():
+    """GET /admin/pg/diag/predictor — admin-only. Why does the predictor return few rows?
+    Shows the degree_group / authority_type distribution + what the mdms/allindia filters
+    actually match, and the raw authority/degree/category values. Read-only. (2026-09-24)"""
+    if not _pay_test_admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    conn = get_db()
+    try:
+        base = "FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0"
+        def one(sql):
+            return conn.execute(sql).fetchone()['c']
+        def dist(col, n=20):
+            return [dict(r) for r in conn.execute(
+                f"SELECT COALESCE(NULLIF(TRIM({col}),''),'(empty)') AS v, COUNT(*) AS c "
+                f"{base} GROUP BY 1 ORDER BY 2 DESC LIMIT {n}").fetchall()]
+        dg_sql = _degree_group_sql('mdms')
+        at_sql = _authority_type_sql('allindia')
+        out = {
+            'ok': True,
+            'year': (conn.execute("SELECT MAX(year) AS c FROM pg_cutoffs").fetchone()['c']),
+            'total_non_reference': one(f"SELECT COUNT(*) AS c {base}"),
+            'by_degree_group': dist('degree_group'),
+            'by_authority_type': dist('authority_type'),
+            'filter_mdms_matches': one(f"SELECT COUNT(*) AS c {base} AND {dg_sql}"),
+            'filter_allindia_matches': one(f"SELECT COUNT(*) AS c {base} AND {at_sql}"),
+            'filter_mdms_AND_allindia': one(f"SELECT COUNT(*) AS c {base} AND {dg_sql} AND {at_sql}"),
+            'filter_mdms_allindia_OPEN': one(f"SELECT COUNT(*) AS c {base} AND {dg_sql} AND {at_sql} AND LOWER(TRIM(category))='open'"),
+            'top_authorities': dist('authority'),
+            'top_degrees': dist('degree'),
+            'top_categories': dist('category', 15),
+        }
+        return jsonify(out)
+    except Exception as e:
+        logging.error("predictor_diag: %s", e)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 def api_pg_bookings():
     """GET  /api/pg/bookings  → the logged-in doctor's session requests.
        POST /api/pg/bookings {mentor_id, session_mode, reason} → record INTEREST
