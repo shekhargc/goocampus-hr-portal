@@ -93,6 +93,7 @@
           <div style="margin-top:0.5rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
             <span class="pill pill-green">{{ ent.plan.name }}</span>
             {% if states %}<span class="pill pill-blue">{{ states|selectattr('role','equalto','home')|map(attribute='state')|first or (states[0].state) }}{% if states|length > 1 %} +{{ states|length - 1 }}{% endif %}</span>{% endif %}
+            {% if enquiry %}<a href="/sales/inquiries/{{ enquiry.id }}" class="pill pill-orange" style="text-decoration:none;">📞 Also booked a free call ({{ enquiry.inquiry_status }}) →</a>{% endif %}
           </div>
         </div>
       </div>
