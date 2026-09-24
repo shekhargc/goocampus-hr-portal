@@ -307,6 +307,7 @@ def user_save(user_id):
         'email': (form.get('email') or '').strip(),
         'neet_pg_year': (form.get('neet_pg_year') or '').strip(),
         'neet_pg_rank': _int_or_none(form.get('neet_pg_rank')),
+        'neet_pg_score': _int_or_none(form.get('neet_pg_score')),
         'target_speciality': (form.get('target_speciality') or '').strip(),
         'city': (form.get('city') or '').strip(),
         'state': (form.get('state') or '').strip(),
@@ -318,6 +319,11 @@ def user_save(user_id):
     }
     conn = get_db()
     try:
+        try:
+            conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS neet_pg_score INTEGER")
+            conn.commit()
+        except Exception:
+            conn.rollback()
         sets = ', '.join(f"{k} = ?" for k in fields)
         conn.execute(f"UPDATE pg_users SET {sets}, updated_at = CURRENT_TIMESTAMP "
                      "WHERE id = ?", tuple(fields.values()) + (user_id,))
