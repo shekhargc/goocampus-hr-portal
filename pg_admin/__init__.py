@@ -17,10 +17,12 @@ from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.data import college_master_tables as _college_master
 from pg_admin.data import pgcp_tables as _pgcp_tables
 from pg_admin.data import choice_tables as _choice_tables
+from pg_admin.data import events_tables as _events_tables
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
                              bookings_admin, college_master_admin, api_college,
-                             pgcp_admin, api_pgcp, api_choice, choice_admin)
+                             pgcp_admin, api_pgcp, api_choice, choice_admin,
+                             api_events, events_admin)
 
 
 def register_pg_admin(app):
@@ -43,7 +45,8 @@ def register_pg_admin(app):
                _plans_tables.set_pgcp_authority_notes,
                _college_master.ensure_college_master_tables,
                _pgcp_tables.ensure_pgcp_tables,
-               _choice_tables.ensure_choice_tables):
+               _choice_tables.ensure_choice_tables,
+               _events_tables.ensure_event_tables):
         try:
             fn()
         except Exception as e:
@@ -191,6 +194,19 @@ def register_pg_admin(app):
                      choice_admin.choice_move, methods=['POST'])
     app.add_url_rule('/admin/pg/choice-items/<int:item_id>/delete', 'pg_choice_delete',
                      choice_admin.choice_delete, methods=['POST'])
+    # ── Events: public API (goocampus.in) + admin ──
+    app.add_url_rule('/api/pg/events', 'api_pg_events', api_events.api_pg_events, methods=['GET'])
+    app.add_url_rule('/api/pg/events/ticket/<ticket_code>', 'api_pg_event_ticket',
+                     api_events.api_pg_event_ticket, methods=['GET'])
+    app.add_url_rule('/api/pg/events/<slug>/register', 'api_pg_event_register',
+                     api_events.api_pg_event_register, methods=['POST'])
+    app.add_url_rule('/api/pg/events/<slug>', 'api_pg_event', api_events.api_pg_event, methods=['GET'])
+    app.add_url_rule('/admin/pg/events', 'pg_events_admin', events_admin.events_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/events/create', 'pg_event_create', events_admin.event_create, methods=['POST'])
+    app.add_url_rule('/admin/pg/events/<int:event_id>/toggle', 'pg_event_toggle',
+                     events_admin.event_toggle, methods=['POST'])
+    app.add_url_rule('/admin/pg/events/<int:event_id>/export', 'pg_event_export',
+                     events_admin.event_export, methods=['GET'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',

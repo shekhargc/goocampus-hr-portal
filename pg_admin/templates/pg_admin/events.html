@@ -1,0 +1,105 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Events · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="max-width:1150px;margin:0 auto;padding:2rem 1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem;">Events</h1>
+  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.88rem;">
+    In-person sessions with their own "Reserve your seat" sign-up — separate from the client /
+    counsellor flow. Each registration gets a unique printable ticket.
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+    <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                background:{{ '#DCFCE7' if cat=='success' else ('#FEE2E2' if cat=='error' else '#e0f2fe') }};
+                color:{{ '#166534' if cat=='success' else ('#991B1B' if cat=='error' else '#075985') }};">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Create event -->
+  <details style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1.4rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);"{% if not events %} open{% endif %}>
+    <summary style="font-weight:700;color:var(--navy);cursor:pointer;">+ New event</summary>
+    <form method="POST" action="{{ url_for('pg_event_create') }}"
+          style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:1rem;">
+      {% macro fld(name, label, ph='', type='text') %}
+      <div><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">{{ label }}</label>
+        <input type="{{ type }}" name="{{ name }}" placeholder="{{ ph }}"
+               style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;"></div>
+      {% endmacro %}
+      {{ fld('title', 'Event title *', 'e.g. Alamin Bijakur Medical College Session') }}
+      {{ fld('venue', 'Venue') }}
+      {{ fld('city', 'City') }}
+      {{ fld('state', 'State') }}
+      {{ fld('event_date', 'Date', '', 'date') }}
+      {{ fld('event_time', 'Time', 'e.g. 11:00 AM') }}
+      {{ fld('ticket_prefix', 'Ticket prefix', 'GCE') }}
+      <div style="grid-column:1/-1;"><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Description</label>
+        <textarea name="description" rows="2" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;"></textarea></div>
+      <div style="grid-column:1/-1;"><button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:0.6rem 1.4rem;font-weight:700;cursor:pointer;">Create event</button></div>
+    </form>
+  </details>
+
+  <!-- Events list -->
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-bottom:1.6rem;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      {% set hs = 'padding:0.65rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
+      <thead><tr>
+        <th style="{{ hs }}">Event</th><th style="{{ hs }}">Date</th><th style="{{ hs }}">API slug</th>
+        <th style="{{ hs }}text-align:right;">Registered</th><th style="{{ hs }}">Status</th><th style="{{ hs }}"></th>
+      </tr></thead>
+      <tbody>
+        {% for e in events %}
+        <tr style="border-top:1px solid var(--gray-100);{% if event and event.id==e.id %}background:#fff7ed;{% endif %}">
+          <td style="padding:0.6rem 0.9rem;font-weight:600;color:var(--navy);">{{ e.title }}<div style="font-size:0.74rem;color:var(--gray-400);font-weight:400;">{{ e.venue }}{% if e.city %}, {{ e.city }}{% endif %}</div></td>
+          <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{{ e.event_date or '—' }}{% if e.event_time %} · {{ e.event_time }}{% endif %}</td>
+          <td style="padding:0.6rem 0.9rem;color:var(--gray-500);font-family:monospace;font-size:0.78rem;">{{ e.slug }}</td>
+          <td style="padding:0.6rem 0.9rem;text-align:right;font-weight:700;">{{ e.n }}</td>
+          <td style="padding:0.6rem 0.9rem;"><span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:20px;background:{{ '#dcfce7' if e.is_active else '#f3f4f6' }};color:{{ '#166534' if e.is_active else '#6b7280' }};">{{ 'Live' if e.is_active else 'Off' }}</span></td>
+          <td style="padding:0.6rem 0.9rem;text-align:right;white-space:nowrap;">
+            <a href="{{ url_for('pg_events_admin', event=e.id) }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.82rem;">Registrations →</a>
+            <form method="POST" action="{{ url_for('pg_event_toggle', event_id=e.id) }}" style="display:inline;">
+              <button type="submit" style="background:none;border:none;color:var(--gray-500);font-weight:600;font-size:0.82rem;cursor:pointer;margin-left:8px;">{{ 'Turn off' if e.is_active else 'Turn on' }}</button></form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--gray-400);">No events yet — create one above.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Selected event's registrations -->
+  {% if event %}
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.7rem;">
+    <h2 style="font-size:1.1rem;font-weight:800;color:var(--navy);margin:0;">{{ event.title }} — registrations ({{ regs|length }})</h2>
+    {% if regs %}<a href="{{ url_for('pg_event_export', event_id=event.id) }}" style="background:#16a34a;color:#fff;text-decoration:none;border-radius:8px;padding:0.5rem 1rem;font-weight:700;font-size:0.83rem;">⬇ Download Excel</a>{% endif %}
+  </div>
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:auto;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <table style="width:100%;border-collapse:collapse;font-size:0.83rem;white-space:nowrap;">
+      <thead><tr>
+        <th style="{{ hs }}">Ticket</th><th style="{{ hs }}">Name</th><th style="{{ hs }}">Mobile</th>
+        <th style="{{ hs }}">Email</th><th style="{{ hs }}text-align:right;">Rank</th><th style="{{ hs }}text-align:right;">Score</th>
+        <th style="{{ hs }}">Domicile</th><th style="{{ hs }}">Registered</th>
+      </tr></thead>
+      <tbody>
+        {% for r in regs %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:0.55rem 0.9rem;font-family:monospace;font-weight:700;color:var(--navy);">{{ r.ticket_code }}</td>
+          <td style="padding:0.55rem 0.9rem;font-weight:600;">{{ r.name }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.mobile }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.email }}</td>
+          <td style="padding:0.55rem 0.9rem;text-align:right;">{{ r.rank or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;text-align:right;">{{ r.score or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.domicile_state or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-500);">{{ r.created_at.strftime('%d %b, %H:%M') if r.created_at else '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--gray-400);">No registrations yet for this event.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
