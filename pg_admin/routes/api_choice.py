@@ -188,18 +188,31 @@ def _plan_label(conn, user_id):
 
 def _choice_gate(conn, uid, scope, state=''):
     """Return an error message if this doctor can't create this set, else None.
-    A state set must use one of the doctor's LOCKED states (home / plan-allowed other)."""
-    if not _plan_has(conn, uid, 'dash_choice_list'):
-        return 'Upgrade to build your choice list.'
+    FREE tier: ONE home-state list only — self-build (predictor + manual), no auto-generate,
+    no All-India/MCC, and the GooCampus team can't edit it.
+    PAID (dash_choice_list): MCC + any LOCKED state (home / plan-allowed other), auto-built."""
+    paid = _plan_has(conn, uid, 'dash_choice_list')
     counts = {r['scope']: r['n'] for r in conn.execute(
         "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? GROUP BY scope",
         [uid]).fetchall()}
-    if scope == 'mcc' and counts.get('mcc', 0) >= 1:
-        return 'You already have an MCC (All-India) choice set.'
+    states = _doctor_states(conn, uid)
+    home = next((s['state'] for s in states if s['role'] == 'home'), None)
+    locked = {s['state'].strip().lower() for s in states}
+    if scope == 'mcc':
+        if not paid:
+            return 'The All-India / MCC choice list is a paid feature. On the Free plan you can build a choice list for your home state.'
+        if counts.get('mcc', 0) >= 1:
+            return 'You already have an MCC (All-India) choice set.'
+        return None
     if scope == 'state':
-        locked = {s['state'].strip().lower() for s in _doctor_states(conn, uid)}
         if not state or state.strip().lower() not in locked:
-            return 'Set this state as your home/other state in onboarding before building its choice list.'
+            return 'Set this state as your home/other state before building its choice list.'
+        if not paid:
+            if not home or state.strip().lower() != home.strip().lower():
+                return 'On the Free plan you can build a choice list for your home state only.'
+            if counts.get('state', 0) >= 1:
+                return 'You already have your home-state choice list. Upgrade to add more states or the All-India list.'
+        return None
     return None
 
 
@@ -212,17 +225,23 @@ def api_pg_choice_entitlement():
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        can = _plan_has(conn, user['id'], 'dash_choice_list')
+        paid = _plan_has(conn, user['id'], 'dash_choice_list')
         home_ok, max_other = _state_limits(conn, user['id'])
         states = _doctor_states(conn, user['id'])
-        return jsonify({'ok': True, 'plan': _plan_label(conn, user['id']), 'can_build': can,
-                        'mcc': can,
-                        'state': ('any' if max_other is None else ('home' if can else False)),
-                        'home_state': next((s['state'] for s in states if s['role'] == 'home'), None),
+        home = next((s['state'] for s in states if s['role'] == 'home'), None)
+        return jsonify({'ok': True, 'plan': _plan_label(conn, user['id']),
+                        'tier': ('paid' if paid else 'free'),
+                        'can_build': True,               # everyone can build at least a home-state list
+                        'auto_generate': paid,           # FREE self-builds (predictor + manual); no auto-build
+                        'team_editable': paid,           # FREE list is theirs — team is view-only
+                        'mcc': paid,
+                        'home_only': (not paid),
+                        'state': ('any' if max_other is None else 'home'),
+                        'home_state': home,
                         'locked_states': [s['state'] for s in states],
                         'allowed_other_states': ('any' if max_other is None else max_other),
                         'cutoff_explorer': _plan_has(conn, user['id'], 'dash_cutoff_explorer'),
-                        'message': ('' if can else 'Upgrade to build your choice list.')})
+                        'message': ('' if paid else 'Free plan: build a home-state choice list yourself (add from the predictor or manually). Upgrade for auto-build, more states and GooCampus team support.')})
     finally:
         conn.close()
 
@@ -336,8 +355,11 @@ def api_pg_choice_sets():
             [uid, (body.get('label') or '').strip(), scope, authority, dg,
              (body.get('state') or '').strip(), quota, category, rank,
              json.dumps(specialties), json.dumps(quota_cats)]).fetchone()['id']
-        for rnd in (1, 2, 3):
-            _generate_round(conn, sid, rnd, authority, dg, specialties, quota_cats, rank)
+        # PAID tiers get the auto-built round sheets; FREE builds their home-state list
+        # themselves (add from predictor / manually), so we leave the rounds empty.
+        if _plan_has(conn, uid, 'dash_choice_list'):
+            for rnd in (1, 2, 3):
+                _generate_round(conn, sid, rnd, authority, dg, specialties, quota_cats, rank)
         conn.commit()
         return jsonify({'ok': True, 'set_id': sid})
     except Exception as e:
@@ -485,9 +507,10 @@ def api_pg_choice_reorder(set_id):
 
 # ── Doctor's locked states (home + plan-allowed extras) ──────────────────────
 def _state_limits(conn, uid):
-    """How many states this doctor can have. home_ok = any paid plan with choice list;
-    max_other = None (unlimited) | 1 | 0, from dash_all_states / dash_extra_state."""
-    home_ok = _plan_has(conn, uid, 'dash_choice_list')
+    """home_ok = may set a HOME state (everyone, incl. Free — for the home-state list).
+    max_other = extra states beyond home: None (unlimited) | 1 | 0, from dash_all_states /
+    dash_extra_state (paid tiers only)."""
+    home_ok = True
     if _plan_has(conn, uid, 'dash_all_states'):
         max_other = None
     elif _plan_has(conn, uid, 'dash_extra_state'):
