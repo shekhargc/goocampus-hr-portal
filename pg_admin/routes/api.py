@@ -1508,8 +1508,10 @@ def admin_pg_predictor_diag():
             return [dict(r) for r in conn.execute(
                 f"SELECT COALESCE(NULLIF(TRIM({col}),''),'(empty)') AS v, COUNT(*) AS c "
                 f"{base} GROUP BY 1 ORDER BY 2 DESC LIMIT {n}").fetchall()]
-        dg_sql = _degree_group_sql('mdms')
-        at_sql = _authority_type_sql('allindia')
+        # These clauses carry literal % (LIKE 'MCC%'); with no ? params the db shim
+        # doesn't escape them, so double them for this param-less diagnostic.
+        dg_sql = _degree_group_sql('mdms').replace('%', '%%')
+        at_sql = _authority_type_sql('allindia').replace('%', '%%')
         out = {
             'ok': True,
             'year': (conn.execute("SELECT MAX(year) AS c FROM pg_cutoffs").fetchone()['c']),
