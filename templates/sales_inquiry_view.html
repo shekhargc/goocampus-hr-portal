@@ -39,7 +39,14 @@
   .note{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:.82rem;padding:10px 14px;border-radius:10px;margin-bottom:1.1rem;}
 </style>
 
-<a class="iv-back" href="/sales/inquiries">← All inquiries</a>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+  <a class="iv-back" href="/sales/inquiries">← All inquiries</a>
+  {% if user and user.is_admin %}
+  <form method="POST" action="/sales/inquiries/{{ inq.id }}/delete" onsubmit="return confirm('Delete this inquiry permanently? Use only for test / junk records.');">
+    <button style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:8px;padding:6px 13px;font-weight:700;font-size:0.82rem;cursor:pointer;">🗑 Delete inquiry</button>
+  </form>
+  {% endif %}
+</div>
 <div class="iv-hero">
   <div class="who">
     <div class="iv-av">{{ (inq.lead_name or 'W')[:1]|upper }}</div>
