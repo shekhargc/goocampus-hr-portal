@@ -68,11 +68,12 @@ def event_create():
             slug = f"{base}-{i}"; i += 1
         conn.execute(
             "INSERT INTO pg_events (slug, title, venue, city, state, event_date, event_time, "
-            "description, ticket_prefix) VALUES (?,?,?,?,?,?,?,?,?)",
+            "description, ticket_prefix, powered_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (slug, title, _s(request.form.get('venue')), _s(request.form.get('city')),
              _s(request.form.get('state')), _s(request.form.get('event_date')),
              _s(request.form.get('event_time')), _s(request.form.get('description')),
-             (_s(request.form.get('ticket_prefix')) or 'GCE').upper()[:8]))
+             (_s(request.form.get('ticket_prefix')) or 'GCE').upper()[:8],
+             _s(request.form.get('powered_by'))))
         conn.commit()
         flash(f'Event created. Slug: {slug} — the goocampus.in events page can point at /api/pg/events/{slug}.', 'success')
     except Exception as e:

@@ -42,6 +42,11 @@ def ensure_event_tables():
         )''')
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pg_event_ticket ON pg_event_registrations (ticket_code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_event_reg_event ON pg_event_registrations (event_id)")
+        # Link a registration to the logged-in doctor (their "my tickets" list) + a
+        # per-event "Powered by" line for the ticket. (founder 2026-09-25)
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS user_id INTEGER")
+        conn.execute("ALTER TABLE pg_events ADD COLUMN IF NOT EXISTS powered_by TEXT DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_event_reg_user ON pg_event_registrations (user_id)")
         conn.commit()
         logging.info("pg_events tables ensured")
     except Exception as e:
