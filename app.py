@@ -40493,23 +40493,22 @@ def api_pg_lead():
             (name, phone, email, PG_INQUIRY_SOURCE, stage_id, notes)).fetchone()
         conn.commit()
         _new_inq_id = _newlead['id'] if _newlead else None
+        # Portal notification for the Sales team + admins — REPLACES the team-wide email
+        # on every website lead (founder 2026-09-24). The lead already lands in
+        # Sales -> Inquiries; this just rings the portal bell, no inbox spam.
         try:
-            sales_emails = _dept_emails(conn, ['Sales'])
-        except Exception:
-            sales_emails = []
+            emps = conn.execute("SELECT id FROM employees WHERE is_active = 1 "
+                                "AND (department = 'Sales' OR is_admin = 1)").fetchall()
+            for _e in emps:
+                create_notification(conn, _e['id'], 'New website enquiry',
+                                    f"{name} · {phone}" + (f" · {notes}" if notes else ''),
+                                    'lead', '/sales/inquiries')
+            conn.commit()
+        except Exception as _ne:
+            logging.warning("api_pg_lead notify: %s", _ne)
         conn.close()
         if _new_inq_id:
             _sheet_push_async(_new_inq_id)   # mirror the new inquiry to the Google Sheet
-        # Alert the sales team that a website lead came in.
-        if sales_emails:
-            try:
-                from email_utils import send_email
-                send_email(sales_emails, f"New website lead — {name}",
-                           f"<p>A new lead came in from goocampus.in.</p>"
-                           f"<p><strong>{name}</strong><br>{phone}{(' · ' + email) if email else ''}<br>{notes}</p>"
-                           f"<p>Open the Sales Leads board to action it.</p>")
-            except Exception:
-                pass
         return jsonify({'ok': True}), 200
     except Exception as e:
         try: conn.rollback(); conn.close()
