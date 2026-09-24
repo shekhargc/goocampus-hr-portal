@@ -18,11 +18,12 @@ from pg_admin.data import college_master_tables as _college_master
 from pg_admin.data import pgcp_tables as _pgcp_tables
 from pg_admin.data import choice_tables as _choice_tables
 from pg_admin.data import events_tables as _events_tables
+from pg_admin.data import analytics_tables as _analytics_tables
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
                              bookings_admin, college_master_admin, api_college,
                              pgcp_admin, api_pgcp, api_choice, choice_admin,
-                             api_events, events_admin)
+                             api_events, events_admin, api_track, analytics_admin)
 
 
 def register_pg_admin(app):
@@ -46,7 +47,8 @@ def register_pg_admin(app):
                _college_master.ensure_college_master_tables,
                _pgcp_tables.ensure_pgcp_tables,
                _choice_tables.ensure_choice_tables,
-               _events_tables.ensure_event_tables):
+               _events_tables.ensure_event_tables,
+               _analytics_tables.ensure_analytics_tables):
         try:
             fn()
         except Exception as e:
@@ -207,6 +209,9 @@ def register_pg_admin(app):
                      events_admin.event_toggle, methods=['POST'])
     app.add_url_rule('/admin/pg/events/<int:event_id>/export', 'pg_event_export',
                      events_admin.event_export, methods=['GET'])
+    # ── Usage analytics: ingest (goocampus.in) + admin dashboard ──
+    app.add_url_rule('/api/pg/track', 'api_pg_track', api_track.api_pg_track, methods=['POST'])
+    app.add_url_rule('/admin/pg/analytics', 'pg_analytics', analytics_admin.analytics_admin, methods=['GET'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',
