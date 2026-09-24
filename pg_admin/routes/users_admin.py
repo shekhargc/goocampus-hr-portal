@@ -127,6 +127,23 @@ def users_admin():
             for u in _need:
                 u['name'] = lead_names.get(_m10(u.get('mobile')), '')
 
+        # Which shown doctors have ALSO booked a free call? (match a website inquiry by last-10 mobile)
+        try:
+            _m10s = {_m10(u.get('mobile')) for u in users if _m10(u.get('mobile'))}
+            _booked = {}
+            if _m10s:
+                _bph = ','.join(['?'] * len(_m10s))
+                for r in conn.execute(
+                    f"SELECT id, RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) AS m10 "
+                    f"FROM sales_leads WHERE COALESCE(is_inquiry,0)=1 "
+                    f"AND RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) IN ({_bph}) "
+                    f"ORDER BY id DESC", tuple(_m10s)).fetchall():
+                    _booked.setdefault(r['m10'], r['id'])
+            for u in users:
+                u['inquiry_id'] = _booked.get(_m10(u.get('mobile')))
+        except Exception:
+            conn.rollback()
+
         s = conn.execute(
             "SELECT COUNT(*) AS total, "
             "  COALESCE(SUM(CASE WHEN COALESCE(is_blocked,0)=1 THEN 1 ELSE 0 END),0) AS blocked, "

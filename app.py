@@ -39042,6 +39042,7 @@ def _ensure_inquiry_schema(conn):
     for ddl in (
         "ALTER TABLE sales_leads ADD COLUMN is_inquiry INTEGER DEFAULT 0",
         "ALTER TABLE sales_leads ADD COLUMN inquiry_status TEXT DEFAULT 'New'",
+        "ALTER TABLE sales_leads ADD COLUMN enquiry_count INTEGER DEFAULT 1",
     ):
         try:
             conn.execute(ddl); conn.commit()
@@ -39111,6 +39112,22 @@ def sales_inquiries_list():
         for r in conn.execute("SELECT COALESCE(inquiry_status,'New') AS st, COUNT(*) AS c "
                               "FROM sales_leads WHERE COALESCE(is_inquiry,0)=1 GROUP BY 1").fetchall():
             counts[r['st']] = counts.get(r['st'], 0) + r['c']
+        # Which of these enquirers are ALSO registered goocampus.in doctors? (last-10 mobile)
+        _p2d = {}
+        for r in rows:
+            _d = ''.join(c for c in (r.get('phone') or '') if c.isdigit())[-10:]
+            if _d:
+                _p2d[_d] = None
+        if _p2d:
+            _ph = ','.join(['?'] * len(_p2d))
+            for pr in conn.execute(
+                f"SELECT id, RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) AS m10 "
+                f"FROM pg_users WHERE RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) IN ({_ph})",
+                list(_p2d.keys())).fetchall():
+                _p2d[pr['m10']] = pr['id']
+        for r in rows:
+            _d = ''.join(c for c in (r.get('phone') or '') if c.isdigit())[-10:]
+            r['reg_doctor_id'] = _p2d.get(_d)
     except Exception as e:
         logging.error(f"sales_inquiries_list: {e}")
         try: conn.rollback()
@@ -40496,15 +40513,44 @@ def api_pg_lead():
             "SELECT id FROM sales_lead_stages WHERE COALESCE(is_active,1)=1 "
             "ORDER BY sort_order, id LIMIT 1").fetchone()
         stage_id = stage['id'] if stage else None
-        # is_inquiry=1 → lands in Sales → Inquiries (not the hot Leads board);
-        # is_hot=0 → a website enquiry is not yet a hot lead. (founder 2026-08-07)
-        _newlead = conn.execute(
-            "INSERT INTO sales_leads (lead_name, phone, email, source, stage_id, is_hot, "
-            "is_inquiry, inquiry_status, notes, created_at) "
-            "VALUES (?, ?, ?, ?, ?, 0, 1, 'New', ?, CURRENT_TIMESTAMP) RETURNING id",
-            (name, phone, email, PG_INQUIRY_SOURCE, stage_id, notes)).fetchone()
-        conn.commit()
-        _new_inq_id = _newlead['id'] if _newlead else None
+        # DEDUPE by mobile (last-10) or email: a repeat "Book a free call" from the same
+        # person updates their existing inquiry + bumps the counter instead of making a
+        # duplicate row (founder 2026-09-24).
+        _dg = ''.join(c for c in (phone or '') if c.isdigit())[-10:]
+        existing = None
+        try:
+            existing = conn.execute(
+                "SELECT id, COALESCE(enquiry_count,1) AS n FROM sales_leads "
+                "WHERE COALESCE(is_inquiry,0)=1 AND ("
+                "  RIGHT(regexp_replace(COALESCE(phone,''),'\\D','','g'),10) = ? "
+                "  OR (? <> '' AND LOWER(TRIM(email)) = LOWER(TRIM(?)))) "
+                "ORDER BY id ASC LIMIT 1", (_dg, email, email)).fetchone()
+        except Exception:
+            existing = None
+        _is_repeat = bool(existing)
+        if existing:
+            existing = dict(existing)
+            conn.execute(
+                "UPDATE sales_leads SET enquiry_count = COALESCE(enquiry_count,1) + 1, "
+                "notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (notes, existing['id']))
+            try:
+                conn.execute("INSERT INTO sales_lead_followups (lead_id, note, created_by_name, created_at) "
+                             "VALUES (?, ?, 'Website', CURRENT_TIMESTAMP)",
+                             (existing['id'], f"Enquired again — {notes}"))
+            except Exception:
+                pass
+            conn.commit()
+            _new_inq_id = existing['id']
+        else:
+            # is_inquiry=1 → lands in Sales → Inquiries (not the hot Leads board);
+            # is_hot=0 → a website enquiry is not yet a hot lead. (founder 2026-08-07)
+            _newlead = conn.execute(
+                "INSERT INTO sales_leads (lead_name, phone, email, source, stage_id, is_hot, "
+                "is_inquiry, inquiry_status, enquiry_count, notes, created_at) "
+                "VALUES (?, ?, ?, ?, ?, 0, 1, 'New', 1, ?, CURRENT_TIMESTAMP) RETURNING id",
+                (name, phone, email, PG_INQUIRY_SOURCE, stage_id, notes)).fetchone()
+            conn.commit()
+            _new_inq_id = _newlead['id'] if _newlead else None
         # Portal notification for the Sales team + admins — REPLACES the team-wide email
         # on every website lead (founder 2026-09-24). The lead already lands in
         # Sales -> Inquiries; this just rings the portal bell, no inbox spam.
