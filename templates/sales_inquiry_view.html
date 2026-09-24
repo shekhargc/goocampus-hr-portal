@@ -44,6 +44,11 @@
     <div>
       <h1>{{ inq.lead_name or 'Website enquiry' }}</h1>
       <div class="meta">🌐 goocampus.in inquiry · received {{ inq.created_at|format_datetime }}</div>
+      {% if reg_doctor %}
+      <div style="margin-top:6px;"><a href="/admin/pg/users/{{ reg_doctor.id }}" style="display:inline-block;background:#dcfce7;color:#166534;font-size:0.78rem;font-weight:700;padding:3px 10px;border-radius:20px;text-decoration:none;">✓ Registered doctor{% if reg_doctor.state %} · {{ reg_doctor.state }}{% endif %} — view profile →</a></div>
+      {% else %}
+      <div style="margin-top:6px;"><span style="display:inline-block;background:#f1f5f9;color:#64748b;font-size:0.78rem;font-weight:600;padding:3px 10px;border-radius:20px;">Not a registered user (enquiry only)</span></div>
+      {% endif %}
     </div>
   </div>
   <span class="pill s-{{ (inq.inquiry_status or 'New')|replace(' ','')|replace('-','') }}">{{ inq.inquiry_status or 'New' }}</span>

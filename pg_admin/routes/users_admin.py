@@ -296,6 +296,19 @@ def user_detail(user_id):
                 "state, fee_min, fee_max, rank FROM pg_user_events WHERE user_id = ? ORDER BY id DESC LIMIT 40")
         except Exception:
             conn.rollback()
+
+        # Did this doctor ALSO book a free call? (match a website inquiry by last-10 mobile)
+        enquiry = None
+        try:
+            _dg = ''.join(ch for ch in (doctor.get('mobile') or '') if ch.isdigit())[-10:]
+            if _dg:
+                r = conn.execute(
+                    "SELECT id, created_at, COALESCE(inquiry_status,'New') AS inquiry_status "
+                    "FROM sales_leads WHERE RIGHT(regexp_replace(COALESCE(phone,''),'\\D','','g'),10) = ? "
+                    "AND COALESCE(is_inquiry,0)=1 ORDER BY id DESC LIMIT 1", (_dg,)).fetchone()
+                enquiry = dict(r) if r else None
+        except Exception:
+            conn.rollback()
     except Exception as e:
         conn.rollback()
         logging.error("user_detail: %s", e)
@@ -318,7 +331,7 @@ def user_detail(user_id):
                            favorites=favorites, states=states, choice_sets=choice_sets,
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
                            choice_team_editable=choice_team_editable, activity=activity,
-                           active_section='goocampus_in')
+                           enquiry=enquiry, active_section='goocampus_in')
 
 
 @login_required

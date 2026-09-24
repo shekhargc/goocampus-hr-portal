@@ -39138,9 +39138,21 @@ def sales_inquiry_view(inq_id):
     followups = [dict(r) for r in conn.execute(
         "SELECT * FROM sales_lead_followups WHERE lead_id = ? ORDER BY created_at DESC, id DESC",
         (inq_id,)).fetchall()]
+    # Is this enquirer ALSO a registered goocampus.in doctor? (match by last-10 mobile)
+    reg_doctor = None
+    try:
+        _dg = ''.join(c for c in (inq.get('phone') or '') if c.isdigit())[-10:]
+        if _dg:
+            r = conn.execute(
+                "SELECT id, name, COALESCE(state,'') AS state, created_at FROM pg_users "
+                "WHERE RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? "
+                "ORDER BY id LIMIT 1", (_dg,)).fetchone()
+            reg_doctor = dict(r) if r else None
+    except Exception:
+        conn.rollback()
     conn.close()
     return render_template('sales_inquiry_view.html', user=user, inq=inq, followups=followups,
-                           statuses=INQUIRY_STATUSES, active_section='sales')
+                           reg_doctor=reg_doctor, statuses=INQUIRY_STATUSES, active_section='sales')
 
 
 @app.route('/sales/inquiries/<int:inq_id>/status', methods=['POST'])
