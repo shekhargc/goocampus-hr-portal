@@ -280,10 +280,16 @@ def user_detail(user_id):
             pass
 
     import json as _json2
+    # Free-tier clients own their home-state list — the team is view-only on it.
+    try:
+        choice_team_editable = bool((ent.get('features') or {}).get('dash_choice_list', {}).get('allowed'))
+    except Exception:
+        choice_team_editable = False
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
                            favorites=favorites, states=states, choice_sets=choice_sets,
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
+                           choice_team_editable=choice_team_editable,
                            active_section='goocampus_in')
 
 

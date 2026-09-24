@@ -270,7 +270,9 @@
 {% if choice_sets %}
 <script>
 window.CHOICE = {{ choice_json|safe }};
+window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list = team view-only
 (function(){
+  var RO = window.CHOICE_RO === true;
   var CH_LBL = {strong:'Strong',high:'High',good:'Good',borderline:'Border',verylow:'Reach',unknown:'—'};
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function nfmt(n){ return (n==null||n==='')?'':Number(n).toLocaleString('en-IN'); }
@@ -292,7 +294,7 @@ window.CHOICE = {{ choice_json|safe }};
     var items = (s.rounds[String(rnd)]||[]);
     var body = document.getElementById('csbody_'+setId);
     var html = '';
-    if(!items.length){ html += '<div class="cs-empty">No colleges in Round '+rnd+' yet. Add one below.</div>'; }
+    if(!items.length){ html += '<div class="cs-empty">No colleges in Round '+rnd+' yet.'+(RO?'':' Add one below.')+'</div>'; }
     items.forEach(function(it, i){
       var team = it.added_by==='team' ? ' <span class="team-badge" title="Added by '+esc(it.added_by_name||'GooCampus team')+'">Team</span>' : '';
       var nm = it.master_id ? '<a href="/admin/pg/college-database/'+it.master_id+'" style="color:var(--navy);text-decoration:none;">'+esc(it.institute)+'</a>' : esc(it.institute);
@@ -300,11 +302,11 @@ window.CHOICE = {{ choice_json|safe }};
         + '<span class="pos">'+(i+1)+'</span>'
         + '<div style="flex:1;min-width:0;"><div class="nm">'+nm+team+'</div><div class="cr">'+crText(it)+'</div></div>'
         + (it.chance ? '<span class="ch ch-'+it.chance+'">'+(CH_LBL[it.chance]||it.chance)+'</span>' : '')
-        + '<div class="cs-ctrls">'
+        + (RO ? '' : ('<div class="cs-ctrls">'
         + '<button title="Move up" '+(i===0?'disabled style="opacity:.35;"':'')+' onclick="CS.move('+setId+','+it.id+',\'up\')">&#9650;</button>'
         + '<button title="Move down" '+(i===items.length-1?'disabled style="opacity:.35;"':'')+' onclick="CS.move('+setId+','+it.id+',\'down\')">&#9660;</button>'
         + '<button class="del" title="Remove" onclick="CS.del('+setId+','+it.id+')">&times;</button>'
-        + '</div></div>';
+        + '</div>')) + '</div>';
     });
     body.innerHTML = html;
     // tab active state + counts
@@ -323,15 +325,16 @@ window.CHOICE = {{ choice_json|safe }};
     meta.push(s.total+' colleges');
     var scopeChip = s.scope==='state' ? '<span class="chip chip-blue">'+esc(s.state||'State')+'</span>' : '<span class="chip chip-gray">MCC / All-India</span>';
     var teamLine = s.team_edited_at ? '<div class="cs-team"><i class="fa-solid fa-pen"></i> Last edited by GooCampus team ('+esc(s.team_edited_by||'team')+') · '+esc(s.team_edited_at)+'</div>' : '';
+    var roLine = RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-eye"></i> Free plan — the client builds this themselves. Team is view only (no add / edit).</div>' : '';
+    var addBox = RO ? '' : ('<div class="cs-add"><input id="csq_'+s.id+'" placeholder="Add a college to this round — type a name…" autocomplete="off" oninput="CS.search('+s.id+')">'
+        + '<div class="cs-sug" id="cssug_'+s.id+'"></div></div>');
     el.innerHTML =
       '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip
-        + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+'</div>'
+        + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+roLine+'</div>'
       + '<div class="cs-tabs">'
         + [1,2,3].map(function(r){ return '<button class="cs-tab" id="cstab_'+s.id+'_'+r+'" onclick="CS.tab('+s.id+','+r+')">Round '+r+' <span class="cnt" style="color:var(--gray-400);">0</span></button>'; }).join('')
       + '</div>'
-      + '<div class="cs-body"><div id="csbody_'+s.id+'"></div>'
-        + '<div class="cs-add"><input id="csq_'+s.id+'" placeholder="Add a college to this round — type a name…" autocomplete="off" oninput="CS.search('+s.id+')">'
-        + '<div class="cs-sug" id="cssug_'+s.id+'"></div></div>'
+      + '<div class="cs-body"><div id="csbody_'+s.id+'"></div>' + addBox
       + '</div>';
     root.appendChild(el);
     active[s.id] = 1;

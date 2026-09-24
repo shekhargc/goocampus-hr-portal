@@ -14,7 +14,7 @@ from flask import request, jsonify, redirect, url_for, flash
 from db import get_db
 from core.users import get_user
 from core.auth import login_required
-from pg_admin.routes.api_choice import _chance, _NORMSQL, _deg_clause, _spec_core
+from pg_admin.routes.api_choice import _chance, _NORMSQL, _deg_clause, _spec_core, _plan_has
 
 
 def _admin():
@@ -61,6 +61,16 @@ def _set_owner(conn, set_id):
     r = conn.execute("SELECT id, user_id, rank, degree_group, authority FROM pg_choice_sets WHERE id = ?",
                      [set_id]).fetchone()
     return dict(r) if r else None
+
+
+# Free-tier clients own their home-state list — the GooCampus team is VIEW-ONLY on it
+# (founder 2026-09-24). Only paid (dash_choice_list) clients' lists can be team-edited.
+_FREE_LIST_MSG = ('This client is on the Free plan — their home-state choice list is '
+                  'self-service and cannot be edited by the team (view only).')
+
+
+def _team_can_edit(conn, user_id):
+    return _plan_has(conn, user_id, 'dash_choice_list')
 
 
 # ── Search cut-offs for the "add college" picker ─────────────────────────────
@@ -132,6 +142,8 @@ def choice_add(set_id):
         s = _set_owner(conn, set_id)
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if not _team_can_edit(conn, s['user_id']):
+            return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
         body = request.get_json(silent=True) or {}
         try:
             rnd = int(body.get('round')); assert rnd in (1, 2, 3)
@@ -180,6 +192,9 @@ def choice_move(item_id):
         if not it:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         it = dict(it)
+        _o = _set_owner(conn, it['set_id'])
+        if _o and not _team_can_edit(conn, _o['user_id']):
+            return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
         direction = _s((request.get_json(silent=True) or {}).get('dir')) or 'up'
         # normalise positions 1..n first (guards against gaps/dupes), then swap.
         ordered = conn.execute("SELECT id FROM pg_choice_items WHERE set_id=? AND round=? "
@@ -213,8 +228,11 @@ def choice_reorder(set_id):
     conn = get_db()
     try:
         _self_heal(conn)
-        if not _set_owner(conn, set_id):
+        _o = _set_owner(conn, set_id)
+        if not _o:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if not _team_can_edit(conn, _o['user_id']):
+            return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
         body = request.get_json(silent=True) or {}
         try:
             rnd = int(body.get('round')); assert rnd in (1, 2, 3)
@@ -250,6 +268,9 @@ def choice_delete(item_id):
         if not it:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         it = dict(it)
+        _o = _set_owner(conn, it['set_id'])
+        if _o and not _team_can_edit(conn, _o['user_id']):
+            return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
         conn.execute("DELETE FROM pg_choice_items WHERE id = ?", [item_id])
         # re-pack positions so the round stays 1..n
         ordered = conn.execute("SELECT id FROM pg_choice_items WHERE set_id=? AND round=? "

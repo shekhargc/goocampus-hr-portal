@@ -412,15 +412,18 @@ _DASH_FEATURES = [
     ('dash_predictor',       'College Predictor (by rank)', 'Rank-based college prediction', 'boolean', 100),
     ('dash_cutoff_explorer', 'Cutoff Explorer (filter cut-offs)', 'Browse cut-offs by college/quota/category', 'boolean', 101),
     ('dash_college_db',      'College Database', 'Browse colleges + full profiles', 'boolean', 102),
-    ('dash_stipend',         'Stipend · Bond · Penalty', 'Stipend/bond/penalty by college & speciality', 'boolean', 103),
-    ('dash_favourites',      'Favourite colleges (star)', 'Save colleges across the dashboard', 'boolean', 104),
-    ('dash_mentors',         'Mentors — browse & request session', 'Browse mentors, request a paid session', 'boolean', 105),
-    ('dash_choice_list',     'Choice-List builder (Round 1/2/3)', 'Auto-build round-wise choice sheets, edit & export', 'boolean', 106),
-    ('dash_extra_state',     'Choice list — one other state', 'Add ONE state beyond the home state', 'boolean', 107),
-    ('dash_all_states',      'Choice list — all states', 'Add any/multiple states (else home + limit)', 'boolean', 108),
+    ('dash_college_fees',    'College & Course Fees', 'Annual tuition + course fees by college / quota / category', 'boolean', 103),
+    ('dash_stipend',         'Stipend · Bond · Penalty', 'Stipend/bond/penalty by college & speciality', 'boolean', 104),
+    ('dash_favourites',      'Favourite colleges (star)', 'Save colleges across the dashboard', 'boolean', 105),
+    ('dash_mentors',         'Mentors — browse & request session', 'Browse mentors, request a paid session', 'boolean', 106),
+    ('dash_choice_home',     'Choice list — home state (self-build)', 'Build a home-state choice list yourself (predictor + manual add)', 'boolean', 107),
+    ('dash_choice_list',     'Choice-List builder (auto, all rounds) + team support', 'Auto-build round-wise choice sheets across states, with GooCampus team editing', 'boolean', 108),
+    ('dash_extra_state',     'Choice list — one other state', 'Add ONE state beyond the home state', 'boolean', 109),
+    ('dash_all_states',      'Choice list — all states', 'Add any/multiple states (else home + limit)', 'boolean', 110),
 ]
 _FREE_SECTIONS = ['dash_predictor', 'dash_cutoff_explorer', 'dash_college_db',
-                  'dash_stipend', 'dash_favourites', 'dash_mentors']
+                  'dash_college_fees', 'dash_stipend', 'dash_favourites', 'dash_mentors',
+                  'dash_choice_home']
 _ALL_PLANS = ['pgcp_free', 'pgcp_starter', 'pgcp_standard', 'pgcp_premium']
 # feature_code -> plan codes included by default
 _DASH_DEFAULTS = {c: list(_ALL_PLANS) for c in _FREE_SECTIONS}
