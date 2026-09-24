@@ -315,5 +315,8 @@ def register_pg_admin(app):
     # payment, starts the subscription and burns the coupon.
     app.add_url_rule('/api/pg/checkout/create-order', 'api_pg_checkout_create_order',
                      api.api_pg_checkout_create_order, methods=['POST'])
+    app.add_url_rule('/admin/pg/pay-test', 'pg_pay_test', api.admin_pg_pay_test, methods=['GET'])
+    app.add_url_rule('/admin/pg/pay-test/verify', 'pg_pay_test_verify',
+                     api.admin_pg_pay_test_verify, methods=['POST'])
     app.add_url_rule('/api/pg/checkout/verify', 'api_pg_checkout_verify',
                      api.api_pg_checkout_verify, methods=['POST'])

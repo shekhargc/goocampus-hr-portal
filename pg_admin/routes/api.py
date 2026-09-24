@@ -1399,6 +1399,100 @@ def api_pg_checkout_verify():
         conn.close()
 
 
+def _pay_test_admin():
+    from core.users import get_user
+    u = get_user()
+    return u if (u and u.get('is_admin')) else None
+
+
+def admin_pg_pay_test():
+    """GET /admin/pg/pay-test?amount=1 — admin-only LIVE Razorpay health check. Creates a
+    real ₹amount order with the portal's keys and opens Razorpay Checkout; on payment it
+    verifies the signature. Confirms keys + order API + checkout + signature all work.
+    Does NOT create any subscription. (founder 2026-09-24)"""
+    import time as _t
+    if not _pay_test_admin():
+        return Response('Access denied', status=403)
+    key_id, key_secret = _razorpay_creds()
+    def _pg(body):
+        return Response("<!doctype html><meta charset=utf-8><title>Razorpay test</title>"
+                        "<body style='font-family:system-ui;padding:32px;max-width:640px;margin:0 auto;color:#1e293b'>"
+                        + body + "</body>", mimetype='text/html')
+    if not (key_id and key_secret):
+        return _pg("<h2>❌ Razorpay is NOT configured</h2><p>The portal environment is missing "
+                   "<code>RAZORPAY_KEY_ID</code> / <code>RAZORPAY_KEY_SECRET</code>. Payments cannot run "
+                   "until these are set on the portal (Render env). Nothing else is wrong.</p>")
+    try:
+        amount = max(1, int(request.args.get('amount', 1)))
+    except (TypeError, ValueError):
+        amount = 1
+    paise = amount * 100
+    mode = 'LIVE (real money)' if key_id.startswith('rzp_live') else 'TEST (no real charge)'
+    import requests as _rq
+    try:
+        rr = _rq.post('https://api.razorpay.com/v1/orders', auth=(key_id, key_secret),
+                      json={'amount': paise, 'currency': 'INR', 'receipt': f'paytest_{int(_t.time())}',
+                            'notes': {'purpose': 'gateway health test'}}, timeout=20)
+    except Exception as e:
+        return _pg(f"<h2>❌ Cannot reach Razorpay</h2><pre>{e}</pre>"
+                   "<p>The keys exist but the order request failed (network/gateway).</p>")
+    if rr.status_code not in (200, 201):
+        return _pg(f"<h2>❌ Razorpay rejected the order ({rr.status_code})</h2>"
+                   f"<pre>{rr.text[:500]}</pre><p>Usually means the API keys are wrong or the account "
+                   "is not activated for payments.</p>")
+    order = rr.json()
+    html = ("<h2>Razorpay gateway test</h2>"
+            "<p>Mode: <b>__MODE__</b> · Key: <code>__KEYID__</code> · Order: <code>__OID__</code></p>"
+            "<p>Order created successfully ✅ — the keys and the order API work. Now complete the "
+            "<b>₹__AMT__</b> payment to confirm the full round-trip (checkout + signature verify).</p>"
+            "<button id='payb' style='background:#F58220;color:#fff;border:none;border-radius:8px;"
+            "padding:12px 22px;font-weight:700;font-size:16px;cursor:pointer'>Pay ₹__AMT__ now</button>"
+            "<div id='result' style='margin-top:20px;font-size:16px;font-weight:600'></div>"
+            "<script src='https://checkout.razorpay.com/v1/checkout.js'></script>"
+            "<script>"
+            "document.getElementById('payb').onclick=function(){"
+            " var rzp=new Razorpay({key:'__KEYID__',amount:__PAISE__,currency:'INR',order_id:'__OID__',"
+            "  name:'GooCampus',description:'Gateway health test ₹__AMT__',theme:{color:'#F58220'},"
+            "  handler:function(resp){"
+            "   fetch('/admin/pg/pay-test/verify',{method:'POST',headers:{'Content-Type':'application/json'},"
+            "    body:JSON.stringify({order_id:resp.razorpay_order_id||'__OID__',payment_id:resp.razorpay_payment_id,signature:resp.razorpay_signature})})"
+            "   .then(function(r){return r.json();}).then(function(j){"
+            "    document.getElementById('result').innerHTML= j.ok?"
+            "     '<span style=\"color:#166534\">✅ Payment captured AND signature verified — the gateway is fully working. Payment id: '+j.payment_id+'</span>':"
+            "     '<span style=\"color:#b91c1c\">❌ Verify failed: '+(j.error||'')+'</span>';"
+            "   });"
+            "  },"
+            "  modal:{ondismiss:function(){document.getElementById('result').innerHTML='<span style=\"color:#92400e\">Payment popup closed — the order was created fine; complete a payment to fully confirm.</span>';}}"
+            " });"
+            " rzp.on('payment.failed',function(r){document.getElementById('result').innerHTML='<span style=\"color:#b91c1c\">❌ Payment failed: '+(r.error&&r.error.description||'')+'</span>';});"
+            " rzp.open();"
+            "};"
+            "</script>")
+    html = (html.replace('__MODE__', mode).replace('__KEYID__', key_id)
+                .replace('__OID__', order['id']).replace('__PAISE__', str(paise))
+                .replace('__AMT__', str(amount)))
+    return _pg(html)
+
+
+def admin_pg_pay_test_verify():
+    """POST /admin/pg/pay-test/verify {order_id, payment_id, signature} → HMAC check only."""
+    if not _pay_test_admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    key_id, key_secret = _razorpay_creds()
+    if not key_secret:
+        return jsonify({'ok': False, 'error': 'payments_not_configured'}), 503
+    data = request.get_json(silent=True) or {}
+    oid = (data.get('order_id') or '').strip()
+    pid = (data.get('payment_id') or '').strip()
+    sig = (data.get('signature') or '').strip()
+    if not (oid and pid and sig):
+        return jsonify({'ok': False, 'error': 'missing_fields'}), 400
+    import hmac as _hmac, hashlib as _hl
+    expected = _hmac.new(key_secret.encode(), f"{oid}|{pid}".encode(), _hl.sha256).hexdigest()
+    ok = _hmac.compare_digest(expected, sig)
+    return jsonify({'ok': ok, 'payment_id': pid, 'error': ('' if ok else 'signature_mismatch')})
+
+
 def api_pg_bookings():
     """GET  /api/pg/bookings  → the logged-in doctor's session requests.
        POST /api/pg/bookings {mentor_id, session_mode, reason} → record INTEREST
