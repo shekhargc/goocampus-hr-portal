@@ -39172,6 +39172,90 @@ def sales_inquiry_view(inq_id):
                            reg_doctor=reg_doctor, statuses=INQUIRY_STATUSES, active_section='sales')
 
 
+@app.route('/sales/inquiries/<int:inq_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def sales_inquiry_delete(inq_id):
+    """Admin-only: delete a website inquiry (e.g. a test record) + its follow-ups."""
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM sales_lead_followups WHERE lead_id = ?", (inq_id,))
+        conn.execute("DELETE FROM sales_leads WHERE id = ? AND COALESCE(is_inquiry,0)=1", (inq_id,))
+        conn.commit()
+        flash('Inquiry deleted.', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("sales_inquiry_delete: %s", e)
+        flash('Could not delete the inquiry.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('sales_inquiries_list'))
+
+
+@app.route('/admin/inquiries/dedupe', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_inquiry_dedupe():
+    """One-time cleanup: merge duplicate website inquiries that share a mobile (last-10).
+    Keeps the OLDEST row, rolls the enquiry_count + follow-ups into it, deletes the rest."""
+    from flask import get_flashed_messages
+    conn = get_db()
+    _ensure_inquiry_schema(conn)
+    try:
+        groups = [dict(r) for r in conn.execute(
+            "SELECT RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) AS m10, "
+            "COUNT(*) AS n, MIN(id) AS keep_id, string_agg(id::text, ',' ORDER BY id) AS ids, "
+            "MAX(lead_name) AS name "
+            "FROM sales_leads WHERE COALESCE(is_inquiry,0)=1 "
+            "AND RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) <> '' "
+            "GROUP BY 1 HAVING COUNT(*) > 1 ORDER BY n DESC").fetchall()]
+        if request.method == 'POST':
+            merged = removed = 0
+            for g in groups:
+                ids = [int(x) for x in g['ids'].split(',')]
+                keep = min(ids)
+                extras = [i for i in ids if i != keep]
+                if not extras:
+                    continue
+                allph = ','.join(['?'] * len(ids))
+                total = conn.execute(
+                    f"SELECT COALESCE(SUM(COALESCE(enquiry_count,1)),0) AS c FROM sales_leads WHERE id IN ({allph})",
+                    ids).fetchone()['c']
+                exph = ','.join(['?'] * len(extras))
+                conn.execute("UPDATE sales_leads SET enquiry_count = ? WHERE id = ?", (total, keep))
+                conn.execute(f"UPDATE sales_lead_followups SET lead_id = ? WHERE lead_id IN ({exph})",
+                             [keep] + extras)
+                conn.execute(f"DELETE FROM sales_leads WHERE id IN ({exph})", extras)
+                merged += 1; removed += len(extras)
+            conn.commit()
+            flash(f'Merged {merged} duplicate group(s); removed {removed} duplicate inquiry row(s).', 'success')
+            conn.close()
+            return redirect(url_for('admin_inquiry_dedupe'))
+    except Exception as e:
+        conn.rollback(); logging.error("admin_inquiry_dedupe: %s", e)
+        groups = []
+    finally:
+        try: conn.close()
+        except Exception: pass
+    fl = "".join(f"<div style='padding:10px 14px;border-radius:8px;margin-bottom:10px;background:#dcfce7;color:#166534;'>{m}</div>"
+                 for c, m in get_flashed_messages(with_categories=True))
+    trs = "".join(
+        f"<tr><td style='padding:6px 10px'>{g['name'] or '—'}</td><td style='padding:6px 10px'>…{g['m10']}</td>"
+        f"<td style='padding:6px 10px'>{g['n']}</td>"
+        f"<td style='padding:6px 10px'>keep #{g['keep_id']}, remove {', '.join('#'+x for x in g['ids'].split(',') if int(x)!=g['keep_id'])}</td></tr>"
+        for g in groups)
+    btn = (f"<form method='POST'><button style='padding:9px 16px;background:#F58220;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer'>Merge all {len(groups)} duplicate group(s)</button></form>"
+           if groups else "<p style='color:#166534'>✅ No duplicate inquiries.</p>")
+    return (f"<!doctype html><meta charset=utf-8><title>Merge duplicate inquiries</title>"
+            f"<body style='font-family:system-ui;padding:24px;max-width:900px;margin:0 auto;color:#1e293b'>"
+            f"<h2>Merge duplicate inquiries</h2>{fl}"
+            f"<p>Inquiries sharing a mobile number. Merging keeps the oldest, adds up the enquiry counts, "
+            f"moves follow-ups to it, and removes the extras.</p>{btn}"
+            f"<table border=1 cellpadding=0 cellspacing=0 style='border-collapse:collapse;margin-top:14px;width:100%;font-size:13px'>"
+            f"<tr style='background:#f1f5f9'><th style='padding:6px 10px'>Name</th><th style='padding:6px 10px'>Mobile</th>"
+            f"<th style='padding:6px 10px'>Count</th><th style='padding:6px 10px'>Action</th></tr>{trs}</table>"
+            f"<p style='margin-top:16px'><a href='/sales/inquiries'>← Back to Inquiries</a></p></body>")
+
+
 @app.route('/sales/inquiries/<int:inq_id>/status', methods=['POST'])
 @login_required
 @sales_write_required

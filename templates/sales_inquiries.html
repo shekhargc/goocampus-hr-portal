@@ -32,6 +32,7 @@
     <div class="sub">Website enquiries from <strong>goocampus.in</strong>. These are not hot leads yet — follow up here, and <strong>Convert to Lead</strong> when one is ready for the sales pipeline.</div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    {% if user and user.is_admin %}<a class="btn" style="background:#fff;border:1px solid #cbd5e1;color:#334155;" href="/admin/inquiries/dedupe">🧹 Merge duplicates</a>{% endif %}
     {% if user and user.is_admin %}<a class="btn" style="background:#fff;border:1px solid #cbd5e1;color:#334155;" href="/admin/inquiry-sheet">⚙ Google Sheet sync</a>{% endif %}
     <a class="btn" style="background:#fff;border:1px solid #cbd5e1;color:#334155;" href="/sales/leads">Go to Leads →</a>
   </div>
