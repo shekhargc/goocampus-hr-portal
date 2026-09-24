@@ -4,11 +4,13 @@
 <style>
   :root{--navy:#1B2A4A;--orange:#F58220;}
   .iv-back{color:var(--orange);text-decoration:none;font-weight:600;font-size:.85rem;}
-  .iv-hero{background:linear-gradient(135deg,#0F1B33,#22324f);color:#fff;border-radius:14px;padding:1.3rem 1.5rem;margin:.6rem 0 1.1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;}
-  .iv-hero .who{display:flex;align-items:center;gap:14px;}
-  .iv-av{width:52px;height:52px;border-radius:50%;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:800;flex-shrink:0;}
-  .iv-hero h1{margin:0;font-size:1.35rem;font-weight:700;}
-  .iv-hero .meta{font-size:.82rem;color:#aeb9cc;margin-top:3px;}
+  .iv-hero{background:#fff;border:1px solid #e2e8f0;color:var(--navy);border-radius:14px;padding:1.3rem 1.5rem;margin:.6rem 0 1.1rem;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .iv-hero .who{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;}
+  .iv-av{width:72px;height:72px;border-radius:50%;background:#FFF7ED;border:3px solid #FED7AA;color:#F97316;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:800;flex-shrink:0;}
+  .iv-hero h1{margin:0;font-size:1.5rem;font-weight:800;color:var(--navy);}
+  .iv-hero .meta{font-size:.82rem;color:#64748b;margin-top:3px;}
+  .iv-strip{display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;border-top:1px solid #f1f5f9;margin-top:1rem;padding-top:.85rem;font-size:.82rem;}
+  .iv-strip .k{color:#64748b;} .iv-strip .v{color:var(--navy);font-weight:600;}
   .pill{display:inline-block;padding:5px 13px;border-radius:999px;font-size:12px;font-weight:700;}
   .s-New{background:#dbeafe;color:#1e40af;} .s-Contacted{background:#fef9c3;color:#a16207;}
   .s-Followup{background:#ffedd5;color:#c2410c;} .s-Interested{background:#dcfce7;color:#15803d;}
@@ -41,17 +43,21 @@
 <div class="iv-hero">
   <div class="who">
     <div class="iv-av">{{ (inq.lead_name or 'W')[:1]|upper }}</div>
-    <div>
+    <div style="flex:1;">
       <h1>{{ inq.lead_name or 'Website enquiry' }}</h1>
-      <div class="meta">🌐 goocampus.in inquiry · received {{ inq.created_at|format_datetime }}</div>
-      {% if reg_doctor %}
-      <div style="margin-top:6px;"><a href="/admin/pg/users/{{ reg_doctor.id }}" style="display:inline-block;background:#dcfce7;color:#166534;font-size:0.78rem;font-weight:700;padding:3px 10px;border-radius:20px;text-decoration:none;">✓ Registered doctor{% if reg_doctor.state %} · {{ reg_doctor.state }}{% endif %} — view profile →</a></div>
-      {% else %}
-      <div style="margin-top:6px;"><span style="display:inline-block;background:#f1f5f9;color:#64748b;font-size:0.78rem;font-weight:600;padding:3px 10px;border-radius:20px;">Not a registered user (enquiry only)</span></div>
-      {% endif %}
+      <div class="meta">🌐 goocampus.in enquiry</div>
+      <div style="margin-top:0.55rem;display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+        <span class="pill s-{{ (inq.inquiry_status or 'New')|replace(' ','')|replace('-','') }}">{{ inq.inquiry_status or 'New' }}</span>
+        {% if reg_doctor %}<a href="/admin/pg/users/{{ reg_doctor.id }}" class="pill" style="background:#dcfce7;color:#166534;text-decoration:none;">✓ Registered doctor{% if reg_doctor.state %} · {{ reg_doctor.state }}{% endif %} →</a>{% else %}<span class="pill" style="background:#f1f5f9;color:#64748b;">Enquiry only</span>{% endif %}
+        {% if inq.enquiry_count and inq.enquiry_count > 1 %}<span class="pill" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;">↻ Enquired {{ inq.enquiry_count }}×</span>{% endif %}
+      </div>
     </div>
   </div>
-  <span class="pill s-{{ (inq.inquiry_status or 'New')|replace(' ','')|replace('-','') }}">{{ inq.inquiry_status or 'New' }}</span>
+  <div class="iv-strip">
+    <span><span class="k">Phone:</span> <span class="v">{{ inq.phone or '—' }}</span></span>
+    <span><span class="k">Email:</span> <span class="v">{{ inq.email or '—' }}</span></span>
+    <span><span class="k">Received:</span> <span class="v">{{ inq.created_at|format_datetime }}</span></span>
+  </div>
 </div>
 
 <div class="note">This is a <strong>website inquiry from goocampus.in</strong> — not a hot lead yet. Log your follow-ups below; hit <strong>Convert to Lead</strong> once they're ready for the sales pipeline.</div>

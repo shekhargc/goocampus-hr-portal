@@ -91,6 +91,7 @@
         {% elif u.plan_name %}<span class="chip chip-orange">{{ u.plan_name }}</span>
         {% else %}<span class="chip chip-gray">Free</span>{% endif %}
         {% if u.plan_source == 'admin_grant' %}<div class="pu-sub">granted</div>{% endif %}
+        {% if u.inquiry_id %}<div style="margin-top:3px;"><a href="/sales/inquiries/{{ u.inquiry_id }}" style="text-decoration:none;font-size:0.66rem;font-weight:700;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;padding:1px 7px;border-radius:20px;white-space:nowrap;">📞 Booked a call</a></div>{% endif %}
       </td>
       <td>{% if u.plan_expires_at %}{{ u.plan_expires_at.strftime('%d %b %Y') }}{% else %}—{% endif %}</td>
       <td>{% if u.created_at %}{{ u.created_at.strftime('%d %b %Y') }}{% endif %}</td>
