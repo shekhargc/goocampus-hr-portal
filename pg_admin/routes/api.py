@@ -395,8 +395,13 @@ def api_pg_predictor():
             "       fee, stipend, bond_years, penalty, r1, r2, r3, r4, stray, closing_rank, "
             "       college_id, COALESCE(institute_type,'') AS institution_type "
             f"  FROM pg_cutoffs WHERE {where_sql} "
-            "  ORDER BY closing_rank ASC NULLS LAST, institute ASC LIMIT ?",
-            params + [limit]).fetchall()
+            # When the scope has more rows than the cap, keep the seats RELEVANT to this
+            # rank — reachable + a stretch band (closing_rank >= rank*0.7) — first, so we
+            # never truncate away the candidate's actual options in favour of the globally
+            # most-competitive (unreachable) seats. Within each band, best (lowest) first.
+            "  ORDER BY (CASE WHEN closing_rank IS NOT NULL AND closing_rank >= ? THEN 0 ELSE 1 END), "
+            "           closing_rank ASC NULLS LAST, institute ASC LIMIT ?",
+            params + [int(rank * 0.7), limit]).fetchall()
         # Resolve each institute → unified college-master id so the site can link a
         # predicted college to its full profile (founder 2026-09-21). alias_key is the
         # normalised name; build a lookup once and attach below.
