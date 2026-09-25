@@ -230,17 +230,23 @@
                 {# Signed contract: sales attaches the client's signed contract here when
                    sending the invite. The client reads it and digitally agrees in their
                    dashboard after Review & Submit (they already physically signed). #}
-                <div style="margin-top:0.9rem;padding-top:0.8rem;border-top:1px dashed var(--gray-200);">
+                <div id="contractBlock" style="margin-top:0.9rem;padding-top:0.8rem;border-top:1px dashed var(--gray-200);">
                     <label class="slf-lbl">Signed Contract <span style="font-weight:400;color:var(--gray-500);">(PDF / image — the client reads &amp; digitally agrees after registering)</span></label>
                     {% if closure and closure.contract_path %}
                     <div style="font-size:0.8rem;color:#166534;font-weight:600;margin:0.15rem 0 0.35rem;">&#10003; Contract already on file — choose a new file only to replace it.</div>
                     {% endif %}
                     {# The signed agreement is MANDATORY (founder 2026-07-24) — but only when
-                       one isn't already on file, so editing an existing lead doesn't force a re-upload. #}
-                    <input type="file" name="contract_file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                       one isn't already on file, so editing an existing lead doesn't force a re-upload.
+                       EXCEPTION: standalone AMC MCQ is training-only (no agreement) — the JS below
+                       drops `required` + hides this block when the product is AMC MCQ. (founder 2026-09-25) #}
+                    <input type="file" id="contractFile" name="contract_file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                            {% if not (closure and closure.contract_path) %}required{% endif %}
                            style="width:100%;padding:0.5rem 0.6rem;border:1px dashed var(--gray-300);border-radius:0.4rem;font-size:0.82rem;box-sizing:border-box;background:#FAFAFA;" />
                     <p style="margin:0.3rem 0 0;font-size:0.72rem;color:var(--gray-500);">Max 15 MB. {% if closure and closure.contract_path %}Choose a file only to replace the one on file.{% else %}<b>Required</b> — the client reads &amp; digitally signs it after registering.{% endif %}</p>
+                </div>
+                {# Shown instead of the contract box for standalone AMC MCQ (training-only). #}
+                <div id="contractSkipNote" style="display:none;margin-top:0.9rem;padding:0.7rem 0.9rem;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:0.5rem;font-size:0.82rem;color:#166534;">
+                    &#10003; <b>AMC MCQ is training-only</b> — no signed agreement needed, so the client won't get an Agreement step. (They still sign the Refund Policy.)
                 </div>
 
                 {# ===== Welcome Call handling (founder 2026-07-22) ===== #}
@@ -402,7 +408,34 @@
                 prodDisp.textContent = (po && po.value) ? po.textContent : '—';
                 planDisp.textContent = planSel.value || '—';
                 if (window.syncTrainingToggle) window.syncTrainingToggle();
+                syncContractRequirement();
             }
+            // Standalone AMC MCQ is training-only → no signed agreement. Drop the
+            // required contract + hide the box when the main product is AMC MCQ; keep
+            // it (as configured) for every other product and for the Consulting+MCQ
+            // combo (whose main product is Consulting). (founder 2026-09-25)
+            var contractDefaultRequired = {{ 'false' if (closure and closure.contract_path) else 'true' }};
+            function isAmcMcqProduct() {
+                var po = productSel.options[productSel.selectedIndex];
+                var name = ((po && po.textContent) || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                return name.indexOf('amc mcq') !== -1;   // matches "AMC MCQ" / "AMC MCQ (AMC 1)"; not "AMC Consulting"
+            }
+            window.syncContractRequirement = function() {
+                var block = document.getElementById('contractBlock');
+                var file  = document.getElementById('contractFile');
+                var note  = document.getElementById('contractSkipNote');
+                if (!file) return;
+                if (isAmcMcqProduct()) {
+                    file.required = false;
+                    try { file.value = ''; } catch (e) {}
+                    if (block) block.style.display = 'none';
+                    if (note)  note.style.display = 'block';
+                } else {
+                    file.required = contractDefaultRequired;
+                    if (block) block.style.display = '';
+                    if (note)  note.style.display = 'none';
+                }
+            };
             var svcBox  = document.getElementById('pkgServicesBox');
             var svcList = document.getElementById('pkgServicesList');
             function loadPlanPackage(autoFill) {
@@ -535,7 +568,7 @@
                         afterWL();
                     }).catch(function(){ amcBox.style.display = 'none'; });
             };
-            if (productSel) productSel.addEventListener('change', function(){ loadPlans(false); });
+            if (productSel) productSel.addEventListener('change', function(){ syncContractRequirement(); loadPlans(false); });
             if (planSel) planSel.addEventListener('change', function(){ updateDisplays(); loadPlanPackage(true); amcAudCheck(); });
             if (productSel && productSel.value) loadPlans(true);
             syncPackage();
