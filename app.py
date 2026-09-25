@@ -4967,7 +4967,14 @@ def client_dashboard():
     # passed the contract/refund/welcome-call gates to reach here), show the new
     # full SaaS dashboard. While they're still filling the form / uploading the
     # photo, keep the original onboarding flow. (founder 2026-07-30)
-    _primary = registrations[0] if registrations else None
+    # The combined add-on (AMC 1 / Training) is auto-created as 'submitted' but is NOT a
+    # fillable form. registrations is ordered created_at DESC, so the later-created add-on
+    # came FIRST and wrongly became the primary — flipping a mid-onboarding combined client
+    # into the onboarded dashboard (bound to the add-on) while their real MAIN registration
+    # was still a draft they could never reach. Always prefer a non-add-on registration.
+    # (founder 2026-09-25 — Samreen Mulla stuck: couldn't fill academic / welcome call)
+    _non_addon = [r for r in registrations if not r.get('is_combined_addon')]
+    _primary = (_non_addon[0] if _non_addon else (registrations[0] if registrations else None))
     _onboarded = bool(_primary and (_primary.get('form_status') if hasattr(_primary, 'get')
                                     else _primary['form_status']) == 'submitted')
     # The client may edit their own details until operations verifies the record;
