@@ -1,0 +1,69 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Home-state backfill{% endblock %}
+{% block section_content %}
+<div style="max-width:1050px;margin:0 auto;padding:2rem 1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem;">Counselling home-state backfill</h1>
+  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.88rem;max-width:75ch;">
+    Sets each doctor's <strong>locked counselling home state</strong> to their <strong>profile state</strong>
+    (the state on their registration). For doctors who registered before the state edit-sync existed and
+    are stuck. Profile states that aren't a clean state name are skipped for manual review.
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+    <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                background:{{ '#DCFCE7' if cat=='success' else ('#FEE2E2' if cat=='error' else '#e0f2fe') }};
+                color:{{ '#166534' if cat=='success' else ('#991B1B' if cat=='error' else '#075985') }};">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  {% set stat = 'background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:0.9rem 1.1rem;' %}
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.9rem;margin-bottom:1.3rem;">
+    <div style="{{ stat }}"><div style="font-size:0.72rem;color:var(--gray-500);text-transform:uppercase;">Missing home</div><div style="font-size:1.5rem;font-weight:800;color:#b45309;">{{ missing|length }}</div></div>
+    <div style="{{ stat }}"><div style="font-size:0.72rem;color:var(--gray-500);text-transform:uppercase;">Mismatch</div><div style="font-size:1.5rem;font-weight:800;color:#b91c1c;">{{ mismatch|length }}</div></div>
+    <div style="{{ stat }}"><div style="font-size:0.72rem;color:var(--gray-500);text-transform:uppercase;">Already correct</div><div style="font-size:1.5rem;font-weight:800;color:#166534;">{{ consistent|length }}</div></div>
+    <div style="{{ stat }}"><div style="font-size:0.72rem;color:var(--gray-500);text-transform:uppercase;">Skip (junk)</div><div style="font-size:1.5rem;font-weight:800;color:var(--gray-500);">{{ junk|length }}</div></div>
+  </div>
+
+  {% set apply_n = missing|length + mismatch|length %}
+  <form method="POST" onsubmit="return confirm('Apply to {{ apply_n }} doctor(s)? This sets their locked counselling home state to their profile state.');" style="margin-bottom:1.6rem;">
+    <button type="submit" {{ 'disabled' if apply_n == 0 }}
+            style="background:{{ 'var(--gray-300)' if apply_n == 0 else 'var(--orange)' }};color:#fff;border:none;border-radius:8px;padding:0.7rem 1.5rem;font-weight:700;font-size:0.9rem;cursor:{{ 'default' if apply_n == 0 else 'pointer' }};">
+      {% if apply_n == 0 %}Nothing to backfill{% else %}Apply backfill to {{ apply_n }} doctor(s){% endif %}
+    </button>
+    <span style="font-size:0.78rem;color:var(--gray-500);margin-left:10px;">Junk rows are never touched — fix those on each profile.</span>
+  </form>
+
+  {% macro tbl(title, rows, colour, show_home) %}
+  {% if rows %}
+  <h3 style="font-size:0.95rem;font-weight:800;color:{{ colour }};margin:1.2rem 0 0.5rem;">{{ title }} ({{ rows|length }})</h3>
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;overflow:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.83rem;white-space:nowrap;">
+      {% set hs = 'padding:0.55rem 0.85rem;text-align:left;font-size:0.68rem;text-transform:uppercase;color:var(--gray-500);border-bottom:1px solid var(--gray-200);background:var(--gray-50);' %}
+      <thead><tr><th style="{{ hs }}">Doctor</th><th style="{{ hs }}">Mobile</th>
+        {% if show_home %}<th style="{{ hs }}">Locked home now</th>{% endif %}
+        <th style="{{ hs }}">Profile state{{ ' → new home' if show_home else ' → will lock' }}</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:0.5rem 0.85rem;"><a href="/admin/pg/users/{{ r.id }}" style="color:var(--navy);font-weight:600;text-decoration:none;">{{ r.name or '(no name)' }}</a></td>
+          <td style="padding:0.5rem 0.85rem;color:var(--gray-500);">{{ r.mobile }}</td>
+          {% if show_home %}<td style="padding:0.5rem 0.85rem;color:#b91c1c;">{{ r.home_state or '—' }}</td>{% endif %}
+          <td style="padding:0.5rem 0.85rem;font-weight:700;color:#166534;">{{ r.profile_state }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endmacro %}
+
+  {{ tbl('Missing counselling home state — will be created', missing, '#b45309', false) }}
+  {{ tbl('Mismatch — locked home differs, will be overwritten', mismatch, '#b91c1c', true) }}
+  {{ tbl('Skipped — profile state is not a clean state (fix manually on the profile)', junk, '#6b7280', true) }}
+
+  {% if not missing and not mismatch and not junk %}
+  <p style="color:var(--gray-500);font-size:0.9rem;">Every doctor's counselling home state already matches their profile state. Nothing to do.</p>
+  {% endif %}
+</div>
+{% endblock %}

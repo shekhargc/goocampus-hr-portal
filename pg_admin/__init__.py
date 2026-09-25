@@ -23,7 +23,8 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
                              bookings_admin, college_master_admin, api_college,
                              pgcp_admin, api_pgcp, api_choice, choice_admin,
-                             api_events, events_admin, api_track, analytics_admin)
+                             api_events, events_admin, api_track, analytics_admin,
+                             diag_home_state)
 
 
 def register_pg_admin(app):
@@ -282,6 +283,8 @@ def register_pg_admin(app):
                      users_admin.user_detail, methods=['GET'])
     app.add_url_rule('/admin/pg/diag/plan', 'pg_plan_diag',
                      users_admin.plan_diag, methods=['GET'])
+    app.add_url_rule('/admin/pg/diag/home-state', 'pg_home_state_backfill',
+                     diag_home_state.home_state_backfill, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/save', 'pg_user_save',
                      users_admin.user_save, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/block', 'pg_user_block',
