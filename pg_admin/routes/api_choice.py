@@ -618,6 +618,25 @@ def api_pg_my_states():
         if request.method == 'GET':
             return jsonify(_payload())
 
+        if request.method == 'DELETE':
+            # Remove a NON-home state (add/remove at will — Premium etc.). The home/domicile
+            # state is fixed and can never be removed. (founder 2026-09-25)
+            dstate = (request.args.get('state')
+                      or (request.get_json(silent=True) or {}).get('state') or '').strip()
+            if not dstate:
+                return jsonify({'ok': False, 'error': 'state required'}), 400
+            row = conn.execute("SELECT id, role FROM pg_doctor_states WHERE user_id = ? "
+                               "AND LOWER(state) = LOWER(?) ORDER BY id LIMIT 1",
+                               [uid, dstate]).fetchone()
+            if not row:
+                return jsonify(_payload())          # already gone — idempotent
+            if (row['role'] or '') == 'home':
+                return jsonify({'ok': False, 'error': 'home_fixed',
+                                'message': 'Your home / domicile state is fixed and cannot be removed.'}), 403
+            conn.execute("DELETE FROM pg_doctor_states WHERE id = ?", [row['id']])
+            conn.commit()
+            return jsonify(_payload())
+
         body = request.get_json(silent=True) or {}
         state = (body.get('state') or '').strip()
         role = (body.get('role') or 'other').strip()
@@ -639,8 +658,10 @@ def api_pg_my_states():
                 return jsonify({'ok': False, 'error': 'limit', 'message': msg}), 403
         if any(s['state'].strip().lower() == state.lower() for s in existing):
             return jsonify({'ok': True, 'already': True})   # idempotent
-        conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) VALUES (?,?,?,1)",
-                     [uid, state, 'home' if role == 'home' else 'other'])
+        # Home is locked (fixed domicile); 'other' states are removable at will.
+        _is_home = (role == 'home')
+        conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) VALUES (?,?,?,?)",
+                     [uid, state, 'home' if _is_home else 'other', 1 if _is_home else 0])
         conn.commit()
         return jsonify(_payload())
     except Exception as e:

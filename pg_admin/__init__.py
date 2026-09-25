@@ -177,7 +177,7 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/choice-entitlement', 'api_pg_choice_entitlement',
                      api_choice.api_pg_choice_entitlement, methods=['GET'])
     app.add_url_rule('/api/pg/my-states', 'api_pg_my_states',
-                     api_choice.api_pg_my_states, methods=['GET', 'POST'])
+                     api_choice.api_pg_my_states, methods=['GET', 'POST', 'DELETE'])
     app.add_url_rule('/api/pg/choice-sets', 'api_pg_choice_sets',
                      api_choice.api_pg_choice_sets, methods=['GET', 'POST'])
     app.add_url_rule('/api/pg/choice-sets/<int:set_id>', 'api_pg_choice_set',
