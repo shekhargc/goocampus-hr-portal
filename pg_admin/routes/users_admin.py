@@ -19,6 +19,28 @@ from pg_admin.data import entitlements
 _PER_PAGE = 50
 _PERIOD_DAYS = {'monthly': 30, 'quarterly': 90, 'half_yearly': 182, 'yearly': 365}
 
+# Canonical 28 states + 8 UTs — the SAME set the goocampus.in home-state dropdown uses,
+# so the team picks from a fixed list (no free-typed / mis-spelt states). Mirrors
+# app._CANONICAL_STATES; lazily imported with a local fallback so boot order can't break
+# the page. (founder 2026-09-25 — make the admin state field a dropdown)
+_STATES_FALLBACK = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa',
+    'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala',
+    'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland',
+    'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Andaman and Nicobar Islands',
+    'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+]
+
+
+def _canonical_states():
+    try:
+        from app import _CANONICAL_STATES
+        return list(_CANONICAL_STATES) or list(_STATES_FALLBACK)
+    except Exception:
+        return list(_STATES_FALLBACK)
+
 
 def _require_admin():
     user = get_user()
@@ -348,7 +370,8 @@ def user_detail(user_id):
                            favorites=favorites, states=states, choice_sets=choice_sets,
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
                            choice_team_editable=choice_team_editable, activity=activity,
-                           enquiry=enquiry, active_section='goocampus_in')
+                           enquiry=enquiry, state_options=_canonical_states(),
+                           active_section='goocampus_in')
 
 
 @login_required
@@ -375,6 +398,11 @@ def user_save(user_id):
         'admin_notes': (form.get('admin_notes') or '').strip(),
         'updated_by': admin.get('name') or '',
     }
+    # Defensive: an empty state submit (e.g. left on "— Select state —") must not wipe a
+    # doctor's set home state — the dropdown defaults to their current value, so blank
+    # means "no change". Only touch state when a value is chosen.
+    if not fields['state']:
+        fields.pop('state')
     conn = get_db()
     try:
         try:
@@ -389,7 +417,7 @@ def user_save(user_id):
         # pg_doctor_states (role='home'), which drives the counselling home-state
         # choice list. The team can correct it here → keep both in sync so the
         # choice list follows. (founder 2026-09-25 — admin can fix a wrong state)
-        st = fields['state']
+        st = fields.get('state')
         if st:
             home = conn.execute("SELECT id FROM pg_doctor_states WHERE user_id = ? "
                                 "AND role = 'home'", (user_id,)).fetchone()
