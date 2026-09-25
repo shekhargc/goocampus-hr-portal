@@ -26,11 +26,13 @@ def _deg_clause(dg):
     # degree code, and degree_group was mislabeled 'other' for 2025 — so match NBEMS in the
     # course too, or degree_group=dnb, so the DNB filter isn't dead. The '%DNB%' stays the
     # bound param; NBEMS is a fixed literal (escaped by the ?->%s shim). (2026-09-25)
+    # '%DNB%' stays a BOUND param (safe); NBEMS uses POSITION (no literal % — the db shim
+    # doesn't escape %, which errored the cut-off explorer).
     if dg == 'dnb':
-        return ("(UPPER(COALESCE(c.degree,'')) LIKE ? OR UPPER(COALESCE(c.course,'')) LIKE '%NBEMS%' "
+        return ("(UPPER(COALESCE(c.degree,'')) LIKE ? OR POSITION('NBEMS' IN UPPER(COALESCE(c.course,''))) > 0 "
                 "OR LOWER(COALESCE(c.degree_group,'')) = 'dnb')", '%DNB%')
     if dg == 'mdms':
-        return ("(UPPER(COALESCE(c.degree,'')) NOT LIKE ? AND UPPER(COALESCE(c.course,'')) NOT LIKE '%NBEMS%')", '%DNB%')
+        return ("(UPPER(COALESCE(c.degree,'')) NOT LIKE ? AND POSITION('NBEMS' IN UPPER(COALESCE(c.course,''))) = 0)", '%DNB%')
     return None, None
 
 

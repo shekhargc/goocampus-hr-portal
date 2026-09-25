@@ -302,13 +302,17 @@ def _degree_group_sql(dg):
     # — the degree_group column was mislabeled 'other' for the 2025 import and the degree
     # column isn't 'DNB' there — so match NBEMS in the course too (fixes the dead DNB
     # predictor). mdms then excludes those so DNB never leaks into MD/MS. (2026-09-25)
+    # POSITION(...) (no literal % — the db shim doesn't escape %, and this clause runs in
+    # both param-ful and param-less queries) instead of LIKE '%…%'.
     if dg == 'mdms':
-        return ("(UPPER(COALESCE(course,'')) NOT LIKE '%NBEMS%' AND UPPER(COALESCE(degree,'')) NOT LIKE '%DNB%' "
+        return ("(POSITION('NBEMS' IN UPPER(COALESCE(course,''))) = 0 "
+                "AND POSITION('DNB' IN UPPER(COALESCE(degree,''))) = 0 "
                 "AND (LOWER(COALESCE(degree_group,''))='mdms' OR (COALESCE(degree_group,'')='' "
                 "AND UPPER(TRIM(COALESCE(degree,''))) IN ('MD','MS','MD/MS'))))")
     if dg == 'dnb':
-        return ("(LOWER(COALESCE(degree_group,''))='dnb' OR UPPER(COALESCE(degree,'')) LIKE '%DNB%' "
-                "OR UPPER(COALESCE(course,'')) LIKE '%NBEMS%')")
+        return ("(LOWER(COALESCE(degree_group,''))='dnb' "
+                "OR POSITION('DNB' IN UPPER(COALESCE(degree,''))) > 0 "
+                "OR POSITION('NBEMS' IN UPPER(COALESCE(course,''))) > 0)")
     return None
 
 
