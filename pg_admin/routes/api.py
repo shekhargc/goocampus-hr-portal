@@ -298,12 +298,17 @@ def api_pg_mentor_photo(mentor_id):
 # The fragments contain no user input (fixed literals) so they bind no params.
 def _degree_group_sql(dg):
     dg = (dg or '').strip().lower()
+    # DNB rows in pg_cutoffs carry the signal in the COURSE name ("(NBEMS) …" / "NBEMS …")
+    # — the degree_group column was mislabeled 'other' for the 2025 import and the degree
+    # column isn't 'DNB' there — so match NBEMS in the course too (fixes the dead DNB
+    # predictor). mdms then excludes those so DNB never leaks into MD/MS. (2026-09-25)
     if dg == 'mdms':
-        return ("(LOWER(COALESCE(degree_group,''))='mdms' OR (COALESCE(degree_group,'')='' "
-                "AND UPPER(TRIM(COALESCE(degree,''))) IN ('MD','MS','MD/MS')))")
+        return ("(UPPER(COALESCE(course,'')) NOT LIKE '%NBEMS%' AND UPPER(COALESCE(degree,'')) NOT LIKE '%DNB%' "
+                "AND (LOWER(COALESCE(degree_group,''))='mdms' OR (COALESCE(degree_group,'')='' "
+                "AND UPPER(TRIM(COALESCE(degree,''))) IN ('MD','MS','MD/MS'))))")
     if dg == 'dnb':
-        return ("(LOWER(COALESCE(degree_group,''))='dnb' OR (COALESCE(degree_group,'')='' "
-                "AND UPPER(TRIM(COALESCE(degree,''))) LIKE 'DNB%'))")
+        return ("(LOWER(COALESCE(degree_group,''))='dnb' OR UPPER(COALESCE(degree,'')) LIKE '%DNB%' "
+                "OR UPPER(COALESCE(course,'')) LIKE '%NBEMS%')")
     return None
 
 
