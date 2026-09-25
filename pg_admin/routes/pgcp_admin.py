@@ -53,6 +53,62 @@ def pgcp_admin():
 
 
 @login_required
+def pgcp_backfill_profiles():
+    """One-time backfill: push each existing PGCP onboarding's fields into the doctor's
+    pg_users profile (name / NEET-PG score+rank / college / city / home state / photo /
+    speciality) so Registered Doctors + the dashboard reflect what the client entered.
+    Preview (GET) then Apply (POST). Additive — fills blanks, updates score/rank. (2026-09-25)"""
+    u = _admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    from pg_admin.routes.api_pgcp import _sync_onboarding_to_user
+    conn = get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT o.*, u.name AS u_name, u.neet_pg_score AS u_score, u.neet_pg_rank AS u_rank "
+            "FROM pg_pgcp_onboarding o LEFT JOIN pg_users u ON u.id = o.user_id "
+            "WHERE o.user_id IS NOT NULL ORDER BY o.id DESC").fetchall()]
+        if request.method == 'POST':
+            n = 0
+            for r in rows:
+                _sync_onboarding_to_user(conn, r['user_id'], r); n += 1
+            flash(f'Backfilled {n} onboarding(s) into doctor profiles.', 'success')
+            return redirect(url_for('pg_pgcp_backfill_profiles'))
+        esc = lambda s: (str(s) if s is not None else '').replace('<', '&lt;')
+        def cell(v, good=False):
+            v = esc(v).strip()
+            return ("<td style='color:#166534'>" if good else "<td>") + (v or '—') + "</td>"
+        trs = ''.join(
+            "<tr><td>" + str(r['user_id']) + "</td>"
+            + ("<td style='color:#b91c1c;font-weight:700'>(name pending)</td>" if not (r.get('u_name') or '').strip()
+               else "<td>" + esc(r['u_name']) + "</td>")
+            + cell(r.get('official_name'), True)
+            + cell(r.get('u_score')) + cell(r.get('neetpg2026_score'), True)
+            + cell(r.get('u_rank')) + cell(r.get('neetpg2026_rank'), True)
+            + cell(r.get('state'), True) + "</tr>"
+            for r in rows)
+        from flask import get_flashed_messages
+        fl = ''.join("<div style='padding:9px 13px;border-radius:8px;margin-bottom:10px;background:#dcfce7;color:#166534'>"
+                     + esc(m) + "</div>" for c, m in get_flashed_messages(with_categories=True))
+        return ("<!doctype html><meta charset=utf-8><title>PGCP profile backfill</title>"
+                "<body style='font-family:system-ui;padding:24px;color:#1e293b;max-width:1000px;margin:auto'>"
+                "<h2>PGCP onboarding &rarr; doctor profile backfill</h2>" + fl
+                + "<p>" + str(len(rows)) + " onboarding(s). Apply copies each one's name / NEET-PG score+rank / "
+                "college / city / home state / photo / speciality into the doctor's profile "
+                "(fills blanks, updates score/rank) so Registered Doctors + their dashboard reflect it. "
+                "Never clobbers a self-edited name/state.</p>"
+                "<form method=POST onsubmit=\"return confirm('Sync " + str(len(rows)) + " onboarding(s) into doctor profiles?')\">"
+                "<button style='padding:9px 16px;background:#F58220;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700'>"
+                "Apply backfill &rarr; " + str(len(rows)) + " profiles</button></form>"
+                "<table border=1 cellpadding=6 cellspacing=0 style='border-collapse:collapse;margin-top:14px;font-size:13px'>"
+                "<tr style='background:#f1f5f9'><th>user</th><th>name now</th><th>onboarding name</th>"
+                "<th>score now</th><th>onb score</th><th>rank now</th><th>onb rank</th><th>onb home state</th></tr>"
+                + trs + "</table></body>")
+    finally:
+        conn.close()
+
+
+@login_required
 def pgcp_invite_create():
     u = _admin()
     if not u:

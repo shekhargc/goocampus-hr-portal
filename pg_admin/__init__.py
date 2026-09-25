@@ -152,6 +152,8 @@ def register_pg_admin(app):
                      pgcp_admin.pgcp_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/create', 'pg_pgcp_invite_create',
                      pgcp_admin.pgcp_invite_create, methods=['POST'])
+    app.add_url_rule('/admin/pg/pgcp/backfill-profiles', 'pg_pgcp_backfill_profiles',
+                     pgcp_admin.pgcp_backfill_profiles, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/pgcp/client-search', 'pg_pgcp_client_search',
                      pgcp_admin.pgcp_client_search, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/send-email', 'pg_pgcp_send_email',

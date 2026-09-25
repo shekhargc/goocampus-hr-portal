@@ -148,6 +148,63 @@ def _serialize(onb):
     return out
 
 
+def _sync_onboarding_to_user(conn, user_id, onb):
+    """Mirror the onboarding's profile fields into pg_users so the Registered Doctors list,
+    the doctor's dashboard, and the 'complete your profile' gate all reflect what the client
+    entered — fixes 'name pending', the missing NEET-PG score, and the home-state being
+    re-asked after onboarding. Fills name/email/photo/state only when the profile value is
+    empty (never clobbers a self-edited profile); updates score/rank/college/city/speciality.
+    (founder 2026-09-25)"""
+    try:
+        sets, vals = [], []
+        def fill(col, val):   # set only when the pg_users value is currently empty
+            v = (str(val).strip() if val is not None else '')
+            if v:
+                sets.append(f"{col} = COALESCE(NULLIF({col}, ''), ?)"); vals.append(v)
+        def put(col, val):    # overwrite when provided
+            v = (str(val).strip() if val is not None else '')
+            if v:
+                sets.append(f"{col} = ?"); vals.append(v)
+        def put_int(col, val):
+            try:
+                iv = int(float(str(val).replace(',', ''))) if str(val or '').strip() != '' else None
+            except (TypeError, ValueError):
+                iv = None
+            if iv is not None:
+                sets.append(f"{col} = ?"); vals.append(iv)
+        fill('name', onb.get('official_name'))
+        fill('email', onb.get('email'))
+        fill('photo_url', onb.get('photo_url'))
+        put('college', onb.get('mbbs_college'))
+        put('city', onb.get('city'))
+        put_int('neet_pg_score', onb.get('neetpg2026_score'))
+        put_int('neet_pg_rank', onb.get('neetpg2026_rank'))
+        try:
+            specs = json.loads(onb.get('specialities') or '[]')
+            if specs:
+                fill('target_speciality', specs[0])
+        except Exception:
+            pass
+        st = str(onb.get('state') or '').strip()
+        if st:
+            fill('state', st)
+        if sets:
+            conn.execute(f"UPDATE pg_users SET {', '.join(sets)}, updated_at = CURRENT_TIMESTAMP "
+                         "WHERE id = ?", vals + [user_id])
+        # Home/domicile state → the doctor's home state (drives the free choice-list), once.
+        if st:
+            home = conn.execute("SELECT id FROM pg_doctor_states WHERE user_id = ? AND role='home'",
+                                [user_id]).fetchone()
+            if not home:
+                conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) "
+                             "VALUES (?, ?, 'home', 1)", [user_id, st])
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("_sync_onboarding_to_user: %s", e)
+
+
 def api_pgcp_onboarding():
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
@@ -187,6 +244,7 @@ def api_pgcp_onboarding():
                 conn.commit()
                 onb = dict(conn.execute("SELECT * FROM pg_pgcp_onboarding WHERE id = ?",
                                         [onb['id']]).fetchone())
+                _sync_onboarding_to_user(conn, user['id'], onb)   # mirror into the doctor's profile
             return jsonify({'ok': True, 'saved': True})
 
         # Resolve the plan's display name + price so the site can label the plan
@@ -245,6 +303,8 @@ def api_pgcp_submit():
         conn.execute("UPDATE pg_pgcp_invitations SET status='submitted' WHERE id=? "
                      "AND status IN ('invited','started')", [inv['id']])
         conn.commit()
+        onb = dict(conn.execute("SELECT * FROM pg_pgcp_onboarding WHERE id = ?", [onb['id']]).fetchone())
+        _sync_onboarding_to_user(conn, user['id'], onb)   # mirror the final data into the profile
         return jsonify({'ok': True, 'submitted': True})
     except Exception as e:
         try: conn.rollback()
@@ -269,7 +329,7 @@ def auto_grant_internal_premium(conn, user_id, mobile):
             return
         # Internal (free Premium) OR pre-paid (payment_status='paid') — either upgrades.
         inv = conn.execute(
-            "SELECT id, client_type, plan_code, paid_amount, "
+            "SELECT id, client_type, plan_code, paid_amount, client_name, email, "
             "COALESCE(payment_status,'due') AS payment_status "
             "FROM pg_pgcp_invitations WHERE status <> 'cancelled' "
             "AND (client_type = 'internal' OR COALESCE(payment_status,'due') = 'paid') "
@@ -278,6 +338,18 @@ def auto_grant_internal_premium(conn, user_id, mobile):
         if not inv:
             return
         inv = dict(inv)
+        # Backfill the doctor's name/email from the invite when their profile is blank, so an
+        # invited client isn't "name pending" in Registered Doctors before they onboard. (2026-09-25)
+        try:
+            _inm, _iem = (inv.get('client_name') or '').strip(), (inv.get('email') or '').strip()
+            if _inm or _iem:
+                conn.execute("UPDATE pg_users SET name = COALESCE(NULLIF(name,''), ?), "
+                             "email = COALESCE(NULLIF(email,''), ?), updated_at = CURRENT_TIMESTAMP "
+                             "WHERE id = ?", [_inm, _iem, user_id])
+                conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         # Already on an active PAID counselling plan? Respect it — don't override.
         active = conn.execute(
             "SELECT p.plan_kind FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
