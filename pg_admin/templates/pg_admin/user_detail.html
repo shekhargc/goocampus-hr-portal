@@ -107,7 +107,7 @@
     </div>
     <div class="info-strip">
       <span><span class="k">Email:</span> <span class="v">{{ d.email or '—' }}</span></span>
-      <span><span class="k">Joined:</span> <span class="v">{{ d.created_at.strftime('%d %b %Y') if d.created_at else '—' }}</span></span>
+      <span><span class="k">Joined:</span> <span class="v">{{ d.created_at|format_datetime if d.created_at else '—' }}</span></span>
       <span><span class="k">Target:</span> <span class="v">{{ d.target_speciality or '—' }}</span></span>
       <span><span class="k">College:</span> <span class="v">{{ d.college or '—' }}</span></span>
       {% if pgcp_inv %}<span><span class="k">PGCP onboarding:</span> <span class="v">{% if pgcp_inv.onb_step %}Step {{ pgcp_inv.onb_step }}/4{% else %}Not started{% endif %}</span></span>{% endif %}
@@ -264,7 +264,7 @@
   <!-- DASHBOARD ACTIVITY (goocampus.in usage) -->
 <div class="card">
   <h3><i class="fa-solid fa-chart-line"></i> Dashboard activity
-    <span class="n">{{ '{:,}'.format(activity.total or 0) }} event{{ '' if activity.total==1 else 's' }}{% if activity.last_seen %} · last {{ activity.last_seen.strftime('%d %b, %H:%M') }}{% endif %}</span></h3>
+    <span class="n">{{ '{:,}'.format(activity.total or 0) }} event{{ '' if activity.total==1 else 's' }}{% if activity.last_seen %} · last {{ activity.last_seen|format_datetime }}{% endif %}</span></h3>
   {% if not activity.total %}
   <p style="font-size:0.85rem;color:var(--gray-400);margin:0.2rem 0 0;">No dashboard activity recorded yet for this doctor.</p>
   {% else %}
@@ -290,7 +290,7 @@
     <tbody>
       {% for e in activity.events[:15] %}
       <tr>
-        <td style="color:var(--gray-500);white-space:nowrap;">{{ e.created_at.strftime('%d %b %H:%M') if e.created_at else '' }}</td>
+        <td style="color:var(--gray-500);white-space:nowrap;">{{ e.created_at|format_datetime if e.created_at else '' }}</td>
         <td style="color:var(--gray-600)">{{ e.section or '—' }}</td>
         <td style="color:var(--gray-600)">{{ e.event_type or '—' }}</td>
         <td style="color:var(--gray-500)">{% if e.q %}"{{ e.q }}" {% endif %}{% if e.college_name %}· {{ e.college_name }}{% endif %}{% if e.speciality %}· {{ e.speciality }}{% endif %}{% if e.quota %}· {{ e.quota }}{% endif %}{% if e.category %}· {{ e.category }}{% endif %}{% if e.state %}· {{ e.state }}{% endif %}{% if e.rank %}· rank {{ '{:,}'.format(e.rank) }}{% endif %}{% if e.fee_min or e.fee_max %}· ₹{{ '{:,.0f}'.format(e.fee_min or 0) }}–{{ '{:,.0f}'.format(e.fee_max or 0) }}{% endif %}</td>

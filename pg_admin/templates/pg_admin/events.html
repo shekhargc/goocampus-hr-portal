@@ -93,7 +93,7 @@
           <td style="padding:0.55rem 0.9rem;text-align:right;">{{ r.rank or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;text-align:right;">{{ r.score or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.domicile_state or '—' }}</td>
-          <td style="padding:0.55rem 0.9rem;color:var(--gray-500);">{{ r.created_at.strftime('%d %b, %H:%M') if r.created_at else '' }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-500);white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}</td>
         </tr>
         {% else %}
         <tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--gray-400);">No registrations yet for this event.</td></tr>

@@ -88,7 +88,7 @@
           <td style="padding:0.45rem 0.9rem;color:var(--gray-500);">
             {% if r.q %}"{{ r.q }}" {% endif %}{% if r.college_name %}· {{ r.college_name }}{% endif %}{% if r.speciality %}· {{ r.speciality }}{% endif %}{% if r.quota %}· {{ r.quota }}{% endif %}{% if r.category %}· {{ r.category }}{% endif %}{% if r.state %}· {{ r.state }}{% endif %}{% if r.rank %}· rank {{ '{:,}'.format(r.rank) }}{% endif %}{% if r.fee_min or r.fee_max %}· ₹{{ '{:,.0f}'.format(r.fee_min or 0) }}–{{ '{:,.0f}'.format(r.fee_max or 0) }}{% endif %}
           </td>
-          <td style="padding:0.45rem 0.9rem;color:var(--gray-400);white-space:nowrap;">{{ r.created_at.strftime('%d %b %H:%M') if r.created_at else '' }}</td>
+          <td style="padding:0.45rem 0.9rem;color:var(--gray-400);white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}</td>
         </tr>
         {% else %}
         <tr><td colspan="5" style="padding:2rem;text-align:center;color:var(--gray-400);">No activity recorded yet — it fills in as the goocampus.in frontend sends tracking events.</td></tr>
