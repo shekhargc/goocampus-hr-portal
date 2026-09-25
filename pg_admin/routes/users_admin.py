@@ -385,8 +385,22 @@ def user_save(user_id):
         sets = ', '.join(f"{k} = ?" for k in fields)
         conn.execute(f"UPDATE pg_users SET {sets}, updated_at = CURRENT_TIMESTAMP "
                      "WHERE id = ?", tuple(fields.values()) + (user_id,))
+        # The Home/Domicile State is LOCKED for the doctor and mirrored into
+        # pg_doctor_states (role='home'), which drives the counselling home-state
+        # choice list. The team can correct it here → keep both in sync so the
+        # choice list follows. (founder 2026-09-25 — admin can fix a wrong state)
+        st = fields['state']
+        if st:
+            home = conn.execute("SELECT id FROM pg_doctor_states WHERE user_id = ? "
+                                "AND role = 'home'", (user_id,)).fetchone()
+            if home:
+                conn.execute("UPDATE pg_doctor_states SET state = ? WHERE user_id = ? "
+                             "AND role = 'home'", (st, user_id))
+            else:
+                conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) "
+                             "VALUES (?, ?, 'home', 1)", (user_id, st))
         conn.commit()
-        flash('Profile saved.', 'success')
+        flash('Profile saved.' + (' Home state updated.' if st else ''), 'success')
     except Exception as e:
         conn.rollback()
         logging.error("user_save: %s", e)
