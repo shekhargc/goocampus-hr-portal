@@ -44,7 +44,7 @@
         {% if show_home %}<th style="{{ hs }}">Locked home now</th>{% endif %}
         <th style="{{ hs }}">Profile state{{ ' → new home' if show_home else ' → will lock' }}</th></tr></thead>
       <tbody>
-        {% for r in rows %}
+        {% for r in rows[:50] %}
         <tr style="border-top:1px solid var(--gray-100);">
           <td style="padding:0.5rem 0.85rem;"><a href="/admin/pg/users/{{ r.id }}" style="color:var(--navy);font-weight:600;text-decoration:none;">{{ r.name or '(no name)' }}</a></td>
           <td style="padding:0.5rem 0.85rem;color:var(--gray-500);">{{ r.mobile }}</td>
@@ -55,6 +55,7 @@
       </tbody>
     </table>
   </div>
+  {% if rows|length > 50 %}<div style="font-size:0.78rem;color:var(--gray-500);margin-top:6px;">Showing first 50 of {{ rows|length }} — <strong>all {{ rows|length }} will be processed on Apply.</strong></div>{% endif %}
   {% endif %}
   {% endmacro %}
 
