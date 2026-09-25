@@ -22,10 +22,15 @@ def _page():
 
 
 def _deg_clause(dg):
+    # DNB rows carry the signal in the COURSE name ("(NBEMS) …") as well as (sometimes) the
+    # degree code, and degree_group was mislabeled 'other' for 2025 — so match NBEMS in the
+    # course too, or degree_group=dnb, so the DNB filter isn't dead. The '%DNB%' stays the
+    # bound param; NBEMS is a fixed literal (escaped by the ?->%s shim). (2026-09-25)
     if dg == 'dnb':
-        return "UPPER(COALESCE(c.degree,'')) LIKE ?", '%DNB%'
+        return ("(UPPER(COALESCE(c.degree,'')) LIKE ? OR UPPER(COALESCE(c.course,'')) LIKE '%NBEMS%' "
+                "OR LOWER(COALESCE(c.degree_group,'')) = 'dnb')", '%DNB%')
     if dg == 'mdms':
-        return "UPPER(COALESCE(c.degree,'')) NOT LIKE ?", '%DNB%'
+        return ("(UPPER(COALESCE(c.degree,'')) NOT LIKE ? AND UPPER(COALESCE(c.course,'')) NOT LIKE '%NBEMS%')", '%DNB%')
     return None, None
 
 
@@ -216,6 +221,42 @@ def _choice_gate(conn, uid, scope, state=''):
     return None
 
 
+def _entitlement_ctx(conn, uid):
+    """The doctor's current choice-list entitlement, cached for out-of-plan checks."""
+    _home_ok, max_other = _state_limits(conn, uid)
+    home = next((s['state'] for s in _doctor_states(conn, uid) if s['role'] == 'home'), None)
+    return {'paid': _plan_has(conn, uid, 'dash_choice_list'),
+            'max_other': max_other, 'home_l': (home or '').strip().lower()}
+
+
+def _set_out_of_plan(conn, uid, s, ctx=None):
+    """Is this set outside what the doctor's CURRENT plan covers? (downgrade lock — the set
+    is kept but becomes view-only; never deleted). MCC needs paid; a non-home state needs an
+    allowed 'other' slot; home-state + in-limit sets stay in-plan."""
+    ctx = ctx or _entitlement_ctx(conn, uid)
+    scope = (s.get('scope') or '').strip().lower()
+    st = (s.get('state') or '').strip().lower()
+    if scope == 'mcc':
+        return not ctx['paid']
+    if scope == 'state':
+        if st and st == ctx['home_l']:
+            return False
+        if ctx['max_other'] is None:       # premium: any state
+            return False
+        if ctx['max_other'] == 0:          # free / starter: home only
+            return True
+        # standard etc.: the earliest N non-home state sets stay in-plan, the rest lock
+        others = [r['id'] for r in conn.execute(
+            "SELECT id FROM pg_choice_sets WHERE user_id = ? AND LOWER(scope) = 'state' "
+            "AND LOWER(COALESCE(state,'')) <> ? ORDER BY id", [uid, ctx['home_l']]).fetchall()]
+        try:
+            rank = others.index(s['id'])
+        except ValueError:
+            rank = len(others)
+        return rank >= ctx['max_other']
+    return False
+
+
 def api_pg_choice_entitlement():
     """GET /api/pg/choice-entitlement → what the doctor's plan unlocks for choice lists."""
     if not _authorized():
@@ -232,7 +273,9 @@ def api_pg_choice_entitlement():
         return jsonify({'ok': True, 'plan': _plan_label(conn, user['id']),
                         'tier': ('paid' if paid else 'free'),
                         'can_build': True,               # everyone can build at least a home-state list
+                        'manual_build': True,            # everyone can add colleges manually (predictor/cut-off)
                         'auto_generate': paid,           # FREE self-builds (predictor + manual); no auto-build
+                        'auto_build': paid,              # alias for the website: false=manual-only (Free), true=auto (Starter+)
                         'team_editable': paid,           # FREE list is theirs — team is view-only
                         'mcc': paid,
                         'home_only': (not paid),
@@ -331,6 +374,10 @@ def api_pg_choice_sets():
             sets = [dict(r) for r in conn.execute(
                 "SELECT s.*, (SELECT COUNT(*) FROM pg_choice_items i WHERE i.set_id=s.id) AS n_items "
                 "FROM pg_choice_sets s WHERE s.user_id = ? ORDER BY s.id DESC", [uid]).fetchall()]
+            # Downgrade lock: mark sets the CURRENT plan no longer covers as view-only.
+            ctx = _entitlement_ctx(conn, uid)
+            for s in sets:
+                s['out_of_plan'] = _set_out_of_plan(conn, uid, s, ctx)
             return jsonify({'ok': True, 'sets': sets})
         body = request.get_json(silent=True) or {}
         scope = (body.get('scope') or 'mcc').strip()
@@ -355,9 +402,10 @@ def api_pg_choice_sets():
             [uid, (body.get('label') or '').strip(), scope, authority, dg,
              (body.get('state') or '').strip(), quota, category, rank,
              json.dumps(specialties), json.dumps(quota_cats)]).fetchone()['id']
-        # PAID tiers get the auto-built round sheets; FREE builds their home-state list
-        # themselves (add from predictor / manually), so we leave the rounds empty.
-        if _plan_has(conn, uid, 'dash_choice_list'):
+        # PAID tiers auto-build the round sheets — UNLESS the client asked for a manual
+        # (empty) set via body auto:false. FREE is always manual (add from predictor /
+        # manually), so its rounds stay empty regardless.
+        if (body.get('auto') is not False) and _plan_has(conn, uid, 'dash_choice_list'):
             for rnd in (1, 2, 3):
                 _generate_round(conn, sid, rnd, authority, dg, specialties, quota_cats, rank)
         conn.commit()
@@ -420,10 +468,13 @@ def api_pg_choice_items(set_id):
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        s = conn.execute("SELECT rank FROM pg_choice_sets WHERE id = ? AND user_id = ?",
+        s = conn.execute("SELECT id, rank, scope, state FROM pg_choice_sets WHERE id = ? AND user_id = ?",
                          [set_id, user['id']]).fetchone()
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if _set_out_of_plan(conn, user['id'], dict(s)):
+            return jsonify({'ok': False, 'error': 'not_entitled',
+                            'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403
         body = request.get_json(silent=True) or {}
         try:
             rnd = int(body.get('round'))
@@ -461,9 +512,18 @@ def api_pg_choice_item_delete(item_id):
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        conn.execute(
-            "DELETE FROM pg_choice_items WHERE id = ? AND set_id IN "
-            "(SELECT id FROM pg_choice_sets WHERE user_id = ?)", [item_id, user['id']])
+        # Find the owning set (must be the doctor's) and block edits on a view-only set.
+        srow = conn.execute(
+            "SELECT s.id, s.scope, s.state FROM pg_choice_sets s "
+            "JOIN pg_choice_items i ON i.set_id = s.id "
+            "WHERE i.id = ? AND s.user_id = ?", [item_id, user['id']]).fetchone()
+        if not srow:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if _set_out_of_plan(conn, user['id'], dict(srow)):
+            return jsonify({'ok': False, 'error': 'not_entitled',
+                            'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403
+        conn.execute("DELETE FROM pg_choice_items WHERE id = ? AND set_id = ?",
+                     [item_id, srow['id']])
         conn.commit()
         return jsonify({'ok': True})
     except Exception as e:
@@ -484,9 +544,13 @@ def api_pg_choice_reorder(set_id):
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        if not conn.execute("SELECT 1 FROM pg_choice_sets WHERE id=? AND user_id=?",
-                            [set_id, user['id']]).fetchone():
+        s = conn.execute("SELECT id, scope, state FROM pg_choice_sets WHERE id=? AND user_id=?",
+                         [set_id, user['id']]).fetchone()
+        if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if _set_out_of_plan(conn, user['id'], dict(s)):
+            return jsonify({'ok': False, 'error': 'not_entitled',
+                            'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403
         body = request.get_json(silent=True) or {}
         ids = body.get('ordered_item_ids') or []
         pos = 0
