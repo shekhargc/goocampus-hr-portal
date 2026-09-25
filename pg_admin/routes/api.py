@@ -1402,6 +1402,17 @@ def api_pg_checkout_verify():
         conn.execute("UPDATE pg_orders SET status='paid', razorpay_payment_id=?, subscription_id=?, "
                      "paid_at=CURRENT_TIMESTAMP WHERE id=?", (pid, sub_id, order['id']))
         conn.commit()
+        # One pathway: a paid counselling plan (PGCP Starter/Standard/Premium) enters the
+        # SAME onboarding flow as a team invite. Guarded — payment is already locked above,
+        # so a hiccup here must never fail the confirmation. (founder 2026-09-25)
+        if (plan.get('plan_kind') or '') == 'counselling':
+            try:
+                from pg_admin.routes.api_pgcp import ensure_paid_invitation
+                ensure_paid_invitation(conn, user, plan, order.get('payable'), pid)
+            except Exception as _e:
+                try: conn.rollback()
+                except Exception: pass
+                logging.error("checkout->pgcp onboarding invite: %s", _e)
         return jsonify({'ok': True, 'subscription_id': sub_id, 'plan_id': order['plan_id']})
     except Exception as e:
         try: conn.rollback()

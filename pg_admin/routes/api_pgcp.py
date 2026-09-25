@@ -7,10 +7,67 @@ Login-first, save-and-continue. Matched to a team-created invitation by mobile.
 """
 import re
 import json
+import secrets
 import logging
 from flask import request, jsonify
 from db import get_db
 from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
+
+
+def _ensure_pay_cols(conn):
+    """Request-time guard: Render cold-start can skip boot DDL, so make sure the
+    invitation payment columns exist before the money path touches them."""
+    for ddl in (
+        "ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'due'",
+        "ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS paid_online INTEGER DEFAULT 0",
+        "ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS payment_ref TEXT DEFAULT ''",
+        "ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(14,2)",
+    ):
+        try:
+            conn.execute(ddl)
+        except Exception:
+            pass
+
+
+def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-upgrade'):
+    """Bridge: a website self-upgrade to a counselling plan enters the SAME PGCP
+    onboarding pathway as a team invite. Upsert the doctor's invitation (matched by
+    mobile) and mark the counselling fee as paid online, so the one onboarding form
+    opens with its payment step pre-filled + locked. Idempotent — never duplicates.
+    Returns the invitation id (or None if the doctor has no usable mobile).
+    (founder 2026-09-25 — unify self-upgrade + invite into one path)"""
+    _ensure_pay_cols(conn)
+    mob10 = _digits(user.get('mobile'))[-10:]
+    if not mob10:
+        return None
+    plan_code = (plan or {}).get('code') or ''
+    try:
+        amt = float(amount) if amount is not None else None
+    except (TypeError, ValueError):
+        amt = None
+    existing = conn.execute(
+        "SELECT * FROM pg_pgcp_invitations WHERE status <> 'cancelled' AND "
+        "RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? ORDER BY id DESC LIMIT 1",
+        [mob10]).fetchone()
+    if existing:
+        existing = dict(existing)
+        conn.execute(
+            "UPDATE pg_pgcp_invitations SET plan_code = ?, "
+            "invited_amount = COALESCE(invited_amount, ?), "
+            "payment_status = 'paid', paid_online = 1, payment_ref = ?, paid_amount = ? "
+            "WHERE id = ?",
+            [plan_code or existing.get('plan_code') or '', amt, payment_ref or '', amt, existing['id']])
+        conn.commit()
+        return existing['id']
+    iid = conn.execute(
+        "INSERT INTO pg_pgcp_invitations (token, client_name, mobile, email, client_type, "
+        "invited_amount, plan_code, status, payment_status, paid_online, payment_ref, paid_amount, created_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+        [secrets.token_urlsafe(12), user.get('name') or '', user.get('mobile') or '',
+         user.get('email') or '', 'paying', amt, plan_code, 'invited', 'paid', 1,
+         payment_ref or '', amt, f'website ({source})']).fetchone()['id']
+    conn.commit()
+    return iid
 
 # column -> kind: text | int | num | bool | json
 _FIELDS = {
@@ -63,10 +120,16 @@ def _load(conn, user):
     row = conn.execute("SELECT * FROM pg_pgcp_onboarding WHERE invitation_id = ? "
                        "ORDER BY id DESC LIMIT 1", [inv['id']]).fetchone()
     if not row:
+        # If the counselling fee is already settled (website Razorpay, or an admin
+        # "payment received" toggle), pre-fill the payment step so it opens locked.
+        paid = (inv.get('payment_status') == 'paid')
         oid = conn.execute(
-            "INSERT INTO pg_pgcp_onboarding (invitation_id, user_id, mobile, email) "
-            "VALUES (?,?,?,?) RETURNING id",
-            [inv['id'], user['id'], user.get('mobile') or '', user.get('email') or '']).fetchone()['id']
+            "INSERT INTO pg_pgcp_onboarding (invitation_id, user_id, mobile, email, "
+            "payment_mode, payment_ref, amount_paid) VALUES (?,?,?,?,?,?,?) RETURNING id",
+            [inv['id'], user['id'], user.get('mobile') or '', user.get('email') or '',
+             ('online' if paid and inv.get('paid_online') else ('transfer_declared' if paid else '')),
+             (inv.get('payment_ref') or '') if paid else '',
+             inv.get('paid_amount') if paid else None]).fetchone()['id']
         conn.execute("UPDATE pg_pgcp_invitations SET status='started' WHERE id=? AND status='invited'",
                      [inv['id']])
         conn.commit()
@@ -103,9 +166,14 @@ def api_pgcp_onboarding():
 
         if request.method == 'POST':
             body = request.get_json(silent=True) or {}
+            # Payment already settled (paid online / admin-declared)? Lock those fields
+            # server-side so the client cannot overwrite the recorded payment.
+            pay_locked = (inv.get('payment_status') == 'paid')
             sets, vals = [], []
             for col, kind in _FIELDS.items():
                 if col in body:
+                    if pay_locked and col in ('payment_mode', 'payment_ref', 'amount_paid'):
+                        continue
                     sets.append(f"{col} = ?"); vals.append(_coerce(kind, body[col]))
             try:
                 step = int(body.get('step'))
@@ -127,7 +195,12 @@ def api_pgcp_onboarding():
                            'invited_amount': float(inv['invited_amount']) if inv['invited_amount'] is not None else None,
                            'discount': float(inv['discount']) if inv['discount'] is not None else 0,
                            'plan_code': inv['plan_code'], 'status': inv['status'],
-                           'client_name': inv['client_name']},
+                           'client_name': inv['client_name'],
+                           'payment_status': inv.get('payment_status') or 'due',
+                           'paid': (inv.get('payment_status') == 'paid'),
+                           'paid_online': bool(inv.get('paid_online')),
+                           'payment_ref': inv.get('payment_ref') or '',
+                           'paid_amount': float(inv['paid_amount']) if inv.get('paid_amount') is not None else None},
             'onboarding': _serialize(onb)})
     except Exception as e:
         try: conn.rollback()

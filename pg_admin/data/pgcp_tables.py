@@ -85,6 +85,13 @@ def ensure_pgcp_tables():
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pgcp_onb_inv ON pg_pgcp_onboarding (invitation_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pgcp_onb_user ON pg_pgcp_onboarding (user_id)")
+        # Payment on the invitation — lets a website self-upgrade (Razorpay) or an admin
+        # "payment already received" toggle mark the counselling fee as settled, so the
+        # onboarding form's payment step is pre-filled + locked. One pathway. (2026-09-25)
+        conn.execute("ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'due'")  # due | paid
+        conn.execute("ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS paid_online INTEGER DEFAULT 0")      # 1 = Razorpay
+        conn.execute("ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS payment_ref TEXT DEFAULT ''")       # razorpay_payment_id / bank ref
+        conn.execute("ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(14,2)")
         conn.commit()
         logging.info("pg_pgcp tables ensured")
     except Exception as e:
