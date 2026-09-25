@@ -33,7 +33,7 @@ def pgcp_admin():
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
-    rows = []
+    rows, plans = [], []
     try:
         rows = [dict(r) for r in conn.execute(
             "SELECT i.*, o.id AS onb_id, o.step AS onb_step, o.status AS onb_status, "
@@ -41,11 +41,15 @@ def pgcp_admin():
             "FROM pg_pgcp_invitations i "
             "LEFT JOIN pg_pgcp_onboarding o ON o.invitation_id = i.id "
             "ORDER BY i.created_at DESC").fetchall()]
+        # The counselling plans (Starter/Standard/Premium) for the invite's plan dropdown.
+        plans = [dict(r) for r in conn.execute(
+            "SELECT code, name, price FROM pg_plans WHERE plan_kind = 'counselling' "
+            "AND COALESCE(is_active,1) = 1 ORDER BY price").fetchall()]
     except Exception as e:
         logging.error("pgcp_admin: %s", e)
     finally:
         conn.close()
-    return render_template('pg_admin/pgcp.html', rows=rows, active_section='goocampus_in')
+    return render_template('pg_admin/pgcp.html', rows=rows, plans=plans, active_section='goocampus_in')
 
 
 @login_required

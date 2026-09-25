@@ -45,9 +45,13 @@
         </select></div>
       {{ fld('invited_amount', 'Invited amount ₹', '', 'number') }}
       {{ fld('discount', 'Discount ₹', '0', 'number') }}
-      {{ fld('plan_code', 'Plan code (optional)', 'pgcp_premium') }}
+      <div><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Plan</label>
+        <select name="plan_code" id="pgcp_f_plan_code" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+          <option value="">— Select plan —</option>
+          {% for p in plans %}<option value="{{ p.code }}">{{ p.name }}{% if p.price %} — ₹{{ '{:,.0f}'.format(p.price) }}{% endif %}</option>{% endfor %}
+        </select></div>
       {{ fld('notes', 'Notes') }}
-      <div style="grid-column:1/-1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:0.8rem 1rem;">
+      <div id="pgcp_pay_block" style="grid-column:1/-1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:0.8rem 1rem;">
         <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:0.86rem;color:#166534;">
           <input type="checkbox" name="payment_received" id="pgcp_pay_recv" value="1" style="margin-top:3px;"
                  onchange="document.getElementById('pgcp_pay_ref_wrap').style.display=this.checked?'block':'none';">
@@ -143,6 +147,7 @@
               if (mob) mob.value = c.mobile || '';
               if (em && c.email) em.value = c.email;
               if (ct) ct.value = 'internal';   // picking an existing client = internal
+              if (window.syncPgcpClientType) window.syncPgcpClientType();
               box.style.display='none';
               input.value = c.name || '';
             };
@@ -153,6 +158,26 @@
     }, 220);
   });
   input.addEventListener('blur', function(){ setTimeout(function(){ box.style.display='none'; }, 200); });
+
+  // Internal clients are free — hide the money fields (invited amount, discount,
+  // "payment already received") when client type is Internal. (founder 2026-09-25)
+  var ctSel = document.getElementById('pgcp_f_client_type');
+  window.syncPgcpClientType = function(){
+    var internal = ctSel && ctSel.value === 'internal';
+    var amt = document.getElementById('pgcp_f_invited_amount');
+    var disc = document.getElementById('pgcp_f_discount');
+    var payBlock = document.getElementById('pgcp_pay_block');
+    var payChk = document.getElementById('pgcp_pay_recv');
+    if (amt && amt.closest('div')) amt.closest('div').style.display = internal ? 'none' : '';
+    if (disc && disc.closest('div')) disc.closest('div').style.display = internal ? 'none' : '';
+    if (payBlock) payBlock.style.display = internal ? 'none' : '';
+    if (internal && payChk) {
+      payChk.checked = false;
+      var w = document.getElementById('pgcp_pay_ref_wrap'); if (w) w.style.display = 'none';
+    }
+  };
+  if (ctSel) ctSel.addEventListener('change', window.syncPgcpClientType);
+  window.syncPgcpClientType();
 })();
 </script>
 {% endblock %}
