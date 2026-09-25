@@ -137,7 +137,13 @@
             <div class="f"><label>Target speciality</label><input name="target_speciality" value="{{ d.target_speciality or '' }}"></div>
             <div class="f"><label>College</label><input name="college" value="{{ d.college or '' }}"></div>
             <div class="f"><label>City</label><input name="city" value="{{ d.city or '' }}"></div>
-            <div class="f"><label>Home / Domicile State</label><input name="state" value="{{ d.state or '' }}" placeholder="e.g. Karnataka"><small style="color:var(--gray-400);font-size:0.68rem;">Locked for the doctor — editing here also updates their counselling home state.</small></div>
+            <div class="f"><label>Home / Domicile State</label>
+              <select name="state">
+                <option value="">— Select state —</option>
+                {% for s in state_options %}<option value="{{ s }}" {{ 'selected' if (d.state or '')|lower == s|lower }}>{{ s }}</option>{% endfor %}
+                {% if d.state and d.state|lower not in (state_options|map('lower')|list) %}<option value="{{ d.state }}" selected>{{ d.state }} (current)</option>{% endif %}
+              </select>
+              <small style="color:var(--gray-400);font-size:0.68rem;">Locked for the doctor — editing here also updates their counselling home state.</small></div>
             <div class="f"><label>Source</label><input name="source" value="{{ d.source or '' }}" placeholder="how they found us"></div>
             <div class="f"><label>Tags</label><input name="tags" value="{{ d.tags or '' }}" placeholder="comma separated"></div>
           </div>
