@@ -242,20 +242,28 @@ def api_pgcp_submit():
 
 
 def auto_grant_internal_premium(conn, user_id, mobile):
-    """On login: if this doctor's mobile has an INTERNAL PGCP invitation and they're not
-    already on a paid counselling plan, grant them Premium FREE (once). Idempotent."""
+    """On login: upgrade the doctor to their PGCP plan when their mobile has either an
+    INTERNAL invitation (free) or a PRE-PAID one (team ticked "payment received"), and
+    they're not already on an active paid counselling plan. Grants the invitation's
+    plan_code (internal legacy invites with no plan default to Premium). Idempotent, and
+    works for both a dropdown-picked internal client and a freshly-typed pre-paid client.
+    (name kept for the login call site; generalised beyond internal-only, founder 2026-09-25)"""
     from datetime import datetime as _dt, timedelta as _td
     try:
         mob = re.sub(r'\D', '', str(mobile or ''))[-10:]
         if not mob:
             return
+        # Internal (free Premium) OR pre-paid (payment_status='paid') — either upgrades.
         inv = conn.execute(
-            "SELECT id FROM pg_pgcp_invitations WHERE client_type = 'internal' "
-            "AND status <> 'cancelled' "
+            "SELECT id, client_type, plan_code, paid_amount, "
+            "COALESCE(payment_status,'due') AS payment_status "
+            "FROM pg_pgcp_invitations WHERE status <> 'cancelled' "
+            "AND (client_type = 'internal' OR COALESCE(payment_status,'due') = 'paid') "
             "AND RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? "
             "ORDER BY id DESC LIMIT 1", [mob]).fetchone()
         if not inv:
             return
+        inv = dict(inv)
         # Already on an active PAID counselling plan? Respect it — don't override.
         active = conn.execute(
             "SELECT p.plan_kind FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
@@ -264,24 +272,39 @@ def auto_grant_internal_premium(conn, user_id, mobile):
             [user_id]).fetchone()
         if active and (active['plan_kind'] or '') == 'counselling':
             return
-        prem = conn.execute("SELECT id, duration_days FROM pg_plans "
-                            "WHERE code = 'pgcp_premium' AND COALESCE(is_active,1)=1").fetchone()
-        if not prem:
+        # Grant the invitation's plan; internal legacy invites with no plan → Premium.
+        code = (inv.get('plan_code') or '').strip() or 'pgcp_premium'
+        plan = conn.execute("SELECT id, duration_days FROM pg_plans "
+                            "WHERE code = ? AND COALESCE(is_active,1)=1", [code]).fetchone()
+        if not plan and code != 'pgcp_premium':
+            plan = conn.execute("SELECT id, duration_days FROM pg_plans "
+                                "WHERE code = 'pgcp_premium' AND COALESCE(is_active,1)=1").fetchone()
+        if not plan:
             return
         exp = None
-        if prem['duration_days']:
+        if plan['duration_days']:
             try:
-                exp = (_dt.utcnow() + _td(days=int(prem['duration_days']))).strftime('%Y-%m-%d %H:%M:%S')
+                exp = (_dt.utcnow() + _td(days=int(plan['duration_days']))).strftime('%Y-%m-%d %H:%M:%S')
             except (ValueError, TypeError):
                 exp = None
+        internal = (inv.get('client_type') == 'internal')
+        try:
+            price = float(inv['paid_amount']) if (not internal and inv.get('paid_amount') is not None) else 0
+        except (TypeError, ValueError):
+            price = 0
+        source = 'internal_auto' if internal else 'prepaid_grant'
         conn.execute("UPDATE pg_subscriptions SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP "
                      "WHERE user_id = ? AND status = 'active'", [user_id])
         conn.execute("INSERT INTO pg_subscriptions (user_id, plan_id, status, expires_at, price_paid, source) "
-                     "VALUES (?, ?, 'active', ?, 0, 'internal_auto')", [user_id, prem['id'], exp])
-        conn.execute("UPDATE pg_pgcp_invitations SET status = 'completed' WHERE id = ?", [inv['id']])
+                     "VALUES (?, ?, 'active', ?, ?, ?)", [user_id, plan['id'], exp, price, source])
+        # Internal keeps its existing 'completed' mark; a pre-paid paying client's
+        # invitation stays in the onboarding lifecycle (invited→started→submitted) so
+        # they still complete the form.
+        if internal:
+            conn.execute("UPDATE pg_pgcp_invitations SET status = 'completed' WHERE id = ?", [inv['id']])
         conn.commit()
-        logging.info("PGCP internal auto-Premium granted to user_id=%s", user_id)
+        logging.info("PGCP plan '%s' auto-granted to user_id=%s (source=%s)", code, user_id, source)
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
-        logging.error("auto_grant_internal_premium: %s", e)
+        logging.error("auto_grant (pgcp): %s", e)
