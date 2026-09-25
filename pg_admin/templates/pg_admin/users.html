@@ -94,7 +94,7 @@
         {% if u.inquiry_id %}<div style="margin-top:3px;"><a href="/sales/inquiries/{{ u.inquiry_id }}" style="text-decoration:none;font-size:0.66rem;font-weight:700;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;padding:1px 7px;border-radius:20px;white-space:nowrap;">📞 Booked a call</a></div>{% endif %}
       </td>
       <td>{% if u.plan_expires_at %}{{ u.plan_expires_at.strftime('%d %b %Y') }}{% else %}—{% endif %}</td>
-      <td>{% if u.created_at %}{{ u.created_at.strftime('%d %b %Y') }}{% endif %}</td>
+      <td style="white-space:nowrap;">{% if u.created_at %}{{ u.created_at|format_datetime }}{% endif %}</td>
       <td><a class="pu-btn pu-btn-ghost pu-btn-sm" href="/admin/pg/users/{{ u.id }}"
              style="padding:0.35rem 0.6rem;">Open <i class="fa-solid fa-arrow-right"></i></a></td>
     </tr>

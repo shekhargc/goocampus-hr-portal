@@ -30,7 +30,7 @@
       <td>{{ r.plan_name or '—' }}</td>
       <td>₹{{ '{:,.0f}'.format(r.order_amount or 0) }}</td>
       <td style="color:#16a34a; font-weight:600;">− ₹{{ '{:,.0f}'.format(r.discount_amount or 0) }}</td>
-      <td>{{ r.redeemed_at.strftime('%d %b %Y, %H:%M') if r.redeemed_at else '' }}</td>
+      <td style="white-space:nowrap;">{{ r.redeemed_at|format_datetime if r.redeemed_at else '' }}</td>
     </tr>
     {% endfor %}
   </tbody>

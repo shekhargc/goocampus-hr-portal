@@ -64,7 +64,7 @@
         <td>{% if r.reg_doctor_id %}<a href="/admin/pg/users/{{ r.reg_doctor_id }}" style="text-decoration:none;font-size:11.5px;font-weight:700;color:#166534;background:#dcfce7;padding:2px 9px;border-radius:20px;white-space:nowrap;">✓ Registered doctor →</a>{% else %}<span class="muted" style="font-size:12px;">Enquiry only</span>{% endif %}</td>
         <td><span class="pill s-{{ (r.inquiry_status or 'New')|replace(' ','')|replace('-','') }}">{{ r.inquiry_status or 'New' }}</span></td>
         <td>{% if r.followup_count %}{{ r.followup_count }}{% else %}<span class="muted">0</span>{% endif %}</td>
-        <td class="muted" style="font-size:12px;white-space:nowrap;">{{ (r.created_at|string)[:16] if r.created_at else '—' }}</td>
+        <td class="muted" style="font-size:12px;white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '—' }}</td>
         <td><a class="btn btn-o" href="/sales/inquiries/{{ r.id }}">Open →</a></td>
       </tr>
       {% else %}
