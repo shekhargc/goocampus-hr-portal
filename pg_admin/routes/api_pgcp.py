@@ -189,12 +189,26 @@ def api_pgcp_onboarding():
                                         [onb['id']]).fetchone())
             return jsonify({'ok': True, 'saved': True})
 
+        # Resolve the plan's display name + price so the site can label the plan
+        # without mapping plan_code itself. (goocampus.in ask 2026-09-25)
+        _plan_name, _plan_price = '', None
+        if inv.get('plan_code'):
+            _pr = conn.execute("SELECT name, price FROM pg_plans WHERE code = ?",
+                               [inv['plan_code']]).fetchone()
+            if _pr:
+                _pr = dict(_pr)
+                _plan_name = _pr.get('name') or ''
+                try:
+                    _plan_price = float(_pr['price']) if _pr.get('price') is not None else None
+                except (TypeError, ValueError):
+                    _plan_price = None
         return jsonify({
             'ok': True, 'invited': True,
             'invitation': {'client_type': inv['client_type'],
                            'invited_amount': float(inv['invited_amount']) if inv['invited_amount'] is not None else None,
                            'discount': float(inv['discount']) if inv['discount'] is not None else 0,
-                           'plan_code': inv['plan_code'], 'status': inv['status'],
+                           'plan_code': inv['plan_code'], 'plan_name': _plan_name, 'plan_price': _plan_price,
+                           'status': inv['status'],
                            'client_name': inv['client_name'],
                            'payment_status': inv.get('payment_status') or 'due',
                            'paid': (inv.get('payment_status') == 'paid'),
