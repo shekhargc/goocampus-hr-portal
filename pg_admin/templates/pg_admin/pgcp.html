@@ -47,6 +47,19 @@
       {{ fld('discount', 'Discount ₹', '0', 'number') }}
       {{ fld('plan_code', 'Plan code (optional)', 'pgcp_premium') }}
       {{ fld('notes', 'Notes') }}
+      <div style="grid-column:1/-1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:0.8rem 1rem;">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:0.86rem;color:#166534;">
+          <input type="checkbox" name="payment_received" id="pgcp_pay_recv" value="1" style="margin-top:3px;"
+                 onchange="document.getElementById('pgcp_pay_ref_wrap').style.display=this.checked?'block':'none';">
+          <span><b>Payment already received</b> (e.g. bank transfer / paid you directly) — marks the counselling fee as settled, so this client <b>skips online payment</b> and their onboarding opens with the payment step locked. Leave unticked for the normal "pay online" flow.</span>
+        </label>
+        <div id="pgcp_pay_ref_wrap" style="display:none;margin-top:0.6rem;">
+          <label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Payment reference (optional)</label>
+          <input type="text" name="payment_ref" placeholder="Bank UTR / transaction ref"
+                 style="width:100%;max-width:340px;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+          <div style="font-size:0.72rem;color:var(--gray-400);margin-top:4px;">Recorded paid amount = Invited amount − Discount.</div>
+        </div>
+      </div>
       <div style="grid-column:1/-1;"><button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:0.6rem 1.4rem;font-weight:700;cursor:pointer;">Create invitation</button></div>
     </form>
   </details>
@@ -67,7 +80,8 @@
           <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{{ r.mobile }}</td>
           <td style="padding:0.6rem 0.9rem;">{{ 'Internal' if r.client_type=='internal' else 'Paying' }}</td>
           <td style="padding:0.6rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;">
-            {% if r.invited_amount is not none %}₹{{ '{:,.0f}'.format(r.invited_amount) }}{% if r.discount %} <span style="color:var(--gray-400);font-size:0.78rem;">− ₹{{ '{:,.0f}'.format(r.discount) }}</span>{% endif %}{% else %}—{% endif %}</td>
+            {% if r.invited_amount is not none %}₹{{ '{:,.0f}'.format(r.invited_amount) }}{% if r.discount %} <span style="color:var(--gray-400);font-size:0.78rem;">− ₹{{ '{:,.0f}'.format(r.discount) }}</span>{% endif %}{% else %}—{% endif %}
+            {% if r.payment_status == 'paid' %}<div><span title="{{ 'Paid online' if r.paid_online else 'Payment received offline' }}" style="font-size:0.66rem;font-weight:700;color:#166534;background:#dcfce7;padding:1px 7px;border-radius:20px;white-space:nowrap;">✓ Paid{{ ' (online)' if r.paid_online else ' (offline)' }}</span></div>{% endif %}</td>
           <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{% if r.onb_step %}Step {{ r.onb_step }} / 4{% else %}Not started{% endif %}</td>
           <td style="padding:0.6rem 0.9rem;">
             <span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:20px;

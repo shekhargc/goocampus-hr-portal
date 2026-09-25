@@ -57,22 +57,44 @@ def pgcp_invite_create():
     if not mobile:
         flash('Mobile is required (it links the invite to the doctor login).', 'error')
         return redirect(url_for('pg_pgcp_admin'))
+    # "Payment already received" (offline / bank transfer): mark the fee settled so the
+    # client skips online payment and their onboarding opens with payment locked. The
+    # recorded paid amount = invited amount − discount. (founder 2026-09-25, Phase 2)
+    inv_amt = _num(request.form.get('invited_amount'))
+    disc = _num(request.form.get('discount')) or 0
+    pay_recv = _s(request.form.get('payment_received')).lower() in ('1', 'on', 'true', 'yes')
+    pay_status, paid_amt, pay_ref = 'due', None, ''
+    if pay_recv:
+        pay_status = 'paid'
+        pay_ref = _s(request.form.get('payment_ref'))
+        try:
+            paid_amt = (float(inv_amt) - float(disc)) if inv_amt is not None else None
+        except (TypeError, ValueError):
+            paid_amt = inv_amt
     conn = get_db()
     inv = None
     try:
+        try:
+            from pg_admin.routes.api_pgcp import _ensure_pay_cols
+            _ensure_pay_cols(conn)   # cold-start guard for the payment columns
+        except Exception:
+            pass
         iid = conn.execute(
             "INSERT INTO pg_pgcp_invitations (token, client_name, mobile, email, client_type, "
-            "invited_amount, discount, plan_code, notes, created_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id",
+            "invited_amount, discount, plan_code, notes, created_by, "
+            "payment_status, paid_online, payment_ref, paid_amount) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
             [secrets.token_urlsafe(12), _s(request.form.get('client_name')), mobile,
              _s(request.form.get('email')),
              _s(request.form.get('client_type')) or 'paying',
-             _num(request.form.get('invited_amount')), _num(request.form.get('discount')) or 0,
+             inv_amt, disc,
              _s(request.form.get('plan_code')), _s(request.form.get('notes')),
-             _s(u.get('name') or u.get('username') or '')]).fetchone()['id']
+             _s(u.get('name') or u.get('username') or ''),
+             pay_status, 0, pay_ref, paid_amt]).fetchone()['id']
         conn.commit()
         inv = dict(conn.execute("SELECT * FROM pg_pgcp_invitations WHERE id = ?", [iid]).fetchone())
-        flash('Invitation created. The doctor can now log in on goocampus.in and start onboarding.', 'success')
+        flash('Invitation created. The doctor can now log in on goocampus.in and start onboarding.'
+              + (' Payment marked received (offline) — they skip online payment.' if pay_recv else ''), 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
