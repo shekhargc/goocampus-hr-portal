@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}System Health — GooCampus{% endblock %}
+
+{% block extra_css %}
+<style>
+  .hz-wrap { max-width: 960px; margin: 0 auto; padding: 0.5rem 0 3rem; }
+  .hz-head { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1.2rem; }
+  .hz-head h1 { font-size:1.6rem; font-weight:800; color:var(--navy,#1B2A4A); margin:0; }
+  .hz-head p { color:#64748b; font-size:0.9rem; margin:0.25rem 0 0; max-width:60ch; }
+  .hz-refresh { display:inline-flex; align-items:center; gap:0.45rem; padding:0.55rem 1rem; border-radius:0.5rem;
+      background:var(--orange,#F58220); color:#fff; font-weight:700; font-size:0.88rem; text-decoration:none; border:none; cursor:pointer; }
+
+  .hz-banner { display:flex; align-items:center; gap:0.9rem; border-radius:0.75rem; padding:1rem 1.25rem; margin-bottom:1.5rem; border:1px solid; }
+  .hz-banner .dot { width:14px; height:14px; border-radius:50%; flex:none; }
+  .hz-banner .big { font-size:1.1rem; font-weight:800; }
+  .hz-banner .sub { font-size:0.85rem; opacity:0.85; }
+  .hz-banner.ok   { background:#f0fdf4; border-color:#bbf7d0; color:#166534; } .hz-banner.ok .dot{ background:#22c55e; }
+  .hz-banner.warn { background:#fffbeb; border-color:#fde68a; color:#92400e; } .hz-banner.warn .dot{ background:#f59e0b; }
+  .hz-banner.down { background:#fef2f2; border-color:#fecaca; color:#991b1b; } .hz-banner.down .dot{ background:#ef4444; }
+
+  .hz-meta { display:flex; gap:1.4rem; flex-wrap:wrap; font-size:0.8rem; color:#64748b; margin-bottom:1.6rem; }
+  .hz-meta b { color:#334155; }
+
+  .hz-section { background:#fff; border:1px solid #e2e8f0; border-radius:0.85rem; overflow:hidden; margin-bottom:1.4rem; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+  .hz-section > h2 { font-size:1.02rem; font-weight:800; color:var(--navy,#1B2A4A); margin:0; padding:0.95rem 1.25rem 0.2rem; }
+  .hz-section .snote { font-size:0.8rem; color:#94a3b8; padding:0 1.25rem 0.8rem; margin:0; }
+  .hz-row { display:flex; align-items:flex-start; gap:0.85rem; padding:0.85rem 1.25rem; border-top:1px solid #f1f5f9; }
+  .hz-row .pill { flex:none; margin-top:1px; }
+  .hz-row .lbl { font-weight:700; color:#1e293b; font-size:0.92rem; }
+  .hz-row .det { color:#64748b; font-size:0.84rem; margin-top:2px; word-break:break-word; }
+  .pill { display:inline-flex; align-items:center; gap:0.35rem; padding:0.2rem 0.6rem; border-radius:1rem; font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.3px; }
+  .pill.ok   { background:#dcfce7; color:#166534; }
+  .pill.warn { background:#fef3c7; color:#92400e; }
+  .pill.down { background:#fee2e2; color:#991b1b; }
+  .pill .d { width:7px; height:7px; border-radius:50%; }
+  .pill.ok .d{ background:#22c55e; } .pill.warn .d{ background:#f59e0b; } .pill.down .d{ background:#ef4444; }
+
+  .hz-foot { font-size:0.78rem; color:#94a3b8; margin-top:0.5rem; line-height:1.5; }
+  .hz-foot code { background:#f1f5f9; padding:1px 6px; border-radius:4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set labels = {'ok':'Working','warn':'Attention','down':'Down'} %}
+{% set bantext = {'ok':'All systems working','warn':'Working, with a few things to watch','down':'Something needs attention'} %}
+<div class="hz-wrap">
+
+  <div class="hz-head">
+    <div>
+      <h1>System Health</h1>
+      <p>A live check of everything GooCampus runs on. Opening this page re-tests each part — it never sends a real email, WhatsApp or OTP.</p>
+    </div>
+    <button class="hz-refresh" onclick="window.location.reload()">↻ Re-run checks</button>
+  </div>
+
+  <div class="hz-banner {{ meta.overall }}">
+    <span class="dot"></span>
+    <div>
+      <div class="big">{{ bantext[meta.overall] }}</div>
+      <div class="sub">
+        {{ meta.counts.ok }} working{% if meta.counts.warn %} · {{ meta.counts.warn }} to watch{% endif %}{% if meta.counts.down %} · {{ meta.counts.down }} down{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="hz-meta">
+    <span>Last checked: <b>{{ meta.checked_at }}</b></span>
+    {% if meta.commit %}<span>Running version: <b>{{ meta.commit }}</b>{% if meta.branch %} ({{ meta.branch }}){% endif %}</span>{% endif %}
+  </div>
+
+  {% for s in sections %}
+  <div class="hz-section">
+    <h2>{{ s.icon }} {{ s.title }}</h2>
+    <p class="snote">{{ s.note }}</p>
+    {% for c in s.checks %}
+    <div class="hz-row">
+      <span class="pill {{ c.status }}"><span class="d"></span>{{ labels[c.status] }}</span>
+      <div>
+        <div class="lbl">{{ c.label }}</div>
+        <div class="det">{{ c.detail }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <p class="hz-foot">
+    Behind the scenes, an always-on probe lives at <code>/healthz</code> on each site, so an
+    external watchdog (UptimeRobot) can ping them 24/7 and alert you if one goes fully down —
+    even when your laptop is off. This page is the deep, functional view; the watchdog is the
+    outer alarm.
+  </p>
+
+</div>
+{% endblock %}
