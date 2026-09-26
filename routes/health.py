@@ -170,6 +170,152 @@ def _check_handshake():
         return _ok('API key set — goocampus.in can read the portal')
 
 
+def _age_days(ts):
+    """Whole days between a stored UTC timestamp and now. None if unparseable."""
+    if not ts:
+        return None
+    try:
+        if isinstance(ts, str):
+            from datetime import datetime as _dt
+            ts = _dt.fromisoformat(ts.replace('Z', '').replace('T', ' ').split('.')[0].strip())
+        return max(0, (datetime.utcnow() - ts).days)
+    except Exception:
+        return None
+
+
+def _journey_stage(sql, waiting_label, warn_days, strong_days):
+    """Generic 'N waiting at a stage, oldest X days' check with stall thresholds.
+    Backlogs never go red (that is operations, not a fault) — they warn."""
+    from db import get_db
+    conn = None
+    try:
+        conn = get_db()
+        row = conn.execute(sql).fetchone()
+        conn.close()
+        n = (row['n'] if row else 0) or 0
+        oldest = row['oldest'] if row else None
+        if n == 0:
+            return _ok(f'No clients {waiting_label} — nothing stuck')
+        age = _age_days(oldest)
+        agestr = f'oldest waiting {age} day(s)' if age is not None else 'flowing'
+        if age is not None and age >= strong_days:
+            return _warn(f'{n} client(s) {waiting_label} — {agestr}; likely stalled, check the queue')
+        if age is not None and age >= warn_days:
+            return _warn(f'{n} client(s) {waiting_label} — {agestr}; worth a look')
+        return _ok(f'{n} client(s) {waiting_label} — {agestr}; flowing normally')
+    except Exception as e:
+        try:
+            if conn:
+                conn.rollback()
+                conn.close()
+        except Exception:
+            pass
+        return _warn(f'Could not read this stage: {e}')
+
+
+def _check_new_registrations():
+    from db import get_db
+    conn = None
+    try:
+        conn = get_db()
+        row = conn.execute(
+            "SELECT COUNT(*) FILTER (WHERE client_submitted_at > NOW() - INTERVAL '7 days') AS n7, "
+            "MAX(client_submitted_at) AS last FROM client_registrations WHERE form_status = 'submitted'"
+        ).fetchone()
+        conn.close()
+        n7 = (row['n7'] if row else 0) or 0
+        last = row['last'] if row else None
+        laststr = f' · latest {_ist_str(last)}' if last else ''
+        if n7 > 0:
+            return _ok(f'{n7} new registration(s) submitted in the last 7 days{laststr}')
+        return _ok(f'No new registrations in the last 7 days (normal when quiet){laststr}')
+    except Exception as e:
+        try:
+            if conn:
+                conn.rollback()
+                conn.close()
+        except Exception:
+            pass
+        return _warn(f'Could not read new registrations: {e}')
+
+
+def _check_sales_verification():
+    return _journey_stage(
+        "SELECT COUNT(*) AS n, MIN(client_submitted_at) AS oldest FROM client_registrations "
+        "WHERE form_status = 'submitted' AND COALESCE(sales_completed, 0) = 0",
+        'waiting for sales verification', warn_days=3, strong_days=7)
+
+
+def _check_ops_verification():
+    return _journey_stage(
+        "SELECT COUNT(*) AS n, MIN(sales_completed_at) AS oldest FROM client_registrations "
+        "WHERE COALESCE(sales_completed, 0) = 1 AND COALESCE(ops_status, 'pending') <> 'verified'",
+        'waiting for ops verification', warn_days=3, strong_days=7)
+
+
+def _check_onboarding_completion():
+    return _journey_stage(
+        "SELECT COUNT(*) AS n, MIN(COALESCE(ops_verified_at, sales_completed_at)) AS oldest "
+        "FROM client_registrations "
+        "WHERE COALESCE(ops_status, 'pending') = 'verified' "
+        "AND COALESCE(onboarding_gated, 0) = 1 "
+        "AND COALESCE(onboarding_status, 'pending') <> 'confirmed'",
+        'in contract/refund onboarding', warn_days=5, strong_days=10)
+
+
+def _check_inquiries():
+    from db import get_db
+    conn = None
+    try:
+        conn = get_db()
+        row = conn.execute(
+            "SELECT COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') AS n7, "
+            "MAX(created_at) AS last FROM sales_leads WHERE COALESCE(is_inquiry, 0) = 1"
+        ).fetchone()
+        conn.close()
+        n7 = (row['n7'] if row else 0) or 0
+        last = row['last'] if row else None
+        laststr = f' · latest {_ist_str(last)}' if last else ''
+        if n7 > 0:
+            return _ok(f'{n7} website inquiry(ies) in the last 7 days{laststr}')
+        return _ok(f'No website inquiries in the last 7 days{laststr}')
+    except Exception as e:
+        try:
+            if conn:
+                conn.rollback()
+                conn.close()
+        except Exception:
+            pass
+        return _warn(f'Could not read inquiries: {e}')
+
+
+def _check_stats_data():
+    """The data behind the goocampus.in numbers: colleges, cut-offs, mentors."""
+    from db import get_db
+    conn = None
+    try:
+        conn = get_db()
+        colleges = (conn.execute("SELECT COUNT(*) AS n FROM pg_college_master").fetchone() or {}).get('n', 0) or 0
+        cutoffs = (conn.execute("SELECT COUNT(*) AS n FROM pg_cutoffs").fetchone() or {}).get('n', 0) or 0
+        mentors = (conn.execute(
+            "SELECT COUNT(*) AS n FROM pg_mentors WHERE COALESCE(is_published, 1) = 1").fetchone() or {}).get('n', 0) or 0
+        conn.close()
+        detail = f'Colleges {colleges:,} · Cut-off rows {cutoffs:,} · Mentors {mentors:,}'
+        if colleges and cutoffs and mentors:
+            return _ok(f'Predictor & explorer data present — {detail}')
+        if not (colleges or cutoffs or mentors):
+            return _down(f'No college/cut-off/mentor data found — the site tools would show empty ({detail})')
+        return _warn(f'Some data set looks empty — {detail}')
+    except Exception as e:
+        try:
+            if conn:
+                conn.rollback()
+                conn.close()
+        except Exception:
+            pass
+        return _warn(f'Could not read statistics data: {e}')
+
+
 # ---------------------------------------------------------------- network checks (run in threads)
 def _check_storage():
     try:
@@ -219,8 +365,12 @@ def _check_infobip():
         r = requests.get(f'https://{base}/account/1/balance',
                          headers={'Authorization': f'App {key}', 'Accept': 'application/json'},
                          timeout=_NET_TIMEOUT)
-        if r.status_code in (401, 403):
-            return _down(f'Infobip rejected the key (HTTP {r.status_code}) — WhatsApp/OTP will fail')
+        if r.status_code == 401:
+            return _down('Infobip rejected the key (HTTP 401) — WhatsApp/OTP will fail')
+        if r.status_code == 403:
+            # Key authenticated but not scoped to read account balance. Messaging
+            # still works (that is a different scope), so this is healthy.
+            return _ok('Infobip key valid — WhatsApp & OTP can send (balance not visible to this key)')
         if r.status_code == 200:
             extra = ''
             try:
@@ -274,6 +424,12 @@ def health_dashboard():
     signups = _check_doctor_signups()
     sync = _check_profile_sync()
     handshake = _check_handshake()
+    inquiries = _check_inquiries()
+    stats = _check_stats_data()
+    j_new = _check_new_registrations()
+    j_sales = _check_sales_verification()
+    j_ops = _check_ops_verification()
+    j_onb = _check_onboarding_completion()
 
     # Slow, outbound (network) checks — run in parallel to keep the page snappy.
     net = {}
@@ -314,14 +470,27 @@ def health_dashboard():
             ],
         },
         {
-            'title': 'GooCampus.in — NEET-PG doctor site',
+            'title': 'Client Journey — onboarding flow',
+            'icon': '🔄',
+            'note': 'The client pipeline end to end: registration → sales verify → ops verify → contract/refund onboarding. Flags a stage where clients get stuck.',
+            'checks': [
+                dict(label='New registrations arriving', **j_new),
+                dict(label='Sales verification', **j_sales),
+                dict(label='Operations verification', **j_ops),
+                dict(label='Contract / refund onboarding', **j_onb),
+            ],
+        },
+        {
+            'title': 'GooCampus.in — NEET-PG doctor site & data',
             'icon': '🩺',
-            'note': 'The public doctor dashboard and the data pipe between it and this portal.',
+            'note': 'The public doctor dashboard, the data pipe to this portal, and the data behind the site tools.',
             'checks': [
                 dict(label='Website reachable', **net['site_in']),
                 dict(label='Portal ↔ site connection (API key)', **handshake),
+                dict(label='Website inquiries flowing in', **inquiries),
                 dict(label='Doctor sign-ups flowing in', **signups),
                 dict(label='Doctor profiles complete (onboarding sync)', **sync),
+                dict(label='Predictor / cut-off / mentor data', **stats),
             ],
         },
         {
