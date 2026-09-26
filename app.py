@@ -54492,6 +54492,11 @@ register_internal_transfer_completion(app)
 from routes.verification_queues import register_verification_queues
 register_verification_queues(app)
 
+# System Health dashboard — /admin/health (admin only): live green/amber/red
+# board for portal + goocampus.in + jobs site + email/WhatsApp/OTP/storage.
+from routes.health import register_health
+register_health(app)
+
 # Client Feedback — anonymous stage-wise forms (public /feedback/<token>) +
 # centralised admin under Clients (Access Master 'clients'/'feedback').
 from routes.feedback import register_routes as register_feedback
