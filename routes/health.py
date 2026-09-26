@@ -154,7 +154,7 @@ def _check_handshake():
     try:
         conn = get_db()
         row = conn.execute(
-            "SELECT COUNT(*) AS n FROM pg_mentors WHERE COALESCE(is_published, 1) = 1"
+            "SELECT COUNT(*) AS n FROM pg_mentors WHERE COALESCE(is_published, TRUE)"
         ).fetchone()
         conn.close()
         n = (row['n'] if row else 0) or 0
@@ -298,7 +298,7 @@ def _check_stats_data():
         colleges = (conn.execute("SELECT COUNT(*) AS n FROM pg_college_master").fetchone() or {}).get('n', 0) or 0
         cutoffs = (conn.execute("SELECT COUNT(*) AS n FROM pg_cutoffs").fetchone() or {}).get('n', 0) or 0
         mentors = (conn.execute(
-            "SELECT COUNT(*) AS n FROM pg_mentors WHERE COALESCE(is_published, 1) = 1").fetchone() or {}).get('n', 0) or 0
+            "SELECT COUNT(*) AS n FROM pg_mentors WHERE COALESCE(is_published, TRUE)").fetchone() or {}).get('n', 0) or 0
         conn.close()
         detail = f'Colleges {colleges:,} · Cut-off rows {cutoffs:,} · Mentors {mentors:,}'
         if colleges and cutoffs and mentors:
