@@ -115,21 +115,25 @@ def _check_doctor_signups():
 
 
 def _check_profile_sync():
-    """Doctors with no name = onboarding->profile sync didn't land (the '(name pending)' bug)."""
+    """The real '(name pending)' bug: a doctor who SUBMITTED onboarding but whose
+    profile name never synced. (An empty name on a doctor who only OTP-logged-in and
+    never onboarded is normal, so we only count submitted-but-nameless ones.)"""
     from db import get_db
     conn = None
     try:
         conn = get_db()
         row = conn.execute(
-            "SELECT COUNT(*) AS n FROM pg_users WHERE COALESCE(name, '') = ''"
+            "SELECT COUNT(*) AS n FROM pg_pgcp_onboarding o "
+            "JOIN pg_users u ON u.id = o.user_id "
+            "WHERE o.status = 'submitted' AND COALESCE(u.name, '') = ''"
         ).fetchone()
         conn.close()
         n = (row['n'] if row else 0) or 0
         if n == 0:
-            return _ok('Every doctor profile has a name — onboarding sync is healthy')
-        if n <= 3:
-            return _warn(f'{n} doctor(s) still show "name pending" — worth a look')
-        return _down(f'{n} doctors show "name pending" — onboarding→profile sync may be broken')
+            return _ok('Every completed onboarding synced its profile — no "name pending"')
+        if n <= 2:
+            return _warn(f'{n} doctor(s) completed onboarding but show "name pending" — worth a look')
+        return _down(f'{n} doctors completed onboarding but show "name pending" — sync may be broken')
     except Exception as e:
         try:
             if conn:
