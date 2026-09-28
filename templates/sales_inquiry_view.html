@@ -1,5 +1,5 @@
 {% extends "sales_sidebar_base.html" %}
-{% block title %}Inquiry — {{ inq.lead_name or 'Website enquiry' }}{% endblock %}
+{% block title %}Inquiry — {{ (inq.lead_name|dr_name) or 'Website enquiry' }}{% endblock %}
 {% block section_content %}
 <style>
   :root{--navy:#1B2A4A;--orange:#F58220;}
@@ -51,7 +51,7 @@
   <div class="who">
     <div class="iv-av">{{ (inq.lead_name or 'W')[:1]|upper }}</div>
     <div style="flex:1;">
-      <h1>{{ inq.lead_name or 'Website enquiry' }}</h1>
+      <h1>{{ (inq.lead_name|dr_name) or 'Website enquiry' }}</h1>
       <div class="meta">🌐 goocampus.in enquiry</div>
       <div style="margin-top:0.55rem;display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
         <span class="pill s-{{ (inq.inquiry_status or 'New')|replace(' ','')|replace('-','') }}">{{ inq.inquiry_status or 'New' }}</span>
@@ -100,7 +100,7 @@
   <div>
     <div class="card">
       <h3>Contact</h3>
-      <div class="row"><span class="k">Name</span><span class="v">{{ inq.lead_name or '—' }}</span></div>
+      <div class="row"><span class="k">Name</span><span class="v">{{ (inq.lead_name|dr_name) or '—' }}</span></div>
       <div class="row"><span class="k">Phone</span><span class="v">{{ inq.phone or '—' }}</span></div>
       <div class="row"><span class="k">Email</span><span class="v">{{ inq.email or '—' }}</span></div>
       <div class="row"><span class="k">Source</span><span class="v">{{ inq.source or 'goocampus.in' }}</span></div>
