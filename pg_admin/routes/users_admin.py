@@ -76,11 +76,15 @@ _CATEGORY_LABELS = {'team': 'Team', 'internal': 'Internal', 'paid': 'Paid', 'fre
 
 def _category_case(ualias='u'):
     um = _m10_sql(f"{ualias}.mobile")
+    # Read employee phone columns via to_jsonb(e)->>'col' so a column that a Render
+    # cold-start ALTER hasn't added yet returns NULL instead of erroring the query.
+    def _emp_m10(field):
+        return f"RIGHT(regexp_replace(COALESCE(to_jsonb(e)->>'{field}',''),'[^0-9]','','g'),10)"
     is_emp = (
         f"({um} <> '' AND EXISTS (SELECT 1 FROM employees e "
         f"WHERE COALESCE(e.is_active,1)=1 AND ("
-        f"{_m10_sql('e.official_number')}={um} OR {_m10_sql('e.phone')}={um} "
-        f"OR {_m10_sql('e.personal_phone')}={um})))"
+        f"{_emp_m10('official_number')}={um} OR {_emp_m10('phone')}={um} "
+        f"OR {_emp_m10('personal_phone')}={um})))"
     )
     is_internal = (
         f"({um} <> '' AND EXISTS (SELECT 1 FROM pg_pgcp_invitations i "
