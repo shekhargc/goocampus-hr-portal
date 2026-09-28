@@ -14,6 +14,23 @@ def _admin():
     return u if (u and u.get('is_admin')) else None
 
 
+def _require_events_section(action='view'):
+    """Admin OR an employee granted goocampus.in → 'Events'. Returns the user or None,
+    so an Access Master grant lets a team member see event sign-ups. (founder 2026-09-28)"""
+    u = get_user()
+    if not u:
+        return None
+    if u.get('is_admin'):
+        return u
+    try:
+        from app import has_section_permission
+        if has_section_permission(u, 'goocampus_in', 'events', action):
+            return u
+    except Exception:
+        pass
+    return None
+
+
 def _s(v):
     return (str(v).strip() if v is not None else '')
 
@@ -25,7 +42,7 @@ def _slugify(t):
 
 @login_required
 def events_admin():
-    u = _admin()
+    u = _require_events_section("view")
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     try:
@@ -53,7 +70,7 @@ def events_admin():
 
 @login_required
 def event_create():
-    u = _admin()
+    u = _require_events_section("edit")
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     title = _s(request.form.get('title'))
@@ -86,7 +103,7 @@ def event_create():
 
 @login_required
 def event_toggle(event_id):
-    u = _admin()
+    u = _require_events_section("edit")
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
@@ -102,7 +119,7 @@ def event_toggle(event_id):
 
 @login_required
 def event_export(event_id):
-    u = _admin()
+    u = _require_events_section("view")
     if not u:
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     import openpyxl

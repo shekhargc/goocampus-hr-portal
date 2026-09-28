@@ -49,6 +49,25 @@ def _require_admin():
     return user
 
 
+def _require_users_section(action='view'):
+    """Admin OR an employee granted goocampus.in → 'Registered Doctors'. Returns the
+    user dict or None. This is what makes the Access Master grant actually take effect
+    for this section; every OTHER pg_admin section keeps its admin-only _require_admin()
+    so a granted employee still can't reach PGCP/plans/coupons. (founder 2026-09-28)"""
+    user = get_user()
+    if not user:
+        return None
+    if user.get('is_admin'):
+        return user
+    try:
+        from app import has_section_permission
+        if has_section_permission(user, 'goocampus_in', 'users', action):
+            return user
+    except Exception:
+        pass
+    return None
+
+
 def _int_or_none(raw):
     raw = (str(raw) if raw is not None else '').strip()
     if raw == '':
@@ -102,7 +121,7 @@ def _category_case(ualias='u'):
 
 @login_required
 def users_admin():
-    user = _require_admin()
+    user = _require_users_section("view")
     if not user:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -254,7 +273,7 @@ def users_admin():
 @login_required
 def user_detail(user_id):
     """One doctor: profile, plan history, and what they've actually used."""
-    admin = _require_admin()
+    admin = _require_users_section("view")
     if not admin:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -431,7 +450,7 @@ def user_detail(user_id):
 def user_save(user_id):
     """Edit the profile fields the team maintains (never the mobile — that is the
     login identity and the OTP is bound to it)."""
-    admin = _require_admin()
+    admin = _require_users_section("edit")
     if not admin:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -496,7 +515,7 @@ def user_save(user_id):
 
 @login_required
 def user_block(user_id):
-    admin = _require_admin()
+    admin = _require_users_section("edit")
     if not admin:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -523,7 +542,7 @@ def user_block(user_id):
 def user_grant_plan(user_id):
     """Put a doctor on a plan by hand — for a comp, a refund fix, or a sale closed
     over the phone before online payment exists."""
-    admin = _require_admin()
+    admin = _require_users_section("edit")
     if not admin:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -592,7 +611,7 @@ def _norm10(s):
 def user_set_team(user_id):
     """Mark / unmark a doctor account as a TEAM MEMBER (staff) — 'convert to employee'
     for an already-registered account (and undo)."""
-    admin = _require_admin()
+    admin = _require_users_section("edit")
     if not admin:
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
     val = 1 if (request.form.get('team') or '').strip() in ('1', 'on', 'true') else 0
@@ -618,7 +637,7 @@ def employee_search():
     """GET /admin/pg/users/employee-search?q= → active employees for the add-employee
     picker. Reads phone fields via dict.get so a missing column can't error the query."""
     from flask import jsonify
-    admin = _require_admin()
+    admin = _require_users_section("view")
     if not admin:
         return jsonify([]), 403
     q = (request.args.get('q') or '').strip()
@@ -653,7 +672,7 @@ def add_employee():
     """POST /admin/pg/users/add-employee — add a staff member as a Team account:
     find-or-create their pg_users row by last-10 mobile (so their OTP login links up),
     flag is_team_member=1, backfill name/email, and grant the chosen plan."""
-    admin = _require_admin()
+    admin = _require_users_section("edit")
     if not admin:
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
     mob = _norm10(request.form.get('mobile'))
@@ -710,7 +729,7 @@ def add_employee():
 
 @login_required
 def subscription_cancel(sub_id):
-    admin = _require_admin()
+    admin = _require_users_section("edit")
     if not admin:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
@@ -742,7 +761,7 @@ def subscription_cancel(sub_id):
 def user_reset_usage(user_id):
     """Clear a doctor's counters — the support fix for "it says I've used my 3 PDFs
     but I only opened one"."""
-    admin = _require_admin()
+    admin = _require_users_section("edit")
     if not admin:
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
