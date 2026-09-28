@@ -175,6 +175,20 @@ def dr_name_filter(value):
     return format_dr_name(value)
 
 
+@app.template_filter('local_mobile')
+def local_mobile_filter(value):
+    """Display an Indian mobile WITHOUT the country code — strip a leading +91/91
+    (and any spaces/dashes) and show the bare 10 digits. Purely cosmetic for admin
+    views + exports; the stored value and OTP/last-10 matching are unchanged.
+    Non-10-digit / foreign numbers are returned trimmed but as-is. (founder 2026-09-28)"""
+    import re as _re
+    s = str(value or '').strip()
+    if not s:
+        return s
+    digits = _re.sub(r'\D', '', s)
+    return digits[-10:] if len(digits) >= 10 else s
+
+
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
 os.makedirs(PHOTO_FOLDER, exist_ok=True)
 
