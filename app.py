@@ -14268,6 +14268,14 @@ def admin_diag_sms_test():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     import html as _html
     mobile = (request.args.get('mobile') or '').strip()
+    # This server's OUTBOUND IP — the address TagSolutions sees. If their gateway
+    # whitelists API IPs, this is what must be added to their allow-list.
+    outbound_ip = '?'
+    try:
+        import requests as _rq
+        outbound_ip = (_rq.get('https://api.ipify.org', timeout=6).text or '?').strip()[:60]
+    except Exception as e:
+        outbound_ip = f'(could not fetch: {e})'
     try:
         from sms_utils import is_configured, send_sms_otp
         cfg = is_configured()
@@ -14278,6 +14286,9 @@ def admin_diag_sms_test():
            "<h2>SMS OTP test (TagSolutions)</h2>",
            f"<p>SMS configured on <b>{_html.escape(request.host)}</b>: "
            f"<b style='color:{'#16a34a' if cfg else '#b91c1c'}'>{'YES' if cfg else 'NO — set the SMS_* env vars on this service'}</b></p>",
+           f"<p style='background:#fff7ed;border:1px solid #fed7aa;padding:10px 14px;border-radius:8px'>"
+           f"This server's <b>outbound IP</b> (give this to TagSolutions to whitelist): "
+           f"<b style='font-family:ui-monospace,monospace'>{_html.escape(str(outbound_ip))}</b></p>",
            f"<form method='GET' style='margin:14px 0'>Send test SMS to: "
            f"<input name='mobile' value='{_html.escape(mobile)}' placeholder='10-digit mobile' "
            f"inputmode='numeric' style='padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;width:220px'> "
