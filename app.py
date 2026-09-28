@@ -14258,6 +14258,44 @@ def admin_diag_email_test():
     return "\n".join(parts)
 
 
+@app.route('/admin/diag/sms-test')
+@login_required
+def admin_diag_sms_test():
+    """Send a TEST SMS OTP (code 123456) via TagSolutions and show the provider's
+    response — the SMS twin of /admin/diag/otp-test. Also reports whether the SMS_*
+    env vars are set on this server. Admin only. (founder 2026-09-28)"""
+    if not session.get('is_admin'):
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    import html as _html
+    mobile = (request.args.get('mobile') or '').strip()
+    try:
+        from sms_utils import is_configured, send_sms_otp
+        cfg = is_configured()
+    except Exception as e:
+        cfg = False
+        send_sms_otp = None
+    out = ["<div style='font-family:system-ui,sans-serif;max-width:760px;margin:32px auto;padding:0 16px;color:#1e293b'>",
+           "<h2>SMS OTP test (TagSolutions)</h2>",
+           f"<p>SMS configured on <b>{_html.escape(request.host)}</b>: "
+           f"<b style='color:{'#16a34a' if cfg else '#b91c1c'}'>{'YES' if cfg else 'NO — set the SMS_* env vars on this service'}</b></p>",
+           f"<form method='GET' style='margin:14px 0'>Send test SMS to: "
+           f"<input name='mobile' value='{_html.escape(mobile)}' placeholder='10-digit mobile' "
+           f"inputmode='numeric' style='padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;width:220px'> "
+           f"<button style='padding:8px 18px;background:#F58220;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer'>Send test</button></form>",
+           "<p style='color:#64748b;font-size:.9rem'>Sends a real SMS with the test code <b>123456</b> and shows exactly what the provider returns.</p>"]
+    if mobile and cfg and send_sms_otp:
+        ok, err = send_sms_otp(mobile, '123456')
+        if ok:
+            out.append(f"<p style='color:#16a34a;font-size:15px'>✅ Provider ACCEPTED the SMS. Check <b>{_html.escape(mobile)}</b> for a message containing <b>123456</b>. "
+                       f"If it arrives, SMS OTP works. (Full provider response is in the server logs.)</p>")
+        else:
+            out.append(f"<pre style='background:#fef2f2;border:1px solid #fecaca;padding:12px;border-radius:8px;white-space:pre-wrap'>❌ Not sent: {_html.escape(str(err))}</pre>")
+    elif mobile and not cfg:
+        out.append("<p style='color:#b91c1c'>Set the six SMS_* environment variables on this Render service first, then retry.</p>")
+    out.append("</div>")
+    return "\n".join(out)
+
+
 @app.route('/admin/onboarding', methods=['GET', 'POST'])
 @admin_required
 def admin_onboarding():
