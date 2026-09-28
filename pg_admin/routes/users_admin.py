@@ -86,9 +86,13 @@ def _category_case(ualias='u'):
         f"WHERE i.status <> 'cancelled' AND i.client_type='internal' "
         f"AND {_m10_sql('i.mobile')}={um}))"
     )
+    # Paid/external = an active priced plan they ACTUALLY paid for (price_paid > 0),
+    # which excludes admin_grant comps (price_paid = 0). PGCP plans are plan_kind
+    # 'counselling', normal paid plans are 'paid' — accept both.
     is_paid = (
         f"EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id=s.plan_id "
-        f"WHERE s.user_id={ualias}.id AND s.status='active' AND p.plan_kind='paid' "
+        f"WHERE s.user_id={ualias}.id AND s.status='active' "
+        f"AND p.plan_kind IN ('paid','counselling') AND COALESCE(s.price_paid,0) > 0 "
         f"AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP))"
     )
     return (f"CASE WHEN {is_team} THEN 'team' "

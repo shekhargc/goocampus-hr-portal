@@ -63,7 +63,7 @@
       <label style="display:block;font-size:0.7rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Plan</label>
       <select name="plan_id" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.87rem;background:#fff;">
         <option value="">No plan (just mark as staff)</option>
-        {% for p in plans %}{% if p.plan_kind == 'paid' %}<option value="{{ p.id }}">{{ p.name }}</option>{% endif %}{% endfor %}
+        {% for p in plans %}{% if (p.price or 0) > 0 %}<option value="{{ p.id }}">{{ p.name }}</option>{% endif %}{% endfor %}
       </select>
     </div>
     <button class="pu-btn pu-btn-primary" type="submit">Add as team member</button>
