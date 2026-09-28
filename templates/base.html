@@ -451,6 +451,9 @@
                     {% if has_college_access %}
                     <li><a href="{{ colleges_landing_url }}" class="{% if active_section == 'colleges' %}active{% endif %}">Colleges</a></li>
                     {% endif %}
+                    {% if can_access('goocampus_in','users','view') or can_access('goocampus_in','events','view') %}
+                    <li><a href="{% if can_access('goocampus_in','users','view') %}/admin/pg/users{% else %}/admin/pg/events{% endif %}" class="{% if active_section == 'goocampus_in' %}active{% endif %}">GooCampus.in</a></li>
+                    {% endif %}
                     <li><a href="/holidays" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
                 {% endif %}
 
