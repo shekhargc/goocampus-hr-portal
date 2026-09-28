@@ -8865,7 +8865,7 @@ def _send_client_invite_email(email, name, link, service_name='', counsellor_nam
   <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus Edu Solutions</h1></div>
   <div style="padding:30px;background-color:white;">
     <h2 style="color:#1e3a5f;margin-top:0;">Welcome to GooCampus!</h2>
-    <p style="font-size:16px;">Hello {format_dr_name(name) or 'Doctor'},</p>
+    <p style="font-size:16px;">Hello {name},</p>
     <p>Thank you for choosing GooCampus{service_line}. Please click the button below to complete your registration and get started.</p>
     {combined_block}
     {counsellor_block}
@@ -8884,7 +8884,7 @@ def _send_client_invite_email(email, name, link, service_name='', counsellor_nam
         try:
             _c = get_db()
             _t = _sc_render(_c, 'notify_client_invite', {
-                'client_name': format_dr_name(name) or 'Doctor', 'service_name': service_name or '',
+                'client_name': name or '', 'service_name': service_name or '',
                 'counsellor_name': counsellor_name or '', 'registration_link': link or ''})
             if _t:
                 _subj_i, _body_i = _t
@@ -9397,7 +9397,7 @@ def _notify_onboarding_confirmed(reg_id):
             tpl_enabled = bool(tpl and (tpl['enabled'] if 'enabled' in tpl.keys() and tpl['enabled'] is not None else 1))
             if tpl and tpl_enabled:
                 subs = {
-                    '{{client_name}}': format_dr_name(client_name) or 'Doctor',
+                    '{{client_name}}': client_name,
                     '{{counsellor_name}}': counsellor_nm or 'your counsellor',
                     '{{counsellor_number}}': counsellor_ph or '',
                     '{{counsellor_email}}': counsellor_em or '',
@@ -9415,7 +9415,7 @@ def _notify_onboarding_confirmed(reg_id):
                     client_body = client_body.replace(_k, str(_v))
             else:
                 client_subject = f"Welcome to GooCampus — {reg['product_name'] or 'Your Program'}!"
-                client_body = f"""<h2>Welcome to GooCampus, {format_dr_name(client_name) or 'Doctor'}!</h2>
+                client_body = f"""<h2>Welcome to GooCampus, {client_name}!</h2>
                 <p>Your onboarding for <strong>{reg['product_name'] or 'your program'}</strong> has been confirmed.</p>
                 <p><strong>Registration #:</strong> {reg['registration_number']}</p>
                 <p>You can log in to your client portal anytime to track your progress, upload documents, and stay updated.</p>

@@ -199,7 +199,7 @@
     <button class="hamburger" onclick="openSidebar()"><i class="bi bi-list"></i></button>
     <h1 id="pageTitle">Overview</h1>
     <div class="spacer"></div>
-    <div class="greet">Welcome, {{ (client_name_clean|dr_name) or 'Doctor' }}</div>
+    <div class="greet">Welcome, Doctor</div>
   </div>
 
   <div class="content">
@@ -210,7 +210,7 @@
     <!-- ══ OVERVIEW ══ -->
     <div class="section active" id="sec-overview">
       <div class="card hero">
-        <h2>Welcome, {{ (client_name_clean|dr_name) or 'Doctor' }} 👋</h2>
+        <h2>Welcome, Doctor 👋</h2>
         <p>Your GooCampus journey, all in one place. Use the menu to view your details, payments, documents and more.</p>
       </div>
       {% if onboarding_stages %}

@@ -285,7 +285,7 @@
         <div class="welcome-banner">
             {% if first_login %}
             {% set _full_name = ((account.first_name or '') ~ ' ' ~ (account.last_name or '')) %}
-            <h2>Welcome, {{ (client_name_clean|dr_name) or (_full_name.strip()|dr_name) or 'Doctor' }}</h2>
+            <h2>Welcome, {{ _full_name.strip() or account.first_name }}</h2>
             {% else %}
             <h2>Welcome back, {{ account.first_name }}</h2>
             {% endif %}
