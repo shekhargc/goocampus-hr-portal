@@ -9,6 +9,7 @@ from flask import render_template, request, redirect, url_for, flash
 from db import get_db
 from core.users import get_user
 from core.auth import login_required
+from core.helpers import format_dr_name
 
 
 def _admin():
@@ -275,7 +276,7 @@ def _send_pgcp_invite_email(inv):
     except Exception as e:
         logging.error("pgcp email import: %s", e)
         return False, 'email module unavailable'
-    name = _s(inv.get('client_name')) or 'Doctor'
+    name = format_dr_name(inv.get('client_name')) or 'Doctor'
     mobile = _s(inv.get('mobile'))
     if inv.get('client_type') == 'internal':
         subject = 'Your India PG Counselling is included — log in to GooCampus'
