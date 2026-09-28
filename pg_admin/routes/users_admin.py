@@ -59,6 +59,47 @@ def _int_or_none(raw):
         return None
 
 
+def _m10_sql(col):
+    """SQL: last-10 digits of a phone column (non-digits stripped). No % / ? so it is
+    shim-safe. Last-10 is the only stable cross-table key for a doctor's mobile."""
+    return f"RIGHT(regexp_replace(COALESCE({col},''),'[^0-9]','','g'),10)"
+
+
+# Doctor category (mutually exclusive, priority team > internal > paid > free):
+#   team     = mobile matches an ACTIVE employee — staff given a plan to use the product
+#   internal = a non-cancelled PGCP invitation marked client_type='internal' (comped)
+#   paid     = an active PAID subscription — a real paying/external client
+#   free     = none of the above
+# So a staff/comped account is never counted as paying revenue.
+_CATEGORY_LABELS = {'team': 'Team', 'internal': 'Internal', 'paid': 'Paid', 'free': 'Free'}
+
+
+def _category_case(ualias='u'):
+    um = _m10_sql(f"{ualias}.mobile")
+    # Team = an EXPLICIT staff flag the founder sets via the "add employees" flow —
+    # NOT an auto mobile match. Everyone else (self-signup, invited, internal client)
+    # is a doctor and keeps 'Dr.'. Read the flag via to_jsonb so a not-yet-added
+    # column returns NULL -> 0 (cold-start safe).
+    is_team = f"COALESCE((to_jsonb({ualias})->>'is_team_member')::int, 0) = 1"
+    is_internal = (
+        f"({um} <> '' AND EXISTS (SELECT 1 FROM pg_pgcp_invitations i "
+        f"WHERE i.status <> 'cancelled' AND i.client_type='internal' "
+        f"AND {_m10_sql('i.mobile')}={um}))"
+    )
+    # Paid/external = an active priced plan they ACTUALLY paid for (price_paid > 0),
+    # which excludes admin_grant comps (price_paid = 0). PGCP plans are plan_kind
+    # 'counselling', normal paid plans are 'paid' — accept both.
+    is_paid = (
+        f"EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id=s.plan_id "
+        f"WHERE s.user_id={ualias}.id AND s.status='active' "
+        f"AND p.plan_kind IN ('paid','counselling') AND COALESCE(s.price_paid,0) > 0 "
+        f"AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP))"
+    )
+    return (f"CASE WHEN {is_team} THEN 'team' "
+            f"WHEN {is_internal} THEN 'internal' "
+            f"WHEN {is_paid} THEN 'paid' ELSE 'free' END")
+
+
 @login_required
 def users_admin():
     user = _require_admin()
@@ -69,11 +110,13 @@ def users_admin():
     q = (request.args.get('q') or '').strip()
     f_plan = (request.args.get('plan') or '').strip()      # 'free' | 'paid' | plan code
     f_status = (request.args.get('status') or '').strip()  # 'active' | 'blocked'
+    f_type = (request.args.get('type') or '').strip()      # 'team'|'internal'|'paid'|'free'
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
     conn = get_db()
     users, plans = [], []
-    stats = {'total': 0, 'paid': 0, 'free': 0, 'blocked': 0, 'new_30d': 0}
+    stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
+             'blocked': 0, 'new_30d': 0}
     total_pages = 1
     try:
         plans = [dict(r) for r in conn.execute(
@@ -109,6 +152,9 @@ def users_admin():
             conds.append("COALESCE(u.is_blocked,0) = 1")
         elif f_status == 'active':
             conds.append("COALESCE(u.is_blocked,0) = 0")
+        if f_type in ('team', 'internal', 'paid', 'free'):
+            conds.append(f"({_category_case('u')}) = ?")
+            params.append(f_type)
         where = (' WHERE ' + ' AND '.join(conds)) if conds else ''
 
         row = conn.execute(f"SELECT COUNT(*) AS n {base}{where}", tuple(params)).fetchone()
@@ -118,7 +164,8 @@ def users_admin():
 
         users = [dict(r) for r in conn.execute(
             f"SELECT u.*, sub.plan_name, sub.plan_code, sub.plan_kind, "
-            f"       sub.expires_at AS plan_expires_at, sub.source AS plan_source "
+            f"       sub.expires_at AS plan_expires_at, sub.source AS plan_source, "
+            f"       ({_category_case('u')}) AS client_category "
             f"{base}{where} ORDER BY u.id DESC LIMIT {_PER_PAGE} OFFSET {(page-1)*_PER_PAGE}",
             tuple(params)).fetchall()]
 
@@ -172,16 +219,20 @@ def users_admin():
             "  COALESCE(SUM(CASE WHEN created_at > CURRENT_TIMESTAMP - INTERVAL '30 days' "
             "                    THEN 1 ELSE 0 END),0) AS new_30d "
             "FROM pg_users").fetchone()
-        paid = conn.execute(
-            "SELECT COUNT(DISTINCT s.user_id) AS n FROM pg_subscriptions s "
-            "JOIN pg_plans p ON p.id = s.plan_id WHERE s.status='active' "
-            "AND p.plan_kind='paid' AND (s.expires_at IS NULL OR "
-            "s.expires_at > CURRENT_TIMESTAMP)").fetchone()
+        # Mutually-exclusive category counts (team/internal/paid/free) so the numbers
+        # add up to total and comped/staff never inflate 'paid'.
+        cat_counts = {'team': 0, 'internal': 0, 'paid': 0, 'free': 0}
+        for r in conn.execute(
+                f"SELECT ({_category_case('u')}) AS cat, COUNT(*) AS n "
+                f"FROM pg_users u GROUP BY 1").fetchall():
+            if r['cat'] in cat_counts:
+                cat_counts[r['cat']] = int(r['n'] or 0)
         stats = {
             'total': int(s['total'] or 0), 'blocked': int(s['blocked'] or 0),
-            'new_30d': int(s['new_30d'] or 0), 'paid': int((paid or {}).get('n') or 0),
+            'new_30d': int(s['new_30d'] or 0),
+            'team': cat_counts['team'], 'internal': cat_counts['internal'],
+            'paid': cat_counts['paid'], 'free': cat_counts['free'],
         }
-        stats['free'] = max(0, stats['total'] - stats['paid'])
     except Exception as e:
         conn.rollback()
         logging.error("users_admin: %s", e)
@@ -194,7 +245,9 @@ def users_admin():
 
     return render_template('pg_admin/users.html', user=user, users=users,
                            plans=plans, stats=stats, q=q, f_plan=f_plan,
-                           f_status=f_status, page=page, total_pages=total_pages,
+                           f_status=f_status, f_type=f_type,
+                           cat_labels=_CATEGORY_LABELS,
+                           page=page, total_pages=total_pages,
                            active_section='goocampus_in')
 
 
@@ -515,6 +568,144 @@ def user_grant_plan(user_id):
         except Exception:
             pass
     return redirect(url_for('pg_user_detail', user_id=user_id))
+
+
+# ── Team members (staff) ──────────────────────────────────────────────────────
+# 'Dr.' is the default for every doctor. Only accounts flagged here (via the
+# add-employee picker or the convert button) are staff → shown without 'Dr.' and
+# counted as Team, not clients. (founder 2026-09-28)
+def _ensure_team_col(conn):
+    try:
+        conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS is_team_member INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _norm10(s):
+    d = ''.join(ch for ch in str(s or '') if ch.isdigit())
+    return d[-10:] if len(d) >= 10 else ''
+
+
+@login_required
+def user_set_team(user_id):
+    """Mark / unmark a doctor account as a TEAM MEMBER (staff) — 'convert to employee'
+    for an already-registered account (and undo)."""
+    admin = _require_admin()
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    val = 1 if (request.form.get('team') or '').strip() in ('1', 'on', 'true') else 0
+    conn = get_db()
+    try:
+        _ensure_team_col(conn)
+        conn.execute("UPDATE pg_users SET is_team_member = ?, updated_at = CURRENT_TIMESTAMP "
+                     "WHERE id = ?", (val, user_id))
+        conn.commit()
+        flash('Marked as a team member (staff) — shown without “Dr.”' if val
+              else 'Unmarked — back to a regular doctor account (shows “Dr.”).', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("user_set_team: %s", e)
+        flash('Could not update the team flag.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_user_detail', user_id=user_id))
+
+
+@login_required
+def employee_search():
+    """GET /admin/pg/users/employee-search?q= → active employees for the add-employee
+    picker. Reads phone fields via dict.get so a missing column can't error the query."""
+    from flask import jsonify
+    admin = _require_admin()
+    if not admin:
+        return jsonify([]), 403
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    conn = get_db()
+    out = []
+    try:
+        like = f"%{q}%"
+        rows = conn.execute(
+            "SELECT * FROM employees WHERE COALESCE(is_active,1)=1 "
+            "AND (COALESCE(name,'') ILIKE ? OR COALESCE(emp_code,'') ILIKE ?) "
+            "ORDER BY name LIMIT 20", (like, like)).fetchall()
+        for r in rows:
+            d = dict(r)
+            mob = (_norm10(d.get('official_number')) or _norm10(d.get('phone'))
+                   or _norm10(d.get('personal_phone')))
+            if not mob:
+                continue
+            out.append({'name': d.get('name') or '', 'emp_code': d.get('emp_code') or '',
+                        'mobile': mob, 'email': d.get('email') or d.get('personal_email') or ''})
+    except Exception as e:
+        logging.error("employee_search: %s", e)
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return jsonify(out)
+
+
+@login_required
+def add_employee():
+    """POST /admin/pg/users/add-employee — add a staff member as a Team account:
+    find-or-create their pg_users row by last-10 mobile (so their OTP login links up),
+    flag is_team_member=1, backfill name/email, and grant the chosen plan."""
+    admin = _require_admin()
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    mob = _norm10(request.form.get('mobile'))
+    name = (request.form.get('name') or '').strip()[:120]
+    email = (request.form.get('email') or '').strip()[:200]
+    plan_id = _int_or_none(request.form.get('plan_id'))
+    if not mob:
+        flash('Pick a staff member with a valid mobile number.', 'error')
+        return redirect(url_for('pg_users_admin'))
+    conn = get_db()
+    uid = None
+    try:
+        _ensure_team_col(conn)
+        row = conn.execute(
+            "SELECT id FROM pg_users WHERE "
+            "RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? "
+            "ORDER BY id ASC LIMIT 1", (mob,)).fetchone()
+        if row:
+            uid = row['id']
+            conn.execute("UPDATE pg_users SET is_team_member = 1, "
+                         "name = COALESCE(NULLIF(name,''), ?), "
+                         "email = COALESCE(NULLIF(email,''), ?), "
+                         "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (name, email, uid))
+        else:
+            uid = conn.execute(
+                "INSERT INTO pg_users (mobile, name, email, is_team_member, created_at) "
+                "VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP) RETURNING id",
+                (mob, name, email)).fetchone()['id']
+        conn.commit()
+        # Grant the chosen plan via the same admin_grant path as a manual grant.
+        if plan_id:
+            plan = conn.execute("SELECT * FROM pg_plans WHERE id = ?", (plan_id,)).fetchone()
+            if plan:
+                plan = dict(plan)
+                days = plan.get('duration_days') or _PERIOD_DAYS.get(plan.get('billing_period'))
+                expires = (datetime.utcnow() + timedelta(days=int(days))) if days else None
+                conn.execute("UPDATE pg_subscriptions SET status='cancelled', "
+                             "cancelled_at=CURRENT_TIMESTAMP WHERE user_id = ? AND status='active'",
+                             (uid,))
+                conn.execute("INSERT INTO pg_subscriptions (user_id, plan_id, status, expires_at, "
+                             "price_paid, source, notes, granted_by) VALUES (?,?,?,?,?,?,?,?)",
+                             (uid, plan_id, 'active', expires, 0, 'admin_grant', 'team member',
+                              admin.get('name') or ''))
+                conn.commit()
+        flash(f'{name or "Team member"} added as staff (no “Dr.”).', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("add_employee: %s", e)
+        flash('Could not add the team member.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_user_detail', user_id=uid) if uid else url_for('pg_users_admin'))
 
 
 @login_required
