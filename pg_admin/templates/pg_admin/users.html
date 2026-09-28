@@ -7,12 +7,13 @@
   .pu-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; }
   .pu-header h1 { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
   .pu-header p { color:var(--gray-500); font-size:0.9rem; margin:0.15rem 0 0; }
-  .pu-stats { display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; margin-bottom:1.5rem; }
+  .pu-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:0.8rem; margin-bottom:1.5rem; }
   .pu-stat { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.9rem 1.1rem; }
   .pu-stat .lbl { font-size:0.74rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
   .pu-stat .val { font-size:1.55rem; font-weight:700; color:var(--navy); margin-top:0.15rem; }
   .pu-stat.paid .val { color:#16a34a; } .pu-stat.blk .val { color:#b91c1c; }
-  @media (max-width:900px){ .pu-stats{ grid-template-columns:repeat(2,1fr);} }
+  .pu-stat.internal .val { color:#c2410c; } .pu-stat.team .val { color:#6b21a8; }
+  @media (max-width:900px){ .pu-stats{ grid-template-columns:repeat(3,1fr);} }
   .pu-controls { display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
   .pu-controls input[type=text], .pu-controls select { padding:0.5rem 0.7rem; border:1px solid var(--gray-300);
       border-radius:0.45rem; font-size:0.87rem; background:#fff; }
@@ -30,6 +31,7 @@
   .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
   .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-500); }
   .chip-red { background:#fee2e2; color:#b91c1c; } .chip-orange { background:#fde9d6; color:#c2410c; }
+  .chip-purple { background:#f3e8ff; color:#6b21a8; }
   .pu-pager { display:flex; gap:0.4rem; justify-content:center; margin-top:1.2rem; align-items:center; }
   .pu-pager a, .pu-pager span { padding:0.4rem 0.75rem; border:1px solid var(--gray-300); border-radius:0.4rem;
       font-size:0.85rem; text-decoration:none; color:var(--navy); }
@@ -46,8 +48,10 @@
 
 <div class="pu-stats">
   <div class="pu-stat"><div class="lbl">Total doctors</div><div class="val">{{ stats.total }}</div></div>
-  <div class="pu-stat paid"><div class="lbl">Paid</div><div class="val">{{ stats.paid }}</div></div>
+  <div class="pu-stat internal"><div class="lbl">Internal</div><div class="val">{{ stats.internal }}</div></div>
+  <div class="pu-stat paid"><div class="lbl">Paid (external)</div><div class="val">{{ stats.paid }}</div></div>
   <div class="pu-stat"><div class="lbl">Free</div><div class="val">{{ stats.free }}</div></div>
+  <div class="pu-stat team"><div class="lbl">Team (staff)</div><div class="val">{{ stats.team }}</div></div>
   <div class="pu-stat"><div class="lbl">New (30 days)</div><div class="val">{{ stats.new_30d }}</div></div>
   <div class="pu-stat blk"><div class="lbl">Blocked</div><div class="val">{{ stats.blocked }}</div></div>
 </div>
@@ -60,13 +64,20 @@
     <option value="free" {{ 'selected' if f_plan=='free' }}>Free only</option>
     {% for p in plans %}<option value="{{ p.code }}" {{ 'selected' if f_plan==p.code }}>{{ p.name }}</option>{% endfor %}
   </select>
+  <select name="type" onchange="this.form.submit()">
+    <option value="">All types</option>
+    <option value="internal" {{ 'selected' if f_type=='internal' }}>Internal</option>
+    <option value="paid" {{ 'selected' if f_type=='paid' }}>Paid (external)</option>
+    <option value="free" {{ 'selected' if f_type=='free' }}>Free</option>
+    <option value="team" {{ 'selected' if f_type=='team' }}>Team (staff)</option>
+  </select>
   <select name="status" onchange="this.form.submit()">
     <option value="">All statuses</option>
     <option value="active" {{ 'selected' if f_status=='active' }}>Active</option>
     <option value="blocked" {{ 'selected' if f_status=='blocked' }}>Blocked</option>
   </select>
   <button class="pu-btn pu-btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
-  {% if q or f_plan or f_status %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
+  {% if q or f_plan or f_status or f_type %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
 </form>
 
 {% if users %}
@@ -80,6 +91,9 @@
     <tr>
       <td>
         <div class="pu-name">{{ (u.name|dr_name) or '(name pending)' }}
+          {% set _cat = u.client_category or 'free' %}
+          {% set _catcolor = {'team':'purple','internal':'orange','paid':'green','free':'gray'} %}
+          <span class="chip chip-{{ _catcolor[_cat] }}">{{ cat_labels[_cat] }}</span>
           {% if u.is_blocked %}<span class="chip chip-red">Blocked</span>{% endif %}</div>
         <div class="pu-sub">{{ u.college or '' }}{% if u.state %} · {{ u.state }}{% endif %}</div>
       </td>

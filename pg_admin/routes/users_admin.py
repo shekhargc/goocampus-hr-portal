@@ -59,6 +59,44 @@ def _int_or_none(raw):
         return None
 
 
+def _m10_sql(col):
+    """SQL: last-10 digits of a phone column (non-digits stripped). No % / ? so it is
+    shim-safe. Last-10 is the only stable cross-table key for a doctor's mobile."""
+    return f"RIGHT(regexp_replace(COALESCE({col},''),'[^0-9]','','g'),10)"
+
+
+# Doctor category (mutually exclusive, priority team > internal > paid > free):
+#   team     = mobile matches an ACTIVE employee — staff given a plan to use the product
+#   internal = a non-cancelled PGCP invitation marked client_type='internal' (comped)
+#   paid     = an active PAID subscription — a real paying/external client
+#   free     = none of the above
+# So a staff/comped account is never counted as paying revenue.
+_CATEGORY_LABELS = {'team': 'Team', 'internal': 'Internal', 'paid': 'Paid', 'free': 'Free'}
+
+
+def _category_case(ualias='u'):
+    um = _m10_sql(f"{ualias}.mobile")
+    is_emp = (
+        f"({um} <> '' AND EXISTS (SELECT 1 FROM employees e "
+        f"WHERE COALESCE(e.is_active,1)=1 AND ("
+        f"{_m10_sql('e.official_number')}={um} OR {_m10_sql('e.phone')}={um} "
+        f"OR {_m10_sql('e.personal_phone')}={um})))"
+    )
+    is_internal = (
+        f"({um} <> '' AND EXISTS (SELECT 1 FROM pg_pgcp_invitations i "
+        f"WHERE i.status <> 'cancelled' AND i.client_type='internal' "
+        f"AND {_m10_sql('i.mobile')}={um}))"
+    )
+    is_paid = (
+        f"EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id=s.plan_id "
+        f"WHERE s.user_id={ualias}.id AND s.status='active' AND p.plan_kind='paid' "
+        f"AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP))"
+    )
+    return (f"CASE WHEN {is_emp} THEN 'team' "
+            f"WHEN {is_internal} THEN 'internal' "
+            f"WHEN {is_paid} THEN 'paid' ELSE 'free' END")
+
+
 @login_required
 def users_admin():
     user = _require_admin()
@@ -69,11 +107,13 @@ def users_admin():
     q = (request.args.get('q') or '').strip()
     f_plan = (request.args.get('plan') or '').strip()      # 'free' | 'paid' | plan code
     f_status = (request.args.get('status') or '').strip()  # 'active' | 'blocked'
+    f_type = (request.args.get('type') or '').strip()      # 'team'|'internal'|'paid'|'free'
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
     conn = get_db()
     users, plans = [], []
-    stats = {'total': 0, 'paid': 0, 'free': 0, 'blocked': 0, 'new_30d': 0}
+    stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
+             'blocked': 0, 'new_30d': 0}
     total_pages = 1
     try:
         plans = [dict(r) for r in conn.execute(
@@ -109,6 +149,9 @@ def users_admin():
             conds.append("COALESCE(u.is_blocked,0) = 1")
         elif f_status == 'active':
             conds.append("COALESCE(u.is_blocked,0) = 0")
+        if f_type in ('team', 'internal', 'paid', 'free'):
+            conds.append(f"({_category_case('u')}) = ?")
+            params.append(f_type)
         where = (' WHERE ' + ' AND '.join(conds)) if conds else ''
 
         row = conn.execute(f"SELECT COUNT(*) AS n {base}{where}", tuple(params)).fetchone()
@@ -118,7 +161,8 @@ def users_admin():
 
         users = [dict(r) for r in conn.execute(
             f"SELECT u.*, sub.plan_name, sub.plan_code, sub.plan_kind, "
-            f"       sub.expires_at AS plan_expires_at, sub.source AS plan_source "
+            f"       sub.expires_at AS plan_expires_at, sub.source AS plan_source, "
+            f"       ({_category_case('u')}) AS client_category "
             f"{base}{where} ORDER BY u.id DESC LIMIT {_PER_PAGE} OFFSET {(page-1)*_PER_PAGE}",
             tuple(params)).fetchall()]
 
@@ -172,16 +216,20 @@ def users_admin():
             "  COALESCE(SUM(CASE WHEN created_at > CURRENT_TIMESTAMP - INTERVAL '30 days' "
             "                    THEN 1 ELSE 0 END),0) AS new_30d "
             "FROM pg_users").fetchone()
-        paid = conn.execute(
-            "SELECT COUNT(DISTINCT s.user_id) AS n FROM pg_subscriptions s "
-            "JOIN pg_plans p ON p.id = s.plan_id WHERE s.status='active' "
-            "AND p.plan_kind='paid' AND (s.expires_at IS NULL OR "
-            "s.expires_at > CURRENT_TIMESTAMP)").fetchone()
+        # Mutually-exclusive category counts (team/internal/paid/free) so the numbers
+        # add up to total and comped/staff never inflate 'paid'.
+        cat_counts = {'team': 0, 'internal': 0, 'paid': 0, 'free': 0}
+        for r in conn.execute(
+                f"SELECT ({_category_case('u')}) AS cat, COUNT(*) AS n "
+                f"FROM pg_users u GROUP BY 1").fetchall():
+            if r['cat'] in cat_counts:
+                cat_counts[r['cat']] = int(r['n'] or 0)
         stats = {
             'total': int(s['total'] or 0), 'blocked': int(s['blocked'] or 0),
-            'new_30d': int(s['new_30d'] or 0), 'paid': int((paid or {}).get('n') or 0),
+            'new_30d': int(s['new_30d'] or 0),
+            'team': cat_counts['team'], 'internal': cat_counts['internal'],
+            'paid': cat_counts['paid'], 'free': cat_counts['free'],
         }
-        stats['free'] = max(0, stats['total'] - stats['paid'])
     except Exception as e:
         conn.rollback()
         logging.error("users_admin: %s", e)
@@ -194,7 +242,9 @@ def users_admin():
 
     return render_template('pg_admin/users.html', user=user, users=users,
                            plans=plans, stats=stats, q=q, f_plan=f_plan,
-                           f_status=f_status, page=page, total_pages=total_pages,
+                           f_status=f_status, f_type=f_type,
+                           cat_labels=_CATEGORY_LABELS,
+                           page=page, total_pages=total_pages,
                            active_section='goocampus_in')
 
 
