@@ -46676,6 +46676,17 @@ ACCESS_SECTION_CATALOG = [
             ('profile',           'Profile Settings',   'Partner profile + bank details'),
         ],
     },
+    # ── goocampus.in Admin (only these two sub-sections are grantable to team members;
+    #    the rest of goocampus.in Admin stays admin-only via its own in-view gate) ──
+    {
+        'key': 'goocampus_in',
+        'label': 'goocampus.in Admin',
+        'description': 'The goocampus.in areas a team member can be given. The rest of goocampus.in Admin (PGCP invites, Pricing & Plans, Coupons, Mentors, College data) stays admin-only.',
+        'sub_sections': [
+            ('users',  'Registered Doctors', 'View doctors, activate/edit profiles, grant plans, add team members'),
+            ('events', 'Events',             'See event sign-ups + who registered for each event'),
+        ],
+    },
 ]
 
 
@@ -49906,6 +49917,24 @@ def _ap(main, sub, action='view'):
 
 
 ACCESS_ROUTE_MAP = {
+    # ── goocampus.in Admin — ONLY these two areas are grantable to team members.
+    # Every other pg_admin endpoint stays UNMAPPED here and keeps its in-view
+    # admin gate, so a granted 'users'/'events' employee can't reach PGCP invites,
+    # plans, coupons, mentors or college data. (founder 2026-09-28)
+    'pg_users_admin':        _ap('goocampus_in', 'users', 'view'),
+    'pg_user_detail':        _ap('goocampus_in', 'users', 'view'),
+    'pg_employee_search':    _ap('goocampus_in', 'users', 'view'),
+    'pg_user_save':          _ap('goocampus_in', 'users', 'edit'),
+    'pg_user_block':         _ap('goocampus_in', 'users', 'edit'),
+    'pg_user_grant_plan':    _ap('goocampus_in', 'users', 'edit'),
+    'pg_user_set_team':      _ap('goocampus_in', 'users', 'edit'),
+    'pg_add_employee':       _ap('goocampus_in', 'users', 'edit'),
+    'pg_user_reset_usage':   _ap('goocampus_in', 'users', 'edit'),
+    'pg_subscription_cancel': _ap('goocampus_in', 'users', 'edit'),
+    'pg_events_admin':       _ap('goocampus_in', 'events', 'view'),
+    'pg_event_create':       _ap('goocampus_in', 'events', 'edit'),
+    'pg_event_toggle':       _ap('goocampus_in', 'events', 'edit'),
+    'pg_event_export':       _ap('goocampus_in', 'events', 'view'),
     # ── College (directory + Medical Predictor + NEET PG PDFs) ──
     # VIEW = the page; a granted team member can look up + download. The
     # management actions (add/edit/import/upload/publish/delete/blast) require
