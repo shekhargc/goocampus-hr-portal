@@ -76,16 +76,11 @@ _CATEGORY_LABELS = {'team': 'Team', 'internal': 'Internal', 'paid': 'Paid', 'fre
 
 def _category_case(ualias='u'):
     um = _m10_sql(f"{ualias}.mobile")
-    # Read employee phone columns via to_jsonb(e)->>'col' so a column that a Render
-    # cold-start ALTER hasn't added yet returns NULL instead of erroring the query.
-    def _emp_m10(field):
-        return f"RIGHT(regexp_replace(COALESCE(to_jsonb(e)->>'{field}',''),'[^0-9]','','g'),10)"
-    is_emp = (
-        f"({um} <> '' AND EXISTS (SELECT 1 FROM employees e "
-        f"WHERE COALESCE(e.is_active,1)=1 AND ("
-        f"{_emp_m10('official_number')}={um} OR {_emp_m10('phone')}={um} "
-        f"OR {_emp_m10('personal_phone')}={um})))"
-    )
+    # Team = an EXPLICIT staff flag the founder sets via the "add employees" flow —
+    # NOT an auto mobile match. Everyone else (self-signup, invited, internal client)
+    # is a doctor and keeps 'Dr.'. Read the flag via to_jsonb so a not-yet-added
+    # column returns NULL -> 0 (cold-start safe).
+    is_team = f"COALESCE((to_jsonb({ualias})->>'is_team_member')::int, 0) = 1"
     is_internal = (
         f"({um} <> '' AND EXISTS (SELECT 1 FROM pg_pgcp_invitations i "
         f"WHERE i.status <> 'cancelled' AND i.client_type='internal' "
@@ -96,7 +91,7 @@ def _category_case(ualias='u'):
         f"WHERE s.user_id={ualias}.id AND s.status='active' AND p.plan_kind='paid' "
         f"AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP))"
     )
-    return (f"CASE WHEN {is_emp} THEN 'team' "
+    return (f"CASE WHEN {is_team} THEN 'team' "
             f"WHEN {is_internal} THEN 'internal' "
             f"WHEN {is_paid} THEN 'paid' ELSE 'free' END")
 
@@ -419,21 +414,12 @@ def user_detail(user_id):
         choice_team_editable = bool((ent.get('features') or {}).get('dash_choice_list', {}).get('allowed'))
     except Exception:
         choice_team_editable = False
-    # Category (team = staff → shown without a 'Dr.' prefix, since they aren't doctors).
-    try:
-        _catrow = conn.execute(
-            f"SELECT ({_category_case('u')}) AS cat FROM pg_users u WHERE u.id = ?",
-            (user_id,)).fetchone()
-        doctor_category = ((_catrow or {}).get('cat')) or 'free'
-    except Exception:
-        conn.rollback(); doctor_category = 'free'
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
                            favorites=favorites, states=states, choice_sets=choice_sets,
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
                            choice_team_editable=choice_team_editable, activity=activity,
                            enquiry=enquiry, state_options=_canonical_states(),
-                           doctor_category=doctor_category,
                            active_section='goocampus_in')
 
 

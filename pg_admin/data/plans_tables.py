@@ -229,6 +229,9 @@ def ensure_pg_plans_tables():
             ('source', "TEXT DEFAULT ''"),
             ('tags', "TEXT DEFAULT ''"),
             ('updated_by', "TEXT DEFAULT ''"),
+            # Explicit staff flag — set only via the "add employees" flow. When 1, this
+            # account is a team member (no 'Dr.' prefix, counted as Team not a client).
+            ('is_team_member', 'INTEGER DEFAULT 0'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS {col} {ddl}")
