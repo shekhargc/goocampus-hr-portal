@@ -90,9 +90,9 @@
     {% for u in users %}
     <tr>
       <td>
-        <div class="pu-name">{{ (u.name|dr_name) or '(name pending)' }}
-          {% set _cat = u.client_category or 'free' %}
-          {% set _catcolor = {'team':'purple','internal':'orange','paid':'green','free':'gray'} %}
+        {% set _cat = u.client_category or 'free' %}
+        {% set _catcolor = {'team':'purple','internal':'orange','paid':'green','free':'gray'} %}
+        <div class="pu-name">{% if _cat == 'team' %}{{ u.name or '(name pending)' }}{% else %}{{ (u.name|dr_name) or '(name pending)' }}{% endif %}
           <span class="chip chip-{{ _catcolor[_cat] }}">{{ cat_labels[_cat] }}</span>
           {% if u.is_blocked %}<span class="chip chip-red">Blocked</span>{% endif %}</div>
         <div class="pu-sub">{{ u.college or '' }}{% if u.state %} · {{ u.state }}{% endif %}</div>
