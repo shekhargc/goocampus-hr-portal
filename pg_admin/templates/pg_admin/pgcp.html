@@ -81,7 +81,7 @@
         {% for r in rows %}
         <tr style="border-top:1px solid var(--gray-100);">
           <td style="padding:0.6rem 0.9rem;font-weight:600;color:var(--navy);">{{ r.client_name or '—' }}</td>
-          <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{{ r.mobile }}</td>
+          <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{{ r.mobile|local_mobile }}</td>
           <td style="padding:0.6rem 0.9rem;">{{ 'Internal' if r.client_type=='internal' else 'Paying' }}</td>
           <td style="padding:0.6rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;">
             {% if r.invited_amount is not none %}₹{{ '{:,.0f}'.format(r.invited_amount) }}{% if r.discount %} <span style="color:var(--gray-400);font-size:0.78rem;">− ₹{{ '{:,.0f}'.format(r.discount) }}</span>{% endif %}{% else %}—{% endif %}
