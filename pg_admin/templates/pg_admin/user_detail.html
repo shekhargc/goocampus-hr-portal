@@ -1,5 +1,5 @@
 {% extends "pg_admin/pg_admin_base.html" %}
-{% block title %}{{ d.name or 'Doctor' }}{% endblock %}
+{% block title %}{{ (d.name|dr_name) or 'Doctor' }}{% endblock %}
 
 {% block section_extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -85,7 +85,7 @@
       <div class="hero-l">
         <div class="avatar">{{ (d.name or 'D')[:1]|upper }}{{ (d.name.split()[1][:1]|upper) if d.name and d.name.split()|length > 1 else '' }}</div>
         <div>
-          <h1 class="hero-name">{{ d.name or 'Unnamed doctor' }}
+          <h1 class="hero-name">{{ (d.name|dr_name) or 'Unnamed doctor' }}
             {% if pgcp_inv %}<span class="pill pill-orange">PGCP · {{ 'Internal' if pgcp_inv.client_type=='internal' else 'Paying' }}</span>{% endif %}
             {% if d.is_blocked %}<span class="pill pill-red">Blocked</span>{% endif %}
           </h1>
