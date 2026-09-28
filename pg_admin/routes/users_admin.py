@@ -566,6 +566,144 @@ def user_grant_plan(user_id):
     return redirect(url_for('pg_user_detail', user_id=user_id))
 
 
+# ── Team members (staff) ──────────────────────────────────────────────────────
+# 'Dr.' is the default for every doctor. Only accounts flagged here (via the
+# add-employee picker or the convert button) are staff → shown without 'Dr.' and
+# counted as Team, not clients. (founder 2026-09-28)
+def _ensure_team_col(conn):
+    try:
+        conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS is_team_member INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _norm10(s):
+    d = ''.join(ch for ch in str(s or '') if ch.isdigit())
+    return d[-10:] if len(d) >= 10 else ''
+
+
+@login_required
+def user_set_team(user_id):
+    """Mark / unmark a doctor account as a TEAM MEMBER (staff) — 'convert to employee'
+    for an already-registered account (and undo)."""
+    admin = _require_admin()
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    val = 1 if (request.form.get('team') or '').strip() in ('1', 'on', 'true') else 0
+    conn = get_db()
+    try:
+        _ensure_team_col(conn)
+        conn.execute("UPDATE pg_users SET is_team_member = ?, updated_at = CURRENT_TIMESTAMP "
+                     "WHERE id = ?", (val, user_id))
+        conn.commit()
+        flash('Marked as a team member (staff) — shown without “Dr.”' if val
+              else 'Unmarked — back to a regular doctor account (shows “Dr.”).', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("user_set_team: %s", e)
+        flash('Could not update the team flag.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_user_detail', user_id=user_id))
+
+
+@login_required
+def employee_search():
+    """GET /admin/pg/users/employee-search?q= → active employees for the add-employee
+    picker. Reads phone fields via dict.get so a missing column can't error the query."""
+    from flask import jsonify
+    admin = _require_admin()
+    if not admin:
+        return jsonify([]), 403
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    conn = get_db()
+    out = []
+    try:
+        like = f"%{q}%"
+        rows = conn.execute(
+            "SELECT * FROM employees WHERE COALESCE(is_active,1)=1 "
+            "AND (COALESCE(name,'') ILIKE ? OR COALESCE(emp_code,'') ILIKE ?) "
+            "ORDER BY name LIMIT 20", (like, like)).fetchall()
+        for r in rows:
+            d = dict(r)
+            mob = (_norm10(d.get('official_number')) or _norm10(d.get('phone'))
+                   or _norm10(d.get('personal_phone')))
+            if not mob:
+                continue
+            out.append({'name': d.get('name') or '', 'emp_code': d.get('emp_code') or '',
+                        'mobile': mob, 'email': d.get('email') or d.get('personal_email') or ''})
+    except Exception as e:
+        logging.error("employee_search: %s", e)
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return jsonify(out)
+
+
+@login_required
+def add_employee():
+    """POST /admin/pg/users/add-employee — add a staff member as a Team account:
+    find-or-create their pg_users row by last-10 mobile (so their OTP login links up),
+    flag is_team_member=1, backfill name/email, and grant the chosen plan."""
+    admin = _require_admin()
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    mob = _norm10(request.form.get('mobile'))
+    name = (request.form.get('name') or '').strip()[:120]
+    email = (request.form.get('email') or '').strip()[:200]
+    plan_id = _int_or_none(request.form.get('plan_id'))
+    if not mob:
+        flash('Pick a staff member with a valid mobile number.', 'error')
+        return redirect(url_for('pg_users_admin'))
+    conn = get_db()
+    uid = None
+    try:
+        _ensure_team_col(conn)
+        row = conn.execute(
+            "SELECT id FROM pg_users WHERE "
+            "RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? "
+            "ORDER BY id ASC LIMIT 1", (mob,)).fetchone()
+        if row:
+            uid = row['id']
+            conn.execute("UPDATE pg_users SET is_team_member = 1, "
+                         "name = COALESCE(NULLIF(name,''), ?), "
+                         "email = COALESCE(NULLIF(email,''), ?), "
+                         "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (name, email, uid))
+        else:
+            uid = conn.execute(
+                "INSERT INTO pg_users (mobile, name, email, is_team_member, created_at) "
+                "VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP) RETURNING id",
+                (mob, name, email)).fetchone()['id']
+        conn.commit()
+        # Grant the chosen plan via the same admin_grant path as a manual grant.
+        if plan_id:
+            plan = conn.execute("SELECT * FROM pg_plans WHERE id = ?", (plan_id,)).fetchone()
+            if plan:
+                plan = dict(plan)
+                days = plan.get('duration_days') or _PERIOD_DAYS.get(plan.get('billing_period'))
+                expires = (datetime.utcnow() + timedelta(days=int(days))) if days else None
+                conn.execute("UPDATE pg_subscriptions SET status='cancelled', "
+                             "cancelled_at=CURRENT_TIMESTAMP WHERE user_id = ? AND status='active'",
+                             (uid,))
+                conn.execute("INSERT INTO pg_subscriptions (user_id, plan_id, status, expires_at, "
+                             "price_paid, source, notes, granted_by) VALUES (?,?,?,?,?,?,?,?)",
+                             (uid, plan_id, 'active', expires, 0, 'admin_grant', 'team member',
+                              admin.get('name') or ''))
+                conn.commit()
+        flash(f'{name or "Team member"} added as staff (no “Dr.”).', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("add_employee: %s", e)
+        flash('Could not add the team member.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_user_detail', user_id=uid) if uid else url_for('pg_users_admin'))
+
+
 @login_required
 def subscription_cancel(sub_id):
     admin = _require_admin()

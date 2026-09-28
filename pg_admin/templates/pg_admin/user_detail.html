@@ -88,6 +88,7 @@
           <h1 class="hero-name">{% if d.is_team_member %}{{ d.name or 'Team member' }}{% else %}{{ (d.name|dr_name) or 'Unnamed doctor' }}{% endif %}
             {% if pgcp_inv %}<span class="pill pill-orange">PGCP · {{ 'Internal' if pgcp_inv.client_type=='internal' else 'Paying' }}</span>{% endif %}
             {% if d.is_blocked %}<span class="pill pill-red">Blocked</span>{% endif %}
+            {% if d.is_team_member %}<span class="pill" style="background:#f3e8ff;color:#6b21a8;">Team member (staff)</span>{% endif %}
           </h1>
           <div style="font-size:0.85rem;color:var(--gray-500);">{{ d.mobile }}</div>
           <div style="margin-top:0.5rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
@@ -99,6 +100,11 @@
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
         {% if pgcp_inv %}<a class="btn btn-ghost" href="{{ url_for('pg_pgcp_submission', invite_id=pgcp_inv.id) }}"><i class="fa-solid fa-eye"></i> PGCP submission</a>{% endif %}
+        <form method="POST" action="/admin/pg/users/{{ d.id }}/set-team" onsubmit="return confirm({{ ('Unmark as team member? They will show as a doctor (Dr.) again.' if d.is_team_member else 'Mark this account as a team member (staff)? They will show without “Dr.” and stop counting as a client.')|tojson }})">
+          <input type="hidden" name="team" value="{{ 0 if d.is_team_member else 1 }}">
+          <button class="btn {{ 'btn-ghost' if d.is_team_member else 'btn-navy' }}" type="submit">
+            <i class="fa-solid fa-user-tie"></i> {{ 'Unmark team member' if d.is_team_member else 'Mark as team member' }}</button>
+        </form>
         <form method="POST" action="/admin/pg/users/{{ d.id }}/block" onsubmit="return confirm('{{ 'Unblock' if d.is_blocked else 'Block' }} this doctor?')">
           <button class="btn {{ 'btn-ghost' if d.is_blocked else 'btn-danger' }}" type="submit">
             <i class="fa-solid fa-{{ 'unlock' if d.is_blocked else 'ban' }}"></i> {{ 'Unblock' if d.is_blocked else 'Block' }}</button>

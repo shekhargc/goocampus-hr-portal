@@ -293,6 +293,12 @@ def register_pg_admin(app):
                      users_admin.user_block, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/grant-plan', 'pg_user_grant_plan',
                      users_admin.user_grant_plan, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/set-team', 'pg_user_set_team',
+                     users_admin.user_set_team, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/employee-search', 'pg_employee_search',
+                     users_admin.employee_search, methods=['GET'])
+    app.add_url_rule('/admin/pg/users/add-employee', 'pg_add_employee',
+                     users_admin.add_employee, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/reset-usage', 'pg_user_reset_usage',
                      users_admin.user_reset_usage, methods=['POST'])
     app.add_url_rule('/admin/pg/subscriptions/<int:sub_id>/cancel',

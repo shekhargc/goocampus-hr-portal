@@ -46,6 +46,30 @@
     <p>Everyone who has signed up on goocampus.in, and the plan each is on.</p></div>
 </div>
 
+<details style="background:#fff;border:1px solid var(--gray-200);border-radius:0.6rem;padding:0.9rem 1.1rem;margin-bottom:1.25rem;">
+  <summary style="cursor:pointer;font-weight:700;color:var(--navy);">＋ Add a team member (staff)</summary>
+  <p style="color:var(--gray-500);font-size:0.82rem;margin:0.5rem 0 0.8rem;">Give a colleague access to use the product. They're marked as <b>staff</b> (shown without &ldquo;Dr.&rdquo; and not counted as a client). Pick them from the active-employees list.</p>
+  <form method="POST" action="/admin/pg/users/add-employee" style="display:flex;gap:0.7rem;flex-wrap:wrap;align-items:flex-end;" onsubmit="return pgEmpChosen()">
+    <div style="position:relative;min-width:280px;">
+      <label style="display:block;font-size:0.7rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Search active staff</label>
+      <input type="text" id="pgEmpSearch" autocomplete="off" placeholder="Name or employee code…" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.87rem;box-sizing:border-box;">
+      <div id="pgEmpResults" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--gray-200);border-radius:0.45rem;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:20;display:none;max-height:240px;overflow:auto;"></div>
+      <div id="pgEmpChosen" style="font-size:0.8rem;color:#166534;margin-top:4px;"></div>
+    </div>
+    <input type="hidden" name="mobile" id="pgEmpMobile">
+    <input type="hidden" name="name" id="pgEmpName">
+    <input type="hidden" name="email" id="pgEmpEmail">
+    <div>
+      <label style="display:block;font-size:0.7rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Plan</label>
+      <select name="plan_id" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.87rem;background:#fff;">
+        <option value="">No plan (just mark as staff)</option>
+        {% for p in plans %}{% if p.plan_kind == 'paid' %}<option value="{{ p.id }}">{{ p.name }}</option>{% endif %}{% endfor %}
+      </select>
+    </div>
+    <button class="pu-btn pu-btn-primary" type="submit">Add as team member</button>
+  </form>
+</details>
+
 <div class="pu-stats">
   <div class="pu-stat"><div class="lbl">Total doctors</div><div class="val">{{ stats.total }}</div></div>
   <div class="pu-stat internal"><div class="lbl">Internal</div><div class="val">{{ stats.internal }}</div></div>
@@ -119,7 +143,7 @@
 
 {% if total_pages > 1 %}
 <div class="pu-pager">
-  {% set qs = '&q=' ~ q ~ '&plan=' ~ f_plan ~ '&status=' ~ f_status %}
+  {% set qs = '&q=' ~ q ~ '&plan=' ~ f_plan ~ '&status=' ~ f_status ~ '&type=' ~ f_type %}
   {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
   <span class="cur">{{ page }} / {{ total_pages }}</span>
   {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}
@@ -129,4 +153,52 @@
 <div class="pu-empty"><i class="fa-solid fa-user-doctor" style="font-size:2rem; opacity:0.3;"></i>
   <p>No doctors match. They appear here automatically after their first OTP login on goocampus.in.</p></div>
 {% endif %}
+
+<script>
+(function(){
+  var box=document.getElementById('pgEmpSearch'), res=document.getElementById('pgEmpResults'),
+      chosen=document.getElementById('pgEmpChosen');
+  if(!box) return;
+  var t;
+  function clearSel(){ document.getElementById('pgEmpMobile').value=''; chosen.textContent=''; }
+  box.addEventListener('input', function(){
+    clearTimeout(t); clearSel(); var q=box.value.trim();
+    if(q.length<2){ res.style.display='none'; return; }
+    t=setTimeout(function(){
+      fetch('/admin/pg/users/employee-search?q='+encodeURIComponent(q))
+        .then(function(r){ return r.json(); })
+        .then(function(list){
+          res.innerHTML='';
+          if(!list||!list.length){ res.style.display='none'; return; }
+          list.forEach(function(e){
+            var d=document.createElement('div');
+            d.style.cssText='padding:8px 12px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f1f5f9;';
+            d.innerHTML='<b></b> <span style="color:#94a3b8"></span>';
+            d.querySelector('b').textContent=(e.name||'—');
+            d.querySelector('span').textContent=' · '+(e.emp_code||'')+' · '+e.mobile;
+            d.onmouseover=function(){ d.style.background='#f8fafc'; };
+            d.onmouseout=function(){ d.style.background='#fff'; };
+            d.onclick=function(){
+              document.getElementById('pgEmpMobile').value=e.mobile;
+              document.getElementById('pgEmpName').value=e.name||'';
+              document.getElementById('pgEmpEmail').value=e.email||'';
+              box.value=e.name||e.mobile;
+              chosen.textContent='✓ '+(e.name||e.mobile)+' ('+e.mobile+')';
+              res.style.display='none';
+            };
+            res.appendChild(d);
+          });
+          res.style.display='block';
+        }).catch(function(){ res.style.display='none'; });
+    }, 200);
+  });
+  document.addEventListener('click', function(ev){
+    if(!box.contains(ev.target) && !res.contains(ev.target)) res.style.display='none';
+  });
+})();
+function pgEmpChosen(){
+  if(!document.getElementById('pgEmpMobile').value){ alert('Pick a staff member from the search first.'); return false; }
+  return true;
+}
+</script>
 {% endblock %}
