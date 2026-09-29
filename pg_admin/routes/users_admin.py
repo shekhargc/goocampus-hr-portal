@@ -584,13 +584,19 @@ def user_grant_plan(user_id):
             if (plan.get('plan_kind') == 'counselling'
                     and (plan.get('code') or '') not in ('pgcp_free', 'free')):
                 from pg_admin.routes.api_pgcp import ensure_paid_invitation
-                _du = conn.execute("SELECT id, mobile, name, email FROM pg_users WHERE id = ?",
-                                   (user_id,)).fetchone()
-                if _du:
+                _du = conn.execute("SELECT id, mobile, name, email, "
+                                   "COALESCE(is_team_member,0) AS is_team_member "
+                                   "FROM pg_users WHERE id = ?", (user_id,)).fetchone()
+                # Only REAL candidates get the onboarding form. A team member (staff) uses
+                # the dashboard to counsel — they get Premium access but NO onboarding
+                # form and NO PGCP invitation. (founder 2026-09-29)
+                if _du and not (_du.get('is_team_member') or 0):
                     ensure_paid_invitation(conn, dict(_du), plan, plan.get('price'),
                                            'admin grant (comp)', source='admin-grant',
                                            client_type='internal')
                     _onb = ' — they will now see the Premium onboarding form on their dashboard'
+                elif _du and (_du.get('is_team_member') or 0):
+                    _onb = ' — team member: Premium access granted, no onboarding form'
         except Exception as _e:
             try: conn.rollback()
             except Exception: pass
@@ -737,20 +743,9 @@ def add_employee():
                              (uid, plan_id, 'active', expires, 0, 'admin_grant', 'team member',
                               admin.get('name') or ''))
                 conn.commit()
-                # Same onboarding bridge as Grant plan — a counselling plan opens the
-                # PGCP onboarding form on the (team) doctor's dashboard.
-                try:
-                    if (plan.get('plan_kind') == 'counselling'
-                            and (plan.get('code') or '') not in ('pgcp_free', 'free')):
-                        from pg_admin.routes.api_pgcp import ensure_paid_invitation
-                        ensure_paid_invitation(
-                            conn, {'id': uid, 'mobile': mob, 'name': name, 'email': email},
-                            plan, plan.get('price'), 'admin grant (team)',
-                            source='admin-grant', client_type='internal')
-                except Exception as _e:
-                    try: conn.rollback()
-                    except Exception: pass
-                    logging.error("add_employee onboarding bridge: %s", _e)
+                # NOTE: no PGCP onboarding bridge here — this flow is only ever a TEAM
+                # MEMBER (staff), who gets Premium access to USE the product, not an
+                # onboarding form. (founder 2026-09-29)
         flash(f'{name or "Team member"} added as staff (no “Dr.”).', 'success')
     except Exception as e:
         conn.rollback(); logging.error("add_employee: %s", e)
