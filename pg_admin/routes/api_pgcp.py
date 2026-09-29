@@ -29,7 +29,7 @@ def _ensure_pay_cols(conn):
             pass
 
 
-def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-upgrade'):
+def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-upgrade', client_type='paying'):
     """Bridge: a website self-upgrade to a counselling plan enters the SAME PGCP
     onboarding pathway as a team invite. Upsert the doctor's invitation (matched by
     mobile) and mark the counselling fee as paid online, so the one onboarding form
@@ -64,7 +64,7 @@ def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-u
         "invited_amount, plan_code, status, payment_status, paid_online, payment_ref, paid_amount, created_by) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
         [secrets.token_urlsafe(12), user.get('name') or '', user.get('mobile') or '',
-         user.get('email') or '', 'paying', amt, plan_code, 'invited', 'paid', 1,
+         user.get('email') or '', client_type, amt, plan_code, 'invited', 'paid', 1,
          payment_ref or '', amt, f'website ({source})']).fetchone()['id']
     conn.commit()
     return iid
