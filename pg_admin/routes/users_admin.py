@@ -575,8 +575,28 @@ def user_grant_plan(user_id):
             (user_id, plan_id, 'active', expires, 0, 'admin_grant',
              (request.form.get('notes') or '').strip(), admin.get('name') or ''))
         conn.commit()
+        # For a counselling plan (Starter/Standard/Premium), also open the PGCP
+        # onboarding form on the doctor's dashboard — the SAME bridge a paid self-upgrade
+        # uses — so an admin upgrade doesn't leave them stuck on the old (free) profile.
+        # (founder 2026-09-29)
+        _onb = ''
+        try:
+            if (plan.get('plan_kind') == 'counselling'
+                    and (plan.get('code') or '') not in ('pgcp_free', 'free')):
+                from pg_admin.routes.api_pgcp import ensure_paid_invitation
+                _du = conn.execute("SELECT id, mobile, name, email FROM pg_users WHERE id = ?",
+                                   (user_id,)).fetchone()
+                if _du:
+                    ensure_paid_invitation(conn, dict(_du), plan, plan.get('price'),
+                                           'admin grant (comp)', source='admin-grant',
+                                           client_type='internal')
+                    _onb = ' — they will now see the Premium onboarding form on their dashboard'
+        except Exception as _e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error("user_grant_plan onboarding bridge: %s", _e)
         when = expires.strftime('%d %b %Y') if expires else 'no expiry'
-        flash(f"{plan['name']} granted ({when}).", 'success')
+        flash(f"{plan['name']} granted ({when}).{_onb}", 'success')
     except Exception as e:
         conn.rollback()
         logging.error("user_grant_plan: %s", e)
@@ -717,6 +737,20 @@ def add_employee():
                              (uid, plan_id, 'active', expires, 0, 'admin_grant', 'team member',
                               admin.get('name') or ''))
                 conn.commit()
+                # Same onboarding bridge as Grant plan — a counselling plan opens the
+                # PGCP onboarding form on the (team) doctor's dashboard.
+                try:
+                    if (plan.get('plan_kind') == 'counselling'
+                            and (plan.get('code') or '') not in ('pgcp_free', 'free')):
+                        from pg_admin.routes.api_pgcp import ensure_paid_invitation
+                        ensure_paid_invitation(
+                            conn, {'id': uid, 'mobile': mob, 'name': name, 'email': email},
+                            plan, plan.get('price'), 'admin grant (team)',
+                            source='admin-grant', client_type='internal')
+                except Exception as _e:
+                    try: conn.rollback()
+                    except Exception: pass
+                    logging.error("add_employee onboarding bridge: %s", _e)
         flash(f'{name or "Team member"} added as staff (no “Dr.”).', 'success')
     except Exception as e:
         conn.rollback(); logging.error("add_employee: %s", e)
