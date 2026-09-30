@@ -159,7 +159,10 @@ def api_pg_news_follows():
                             'can_follow': can_follow, 'available': available,
                             'tier': ('paid' if can_follow else 'free')}), 200
 
-        state = _s((request.get_json(silent=True) or {}).get('state') or request.form.get('state'))
+        # Accept the state from JSON body, form, OR query string — DELETE requests
+        # commonly carry it in the URL rather than a body.
+        state = _s((request.get_json(silent=True) or {}).get('state')
+                   or request.form.get('state') or request.args.get('state'))
         if not state:
             return jsonify({'ok': False, 'error': 'state_required'}), 400
 
