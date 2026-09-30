@@ -51,8 +51,10 @@ def compute_discount(coupon, amount):
     return max(Decimal('0.00'), min(disc, amount))
 
 
-def validate(conn, code, plan_id=None, user_id=None, amount=None):
-    """(ok, dict). On failure dict['error'] is a sentence we can show a doctor."""
+def validate(conn, code, plan_id=None, user_id=None, amount=None, gst_percent=None):
+    """(ok, dict). On failure dict['error'] is a sentence we can show a doctor.
+    Discount applies to the base price; GST (gst_percent) is then added ON TOP of
+    the discounted amount — so payable = (price - discount) * (1 + gst%/100)."""
     coupon = find(conn, code)
     if not coupon:
         return False, {'error': 'That coupon code is not valid.'}
@@ -103,22 +105,30 @@ def validate(conn, code, plan_id=None, user_id=None, amount=None):
             except Exception:
                 conn.rollback()
 
-    # Amount — resolve from the plan when the caller didn't pass one.
-    if amount is None and plan_id is not None:
+    # Amount + GST — resolve from the plan when the caller didn't pass them.
+    if (amount is None or gst_percent is None) and plan_id is not None:
         try:
-            row = conn.execute("SELECT price FROM pg_plans WHERE id = ?",
+            row = conn.execute("SELECT price, gst_percent FROM pg_plans WHERE id = ?",
                                (plan_id,)).fetchone()
-            amount = row['price'] if row else 0
+            if amount is None:
+                amount = row['price'] if row else 0
+            if gst_percent is None:
+                gst_percent = (row['gst_percent'] if row else 0)
         except Exception:
             conn.rollback()
-            amount = 0
+            if amount is None:
+                amount = 0
     amount = _money(amount)
+    gst_pct = _money(gst_percent or 0)
 
     min_order = _money(coupon.get('min_order_amount'))
     if min_order > 0 and amount < min_order:
         return False, {'error': f'This coupon needs a minimum order of ₹{min_order:.0f}.'}
 
     disc = compute_discount(coupon, amount)
+    taxable = amount - disc
+    gst = (taxable * gst_pct / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    payable = taxable + gst
     return True, {
         'code': coupon['code'],
         'coupon_id': coupon['id'],
@@ -127,7 +137,10 @@ def validate(conn, code, plan_id=None, user_id=None, amount=None):
         'discount_value': float(_money(coupon.get('discount_value'))),
         'amount': float(amount),
         'discount': float(disc),
-        'payable': float(amount - disc),
+        'taxable': float(taxable),
+        'gst_percent': float(gst_pct),
+        'gst': float(gst),
+        'payable': float(payable),
     }
 
 

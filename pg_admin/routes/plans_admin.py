@@ -193,6 +193,7 @@ def plan_save():
         'description': (form.get('description') or '').strip(),
         'plan_kind': kind,
         'price': price,
+        'gst_percent': _num_or_none(form.get('gst_percent')) or 0,
         'compare_at_price': compare,
         'currency': (form.get('currency') or 'INR').strip() or 'INR',
         'billing_period': billing,
@@ -213,6 +214,12 @@ def plan_save():
     conn = get_db()
     try:
         if edit_id:
+            # Never let the pricing screen change a plan's structural kind — a PGCP
+            # plan is 'counselling' and the post-payment onboarding trigger keys off
+            # that; flipping it to 'paid' would silently break onboarding.
+            existing = conn.execute("SELECT plan_kind FROM pg_plans WHERE id = ?", (edit_id,)).fetchone()
+            if existing and existing['plan_kind']:
+                fields['plan_kind'] = existing['plan_kind']
             sets = ', '.join(f"{k} = ?" for k in fields)
             conn.execute(f"UPDATE pg_plans SET {sets}, updated_at = CURRENT_TIMESTAMP "
                          "WHERE id = ?", tuple(fields.values()) + (edit_id,))
