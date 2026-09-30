@@ -21,6 +21,15 @@ def _page():
         return 1
 
 
+def _fee_arg(name):
+    """Integer rupee bound from the query string, or None."""
+    try:
+        v = request.args.get(name)
+        return int(float(v)) if v not in (None, '') else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _deg_clause(dg):
     # DNB rows carry the signal in the COURSE name ("(NBEMS) …") as well as (sometimes) the
     # degree code, and degree_group was mislabeled 'other' for 2025 — so match NBEMS in the
@@ -73,6 +82,8 @@ def api_pg_cutoff_explorer():
     course = (request.args.get('course') or '').strip()
     q = (request.args.get('q') or '').strip()
     dg = (request.args.get('degree_group') or '').strip()
+    fee_min = _fee_arg('fee_min')
+    fee_max = _fee_arg('fee_max')
     page = _page()
     conn = get_db()
     try:
@@ -95,21 +106,43 @@ def api_pg_cutoff_explorer():
         if q:
             where.append("c.institute ILIKE ?"); params.append('%' + q + '%')
         wsql = " WHERE " + " AND ".join(where)
-        total = conn.execute("SELECT COUNT(*) AS n FROM pg_cutoffs c" + wsql, params).fetchone()['n']
+        grp = (" GROUP BY c.institute, c.course, c.authority, c.quota, c.category, c.degree, "
+               "c.state, c.institute_type, c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank ")
+        # Annual-fee bound — same fee source (pg_cutoffs.fee) and "real fee > 1" rule as
+        # /api/pg/fees. Applied per grouped row via HAVING so total + pagination reflect it;
+        # when a bound is set, rows with no real fee are dropped.
+        having, hparams = [], []
+        if fee_min is not None or fee_max is not None:
+            having.append("MAX(c.fee) > 1")
+            if fee_min is not None:
+                having.append("MAX(c.fee) >= ?"); hparams.append(fee_min)
+            if fee_max is not None:
+                having.append("MAX(c.fee) <= ?"); hparams.append(fee_max)
+        hsql = (" HAVING " + " AND ".join(having)) if having else ""
+        if having:
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + wsql + grp + hsql + ") t",
+                params + hparams).fetchone()['n']
+        else:
+            total = conn.execute("SELECT COUNT(*) AS n FROM pg_cutoffs c" + wsql, params).fetchone()['n']
         offset = (page - 1) * _PER_PAGE
         rows = conn.execute(
             "SELECT c.institute, c.course, c.authority, c.quota, c.category, c.degree, c.state, "
             "c.institute_type, "
-            "c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank, MAX(a.master_id) AS pg_college_id "
+            "c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank, "
+            "MAX(c.fee) AS fee, MAX(c.year) AS fee_year, MAX(a.master_id) AS pg_college_id "
             "FROM pg_cutoffs c "
             f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL}"
-            + wsql +
-            " GROUP BY c.institute, c.course, c.authority, c.quota, c.category, c.degree, c.state, "
-            "c.institute_type, "
-            "c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank "
-            "ORDER BY c.closing_rank ASC NULLS LAST, c.institute ASC LIMIT ? OFFSET ?",
-            params + [_PER_PAGE, offset]).fetchall()
-        out = [dict(r) for r in rows]
+            + wsql + grp + hsql +
+            " ORDER BY c.closing_rank ASC NULLS LAST, c.institute ASC LIMIT ? OFFSET ?",
+            params + hparams + [_PER_PAGE, offset]).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            if d.get('fee') is not None:
+                try: d['fee'] = float(d['fee'])
+                except Exception: d['fee'] = None
+            out.append(d)
     except Exception as e:
         logging.error("api_pg_cutoff_explorer: %s", e)
         conn.close()
