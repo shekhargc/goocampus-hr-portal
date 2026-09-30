@@ -109,5 +109,100 @@
   <p style="color:var(--gray-500);font-size:0.9rem;">Nothing loaded yet — upload the announced seat matrix above.</p>
   {% endif %}
 
+  <!-- ── Browse / preview ── -->
+  {% if browse %}
+  <div style="margin-top:28px;">
+    <h2 style="margin:0 0 4px;font-size:1.05rem;font-weight:700;color:var(--navy);">Browse the seat matrix</h2>
+    <p style="margin:0 0 12px;font-size:0.82rem;color:var(--gray-500);">
+      {{ browse.body }} · {{ browse.year }} — this is exactly what doctors filter on the dashboard.
+    </p>
+
+    <form method="GET" action="{{ url_for('pg_seat_matrix_admin') }}"
+          style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px;">
+      <input type="hidden" name="b_body" value="{{ browse.body }}">
+      <input type="hidden" name="b_year" value="{{ browse.year }}">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--gray-600);">State
+        <select name="state" style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;min-width:160px;">
+          <option value="">All states</option>
+          {% for s in browse.states %}<option value="{{ s }}" {{ 'selected' if s == browse.state }}>{{ s }}</option>{% endfor %}
+        </select>
+      </label>
+      <label style="font-size:0.78rem;font-weight:600;color:var(--gray-600);">Category
+        <select name="category" style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;">
+          <option value="">All</option>
+          {% for c in browse.categories %}<option value="{{ c }}" {{ 'selected' if c == browse.category }}>{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <label style="font-size:0.78rem;font-weight:600;color:var(--gray-600);">Course
+        <select name="course" style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;max-width:260px;">
+          <option value="">All courses</option>
+          {% for c in browse.courses %}<option value="{{ c }}" {{ 'selected' if c == browse.course }}>{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <label style="font-size:0.78rem;font-weight:600;color:var(--gray-600);">College search
+        <input name="q" value="{{ browse.q }}" placeholder="name or code"
+               style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;min-width:180px;">
+      </label>
+      <button type="submit" style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:8px 18px;font-size:0.85rem;font-weight:600;cursor:pointer;">Filter</button>
+      {% if browse.state or browse.category or browse.course or browse.q %}
+      <a href="{{ url_for('pg_seat_matrix_admin') }}?b_body={{ browse.body|urlencode }}&b_year={{ browse.year|urlencode }}"
+         style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;padding:8px 6px;">Clear</a>
+      {% endif %}
+    </form>
+
+    <div style="font-size:0.82rem;color:var(--gray-600);margin-bottom:8px;">
+      <b>{{ '{:,}'.format(browse.total) }}</b> matching rows · <b>{{ '{:,}'.format(browse.seats) }}</b> seats
+    </div>
+
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead>
+          <tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+            <th style="padding:8px 12px;">Code</th>
+            <th style="padding:8px 12px;">State</th>
+            <th style="padding:8px 12px;">College</th>
+            <th style="padding:8px 12px;">Category</th>
+            <th style="padding:8px 12px;">Course</th>
+            <th style="padding:8px 12px;text-align:right;">Seats</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in browse.rows %}
+          <tr style="border-top:1px solid var(--gray-100);">
+            <td style="padding:8px 12px;white-space:nowrap;color:var(--gray-500);">{{ r.college_code }}</td>
+            <td style="padding:8px 12px;">{{ r.state }}</td>
+            <td style="padding:8px 12px;">{{ r.college_name }}</td>
+            <td style="padding:8px 12px;">{{ r.category }}</td>
+            <td style="padding:8px 12px;">{{ r.course_name }}</td>
+            <td style="padding:8px 12px;text-align:right;font-weight:600;">{{ r.seats }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="padding:14px;color:var(--gray-400);">No rows match those filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if browse.total_pages > 1 %}
+    {% set qs = '&b_body=' ~ browse.body|urlencode ~ '&b_year=' ~ browse.year|urlencode ~ '&state=' ~ browse.state|urlencode ~ '&category=' ~ browse.category|urlencode ~ '&course=' ~ browse.course|urlencode ~ '&q=' ~ browse.q|urlencode %}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:0.85rem;">
+      <div>
+        {% if browse.page > 1 %}
+        <a href="{{ url_for('pg_seat_matrix_admin') }}?page={{ browse.page - 1 }}{{ qs }}"
+           style="color:var(--navy);text-decoration:none;font-weight:600;">← Prev</a>
+        {% endif %}
+      </div>
+      <div style="color:var(--gray-500);">Page {{ browse.page }} of {{ '{:,}'.format(browse.total_pages) }}</div>
+      <div>
+        {% if browse.page < browse.total_pages %}
+        <a href="{{ url_for('pg_seat_matrix_admin') }}?page={{ browse.page + 1 }}{{ qs }}"
+           style="color:var(--navy);text-decoration:none;font-weight:600;">Next →</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
 </div>
 {% endblock %}

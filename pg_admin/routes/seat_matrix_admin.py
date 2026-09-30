@@ -117,21 +117,77 @@ def _read_seat_matrix(file_bytes):
 def seat_matrix_admin():
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    # Browse filters (server-rendered, no JS needed).
+    b_body = _s(request.args.get('b_body'))
+    b_year = _s(request.args.get('b_year'))
+    f_state = _s(request.args.get('state'))
+    f_cat = _s(request.args.get('category'))
+    f_course = _s(request.args.get('course'))
+    f_q = _s(request.args.get('q'))
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except Exception:
+        page = 1
+    page_size = 50
+
     conn = get_db()
     sources = []
+    browse = None
     try:
         sources = conn.execute(
             "SELECT counselling_body, academic_year, source_file_name, pdf_name, "
             "row_count, college_count, total_seats, uploaded_by, uploaded_at "
             "FROM pg_seat_matrix_source ORDER BY academic_year DESC, counselling_body ASC"
         ).fetchall()
+        # Default the browse target to the first loaded matrix.
+        if not (b_body and b_year) and sources:
+            b_body = sources[0]['counselling_body']
+            b_year = sources[0]['academic_year']
+        if b_body and b_year:
+            base = "FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?"
+            bp = [b_body, b_year]
+            states = [r['state'] for r in conn.execute(
+                f"SELECT DISTINCT state {base} AND state<>'' ORDER BY state", bp).fetchall()]
+            cats = [r['category'] for r in conn.execute(
+                f"SELECT DISTINCT category {base} AND category<>'' ORDER BY category", bp).fetchall()]
+            courses = [r['course_name'] for r in conn.execute(
+                f"SELECT DISTINCT course_name {base} AND course_name<>'' ORDER BY course_name", bp).fetchall()]
+            conds = ["counselling_body=?", "academic_year=?"]; params = [b_body, b_year]
+            if f_state:
+                conds.append("state=?"); params.append(f_state)
+            if f_cat:
+                conds.append("category=?"); params.append(f_cat)
+            if f_course:
+                conds.append("course_name=?"); params.append(f_course)
+            if f_q:
+                conds.append("(college_name ILIKE ? OR college_code ILIKE ?)")
+                like = f"%{f_q}%"; params.extend([like, like])
+            where = " AND ".join(conds)
+            total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_seat_matrix WHERE {where}",
+                                 params).fetchone()['n']
+            seats = conn.execute(f"SELECT COALESCE(SUM(seats),0) AS s FROM pg_seat_matrix WHERE {where}",
+                                 params).fetchone()['s']
+            offset = (page - 1) * page_size
+            rows = conn.execute(
+                f"SELECT sl_no, college_code, state, college_name, category, course_name, seats "
+                f"FROM pg_seat_matrix WHERE {where} "
+                f"ORDER BY state ASC, college_name ASC, course_name ASC "
+                f"LIMIT {page_size} OFFSET {offset}", params).fetchall()
+            browse = {
+                'body': b_body, 'year': b_year,
+                'states': states, 'categories': cats, 'courses': courses,
+                'rows': rows, 'total': total, 'seats': int(seats or 0),
+                'page': page, 'page_size': page_size,
+                'total_pages': (total + page_size - 1) // page_size if page_size else 1,
+                'state': f_state, 'category': f_cat, 'course': f_course, 'q': f_q,
+            }
     except Exception as e:
-        logging.error("seat_matrix_admin list: %s", e)
+        logging.error("seat_matrix_admin: %s", e)
         try: conn.rollback()
         except Exception: pass
     finally:
         conn.close()
-    return render_template('pg_admin/seat_matrix.html', sources=sources,
+    return render_template('pg_admin/seat_matrix.html', sources=sources, browse=browse,
                            default_body=DEFAULT_BODY, default_year=DEFAULT_YEAR,
                            active_section='goocampus_in')
 
