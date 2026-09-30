@@ -48,9 +48,21 @@ def news_save():
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     news_id = _s(request.form.get('news_id'))
-    scope = _s(request.form.get('scope')) or 'all_india'
-    state = _s(request.form.get('state')) if scope == 'state' else ''
-    body_label = _s(request.form.get('body_label')) or ('All India MCC' if scope == 'all_india' else state)
+    # New single "Counselling Authority" dropdown: '__all__' or 'state:<State>'.
+    authority = _s(request.form.get('authority'))
+    if authority:
+        if authority == '__all__':
+            scope, state, body_label = 'all_india', '', 'All India MCC'
+        elif authority.startswith('state:'):
+            state = authority[6:].strip()
+            scope, body_label = 'state', state
+        else:
+            scope, state, body_label = 'all_india', '', 'All India MCC'
+    else:
+        # Backward-compat with the old scope/state/label fields.
+        scope = _s(request.form.get('scope')) or 'all_india'
+        state = _s(request.form.get('state')) if scope == 'state' else ''
+        body_label = _s(request.form.get('body_label')) or ('All India MCC' if scope == 'all_india' else state)
     heading = _s(request.form.get('heading'))
     body_text = (request.form.get('body_text') or '').strip()
     # Default published; only an explicit '0'/'off' unpublishes.

@@ -36,8 +36,19 @@ def ensure_pg_news():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_scope ON pg_news (scope)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_state ON pg_news (state)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_pub ON pg_news (is_published, published_at)")
+
+        # Per-doctor "followed states" for the news feed (beyond All-India + home state).
+        # Saved to the doctor's profile so the admin can see their subscriptions.
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_news_follows (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_news_follows ON pg_news_follows (user_id, state)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_follows_user ON pg_news_follows (user_id)")
         conn.commit()
-        logging.info("pg_news table ensured")
+        logging.info("pg_news tables ensured")
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

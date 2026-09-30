@@ -161,6 +161,10 @@ def register_pg_admin(app):
     # ── Public API for goocampus.in: News feed (X-PG-Key; PDF is public) ──
     app.add_url_rule('/api/pg/news', 'api_pg_news',
                      api_news.api_pg_news, methods=['GET'])
+    app.add_url_rule('/api/pg/news/states', 'api_pg_news_states',
+                     api_news.api_pg_news_states, methods=['GET'])
+    app.add_url_rule('/api/pg/news/follows', 'api_pg_news_follows',
+                     api_news.api_pg_news_follows, methods=['GET', 'POST', 'DELETE'])
     app.add_url_rule('/api/pg/news/<int:news_id>/pdf', 'api_pg_news_pdf',
                      api_news.api_pg_news_pdf, methods=['GET'])
 
