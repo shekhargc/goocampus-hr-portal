@@ -216,6 +216,8 @@
               <legend>Price &amp; offer</legend>
               <div class="pp-grid2 pp-f">
                 <div><label>Price (₹)</label><input type="number" step="1" min="0" name="price" id="pf_price" oninput="ppPreview()" value="0"></div>
+                <div><label>GST % (added at checkout)</label><input type="number" step="0.01" min="0" max="100" name="gst_percent" id="pf_gst" value="0" placeholder="0">
+                  <div class="hint">Charged ON TOP of the (post-coupon) price. 0 = tax-inclusive / no GST.</div></div>
                 <div><label>Compare-at "was" price (₹)</label><input type="number" step="1" min="0" name="compare_at_price" id="pf_compare" oninput="ppPreview()" placeholder="optional">
                   <div class="hint">Shows struck-through to signal a discount.</div></div>
                 <div><label>Access duration (days)</label><input type="number" step="1" min="1" name="duration_days" id="pf_duration" placeholder="blank = from billing period">
@@ -363,6 +365,7 @@
         ppSet('pf_edit_id', p.id); ppSet('pf_name', p.name); ppSet('pf_plan_kind', p.plan_kind);
         ppSet('pf_billing_period', p.billing_period); ppSet('pf_tagline', p.tagline);
         ppSet('pf_description', p.description); ppSet('pf_price', p.price);
+        ppSet('pf_gst', p.gst_percent || 0);
         ppSet('pf_compare', p.compare_at_price); ppSet('pf_duration', p.duration_days);
         ppSet('pf_seats', p.seats_limit); ppSet('pf_badge_text', p.badge_text);
         ppSet('pf_badge_color', p.badge_color || '#F57C1F'); ppSet('pf_accent_color', p.accent_color || '#2952A3');

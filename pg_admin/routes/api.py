@@ -992,6 +992,8 @@ def api_pg_plans():
                 'tagline': p.get('tagline') or '', 'description': p.get('description') or '',
                 'plan_kind': p.get('plan_kind') or 'paid',
                 'price': float(p.get('price') or 0),
+                'gst_percent': float(p.get('gst_percent') or 0),
+                'price_incl_gst': round(float(p.get('price') or 0) * (1 + float(p.get('gst_percent') or 0) / 100.0), 2),
                 'compare_at_price': float(p['compare_at_price']) if p.get('compare_at_price') else None,
                 'currency': p.get('currency') or 'INR',
                 'billing_period': p.get('billing_period') or 'one_time',
@@ -1263,6 +1265,10 @@ def _ensure_pg_orders(conn):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             paid_at TIMESTAMP
         )''')
+        try:
+            conn.execute("ALTER TABLE pg_orders ADD COLUMN IF NOT EXISTS gst NUMERIC(12,2) DEFAULT 0")
+        except Exception:
+            conn.rollback()
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1314,6 +1320,7 @@ def api_pg_checkout_create_order():
             return jsonify({'ok': False, 'error': 'plan_not_found'}), 404
         plan = as_dict(plan)
         amount = float(plan.get('price') or 0)
+        gst_pct = float(plan.get('gst_percent') or 0)
         if (plan.get('plan_kind') or 'paid') == 'free' or amount <= 0:
             return jsonify({'ok': False, 'error': 'plan_is_free'}), 400
 
@@ -1327,7 +1334,10 @@ def api_pg_checkout_create_order():
             discount = float(res.get('discount') or 0)
             coupon_id = res.get('coupon_id')
             coupon_code = res.get('code') or code
-        payable = round(amount - discount, 2)
+        # Discount applies to the base price; GST is then added on the discounted amount.
+        taxable = round(amount - discount, 2)
+        gst = round(taxable * gst_pct / 100.0, 2)
+        payable = round(taxable + gst, 2)
 
         # Fully covered by the coupon → activate now, no Razorpay charge.
         if payable <= 0:
@@ -1357,12 +1367,15 @@ def api_pg_checkout_create_order():
         order = rr.json()
         conn.execute(
             "INSERT INTO pg_orders (razorpay_order_id, user_id, plan_id, amount, discount, "
-            " payable, coupon_code, coupon_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created')",
-            (order['id'], uid, plan_id, amount, discount, payable, coupon_code, coupon_id))
+            " gst, payable, coupon_code, coupon_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')",
+            (order['id'], uid, plan_id, amount, discount, gst, payable, coupon_code, coupon_id))
         conn.commit()
         return jsonify({'ok': True, 'order_id': order['id'], 'amount': paise,
                         'currency': order.get('currency', 'INR'), 'key_id': key_id,
                         'plan_name': plan.get('name') or '',
+                        'breakdown': {'base': amount, 'discount': discount,
+                                      'taxable': taxable, 'gst_percent': gst_pct,
+                                      'gst': gst, 'payable': payable},
                         'prefill': {'name': user.get('name') or '',
                                     'email': user.get('email') or '',
                                     'contact': user.get('mobile') or ''}})

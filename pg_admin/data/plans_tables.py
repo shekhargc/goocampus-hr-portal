@@ -238,6 +238,13 @@ def ensure_pg_plans_tables():
             except Exception:
                 conn.rollback()
 
+        # pg_plans: GST % charged at checkout ON TOP of the (post-coupon) price.
+        # 0 = tax-inclusive / no GST added (e.g. Free, Starter "incl. all taxes").
+        try:
+            conn.execute("ALTER TABLE pg_plans ADD COLUMN IF NOT EXISTS gst_percent NUMERIC(5,2) DEFAULT 0")
+        except Exception:
+            conn.rollback()
+
         conn.commit()
         logging.info("pg pricing tables ensured successfully")
     except Exception as e:
