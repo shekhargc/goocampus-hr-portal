@@ -314,6 +314,14 @@ def user_detail(user_id):
         except Exception:
             conn.rollback(); states = []
 
+        # News state subscriptions (dashboard news feed) — saved to the profile.
+        try:
+            news_follows = [r['state'] for r in conn.execute(
+                "SELECT state FROM pg_news_follows WHERE user_id = ? ORDER BY state",
+                (user_id,)).fetchall()]
+        except Exception:
+            conn.rollback(); news_follows = []
+
         # Choice sheets the doctor has built — each set carries its 3 round sheets.
         choice_sets = []
         try:
@@ -439,7 +447,8 @@ def user_detail(user_id):
         choice_team_editable = False
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
-                           favorites=favorites, states=states, choice_sets=choice_sets,
+                           favorites=favorites, states=states, news_follows=news_follows,
+                           choice_sets=choice_sets,
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
                            choice_team_editable=choice_team_editable, activity=activity,
                            enquiry=enquiry, state_options=_canonical_states(),

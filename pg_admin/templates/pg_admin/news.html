@@ -27,27 +27,17 @@
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px;margin-bottom:22px;max-width:860px;">
     <h2 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:var(--navy);">Post an update</h2>
     <form method="POST" action="{{ url_for('pg_news_save') }}" enctype="multipart/form-data">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
-        <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Scope
-          <select name="scope" id="news-scope" onchange="document.getElementById('news-state-wrap').style.display=this.value==='state'?'block':'none';"
-                  style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
-            <option value="all_india">All India (everyone sees it)</option>
-            <option value="state">A specific State</option>
-          </select>
-        </label>
-        <div id="news-state-wrap" style="display:none;">
-          <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">State
-            <select name="state" style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
-              <option value="">— choose state —</option>
-              {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
-            </select>
-          </label>
-        </div>
-      </div>
-      <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Counselling authority (label)
-        <input name="body_label" value="All India MCC"
-               style="display:block;width:100%;margin-top:5px;margin-bottom:14px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+      <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Counselling Authority
+        <select name="authority" style="display:block;width:100%;margin-top:5px;margin-bottom:6px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+          <option value="__all__">All India MCC — everyone sees it</option>
+          <optgroup label="State counselling authorities (only that state's doctors see it)">
+            {% for s in states %}<option value="state:{{ s }}">{{ s }}</option>{% endfor %}
+          </optgroup>
+        </select>
       </label>
+      <p style="margin:0 0 14px;font-size:0.76rem;color:var(--gray-500);">
+        Pick <b>All India MCC</b> for national news everyone sees, or a <b>state</b> for news only that state's doctors get.
+      </p>
       <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Heading <span style="color:#dc2626;">*</span>
         <input name="heading" required placeholder="e.g. MCC releases 2026-27 counselling schedule"
                style="display:block;width:100%;margin-top:5px;margin-bottom:14px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">

@@ -423,6 +423,7 @@ _DASH_FEATURES = [
     ('dash_choice_list',     'Choice-List builder (auto, all rounds) + team support', 'Auto-build round-wise choice sheets across states, with GooCampus team editing', 'boolean', 108),
     ('dash_extra_state',     'Choice list — one other state', 'Add ONE state beyond the home state', 'boolean', 109),
     ('dash_all_states',      'Choice list — all states', 'Add any/multiple states (else home + limit)', 'boolean', 110),
+    ('dash_news_follow',     'News — follow other states', 'Add states beyond All-India + home to the dashboard news feed', 'boolean', 111),
 ]
 _FREE_SECTIONS = ['dash_predictor', 'dash_cutoff_explorer', 'dash_college_db',
                   'dash_college_fees', 'dash_stipend', 'dash_favourites', 'dash_mentors',
@@ -433,6 +434,7 @@ _DASH_DEFAULTS = {c: list(_ALL_PLANS) for c in _FREE_SECTIONS}
 _DASH_DEFAULTS['dash_choice_list'] = ['pgcp_starter', 'pgcp_standard', 'pgcp_premium']
 _DASH_DEFAULTS['dash_extra_state'] = ['pgcp_standard', 'pgcp_premium']
 _DASH_DEFAULTS['dash_all_states'] = ['pgcp_premium']
+_DASH_DEFAULTS['dash_news_follow'] = ['pgcp_starter', 'pgcp_standard', 'pgcp_premium']
 
 
 def ensure_dashboard_gating_features():

@@ -178,6 +178,8 @@ def _plan_has(conn, user_id, feature_code):
             return premium
         if feature_code == 'dash_choice_list':
             return paid
+        if feature_code == 'dash_news_follow':
+            return paid
         if feature_code == 'dash_cutoff_explorer':
             return True
         return False

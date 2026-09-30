@@ -243,6 +243,26 @@
         {% else %}<p style="font-size:0.85rem;color:var(--gray-400);margin:0.2rem 0 0;">No state chosen yet.</p>{% endif %}
       </div>
 
+      <!-- News subscriptions (dashboard news feed) -->
+      <div class="card">
+        <h3><i class="fa-solid fa-newspaper"></i> News subscriptions <span class="n">{{ (news_follows|length) + 1 }}</span></h3>
+        {% set home_state = states|selectattr('role','equalto','home')|map(attribute='state')|first %}
+        <div class="ent-row">
+          <div>All India MCC <span class="chip chip-blue" style="font-size:0.62rem;">Default</span></div>
+        </div>
+        {% if home_state %}
+        <div class="ent-row">
+          <div>{{ home_state }} <span class="chip chip-blue" style="font-size:0.62rem;">Home</span></div>
+        </div>
+        {% endif %}
+        {% for s in news_follows %}
+        <div class="ent-row">
+          <div>{{ s }} <span class="chip chip-gray" style="font-size:0.62rem;">Following</span></div>
+        </div>
+        {% endfor %}
+        <small style="color:var(--gray-400);font-size:0.68rem;">All-India + home state always on; extra states the doctor followed (paid feature).</small>
+      </div>
+
       <!-- Plan coverage — minimized (team already knows it) -->
       <div class="card">
         <details>
