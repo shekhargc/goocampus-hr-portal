@@ -896,3 +896,70 @@ def plan_diag():
                    "with this exact number first (OTP), which creates the account.")
     from flask import Response
     return Response("\n".join(out), mimetype='text/plain')
+
+
+@login_required
+def team_link_check():
+    """Which team members (staff) are properly linked to an ACTIVE employee — by MOBILE
+    (last-10), not name. Green = their account mobile matches an active employee; red =
+    no match (flagged staff but not an active employee, or their goocampus.in number
+    differs from HR). Read-only audit — nothing is changed. (founder 2026-09-29)"""
+    admin = _require_admin()
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    matched, unmatched = [], []
+    try:
+        team = [dict(r) for r in conn.execute(
+            "SELECT id, name, mobile FROM pg_users WHERE COALESCE(is_team_member,0)=1 "
+            "ORDER BY LOWER(COALESCE(name,''))").fetchall()]
+        emp_by_m10 = {}
+        for e in conn.execute("SELECT * FROM employees WHERE COALESCE(is_active,1)=1").fetchall():
+            d = dict(e)
+            for f in ('official_number', 'phone', 'personal_phone'):
+                m = _norm10(d.get(f))
+                if m and m not in emp_by_m10:
+                    emp_by_m10[m] = (d.get('name') or '', d.get('emp_code') or '')
+        for tm in team:
+            m10 = _norm10(tm.get('mobile'))
+            hit = emp_by_m10.get(m10)
+            row = {'name': tm.get('name') or '(no name)', 'mobile': m10 or '(none)',
+                   'id': tm['id'], 'emp': hit}
+            (matched if hit else unmatched).append(row)
+    finally:
+        try: conn.close()
+        except Exception: pass
+    import html as _h
+
+    def _tr(r, ok):
+        emp = (f"{_h.escape(r['emp'][0])} ({_h.escape(r['emp'][1])})" if r['emp'] else '—')
+        badge = ("<span style='color:#166534;font-weight:700'>&#10003; linked</span>" if ok
+                 else "<span style='color:#b91c1c;font-weight:700'>&#9888; no match</span>")
+        return (f"<tr><td style='padding:8px 12px;border-top:1px solid #eee'>"
+                f"<a href='/admin/pg/users/{r['id']}' style='color:#1e3a5f;font-weight:600;text-decoration:none'>{_h.escape(r['name'])}</a></td>"
+                f"<td style='padding:8px 12px;border-top:1px solid #eee'>{_h.escape(r['mobile'])}</td>"
+                f"<td style='padding:8px 12px;border-top:1px solid #eee'>{emp}</td>"
+                f"<td style='padding:8px 12px;border-top:1px solid #eee'>{badge}</td></tr>")
+    hdr = ("<tr style='background:#f8fafc'><th style='text-align:left;padding:8px 12px'>Name</th>"
+           "<th style='text-align:left;padding:8px 12px'>Mobile</th>"
+           "<th style='text-align:left;padding:8px 12px'>Matched employee</th>"
+           "<th style='text-align:left;padding:8px 12px'>Status</th></tr>")
+    body = [
+        "<div style='font-family:system-ui,sans-serif;max-width:840px;margin:32px auto;padding:0 16px;color:#1e293b'>",
+        "<h2>Team members &#8596; employee link</h2>",
+        "<p style='color:#64748b;font-size:.9rem'>Team members link to your active-employee list by <b>mobile number</b> (not name), "
+        "so a name mismatch doesn't matter. Green = the account's mobile matches an active employee. "
+        "Red = no match — either they were flagged staff but aren't an active employee, or their goocampus.in number differs from HR.</p>",
+        f"<p><b>{len(matched)}</b> linked &middot; <b style='color:#b91c1c'>{len(unmatched)}</b> not matched &middot; "
+        f"{len(matched)+len(unmatched)} total team members.</p>",
+    ]
+    if unmatched:
+        body.append("<h3 style='color:#b91c1c'>Not matched to an active employee</h3>"
+                    "<table style='width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;overflow:hidden'>" + hdr)
+        body += [_tr(r, False) for r in unmatched]
+        body.append("</table>")
+    body.append("<h3 style='color:#166534;margin-top:1.4rem'>Linked</h3>"
+                "<table style='width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;overflow:hidden'>" + hdr)
+    body += [_tr(r, True) for r in matched] or ["<tr><td colspan='4' style='padding:12px;color:#94a3b8'>None yet.</td></tr>"]
+    body.append("</table></div>")
+    return "\n".join(body)
