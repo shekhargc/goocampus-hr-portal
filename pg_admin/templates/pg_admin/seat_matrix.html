@@ -1,0 +1,113 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Seat Matrix · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="margin-bottom:18px;">
+    <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">NEET-PG Seat Matrix</h1>
+    <p style="margin:0;font-size:0.88rem;color:var(--gray-500);max-width:860px;">
+      Upload the counselling authority's <b>announced seat matrix</b> (All India MCC first) exactly as
+      published. College &amp; course names are stored <b>verbatim</b> — <b>not</b> matched to our college
+      database — so doctors can filter it on the dashboard straight away. Re-uploading the same
+      <b>authority + academic year</b> is a clean replace. Attach the official PDF too, so users can open
+      the source document.
+    </p>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      {% for cat, m in msgs %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                  background:{{ '#DCFCE7' if cat == 'success' else ('#FEF9C3' if cat == 'info' else '#FEE2E2') }};
+                  color:{{ '#166534' if cat == 'success' else ('#854D0E' if cat == 'info' else '#991B1B') }};">{{ m }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- ── Upload ── -->
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px;margin-bottom:22px;max-width:860px;">
+    <h2 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:var(--navy);">Upload a seat matrix</h2>
+    <form method="POST" action="{{ url_for('pg_seat_matrix_upload') }}" enctype="multipart/form-data">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+        <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Counselling authority
+          <input name="counselling_body" value="{{ default_body }}" required
+                 style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+        </label>
+        <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Academic year
+          <input name="academic_year" value="{{ default_year }}" required
+                 style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+        </label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+        <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Seat matrix (Excel .xlsx) <span style="color:#dc2626;">*</span>
+          <input type="file" name="data_file" accept=".xlsx,.xlsm" required
+                 style="display:block;width:100%;margin-top:5px;font-size:0.85rem;">
+          <span style="font-weight:400;color:var(--gray-500);font-size:0.78rem;">Columns: State · College · Category · Course · Seats (order/names are auto-detected).</span>
+        </label>
+        <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Official PDF (optional)
+          <input type="file" name="pdf_file" accept=".pdf"
+                 style="display:block;width:100%;margin-top:5px;font-size:0.85rem;">
+          <span style="font-weight:400;color:var(--gray-500);font-size:0.78rem;">Shown to users as "View official PDF". Kept if you leave it blank on a re-upload.</span>
+        </label>
+      </div>
+      <button type="submit"
+              style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;">
+        Upload &amp; load
+      </button>
+    </form>
+  </div>
+
+  <!-- ── What's loaded ── -->
+  <h2 style="margin:0 0 12px;font-size:1.05rem;font-weight:700;color:var(--navy);">Loaded seat matrices</h2>
+  {% if sources %}
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;max-width:1000px;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
+      <thead>
+        <tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+          <th style="padding:10px 14px;">Authority</th>
+          <th style="padding:10px 14px;">Year</th>
+          <th style="padding:10px 14px;text-align:right;">Rows</th>
+          <th style="padding:10px 14px;text-align:right;">Colleges</th>
+          <th style="padding:10px 14px;text-align:right;">Seats</th>
+          <th style="padding:10px 14px;">PDF</th>
+          <th style="padding:10px 14px;">Uploaded</th>
+          <th style="padding:10px 14px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sources %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:10px 14px;font-weight:600;color:var(--navy);">{{ s.counselling_body }}</td>
+          <td style="padding:10px 14px;">{{ s.academic_year }}</td>
+          <td style="padding:10px 14px;text-align:right;">{{ '{:,}'.format(s.row_count or 0) }}</td>
+          <td style="padding:10px 14px;text-align:right;">{{ '{:,}'.format(s.college_count or 0) }}</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:600;">{{ '{:,}'.format(s.total_seats or 0) }}</td>
+          <td style="padding:10px 14px;">
+            {% if s.pdf_name %}
+              <a href="{{ url_for('pg_seat_matrix_pdf_admin') }}?body={{ s.counselling_body|urlencode }}&year={{ s.academic_year|urlencode }}"
+                 target="_blank" style="color:#2952a3;text-decoration:none;font-weight:600;">View PDF</a>
+            {% else %}
+              <span style="color:var(--gray-400);">—</span>
+            {% endif %}
+          </td>
+          <td style="padding:10px 14px;color:var(--gray-500);">{{ s.uploaded_by }}<br><span style="font-size:0.76rem;">{{ s.uploaded_at }}</span></td>
+          <td style="padding:10px 14px;text-align:right;">
+            <form method="POST" action="{{ url_for('pg_seat_matrix_delete') }}"
+                  onsubmit="return confirm('Remove the {{ s.counselling_body }} {{ s.academic_year }} seat matrix?');" style="display:inline;">
+              <input type="hidden" name="counselling_body" value="{{ s.counselling_body }}">
+              <input type="hidden" name="academic_year" value="{{ s.academic_year }}">
+              <button type="submit" style="background:none;border:0;color:#dc2626;font-size:0.82rem;cursor:pointer;">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:var(--gray-500);font-size:0.9rem;">Nothing loaded yet — upload the announced seat matrix above.</p>
+  {% endif %}
+
+</div>
+{% endblock %}

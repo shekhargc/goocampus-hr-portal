@@ -19,12 +19,13 @@ from pg_admin.data import pgcp_tables as _pgcp_tables
 from pg_admin.data import choice_tables as _choice_tables
 from pg_admin.data import events_tables as _events_tables
 from pg_admin.data import analytics_tables as _analytics_tables
+from pg_admin.data import seat_matrix_tables as _seat_matrix
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
                              bookings_admin, college_master_admin, api_college,
                              pgcp_admin, api_pgcp, api_choice, choice_admin,
                              api_events, events_admin, api_track, analytics_admin,
-                             diag_home_state)
+                             diag_home_state, seat_matrix_admin, api_seat_matrix)
 
 
 def register_pg_admin(app):
@@ -49,7 +50,8 @@ def register_pg_admin(app):
                _pgcp_tables.ensure_pgcp_tables,
                _choice_tables.ensure_choice_tables,
                _events_tables.ensure_event_tables,
-               _analytics_tables.ensure_analytics_tables):
+               _analytics_tables.ensure_analytics_tables,
+               _seat_matrix.ensure_pg_seat_matrix):
         try:
             fn()
         except Exception as e:
@@ -122,6 +124,24 @@ def register_pg_admin(app):
                      college_master_admin.college_stipend_detail, methods=['GET'])
     app.add_url_rule('/admin/pg/college-fees', 'pg_college_fees',
                      college_master_admin.college_fees, methods=['GET'])
+
+    # ── Seat Matrix admin (raw announced authority matrix; not matched to master) ──
+    app.add_url_rule('/admin/pg/seat-matrix', 'pg_seat_matrix_admin',
+                     seat_matrix_admin.seat_matrix_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/seat-matrix/upload', 'pg_seat_matrix_upload',
+                     seat_matrix_admin.seat_matrix_upload, methods=['POST'])
+    app.add_url_rule('/admin/pg/seat-matrix/delete', 'pg_seat_matrix_delete',
+                     seat_matrix_admin.seat_matrix_delete, methods=['POST'])
+    app.add_url_rule('/admin/pg/seat-matrix/pdf', 'pg_seat_matrix_pdf_admin',
+                     seat_matrix_admin.seat_matrix_pdf_admin, methods=['GET'])
+
+    # ── Public API for goocampus.in: Seat Matrix (X-PG-Key; PDF is public) ──
+    app.add_url_rule('/api/pg/seat-matrix', 'api_pg_seat_matrix',
+                     api_seat_matrix.api_pg_seat_matrix, methods=['GET'])
+    app.add_url_rule('/api/pg/seat-matrix/facets', 'api_pg_seat_matrix_facets',
+                     api_seat_matrix.api_pg_seat_matrix_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/seat-matrix/pdf', 'api_pg_seat_matrix_pdf',
+                     api_seat_matrix.api_pg_seat_matrix_pdf, methods=['GET'])
 
     # ── Public API for goocampus.in: PG College Database + Stipend (X-PG-Key) ──
     app.add_url_rule('/api/pg/pg-colleges', 'api_pg_pg_colleges',
