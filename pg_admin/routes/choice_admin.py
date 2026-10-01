@@ -14,7 +14,8 @@ from flask import request, jsonify, redirect, url_for, flash
 from db import get_db
 from core.users import get_user
 from core.auth import login_required
-from pg_admin.routes.api_choice import _chance, _NORMSQL, _deg_clause, _spec_core, _plan_has
+from pg_admin.routes.api_choice import (_chance, _NORMSQL, _deg_clause, _spec_core,
+                                        _plan_has, _choice_gate, _generate_round)
 
 
 def _admin():
@@ -67,6 +68,68 @@ def _set_owner(conn, set_id):
 # (founder 2026-09-24). Only paid (dash_choice_list) clients' lists can be team-edited.
 _FREE_LIST_MSG = ('This client is on the Free plan — their home-state choice list is '
                   'self-service and cannot be edited by the team (view only).')
+
+
+@login_required
+def choice_create(user_id):
+    """Team creates a NEW choice list for a doctor, per counselling body (MCC or a
+    state), from the doctor's profile — mirrors the doctor-side POST /api/pg/choice-sets
+    but on the client's behalf, respecting the DOCTOR's plan entitlement + stamping the
+    team member. Optionally auto-builds the 3 rounds (paid), else an empty list the team
+    fills. (founder 2026-10-01)"""
+    import json as _json
+    u = _admin()
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    body = request.get_json(silent=True) or request.form
+    scope = _s(body.get('scope')) or 'mcc'
+    state = _s(body.get('state'))
+    dg = _s(body.get('degree_group')) or 'mdms'
+    authority = _s(body.get('authority'))
+    try:
+        rank = int(body.get('rank'))
+    except (TypeError, ValueError):
+        rank = None
+    sp = body.get('specialties')
+    if isinstance(sp, str):
+        specialties = [x.strip() for x in sp.split(',') if x.strip()]
+    else:
+        specialties = [x for x in (sp or []) if _s(x)]
+    quota = _s(body.get('quota'))
+    category = _s(body.get('category'))
+    qcs = body.get('quota_categories') or []
+    if not qcs and quota:
+        qcs = [{'quota': quota, 'categories': [category] if category else []}]
+    auto = str(body.get('auto', '1')).lower() not in ('0', 'false', 'no', 'off')
+
+    conn = get_db()
+    try:
+        _self_heal(conn)
+        if not conn.execute("SELECT 1 FROM pg_users WHERE id = ?", [user_id]).fetchone():
+            return jsonify({'ok': False, 'error': 'doctor_not_found'}), 404
+        # Never let the team create a list the doctor's own plan wouldn't allow.
+        gate = _choice_gate(conn, user_id, scope, state)
+        if gate:
+            return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
+        sid = conn.execute(
+            "INSERT INTO pg_choice_sets (user_id, label, scope, authority, degree_group, state, "
+            "quota, category, rank, specialties, quota_categories) VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+            "RETURNING id",
+            [user_id, _s(body.get('label')), scope, authority, dg, state, quota, category, rank,
+             _json.dumps(specialties), _json.dumps(qcs)]).fetchone()['id']
+        if auto and _plan_has(conn, user_id, 'dash_choice_list'):
+            for rnd in (1, 2, 3):
+                _generate_round(conn, sid, rnd, authority, dg, specialties, qcs, rank)
+        _stamp_team(conn, sid, _admin_name(u))
+        conn.commit()
+        return jsonify({'ok': True, 'set_id': sid})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("choice_create: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
 
 
 def _team_can_edit(conn, user_id):

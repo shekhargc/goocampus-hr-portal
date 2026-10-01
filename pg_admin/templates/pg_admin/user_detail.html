@@ -333,12 +333,67 @@
     <p style="font-size:0.8rem;color:var(--gray-500);margin:-0.3rem 0 0.9rem;">
       Edit on the doctor's behalf — reorder, add or remove colleges. Every change you make is
       tagged <span class="team-badge">Team</span> so the doctor sees it came from GooCampus.</p>
+
+    {% if choice_team_editable %}
+    <details class="cs-new" style="margin:0 0 1rem;border:1px solid var(--gray-200);border-radius:10px;padding:0.7rem 0.9rem;background:var(--gray-50);">
+      <summary style="cursor:pointer;font-weight:700;color:var(--navy);font-size:0.9rem;"><i class="fa-solid fa-plus"></i> Build a new choice list (per counselling body)</summary>
+      <div style="margin-top:0.8rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.7rem;">
+        <label style="font-size:0.74rem;font-weight:600;color:var(--gray-600);">Counselling body
+          <select id="nc_body" style="display:block;width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+            <option value="mcc">All India MCC</option>
+            {% for st in states %}<option value="state::{{ st.state }}">{{ st.state }}{% if st.role == 'home' %} — Home{% endif %}</option>{% endfor %}
+          </select></label>
+        <label style="font-size:0.74rem;font-weight:600;color:var(--gray-600);">Degree
+          <select id="nc_dg" style="display:block;width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+            <option value="mdms">MD / MS</option><option value="dnb">DNB</option></select></label>
+        <label style="font-size:0.74rem;font-weight:600;color:var(--gray-600);">NEET-PG rank
+          <input id="nc_rank" type="number" min="1" placeholder="e.g. 12000" style="display:block;width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;"></label>
+        <label style="font-size:0.74rem;font-weight:600;color:var(--gray-600);">Specialties (comma-sep)
+          <input id="nc_spec" placeholder="Radiology, Dermatology" style="display:block;width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;"></label>
+        <label style="font-size:0.74rem;font-weight:600;color:var(--gray-600);">Quota
+          <input id="nc_quota" placeholder="AIQ / State" style="display:block;width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;"></label>
+        <label style="font-size:0.74rem;font-weight:600;color:var(--gray-600);">Category
+          <input id="nc_cat" placeholder="GEN / OBC / SC…" style="display:block;width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;"></label>
+      </div>
+      <label style="display:block;font-size:0.78rem;color:var(--gray-600);margin-top:0.6rem;"><input type="checkbox" id="nc_auto" checked> Auto-build Rounds 1–3 from the rank (uncheck for an empty list to fill manually)</label>
+      <div style="margin-top:0.7rem;">
+        <button type="button" onclick="ncCreate({{ d.id }})" style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:7px 16px;font-size:0.85rem;font-weight:600;cursor:pointer;">Create list</button>
+        <span id="nc_msg" style="font-size:0.8rem;margin-left:0.6rem;color:var(--gray-600);"></span>
+      </div>
+    </details>
+    {% endif %}
+
     {% if not choice_sets %}
-    <p class="cs-empty">This doctor hasn't built any choice lists yet. They build them from their dashboard (a Starter+ feature).</p>
+    <p class="cs-empty">No choice lists yet. {% if choice_team_editable %}Use "Build a new choice list" above to start one for MCC or a state on the doctor's behalf, or they can build it from their dashboard.{% else %}They build them from their dashboard (a Starter+ feature).{% endif %}</p>
     {% else %}
     <div id="choiceRoot"></div>
     {% endif %}
   </div>
+
+  {% if choice_team_editable %}
+  <script>
+  async function ncCreate(uid){
+    var bodyVal = document.getElementById('nc_body').value;
+    var scope='mcc', state='';
+    if(bodyVal.indexOf('state::')===0){ scope='state'; state=bodyVal.slice(7); }
+    var payload={scope:scope, state:state,
+      degree_group:document.getElementById('nc_dg').value,
+      rank:document.getElementById('nc_rank').value,
+      specialties:document.getElementById('nc_spec').value,
+      quota:document.getElementById('nc_quota').value,
+      category:document.getElementById('nc_cat').value,
+      auto: document.getElementById('nc_auto').checked ? '1' : '0'};
+    var msg=document.getElementById('nc_msg'); msg.style.color='var(--gray-600)'; msg.textContent='Creating…';
+    try{
+      var r=await fetch('/admin/pg/users/'+uid+'/choice-sets/create',
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      var j=await r.json();
+      if(j.ok){ msg.style.color='#166534'; msg.textContent='✓ List created'; setTimeout(function(){location.reload();},500); }
+      else { msg.style.color='#b91c1c'; msg.textContent='✗ '+(j.message||j.error||'Could not create'); }
+    }catch(e){ msg.style.color='#b91c1c'; msg.textContent='✗ Error, try again'; }
+  }
+  </script>
+  {% endif %}
 </div>
 
 {% if choice_sets %}

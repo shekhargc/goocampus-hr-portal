@@ -234,6 +234,8 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/choice-items/<int:item_id>', 'api_pg_choice_item_delete',
                      api_choice.api_pg_choice_item_delete, methods=['DELETE'])
     # Team-side choice-sheet editing (goocampus.org admin, on the client's behalf)
+    app.add_url_rule('/admin/pg/users/<int:user_id>/choice-sets/create', 'pg_choice_create',
+                     choice_admin.choice_create, methods=['POST'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/cutoff-search', 'pg_choice_cutoff_search',
                      choice_admin.choice_cutoff_search, methods=['GET'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/add', 'pg_choice_add',
