@@ -238,29 +238,35 @@ def plan_save():
                                    (code,)).fetchone()['id']
 
         # ── the feature matrix ────────────────────────────────────────────────
-        feats = conn.execute(
-            "SELECT code, unit FROM pg_features WHERE COALESCE(is_active,1)=1"
-        ).fetchall()
-        for f in feats:
-            fcode = f['code']
-            vtype = (form.get(f'feat_{fcode}_type') or 'off').strip()
-            if vtype not in _VALUE_TYPES:
-                vtype = 'off'
-            limit = _int_or_none(form.get(f'feat_{fcode}_limit'))
-            if f['unit'] == 'boolean':
-                limit = None
-            note = (form.get(f'feat_{fcode}_note') or '').strip()
-            if vtype == 'off':
-                conn.execute("DELETE FROM pg_plan_features WHERE plan_id = ? "
-                             "AND feature_code = ?", (plan_id, fcode))
-            else:
-                conn.execute(
-                    "INSERT INTO pg_plan_features (plan_id, feature_code, value_type, "
-                    "limit_value, note) VALUES (?,?,?,?,?) "
-                    "ON CONFLICT (plan_id, feature_code) DO UPDATE SET "
-                    "value_type = EXCLUDED.value_type, limit_value = EXCLUDED.limit_value, "
-                    "note = EXCLUDED.note",
-                    (plan_id, fcode, vtype, limit, note))
+        # SAFETY: only rewrite the matrix if the form actually carried it. A submit
+        # that omits all feat_*_type fields (e.g. a price-only or programmatic save)
+        # must NOT be read as "turn every feature off" — otherwise it would silently
+        # wipe the plan's features. In that case we leave the existing matrix intact.
+        _submitted_matrix = any(k.startswith('feat_') and k.endswith('_type') for k in form.keys())
+        if _submitted_matrix:
+            feats = conn.execute(
+                "SELECT code, unit FROM pg_features WHERE COALESCE(is_active,1)=1"
+            ).fetchall()
+            for f in feats:
+                fcode = f['code']
+                vtype = (form.get(f'feat_{fcode}_type') or 'off').strip()
+                if vtype not in _VALUE_TYPES:
+                    vtype = 'off'
+                limit = _int_or_none(form.get(f'feat_{fcode}_limit'))
+                if f['unit'] == 'boolean':
+                    limit = None
+                note = (form.get(f'feat_{fcode}_note') or '').strip()
+                if vtype == 'off':
+                    conn.execute("DELETE FROM pg_plan_features WHERE plan_id = ? "
+                                 "AND feature_code = ?", (plan_id, fcode))
+                else:
+                    conn.execute(
+                        "INSERT INTO pg_plan_features (plan_id, feature_code, value_type, "
+                        "limit_value, note) VALUES (?,?,?,?,?) "
+                        "ON CONFLICT (plan_id, feature_code) DO UPDATE SET "
+                        "value_type = EXCLUDED.value_type, limit_value = EXCLUDED.limit_value, "
+                        "note = EXCLUDED.note",
+                        (plan_id, fcode, vtype, limit, note))
 
         conn.commit()
         flash(f'Plan "{name}" saved.', 'success')
