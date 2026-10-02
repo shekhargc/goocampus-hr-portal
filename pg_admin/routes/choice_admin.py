@@ -108,22 +108,38 @@ def choice_create(user_id):
         _self_heal(conn)
         if not conn.execute("SELECT 1 FROM pg_users WHERE id = ?", [user_id]).fetchone():
             return jsonify({'ok': False, 'error': 'doctor_not_found'}), 404
-        # Never let the team create a list the doctor's own plan wouldn't allow.
-        gate = _choice_gate(conn, user_id, scope, state)
-        if gate:
-            return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
-        sid = conn.execute(
-            "INSERT INTO pg_choice_sets (user_id, label, scope, authority, degree_group, state, "
-            "quota, category, rank, specialties, quota_categories) VALUES (?,?,?,?,?,?,?,?,?,?,?) "
-            "RETURNING id",
-            [user_id, _s(body.get('label')), scope, authority, dg, state, quota, category, rank,
-             _json.dumps(specialties), _json.dumps(qcs)]).fetchone()['id']
+        # ONE list per counselling body. If this body already has a set, REBUILD it in
+        # place (update its params + regenerate the rounds) — never create a duplicate.
+        # Only check the plan entitlement when starting a NEW body's list.
+        existing = conn.execute(
+            "SELECT id FROM pg_choice_sets WHERE user_id = ? AND scope = ? "
+            "AND LOWER(COALESCE(state,'')) = LOWER(?) ORDER BY id LIMIT 1",
+            [user_id, scope, state or '']).fetchone()
+        if existing:
+            sid = existing['id']
+            conn.execute(
+                "UPDATE pg_choice_sets SET label=?, authority=?, degree_group=?, quota=?, "
+                "category=?, rank=?, specialties=?, quota_categories=?, updated_at=CURRENT_TIMESTAMP "
+                "WHERE id=?",
+                [_s(body.get('label')), authority, dg, quota, category, rank,
+                 _json.dumps(specialties), _json.dumps(qcs), sid])
+            conn.execute("DELETE FROM pg_choice_items WHERE set_id = ?", [sid])
+        else:
+            gate = _choice_gate(conn, user_id, scope, state)
+            if gate:
+                return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
+            sid = conn.execute(
+                "INSERT INTO pg_choice_sets (user_id, label, scope, authority, degree_group, state, "
+                "quota, category, rank, specialties, quota_categories) VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                "RETURNING id",
+                [user_id, _s(body.get('label')), scope, authority, dg, state, quota, category, rank,
+                 _json.dumps(specialties), _json.dumps(qcs)]).fetchone()['id']
         if auto and _plan_has(conn, user_id, 'dash_choice_list'):
             for rnd in (1, 2, 3):
                 _generate_round(conn, sid, rnd, authority, dg, specialties, qcs, rank)
         _stamp_team(conn, sid, _admin_name(u))
         conn.commit()
-        return jsonify({'ok': True, 'set_id': sid})
+        return jsonify({'ok': True, 'set_id': sid, 'rebuilt': bool(existing)})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -239,6 +255,29 @@ def choice_facets():
                         'categories_by_quota': by_quota})
     except Exception as e:
         logging.error("choice_facets: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+@login_required
+def choice_delete_set(set_id):
+    """Team deletes a whole choice list (and its colleges) for a doctor — e.g. to
+    remove a stray/duplicate list. (founder 2026-10-02)"""
+    if not _admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM pg_choice_sets WHERE id = ?", [set_id]).fetchone():
+            return jsonify({'ok': True, 'deleted': True})   # already gone — idempotent
+        conn.execute("DELETE FROM pg_choice_items WHERE set_id = ?", [set_id])
+        conn.execute("DELETE FROM pg_choice_sets WHERE id = ?", [set_id])
+        conn.commit()
+        return jsonify({'ok': True, 'deleted': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("choice_delete_set: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()

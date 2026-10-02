@@ -240,6 +240,8 @@ def register_pg_admin(app):
                      choice_admin.choice_states, methods=['GET', 'POST', 'DELETE'])
     app.add_url_rule('/admin/pg/choice-facets', 'pg_choice_facets',
                      choice_admin.choice_facets, methods=['GET'])
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/delete', 'pg_choice_delete_set',
+                     choice_admin.choice_delete_set, methods=['POST'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/cutoff-search', 'pg_choice_cutoff_search',
                      choice_admin.choice_cutoff_search, methods=['GET'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/add', 'pg_choice_add',
