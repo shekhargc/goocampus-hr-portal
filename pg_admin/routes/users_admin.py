@@ -314,6 +314,15 @@ def user_detail(user_id):
         except Exception:
             conn.rollback(); states = []
 
+        # How many EXTRA (non-home) states this doctor's plan allows — for the team
+        # "Add state" control on the build panel.
+        try:
+            from pg_admin.routes.api_choice import _state_limits
+            _home_ok, _max_other = _state_limits(conn, user_id)
+            state_max_other = ('any' if _max_other is None else _max_other)
+        except Exception:
+            conn.rollback(); state_max_other = 0
+
         # News state subscriptions (dashboard news feed) — saved to the profile.
         try:
             news_follows = [r['state'] for r in conn.execute(
@@ -445,6 +454,11 @@ def user_detail(user_id):
         choice_team_editable = bool((ent.get('features') or {}).get('dash_choice_list', {}).get('allowed'))
     except Exception:
         choice_team_editable = False
+    try:
+        from college.data.neetpg_lists import NEETPG_COURSES as _MDMS, DNB_COURSES as _DNB
+        specialty_mdms, specialty_dnb = list(_MDMS), list(_DNB)
+    except Exception:
+        specialty_mdms, specialty_dnb = [], []
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
                            favorites=favorites, states=states, news_follows=news_follows,
@@ -452,6 +466,9 @@ def user_detail(user_id):
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
                            choice_team_editable=choice_team_editable, activity=activity,
                            enquiry=enquiry, state_options=_canonical_states(),
+                           state_max_other=state_max_other,
+                           specialty_mdms=_json2.dumps(specialty_mdms),
+                           specialty_dnb=_json2.dumps(specialty_dnb),
                            active_section='goocampus_in')
 
 

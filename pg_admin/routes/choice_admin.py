@@ -15,7 +15,8 @@ from db import get_db
 from core.users import get_user
 from core.auth import login_required
 from pg_admin.routes.api_choice import (_chance, _NORMSQL, _deg_clause, _spec_core,
-                                        _plan_has, _choice_gate, _generate_round)
+                                        _plan_has, _choice_gate, _generate_round,
+                                        _state_limits, _doctor_states)
 
 
 def _admin():
@@ -127,6 +128,117 @@ def choice_create(user_id):
         try: conn.rollback()
         except Exception: pass
         logging.error("choice_create: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+@login_required
+def choice_states(user_id):
+    """Team manages a doctor's counselling states from their profile (home stays
+    fixed; 'other' states capped by the DOCTOR's plan). Mirrors /api/pg/my-states.
+    GET → payload; POST {state} → add 'other'; DELETE {state} → remove a non-home.
+    Adding a state here reflects on the doctor's own dashboard too (same table).
+    (founder 2026-10-02)"""
+    u = _admin()
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM pg_users WHERE id = ?", [user_id]).fetchone():
+            return jsonify({'ok': False, 'error': 'doctor_not_found'}), 404
+        home_ok, max_other = _state_limits(conn, user_id)
+
+        def _payload():
+            states = _doctor_states(conn, user_id)
+            home = next((s['state'] for s in states if s['role'] == 'home'), None)
+            others = [s for s in states if s['role'] == 'other']
+            return {'ok': True, 'states': states, 'home': home,
+                    'allowed_other': ('any' if max_other is None else max_other),
+                    'can_add_other': home_ok and (max_other is None or len(others) < max_other)}
+
+        if request.method == 'GET':
+            return jsonify(_payload())
+
+        state = _s((request.get_json(silent=True) or {}).get('state')
+                   or request.form.get('state') or request.args.get('state'))
+        if not state:
+            return jsonify({'ok': False, 'error': 'state_required'}), 400
+
+        if request.method == 'DELETE':
+            row = conn.execute("SELECT id, role FROM pg_doctor_states WHERE user_id=? "
+                               "AND LOWER(state)=LOWER(?) ORDER BY id LIMIT 1",
+                               [user_id, state]).fetchone()
+            if row and (row['role'] or '') == 'home':
+                return jsonify({'ok': False, 'error': 'home_fixed',
+                                'message': 'The home / domicile state is fixed and cannot be removed.'}), 403
+            if row:
+                conn.execute("DELETE FROM pg_doctor_states WHERE id=?", [row['id']])
+                conn.commit()
+            return jsonify(_payload())
+
+        # POST → add an 'other' state, capped by the doctor's plan.
+        existing = _doctor_states(conn, user_id)
+        others = [s for s in existing if s['role'] == 'other']
+        if max_other is not None and len(others) >= max_other:
+            msg = ('This doctor’s plan does not include extra states.' if max_other == 0
+                   else 'This doctor has used their extra-state allowance (plan limit).')
+            return jsonify({'ok': False, 'error': 'limit', 'message': msg}), 403
+        if any(s['state'].strip().lower() == state.lower() for s in existing):
+            return jsonify({'ok': True, 'already': True, **_payload()})
+        conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) VALUES (?,?,'other',0)",
+                     [user_id, state])
+        conn.commit()
+        return jsonify(_payload())
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("choice_states: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+@login_required
+def choice_facets():
+    """Distinct quota + category options for a counselling body (MCC or a state),
+    from pg_cutoffs, so the team's build form only offers valid combos.
+    GET ?scope=mcc|state&state=&degree_group=mdms|dnb (founder 2026-10-02)"""
+    if not _admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    scope = _s(request.args.get('scope')) or 'mcc'
+    state = _s(request.args.get('state'))
+    dg = _s(request.args.get('degree_group')) or 'mdms'
+    where = ["COALESCE(c.is_reference,0)=0"]
+    params = []
+    dgc, dgp = _deg_clause(dg)
+    if dgc:
+        where.append(dgc); params.append(dgp)
+    if scope == 'state' and state:
+        where.append("c.state ILIKE ?"); params.append('%' + state + '%')
+    else:  # MCC / All-India
+        where.append("(c.authority ILIKE ? OR c.authority ILIKE ? OR c.authority ILIKE ?)")
+        params.extend(['%MCC%', '%All India%', '%AIQ%'])
+    wsql = " WHERE " + " AND ".join(where)
+    conn = get_db()
+    try:
+        quotas = [r['quota'] for r in conn.execute(
+            f"SELECT DISTINCT c.quota AS quota FROM pg_cutoffs c{wsql} "
+            "AND COALESCE(c.quota,'')<>'' ORDER BY c.quota", params).fetchall()]
+        cats = [r['category'] for r in conn.execute(
+            f"SELECT DISTINCT c.category AS category FROM pg_cutoffs c{wsql} "
+            "AND COALESCE(c.category,'')<>'' ORDER BY c.category", params).fetchall()]
+        # categories available per quota (so category can follow the chosen quota)
+        by_quota = {}
+        for r in conn.execute(
+                f"SELECT DISTINCT c.quota AS quota, c.category AS category FROM pg_cutoffs c{wsql} "
+                "AND COALESCE(c.quota,'')<>'' AND COALESCE(c.category,'')<>'' "
+                "ORDER BY c.quota, c.category", params).fetchall():
+            by_quota.setdefault(r['quota'], []).append(r['category'])
+        return jsonify({'ok': True, 'quotas': quotas, 'categories': cats,
+                        'categories_by_quota': by_quota})
+    except Exception as e:
+        logging.error("choice_facets: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
