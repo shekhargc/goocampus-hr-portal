@@ -50,8 +50,9 @@ def events_admin():
     except (TypeError, ValueError):
         sel = 0
     conn = get_db()
-    events, event, regs = [], None, []
+    events, event, regs, summary = [], None, [], {}
     try:
+        _ensure_reg_fields(conn)
         events = [dict(r) for r in conn.execute(
             "SELECT e.*, (SELECT COUNT(*) FROM pg_event_registrations r WHERE r.event_id=e.id) AS n "
             "FROM pg_events e ORDER BY e.created_at DESC").fetchall()]
@@ -62,10 +63,20 @@ def events_admin():
                 regs = [dict(r) for r in conn.execute(
                     "SELECT * FROM pg_event_registrations WHERE event_id = ? ORDER BY id DESC",
                     (sel,)).fetchall()]
+                summary = {
+                    'total': len(regs),
+                    'attended': sum(1 for r in regs if r.get('attendance') == 'attended'),
+                    'not_attended': sum(1 for r in regs if r.get('attendance') == 'not_attended'),
+                    'online': sum(1 for r in regs if r.get('session_mode') == 'online'),
+                    'offline': sum(1 for r in regs if r.get('session_mode') == 'offline'),
+                    'spoken': sum(1 for r in regs if r.get('contact_status') == 'spoken'),
+                    'completed': sum(1 for r in regs if r.get('contact_status') == 'completed'),
+                    'not_spoken': sum(1 for r in regs if r.get('contact_status') == 'not_spoken'),
+                }
     finally:
         conn.close()
     return render_template('pg_admin/events.html', events=events, event=event, regs=regs,
-                           active_section='goocampus_in')
+                           summary=summary, active_section='goocampus_in')
 
 
 @login_required
@@ -136,6 +147,59 @@ def event_toggle_registration(event_id):
     return redirect(url_for('pg_events_admin', event=event_id))
 
 
+# Team working-list fields — the only columns event_reg_update may write, each mapped
+# to the set of values it accepts ('' = cleared). Keeps the endpoint from being used to
+# overwrite the registrant's own data. (founder 2026-10-04)
+_REG_FIELDS = {
+    'attendance':     {'', 'attended', 'not_attended'},
+    'session_mode':   {'', 'offline', 'online'},
+    'contact_status': {'', 'not_spoken', 'spoken', 'completed'},
+    'staff_notes':    None,   # free text
+}
+
+# Human labels for the Excel export.
+_REG_LABELS = {
+    'attendance': {'attended': 'Attended', 'not_attended': 'Not attended'},
+    'session_mode': {'offline': 'Offline', 'online': 'Online'},
+    'contact_status': {'not_spoken': 'Not spoken', 'spoken': 'Spoken', 'completed': 'Completed'},
+}
+
+
+def _ensure_reg_fields(conn):
+    """Request-time guard: the team columns may be missing if the boot migration was
+    skipped on a Render cold start. (reference: Render cold-start migrations)"""
+    for col in ('attendance', 'session_mode', 'contact_status', 'staff_notes'):
+        conn.execute(f"ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS {col} TEXT DEFAULT ''")
+
+
+@login_required
+def event_reg_update(reg_id):
+    """POST {field, value} — set one team working-list field on a registration.
+    Team-editable (Events 'edit' grant). Returns JSON for the inline editor."""
+    from flask import jsonify
+    u = _require_events_section("edit")
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    field = _s(request.form.get('field'))
+    value = _s(request.form.get('value'))
+    if field not in _REG_FIELDS:
+        return jsonify({'ok': False, 'error': 'bad_field'}), 400
+    allowed = _REG_FIELDS[field]
+    if allowed is not None and value not in allowed:
+        return jsonify({'ok': False, 'error': 'bad_value'}), 400
+    conn = get_db()
+    try:
+        _ensure_reg_fields(conn)
+        conn.execute(f"UPDATE pg_event_registrations SET {field} = ? WHERE id = ?", (value, reg_id))
+        conn.commit()
+        return jsonify({'ok': True, 'field': field, 'value': value})
+    except Exception as e:
+        conn.rollback(); logging.error("event_reg_update: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 @login_required
 def event_export(event_id):
     u = _require_events_section("view")
@@ -144,20 +208,31 @@ def event_export(event_id):
     import openpyxl
     conn = get_db()
     try:
+        _ensure_reg_fields(conn)
         ev = conn.execute("SELECT * FROM pg_events WHERE id = ?", (event_id,)).fetchone()
         regs = [dict(r) for r in conn.execute(
             "SELECT ticket_code, name, email, mobile, rank, score, domicile_state, college, "
-            "target_speciality, city, notes, created_at FROM pg_event_registrations "
+            "target_speciality, city, attendance, session_mode, contact_status, staff_notes, "
+            "notes, created_at FROM pg_event_registrations "
             "WHERE event_id = ? ORDER BY id", (event_id,)).fetchall()]
     finally:
         conn.close()
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'Registrations'
     cols = ['ticket_code', 'name', 'email', 'mobile', 'rank', 'score', 'domicile_state',
-            'college', 'target_speciality', 'city', 'notes', 'created_at']
+            'college', 'target_speciality', 'city', 'attendance', 'session_mode',
+            'contact_status', 'staff_notes', 'notes', 'created_at']
     ws.append(['Ticket', 'Name', 'Email', 'Mobile', 'Rank', 'Score', 'Domicile', 'College',
-               'Target Speciality', 'City', 'Notes', 'Registered'])
+               'Target Speciality', 'City', 'Attendance', 'Session mode', 'Contact status',
+               'Team notes', 'Registrant note', 'Registered'])
     for r in regs:
-        ws.append([str(r.get(c)) if r.get(c) is not None else '' for c in cols])
+        row = []
+        for c in cols:
+            v = r.get(c)
+            v = '' if v is None else str(v)
+            if c in _REG_LABELS:            # show the friendly label, not the code
+                v = _REG_LABELS[c].get(v, v)
+            row.append(v)
+        ws.append(row)
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     fname = _slugify((ev['title'] if ev else 'event')) + '-registrations.xlsx'
     return Response(buf.read(),
