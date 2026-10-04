@@ -74,35 +74,144 @@
 
   <!-- Selected event's registrations -->
   {% if event %}
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.7rem;">
-    <h2 style="font-size:1.1rem;font-weight:800;color:var(--navy);margin:0;">{{ event.title }} — registrations ({{ regs|length }})</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.7rem;flex-wrap:wrap;gap:0.6rem;">
+    <h2 style="font-size:1.1rem;font-weight:800;color:var(--navy);margin:0;">{{ event.title }} — attendee list ({{ regs|length }})</h2>
     {% if regs %}<a href="{{ url_for('pg_event_export', event_id=event.id) }}" style="background:#16a34a;color:#fff;text-decoration:none;border-radius:8px;padding:0.5rem 1rem;font-weight:700;font-size:0.83rem;">⬇ Download Excel</a>{% endif %}
   </div>
+
+  {% if regs %}
+  <!-- Summary chips -->
+  {% set chip = 'display:inline-flex;align-items:baseline;gap:6px;padding:6px 12px;border-radius:20px;font-size:0.8rem;font-weight:600;' %}
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:0.9rem;">
+    <span style="{{ chip }}background:#eef2ff;color:#3730a3;">Registered <b>{{ summary.total }}</b></span>
+    <span style="{{ chip }}background:#dcfce7;color:#166534;">Attended <b id="sumAttended">{{ summary.attended }}</b></span>
+    <span style="{{ chip }}background:#fee2e2;color:#991b1b;">Not attended <b id="sumNot">{{ summary.not_attended }}</b></span>
+    <span style="{{ chip }}background:#e0f2fe;color:#075985;">Online <b id="sumOnline">{{ summary.online }}</b></span>
+    <span style="{{ chip }}background:#f1f5f9;color:#334155;">Offline <b id="sumOffline">{{ summary.offline }}</b></span>
+    <span style="{{ chip }}background:#fef9c3;color:#854d0e;">Spoken <b id="sumSpoken">{{ summary.spoken }}</b></span>
+    <span style="{{ chip }}background:#f3e8ff;color:#6b21a8;">Completed <b id="sumCompleted">{{ summary.completed }}</b></span>
+  </div>
+
+  <!-- Filters -->
+  {% set fsel = 'padding:0.4rem 0.6rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.82rem;background:#fff;' %}
+  <div style="display:flex;flex-wrap:wrap;gap:0.6rem;margin-bottom:0.7rem;align-items:center;">
+    <input id="fSearch" type="text" placeholder="Search name / mobile / ticket…" style="{{ fsel }}min-width:230px;">
+    <select id="fAttendance" style="{{ fsel }}"><option value="">Attendance: all</option><option value="attended">Attended</option><option value="not_attended">Not attended</option><option value="__blank">— not set</option></select>
+    <select id="fMode" style="{{ fsel }}"><option value="">Session mode: all</option><option value="offline">Offline</option><option value="online">Online</option><option value="__blank">— not set</option></select>
+    <select id="fContact" style="{{ fsel }}"><option value="">Contact: all</option><option value="not_spoken">Not spoken</option><option value="spoken">Spoken</option><option value="completed">Completed</option><option value="__blank">— not set</option></select>
+    <span id="fCount" style="font-size:0.8rem;color:var(--gray-500);"></span>
+  </div>
+
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:auto;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <table style="width:100%;border-collapse:collapse;font-size:0.83rem;white-space:nowrap;">
+    <table id="regTable" style="width:100%;border-collapse:collapse;font-size:0.83rem;white-space:nowrap;">
       <thead><tr>
         <th style="{{ hs }}">Ticket</th><th style="{{ hs }}">Name</th><th style="{{ hs }}">Mobile</th>
-        <th style="{{ hs }}">Email</th><th style="{{ hs }}text-align:right;">Rank</th><th style="{{ hs }}text-align:right;">Score</th>
-        <th style="{{ hs }}">Domicile</th><th style="{{ hs }}">Registered</th>
+        <th style="{{ hs }}text-align:right;">Rank</th><th style="{{ hs }}">Domicile</th>
+        <th style="{{ hs }}">Attendance</th><th style="{{ hs }}">Session mode</th><th style="{{ hs }}">Contact status</th>
+        <th style="{{ hs }}">Team notes</th><th style="{{ hs }}">Registered</th>
       </tr></thead>
       <tbody>
+        {% set esel = 'padding:0.35rem 0.4rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.8rem;background:#fff;cursor:pointer;' %}
         {% for r in regs %}
-        <tr style="border-top:1px solid var(--gray-100);">
-          <td style="padding:0.55rem 0.9rem;font-family:monospace;font-weight:700;color:var(--navy);">{{ r.ticket_code }}</td>
-          <td style="padding:0.55rem 0.9rem;font-weight:600;">{{ r.name }}</td>
-          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.mobile }}</td>
-          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.email }}</td>
-          <td style="padding:0.55rem 0.9rem;text-align:right;">{{ r.rank or '—' }}</td>
-          <td style="padding:0.55rem 0.9rem;text-align:right;">{{ r.score or '—' }}</td>
-          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.domicile_state or '—' }}</td>
-          <td style="padding:0.55rem 0.9rem;color:var(--gray-500);white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}</td>
+        <tr class="regRow" data-attendance="{{ r.attendance or '' }}" data-mode="{{ r.session_mode or '' }}" data-contact="{{ r.contact_status or '' }}"
+            data-search="{{ (r.name or '')|lower }} {{ (r.mobile or '')|lower }} {{ (r.ticket_code or '')|lower }} {{ (r.email or '')|lower }}"
+            style="border-top:1px solid var(--gray-100);">
+          <td style="padding:0.5rem 0.9rem;font-family:monospace;font-weight:700;color:var(--navy);">{{ r.ticket_code }}</td>
+          <td style="padding:0.5rem 0.9rem;font-weight:600;">{{ r.name }}<div style="font-size:0.72rem;color:var(--gray-400);font-weight:400;">{{ r.email }}</div></td>
+          <td style="padding:0.5rem 0.9rem;color:var(--gray-600);">{{ r.mobile }}</td>
+          <td style="padding:0.5rem 0.9rem;text-align:right;">{{ r.rank or '—' }}</td>
+          <td style="padding:0.5rem 0.9rem;color:var(--gray-600);">{{ r.domicile_state or '—' }}</td>
+          <td style="padding:0.5rem 0.9rem;">
+            <select class="regEdit" data-reg="{{ r.id }}" data-field="attendance" style="{{ esel }}">
+              <option value="">—</option>
+              <option value="attended" {{ 'selected' if r.attendance=='attended' }}>Attended</option>
+              <option value="not_attended" {{ 'selected' if r.attendance=='not_attended' }}>Not attended</option>
+            </select></td>
+          <td style="padding:0.5rem 0.9rem;">
+            <select class="regEdit" data-reg="{{ r.id }}" data-field="session_mode" style="{{ esel }}">
+              <option value="">—</option>
+              <option value="offline" {{ 'selected' if r.session_mode=='offline' }}>Offline</option>
+              <option value="online" {{ 'selected' if r.session_mode=='online' }}>Online</option>
+            </select></td>
+          <td style="padding:0.5rem 0.9rem;">
+            <select class="regEdit" data-reg="{{ r.id }}" data-field="contact_status" style="{{ esel }}">
+              <option value="">—</option>
+              <option value="not_spoken" {{ 'selected' if r.contact_status=='not_spoken' }}>Not spoken</option>
+              <option value="spoken" {{ 'selected' if r.contact_status=='spoken' }}>Spoken</option>
+              <option value="completed" {{ 'selected' if r.contact_status=='completed' }}>Completed</option>
+            </select></td>
+          <td style="padding:0.5rem 0.9rem;">
+            <input class="regEdit" data-reg="{{ r.id }}" data-field="staff_notes" type="text" value="{{ r.staff_notes or '' }}"
+                   placeholder="add note…" style="padding:0.35rem 0.5rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.8rem;min-width:170px;">
+          </td>
+          <td style="padding:0.5rem 0.9rem;color:var(--gray-500);white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}</td>
         </tr>
-        {% else %}
-        <tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--gray-400);">No registrations yet for this event.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  <p style="margin:0.6rem 0 0;font-size:0.76rem;color:var(--gray-400);">Changes save automatically. Session mode = how the doctor attended / prefers (online count shown above). The registrant's own sign-up note is kept separately and appears in the Excel download.</p>
+
+  <script>
+  (function(){
+    var UP = "{{ url_for('pg_event_reg_update', reg_id=0) }}".replace(/0$/,'');
+    // inline save
+    document.querySelectorAll('.regEdit').forEach(function(el){
+      var evt = el.tagName === 'SELECT' ? 'change' : 'blur';
+      el.addEventListener(evt, function(){
+        var body = new URLSearchParams({field: el.dataset.field, value: el.value});
+        el.style.opacity = '0.5';
+        fetch(UP + el.dataset.reg + '/update', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body})
+          .then(function(r){return r.json();})
+          .then(function(d){
+            el.style.opacity = '1';
+            if(!d.ok){ el.style.borderColor='#dc2626'; alert('Could not save. Please try again.'); return; }
+            el.style.borderColor='#16a34a';
+            setTimeout(function(){ el.style.borderColor=''; }, 900);
+            var row = el.closest('tr');
+            if(el.dataset.field==='attendance') row.dataset.attendance = el.value;
+            if(el.dataset.field==='session_mode') row.dataset.mode = el.value;
+            if(el.dataset.field==='contact_status') row.dataset.contact = el.value;
+            recount(); applyFilters();
+          })
+          .catch(function(){ el.style.opacity='1'; el.style.borderColor='#dc2626'; alert('Network error — not saved.'); });
+      });
+    });
+    // live summary recount
+    function recount(){
+      var rows = document.querySelectorAll('.regRow'); var c={att:0,no:0,on:0,off:0,sp:0,cp:0};
+      rows.forEach(function(r){
+        if(r.dataset.attendance==='attended')c.att++; if(r.dataset.attendance==='not_attended')c.no++;
+        if(r.dataset.mode==='online')c.on++; if(r.dataset.mode==='offline')c.off++;
+        if(r.dataset.contact==='spoken')c.sp++; if(r.dataset.contact==='completed')c.cp++;
+      });
+      document.getElementById('sumAttended').textContent=c.att;
+      document.getElementById('sumNot').textContent=c.no;
+      document.getElementById('sumOnline').textContent=c.on;
+      document.getElementById('sumOffline').textContent=c.off;
+      document.getElementById('sumSpoken').textContent=c.sp;
+      document.getElementById('sumCompleted').textContent=c.cp;
+    }
+    // filters
+    var fS=document.getElementById('fSearch'), fA=document.getElementById('fAttendance'),
+        fM=document.getElementById('fMode'), fC=document.getElementById('fContact'), fCount=document.getElementById('fCount');
+    function match(val, want){ if(want==='')return true; if(want==='__blank')return val===''; return val===want; }
+    function applyFilters(){
+      var q=(fS.value||'').toLowerCase().trim(), shown=0;
+      document.querySelectorAll('.regRow').forEach(function(r){
+        var ok = match(r.dataset.attendance,fA.value) && match(r.dataset.mode,fM.value) && match(r.dataset.contact,fC.value)
+                 && (q===''|| (r.dataset.search||'').indexOf(q)>=0);
+        r.style.display = ok ? '' : 'none'; if(ok)shown++;
+      });
+      fCount.textContent = shown + ' shown';
+    }
+    [fS,fA,fM,fC].forEach(function(el){ el.addEventListener('input',applyFilters); el.addEventListener('change',applyFilters); });
+    applyFilters();
+  })();
+  </script>
+  {% else %}
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:2rem;text-align:center;color:var(--gray-400);box-shadow:0 1px 3px rgba(0,0,0,0.05);">No registrations yet for this event.</div>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}

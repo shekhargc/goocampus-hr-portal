@@ -50,6 +50,16 @@ def ensure_event_tables():
         # reprint keep working; only NEW registrations are rejected). (founder 2026-10-04)
         conn.execute("ALTER TABLE pg_events ADD COLUMN IF NOT EXISTS reg_closed INTEGER DEFAULT 0")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_event_reg_user ON pg_event_registrations (user_id)")
+        # Team working-list fields per registrant — set from the Events admin while the
+        # team works the attendee list (NOT filled by the registrant). (founder 2026-10-04)
+        #   attendance     : '' | 'attended' | 'not_attended'
+        #   session_mode   : '' | 'offline' | 'online'   (how they attended / preferred)
+        #   contact_status : '' | 'not_spoken' | 'spoken' | 'completed'
+        #   staff_notes    : free text by the team (separate from the registrant's own `notes`)
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS attendance TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS session_mode TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS contact_status TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS staff_notes TEXT DEFAULT ''")
         conn.commit()
         logging.info("pg_events tables ensured")
     except Exception as e:
