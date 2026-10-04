@@ -46,6 +46,9 @@ def ensure_event_tables():
         # per-event "Powered by" line for the ticket. (founder 2026-09-25)
         conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS user_id INTEGER")
         conn.execute("ALTER TABLE pg_events ADD COLUMN IF NOT EXISTS powered_by TEXT DEFAULT ''")
+        # Close registration for a past event WITHOUT hiding it (recap page + ticket
+        # reprint keep working; only NEW registrations are rejected). (founder 2026-10-04)
+        conn.execute("ALTER TABLE pg_events ADD COLUMN IF NOT EXISTS reg_closed INTEGER DEFAULT 0")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_event_reg_user ON pg_event_registrations (user_id)")
         conn.commit()
         logging.info("pg_events tables ensured")

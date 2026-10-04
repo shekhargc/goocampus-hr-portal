@@ -257,6 +257,8 @@ def register_pg_admin(app):
     app.add_url_rule('/admin/pg/events/create', 'pg_event_create', events_admin.event_create, methods=['POST'])
     app.add_url_rule('/admin/pg/events/<int:event_id>/toggle', 'pg_event_toggle',
                      events_admin.event_toggle, methods=['POST'])
+    app.add_url_rule('/admin/pg/events/<int:event_id>/toggle-registration', 'pg_event_toggle_registration',
+                     events_admin.event_toggle_registration, methods=['POST'])
     app.add_url_rule('/admin/pg/events/<int:event_id>/export', 'pg_event_export',
                      events_admin.event_export, methods=['GET'])
     # ── Usage analytics: ingest (goocampus.in) + admin dashboard ──
