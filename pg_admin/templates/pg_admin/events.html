@@ -56,9 +56,11 @@
           <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{{ e.event_date or '—' }}{% if e.event_time %} · {{ e.event_time }}{% endif %}</td>
           <td style="padding:0.6rem 0.9rem;color:var(--gray-500);font-family:monospace;font-size:0.78rem;">{{ e.slug }}</td>
           <td style="padding:0.6rem 0.9rem;text-align:right;font-weight:700;">{{ e.n }}</td>
-          <td style="padding:0.6rem 0.9rem;"><span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:20px;background:{{ '#dcfce7' if e.is_active else '#f3f4f6' }};color:{{ '#166534' if e.is_active else '#6b7280' }};">{{ 'Live' if e.is_active else 'Off' }}</span></td>
+          <td style="padding:0.6rem 0.9rem;"><span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:20px;background:{{ '#dcfce7' if e.is_active else '#f3f4f6' }};color:{{ '#166534' if e.is_active else '#6b7280' }};">{{ 'Live' if e.is_active else 'Off' }}</span>{% if e.reg_closed %} <span style="font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:20px;background:#fef2f2;color:#b91c1c;">Reg closed</span>{% endif %}</td>
           <td style="padding:0.6rem 0.9rem;text-align:right;white-space:nowrap;">
             <a href="{{ url_for('pg_events_admin', event=e.id) }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.82rem;">Registrations →</a>
+            <form method="POST" action="{{ url_for('pg_event_toggle_registration', event_id=e.id) }}" style="display:inline;" onsubmit="return confirm('{{ 'Re-open registrations for this session?' if e.reg_closed else 'Close new registrations for this session? (It stays visible for the recap; tickets still reprint.)' }}');">
+              <button type="submit" style="background:none;border:none;color:{{ '#16a34a' if e.reg_closed else '#b91c1c' }};font-weight:600;font-size:0.82rem;cursor:pointer;margin-left:8px;">{{ 'Open reg' if e.reg_closed else 'Close reg' }}</button></form>
             <form method="POST" action="{{ url_for('pg_event_toggle', event_id=e.id) }}" style="display:inline;">
               <button type="submit" style="background:none;border:none;color:var(--gray-500);font-weight:600;font-size:0.82rem;cursor:pointer;margin-left:8px;">{{ 'Turn off' if e.is_active else 'Turn on' }}</button></form>
           </td>

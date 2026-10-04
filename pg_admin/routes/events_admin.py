@@ -118,6 +118,25 @@ def event_toggle(event_id):
 
 
 @login_required
+def event_toggle_registration(event_id):
+    """Close / re-open NEW registrations for an event without hiding it (recap + ticket
+    reprint keep working). (founder 2026-10-04)"""
+    u = _require_events_section("edit")
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        conn.execute("ALTER TABLE pg_events ADD COLUMN IF NOT EXISTS reg_closed INTEGER DEFAULT 0")
+        conn.execute("UPDATE pg_events SET reg_closed = 1 - COALESCE(reg_closed,0) WHERE id = ?", (event_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    finally:
+        conn.close()
+    return redirect(url_for('pg_events_admin', event=event_id))
+
+
+@login_required
 def event_export(event_id):
     u = _require_events_section("view")
     if not u:

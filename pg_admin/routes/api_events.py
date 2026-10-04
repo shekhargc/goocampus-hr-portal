@@ -118,6 +118,11 @@ def api_pg_event_register(slug):
         if not ev:
             return jsonify({'ok': False, 'error': 'event_not_found'}), 404
         ev = dict(ev)
+        # Registration closed (past event) — the event still shows for the recap and
+        # tickets still reprint, but no NEW registrations are accepted.
+        if ev.get('reg_closed'):
+            return jsonify({'ok': False, 'error': 'registration_closed',
+                            'message': 'Registration for this session has closed.'}), 403
         body = request.get_json(silent=True) or {}
         name = _s(body.get('name'))
         email = _s(body.get('email'))
