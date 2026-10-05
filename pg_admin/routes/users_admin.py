@@ -443,7 +443,7 @@ def user_detail(user_id):
             _fu.ensure_followups_schema(conn)
             fu_thread = _fu.get_thread(conn, doctor.get('mobile'), doctor.get('email'))
             fu_state = _fu.current_state(conn, doctor.get('mobile'), doctor.get('email'))
-            fu_statuses = _fu.STATUSES
+            fu_statuses = _fu.PICK_STATUSES
         except Exception as _fe:
             logging.error("user_detail followups: %s", _fe)
             try: conn.rollback()
@@ -496,8 +496,8 @@ def user_followup_add(user_id):
     note = (request.form.get('note') or '').strip()
     status = (request.form.get('status') or '').strip()
     next_date = (request.form.get('next_followup_date') or '').strip()
-    if status != 'Follow-up':
-        next_date = ''                      # a next-date only makes sense for 'Follow-up'
+    if status not in ('Follow-up', 'Interested'):
+        next_date = ''                      # a next-date only applies to Follow-up / Interested
     if not note and not status:
         flash('Add a note or pick a status.', 'error')
         return redirect(url_for('pg_user_detail', user_id=user_id))

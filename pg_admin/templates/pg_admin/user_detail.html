@@ -208,7 +208,7 @@
     <!-- RIGHT -->
     <div>
       {# ── Follow-up (shared with Sales → Inquiries by mobile/email) ── #}
-      {% set fu_colors = {'New':['#eef2ff','#3730a3'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
+      {% set fu_colors = {'New':['#eef2ff','#3730a3'],'Did not pick up':['#fff1f2','#9f1239'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
       <div class="card" style="border-top:3px solid var(--orange);">
         <h3><i class="fa-solid fa-phone-volume"></i> Follow-up</h3>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
@@ -222,12 +222,12 @@
 
         <form method="POST" action="/admin/pg/users/{{ d.id }}/followup">
           <div class="f"><label>Status</label>
-            <select name="status" id="fuStatus" onchange="document.getElementById('fuDateRow').style.display = this.value==='Follow-up' ? 'block' : 'none';">
+            <select name="status" id="fuStatus" onchange="var s=this.value;document.getElementById('fuDateRow').style.display=(s==='Follow-up'||s==='Interested')?'block':'none';">
               <option value="">— keep current —</option>
               {% for s in fu_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
             </select></div>
-          <div class="f" id="fuDateRow" style="display:none;"><label>Next follow-up date</label>
-            <input type="date" name="next_followup_date" value="{{ fu_state.next_followup_date or '' }}"></div>
+          <div class="f" id="fuDateRow" style="display:none;"><label>Next follow-up — date &amp; time</label>
+            <input type="datetime-local" name="next_followup_date" value="{{ (fu_state.next_followup_date or '')|replace(' ','T') }}"></div>
           <div class="f"><label>Note — what you spoke about</label>
             <textarea name="note" rows="3" placeholder="e.g. Called, explained Premium plan, interested — will decide by Friday"></textarea></div>
           <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Add follow-up</button>
