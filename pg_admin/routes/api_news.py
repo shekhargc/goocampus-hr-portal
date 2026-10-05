@@ -113,7 +113,7 @@ def api_pg_news():
         total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_news WHERE {where}", params).fetchone()['n']
         offset = (page - 1) * page_size
         rows = conn.execute(
-            f"SELECT id, scope, state, body_label, heading, body_text, pdf_name, "
+            f"SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
             f"(pdf_data IS NOT NULL) AS has_pdf, published_at "
             f"FROM pg_news WHERE {where} ORDER BY published_at DESC, id DESC "
             f"LIMIT {page_size} OFFSET {offset}", params).fetchall()

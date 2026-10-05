@@ -66,6 +66,7 @@ def news_save():
     heading = _s(request.form.get('heading'))
     body_text = (request.form.get('body_text') or '').strip()
     news_date = _s(request.form.get('news_date')) or None   # YYYY-MM-DD, optional (else today)
+    source_url = _s(request.form.get('source_url'))          # official link (optional)
     # Default published; only an explicit '0'/'off' unpublishes.
     is_published = 0 if request.form.get('is_published') in ('0', 'off') else 1
 
@@ -94,28 +95,29 @@ def news_save():
 
     conn = get_db()
     try:
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")  # cold-start guard
         if news_id:
             if pdf_bytes is not None:
                 conn.execute(
-                    "UPDATE pg_news SET scope=?, state=?, body_label=?, heading=?, body_text=?, "
+                    "UPDATE pg_news SET scope=?, state=?, body_label=?, heading=?, body_text=?, source_url=?, "
                     "pdf_name=?, pdf_data=?, pdf_content_type=?, is_published=?, updated_at=CURRENT_TIMESTAMP "
                     "WHERE id=?",
-                    (scope, state, body_label, heading, body_text, pdf_name, pdf_bytes, pdf_ctype,
+                    (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
                      is_published, news_id))
             else:
                 conn.execute(
-                    "UPDATE pg_news SET scope=?, state=?, body_label=?, heading=?, body_text=?, "
+                    "UPDATE pg_news SET scope=?, state=?, body_label=?, heading=?, body_text=?, source_url=?, "
                     "is_published=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                    (scope, state, body_label, heading, body_text, is_published, news_id))
+                    (scope, state, body_label, heading, body_text, source_url, is_published, news_id))
             if news_date:
                 conn.execute("UPDATE pg_news SET published_at = ?::date WHERE id=?", (news_date, news_id))
             flash('Update saved.', 'success')
         else:
             conn.execute(
-                "INSERT INTO pg_news (scope, state, body_label, heading, body_text, pdf_name, "
+                "INSERT INTO pg_news (scope, state, body_label, heading, body_text, source_url, pdf_name, "
                 "pdf_data, pdf_content_type, is_published, created_by, published_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?, COALESCE(?::date, CURRENT_TIMESTAMP))",
-                (scope, state, body_label, heading, body_text, pdf_name, pdf_bytes, pdf_ctype,
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?, COALESCE(?::date, CURRENT_TIMESTAMP))",
+                (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
                  is_published, who, news_date))
             flash('News posted.', 'success')
         conn.commit()
