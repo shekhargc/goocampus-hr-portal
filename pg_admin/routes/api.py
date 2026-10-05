@@ -23,6 +23,29 @@ def _norm_mobile(v):
     return re.sub(r'\D', '', str(v or ''))[-10:]
 
 
+def smart_name_clause(col_expr, q, runon=True):
+    """Build a forgiving name-search WHERE fragment for a SQL text column/expression.
+
+    Punctuation/space-insensitive + token-AND + run-on matching, so searching a college
+    or course name finds it regardless of hyphens, spaces or word order:
+      'al ameen' / 'ameen' / 'ameen bijapur' / 'alameen'  →  'Al-Ameen Medical College'
+    Returns (sql_fragment, params). Empty query → ('1=1', []) (matches everything, i.e.
+    "no filter"). Used across the college/course searches so the dashboard + admin behave
+    the same. (founder 2026-10-05)"""
+    qn = re.sub(r'[^a-z0-9]+', ' ', (q or '').lower()).strip()
+    tokens = [t for t in qn.split() if t][:6]
+    if not tokens:
+        return ('1=1', [])
+    norm = f"btrim(regexp_replace(lower({col_expr}), '[^a-z0-9]+', ' ', 'g'))"
+    conds = ["(" + " AND ".join([f"{norm} LIKE ?"] * len(tokens)) + ")"]
+    params = ['%' + t + '%' for t in tokens]
+    despaced = qn.replace(' ', '')
+    if runon and len(despaced) >= 4:
+        conds.append(f"replace({norm}, ' ', '') LIKE ?")
+        params.append('%' + despaced + '%')
+    return ("(" + " OR ".join(conds) + ")", params)
+
+
 def api_pg_otp_send():
     """POST /api/pg/otp/send  {mobile}  → {ok:true}. Sends a WhatsApp OTP for the
     goocampus.in doctor login. X-PG-Key guarded. (founder 2026-07-24)"""
@@ -404,8 +427,9 @@ def api_pg_predictor():
         if at_sql:
             where.append(at_sql)
         if q:
-            where.append("(course ILIKE ? OR institute ILIKE ?)")
-            params.extend([f"%{q}%", f"%{q}%"])
+            fc, pc = smart_name_clause("course", q)
+            fi, pi = smart_name_clause("institute", q)
+            where.append(f"({fc} OR {fi})"); params.extend(pc + pi)
         where_sql = ' AND '.join(where)
         # Exact match count (not just the page) so the site can say "N total"
         # truthfully even though only `limit` rows are returned for display.
@@ -557,8 +581,7 @@ def api_pg_predictor_courses():
             where = ["year = ?", "COALESCE(course,'') <> ''", "COALESCE(is_reference,0) = 0"]
             params = [year]
             if q:
-                where.append("course ILIKE ?")
-                params.append(f"%{q}%")
+                fc, pc = smart_name_clause("course", q); where.append(fc); params.extend(pc)
             if authority:
                 where.append("authority = ?")
                 params.append(authority)
@@ -622,7 +645,7 @@ def api_pg_colleges():
     if institution_type:
         where.append("LOWER(TRIM(institution_type)) = LOWER(TRIM(?))"); params.append(institution_type)
     if q:
-        where.append("name ILIKE ?"); params.append(f"%{q}%")
+        frag, fp = smart_name_clause("name", q); where.append(frag); params.extend(fp)
     colleges = []
     try:
         rows = conn.execute(

@@ -12,7 +12,7 @@ DB) + pg_cutoffs (predictor + stipend). Mirrors the goocampus.org admin screens:
 import logging
 from flask import request, jsonify, session
 from db import get_db
-from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
+from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token, smart_name_clause
 
 _PER_PAGE = 100
 _CAT_LABELS = [('mbbs', 'MBBS (UG)'), ('mdms', 'MD / MS'),
@@ -109,7 +109,7 @@ def api_pg_pg_colleges():
     try:
         where, params = ["1=1"], []
         if q:
-            where.append("m.college_name ILIKE ?"); params.append('%' + q + '%')
+            frag, fp = smart_name_clause("m.college_name", q); where.append(frag); params.extend(fp)
         if cat in _CAT_KEYS:
             where.append("EXISTS (SELECT 1 FROM pg_college_course cc "
                          "WHERE cc.master_id = m.id AND cc.course_category = ?)")
@@ -256,7 +256,7 @@ def api_pg_stipend():
         if state:
             where.append("c.state = ?"); params.append(state)
         if q:
-            where.append("c.institute ILIKE ?"); params.append('%' + q + '%')
+            frag, fp = smart_name_clause("c.institute", q); where.append(frag); params.extend(fp)
         wsql = " WHERE " + " AND ".join(where)
         total = conn.execute("SELECT COUNT(DISTINCT c.institute) AS n FROM pg_cutoffs c" + wsql,
                              params).fetchone()['n']
@@ -371,8 +371,9 @@ def _fee_where(f):
     if f['college_type']:
         where.append("LOWER(TRIM(c.institute_type)) = LOWER(TRIM(?))"); params.append(f['college_type'])
     if f['q']:
-        where.append("(c.institute ILIKE ? OR c.course ILIKE ?)")
-        params.extend(['%' + f['q'] + '%', '%' + f['q'] + '%'])
+        fi, pi = smart_name_clause("c.institute", f['q'])
+        fc, pc = smart_name_clause("c.course", f['q'])
+        where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
     return where, params
 
 

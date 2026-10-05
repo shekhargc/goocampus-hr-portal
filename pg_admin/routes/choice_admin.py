@@ -315,8 +315,10 @@ def choice_cutoff_search(set_id):
         if s.get('authority'):
             where.append("c.authority ILIKE ?"); params.append('%' + s['authority'] + '%')
         if q:
-            where.append("(c.institute ILIKE ? OR c.course ILIKE ?)")
-            params.extend(['%' + q + '%', '%' + q + '%'])
+            from pg_admin.routes.api import smart_name_clause
+            fi, pi = smart_name_clause("c.institute", q)
+            fc, pc = smart_name_clause("c.course", q)
+            where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
         rows = conn.execute(
             f"SELECT c.institute, c.course, c.quota, c.category, MIN(c.{col}) AS cr, "
             "MAX(a.master_id) AS master_id, MAX(c.fee) AS fee "
