@@ -61,6 +61,10 @@ def api_pg_news():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     states = [s.strip() for s in _s(request.args.get('states')).split(',') if s.strip()]
     include_all = _s(request.args.get('all')) != '0'
+    # scope lets the dashboard request ONE tab's news: 'mcc' (All-India/MCC only),
+    # 'home' (the doctor's home state only), 'others' (followed states, excl home).
+    # Empty = the default blended feed. (founder 2026-10-05)
+    scope_req = _s(request.args.get('scope')).lower()
     body = _s(request.args.get('body'))
     try:
         page = max(1, int(request.args.get('page', 1)))
@@ -73,13 +77,23 @@ def api_pg_news():
 
     conn = get_db()
     try:
-        # Fold in the doctor's own home + followed states when a token is supplied.
+        # Resolve the doctor's home + followed states (when a token is supplied).
         user = _user(conn)
-        if user:
-            hs = _home_state(conn, user['id'])
+        hs = _home_state(conn, user['id']) if user else None
+        folls = _follows(conn, user['id']) if user else []
+        if scope_req == 'mcc':
+            include_all = True; states = []                      # All-India / MCC only
+        elif scope_req == 'home':
+            include_all = False; states = [hs] if hs else []     # home state only
+        elif scope_req == 'others':
+            include_all = False                                   # followed states, minus home
+            _hl = (hs or '').strip().lower()
+            states = [s for s in folls if s.strip().lower() != _hl]
+        else:
+            # Default blended feed: fold in home + followed states alongside the request.
             if hs:
                 states.append(hs)
-            states.extend(_follows(conn, user['id']))
+            states.extend(folls)
         states = list({s for s in states if s})
 
         scope_parts = []
