@@ -243,6 +243,8 @@
 
     // ---- drawer ----
     function profileUrl(reg){ return UPD.replace('/0/update', '/' + reg + '/profile'); }
+    var DELU = "{{ url_for('pg_event_reg_update_delete', update_id=0) }}";   // .../registration-update/0/delete
+    function deleteUrl(id){ return DELU.replace('/0/delete', '/' + id + '/delete'); }
     var overlay=document.getElementById('regOverlay'), drawer=document.getElementById('regDrawer'),
         dSave=document.getElementById('dSave'), dErr=document.getElementById('dErr'),
         dHistory=document.getElementById('dHistory'), current=null;
@@ -250,7 +252,10 @@
            contact:document.getElementById('dContact'), notes:document.getElementById('dNotes')};
 
     function histItem(u){
-      return '<div style="border-left:3px solid var(--orange,#F58220);padding:2px 0 8px 10px;margin-bottom:10px;">'
+      var del = u.id ? '<button type="button" class="histDel" data-upid="'+u.id+'" title="Delete this update" '
+                     + 'style="float:right;background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:0.95rem;line-height:1;padding:0 2px;">&times;</button>' : '';
+      return '<div class="histRow" data-upid="'+(u.id||'')+'" style="border-left:3px solid var(--orange,#F58220);padding:2px 0 8px 10px;margin-bottom:10px;">'
+           + del
            + '<div style="white-space:pre-wrap;color:#334155;">'+esc(u.note||'')+'</div>'
            + '<div style="font-size:0.72rem;color:#94a3b8;margin-top:2px;">— '+esc(u.by||'Team')+' · '+esc(u.at||'')+'</div></div>';
     }
@@ -291,6 +296,25 @@
     document.getElementById('dCancel').addEventListener('click', closeDrawer);
     overlay.addEventListener('click', closeDrawer);
     document.addEventListener('keydown', function(e){ if(e.key==='Escape' && current) closeDrawer(); });
+
+    // delete a history entry (delegated)
+    dHistory.addEventListener('click', function(e){
+      var btn = e.target.closest('.histDel'); if(!btn || !current) return;
+      var id = btn.dataset.upid; if(!id) return;
+      if(!confirm('Delete this update? This cannot be undone.')) return;
+      var row = current;
+      btn.disabled = true;
+      fetch(deleteUrl(id), {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:''})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if(!d.ok){ alert('Could not delete. Please try again.'); btn.disabled=false; return; }
+          var item = btn.closest('.histRow'); if(item) item.remove();
+          if(!dHistory.querySelector('.histRow')) dHistory.innerHTML='<div style="color:#cbd5e1;">No updates yet.</div>';
+          row.dataset.notes = d.latest_note || '';     // row's Team-notes cell = now-latest note
+          renderRow(row);
+        })
+        .catch(function(){ alert('Network error — not deleted.'); btn.disabled=false; });
+    });
 
     dSave.addEventListener('click', function(){
       if(!current) return;

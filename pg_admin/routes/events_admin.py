@@ -228,10 +228,10 @@ def event_reg_update(reg_id):
         if new_update:
             row = conn.execute("SELECT event_id FROM pg_event_registrations WHERE id = ?", (reg_id,)).fetchone()
             ev_id = dict(row)['event_id'] if row else None
-            conn.execute(
+            up_id = conn.execute(
                 "INSERT INTO pg_event_reg_updates (reg_id, event_id, note, added_by, added_by_id, created_at) "
-                "VALUES (?,?,?,?,?,?)", (reg_id, ev_id, new_update, editor, u.get('id'), now))
-            new_entry = {'note': new_update, 'by': editor, 'at': _ist_str(now)}
+                "VALUES (?,?,?,?,?,?) RETURNING id", (reg_id, ev_id, new_update, editor, u.get('id'), now)).fetchone()
+            new_entry = {'id': dict(up_id)['id'], 'note': new_update, 'by': editor, 'at': _ist_str(now)}
         conn.commit()
         return jsonify({'ok': True, 'edited_by': editor, 'edited_at': _ist_str(now),
                         'latest_note': new_update, 'new_entry': new_entry})
@@ -257,12 +257,42 @@ def event_reg_profile(reg_id):
         if not reg:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         ups = [dict(r) for r in conn.execute(
-            "SELECT note, added_by, created_at FROM pg_event_reg_updates "
+            "SELECT id, note, added_by, created_at FROM pg_event_reg_updates "
             "WHERE reg_id = ? ORDER BY id DESC", (reg_id,)).fetchall()]
-        updates = [{'note': x['note'], 'by': x['added_by'], 'at': _ist_str(x['created_at'])} for x in ups]
+        updates = [{'id': x['id'], 'note': x['note'], 'by': x['added_by'], 'at': _ist_str(x['created_at'])} for x in ups]
         return jsonify({'ok': True, 'registered': _ist_str(dict(reg)['created_at']), 'updates': updates})
     except Exception as e:
         logging.error("event_reg_profile: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+@login_required
+def event_reg_update_delete(update_id):
+    """POST → remove ONE history entry (a mistaken note). Re-syncs staff_notes to the
+    now-latest remaining note. Team-editable (Events 'edit')."""
+    from flask import jsonify
+    u = _require_events_section("edit")
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    conn = get_db()
+    try:
+        _ensure_reg_fields(conn)
+        row = conn.execute("SELECT reg_id FROM pg_event_reg_updates WHERE id = ?", (update_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        reg_id = dict(row)['reg_id']
+        conn.execute("DELETE FROM pg_event_reg_updates WHERE id = ?", (update_id,))
+        latest = conn.execute(
+            "SELECT note FROM pg_event_reg_updates WHERE reg_id = ? ORDER BY id DESC LIMIT 1",
+            (reg_id,)).fetchone()
+        latest_note = (dict(latest)['note'] if latest else '') or ''
+        conn.execute("UPDATE pg_event_registrations SET staff_notes = ? WHERE id = ?", (latest_note, reg_id))
+        conn.commit()
+        return jsonify({'ok': True, 'reg_id': reg_id, 'latest_note': latest_note})
+    except Exception as e:
+        conn.rollback(); logging.error("event_reg_update_delete: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
