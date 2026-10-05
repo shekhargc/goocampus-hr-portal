@@ -26,7 +26,11 @@
   <!-- ── Post ── -->
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px;margin-bottom:22px;max-width:860px;">
     <h2 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:var(--navy);">Post an update</h2>
-    <form method="POST" action="{{ url_for('pg_news_save') }}" enctype="multipart/form-data">
+    <form id="newsForm" method="POST" action="{{ url_for('pg_news_save') }}" enctype="multipart/form-data">
+      <input type="hidden" name="news_id" value="">
+      <div id="editingBanner" style="display:none;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:0.84rem;">
+        Editing an existing update. <button type="button" onclick="newsClearEdit()" style="background:none;border:0;color:#2952a3;cursor:pointer;font-weight:600;">Cancel edit / new post</button>
+      </div>
       <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Counselling Authority
         <select name="authority" style="display:block;width:100%;margin-top:5px;margin-bottom:6px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
           <option value="__all__">All India MCC — everyone sees it</option>
@@ -98,9 +102,14 @@
           </td>
           <td style="padding:10px 14px;color:var(--gray-500);font-size:0.78rem;">{{ it.published_at }}</td>
           <td style="padding:10px 14px;text-align:right;white-space:nowrap;">
+            <button type="button" class="newsEditBtn" style="background:none;border:0;color:#166534;font-size:0.82rem;cursor:pointer;font-weight:600;"
+                    data-id="{{ it.id }}" data-heading="{{ it.heading }}"
+                    data-authority="{{ '__all__' if it.scope=='all_india' else 'state:' + (it.state or '') }}"
+                    data-date="{{ it.published_at.strftime('%Y-%m-%d') if it.published_at else '' }}"
+                    data-body="{{ it.body_text or '' }}" data-source="{{ it.source_url or '' }}">Edit</button>
             <form method="POST" action="{{ url_for('pg_news_toggle') }}" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
-              <button type="submit" style="background:none;border:0;color:#2952a3;font-size:0.82rem;cursor:pointer;">{{ 'Hide' if it.is_published else 'Show' }}</button>
+              <button type="submit" style="background:none;border:0;color:#2952a3;font-size:0.82rem;cursor:pointer;margin-left:8px;">{{ 'Hide' if it.is_published else 'Show' }}</button>
             </form>
             <form method="POST" action="{{ url_for('pg_news_delete') }}" onsubmit="return confirm('Delete this update?');" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
@@ -117,4 +126,28 @@
   {% endif %}
 
 </div>
+
+<script>
+(function(){
+  var f=document.getElementById('newsForm');
+  function set(n,v){ var el=f.querySelector('[name="'+n+'"]'); if(el) el.value=v; }
+  function submitLabel(t){ var b=f.querySelector('button[type="submit"]'); if(b) b.textContent=t; }
+  window.newsClearEdit=function(){
+    set('news_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
+    set('body_text',''); set('source_url','');
+    document.getElementById('editingBanner').style.display='none';
+    submitLabel('Post update');
+  };
+  document.querySelectorAll('.newsEditBtn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      set('news_id',btn.dataset.id); set('authority',btn.dataset.authority);
+      set('heading',btn.dataset.heading); set('news_date',btn.dataset.date);
+      set('body_text',btn.dataset.body); set('source_url',btn.dataset.source);
+      document.getElementById('editingBanner').style.display='block';
+      submitLabel('Save changes');
+      f.scrollIntoView({behavior:'smooth',block:'start'});
+    });
+  });
+})();
+</script>
 {% endblock %}
