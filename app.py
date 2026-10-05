@@ -39111,6 +39111,13 @@ def sales_inquiries_list():
     role = get_sales_role(user)
     conn = get_db()
     _ensure_inquiry_schema(conn)
+    try:
+        from pg_admin import followups as _fu
+        _fu.ensure_followups_schema(conn)
+    except Exception as _fe:
+        logging.error("inquiry list followups ensure: %s", _fe)
+        try: conn.rollback()
+        except Exception: pass
     f_status = (request.args.get('status') or '').strip()
     q = (request.args.get('q') or '').strip()
     where = ["COALESCE(sl.is_inquiry,0) = 1"]
@@ -39125,7 +39132,9 @@ def sales_inquiries_list():
     try:
         rows = [dict(r) for r in conn.execute(
             f"""SELECT sl.*, s.name AS stage_name,
-                       (SELECT COUNT(*) FROM sales_lead_followups f WHERE f.lead_id = sl.id) AS followup_count
+                       (SELECT COUNT(*) FROM pg_followups pf
+                          WHERE (pf.mobile10 <> '' AND pf.mobile10 = RIGHT(regexp_replace(COALESCE(sl.phone,''),'\\D','','g'),10))
+                             OR (pf.email <> '' AND pf.email = LOWER(TRIM(COALESCE(sl.email,''))))) AS followup_count
                   FROM sales_leads sl
              LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id
                  WHERE {' AND '.join(where)}
@@ -39173,9 +39182,19 @@ def sales_inquiry_view(inq_id):
         conn.close(); flash('Inquiry not found (it may already be converted to a Lead).', 'error')
         return redirect(url_for('sales_inquiries_list'))
     inq = dict(inq)
-    followups = [dict(r) for r in conn.execute(
-        "SELECT * FROM sales_lead_followups WHERE lead_id = ? ORDER BY created_at DESC, id DESC",
-        (inq_id,)).fetchall()]
+    # Follow-ups come from the SHARED person thread (synced with the Registered-Doctor
+    # profile by mobile/email), so calls logged on either screen show on both.
+    fu_state = {}
+    try:
+        from pg_admin import followups as _fu
+        _fu.ensure_followups_schema(conn)
+        followups = _fu.get_thread(conn, inq.get('phone'), inq.get('email'))
+        fu_state = _fu.current_state(conn, inq.get('phone'), inq.get('email'))
+    except Exception as _fe:
+        logging.error("inquiry view followups: %s", _fe)
+        try: conn.rollback()
+        except Exception: pass
+        followups = []
     # Is this enquirer ALSO a registered goocampus.in doctor? (match by last-10 mobile)
     reg_doctor = None
     try:
@@ -39190,7 +39209,8 @@ def sales_inquiry_view(inq_id):
         conn.rollback()
     conn.close()
     return render_template('sales_inquiry_view.html', user=user, inq=inq, followups=followups,
-                           reg_doctor=reg_doctor, statuses=INQUIRY_STATUSES, active_section='sales')
+                           reg_doctor=reg_doctor, statuses=INQUIRY_STATUSES, fu_state=fu_state,
+                           active_section='sales')
 
 
 @app.route('/sales/inquiries/<int:inq_id>/delete', methods=['POST'])
@@ -39289,6 +39309,14 @@ def sales_inquiry_status(inq_id):
             conn.execute("UPDATE sales_leads SET inquiry_status = ? WHERE id = ? AND COALESCE(is_inquiry,0)=1",
                          (new_status, inq_id))
             conn.commit()
+            # Record the status change in the shared thread so the doctor profile reflects it.
+            from pg_admin import followups as _fu
+            _fu.ensure_followups_schema(conn)
+            lead = conn.execute("SELECT phone, email FROM sales_leads WHERE id = ?", (inq_id,)).fetchone()
+            if lead:
+                lead = dict(lead); _u = get_user()
+                _fu.add_followup(conn, lead.get('phone'), lead.get('email'), '', new_status, '',
+                                 (dict(_u) if _u else {}), src='inquiry')
         except Exception as e:
             logging.error(f"sales_inquiry_status: {e}")
             try: conn.rollback()
@@ -39308,10 +39336,13 @@ def sales_inquiry_followup(inq_id):
     _ensure_inquiry_schema(conn)
     if note:
         try:
-            conn.execute("INSERT INTO sales_lead_followups (lead_id, note, created_by_id, created_by_name) "
-                         "VALUES (?, ?, ?, ?)",
-                         (inq_id, note, (user['id'] if user else None), (user['name'] if user else '')))
-            conn.commit()
+            from pg_admin import followups as _fu
+            _fu.ensure_followups_schema(conn)
+            lead = conn.execute("SELECT phone, email FROM sales_leads WHERE id = ?", (inq_id,)).fetchone()
+            if lead:
+                lead = dict(lead)
+                _fu.add_followup(conn, lead.get('phone'), lead.get('email'), note, '', '',
+                                 (dict(user) if user else {}), src='inquiry')
         except Exception as e:
             logging.error(f"sales_inquiry_followup: {e}")
             try: conn.rollback()

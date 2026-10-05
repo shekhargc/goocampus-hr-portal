@@ -86,8 +86,12 @@
         <div class="tl-item">
           <div class="tl-dot">{{ (f.created_by_name or '?')[:1]|upper }}</div>
           <div class="tl-when">{{ f.created_at|format_datetime }}</div>
-          <div class="tl-who">{{ f.created_by_name or 'Someone' }}</div>
-          <div class="tl-txt">{{ f.note }}</div>
+          <div class="tl-who">{{ f.created_by_name or 'Someone' }}{% if f.src=='doctor' %} · via doctor profile{% endif %}</div>
+          <div class="tl-txt">
+            {% if f.status %}<span style="font-size:.7rem;font-weight:700;padding:1px 8px;border-radius:12px;background:#eef2ff;color:#3730a3;">{{ f.status }}</span>{% endif %}
+            {% if f.next_followup_date %}<span style="font-size:.72rem;color:#b45309;font-weight:600;margin-left:4px;">Next: {{ f.next_followup_date }}</span>{% endif %}
+            {% if f.note %}<div style="margin-top:3px;">{{ f.note }}</div>{% endif %}
+          </div>
         </div>
         {% endfor %}
       </div>
