@@ -119,6 +119,7 @@
             data-name="{{ r.name or '' }}" data-email="{{ r.email or '' }}" data-mobile="{{ r.mobile or '' }}"
             data-ticket="{{ r.ticket_code or '' }}" data-rank="{{ r.rank or '' }}" data-domicile="{{ r.domicile_state or '' }}"
             data-editedby="{{ r.edited_by or '' }}" data-editedat="{{ r.edited_at|format_datetime if r.edited_at else '' }}"
+            data-registered="{{ r.created_at|format_datetime if r.created_at else '' }}"
             data-search="{{ (r.name or '')|lower }} {{ (r.mobile or '')|lower }} {{ (r.ticket_code or '')|lower }} {{ (r.email or '')|lower }}">
           <td style="padding:0.5rem 0.9rem;font-family:monospace;font-weight:700;color:var(--navy);">{{ r.ticket_code }}</td>
           <td style="padding:0.5rem 0.9rem;font-weight:600;">{{ r.name }}<div style="font-size:0.72rem;color:var(--gray-400);font-weight:400;">{{ r.email }}</div></td>
@@ -164,10 +165,15 @@
         <select id="dContact" style="{{ dinp }}">
           <option value="">— not set</option><option value="not_spoken">Not spoken</option><option value="spoken">Spoken</option><option value="completed">Completed</option>
         </select></div>
-      <div style="margin-bottom:0.4rem;"><label style="{{ dlab }}">Team notes</label>
-        <textarea id="dNotes" rows="4" placeholder="Notes about this doctor…" style="{{ dinp }}resize:vertical;"></textarea></div>
-      <div id="dEdited" style="font-size:0.74rem;color:var(--gray-400);margin-top:0.6rem;"></div>
+      <div style="margin-bottom:0.3rem;"><label style="{{ dlab }}">Add an update / note</label>
+        <textarea id="dNotes" rows="3" placeholder="e.g. Called, interested in Karnataka colleges — will share choice list" style="{{ dinp }}resize:vertical;"></textarea>
+        <div style="font-size:0.72rem;color:var(--gray-400);margin-top:4px;">Each saved note is added to the history below (it won't overwrite earlier ones). Leave blank to just update the status fields.</div></div>
       <div id="dErr" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:0.6rem 0.8rem;font-size:0.8rem;margin-top:0.8rem;"></div>
+
+      <div style="margin-top:1.3rem;border-top:1px dashed var(--gray-200);padding-top:0.9rem;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.03em;margin-bottom:0.6rem;">Update history</div>
+        <div id="dHistory" style="font-size:0.82rem;color:var(--gray-600);"></div>
+      </div>
     </div>
     <div style="padding:1rem 1.3rem;border-top:1px solid var(--gray-200);display:flex;gap:0.7rem;">
       <button type="button" id="dCancel" style="flex:0 0 auto;background:#fff;border:1px solid var(--gray-300);color:var(--gray-600);border-radius:9px;padding:0.6rem 1.1rem;font-weight:700;font-size:0.86rem;cursor:pointer;">Cancel</button>
@@ -236,26 +242,46 @@
     applyFilters();
 
     // ---- drawer ----
+    function profileUrl(reg){ return UPD.replace('/0/update', '/' + reg + '/profile'); }
     var overlay=document.getElementById('regOverlay'), drawer=document.getElementById('regDrawer'),
-        dSave=document.getElementById('dSave'), dErr=document.getElementById('dErr'), current=null;
+        dSave=document.getElementById('dSave'), dErr=document.getElementById('dErr'),
+        dHistory=document.getElementById('dHistory'), current=null;
     var F={att:document.getElementById('dAttendance'), mode:document.getElementById('dMode'),
            contact:document.getElementById('dContact'), notes:document.getElementById('dNotes')};
+
+    function histItem(u){
+      return '<div style="border-left:3px solid var(--orange,#F58220);padding:2px 0 8px 10px;margin-bottom:10px;">'
+           + '<div style="white-space:pre-wrap;color:#334155;">'+esc(u.note||'')+'</div>'
+           + '<div style="font-size:0.72rem;color:#94a3b8;margin-top:2px;">— '+esc(u.by||'Team')+' · '+esc(u.at||'')+'</div></div>';
+    }
+    function renderHistory(updates){
+      if(!updates || !updates.length){ dHistory.innerHTML='<div style="color:#cbd5e1;">No updates yet.</div>'; return; }
+      dHistory.innerHTML = updates.map(histItem).join('');
+    }
+
     function openDrawer(row){
       current=row;
       document.getElementById('dName').textContent = row.dataset.name || '(no name)';
       document.getElementById('dMeta').textContent = (row.dataset.ticket||'') + '  ·  ' + (row.dataset.mobile||'');
       var ctx=[];
+      ctx.push('🗓️ Registered: <b>'+esc(row.dataset.registered||'—')+'</b>');
       if(row.dataset.email) ctx.push('✉️ '+esc(row.dataset.email));
       ctx.push('📱 '+esc(row.dataset.mobile||'—'));
       ctx.push('🏅 Rank '+esc(row.dataset.rank||'—'));
       ctx.push('📍 '+esc(row.dataset.domicile||'—'));
+      var eb=row.dataset.editedby||'';
+      if(eb) ctx.push('<span style="color:#94a3b8;">✏️ Last updated by '+esc(eb)+' · '+esc(row.dataset.editedat||'')+'</span>');
       document.getElementById('dContext').innerHTML = ctx.join('<br>');
       F.att.value=row.dataset.attendance||''; F.mode.value=row.dataset.mode||'';
-      F.contact.value=row.dataset.contact||''; F.notes.value=row.dataset.notes||'';
-      var eb=row.dataset.editedby||'';
-      document.getElementById('dEdited').textContent = eb ? ('Last updated by '+eb+' · '+(row.dataset.editedat||'')) : 'Not updated yet.';
-      dErr.style.display='none';
+      F.contact.value=row.dataset.contact||''; F.notes.value='';   // the add-note box always starts empty
+      dErr.style.display='none'; dSave.disabled=false; dSave.textContent='Save';
+      dHistory.innerHTML='<div style="color:#94a3b8;">Loading history…</div>';
       overlay.style.display='block'; requestAnimationFrame(function(){ drawer.style.transform='translateX(0)'; });
+      // load the profile history
+      fetch(profileUrl(row.dataset.reg), {headers:{'Accept':'application/json'}})
+        .then(function(r){ return r.json(); })
+        .then(function(d){ if(current===row){ renderHistory(d && d.ok ? d.updates : []); } })
+        .catch(function(){ if(current===row){ dHistory.innerHTML='<div style="color:#b91c1c;">Could not load history.</div>'; } });
     }
     function closeDrawer(){ drawer.style.transform='translateX(100%)'; overlay.style.display='none'; current=null; }
     document.querySelectorAll('.regRow').forEach(function(row){
@@ -268,19 +294,26 @@
 
     dSave.addEventListener('click', function(){
       if(!current) return;
-      var row=current, body=new URLSearchParams({
-        attendance:F.att.value, session_mode:F.mode.value, contact_status:F.contact.value, staff_notes:F.notes.value
+      var row=current, note=(F.notes.value||'').trim(), body=new URLSearchParams({
+        attendance:F.att.value, session_mode:F.mode.value, contact_status:F.contact.value, new_update:note
       });
       dSave.disabled=true; dSave.textContent='Saving…'; dErr.style.display='none';
       fetch(url(row.dataset.reg), {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:body})
         .then(function(r){ return r.json().catch(function(){ throw new Error('bad'); }); })
         .then(function(d){
-          dSave.disabled=false; dSave.textContent='Save';
-          if(!d.ok){ dErr.textContent='Could not save'+(d.field?(' ('+d.field+')'):'')+'. Please try again.'; dErr.style.display='block'; return; }
-          row.dataset.attendance=F.att.value; row.dataset.mode=F.mode.value;
-          row.dataset.contact=F.contact.value; row.dataset.notes=F.notes.value;
+          dSave.disabled=false;
+          if(!d.ok){ dSave.textContent='Save'; dErr.textContent='Could not save'+(d.field?(' ('+d.field+')'):'')+'. Please try again.'; dErr.style.display='block'; return; }
+          row.dataset.attendance=F.att.value; row.dataset.mode=F.mode.value; row.dataset.contact=F.contact.value;
+          if(d.new_entry){                                   // prepend to history, mirror latest note to the row
+            row.dataset.notes = d.latest_note || row.dataset.notes || '';
+            if(dHistory.innerHTML.indexOf('No updates')>=0){ dHistory.innerHTML = histItem(d.new_entry); }
+            else { dHistory.innerHTML = histItem(d.new_entry) + dHistory.innerHTML; }
+          }
           row.dataset.editedby=d.edited_by||''; row.dataset.editedat=d.edited_at||'';
-          renderRow(row); recount(); applyFilters(); closeDrawer();
+          // reflect the new edited stamp in the drawer context + clear the note box
+          F.notes.value='';
+          renderRow(row); recount(); applyFilters();
+          dSave.textContent='Saved ✓'; setTimeout(function(){ if(!dSave.disabled) dSave.textContent='Save'; }, 1400);
         })
         .catch(function(){ dSave.disabled=false; dSave.textContent='Save'; dErr.textContent='Network error — not saved. Please try again.'; dErr.style.display='block'; });
     });

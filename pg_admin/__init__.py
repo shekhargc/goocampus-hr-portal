@@ -271,6 +271,8 @@ def register_pg_admin(app):
                      events_admin.event_export, methods=['GET'])
     app.add_url_rule('/admin/pg/events/registration/<int:reg_id>/update', 'pg_event_reg_update',
                      events_admin.event_reg_update, methods=['POST'])
+    app.add_url_rule('/admin/pg/events/registration/<int:reg_id>/profile', 'pg_event_reg_profile',
+                     events_admin.event_reg_profile, methods=['GET'])
     # ── Usage analytics: ingest (goocampus.in) + admin dashboard ──
     app.add_url_rule('/api/pg/track', 'api_pg_track', api_track.api_pg_track, methods=['POST'])
     app.add_url_rule('/admin/pg/analytics', 'pg_analytics', analytics_admin.analytics_admin, methods=['GET'])

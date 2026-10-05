@@ -65,6 +65,20 @@ def ensure_event_tables():
         conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_by TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_by_id INTEGER")
         conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP")
+        # Update history — an append-only log of team notes/updates per registrant, so the
+        # client's event profile keeps a running record (who added what, when). The latest
+        # note is also mirrored into pg_event_registrations.staff_notes for the list + Excel.
+        # (founder 2026-10-05)
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_event_reg_updates (
+            id SERIAL PRIMARY KEY,
+            reg_id INTEGER NOT NULL,
+            event_id INTEGER,
+            note TEXT DEFAULT '',
+            added_by TEXT DEFAULT '',
+            added_by_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_event_reg_updates_reg ON pg_event_reg_updates (reg_id)")
         conn.commit()
         logging.info("pg_events tables ensured")
     except Exception as e:
