@@ -108,7 +108,7 @@
 <div style="overflow-x:auto;">
 <table class="pu-table">
   <thead><tr>
-    <th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Plan ends</th><th>Joined</th><th></th>
+    <th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Status</th><th>Joined</th><th></th>
   </tr></thead>
   <tbody>
     {% for u in users %}
@@ -131,7 +131,9 @@
         {% if u.plan_source == 'admin_grant' %}<div class="pu-sub">granted</div>{% endif %}
         {% if u.inquiry_id %}<div style="margin-top:3px;"><a href="/sales/inquiries/{{ u.inquiry_id }}" style="text-decoration:none;font-size:0.66rem;font-weight:700;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;padding:1px 7px;border-radius:20px;white-space:nowrap;">📞 Booked a call</a></div>{% endif %}
       </td>
-      <td>{% if u.plan_expires_at %}{{ u.plan_expires_at.strftime('%d %b %Y') }}{% else %}—{% endif %}</td>
+      <td>{% set fc = {'New':['#eef2ff','#3730a3'],'Did not pick up':['#fff1f2','#9f1239'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
+        {% set st = u.fu_status or 'New' %}
+        <span class="chip" style="background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span></td>
       <td style="white-space:nowrap;">{% if u.created_at %}{{ u.created_at|format_datetime }}{% endif %}</td>
       <td><a class="pu-btn pu-btn-ghost pu-btn-sm" href="/admin/pg/users/{{ u.id }}"
              style="padding:0.35rem 0.6rem;">Open <i class="fa-solid fa-arrow-right"></i></a></td>

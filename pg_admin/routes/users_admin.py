@@ -232,6 +232,19 @@ def users_admin():
         except Exception:
             conn.rollback()
 
+        # Follow-up status per doctor (shared thread / inquiry, else New) — shown in the
+        # list column in place of plan-ends. (founder 2026-10-05)
+        try:
+            from pg_admin import followups as _fu
+            _st = _fu.statuses_for(conn, users)
+            for i, u in enumerate(users):
+                u['fu_status'] = _st[i]
+        except Exception as _se:
+            logging.error("users_admin fu_status: %s", _se)
+            conn.rollback()
+            for u in users:
+                u['fu_status'] = 'New'
+
         s = conn.execute(
             "SELECT COUNT(*) AS total, "
             "  COALESCE(SUM(CASE WHEN COALESCE(is_blocked,0)=1 THEN 1 ELSE 0 END),0) AS blocked, "
@@ -435,11 +448,12 @@ def user_detail(user_id):
             fu_thread = _fu.get_thread(conn, doctor.get('mobile'), doctor.get('email'))
             fu_state = _fu.current_state(conn, doctor.get('mobile'), doctor.get('email'))
             fu_statuses = _fu.PICK_STATUSES
+            fu_time_slots = _fu.TIME_SLOTS
         except Exception as _fe:
             logging.error("user_detail followups: %s", _fe)
             try: conn.rollback()
             except Exception: pass
-            fu_thread, fu_state, fu_statuses = [], {}, []
+            fu_thread, fu_state, fu_statuses, fu_time_slots = [], {}, [], []
     except Exception as e:
         conn.rollback()
         logging.error("user_detail: %s", e)
@@ -465,6 +479,7 @@ def user_detail(user_id):
                            choice_team_editable=choice_team_editable, activity=activity,
                            enquiry=enquiry, state_options=_canonical_states(),
                            fu_thread=fu_thread, fu_state=fu_state, fu_statuses=fu_statuses,
+                           fu_time_slots=fu_time_slots,
                            active_section='goocampus_in')
 
 
@@ -478,7 +493,9 @@ def user_followup_add(user_id):
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     note = (request.form.get('note') or '').strip()
     status = (request.form.get('status') or '').strip()
-    next_date = (request.form.get('next_followup_date') or '').strip()
+    _nd = (request.form.get('next_followup_date') or '').strip()      # YYYY-MM-DD (calendar)
+    _nt = (request.form.get('next_followup_time') or '').strip()      # e.g. "10:30 AM" (dropdown)
+    next_date = (_nd + (' ' + _nt if _nt else '')).strip() if _nd else ''
     if status not in ('Follow-up', 'Interested'):
         next_date = ''                      # a next-date only applies to Follow-up / Interested
     if not note and not status:

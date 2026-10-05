@@ -226,8 +226,16 @@
               <option value="">— keep current —</option>
               {% for s in fu_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
             </select></div>
-          <div class="f" id="fuDateRow" style="display:none;"><label>Next follow-up — date &amp; time</label>
-            <input type="datetime-local" name="next_followup_date" value="{{ (fu_state.next_followup_date or '')|replace(' ','T') }}"></div>
+          <div id="fuDateRow" style="display:none;">
+            <div class="f"><label>Next follow-up date</label>
+              <input type="date" name="next_followup_date" value="{{ (fu_state.next_followup_date or '')[:10] }}"></div>
+            <div class="f"><label>Time</label>
+              <select name="next_followup_time">
+                <option value="">— select time —</option>
+                {% set curt = (fu_state.next_followup_date or '')[11:] %}
+                {% for t in fu_time_slots %}<option value="{{ t }}" {{ 'selected' if t==curt }}>{{ t }}</option>{% endfor %}
+              </select></div>
+          </div>
           <div class="f"><label>Note — what you spoke about</label>
             <textarea name="note" rows="3" placeholder="e.g. Called, explained Premium plan, interested — will decide by Friday"></textarea></div>
           <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Add follow-up</button>

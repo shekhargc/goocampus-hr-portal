@@ -16,6 +16,22 @@ PICK_STATUSES = [s for s in STATUSES if s != 'New']
 DATE_STATUSES = ('Follow-up', 'Interested')   # these keep a next-follow-up date+time
 
 
+def _time_slots():
+    """12-hour time labels every 30 min from 10:00 AM to 11:00 PM (call-hours window)."""
+    out = []
+    for h in range(10, 24):            # 10:00 .. 23:00
+        for m in (0, 30):
+            if h == 23 and m == 30:
+                continue               # stop at 11:00 PM
+            ap = 'AM' if h < 12 else 'PM'
+            h12 = h % 12 or 12
+            out.append(f"{h12}:{m:02d} {ap}")
+    return out
+
+
+TIME_SLOTS = _time_slots()
+
+
 def ensure_followups_schema(conn):
     """Create the shared follow-up table (Render cold-start safe) + migrate the existing
     inquiry follow-ups in once, so history is unified from day one."""
@@ -128,6 +144,56 @@ def current_state(conn, mobile, email):
     if not out['status']:
         out['status'] = 'New'       # automatic default when nothing has been set
     return out
+
+
+def statuses_for(conn, people):
+    """Bulk current-status lookup for a list of people (each a dict with 'mobile'+'email').
+    Returns a list of status strings in the SAME order — latest shared-thread status, else a
+    matching inquiry's status, else 'New'. Two queries total, so a list page stays fast.
+    (founder 2026-10-05)"""
+    norm = [(m10(p.get('mobile')), norm_email(p.get('email'))) for p in people]
+    m10s = {mm for mm, _ in norm if mm}
+    emails = {ee for _, ee in norm if ee}
+    fu_by_m, fu_by_e, inq_by_m, inq_by_e = {}, {}, {}, {}
+    if not (m10s or emails):
+        return ['New'] * len(people)
+    try:
+        ensure_followups_schema(conn)
+        conds, params = [], []
+        if m10s:
+            conds.append("mobile10 IN (%s)" % ','.join(['?'] * len(m10s))); params += list(m10s)
+        if emails:
+            conds.append("email IN (%s)" % ','.join(['?'] * len(emails))); params += list(emails)
+        for r in conn.execute(
+                "SELECT mobile10, email, status FROM pg_followups WHERE status <> '' "
+                "AND (" + " OR ".join(conds) + ") ORDER BY created_at DESC, id DESC", params).fetchall():
+            r = dict(r)
+            if r['mobile10'] and r['mobile10'] not in fu_by_m: fu_by_m[r['mobile10']] = r['status']
+            if r['email'] and r['email'] not in fu_by_e: fu_by_e[r['email']] = r['status']
+    except Exception as e:
+        logging.error("statuses_for (followups): %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    try:
+        conds, params = [], []
+        if m10s:
+            conds.append("RIGHT(regexp_replace(COALESCE(phone,''),'\\D','','g'),10) IN (%s)" % ','.join(['?'] * len(m10s))); params += list(m10s)
+        if emails:
+            conds.append("LOWER(TRIM(COALESCE(email,''))) IN (%s)" % ','.join(['?'] * len(emails))); params += list(emails)
+        for r in conn.execute(
+                "SELECT RIGHT(regexp_replace(COALESCE(phone,''),'\\D','','g'),10) AS m10, "
+                "LOWER(TRIM(COALESCE(email,''))) AS em, inquiry_status FROM sales_leads "
+                "WHERE COALESCE(is_inquiry,0)=1 AND COALESCE(inquiry_status,'') <> '' "
+                "AND (" + " OR ".join(conds) + ") ORDER BY id DESC", params).fetchall():
+            r = dict(r)
+            if r['m10'] and r['m10'] not in inq_by_m: inq_by_m[r['m10']] = r['inquiry_status']
+            if r['em'] and r['em'] not in inq_by_e: inq_by_e[r['em']] = r['inquiry_status']
+    except Exception as e:
+        logging.error("statuses_for (inquiry): %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    return [(fu_by_m.get(mm) or fu_by_e.get(ee) or inq_by_m.get(mm) or inq_by_e.get(ee) or 'New')
+            for mm, ee in norm]
 
 
 def add_followup(conn, mobile, email, note, status, next_date, user, src='doctor'):
