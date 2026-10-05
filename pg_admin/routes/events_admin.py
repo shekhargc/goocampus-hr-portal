@@ -166,35 +166,133 @@ _REG_LABELS = {
 
 
 def _ensure_reg_fields(conn):
-    """Request-time guard: the team columns may be missing if the boot migration was
-    skipped on a Render cold start. (reference: Render cold-start migrations)"""
-    for col in ('attendance', 'session_mode', 'contact_status', 'staff_notes'):
+    """Request-time guard: the team columns / history table may be missing if the boot
+    migration was skipped on a Render cold start. (reference: Render cold-start migrations)"""
+    for col in ('attendance', 'session_mode', 'contact_status', 'staff_notes', 'edited_by'):
         conn.execute(f"ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS {col} TEXT DEFAULT ''")
+    conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_by_id INTEGER")
+    conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP")
+    conn.execute('''CREATE TABLE IF NOT EXISTS pg_event_reg_updates (
+        id SERIAL PRIMARY KEY, reg_id INTEGER NOT NULL, event_id INTEGER, note TEXT DEFAULT '',
+        added_by TEXT DEFAULT '', added_by_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_event_reg_updates_reg ON pg_event_reg_updates (reg_id)")
+
+
+def _ist_str(dt):
+    """A UTC datetime → 'DD-Mon-YYYY, hh:mm AM/PM IST' (matches the format_datetime filter)."""
+    from datetime import timedelta
+    if not dt:
+        return ''
+    try:
+        return (dt + timedelta(hours=5, minutes=30)).strftime('%d-%b-%Y, %I:%M %p') + ' IST'
+    except (AttributeError, ValueError, TypeError):
+        return ''
 
 
 @login_required
 def event_reg_update(reg_id):
-    """POST {field, value} — set one team working-list field on a registration.
-    Team-editable (Events 'edit' grant). Returns JSON for the inline editor."""
+    """POST {attendance, session_mode, contact_status, new_update} — save the team
+    working-list fields for ONE registrant (from the row drawer, an explicit Save).
+    `new_update` (optional) is appended to the registrant's update HISTORY and also
+    mirrored into staff_notes (the latest note, for the list + Excel). Stamps who
+    edited + when (UTC → shown IST). Team-editable (Events 'edit')."""
+    from flask import jsonify
+    from datetime import datetime
+    u = _require_events_section("edit")
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    u = dict(u)
+    sets, params = [], []
+    for field in ('attendance', 'session_mode', 'contact_status'):
+        if field not in request.form:          # absent = leave untouched
+            continue
+        value = _s(request.form.get(field))
+        if value not in _REG_FIELDS[field]:
+            return jsonify({'ok': False, 'error': 'bad_value', 'field': field}), 400
+        sets.append(f"{field} = ?"); params.append(value)
+    new_update = _s(request.form.get('new_update'))
+    if not sets and not new_update:
+        return jsonify({'ok': False, 'error': 'nothing_to_save'}), 400
+    now = datetime.utcnow()
+    editor = u.get('name') or 'Team'
+    if new_update:                              # the latest note mirrors into staff_notes
+        sets.append("staff_notes = ?"); params.append(new_update)
+    sets += ["edited_by = ?", "edited_by_id = ?", "edited_at = ?"]
+    params += [editor, u.get('id'), now]
+    params.append(reg_id)
+    conn = get_db()
+    try:
+        _ensure_reg_fields(conn)
+        conn.execute(f"UPDATE pg_event_registrations SET {', '.join(sets)} WHERE id = ?", tuple(params))
+        new_entry = None
+        if new_update:
+            row = conn.execute("SELECT event_id FROM pg_event_registrations WHERE id = ?", (reg_id,)).fetchone()
+            ev_id = dict(row)['event_id'] if row else None
+            up_id = conn.execute(
+                "INSERT INTO pg_event_reg_updates (reg_id, event_id, note, added_by, added_by_id, created_at) "
+                "VALUES (?,?,?,?,?,?) RETURNING id", (reg_id, ev_id, new_update, editor, u.get('id'), now)).fetchone()
+            new_entry = {'id': dict(up_id)['id'], 'note': new_update, 'by': editor, 'at': _ist_str(now)}
+        conn.commit()
+        return jsonify({'ok': True, 'edited_by': editor, 'edited_at': _ist_str(now),
+                        'latest_note': new_update, 'new_entry': new_entry})
+    except Exception as e:
+        conn.rollback(); logging.error("event_reg_update: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+@login_required
+def event_reg_profile(reg_id):
+    """GET → one registrant's event profile for the drawer: registration time + the full
+    update history (newest first). Team-readable (Events 'view')."""
+    from flask import jsonify
+    u = _require_events_section("view")
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    conn = get_db()
+    try:
+        _ensure_reg_fields(conn)
+        reg = conn.execute("SELECT created_at FROM pg_event_registrations WHERE id = ?", (reg_id,)).fetchone()
+        if not reg:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        ups = [dict(r) for r in conn.execute(
+            "SELECT id, note, added_by, created_at FROM pg_event_reg_updates "
+            "WHERE reg_id = ? ORDER BY id DESC", (reg_id,)).fetchall()]
+        updates = [{'id': x['id'], 'note': x['note'], 'by': x['added_by'], 'at': _ist_str(x['created_at'])} for x in ups]
+        return jsonify({'ok': True, 'registered': _ist_str(dict(reg)['created_at']), 'updates': updates})
+    except Exception as e:
+        logging.error("event_reg_profile: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+@login_required
+def event_reg_update_delete(update_id):
+    """POST → remove ONE history entry (a mistaken note). Re-syncs staff_notes to the
+    now-latest remaining note. Team-editable (Events 'edit')."""
     from flask import jsonify
     u = _require_events_section("edit")
     if not u:
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
-    field = _s(request.form.get('field'))
-    value = _s(request.form.get('value'))
-    if field not in _REG_FIELDS:
-        return jsonify({'ok': False, 'error': 'bad_field'}), 400
-    allowed = _REG_FIELDS[field]
-    if allowed is not None and value not in allowed:
-        return jsonify({'ok': False, 'error': 'bad_value'}), 400
     conn = get_db()
     try:
         _ensure_reg_fields(conn)
-        conn.execute(f"UPDATE pg_event_registrations SET {field} = ? WHERE id = ?", (value, reg_id))
+        row = conn.execute("SELECT reg_id FROM pg_event_reg_updates WHERE id = ?", (update_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        reg_id = dict(row)['reg_id']
+        conn.execute("DELETE FROM pg_event_reg_updates WHERE id = ?", (update_id,))
+        latest = conn.execute(
+            "SELECT note FROM pg_event_reg_updates WHERE reg_id = ? ORDER BY id DESC LIMIT 1",
+            (reg_id,)).fetchone()
+        latest_note = (dict(latest)['note'] if latest else '') or ''
+        conn.execute("UPDATE pg_event_registrations SET staff_notes = ? WHERE id = ?", (latest_note, reg_id))
         conn.commit()
-        return jsonify({'ok': True, 'field': field, 'value': value})
+        return jsonify({'ok': True, 'reg_id': reg_id, 'latest_note': latest_note})
     except Exception as e:
-        conn.rollback(); logging.error("event_reg_update: %s", e)
+        conn.rollback(); logging.error("event_reg_update_delete: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
@@ -213,24 +311,27 @@ def event_export(event_id):
         regs = [dict(r) for r in conn.execute(
             "SELECT ticket_code, name, email, mobile, rank, score, domicile_state, college, "
             "target_speciality, city, attendance, session_mode, contact_status, staff_notes, "
-            "notes, created_at FROM pg_event_registrations "
+            "notes, edited_by, edited_at, created_at FROM pg_event_registrations "
             "WHERE event_id = ? ORDER BY id", (event_id,)).fetchall()]
     finally:
         conn.close()
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'Registrations'
     cols = ['ticket_code', 'name', 'email', 'mobile', 'rank', 'score', 'domicile_state',
             'college', 'target_speciality', 'city', 'attendance', 'session_mode',
-            'contact_status', 'staff_notes', 'notes', 'created_at']
+            'contact_status', 'staff_notes', 'notes', 'edited_by', 'edited_at', 'created_at']
     ws.append(['Ticket', 'Name', 'Email', 'Mobile', 'Rank', 'Score', 'Domicile', 'College',
                'Target Speciality', 'City', 'Attendance', 'Session mode', 'Contact status',
-               'Team notes', 'Registrant note', 'Registered'])
+               'Team notes', 'Registrant note', 'Last edited by', 'Last edited (IST)', 'Registered'])
     for r in regs:
         row = []
         for c in cols:
             v = r.get(c)
-            v = '' if v is None else str(v)
-            if c in _REG_LABELS:            # show the friendly label, not the code
-                v = _REG_LABELS[c].get(v, v)
+            if c == 'edited_at':
+                v = _ist_str(v)
+            else:
+                v = '' if v is None else str(v)
+                if c in _REG_LABELS:        # show the friendly label, not the code
+                    v = _REG_LABELS[c].get(v, v)
             row.append(v)
         ws.append(row)
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
