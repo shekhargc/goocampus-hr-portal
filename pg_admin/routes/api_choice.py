@@ -102,7 +102,7 @@ def api_pg_cutoff_explorer():
         if college_type:
             where.append("c.institute_type ILIKE ?"); params.append('%' + college_type + '%')
         if course:
-            where.append("c.course ILIKE ?"); params.append('%' + course + '%')
+            frag, fp = smart_name_clause("c.course", course); where.append(frag); params.extend(fp)
         if q:
             frag, fp = smart_name_clause("c.institute", q); where.append(frag); params.extend(fp)
         wsql = " WHERE " + " AND ".join(where)
