@@ -9,7 +9,11 @@ import logging
 from db import get_db
 
 # Shared with the inquiry board (sales_leads.inquiry_status) so the two map 1:1.
-STATUSES = ['New', 'Contacted', 'Follow-up', 'Interested', 'Not Interested', 'Converted']
+# 'New' is the automatic default (never picked manually); PICK_STATUSES are what the
+# team actually selects. A next-follow-up date+time applies to these statuses.
+STATUSES = ['New', 'Did not pick up', 'Contacted', 'Follow-up', 'Interested', 'Not Interested', 'Converted']
+PICK_STATUSES = [s for s in STATUSES if s != 'New']
+DATE_STATUSES = ('Follow-up', 'Interested')   # these keep a next-follow-up date+time
 
 
 def ensure_followups_schema(conn):
@@ -121,6 +125,8 @@ def current_state(conn, mobile, email):
         except Exception:
             try: conn.rollback()
             except Exception: pass
+    if not out['status']:
+        out['status'] = 'New'       # automatic default when nothing has been set
     return out
 
 
@@ -129,7 +135,7 @@ def add_followup(conn, mobile, email, note, status, next_date, user, src='doctor
     inquiry so the inquiry board stays in step. Returns the new entry dict."""
     mob10, em = m10(mobile), norm_email(email)
     status = status if status in STATUSES else ''
-    next_date = (next_date or '').strip()
+    next_date = (next_date or '').strip().replace('T', ' ')   # datetime-local → "YYYY-MM-DD HH:MM"
     uid = (user or {}).get('id')
     uname = (user or {}).get('name') or ''
     conn.execute(

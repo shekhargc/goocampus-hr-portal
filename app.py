@@ -39104,7 +39104,7 @@ def _lead_reg_status_map(conn, leads):
 # OFF the hot Leads board and in their own Sales → Inquiries area, with a status
 # + a follow-up thread, until a salesperson converts one into a real Lead.
 PG_INQUIRY_SOURCE = 'NEET PG Website (goocampus.in)'
-INQUIRY_STATUSES = ['New', 'Contacted', 'Follow-up', 'Interested', 'Not Interested', 'Converted']
+INQUIRY_STATUSES = ['New', 'Did not pick up', 'Contacted', 'Follow-up', 'Interested', 'Not Interested', 'Converted']
 
 
 def _ensure_inquiry_schema(conn):
@@ -39259,6 +39259,7 @@ def sales_inquiry_view(inq_id):
     conn.close()
     return render_template('sales_inquiry_view.html', user=user, inq=inq, followups=followups,
                            reg_doctor=reg_doctor, statuses=INQUIRY_STATUSES, fu_state=fu_state,
+                           pick_statuses=[s for s in INQUIRY_STATUSES if s != 'New'],
                            active_section='sales')
 
 
@@ -39380,17 +39381,21 @@ def sales_inquiry_status(inq_id):
 @sales_write_required
 def sales_inquiry_followup(inq_id):
     note = (request.form.get('note') or '').strip()
+    status = (request.form.get('status') or '').strip()
+    next_date = (request.form.get('next_followup_date') or '').strip()
+    if status not in ('Follow-up', 'Interested'):
+        next_date = ''                      # a next-date only applies to Follow-up / Interested
     user = get_user()
     conn = get_db()
     _ensure_inquiry_schema(conn)
-    if note:
+    if note or status:
         try:
             from pg_admin import followups as _fu
             _fu.ensure_followups_schema(conn)
             lead = conn.execute("SELECT phone, email FROM sales_leads WHERE id = ?", (inq_id,)).fetchone()
             if lead:
                 lead = dict(lead)
-                _fu.add_followup(conn, lead.get('phone'), lead.get('email'), note, '', '',
+                _fu.add_followup(conn, lead.get('phone'), lead.get('email'), note, status, next_date,
                                  (dict(user) if user else {}), src='inquiry')
         except Exception as e:
             logging.error(f"sales_inquiry_followup: {e}")

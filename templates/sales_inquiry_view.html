@@ -74,9 +74,20 @@
     <div class="card">
       <h3>Follow-up thread</h3>
       <form method="POST" action="/sales/inquiries/{{ inq.id }}/followup" style="margin-bottom:1.1rem;">
-        <textarea class="ta" name="note" placeholder="Log a call, WhatsApp, or next step…" required></textarea>
+        <div style="margin-bottom:8px;">
+          <select class="inp" name="status" id="inqStatus" style="width:100%;"
+                  onchange="var s=this.value;document.getElementById('inqDateRow').style.display=(s==='Follow-up'||s==='Interested')?'block':'none';">
+            <option value="">— keep status ({{ inq.inquiry_status or 'New' }}) —</option>
+            {% for s in pick_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div id="inqDateRow" style="display:none;margin-bottom:8px;">
+          <label style="font-size:.75rem;color:#64748b;display:block;margin-bottom:3px;">Next follow-up — date &amp; time</label>
+          <input type="datetime-local" class="inp" name="next_followup_date" value="{{ (fu_state.next_followup_date or '')|replace(' ','T') }}" style="width:100%;">
+        </div>
+        <textarea class="ta" name="note" placeholder="Log a call, WhatsApp, or next step…"></textarea>
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:.75rem;color:#94a3b8;">Date &amp; time are captured automatically.</span>
+          <span style="font-size:.75rem;color:#94a3b8;">Saved with your name &amp; time (IST).</span>
           <button type="submit" class="btn btn-primary">Add follow-up</button>
         </div>
       </form>
@@ -112,15 +123,6 @@
       {% if inq.notes %}<div class="row" style="flex-direction:column;gap:4px;"><span class="k">Enquiry</span><span class="v" style="font-weight:500;">{{ inq.notes }}</span></div>{% endif %}
     </div>
 
-    <div class="card">
-      <h3>Status</h3>
-      <form method="POST" action="/sales/inquiries/{{ inq.id }}/status" style="display:flex;gap:8px;align-items:center;">
-        <select class="inp" name="inquiry_status">
-          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if (inq.inquiry_status or 'New') == s }}>{{ s }}</option>{% endfor %}
-        </select>
-        <button type="submit" class="btn btn-g">Update</button>
-      </form>
-    </div>
 
     <div class="card">
       <h3>Ready for the pipeline?</h3>
