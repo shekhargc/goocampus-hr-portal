@@ -68,8 +68,18 @@ def api_pg_college_lookup():
                "FROM pg_college_alias a WHERE a.master_id = m.id), '')")
         inner = (f"SELECT m.id, m.college_name, m.city, m.state, {norm} AS nname, {hay} AS hay "
                  f"FROM pg_college_master m WHERE m.kind = 'medical'")
-        where = " AND ".join(["s.hay LIKE ?"] * len(tokens))
+        # Match if EITHER every typed word appears somewhere (any order) OR — for a run-on
+        # query like 'alameen' — the whole thing (spaces removed) is a substring of the
+        # name with spaces removed. The run-on branch only kicks in at 4+ chars so short
+        # queries don't match half the list.
+        token_cond = "(" + " AND ".join(["s.hay LIKE ?"] * len(tokens)) + ")"
         params = ['%' + t + '%' for t in tokens]
+        despaced = qn.replace(' ', '')
+        conds = [token_cond]
+        if len(despaced) >= 4:
+            conds.append("replace(s.hay, ' ', '') LIKE ?")
+            params.append('%' + despaced + '%')
+        where = "(" + " OR ".join(conds) + ")"
         sql = (f"SELECT s.id, s.college_name, s.city, s.state FROM ({inner}) s "
                f"WHERE {where} "
                f"ORDER BY (CASE WHEN s.nname LIKE ? THEN 0 ELSE 1 END), "
