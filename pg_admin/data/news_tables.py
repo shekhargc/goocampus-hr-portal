@@ -36,6 +36,9 @@ def ensure_pg_news():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_scope ON pg_news (scope)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_state ON pg_news (state)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_pub ON pg_news (is_published, published_at)")
+        # Official source link for the item (e.g. the authority's page), shown + clickable
+        # on the dashboard alongside the PDF. (founder 2026-10-05)
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")
 
         # Per-doctor "followed states" for the news feed (beyond All-India + home state).
         # Saved to the doctor's profile so the admin can see their subscriptions.
