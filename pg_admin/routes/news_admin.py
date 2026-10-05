@@ -29,10 +29,14 @@ def news_admin():
     conn = get_db()
     items = []
     try:
-        items = conn.execute(
-            "SELECT id, scope, state, body_label, heading, "
+        try:
+            conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")
+        except Exception:
+            conn.rollback()
+        items = [dict(r) for r in conn.execute(
+            "SELECT id, scope, state, body_label, heading, body_text, source_url, "
             "(pdf_data IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by "
-            "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()
+            "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()]
     except Exception as e:
         logging.error("news_admin list: %s", e)
         try: conn.rollback()
@@ -132,7 +136,7 @@ def news_save():
         try: conn.rollback()
         except Exception: pass
         logging.error("news_save: %s", e)
-        flash(f'Could not save: {e}', 'error')
+        flash('Could not save. Please try again.', 'error')
     finally:
         conn.close()
     return redirect(url_for('pg_news_admin'))
