@@ -65,6 +65,7 @@ def news_save():
         body_label = _s(request.form.get('body_label')) or ('All India MCC' if scope == 'all_india' else state)
     heading = _s(request.form.get('heading'))
     body_text = (request.form.get('body_text') or '').strip()
+    news_date = _s(request.form.get('news_date')) or None   # YYYY-MM-DD, optional (else today)
     # Default published; only an explicit '0'/'off' unpublishes.
     is_published = 0 if request.form.get('is_published') in ('0', 'off') else 1
 
@@ -106,13 +107,16 @@ def news_save():
                     "UPDATE pg_news SET scope=?, state=?, body_label=?, heading=?, body_text=?, "
                     "is_published=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                     (scope, state, body_label, heading, body_text, is_published, news_id))
+            if news_date:
+                conn.execute("UPDATE pg_news SET published_at = ?::date WHERE id=?", (news_date, news_id))
             flash('Update saved.', 'success')
         else:
             conn.execute(
                 "INSERT INTO pg_news (scope, state, body_label, heading, body_text, pdf_name, "
-                "pdf_data, pdf_content_type, is_published, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "pdf_data, pdf_content_type, is_published, created_by, published_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?, COALESCE(?::date, CURRENT_TIMESTAMP))",
                 (scope, state, body_label, heading, body_text, pdf_name, pdf_bytes, pdf_ctype,
-                 is_published, who))
+                 is_published, who, news_date))
             flash('News posted.', 'success')
         conn.commit()
     except Exception as e:
