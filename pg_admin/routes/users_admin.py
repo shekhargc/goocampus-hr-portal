@@ -437,6 +437,18 @@ def user_detail(user_id):
                 enquiry = dict(r) if r else None
         except Exception:
             conn.rollback()
+        # Shared follow-up thread (synced with Sales → Inquiries by mobile/email)
+        try:
+            from pg_admin import followups as _fu
+            _fu.ensure_followups_schema(conn)
+            fu_thread = _fu.get_thread(conn, doctor.get('mobile'), doctor.get('email'))
+            fu_state = _fu.current_state(conn, doctor.get('mobile'), doctor.get('email'))
+            fu_statuses = _fu.STATUSES
+        except Exception as _fe:
+            logging.error("user_detail followups: %s", _fe)
+            try: conn.rollback()
+            except Exception: pass
+            fu_thread, fu_state, fu_statuses = [], {}, []
     except Exception as e:
         conn.rollback()
         logging.error("user_detail: %s", e)
@@ -469,7 +481,61 @@ def user_detail(user_id):
                            state_max_other=state_max_other,
                            specialty_mdms=_json2.dumps(specialty_mdms),
                            specialty_dnb=_json2.dumps(specialty_dnb),
+                           fu_thread=fu_thread, fu_state=fu_state, fu_statuses=fu_statuses,
                            active_section='goocampus_in')
+
+
+@login_required
+def user_followup_add(user_id):
+    """Add a follow-up (note + status + optional next-follow-up date) to a registered
+    doctor, into the SHARED thread so it also shows on their Sales → Inquiry (by mobile/
+    email) and the status syncs. Team-editable (Registered Doctors 'edit'). (founder 2026-10-05)"""
+    admin = _require_users_section("edit")
+    if not admin:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    note = (request.form.get('note') or '').strip()
+    status = (request.form.get('status') or '').strip()
+    next_date = (request.form.get('next_followup_date') or '').strip()
+    if status != 'Follow-up':
+        next_date = ''                      # a next-date only makes sense for 'Follow-up'
+    if not note and not status:
+        flash('Add a note or pick a status.', 'error')
+        return redirect(url_for('pg_user_detail', user_id=user_id))
+    conn = get_db()
+    try:
+        from pg_admin import followups as _fu
+        _fu.ensure_followups_schema(conn)
+        d = conn.execute("SELECT mobile, email FROM pg_users WHERE id = ?", (user_id,)).fetchone()
+        if d:
+            d = dict(d)
+            _fu.add_followup(conn, d.get('mobile'), d.get('email'), note, status, next_date,
+                             dict(admin), src='doctor')
+            flash('Follow-up saved.', 'success')
+        else:
+            flash('Doctor not found.', 'error')
+    except Exception as e:
+        conn.rollback(); logging.error("user_followup_add: %s", e)
+        flash('Could not save the follow-up.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_user_detail', user_id=user_id))
+
+
+@login_required
+def user_followup_delete(user_id, fu_id):
+    """Remove one follow-up entry (a mistaken note) from the shared thread."""
+    admin = _require_users_section("edit")
+    if not admin:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM pg_followups WHERE id = ?", (fu_id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback(); logging.error("user_followup_delete: %s", e)
+    finally:
+        conn.close()
+    return redirect(url_for('pg_user_detail', user_id=user_id))
 
 
 @login_required

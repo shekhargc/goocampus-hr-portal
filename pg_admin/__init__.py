@@ -352,6 +352,10 @@ def register_pg_admin(app):
                      diag_home_state.home_state_backfill, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/save', 'pg_user_save',
                      users_admin.user_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/followup', 'pg_user_followup_add',
+                     users_admin.user_followup_add, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/followup/<int:fu_id>/delete', 'pg_user_followup_delete',
+                     users_admin.user_followup_delete, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/block', 'pg_user_block',
                      users_admin.user_block, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/grant-plan', 'pg_user_grant_plan',

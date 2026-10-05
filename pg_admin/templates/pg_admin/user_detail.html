@@ -207,6 +207,49 @@
 
     <!-- RIGHT -->
     <div>
+      {# ── Follow-up (shared with Sales → Inquiries by mobile/email) ── #}
+      {% set fu_colors = {'New':['#eef2ff','#3730a3'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
+      <div class="card" style="border-top:3px solid var(--orange);">
+        <h3><i class="fa-solid fa-phone-volume"></i> Follow-up</h3>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+          <span style="font-size:0.78rem;color:var(--gray-500);">Status:</span>
+          {% set cs = fu_state.status or '' %}
+          {% if cs %}<span style="font-size:0.78rem;font-weight:700;padding:3px 11px;border-radius:20px;background:{{ fu_colors.get(cs,['#f3f4f6','#6b7280'])[0] }};color:{{ fu_colors.get(cs,['#f3f4f6','#6b7280'])[1] }};">{{ cs }}</span>
+          {% else %}<span style="font-size:0.8rem;color:var(--gray-400);">— not set —</span>{% endif %}
+          {% if fu_state.next_followup_date %}<span style="font-size:0.78rem;color:#b45309;font-weight:600;">· Next: {{ fu_state.next_followup_date }}</span>{% endif %}
+        </div>
+        {% if fu_state.last_by %}<div style="font-size:0.72rem;color:var(--gray-400);margin-bottom:0.7rem;">Last updated by {{ fu_state.last_by }}{% if fu_state.last_at %} · {{ fu_state.last_at|format_datetime }}{% endif %}</div>{% endif %}
+
+        <form method="POST" action="/admin/pg/users/{{ d.id }}/followup">
+          <div class="f"><label>Status</label>
+            <select name="status" id="fuStatus" onchange="document.getElementById('fuDateRow').style.display = this.value==='Follow-up' ? 'block' : 'none';">
+              <option value="">— keep current —</option>
+              {% for s in fu_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select></div>
+          <div class="f" id="fuDateRow" style="display:none;"><label>Next follow-up date</label>
+            <input type="date" name="next_followup_date" value="{{ fu_state.next_followup_date or '' }}"></div>
+          <div class="f"><label>Note — what you spoke about</label>
+            <textarea name="note" rows="3" placeholder="e.g. Called, explained Premium plan, interested — will decide by Friday"></textarea></div>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Add follow-up</button>
+        </form>
+
+        <div style="margin-top:1rem;border-top:1px solid var(--gray-100);padding-top:0.8rem;">
+          <div style="font-size:0.74rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.03em;margin-bottom:0.6rem;">History <span class="n">{{ fu_thread|length }}</span></div>
+          {% for r in fu_thread %}
+          <div style="border-left:3px solid var(--orange);padding:2px 0 9px 10px;margin-bottom:10px;">
+            <form method="POST" action="/admin/pg/users/{{ d.id }}/followup/{{ r.id }}/delete" style="float:right;" onsubmit="return confirm('Delete this follow-up entry?');">
+              <button type="submit" title="Delete" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:0.95rem;line-height:1;padding:0 2px;">&times;</button></form>
+            {% if r.status %}<span style="font-size:0.7rem;font-weight:700;padding:1px 8px;border-radius:12px;background:{{ fu_colors.get(r.status,['#f3f4f6','#6b7280'])[0] }};color:{{ fu_colors.get(r.status,['#f3f4f6','#6b7280'])[1] }};">{{ r.status }}</span>{% endif %}
+            {% if r.next_followup_date %}<span style="font-size:0.72rem;color:#b45309;font-weight:600;margin-left:4px;">Next: {{ r.next_followup_date }}</span>{% endif %}
+            {% if r.note %}<div style="white-space:pre-wrap;color:#334155;font-size:0.84rem;margin-top:3px;">{{ r.note }}</div>{% endif %}
+            <div style="font-size:0.71rem;color:#94a3b8;margin-top:2px;">— {{ r.created_by_name or 'Team' }}{% if r.src=='migrated' %} · from inquiry{% elif r.src=='inquiry' %} · via inquiry{% endif %} · {{ r.created_at|format_datetime if r.created_at else '' }}</div>
+          </div>
+          {% else %}
+          <p style="font-size:0.82rem;color:var(--gray-400);margin:0;">No follow-ups yet. Add the first one above.</p>
+          {% endfor %}
+        </div>
+      </div>
+
       <div class="card">
         <h3><i class="fa-solid fa-crown"></i> Current plan</h3>
         <div style="background:linear-gradient(160deg,#f0f6ff,#eaf0fb);border:1px solid #cfe0f7;border-radius:0.6rem;padding:0.9rem 1rem;margin-bottom:1rem;">
