@@ -60,6 +60,11 @@ def ensure_event_tables():
         conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS session_mode TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS contact_status TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS staff_notes TEXT DEFAULT ''")
+        # Audit: who last edited the working-list fields + when (UTC, displayed IST). So the
+        # team knows which member updated a registrant's attendance/notes. (founder 2026-10-05)
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_by TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_by_id INTEGER")
+        conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP")
         conn.commit()
         logging.info("pg_events tables ensured")
     except Exception as e:

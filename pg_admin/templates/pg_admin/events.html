@@ -108,79 +108,105 @@
         <th style="{{ hs }}">Ticket</th><th style="{{ hs }}">Name</th><th style="{{ hs }}">Mobile</th>
         <th style="{{ hs }}text-align:right;">Rank</th><th style="{{ hs }}">Domicile</th>
         <th style="{{ hs }}">Attendance</th><th style="{{ hs }}">Session mode</th><th style="{{ hs }}">Contact status</th>
-        <th style="{{ hs }}">Team notes</th><th style="{{ hs }}">Registered</th>
+        <th style="{{ hs }}">Team notes</th><th style="{{ hs }}">Last updated</th><th style="{{ hs }}"></th>
       </tr></thead>
       <tbody>
-        {% set esel = 'padding:0.35rem 0.4rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.8rem;background:#fff;cursor:pointer;' %}
         {% for r in regs %}
-        <tr class="regRow" data-attendance="{{ r.attendance or '' }}" data-mode="{{ r.session_mode or '' }}" data-contact="{{ r.contact_status or '' }}"
-            data-search="{{ (r.name or '')|lower }} {{ (r.mobile or '')|lower }} {{ (r.ticket_code or '')|lower }} {{ (r.email or '')|lower }}"
-            style="border-top:1px solid var(--gray-100);">
+        <tr class="regRow" style="border-top:1px solid var(--gray-100);cursor:pointer;"
+            data-reg="{{ r.id }}"
+            data-attendance="{{ r.attendance or '' }}" data-mode="{{ r.session_mode or '' }}" data-contact="{{ r.contact_status or '' }}"
+            data-notes="{{ r.staff_notes or '' }}"
+            data-name="{{ r.name or '' }}" data-email="{{ r.email or '' }}" data-mobile="{{ r.mobile or '' }}"
+            data-ticket="{{ r.ticket_code or '' }}" data-rank="{{ r.rank or '' }}" data-domicile="{{ r.domicile_state or '' }}"
+            data-editedby="{{ r.edited_by or '' }}" data-editedat="{{ r.edited_at|format_datetime if r.edited_at else '' }}"
+            data-search="{{ (r.name or '')|lower }} {{ (r.mobile or '')|lower }} {{ (r.ticket_code or '')|lower }} {{ (r.email or '')|lower }}">
           <td style="padding:0.5rem 0.9rem;font-family:monospace;font-weight:700;color:var(--navy);">{{ r.ticket_code }}</td>
           <td style="padding:0.5rem 0.9rem;font-weight:600;">{{ r.name }}<div style="font-size:0.72rem;color:var(--gray-400);font-weight:400;">{{ r.email }}</div></td>
           <td style="padding:0.5rem 0.9rem;color:var(--gray-600);">{{ r.mobile }}</td>
           <td style="padding:0.5rem 0.9rem;text-align:right;">{{ r.rank or '—' }}</td>
           <td style="padding:0.5rem 0.9rem;color:var(--gray-600);">{{ r.domicile_state or '—' }}</td>
-          <td style="padding:0.5rem 0.9rem;">
-            <select class="regEdit" data-reg="{{ r.id }}" data-field="attendance" style="{{ esel }}">
-              <option value="">—</option>
-              <option value="attended" {{ 'selected' if r.attendance=='attended' }}>Attended</option>
-              <option value="not_attended" {{ 'selected' if r.attendance=='not_attended' }}>Not attended</option>
-            </select></td>
-          <td style="padding:0.5rem 0.9rem;">
-            <select class="regEdit" data-reg="{{ r.id }}" data-field="session_mode" style="{{ esel }}">
-              <option value="">—</option>
-              <option value="offline" {{ 'selected' if r.session_mode=='offline' }}>Offline</option>
-              <option value="online" {{ 'selected' if r.session_mode=='online' }}>Online</option>
-            </select></td>
-          <td style="padding:0.5rem 0.9rem;">
-            <select class="regEdit" data-reg="{{ r.id }}" data-field="contact_status" style="{{ esel }}">
-              <option value="">—</option>
-              <option value="not_spoken" {{ 'selected' if r.contact_status=='not_spoken' }}>Not spoken</option>
-              <option value="spoken" {{ 'selected' if r.contact_status=='spoken' }}>Spoken</option>
-              <option value="completed" {{ 'selected' if r.contact_status=='completed' }}>Completed</option>
-            </select></td>
-          <td style="padding:0.5rem 0.9rem;">
-            <input class="regEdit" data-reg="{{ r.id }}" data-field="staff_notes" type="text" value="{{ r.staff_notes or '' }}"
-                   placeholder="add note…" style="padding:0.35rem 0.5rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.8rem;min-width:170px;">
-          </td>
-          <td style="padding:0.5rem 0.9rem;color:var(--gray-500);white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}</td>
+          <td class="cell-attendance" style="padding:0.5rem 0.9rem;"></td>
+          <td class="cell-mode" style="padding:0.5rem 0.9rem;"></td>
+          <td class="cell-contact" style="padding:0.5rem 0.9rem;"></td>
+          <td class="cell-notes" style="padding:0.5rem 0.9rem;color:var(--gray-600);max-width:200px;overflow:hidden;text-overflow:ellipsis;"></td>
+          <td class="cell-edited" style="padding:0.5rem 0.9rem;color:var(--gray-500);font-size:0.76rem;"></td>
+          <td style="padding:0.5rem 0.9rem;text-align:right;"><button type="button" class="regEditBtn" style="background:#fff;border:1px solid var(--gray-300);color:var(--navy);border-radius:7px;padding:0.3rem 0.7rem;font-weight:600;font-size:0.78rem;cursor:pointer;">Edit ✏️</button></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  <p style="margin:0.6rem 0 0;font-size:0.76rem;color:var(--gray-400);">Changes save automatically. Session mode = how the doctor attended / prefers (online count shown above). The registrant's own sign-up note is kept separately and appears in the Excel download.</p>
+  <p style="margin:0.6rem 0 0;font-size:0.76rem;color:var(--gray-400);">This table is view-only — click a row (or <b>Edit</b>) to open the panel and change that doctor's details, then press Save there. Session mode = how the doctor attended / prefers (online count above). The registrant's own sign-up note is kept separately and appears in the Excel download.</p>
+
+  <!-- Slide-in edit drawer -->
+  <div id="regOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.35);z-index:60;"></div>
+  <div id="regDrawer" style="position:fixed;top:0;right:0;height:100%;width:430px;max-width:93vw;background:#fff;box-shadow:-10px 0 34px rgba(0,0,0,0.16);z-index:61;transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;">
+    <div style="padding:1.1rem 1.3rem;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+      <div>
+        <div id="dName" style="font-size:1.05rem;font-weight:800;color:var(--navy);"></div>
+        <div id="dMeta" style="font-size:0.78rem;color:var(--gray-500);margin-top:2px;"></div>
+      </div>
+      <button type="button" id="dClose" style="background:none;border:none;font-size:1.4rem;line-height:1;color:var(--gray-400);cursor:pointer;">&times;</button>
+    </div>
+    <div style="padding:1.1rem 1.3rem;overflow:auto;flex:1;">
+      <div id="dContext" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:0.7rem 0.9rem;font-size:0.8rem;color:var(--gray-600);margin-bottom:1.1rem;line-height:1.7;"></div>
+      {% set dlab = 'display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin:0 0 5px;text-transform:uppercase;letter-spacing:.03em;' %}
+      {% set dinp = 'width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:9px;font-size:0.9rem;box-sizing:border-box;background:#fff;' %}
+      <div style="margin-bottom:1rem;"><label style="{{ dlab }}">Attendance</label>
+        <select id="dAttendance" style="{{ dinp }}">
+          <option value="">— not set</option><option value="attended">Attended</option><option value="not_attended">Not attended</option>
+        </select></div>
+      <div style="margin-bottom:1rem;"><label style="{{ dlab }}">Session mode</label>
+        <select id="dMode" style="{{ dinp }}">
+          <option value="">— not set</option><option value="offline">Offline</option><option value="online">Online</option>
+        </select></div>
+      <div style="margin-bottom:1rem;"><label style="{{ dlab }}">Contact status</label>
+        <select id="dContact" style="{{ dinp }}">
+          <option value="">— not set</option><option value="not_spoken">Not spoken</option><option value="spoken">Spoken</option><option value="completed">Completed</option>
+        </select></div>
+      <div style="margin-bottom:0.4rem;"><label style="{{ dlab }}">Team notes</label>
+        <textarea id="dNotes" rows="4" placeholder="Notes about this doctor…" style="{{ dinp }}resize:vertical;"></textarea></div>
+      <div id="dEdited" style="font-size:0.74rem;color:var(--gray-400);margin-top:0.6rem;"></div>
+      <div id="dErr" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:0.6rem 0.8rem;font-size:0.8rem;margin-top:0.8rem;"></div>
+    </div>
+    <div style="padding:1rem 1.3rem;border-top:1px solid var(--gray-200);display:flex;gap:0.7rem;">
+      <button type="button" id="dCancel" style="flex:0 0 auto;background:#fff;border:1px solid var(--gray-300);color:var(--gray-600);border-radius:9px;padding:0.6rem 1.1rem;font-weight:700;font-size:0.86rem;cursor:pointer;">Cancel</button>
+      <button type="button" id="dSave" style="flex:1;background:var(--navy);color:#fff;border:none;border-radius:9px;padding:0.6rem 1.1rem;font-weight:700;font-size:0.86rem;cursor:pointer;">Save</button>
+    </div>
+  </div>
 
   <script>
   (function(){
-    var UP = "{{ url_for('pg_event_reg_update', reg_id=0) }}".replace(/0$/,'');
-    // inline save
-    document.querySelectorAll('.regEdit').forEach(function(el){
-      var evt = el.tagName === 'SELECT' ? 'change' : 'blur';
-      el.addEventListener(evt, function(){
-        var body = new URLSearchParams({field: el.dataset.field, value: el.value});
-        el.style.opacity = '0.5';
-        fetch(UP + el.dataset.reg + '/update', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body})
-          .then(function(r){return r.json();})
-          .then(function(d){
-            el.style.opacity = '1';
-            if(!d.ok){ el.style.borderColor='#dc2626'; alert('Could not save. Please try again.'); return; }
-            el.style.borderColor='#16a34a';
-            setTimeout(function(){ el.style.borderColor=''; }, 900);
-            var row = el.closest('tr');
-            if(el.dataset.field==='attendance') row.dataset.attendance = el.value;
-            if(el.dataset.field==='session_mode') row.dataset.mode = el.value;
-            if(el.dataset.field==='contact_status') row.dataset.contact = el.value;
-            recount(); applyFilters();
-          })
-          .catch(function(){ el.style.opacity='1'; el.style.borderColor='#dc2626'; alert('Network error — not saved.'); });
-      });
-    });
-    // live summary recount
+    var UPD = "{{ url_for('pg_event_reg_update', reg_id=0) }}";   // .../registration/0/update
+    function url(reg){ return UPD.replace('/0/update', '/' + reg + '/update'); }
+    var esc = function(s){ var d=document.createElement('div'); d.textContent = s==null?'':String(s); return d.innerHTML; };
+
+    // ---- badges (single source of truth for the view cells) ----
+    var BADGE = {
+      attendance:{ attended:['Attended','#dcfce7','#166534'], not_attended:['Not attended','#fee2e2','#991b1b'] },
+      mode:{ offline:['Offline','#f1f5f9','#334155'], online:['Online','#e0f2fe','#075985'] },
+      contact:{ not_spoken:['Not spoken','#f3f4f6','#6b7280'], spoken:['Spoken','#fef9c3','#854d0e'], completed:['Completed','#f3e8ff','#6b21a8'] }
+    };
+    function badge(kind,val){
+      var b = BADGE[kind][val];
+      if(!b) return '<span style="color:#cbd5e1;">—</span>';
+      return '<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:0.74rem;font-weight:700;background:'+b[1]+';color:'+b[2]+';">'+b[0]+'</span>';
+    }
+    function renderRow(row){
+      row.querySelector('.cell-attendance').innerHTML = badge('attendance', row.dataset.attendance);
+      row.querySelector('.cell-mode').innerHTML = badge('mode', row.dataset.mode);
+      row.querySelector('.cell-contact').innerHTML = badge('contact', row.dataset.contact);
+      var n = row.dataset.notes || '';
+      row.querySelector('.cell-notes').innerHTML = n ? esc(n) : '<span style="color:#cbd5e1;">—</span>';
+      var eb = row.dataset.editedby || '', ea = row.dataset.editedat || '';
+      row.querySelector('.cell-edited').innerHTML = eb ? (esc(eb) + '<br><span style="color:#94a3b8;">' + esc(ea) + '</span>') : '<span style="color:#cbd5e1;">—</span>';
+    }
+    document.querySelectorAll('.regRow').forEach(renderRow);
+
+    // ---- summary recount ----
     function recount(){
-      var rows = document.querySelectorAll('.regRow'); var c={att:0,no:0,on:0,off:0,sp:0,cp:0};
-      rows.forEach(function(r){
+      var c={att:0,no:0,on:0,off:0,sp:0,cp:0};
+      document.querySelectorAll('.regRow').forEach(function(r){
         if(r.dataset.attendance==='attended')c.att++; if(r.dataset.attendance==='not_attended')c.no++;
         if(r.dataset.mode==='online')c.on++; if(r.dataset.mode==='offline')c.off++;
         if(r.dataset.contact==='spoken')c.sp++; if(r.dataset.contact==='completed')c.cp++;
@@ -192,7 +218,8 @@
       document.getElementById('sumSpoken').textContent=c.sp;
       document.getElementById('sumCompleted').textContent=c.cp;
     }
-    // filters
+
+    // ---- filters ----
     var fS=document.getElementById('fSearch'), fA=document.getElementById('fAttendance'),
         fM=document.getElementById('fMode'), fC=document.getElementById('fContact'), fCount=document.getElementById('fCount');
     function match(val, want){ if(want==='')return true; if(want==='__blank')return val===''; return val===want; }
@@ -207,6 +234,56 @@
     }
     [fS,fA,fM,fC].forEach(function(el){ el.addEventListener('input',applyFilters); el.addEventListener('change',applyFilters); });
     applyFilters();
+
+    // ---- drawer ----
+    var overlay=document.getElementById('regOverlay'), drawer=document.getElementById('regDrawer'),
+        dSave=document.getElementById('dSave'), dErr=document.getElementById('dErr'), current=null;
+    var F={att:document.getElementById('dAttendance'), mode:document.getElementById('dMode'),
+           contact:document.getElementById('dContact'), notes:document.getElementById('dNotes')};
+    function openDrawer(row){
+      current=row;
+      document.getElementById('dName').textContent = row.dataset.name || '(no name)';
+      document.getElementById('dMeta').textContent = (row.dataset.ticket||'') + '  ·  ' + (row.dataset.mobile||'');
+      var ctx=[];
+      if(row.dataset.email) ctx.push('✉️ '+esc(row.dataset.email));
+      ctx.push('📱 '+esc(row.dataset.mobile||'—'));
+      ctx.push('🏅 Rank '+esc(row.dataset.rank||'—'));
+      ctx.push('📍 '+esc(row.dataset.domicile||'—'));
+      document.getElementById('dContext').innerHTML = ctx.join('<br>');
+      F.att.value=row.dataset.attendance||''; F.mode.value=row.dataset.mode||'';
+      F.contact.value=row.dataset.contact||''; F.notes.value=row.dataset.notes||'';
+      var eb=row.dataset.editedby||'';
+      document.getElementById('dEdited').textContent = eb ? ('Last updated by '+eb+' · '+(row.dataset.editedat||'')) : 'Not updated yet.';
+      dErr.style.display='none';
+      overlay.style.display='block'; requestAnimationFrame(function(){ drawer.style.transform='translateX(0)'; });
+    }
+    function closeDrawer(){ drawer.style.transform='translateX(100%)'; overlay.style.display='none'; current=null; }
+    document.querySelectorAll('.regRow').forEach(function(row){
+      row.addEventListener('click', function(){ openDrawer(row); });
+    });
+    document.getElementById('dClose').addEventListener('click', closeDrawer);
+    document.getElementById('dCancel').addEventListener('click', closeDrawer);
+    overlay.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && current) closeDrawer(); });
+
+    dSave.addEventListener('click', function(){
+      if(!current) return;
+      var row=current, body=new URLSearchParams({
+        attendance:F.att.value, session_mode:F.mode.value, contact_status:F.contact.value, staff_notes:F.notes.value
+      });
+      dSave.disabled=true; dSave.textContent='Saving…'; dErr.style.display='none';
+      fetch(url(row.dataset.reg), {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:body})
+        .then(function(r){ return r.json().catch(function(){ throw new Error('bad'); }); })
+        .then(function(d){
+          dSave.disabled=false; dSave.textContent='Save';
+          if(!d.ok){ dErr.textContent='Could not save'+(d.field?(' ('+d.field+')'):'')+'. Please try again.'; dErr.style.display='block'; return; }
+          row.dataset.attendance=F.att.value; row.dataset.mode=F.mode.value;
+          row.dataset.contact=F.contact.value; row.dataset.notes=F.notes.value;
+          row.dataset.editedby=d.edited_by||''; row.dataset.editedat=d.edited_at||'';
+          renderRow(row); recount(); applyFilters(); closeDrawer();
+        })
+        .catch(function(){ dSave.disabled=false; dSave.textContent='Save'; dErr.textContent='Network error — not saved. Please try again.'; dErr.style.display='block'; });
+    });
   })();
   </script>
   {% else %}

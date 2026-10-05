@@ -168,31 +168,56 @@ _REG_LABELS = {
 def _ensure_reg_fields(conn):
     """Request-time guard: the team columns may be missing if the boot migration was
     skipped on a Render cold start. (reference: Render cold-start migrations)"""
-    for col in ('attendance', 'session_mode', 'contact_status', 'staff_notes'):
+    for col in ('attendance', 'session_mode', 'contact_status', 'staff_notes', 'edited_by'):
         conn.execute(f"ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS {col} TEXT DEFAULT ''")
+    conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_by_id INTEGER")
+    conn.execute("ALTER TABLE pg_event_registrations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP")
+
+
+def _ist_str(dt):
+    """A UTC datetime → 'DD-Mon-YYYY, hh:mm AM/PM IST' (matches the format_datetime filter)."""
+    from datetime import timedelta
+    if not dt:
+        return ''
+    try:
+        return (dt + timedelta(hours=5, minutes=30)).strftime('%d-%b-%Y, %I:%M %p') + ' IST'
+    except (AttributeError, ValueError, TypeError):
+        return ''
 
 
 @login_required
 def event_reg_update(reg_id):
-    """POST {field, value} — set one team working-list field on a registration.
-    Team-editable (Events 'edit' grant). Returns JSON for the inline editor."""
+    """POST {attendance, session_mode, contact_status, staff_notes} — save the team
+    working-list fields for ONE registrant (from the row drawer, an explicit Save).
+    Only the fields present in the form are written. Stamps who edited + when (UTC),
+    so the team sees which member last updated the row. Team-editable (Events 'edit')."""
     from flask import jsonify
+    from datetime import datetime
     u = _require_events_section("edit")
     if not u:
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
-    field = _s(request.form.get('field'))
-    value = _s(request.form.get('value'))
-    if field not in _REG_FIELDS:
-        return jsonify({'ok': False, 'error': 'bad_field'}), 400
-    allowed = _REG_FIELDS[field]
-    if allowed is not None and value not in allowed:
-        return jsonify({'ok': False, 'error': 'bad_value'}), 400
+    u = dict(u)
+    sets, params = [], []
+    for field, allowed in _REG_FIELDS.items():
+        if field not in request.form:          # drawer sends all 4; absent = leave untouched
+            continue
+        value = _s(request.form.get(field))
+        if allowed is not None and value not in allowed:
+            return jsonify({'ok': False, 'error': 'bad_value', 'field': field}), 400
+        sets.append(f"{field} = ?"); params.append(value)
+    if not sets:
+        return jsonify({'ok': False, 'error': 'nothing_to_save'}), 400
+    now = datetime.utcnow()
+    editor = u.get('name') or 'Team'
+    sets += ["edited_by = ?", "edited_by_id = ?", "edited_at = ?"]
+    params += [editor, u.get('id'), now]
+    params.append(reg_id)
     conn = get_db()
     try:
         _ensure_reg_fields(conn)
-        conn.execute(f"UPDATE pg_event_registrations SET {field} = ? WHERE id = ?", (value, reg_id))
+        conn.execute(f"UPDATE pg_event_registrations SET {', '.join(sets)} WHERE id = ?", tuple(params))
         conn.commit()
-        return jsonify({'ok': True, 'field': field, 'value': value})
+        return jsonify({'ok': True, 'edited_by': editor, 'edited_at': _ist_str(now)})
     except Exception as e:
         conn.rollback(); logging.error("event_reg_update: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
@@ -213,24 +238,27 @@ def event_export(event_id):
         regs = [dict(r) for r in conn.execute(
             "SELECT ticket_code, name, email, mobile, rank, score, domicile_state, college, "
             "target_speciality, city, attendance, session_mode, contact_status, staff_notes, "
-            "notes, created_at FROM pg_event_registrations "
+            "notes, edited_by, edited_at, created_at FROM pg_event_registrations "
             "WHERE event_id = ? ORDER BY id", (event_id,)).fetchall()]
     finally:
         conn.close()
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'Registrations'
     cols = ['ticket_code', 'name', 'email', 'mobile', 'rank', 'score', 'domicile_state',
             'college', 'target_speciality', 'city', 'attendance', 'session_mode',
-            'contact_status', 'staff_notes', 'notes', 'created_at']
+            'contact_status', 'staff_notes', 'notes', 'edited_by', 'edited_at', 'created_at']
     ws.append(['Ticket', 'Name', 'Email', 'Mobile', 'Rank', 'Score', 'Domicile', 'College',
                'Target Speciality', 'City', 'Attendance', 'Session mode', 'Contact status',
-               'Team notes', 'Registrant note', 'Registered'])
+               'Team notes', 'Registrant note', 'Last edited by', 'Last edited (IST)', 'Registered'])
     for r in regs:
         row = []
         for c in cols:
             v = r.get(c)
-            v = '' if v is None else str(v)
-            if c in _REG_LABELS:            # show the friendly label, not the code
-                v = _REG_LABELS[c].get(v, v)
+            if c == 'edited_at':
+                v = _ist_str(v)
+            else:
+                v = '' if v is None else str(v)
+                if c in _REG_LABELS:        # show the friendly label, not the code
+                    v = _REG_LABELS[c].get(v, v)
             row.append(v)
         ws.append(row)
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
