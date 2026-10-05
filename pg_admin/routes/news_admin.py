@@ -74,8 +74,8 @@ def news_save():
         except ValueError:
             pub_dt = None
     source_url = _s(request.form.get('source_url'))          # official link (optional)
-    # Default published; only an explicit '0'/'off' unpublishes.
-    is_published = 0 if request.form.get('is_published') in ('0', 'off') else 1
+    # Default published; only an explicit '0'/'off' unpublishes. (bool, not int → BOOLEAN col)
+    is_published = False if request.form.get('is_published') in ('0', 'off') else True
 
     if not heading:
         flash('Please enter a heading.', 'error')
@@ -132,7 +132,7 @@ def news_save():
         try: conn.rollback()
         except Exception: pass
         logging.error("news_save: %s", e)
-        flash('Could not save. Please try again.', 'error')
+        flash(f'Could not save: {e}', 'error')
     finally:
         conn.close()
     return redirect(url_for('pg_news_admin'))
