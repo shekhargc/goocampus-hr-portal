@@ -65,7 +65,14 @@ def news_save():
         body_label = _s(request.form.get('body_label')) or ('All India MCC' if scope == 'all_india' else state)
     heading = _s(request.form.get('heading'))
     body_text = (request.form.get('body_text') or '').strip()
-    news_date = _s(request.form.get('news_date')) or None   # YYYY-MM-DD, optional (else today)
+    news_date = _s(request.form.get('news_date'))            # YYYY-MM-DD, optional (else today)
+    from datetime import datetime as _dt
+    pub_dt = None
+    if news_date:
+        try:
+            pub_dt = _dt.strptime(news_date, '%Y-%m-%d')
+        except ValueError:
+            pub_dt = None
     source_url = _s(request.form.get('source_url'))          # official link (optional)
     # Default published; only an explicit '0'/'off' unpublishes.
     is_published = 0 if request.form.get('is_published') in ('0', 'off') else 1
@@ -109,16 +116,16 @@ def news_save():
                     "UPDATE pg_news SET scope=?, state=?, body_label=?, heading=?, body_text=?, source_url=?, "
                     "is_published=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                     (scope, state, body_label, heading, body_text, source_url, is_published, news_id))
-            if news_date:
-                conn.execute("UPDATE pg_news SET published_at = ?::date WHERE id=?", (news_date, news_id))
+            if pub_dt:
+                conn.execute("UPDATE pg_news SET published_at = ? WHERE id=?", (pub_dt, news_id))
             flash('Update saved.', 'success')
         else:
             conn.execute(
                 "INSERT INTO pg_news (scope, state, body_label, heading, body_text, source_url, pdf_name, "
                 "pdf_data, pdf_content_type, is_published, created_by, published_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?, COALESCE(?::date, CURRENT_TIMESTAMP))",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
-                 is_published, who, news_date))
+                 is_published, who, (pub_dt or _dt.utcnow())))
             flash('News posted.', 'success')
         conn.commit()
     except Exception as e:
