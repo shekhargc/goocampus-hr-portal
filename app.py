@@ -39257,10 +39257,14 @@ def sales_inquiry_view(inq_id):
     except Exception:
         conn.rollback()
     conn.close()
+    try:
+        from pg_admin.followups import TIME_SLOTS as _ts
+    except Exception:
+        _ts = []
     return render_template('sales_inquiry_view.html', user=user, inq=inq, followups=followups,
                            reg_doctor=reg_doctor, statuses=INQUIRY_STATUSES, fu_state=fu_state,
                            pick_statuses=[s for s in INQUIRY_STATUSES if s != 'New'],
-                           active_section='sales')
+                           time_slots=_ts, active_section='sales')
 
 
 @app.route('/sales/inquiries/<int:inq_id>/delete', methods=['POST'])
@@ -39382,7 +39386,9 @@ def sales_inquiry_status(inq_id):
 def sales_inquiry_followup(inq_id):
     note = (request.form.get('note') or '').strip()
     status = (request.form.get('status') or '').strip()
-    next_date = (request.form.get('next_followup_date') or '').strip()
+    _nd = (request.form.get('next_followup_date') or '').strip()
+    _nt = (request.form.get('next_followup_time') or '').strip()
+    next_date = (_nd + (' ' + _nt if _nt else '')).strip() if _nd else ''
     if status not in ('Follow-up', 'Interested'):
         next_date = ''                      # a next-date only applies to Follow-up / Interested
     user = get_user()

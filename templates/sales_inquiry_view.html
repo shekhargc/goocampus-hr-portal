@@ -83,7 +83,14 @@
         </div>
         <div id="inqDateRow" style="display:none;margin-bottom:8px;">
           <label style="font-size:.75rem;color:#64748b;display:block;margin-bottom:3px;">Next follow-up — date &amp; time</label>
-          <input type="datetime-local" class="inp" name="next_followup_date" value="{{ (fu_state.next_followup_date or '')|replace(' ','T') }}" style="width:100%;">
+          <div style="display:flex;gap:6px;">
+            <input type="date" class="inp" name="next_followup_date" value="{{ (fu_state.next_followup_date or '')[:10] }}" style="flex:1;">
+            <select class="inp" name="next_followup_time" style="flex:1;">
+              <option value="">— time —</option>
+              {% set curt = (fu_state.next_followup_date or '')[11:] %}
+              {% for t in time_slots %}<option value="{{ t }}" {{ 'selected' if t==curt }}>{{ t }}</option>{% endfor %}
+            </select>
+          </div>
         </div>
         <textarea class="ta" name="note" placeholder="Log a call, WhatsApp, or next step…"></textarea>
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
