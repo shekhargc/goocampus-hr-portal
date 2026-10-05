@@ -10,7 +10,7 @@ DB) + pg_cutoffs (predictor + stipend). Mirrors the goocampus.org admin screens:
   GET /api/pg/stipend/<id>               per-speciality stipend detail
 """
 import logging
-from flask import request, jsonify
+from flask import request, jsonify, session
 from db import get_db
 from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
 
@@ -37,6 +37,53 @@ def _fam(family):
 
 def _num(v):
     return float(v) if v is not None else None
+
+
+def api_pg_college_lookup():
+    """GET /api/pg/college-lookup?q=&limit=  — type-ahead search over the MEDICAL college
+    master, for the MBBS-college picker on the goocampus.in onboarding form.
+
+    Punctuation-insensitive + token-AND matching across the college name AND its aliases:
+    the query and the names are normalised (lowercased, every run of non-alphanumerics →
+    a single space), then EACH typed word must appear somewhere. So 'al ameen' finds
+    'Al-Ameen Medical College' (hyphen ignored), 'ameen bijapur' finds it too (any order),
+    and a middle/last word alone matches. Auth: X-PG-Key OR a logged-in admin/team
+    session (so the portal's own screens can reuse it). (founder 2026-10-05)"""
+    if not (_authorized() or session.get('is_admin')):
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    import re
+    raw = (request.args.get('q') or '').strip()
+    qn = re.sub(r'[^a-z0-9]+', ' ', raw.lower()).strip()
+    tokens = [t for t in qn.split() if t][:6]        # cap at 6 words
+    try:
+        limit = min(int(request.args.get('limit') or 20), 50)
+    except (TypeError, ValueError):
+        limit = 20
+    if len(qn) < 2 or not tokens:
+        return jsonify({'ok': True, 'colleges': [], 'count': 0})
+    conn = get_db()
+    try:
+        norm = "btrim(regexp_replace(lower(m.college_name), '[^a-z0-9]+', ' ', 'g'))"
+        hay = (norm + " || ' ' || COALESCE((SELECT string_agg(a.alias_key, ' ') "
+               "FROM pg_college_alias a WHERE a.master_id = m.id), '')")
+        inner = (f"SELECT m.id, m.college_name, m.city, m.state, {norm} AS nname, {hay} AS hay "
+                 f"FROM pg_college_master m WHERE m.kind = 'medical'")
+        where = " AND ".join(["s.hay LIKE ?"] * len(tokens))
+        params = ['%' + t + '%' for t in tokens]
+        sql = (f"SELECT s.id, s.college_name, s.city, s.state FROM ({inner}) s "
+               f"WHERE {where} "
+               f"ORDER BY (CASE WHEN s.nname LIKE ? THEN 0 ELSE 1 END), "
+               f"length(s.college_name), s.college_name LIMIT ?")
+        params = params + [qn + '%', limit]
+        rows = [dict(x) for x in conn.execute(sql, params).fetchall()]
+        out = [{'id': r['id'], 'name': r['college_name'],
+                'city': r.get('city') or '', 'state': r.get('state') or ''} for r in rows]
+        return jsonify({'ok': True, 'colleges': out, 'count': len(out)})
+    except Exception as e:
+        logging.error("api_pg_college_lookup: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
 
 
 # ── College Database ─────────────────────────────────────────────────────────
