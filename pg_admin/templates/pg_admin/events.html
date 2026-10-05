@@ -334,10 +334,10 @@
             else { dHistory.innerHTML = histItem(d.new_entry) + dHistory.innerHTML; }
           }
           row.dataset.editedby=d.edited_by||''; row.dataset.editedat=d.edited_at||'';
-          // reflect the new edited stamp in the drawer context + clear the note box
           F.notes.value='';
           renderRow(row); recount(); applyFilters();
-          dSave.textContent='Saved ✓'; setTimeout(function(){ if(!dSave.disabled) dSave.textContent='Save'; }, 1400);
+          dSave.textContent='Save';
+          closeDrawer();   // return to the (now-updated) list to pick the next candidate
         })
         .catch(function(){ dSave.disabled=false; dSave.textContent='Save'; dErr.textContent='Network error — not saved. Please try again.'; dErr.style.display='block'; });
     });
