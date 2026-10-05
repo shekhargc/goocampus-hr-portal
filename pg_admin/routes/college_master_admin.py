@@ -15,6 +15,7 @@ from flask import render_template, request, redirect, url_for, flash
 from db import get_db
 from core.users import get_user
 from core.auth import login_required
+from pg_admin.routes.api import smart_name_clause
 
 _MASTER_COLS = {
     'College Name': 'college_name', 'University': 'university', 'Logo URL': 'logo_url',
@@ -515,7 +516,7 @@ def college_database_list():
         _ensure_course_categories(conn)
         where, params = [], []
         if q:
-            where.append("m.college_name ILIKE ?"); params.append('%' + q + '%')
+            frag, fp = smart_name_clause("m.college_name", q); where.append(frag); params.extend(fp)
         if cat in _CAT_KEYS:
             where.append("EXISTS (SELECT 1 FROM pg_college_course c "
                          "WHERE c.master_id = m.id AND c.course_category = ?)")
@@ -781,7 +782,7 @@ def college_stipend():
         if state:
             where.append("c.state = ?"); params.append(state)
         if q:
-            where.append("c.institute ILIKE ?"); params.append('%' + q + '%')
+            frag, fp = smart_name_clause("c.institute", q); where.append(frag); params.extend(fp)
         wsql = " WHERE " + " AND ".join(where)
         total = conn.execute("SELECT COUNT(DISTINCT c.institute) AS n FROM pg_cutoffs c" + wsql,
                              params).fetchone()['n']
@@ -890,7 +891,9 @@ def college_fees():
     if category:
         where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(category)
     if q:
-        where.append("(c.institute ILIKE ? OR c.course ILIKE ?)"); params.extend(['%'+q+'%', '%'+q+'%'])
+        fi, pi = smart_name_clause("c.institute", q)
+        fc, pc = smart_name_clause("c.course", q)
+        where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
     wsql = " WHERE " + " AND ".join(where)
     grp = " GROUP BY c.institute, c.course, c.quota, c.category "
     conn = get_db()

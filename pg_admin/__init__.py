@@ -169,6 +169,8 @@ def register_pg_admin(app):
                      api_news.api_pg_news_pdf, methods=['GET'])
 
     # ── Public API for goocampus.in: PG College Database + Stipend (X-PG-Key) ──
+    app.add_url_rule('/api/pg/college-lookup', 'api_pg_college_lookup',
+                     api_college.api_pg_college_lookup, methods=['GET'])
     app.add_url_rule('/api/pg/pg-colleges', 'api_pg_pg_colleges',
                      api_college.api_pg_pg_colleges, methods=['GET'])
     app.add_url_rule('/api/pg/pg-colleges/facets', 'api_pg_pg_colleges_facets',

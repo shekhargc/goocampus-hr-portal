@@ -10,9 +10,9 @@ DB) + pg_cutoffs (predictor + stipend). Mirrors the goocampus.org admin screens:
   GET /api/pg/stipend/<id>               per-speciality stipend detail
 """
 import logging
-from flask import request, jsonify
+from flask import request, jsonify, session
 from db import get_db
-from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
+from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token, smart_name_clause
 
 _PER_PAGE = 100
 _CAT_LABELS = [('mbbs', 'MBBS (UG)'), ('mdms', 'MD / MS'),
@@ -39,6 +39,63 @@ def _num(v):
     return float(v) if v is not None else None
 
 
+def api_pg_college_lookup():
+    """GET /api/pg/college-lookup?q=&limit=  — type-ahead search over the MEDICAL college
+    master, for the MBBS-college picker on the goocampus.in onboarding form.
+
+    Punctuation-insensitive + token-AND matching across the college name AND its aliases:
+    the query and the names are normalised (lowercased, every run of non-alphanumerics →
+    a single space), then EACH typed word must appear somewhere. So 'al ameen' finds
+    'Al-Ameen Medical College' (hyphen ignored), 'ameen bijapur' finds it too (any order),
+    and a middle/last word alone matches. Auth: X-PG-Key OR a logged-in admin/team
+    session (so the portal's own screens can reuse it). (founder 2026-10-05)"""
+    if not (_authorized() or session.get('is_admin')):
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    import re
+    raw = (request.args.get('q') or '').strip()
+    qn = re.sub(r'[^a-z0-9]+', ' ', raw.lower()).strip()
+    tokens = [t for t in qn.split() if t][:6]        # cap at 6 words
+    try:
+        limit = min(int(request.args.get('limit') or 20), 50)
+    except (TypeError, ValueError):
+        limit = 20
+    if len(qn) < 2 or not tokens:
+        return jsonify({'ok': True, 'colleges': [], 'count': 0})
+    conn = get_db()
+    try:
+        norm = "btrim(regexp_replace(lower(m.college_name), '[^a-z0-9]+', ' ', 'g'))"
+        hay = (norm + " || ' ' || COALESCE((SELECT string_agg(a.alias_key, ' ') "
+               "FROM pg_college_alias a WHERE a.master_id = m.id), '')")
+        inner = (f"SELECT m.id, m.college_name, m.city, m.state, {norm} AS nname, {hay} AS hay "
+                 f"FROM pg_college_master m WHERE m.kind = 'medical'")
+        # Match if EITHER every typed word appears somewhere (any order) OR — for a run-on
+        # query like 'alameen' — the whole thing (spaces removed) is a substring of the
+        # name with spaces removed. The run-on branch only kicks in at 4+ chars so short
+        # queries don't match half the list.
+        token_cond = "(" + " AND ".join(["s.hay LIKE ?"] * len(tokens)) + ")"
+        params = ['%' + t + '%' for t in tokens]
+        despaced = qn.replace(' ', '')
+        conds = [token_cond]
+        if len(despaced) >= 4:
+            conds.append("replace(s.hay, ' ', '') LIKE ?")
+            params.append('%' + despaced + '%')
+        where = "(" + " OR ".join(conds) + ")"
+        sql = (f"SELECT s.id, s.college_name, s.city, s.state FROM ({inner}) s "
+               f"WHERE {where} "
+               f"ORDER BY (CASE WHEN s.nname LIKE ? THEN 0 ELSE 1 END), "
+               f"length(s.college_name), s.college_name LIMIT ?")
+        params = params + [qn + '%', limit]
+        rows = [dict(x) for x in conn.execute(sql, params).fetchall()]
+        out = [{'id': r['id'], 'name': r['college_name'],
+                'city': r.get('city') or '', 'state': r.get('state') or ''} for r in rows]
+        return jsonify({'ok': True, 'colleges': out, 'count': len(out)})
+    except Exception as e:
+        logging.error("api_pg_college_lookup: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 # ── College Database ─────────────────────────────────────────────────────────
 def api_pg_pg_colleges():
     """GET /api/pg/pg-colleges?cat=&state=&q=&page="""
@@ -52,7 +109,7 @@ def api_pg_pg_colleges():
     try:
         where, params = ["1=1"], []
         if q:
-            where.append("m.college_name ILIKE ?"); params.append('%' + q + '%')
+            frag, fp = smart_name_clause("m.college_name", q); where.append(frag); params.extend(fp)
         if cat in _CAT_KEYS:
             where.append("EXISTS (SELECT 1 FROM pg_college_course cc "
                          "WHERE cc.master_id = m.id AND cc.course_category = ?)")
@@ -199,7 +256,7 @@ def api_pg_stipend():
         if state:
             where.append("c.state = ?"); params.append(state)
         if q:
-            where.append("c.institute ILIKE ?"); params.append('%' + q + '%')
+            frag, fp = smart_name_clause("c.institute", q); where.append(frag); params.extend(fp)
         wsql = " WHERE " + " AND ".join(where)
         total = conn.execute("SELECT COUNT(DISTINCT c.institute) AS n FROM pg_cutoffs c" + wsql,
                              params).fetchone()['n']
@@ -314,8 +371,9 @@ def _fee_where(f):
     if f['college_type']:
         where.append("LOWER(TRIM(c.institute_type)) = LOWER(TRIM(?))"); params.append(f['college_type'])
     if f['q']:
-        where.append("(c.institute ILIKE ? OR c.course ILIKE ?)")
-        params.extend(['%' + f['q'] + '%', '%' + f['q'] + '%'])
+        fi, pi = smart_name_clause("c.institute", f['q'])
+        fc, pc = smart_name_clause("c.course", f['q'])
+        where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
     return where, params
 
 

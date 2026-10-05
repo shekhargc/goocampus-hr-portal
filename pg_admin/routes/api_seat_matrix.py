@@ -8,7 +8,7 @@ government document (so the user's browser can open it directly).
 import logging
 from flask import request, jsonify, Response
 from db import get_db
-from pg_admin.routes.api import _authorized
+from pg_admin.routes.api import _authorized, smart_name_clause
 
 DEFAULT_BODY = 'All India MCC'
 DEFAULT_YEAR = '2026-27'
@@ -48,8 +48,8 @@ def api_pg_seat_matrix():
     if course:
         conds.append("course_name = ?"); params.append(course)
     if q:
-        conds.append("(college_name ILIKE ? OR college_code ILIKE ?)")
-        like = f"%{q}%"; params.extend([like, like])
+        fn, pn = smart_name_clause("college_name", q)
+        conds.append(f"({fn} OR college_code ILIKE ?)"); params.extend(pn + [f"%{q}%"])
     where = " AND ".join(conds)
 
     conn = get_db()

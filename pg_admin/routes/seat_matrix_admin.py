@@ -160,8 +160,9 @@ def seat_matrix_admin():
             if f_course:
                 conds.append("course_name=?"); params.append(f_course)
             if f_q:
-                conds.append("(college_name ILIKE ? OR college_code ILIKE ?)")
-                like = f"%{f_q}%"; params.extend([like, like])
+                from pg_admin.routes.api import smart_name_clause
+                fn, pn = smart_name_clause("college_name", f_q)
+                conds.append(f"({fn} OR college_code ILIKE ?)"); params.extend(pn + [f"%{f_q}%"])
             where = " AND ".join(conds)
             total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_seat_matrix WHERE {where}",
                                  params).fetchone()['n']

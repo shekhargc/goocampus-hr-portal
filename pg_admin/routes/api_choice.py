@@ -7,7 +7,7 @@ import json
 import logging
 from flask import request, jsonify
 from db import get_db
-from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
+from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token, smart_name_clause
 from pg_admin.data import entitlements
 
 _PER_PAGE = 100
@@ -102,9 +102,9 @@ def api_pg_cutoff_explorer():
         if college_type:
             where.append("c.institute_type ILIKE ?"); params.append('%' + college_type + '%')
         if course:
-            where.append("c.course ILIKE ?"); params.append('%' + course + '%')
+            frag, fp = smart_name_clause("c.course", course); where.append(frag); params.extend(fp)
         if q:
-            where.append("c.institute ILIKE ?"); params.append('%' + q + '%')
+            frag, fp = smart_name_clause("c.institute", q); where.append(frag); params.extend(fp)
         wsql = " WHERE " + " AND ".join(where)
         grp = (" GROUP BY c.institute, c.course, c.authority, c.quota, c.category, c.degree, "
                "c.state, c.institute_type, c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank ")
