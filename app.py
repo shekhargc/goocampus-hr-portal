@@ -29917,6 +29917,95 @@ def _svc_detail_row(key, r):
     return out
 
 
+# ── "Paid by" per delivered service line (founder 2026-10-06) ──
+# Recorded centrally on the Services Detail list (not in the 15 section forms), keyed by the
+# source record. Where a section already has a "Booked by" dropdown (Test Bookings, Online
+# Courses, Online Subscriptions) that value is used until the team sets one here.
+# "Booking included in Package" counts as GooCampus spend (founder decision).
+# amount_spent is reserved for Step 2 (cost per service).
+
+_PAID_BY_CHOICES = ('GooCampus', 'Client')
+_PAID_BY_MAP = {
+    'booked & paid by goocampus': 'GooCampus',
+    'booking included in package': 'GooCampus',
+    'booked by gc / paid by client': 'Client',
+    'booked and paid by client': 'Client',
+    'booked & paid by candidate': 'Client',
+    'booked by goocampus paid by candidate': 'Client',
+}
+
+
+def _paid_by_from_booked(v):
+    s = ' '.join(str(v or '').lower().split())
+    if not s:
+        return ''
+    if s in _PAID_BY_MAP:
+        return _PAID_BY_MAP[s]
+    if 'package' in s:
+        return 'GooCampus'
+    if 'paid by client' in s or 'paid by candidate' in s:
+        return 'Client'
+    if 'paid by goocampus' in s or 'paid by gc' in s:
+        return 'GooCampus'
+    return ''
+
+
+def _ensure_service_meta(conn):
+    """Request-time guarded (Render cold-start can skip boot DDL)."""
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_service_meta (
+            id SERIAL PRIMARY KEY,
+            source_table TEXT NOT NULL,
+            record_id INTEGER NOT NULL,
+            section_key TEXT DEFAULT '',
+            registration_number TEXT DEFAULT '',
+            paid_by TEXT DEFAULT '',
+            amount_spent NUMERIC(14,2),
+            notes TEXT DEFAULT '',
+            updated_by TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_ops_service_meta "
+                     "ON ops_service_meta (source_table, record_id)")
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_service_meta_log (
+            id SERIAL PRIMARY KEY,
+            source_table TEXT, record_id INTEGER, field TEXT,
+            old_value TEXT, new_value TEXT,
+            changed_by TEXT DEFAULT '',
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+    except Exception as e:
+        logging.warning(f"_ensure_service_meta: {e}")
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _load_service_meta(conn):
+    """{(source_table, record_id): meta dict} for every recorded service line."""
+    out = {}
+    try:
+        for m in conn.execute("SELECT source_table, record_id, paid_by, notes, updated_by, updated_at "
+                              "FROM ops_service_meta").fetchall():
+            m = dict(m)
+            out[(m['source_table'], m['record_id'])] = m
+    except Exception as e:
+        logging.warning(f"_load_service_meta: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    return out
+
+
+def _resolve_paid_by(source_table, record_id, booked_by, meta):
+    """→ (paid_by, source): the team's entry wins, else the section's own 'Booked by'."""
+    m = meta.get((source_table, record_id))
+    if m and (m.get('paid_by') or '') in _PAID_BY_CHOICES:
+        return m['paid_by'], 'team'
+    pb = _paid_by_from_booked(booked_by)
+    return (pb, 'booked_by') if pb else ('', '')
+
+
 def _plab_filtered_clients(conn, search='', status_filter='', stage_filter=''):
     sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='plab' "
     params = []
@@ -29934,9 +30023,8 @@ def _plab_filtered_clients(conn, search='', status_filter='', stage_filter=''):
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='', section_filter=''):
-    """Return (rows, statuses, stages): one row per delivered service line for PLAB/UK clients."""
-    clients = _plab_filtered_clients(conn, search, status_filter, stage_filter)
+def _plab_client_index(clients):
+    """→ (by_reg, by_id, order) for a filtered PLAB client list."""
     by_reg, by_id, order = {}, {}, {}
     for i, c in enumerate(clients):
         name = ' '.join(f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".split())
@@ -29950,30 +30038,31 @@ def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='
             by_reg[rn] = info
         by_id[c.get('id')] = info
         order[c.get('id')] = i
-    sec_order = {k: n for n, (k, _l, _t) in enumerate(PLAB_SERVICE_COLUMNS)}
-    sec_label = {k: l for k, l, _t in PLAB_SERVICE_COLUMNS}
+    return by_reg, by_id, order
 
-    rows = []
+
+def _plab_iter_service_records(conn, by_reg, by_id, section_filter=''):
+    """Yield (key, label, source_table, client_info, raw_record) for every delivered PLAB
+    service record belonging to an indexed client. Raw records are full rows — callers must
+    pick display fields explicitly (some tables hold credentials)."""
     for key, label, tables in PLAB_SERVICE_COLUMNS:
         if section_filter and key != section_filter:
             continue
         if key == 'certificates':
             try:
-                for d in conn.execute(
-                        "SELECT client_id, doc_type, file_name, status, uploaded_at FROM plab_client_documents "
-                        "WHERE LOWER(COALESCE(doc_category,'')) = 'certificate' ORDER BY id").fetchall():
-                    d = dict(d)
-                    info = by_id.get(d.get('client_id'))
-                    if not info:
-                        continue
-                    rows.append({**info, 'section_key': key, 'section': label,
-                                 'service': d.get('doc_type') or 'Certificate', 'provider': '',
-                                 'date': _svc_date(d.get('uploaded_at')), 'status': d.get('status') or '',
-                                 'details': d.get('file_name') or '', 'amount': ''})
+                docs = [dict(d) for d in conn.execute(
+                    "SELECT id, client_id, doc_type, file_name, status, notes, uploaded_by, uploaded_at "
+                    "FROM plab_client_documents WHERE LOWER(COALESCE(doc_category,'')) = 'certificate' "
+                    "ORDER BY id").fetchall()]
             except Exception as e:
                 logging.warning(f"services detail certificates: {e}")
                 try: conn.rollback()
                 except Exception: pass
+                docs = []
+            for d in docs:
+                info = by_id.get(d.get('client_id'))
+                if info:
+                    yield key, label, 'plab_client_documents', info, d
             continue
         for table in tables:
             try:
@@ -29986,9 +30075,40 @@ def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='
                 continue
             for r in recs:
                 info = by_reg.get((r.get('registration_number') or '').strip().upper())
-                if not info:
-                    continue   # not a client in the current (filtered) list
-                rows.append({**info, 'section_key': key, 'section': label, **_svc_detail_row(key, r)})
+                if info:            # skip records whose client isn't in the (filtered) list
+                    yield key, label, table, info, r
+
+
+def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='', section_filter='',
+                               paid_filter=''):
+    """Return (rows, statuses, stages): one row per delivered service line for PLAB/UK clients,
+    each carrying its source record + resolved Paid by. paid_filter: GooCampus | Client | none."""
+    clients = _plab_filtered_clients(conn, search, status_filter, stage_filter)
+    by_reg, by_id, order = _plab_client_index(clients)
+    _ensure_service_meta(conn)
+    meta = _load_service_meta(conn)
+    sec_order = {k: n for n, (k, _l, _t) in enumerate(PLAB_SERVICE_COLUMNS)}
+
+    rows = []
+    for key, label, table, info, r in _plab_iter_service_records(conn, by_reg, by_id, section_filter):
+        if key == 'certificates':
+            base = {'service': r.get('doc_type') or 'Certificate', 'provider': '',
+                    'date': _svc_date(r.get('uploaded_at')), 'status': r.get('status') or '',
+                    'details': r.get('file_name') or '', 'amount': ''}
+        else:
+            base = _svc_detail_row(key, r)
+        pb, src = _resolve_paid_by(table, r.get('id'), r.get('booked_by'), meta)
+        if paid_filter == 'none' and pb:
+            continue
+        if paid_filter in _PAID_BY_CHOICES and pb != paid_filter:
+            continue
+        m = meta.get((table, r.get('id'))) or {}
+        rows.append({**info, 'section_key': key, 'section': label, **base,
+                     'source_table': table, 'record_id': r.get('id'),
+                     'booked_by': str(r.get('booked_by') or ''),
+                     'paid_by': pb, 'paid_by_source': src,
+                     'meta_notes': m.get('notes') or '', 'meta_by': m.get('updated_by') or '',
+                     'meta_at': str(m.get('updated_at') or '')[:16]})
 
     rows.sort(key=lambda x: (order.get(x['client_id'], 10**9), sec_order.get(x['section_key'], 99),
                              str(x.get('date') or '')))
@@ -29998,24 +30118,88 @@ def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='
 
 
 _SVC_DETAIL_PER_PAGE = 300
+_SVC_PAID_SOURCE_LABEL = {'team': 'Set by team', 'booked_by': "From section's 'Booked by'", '': ''}
+# Raw-record columns never exported in the full workbook: credentials, internals, file blobs.
+_SVC_EXPORT_SKIP_PATTERN = ('pass', 'pwd', 'secret', 'security', 'hint', 'login')
+_SVC_EXPORT_SKIP_EXACT = {'id', 'pathway', 'client_id', 'file_data', 'file_path', 'registration_number'}
+
+
+def _svc_filters(src):
+    """q/status/stage/section/paid from request.args or request.form."""
+    return {k: (src.get(k, '') or '').strip() for k in ('q', 'status', 'stage', 'section', 'paid')}
+
+
+def _svc_xl_value(v):
+    """Excel-safe cell value: no blobs, dates as text, strip illegal XML chars."""
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+    import datetime as _dtm
+    from decimal import Decimal
+    if v is None or isinstance(v, (bytes, bytearray, memoryview)):
+        return ''
+    if isinstance(v, bool):
+        return 'Yes' if v else 'No'
+    if isinstance(v, Decimal):
+        return float(v)
+    if isinstance(v, (_dtm.datetime, _dtm.date)):
+        return str(v)[:19]
+    if isinstance(v, str):
+        return ILLEGAL_CHARACTERS_RE.sub('', v)
+    return v
+
+
+def _svc_xl_style(ws, widths, freeze='C2'):
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    navy = PatternFill('solid', fgColor='0F1B33')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF'); cell.fill = navy
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.freeze_panes = freeze
+    if ws.max_row > 1:
+        ws.auto_filter.ref = ws.dimensions
+    for idx, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = w
+
+
+def _svc_xl_send(wb, fn_prefix):
+    import io
+    from datetime import datetime
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    fn = f"{fn_prefix}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=fn)
+
+
+_SVC_ALL_HEADERS = ['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
+                    'Current Stage', 'Section', 'Service', 'Provider / Vendor', 'Date', 'Status',
+                    'Details', 'Paid by', 'Paid by — source', 'Booked by (as entered)', 'Team notes',
+                    'Amount (if recorded)']
+_SVC_ALL_WIDTHS = [26, 20, 15, 14, 20, 22, 34, 28, 22, 20, 36, 12, 22, 26, 28, 14]
+
+
+def _svc_all_line(r):
+    v = _svc_xl_value
+    return [v(r['name']), v(r['registration_number']), v(r['registration_date']), v(r['account_status']),
+            v(r['current_stage']), v(r['section']), v(r['service']), v(r['provider']), v(r['date']),
+            v(r['status']), v(r['details']), v(r['paid_by'] or 'Not set'),
+            v(_SVC_PAID_SOURCE_LABEL.get(r['paid_by_source'], '')), v(r['booked_by']),
+            v(r['meta_notes']), v(r['amount'])]
 
 
 @app.route('/operations/plab/services-detail')
 @admin_required
 def ops_plab_services_detail():
-    """PLAB/UK Services DETAIL — every delivered service line, per client."""
+    """PLAB/UK Services DETAIL — every delivered service line, per client, with Paid by."""
     conn = get_db()
-    search = (request.args.get('q', '') or '').strip()
-    status_filter = (request.args.get('status', '') or '').strip()
-    stage_filter = (request.args.get('stage', '') or '').strip()
-    section_filter = (request.args.get('section', '') or '').strip()
+    f = _svc_filters(request.args)
     try:
         page = max(1, int(request.args.get('page', 1) or 1))
     except Exception:
         page = 1
     rows, statuses, stages = [], [], []
     try:
-        rows, statuses, stages = _plab_services_detail_data(conn, search, status_filter, stage_filter, section_filter)
+        rows, statuses, stages = _plab_services_detail_data(conn, f['q'], f['status'], f['stage'],
+                                                            f['section'], f['paid'])
     except Exception as e:
         logging.warning(f"ops_plab_services_detail: {e}")
         try: conn.rollback()
@@ -30025,64 +30209,189 @@ def ops_plab_services_detail():
     total_pages = max(1, (total + _SVC_DETAIL_PER_PAGE - 1) // _SVC_DETAIL_PER_PAGE)
     page = min(page, total_pages)
     start = (page - 1) * _SVC_DETAIL_PER_PAGE
+    paid_counts = {'GooCampus': 0, 'Client': 0, 'none': 0}
+    for r in rows:
+        paid_counts[r['paid_by'] or 'none'] = paid_counts.get(r['paid_by'] or 'none', 0) + 1
     return render_template(
         'ops_plab_services_detail.html',
         rows=rows[start:start + _SVC_DETAIL_PER_PAGE], total=total, page=page, total_pages=total_pages,
-        page_offset=start, client_count=len({r['client_id'] for r in rows}),
+        page_offset=start, client_count=len({r['client_id'] for r in rows}), paid_counts=paid_counts,
         statuses=statuses, stages=stages, sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
-        q=search, status_filter=status_filter, stage_filter=stage_filter, section_filter=section_filter,
-        active_ops_page='plab-services-summary',
+        paid_choices=_PAID_BY_CHOICES, paid_source_label=_SVC_PAID_SOURCE_LABEL,
+        q=f['q'], status_filter=f['status'], stage_filter=f['stage'], section_filter=f['section'],
+        paid_filter=f['paid'], active_ops_page='plab-services-summary',
     )
+
+
+@app.route('/operations/plab/services-detail/paid-by', methods=['POST'])
+@admin_required
+def ops_plab_services_paid_by():
+    """Set 'Paid by' (GooCampus / Client, or clear) for one or many service lines — from the
+    row drawer (with notes) or the bulk bar (no notes field → notes untouched). Logged."""
+    f = _svc_filters(request.form)
+    page = (request.form.get('page') or '').strip()
+    back = {k: v for k, v in f.items() if v}
+    if page.isdigit():
+        back['page'] = page
+    paid_by = (request.form.get('paid_by') or '').strip()
+    notes = request.form.get('notes')          # None when posted from the bulk bar
+    if paid_by not in _PAID_BY_CHOICES + ('',):
+        flash('Pick GooCampus or Client.', 'error')
+        return redirect(url_for('ops_plab_services_detail', **back))
+    allowed = {t: k for k, _l, ts in PLAB_SERVICE_COLUMNS for t in ts}
+    allowed['plab_client_documents'] = 'certificates'
+    items = []
+    for it in request.form.getlist('items'):
+        table, _, rid = (it or '').partition(':')
+        if table in allowed and rid.isdigit():
+            items.append((table, int(rid)))
+    if not items:
+        flash('Select at least one service line.', 'error')
+        return redirect(url_for('ops_plab_services_detail', **back))
+    user = get_user() or {}
+    who = user.get('name') or user.get('emp_code') or 'ops'
+    conn = get_db()
+    changed = 0
+    try:
+        _ensure_service_meta(conn)
+        meta = _load_service_meta(conn)
+        for table, rid in items:
+            old = meta.get((table, rid)) or {}
+            old_pb, old_notes = old.get('paid_by') or '', old.get('notes') or ''
+            new_notes = old_notes if notes is None else notes.strip()
+            if old and old_pb == paid_by and old_notes == new_notes:
+                continue
+            conn.execute(
+                "INSERT INTO ops_service_meta (source_table, record_id, section_key, paid_by, notes, "
+                "updated_by, updated_at) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP) "
+                "ON CONFLICT (source_table, record_id) DO UPDATE SET paid_by = EXCLUDED.paid_by, "
+                "notes = EXCLUDED.notes, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP",
+                (table, rid, allowed[table], paid_by, new_notes, who))
+            for field, a, b in (('paid_by', old_pb, paid_by), ('notes', old_notes, new_notes)):
+                if a != b:
+                    conn.execute("INSERT INTO ops_service_meta_log (source_table, record_id, field, "
+                                 "old_value, new_value, changed_by) VALUES (?,?,?,?,?,?)",
+                                 (table, rid, field, a, b, who))
+            changed += 1
+        conn.commit()
+        flash(f"Paid by {'cleared' if not paid_by else 'set to ' + paid_by} for {changed} service line(s)."
+              if changed else 'Nothing changed.', 'success')
+    except Exception as e:
+        logging.error(f"ops_plab_services_paid_by: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not save. Please try again.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('ops_plab_services_detail', **back))
 
 
 @app.route('/operations/plab/services-detail/download')
 @admin_required
 def ops_plab_services_detail_download():
-    """Excel of every delivered service line (respects current filters). Client Name +
-    Registration Number lead, per the export convention."""
-    import io
-    from datetime import datetime
+    """Single-sheet Excel of every delivered service line (respects current filters)."""
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.utils import get_column_letter
-    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
     conn = get_db()
-    search = (request.args.get('q', '') or '').strip()
-    status_filter = (request.args.get('status', '') or '').strip()
-    stage_filter = (request.args.get('stage', '') or '').strip()
-    section_filter = (request.args.get('section', '') or '').strip()
+    f = _svc_filters(request.args)
     try:
-        rows, _s, _g = _plab_services_detail_data(conn, search, status_filter, stage_filter, section_filter)
+        rows, _s, _g = _plab_services_detail_data(conn, f['q'], f['status'], f['stage'], f['section'], f['paid'])
     except Exception as e:
         logging.warning(f"ops_plab_services_detail_download: {e}")
         rows = []
     conn.close()
-
-    def _xs(v):
-        return ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
-
     wb = Workbook(); ws = wb.active; ws.title = 'PLAB Services Detail'
-    headers = ['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
-               'Current Stage', 'Section', 'Service', 'Provider / Vendor', 'Date', 'Status',
-               'Details', 'Amount (if recorded)']
-    ws.append(headers)
+    ws.append(_SVC_ALL_HEADERS)
     for r in rows:
-        ws.append([_xs(r['name']), _xs(r['registration_number']), _xs(r['registration_date']),
-                   _xs(r['account_status']), _xs(r['current_stage']), _xs(r['section']),
-                   _xs(r['service']), _xs(r['provider']), _xs(r['date']), _xs(r['status']),
-                   _xs(r['details']), _xs(r['amount'])])
-    navy = PatternFill('solid', fgColor='0F1B33')
-    for cell in ws[1]:
-        cell.font = Font(bold=True, color='FFFFFF'); cell.fill = navy
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    ws.freeze_panes = 'C2'
-    ws.auto_filter.ref = ws.dimensions
-    for idx, w in enumerate([26, 20, 15, 14, 20, 22, 34, 28, 22, 20, 36, 14], 1):
-        ws.column_dimensions[get_column_letter(idx)].width = w
-    out = io.BytesIO(); wb.save(out); out.seek(0)
-    fn = f"PLAB_UK_Services_Detail_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                     as_attachment=True, download_name=fn)
+        ws.append(_svc_all_line(r))
+    _svc_xl_style(ws, _SVC_ALL_WIDTHS)
+    return _svc_xl_send(wb, 'PLAB_UK_Services_Detail')
+
+
+@app.route('/operations/plab/services-detail/workbook')
+@admin_required
+def ops_plab_services_workbook():
+    """FULL workbook: 'Counts' (per client: times each service given + paid-by split),
+    'All services' (one row per line) and ONE SHEET PER SECTION with every field the team
+    entered (credentials / internal ids / file blobs excluded). Respects the client filters
+    (search / status / stage); always covers all sections."""
+    from openpyxl import Workbook
+    conn = get_db()
+    f = _svc_filters(request.args)
+    sec_keys = [(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS]
+    try:
+        clients = _plab_filtered_clients(conn, f['q'], f['status'], f['stage'])
+        by_reg, by_id, order = _plab_client_index(clients)
+        _ensure_service_meta(conn)
+        meta = _load_service_meta(conn)
+        per_section = {k: [] for k, _l in sec_keys}       # key -> [(info, table, raw, paid_by, src)]
+        for key, label, table, info, r in _plab_iter_service_records(conn, by_reg, by_id):
+            pb, src = _resolve_paid_by(table, r.get('id'), r.get('booked_by'), meta)
+            per_section[key].append((info, table, r, pb, src))
+        detail_rows, _st, _sg = _plab_services_detail_data(conn, f['q'], f['status'], f['stage'])
+    except Exception as e:
+        logging.error(f"ops_plab_services_workbook: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        conn.close()
+        flash('Could not build the workbook. Please try again.', 'error')
+        return redirect(url_for('ops_plab_services_detail'))
+    conn.close()
+
+    wb = Workbook()
+    # 1) Counts — per client
+    ws = wb.active; ws.title = 'Counts'
+    ws.append(['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
+               'Current Stage'] + [l for _k, l in sec_keys] +
+              ['Total services', 'Paid by GooCampus', 'Paid by Client', 'Paid by — not set'])
+    tally = {}
+    for key, recs in per_section.items():
+        for info, _t, _r, pb, _src in recs:
+            t = tally.setdefault(info['client_id'], {'_gc': 0, '_cl': 0, '_ns': 0})
+            t[key] = t.get(key, 0) + 1
+            t['_gc' if pb == 'GooCampus' else '_cl' if pb == 'Client' else '_ns'] += 1
+    for c in clients:
+        info = by_id.get(c.get('id'))
+        t = tally.get(c.get('id'), {})
+        counts = [t.get(k, 0) for k, _l in sec_keys]
+        ws.append([_svc_xl_value(info['name']), _svc_xl_value(info['registration_number']),
+                   _svc_xl_value(info['registration_date']), _svc_xl_value(info['account_status']),
+                   _svc_xl_value(info['current_stage'])] + counts +
+                  [sum(counts), t.get('_gc', 0), t.get('_cl', 0), t.get('_ns', 0)])
+    _svc_xl_style(ws, [26, 20, 15, 14, 20] + [12] * len(sec_keys) + [12, 14, 12, 14])
+
+    # 2) All services — one row per line
+    ws = wb.create_sheet('All services')
+    ws.append(_SVC_ALL_HEADERS)
+    for r in detail_rows:
+        ws.append(_svc_all_line(r))
+    _svc_xl_style(ws, _SVC_ALL_WIDTHS)
+
+    # 3) One sheet per section — every recorded field
+    used_titles = {'Counts', 'All services'}
+    for key, label in sec_keys:
+        recs = per_section.get(key) or []
+        cols = []
+        for _i, _t, r, _p, _s in recs:
+            for c in r.keys():
+                cl = c.lower()
+                if c in cols or c in _SVC_EXPORT_SKIP_EXACT or any(p in cl for p in _SVC_EXPORT_SKIP_PATTERN):
+                    continue
+                cols.append(c)
+        title = label.replace('/', '-').replace('&', 'and')[:31]
+        while title in used_titles:
+            title = title[:28] + '_2'
+        used_titles.add(title)
+        ws = wb.create_sheet(title)
+        ws.append(['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
+                   'Paid by', 'Paid by — source'] + [c.replace('_', ' ').title() for c in cols])
+        recs.sort(key=lambda x: (order.get(x[0]['client_id'], 10**9), x[2].get('id') or 0))
+        for info, _t, r, pb, src in recs:
+            ws.append([_svc_xl_value(info['name']), _svc_xl_value(info['registration_number']),
+                       _svc_xl_value(info['registration_date']), _svc_xl_value(info['account_status']),
+                       pb or 'Not set', _SVC_PAID_SOURCE_LABEL.get(src, '')] +
+                      [_svc_xl_value(r.get(c)) for c in cols])
+        _svc_xl_style(ws, [26, 20, 15, 14, 12, 20] + [18] * len(cols))
+    return _svc_xl_send(wb, 'PLAB_UK_Services_Full_Workbook')
 
 
 @app.route('/operations/plab/clients/<int:client_id>/welcome-kit', methods=['POST'])
@@ -50705,6 +51014,10 @@ ACCESS_ROUTE_MAP = {
     # ── Operations: PLAB Pathway ──────────────────────────────────────────
     'ops_plab_services_summary':          _ap('plab_pathway', 'services_summary'),
     'ops_plab_services_summary_download': _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_detail':           _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_detail_download':  _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_workbook':         _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_paid_by':          _ap('plab_pathway', 'services_summary', 'edit'),
     'ops_plab_welcome_kit_toggle':        _ap('plab_pathway', 'registration', 'edit'),
     'ops_plab_list':                _ap('plab_pathway', 'registration'),
     'ops_plab_dashboard':           _ap('plab_pathway', 'registration'),
