@@ -27,7 +27,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              bookings_admin, college_master_admin, api_college,
                              pgcp_admin, api_pgcp, api_choice, choice_admin,
                              api_events, events_admin, api_track, analytics_admin,
-                             diag_home_state, seat_matrix_admin, api_seat_matrix,
+                             diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities)
 
 
@@ -375,6 +375,8 @@ def register_pg_admin(app):
                      users_admin.plan_diag, methods=['GET'])
     app.add_url_rule('/admin/pg/diag/home-state', 'pg_home_state_backfill',
                      diag_home_state.home_state_backfill, methods=['GET', 'POST'])
+    app.add_url_rule('/admin/diag/pg-states', 'pg_states_cleanup',
+                     diag_states.pg_states_cleanup, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/save', 'pg_user_save',
                      users_admin.user_save, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/followup', 'pg_user_followup_add',
