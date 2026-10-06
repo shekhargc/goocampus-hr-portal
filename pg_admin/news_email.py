@@ -136,28 +136,50 @@ def build_news_email_html(news, is_free, name=""):
 
 
 def _recipients(conn):
-    """All registered doctors with a usable email + whether they are a 'free' user.
-    Excludes explicit team (staff) accounts. 'free' = no active paid/counselling plan."""
-    rows = conn.execute(
-        "SELECT u.id, u.name, LOWER(TRIM(u.email)) AS email, "
-        "  COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) AS is_team, "
-        "  EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
-        "          WHERE s.user_id = u.id AND s.status = 'active' "
-        "          AND p.plan_kind IN ('paid','counselling') "
-        "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
-        "FROM pg_users u "
-        "WHERE COALESCE(u.email,'') <> '' AND u.email LIKE '%@%'"
-    ).fetchall()
+    """Everyone who should get a news alert, de-duplicated by email:
+    - Registered doctors (pg_users) — incl. team members now (founder 2026-10-06).
+      'free' (gets the upgrade banner) = a NON-team doctor with NO active paid/counselling plan.
+    - Internal staff (active employees) — always the clean update, greeted by name, no banner.
+    Paid users, internal clients and staff all get the personalised update with no banner."""
     out, seen = [], set()
-    for r in rows:
-        r = dict(r)
-        if r.get("is_team"):
-            continue
-        em = (r.get("email") or "").strip()
-        if not em or "@" not in em or em in seen:
-            continue
-        seen.add(em)
-        out.append({"email": em, "name": r.get("name") or "", "is_free": not r.get("has_plan")})
+    try:
+        rows = conn.execute(
+            "SELECT u.id, u.name, LOWER(TRIM(u.email)) AS email, "
+            "  COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) AS is_team, "
+            "  EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
+            "          WHERE s.user_id = u.id AND s.status = 'active' "
+            "          AND p.plan_kind IN ('paid','counselling') "
+            "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
+            "FROM pg_users u "
+            "WHERE COALESCE(u.email,'') <> '' AND u.email LIKE '%@%'"
+        ).fetchall()
+        for r in rows:
+            r = dict(r)
+            em = (r.get("email") or "").strip()
+            if not em or "@" not in em or em in seen:
+                continue
+            seen.add(em)
+            is_free = (not r.get("is_team")) and (not r.get("has_plan"))
+            out.append({"email": em, "name": r.get("name") or "", "is_free": is_free})
+    except Exception as e:
+        logger.error("news blast recipients (doctors): %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    # Internal staff / employees — the clean update, named, no upgrade banner.
+    try:
+        for r in conn.execute(
+                "SELECT name, LOWER(TRIM(email)) AS email FROM employees "
+                "WHERE is_active = 1 AND COALESCE(email,'') <> '' AND email LIKE '%@%'").fetchall():
+            r = dict(r)
+            em = (r.get("email") or "").strip()
+            if not em or "@" not in em or em in seen:
+                continue
+            seen.add(em)
+            out.append({"email": em, "name": r.get("name") or "", "is_free": False})
+    except Exception as e:
+        logger.error("news blast recipients (staff): %s", e)
+        try: conn.rollback()
+        except Exception: pass
     return out
 
 
