@@ -344,6 +344,10 @@ def register_pg_admin(app):
     # ── Registered Doctors admin ───────────────────────────────────────────
     app.add_url_rule('/admin/pg/users', 'pg_users_admin',
                      users_admin.users_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/users/followups', 'pg_users_followups',
+                     users_admin.users_followups, methods=['GET'])
+    app.add_url_rule('/admin/pg/users/visits', 'pg_users_visits',
+                     users_admin.users_visits, methods=['GET'])
     app.add_url_rule('/admin/pg/users/<int:user_id>', 'pg_user_detail',
                      users_admin.user_detail, methods=['GET'])
     app.add_url_rule('/admin/pg/diag/plan', 'pg_plan_diag',

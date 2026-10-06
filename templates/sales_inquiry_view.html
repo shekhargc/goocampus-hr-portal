@@ -92,6 +92,17 @@
             </select>
           </div>
         </div>
+        <div style="margin-bottom:8px;display:flex;gap:6px;align-items:center;">
+          <label style="font-size:.78rem;color:#64748b;white-space:nowrap;">Visit office?</label>
+          <select class="inp" name="visit_office" id="inqVisit" style="flex:0 0 90px;"
+                  onchange="document.getElementById('inqVisitDate').style.display=this.value==='yes'?'block':'none';">
+            <option value="">—</option>
+            <option value="yes" {{ 'selected' if fu_state.visit_office=='yes' }}>Yes</option>
+            <option value="no" {{ 'selected' if fu_state.visit_office=='no' }}>No</option>
+          </select>
+          <input type="date" class="inp" id="inqVisitDate" name="visit_date" value="{{ fu_state.visit_date or '' }}"
+                 style="flex:1;display:{{ 'block' if fu_state.visit_office=='yes' else 'none' }};" placeholder="visit date">
+        </div>
         <textarea class="ta" name="note" placeholder="Log a call, WhatsApp, or next step…"></textarea>
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:.75rem;color:#94a3b8;">Saved with your name &amp; time (IST).</span>

@@ -283,6 +283,81 @@ def users_admin():
                            active_section='goocampus_in')
 
 
+# ── CRM tabs: Follow-ups work-queue + Office Visits (shared follow-up thread) ──
+_CRM_WORKING_STATUSES = ('Contacted', 'Follow-up', 'Interested', 'Not Interested', 'Converted')
+
+
+def _crm_week_groups(rows, date_key, bucket_order, labels):
+    """Group CRM rows into week buckets by a date field; closest date first within each."""
+    from pg_admin import followups as _fu
+    today = _fu.ist_today()
+    by = {}
+    for r in rows:
+        dstr = (r.get(date_key) or '')[:10]
+        b = _fu.week_bucket(dstr, today) if dstr else ''
+        by.setdefault(b, []).append(r)
+    groups = []
+    for b in bucket_order:
+        lst = by.get(b, [])
+        lst.sort(key=lambda r: (r.get(date_key) or '9999-99-99'))
+        if lst:
+            groups.append({'key': b, 'label': labels.get(b, b), 'rows': lst})
+    return groups
+
+
+@login_required
+def users_followups():
+    """Work queue: everyone past New/Did-not-pick-up, grouped by follow-up week (closest first).
+    Reads the SHARED follow-up thread, so inquiry-side follow-ups show here too. (founder 2026-10-06)"""
+    admin = _require_users_section("view")
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    groups, total = [], 0
+    try:
+        from pg_admin import followups as _fu
+        rows = [r for r in _fu.crm_rows(conn) if r.get('status') in _CRM_WORKING_STATUSES]
+        total = len(rows)
+        groups = _crm_week_groups(
+            rows, 'next_followup_date', ['overdue', 'this', 'next', 'later', ''],
+            {'overdue': '⚠ Overdue', 'this': 'This week', 'next': 'Next week',
+             'later': 'Later', '': 'No follow-up date set'})
+    except Exception as e:
+        logging.error("users_followups: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return render_template('pg_admin/users_crm.html', mode='followups', groups=groups, total=total,
+                           active_section='goocampus_in')
+
+
+@login_required
+def users_visits():
+    """Office-visits queue: everyone marked willing-to-visit with a date, grouped by visit week."""
+    admin = _require_users_section("view")
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    groups, total = [], 0
+    try:
+        from pg_admin import followups as _fu
+        rows = [r for r in _fu.crm_rows(conn)
+                if r.get('visit_office') == 'yes' and (r.get('visit_date') or '')]
+        total = len(rows)
+        groups = _crm_week_groups(
+            rows, 'visit_date', ['overdue', 'this', 'next', 'later'],
+            {'overdue': 'Past', 'this': 'This week', 'next': 'Next week', 'later': 'Later'})
+    except Exception as e:
+        logging.error("users_visits: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return render_template('pg_admin/users_crm.html', mode='visits', groups=groups, total=total,
+                           active_section='goocampus_in')
+
+
 @login_required
 def user_detail(user_id):
     """One doctor: profile, plan history, and what they've actually used."""
@@ -515,8 +590,10 @@ def user_followup_add(user_id):
     next_date = (_nd + (' ' + _nt if _nt else '')).strip() if _nd else ''
     if status not in ('Follow-up', 'Interested'):
         next_date = ''                      # a next-date only applies to Follow-up / Interested
-    if not note and not status:
-        flash('Add a note or pick a status.', 'error')
+    visit_office = (request.form.get('visit_office') or '').strip()      # '' | yes | no
+    visit_date = (request.form.get('visit_date') or '').strip()
+    if not note and not status and not visit_office:
+        flash('Add a note, a status, or an office-visit.', 'error')
         return redirect(url_for('pg_user_detail', user_id=user_id))
     conn = get_db()
     try:
@@ -526,7 +603,7 @@ def user_followup_add(user_id):
         if d:
             d = dict(d)
             _fu.add_followup(conn, d.get('mobile'), d.get('email'), note, status, next_date,
-                             dict(admin), src='doctor')
+                             dict(admin), src='doctor', visit_office=visit_office, visit_date=visit_date)
             flash('Follow-up saved.', 'success')
         else:
             flash('Doctor not found.', 'error')
