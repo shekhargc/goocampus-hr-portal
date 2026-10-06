@@ -142,6 +142,7 @@ def api_pg_cutoff_explorer():
             if d.get('fee') is not None:
                 try: d['fee'] = float(d['fee'])
                 except Exception: d['fee'] = None
+            d['fee_period'] = 'year'                 # college fee is annual tuition (founder 2026-10-06)
             out.append(d)
     except Exception as e:
         logging.error("api_pg_cutoff_explorer: %s", e)
