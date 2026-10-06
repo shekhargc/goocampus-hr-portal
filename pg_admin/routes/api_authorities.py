@@ -13,7 +13,45 @@ import logging
 from flask import request, jsonify, Response
 from db import get_db
 from pg_admin.routes.api import _authorized
+from pg_admin.routes.api_choice import _user, _doctor_states
+from pg_admin.data import entitlements
 from pg_admin.authorities import all_authorities, get_authority, DOC_CATEGORIES, category_label
+
+
+def _doctor_access(conn):
+    """Resolve the requesting doctor (from their Bearer token, if sent) → (user, home_state,
+    is_paid). Free = no paid plan: may access only MCC (All-India) + their home state.
+    Paid (starter/standard/premium) = all authorities. No token → (None,'',False): the
+    caller (frontend) applies its own gating; the list is returned unfiltered."""
+    user = _user(conn)
+    if not user:
+        return None, '', False
+    uid = user['id']
+    home = ''
+    try:
+        for st in _doctor_states(conn, uid):
+            if (st.get('role') or '') == 'home':
+                home = st.get('state') or ''
+                break
+    except Exception:
+        pass
+    is_paid = False
+    try:
+        plan, _sub = entitlements.effective_plan(conn, uid)
+        code = (plan.get('code') or '').lower() if plan else ''
+        is_paid = any(t in code for t in ('starter', 'standard', 'premium'))
+    except Exception:
+        pass
+    return user, home, is_paid
+
+
+def _can_access(authority, home, is_paid):
+    """Free users: MCC (central) + their own home state only. Paid: everything."""
+    if is_paid:
+        return True
+    if authority['kind'] == 'central':
+        return True
+    return (authority.get('state') or '').strip().lower() == (home or '').strip().lower()
 
 
 def _file_url(doc_id):
@@ -77,15 +115,28 @@ def api_pg_authorities():
     finally:
         conn.close()
 
+    # Doctor context for access gating (free = MCC + home state; paid = all).
+    conn2 = get_db()
+    try:
+        user, home, is_paid = _doctor_access(conn2)
+    finally:
+        try: conn2.close()
+        except Exception: pass
+
     out = []
     for a in all_authorities():
         docs = doc_counts.get(a['code'], 0)
         has_news = (a['kind'] == 'central' and mcc_news) or (a['state'].lower() in news_states)
         sm = any(a['state'].lower() in b or a['name'].split(' ')[0].lower() in b for b in sm_bodies)
         if docs or has_news or sm:
+            # locked only matters when we know the doctor (token sent). No token → not locked
+            # (the frontend gates). Paid or MCC or home state → open.
+            locked = bool(user) and not _can_access(a, home, is_paid)
             out.append({**a, 'doc_count': docs, 'has_news': bool(has_news),
-                        'has_seat_matrix': bool(sm)})
-    return jsonify({'ok': True, 'authorities': out}), 200
+                        'has_seat_matrix': bool(sm), 'locked': locked})
+    return jsonify({'ok': True, 'authorities': out,
+                    'viewer': {'is_paid': is_paid, 'home_state': home,
+                               'known': bool(user)}}), 200
 
 
 def api_pg_authority(code):
@@ -99,6 +150,19 @@ def api_pg_authority(code):
     groups = []
     news = []
     seat_matrix = None
+    # Access gating: a free doctor may open only MCC + their home state. When a doctor token
+    # is sent and the authority is locked for them, return it flagged locked with no content
+    # (the frontend shows an upgrade prompt); paid doctors and service calls get everything.
+    try:
+        user, home, is_paid = _doctor_access(conn)
+    except Exception:
+        user, home, is_paid = None, '', False
+    if user and not _can_access(authority, home, is_paid):
+        try: conn.close()
+        except Exception: pass
+        return jsonify({'ok': True, 'authority': authority, 'locked': True,
+                        'document_groups': [], 'news': [], 'seat_matrix': None,
+                        'viewer': {'is_paid': is_paid, 'home_state': home}}), 200
     try:
         rows = [dict(r) for r in conn.execute(
             "SELECT id, category, title, doc_date, note, body_text, file_name "
@@ -140,8 +204,9 @@ def api_pg_authority(code):
         except Exception: pass
     finally:
         conn.close()
-    return jsonify({'ok': True, 'authority': authority, 'document_groups': groups,
-                    'news': news, 'seat_matrix': seat_matrix}), 200
+    return jsonify({'ok': True, 'authority': authority, 'locked': False,
+                    'document_groups': groups, 'news': news, 'seat_matrix': seat_matrix,
+                    'viewer': {'is_paid': is_paid, 'home_state': home}}), 200
 
 
 def api_pg_authority_doc_file(doc_id):
