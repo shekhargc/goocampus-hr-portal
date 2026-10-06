@@ -130,10 +130,11 @@ def users_admin():
     f_plan = (request.args.get('plan') or '').strip()      # 'free' | 'paid' | plan code
     f_status = (request.args.get('status') or '').strip()  # 'active' | 'blocked'
     f_type = (request.args.get('type') or '').strip()      # 'team'|'internal'|'paid'|'free'
+    f_state = (request.args.get('state') or '').strip()    # home state filter (founder 2026-10-06)
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
     conn = get_db()
-    users, plans, tab_counts = [], [], {}
+    users, plans, tab_counts, states = [], [], {}, []
     stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
              'blocked': 0, 'new_30d': 0}
     total_pages = 1
@@ -142,6 +143,15 @@ def users_admin():
             "SELECT id, code, name, plan_kind, price, billing_period, duration_days "
             "FROM pg_plans WHERE COALESCE(is_active,1)=1 ORDER BY sort_order, id"
         ).fetchall()]
+        # States that registered doctors actually have — for the "Filter by state" dropdown.
+        try:
+            states = [r['state'] for r in conn.execute(
+                "SELECT DISTINCT state FROM pg_users WHERE COALESCE(state,'') <> '' "
+                "ORDER BY state").fetchall()]
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            states = []
 
         # One LATERAL join gives every doctor their live plan without N+1 queries —
         # this list has to stay fast as signups grow.
@@ -174,6 +184,9 @@ def users_admin():
         if f_type in ('team', 'internal', 'paid', 'free'):
             conds.append(f"({_category_case('u')}) = ?")
             params.append(f_type)
+        if f_state:
+            conds.append("u.state = ?")
+            params.append(f_state)
         where = (' WHERE ' + ' AND '.join(conds)) if conds else ''
 
         row = conn.execute(f"SELECT COUNT(*) AS n {base}{where}", tuple(params)).fetchone()
@@ -284,6 +297,7 @@ def users_admin():
                            plans=plans, stats=stats, q=q, f_plan=f_plan,
                            f_status=f_status, f_type=f_type,
                            cat_labels=_CATEGORY_LABELS, counts=tab_counts,
+                           states=states, f_state=f_state,
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
 
