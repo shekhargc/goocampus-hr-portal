@@ -203,6 +203,73 @@ def news_test_email():
 
 
 @login_required
+def news_send_alert():
+    """Re-send the email alert for a posted item to everyone, on demand (regardless of the
+    original checkbox). Lets the founder push a news update out again. (founder 2026-10-06)"""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    try: nid = int(_s(request.form.get('news_id')))
+    except (TypeError, ValueError): nid = None
+    if not nid:
+        flash('Could not find that update.', 'error'); return redirect(url_for('pg_news_admin'))
+    try:
+        from pg_admin.news_email import trigger_news_blast, recipient_count
+        n = recipient_count()
+        trigger_news_blast(nid)
+        flash(f'Email alert is being sent to {n} recipient(s) in the background…'
+              if n is not None else 'Email alert is being sent in the background…', 'success')
+    except Exception as e:
+        logging.error("news_send_alert: %s", e)
+        flash('Could not start the email alert.', 'error')
+    return redirect(url_for('pg_news_admin'))
+
+
+@login_required
+def news_recipients_diag():
+    """Diagnostic: show exactly how many people a news blast reaches + the gaps (accounts
+    with no email can't be mailed). ?check=<email> tells you if that address is included."""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    check = _s(request.args.get('check'))
+    conn = get_db()
+    try:
+        from pg_admin.news_email import recipients_breakdown
+        b = recipients_breakdown(conn, check)
+    except Exception as e:
+        logging.error("news_recipients_diag: %s", e)
+        b = {}
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    def esc(v):
+        s = '' if v is None else str(v)
+        return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    chk = ''
+    if b.get('check_email'):
+        yes = b.get('check_in_list')
+        chk = (f"<p style='font-size:15px;'>Is <b>{esc(b['check_email'])}</b> in the blast list? "
+               f"<b style='color:{'#16a34a' if yes else '#dc2626'}'>{'YES — will receive' if yes else 'NO — not a recipient (no email on file, or a team-only account)'}</b></p>")
+    html = f"""<div style="font-family:system-ui;max-width:760px;margin:30px auto;padding:0 16px;">
+<h2>News email — who it reaches</h2>
+<p style="font-size:15px;">A news blast is being sent to <b>{esc(b.get('total','?'))}</b> unique email address(es):
+<br>• {esc(b.get('paid_or_staff','?'))} paid doctors / internal / staff (clean update)
+<br>• {esc(b.get('free','?'))} free doctors (with upgrade banner)</p>
+<hr>
+<p style="font-size:14px;color:#475569;">Why some don't get it — an account with no email can't be mailed:</p>
+<ul style="font-size:14px;color:#475569;">
+<li>Registered doctor accounts total: <b>{esc(b.get('pg_users_total','?'))}</b>, of which <b>{esc(b.get('pg_users_no_email','?'))}</b> have <b>no email</b> (mobile-OTP signup) → skipped.</li>
+<li>Team-member accounts: <b>{esc(b.get('pg_team','?'))}</b>, of which <b>{esc(b.get('pg_team_no_email','?'))}</b> have no email on their doctor account.</li>
+<li>Active staff (employees) with an email: <b>{esc(b.get('staff_with_email','?'))}</b> → these DO receive it.</li>
+</ul>
+<form method="GET" style="margin-top:14px;">Check an email: <input name="check" value="{esc(b.get('check_email',''))}" style="padding:7px;width:280px;"> <button>Check</button></form>
+{chk}
+<p style="margin-top:16px;"><a href="/admin/pg/news" style="color:#F58220;">← Back to News</a></p>
+</div>"""
+    return html
+
+
+@login_required
 def news_toggle():
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))

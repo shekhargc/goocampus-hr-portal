@@ -151,7 +151,7 @@ def _recipients(conn):
             "          AND p.plan_kind IN ('paid','counselling') "
             "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
             "FROM pg_users u "
-            "WHERE COALESCE(u.email,'') <> '' AND u.email LIKE '%@%'"
+            "WHERE COALESCE(u.email,'') <> '' AND strpos(u.email, '@') > 0"
         ).fetchall()
         for r in rows:
             r = dict(r)
@@ -169,7 +169,7 @@ def _recipients(conn):
     try:
         for r in conn.execute(
                 "SELECT name, LOWER(TRIM(email)) AS email FROM employees "
-                "WHERE is_active = 1 AND COALESCE(email,'') <> '' AND email LIKE '%@%'").fetchall():
+                "WHERE is_active = 1 AND COALESCE(email,'') <> '' AND strpos(email, '@') > 0").fetchall():
             r = dict(r)
             em = (r.get("email") or "").strip()
             if not em or "@" not in em or em in seen:
@@ -252,3 +252,37 @@ def recipient_count():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+def recipients_breakdown(conn, check_email=''):
+    """Diagnostic: how many people a blast reaches + the gaps. Returns a dict with the
+    totals and (if check_email given) whether that address is in the recipient list."""
+    recips = _recipients(conn)
+    emails = {r['email'] for r in recips}
+    out = {'total': len(recips),
+           'free': sum(1 for r in recips if r['is_free']),
+           'paid_or_staff': sum(1 for r in recips if not r['is_free'])}
+    try:
+        out['pg_users_total'] = conn.execute("SELECT COUNT(*) AS n FROM pg_users").fetchone()['n']
+        out['pg_users_no_email'] = conn.execute(
+            "SELECT COUNT(*) AS n FROM pg_users WHERE strpos(COALESCE(email,''), '@') = 0"
+        ).fetchone()['n']
+        out['pg_team'] = conn.execute(
+            "SELECT COUNT(*) AS n FROM pg_users WHERE COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0)=1"
+        ).fetchone()['n']
+        out['pg_team_no_email'] = conn.execute(
+            "SELECT COUNT(*) AS n FROM pg_users WHERE COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0)=1 "
+            "AND strpos(COALESCE(email,''), '@') = 0"
+        ).fetchone()['n']
+        out['staff_with_email'] = conn.execute(
+            "SELECT COUNT(*) AS n FROM employees WHERE is_active=1 AND strpos(COALESCE(email,''), '@') > 0"
+        ).fetchone()['n']
+    except Exception as e:
+        logger.error("recipients_breakdown counts: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    if check_email:
+        ce = check_email.strip().lower()
+        out['check_email'] = check_email
+        out['check_in_list'] = ce in emails
+    return out

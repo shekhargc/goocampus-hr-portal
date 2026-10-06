@@ -112,6 +112,10 @@
                     data-date="{{ it.published_at.strftime('%Y-%m-%d') if it.published_at else '' }}"
                     data-body="{{ it.body_text or '' }}" data-source="{{ it.source_url or '' }}">Edit</button>
             <button type="button" onclick="newsTest({{ it.id }})" style="background:none;border:0;color:#b45309;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">✉️ Test</button>
+            <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to ALL registered users + staff now?');" style="display:inline;">
+              <input type="hidden" name="news_id" value="{{ it.id }}">
+              <button type="submit" style="background:none;border:0;color:#166534;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">📧 Send to all</button>
+            </form>
             <form method="POST" action="{{ url_for('pg_news_toggle') }}" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
               <button type="submit" style="background:none;border:0;color:#2952a3;font-size:0.82rem;cursor:pointer;margin-left:8px;">{{ 'Hide' if it.is_published else 'Show' }}</button>
