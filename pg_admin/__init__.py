@@ -155,6 +155,10 @@ def register_pg_admin(app):
                      news_admin.news_save, methods=['POST'])
     app.add_url_rule('/admin/pg/news/test-email', 'pg_news_test_email',
                      news_admin.news_test_email, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/send-alert', 'pg_news_send_alert',
+                     news_admin.news_send_alert, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/recipients', 'pg_news_recipients_diag',
+                     news_admin.news_recipients_diag, methods=['GET'])
     app.add_url_rule('/admin/pg/news/toggle', 'pg_news_toggle',
                      news_admin.news_toggle, methods=['POST'])
     app.add_url_rule('/admin/pg/news/delete', 'pg_news_delete',
