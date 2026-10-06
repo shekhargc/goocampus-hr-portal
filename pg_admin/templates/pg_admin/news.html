@@ -63,6 +63,10 @@
         <input type="file" name="pdf_file" accept=".pdf"
                style="display:block;width:100%;margin-top:5px;margin-bottom:16px;font-size:0.85rem;">
       </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.85rem;color:var(--gray-700);background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;margin-bottom:16px;cursor:pointer;">
+        <input type="checkbox" name="send_alert" id="send_alert" value="1" checked style="margin-top:2px;">
+        <span><strong>📧 Email this update to all registered users</strong> (free + paid). They get a glimpse + a link to log in and read/download. Free users also see a gentle upgrade note. Leave unticked when just fixing a typo.</span>
+      </label>
       <button type="submit"
               style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;">
         Post update
@@ -107,6 +111,7 @@
                     data-authority="{{ '__all__' if it.scope=='all_india' else 'state:' + (it.state or '') }}"
                     data-date="{{ it.published_at.strftime('%Y-%m-%d') if it.published_at else '' }}"
                     data-body="{{ it.body_text or '' }}" data-source="{{ it.source_url or '' }}">Edit</button>
+            <button type="button" onclick="newsTest({{ it.id }})" style="background:none;border:0;color:#b45309;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">✉️ Test</button>
             <form method="POST" action="{{ url_for('pg_news_toggle') }}" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
               <button type="submit" style="background:none;border:0;color:#2952a3;font-size:0.82rem;cursor:pointer;margin-left:8px;">{{ 'Hide' if it.is_published else 'Show' }}</button>
@@ -128,13 +133,22 @@
 </div>
 
 <script>
+function newsTest(id){
+  var to=prompt('Send a TEST of this update (free + paid views) to which email?','shekhar@goocampus.in');
+  if(!to) return;
+  var f=document.createElement('form'); f.method='POST'; f.action='/admin/pg/news/test-email';
+  f.innerHTML='<input type="hidden" name="news_id" value="'+id+'"><input type="hidden" name="to">';
+  f.querySelector('[name=to]').value=to; document.body.appendChild(f); f.submit();
+}
 (function(){
   var f=document.getElementById('newsForm');
   function set(n,v){ var el=f.querySelector('[name="'+n+'"]'); if(el) el.value=v; }
   function submitLabel(t){ var b=f.querySelector('button[type="submit"]'); if(b) b.textContent=t; }
+  function setAlert(on){ var a=document.getElementById('send_alert'); if(a) a.checked=on; }
   window.newsClearEdit=function(){
     set('news_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
     set('body_text',''); set('source_url','');
+    setAlert(true);   // new post → default to emailing everyone
     document.getElementById('editingBanner').style.display='none';
     submitLabel('Post update');
   };
@@ -143,6 +157,7 @@
       set('news_id',btn.dataset.id); set('authority',btn.dataset.authority);
       set('heading',btn.dataset.heading); set('news_date',btn.dataset.date);
       set('body_text',btn.dataset.body); set('source_url',btn.dataset.source);
+      setAlert(false);  // editing → don't re-blast unless the user ticks it back on
       document.getElementById('editingBanner').style.display='block';
       submitLabel('Save changes');
       f.scrollIntoView({behavior:'smooth',block:'start'});
