@@ -636,6 +636,7 @@ def user_followup_add(user_id):
         next_date = ''                      # a next-date only applies to Follow-up / Interested
     visit_office = (request.form.get('visit_office') or '').strip()      # '' | yes | no
     visit_date = (request.form.get('visit_date') or '').strip()
+    convert_plan = (request.form.get('convert_plan') or '').strip()      # plan this lead converted to
     if not note and not status and not visit_office:
         flash('Add a note, a status, or an office-visit.', 'error')
         return redirect(url_for('pg_user_detail', user_id=user_id))
@@ -647,7 +648,8 @@ def user_followup_add(user_id):
         if d:
             d = dict(d)
             _fu.add_followup(conn, d.get('mobile'), d.get('email'), note, status, next_date,
-                             dict(admin), src='doctor', visit_office=visit_office, visit_date=visit_date)
+                             dict(admin), src='doctor', visit_office=visit_office, visit_date=visit_date,
+                             convert_plan=convert_plan)
             flash('Follow-up saved.', 'success')
         else:
             flash('Doctor not found.', 'error')

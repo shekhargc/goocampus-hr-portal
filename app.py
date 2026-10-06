@@ -39393,6 +39393,7 @@ def sales_inquiry_followup(inq_id):
         next_date = ''                      # a next-date only applies to Follow-up / Interested
     visit_office = (request.form.get('visit_office') or '').strip()
     visit_date = (request.form.get('visit_date') or '').strip()
+    convert_plan = (request.form.get('convert_plan') or '').strip()
     user = get_user()
     conn = get_db()
     _ensure_inquiry_schema(conn)
@@ -39405,7 +39406,8 @@ def sales_inquiry_followup(inq_id):
                 lead = dict(lead)
                 _fu.add_followup(conn, lead.get('phone'), lead.get('email'), note, status, next_date,
                                  (dict(user) if user else {}), src='inquiry',
-                                 visit_office=visit_office, visit_date=visit_date)
+                                 visit_office=visit_office, visit_date=visit_date,
+                                 convert_plan=convert_plan)
         except Exception as e:
             logging.error(f"sales_inquiry_followup: {e}")
             try: conn.rollback()

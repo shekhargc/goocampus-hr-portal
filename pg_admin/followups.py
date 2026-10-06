@@ -54,6 +54,8 @@ def ensure_followups_schema(conn):
         # Office-visit intent per entry — for the Office Visits CRM tab. (founder 2026-10-06)
         conn.execute("ALTER TABLE pg_followups ADD COLUMN IF NOT EXISTS visit_office TEXT DEFAULT ''")   # '' | 'yes' | 'no'
         conn.execute("ALTER TABLE pg_followups ADD COLUMN IF NOT EXISTS visit_date TEXT DEFAULT ''")     # YYYY-MM-DD
+        # Plan this lead converted to — captured when status=Converted, shown in the Converted tab. (founder 2026-10-06)
+        conn.execute("ALTER TABLE pg_followups ADD COLUMN IF NOT EXISTS convert_plan TEXT DEFAULT ''")
         conn.commit()
     except Exception as e:
         logging.error("ensure_followups_schema: %s", e)
@@ -123,13 +125,15 @@ def current_state(conn, mobile, email):
     has no status yet (so migrated-only people still show their inquiry status)."""
     mob10, em = m10(mobile), norm_email(email)
     out = {'status': '', 'next_followup_date': '', 'visit_office': '', 'visit_date': '',
-           'last_by': '', 'last_at': None}
+           'convert_plan': '', 'last_by': '', 'last_at': None}
     for r in get_thread(conn, mobile, email):
         if not out['last_at']:
             out['last_by'] = r.get('created_by_name') or ''
             out['last_at'] = r.get('created_at')
         if not out['status'] and (r.get('status') or ''):
             out['status'] = r['status']
+        if not out['convert_plan'] and (r.get('convert_plan') or ''):
+            out['convert_plan'] = r['convert_plan']
         if not out['next_followup_date'] and (r.get('next_followup_date') or ''):
             out['next_followup_date'] = r['next_followup_date']
         if not out['visit_office'] and (r.get('visit_office') or ''):
@@ -203,7 +207,7 @@ def statuses_for(conn, people):
 
 
 def add_followup(conn, mobile, email, note, status, next_date, user, src='doctor',
-                 visit_office='', visit_date=''):
+                 visit_office='', visit_date='', convert_plan=''):
     """Append a follow-up entry + (when a status is given) sync it onto any matching website
     inquiry so the inquiry board stays in step. Returns the new entry dict."""
     mob10, em = m10(mobile), norm_email(email)
@@ -211,17 +215,19 @@ def add_followup(conn, mobile, email, note, status, next_date, user, src='doctor
     next_date = (next_date or '').strip().replace('T', ' ')   # datetime-local → "YYYY-MM-DD HH:MM"
     visit_office = visit_office if visit_office in ('yes', 'no') else ''
     visit_date = (visit_date or '').strip() if visit_office == 'yes' else ''
+    convert_plan = (convert_plan or '').strip() if status == 'Converted' else ''
     uid = (user or {}).get('id')
     uname = (user or {}).get('name') or ''
     conn.execute(
         "INSERT INTO pg_followups (mobile10, email, note, status, next_followup_date, "
-        "visit_office, visit_date, created_by_id, created_by_name, src) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (mob10, em, (note or '').strip(), status, next_date, visit_office, visit_date, uid, uname, src))
+        "visit_office, visit_date, convert_plan, created_by_id, created_by_name, src) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (mob10, em, (note or '').strip(), status, next_date, visit_office, visit_date, convert_plan, uid, uname, src))
     conn.commit()
     if status:
         _sync_inquiry_status(conn, mob10, em, status)
     return {'note': (note or '').strip(), 'status': status, 'next_followup_date': next_date,
-            'visit_office': visit_office, 'visit_date': visit_date, 'created_by_name': uname}
+            'visit_office': visit_office, 'visit_date': visit_date, 'convert_plan': convert_plan,
+            'created_by_name': uname}
 
 
 def _sync_inquiry_status(conn, mob10, em, status):
@@ -292,7 +298,7 @@ def crm_rows(conn):
     ensure_followups_schema(conn)
     try:
         status_rows = [dict(r) for r in conn.execute(
-            "SELECT DISTINCT ON (mobile10) mobile10, status, next_followup_date, created_by_name, created_at "
+            "SELECT DISTINCT ON (mobile10) mobile10, status, next_followup_date, convert_plan, created_by_name, created_at "
             "FROM pg_followups WHERE mobile10 <> '' AND status <> '' "
             "ORDER BY mobile10, created_at DESC, id DESC").fetchall()]
         visit_rows = [dict(r) for r in conn.execute(
@@ -310,6 +316,7 @@ def crm_rows(conn):
         rows[r['mobile10']] = {
             'mobile10': r['mobile10'], 'status': r['status'],
             'next_followup_date': r.get('next_followup_date') or '',
+            'convert_plan': r.get('convert_plan') or '',
             'visit_office': '', 'visit_date': '',
             'last_by': r.get('created_by_name') or '', 'last_at': r.get('created_at'),
             'name': '', 'doctor_id': None, 'inquiry_id': None}
@@ -319,6 +326,7 @@ def crm_rows(conn):
             rows[mv]['visit_date'] = v.get('visit_date') or ''
         elif v.get('visit_office') == 'yes':
             rows[mv] = {'mobile10': mv, 'status': 'New', 'next_followup_date': '',
+                        'convert_plan': '',
                         'visit_office': 'yes', 'visit_date': v.get('visit_date') or '',
                         'last_by': '', 'last_at': None, 'name': '', 'doctor_id': None, 'inquiry_id': None}
     out = list(rows.values())
