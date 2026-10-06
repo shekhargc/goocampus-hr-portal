@@ -188,8 +188,10 @@ def seat_matrix_admin():
         except Exception: pass
     finally:
         conn.close()
+    from pg_admin.authorities import all_authorities
     return render_template('pg_admin/seat_matrix.html', sources=sources, browse=browse,
                            default_body=DEFAULT_BODY, default_year=DEFAULT_YEAR,
+                           authorities=all_authorities(),
                            active_section='goocampus_in')
 
 
@@ -199,6 +201,18 @@ def seat_matrix_upload():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     body = _s(request.form.get('counselling_body')) or DEFAULT_BODY
     year = _s(request.form.get('academic_year')) or DEFAULT_YEAR
+    # Explicit authority link (founder 2026-10-06). When chosen, it drives the body label so
+    # the matrix ties to the authority by its stable code, not spelling.
+    authority_code = _s(request.form.get('authority_code'))
+    if authority_code:
+        try:
+            from pg_admin.authorities import get_authority
+            _a = get_authority(authority_code)
+            if _a:
+                authority_code = _a['code']
+                body = 'All India MCC' if _a['code'] == 'mcc' else _a['name']
+        except Exception:
+            pass
     data_file = request.files.get('data_file')
     pdf_file = request.files.get('pdf_file')
 
@@ -240,11 +254,11 @@ def seat_matrix_upload():
         # Clean replace for this body + year.
         conn.execute("DELETE FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?",
                      (body, year))
-        cols = ['counselling_body', 'academic_year', 'sl_no', 'college_code', 'state',
-                'college_name', 'category', 'course_name', 'seats']
+        cols = ['counselling_body', 'academic_year', 'authority_code', 'sl_no', 'college_code',
+                'state', 'college_name', 'category', 'course_name', 'seats']
         ph = ','.join(['?'] * len(cols))
         sql = f"INSERT INTO pg_seat_matrix ({','.join(cols)}) VALUES ({ph})"
-        batch = [[body, year, r['sl_no'], r['college_code'], r['state'],
+        batch = [[body, year, authority_code, r['sl_no'], r['college_code'], r['state'],
                   r['college_name'], r['category'], r['course_name'], r['seats']] for r in rows]
         conn.execute_batch(sql, batch, page_size=1000)
 
@@ -255,24 +269,24 @@ def seat_matrix_upload():
         if existing:
             if pdf_bytes is not None:
                 conn.execute(
-                    "UPDATE pg_seat_matrix_source SET source_file_name=?, pdf_name=?, pdf_data=?, "
-                    "pdf_content_type=?, row_count=?, college_count=?, total_seats=?, "
+                    "UPDATE pg_seat_matrix_source SET authority_code=?, source_file_name=?, pdf_name=?, "
+                    "pdf_data=?, pdf_content_type=?, row_count=?, college_count=?, total_seats=?, "
                     "uploaded_by=?, uploaded_at=CURRENT_TIMESTAMP WHERE id=?",
-                    (data_file.filename, pdf_name, pdf_bytes, pdf_ctype,
+                    (authority_code, data_file.filename, pdf_name, pdf_bytes, pdf_ctype,
                      len(rows), college_count, total_seats, uploaded_by, existing['id']))
             else:
                 conn.execute(
-                    "UPDATE pg_seat_matrix_source SET source_file_name=?, row_count=?, "
+                    "UPDATE pg_seat_matrix_source SET authority_code=?, source_file_name=?, row_count=?, "
                     "college_count=?, total_seats=?, uploaded_by=?, uploaded_at=CURRENT_TIMESTAMP "
                     "WHERE id=?",
-                    (data_file.filename, len(rows), college_count, total_seats,
+                    (authority_code, data_file.filename, len(rows), college_count, total_seats,
                      uploaded_by, existing['id']))
         else:
             conn.execute(
-                "INSERT INTO pg_seat_matrix_source (counselling_body, academic_year, source_file_name, "
-                "pdf_name, pdf_data, pdf_content_type, row_count, college_count, total_seats, uploaded_by) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (body, year, data_file.filename, pdf_name, pdf_bytes, pdf_ctype,
+                "INSERT INTO pg_seat_matrix_source (counselling_body, academic_year, authority_code, "
+                "source_file_name, pdf_name, pdf_data, pdf_content_type, row_count, college_count, "
+                "total_seats, uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (body, year, authority_code, data_file.filename, pdf_name, pdf_bytes, pdf_ctype,
                  len(rows), college_count, total_seats, uploaded_by))
         conn.commit()
         msg = (f"Loaded {len(rows):,} rows · {college_count:,} colleges · {total_seats:,} seats "
