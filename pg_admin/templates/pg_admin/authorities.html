@@ -70,7 +70,7 @@
         </label>
       </div>
       <label style="display:block;margin-top:14px;font-size:0.85rem;font-weight:600;color:var(--gray-700);">Title
-        <input name="title" placeholder="e.g. Registration Guidelines 2026 / Annexure-II Format"
+        <input name="title" id="docTitle" placeholder="e.g. Registration Guidelines 2026 / Annexure-II Format"
                style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
       </label>
       <label style="display:block;margin-top:14px;font-size:0.85rem;font-weight:600;color:var(--gray-700);">Note (optional)
@@ -83,6 +83,7 @@
       </label>
       <label style="display:block;margin-top:14px;font-size:0.85rem;font-weight:600;color:var(--gray-700);">File (optional — PDF / image / Excel, max 25 MB)
         <input type="file" name="doc_file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.doc,.docx"
+               onchange="(function(f){var t=document.getElementById('docTitle');if(!f.files||!f.files.length)return;if(t.value.trim())return;var n=f.files[0].name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();t.value=n.charAt(0).toUpperCase()+n.slice(1);})(this)"
                style="display:block;width:100%;margin-top:5px;font-size:0.85rem;">
       </label>
       <p style="margin:8px 0 0;font-size:0.78rem;color:var(--gray-400);">Add a file, a typed list, or both — at least one is required.</p>
