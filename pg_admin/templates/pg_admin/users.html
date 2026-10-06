@@ -109,6 +109,7 @@
   </select>
   <button class="pu-btn pu-btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
   {% if q or f_plan or f_status or f_type or f_state %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
+  {% if session.get('is_admin') %}<a class="pu-btn pu-btn-ghost" href="/admin/diag/pg-states" title="Fix misspelt / duplicate states">🧹 Clean up states</a>{% endif %}
 </form>
 
 {% if users %}

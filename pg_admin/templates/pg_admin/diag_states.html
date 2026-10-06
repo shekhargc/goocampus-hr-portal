@@ -1,0 +1,65 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Clean up doctor states · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="margin-bottom:18px;max-width:900px;">
+    <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Clean up doctor states</h1>
+    <p style="margin:0;font-size:0.88rem;color:var(--gray-500);">
+      Early signups took the state as free text, so some values are misspelt or duplicated.
+      Pick the correct state for each below and click <b>Apply</b> — only the ones you map are
+      changed (and the matching locked counselling home state is synced). Values left as
+      <i>“leave as-is”</i> are untouched. <b>{{ clean_n }}</b> doctor record(s) already have a clean state.
+    </p>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}{% for cat, m in msgs %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;max-width:900px;
+                  background:{{ '#DCFCE7' if cat=='success' else ('#FEF9C3' if cat=='info' else '#FEE2E2') }};
+                  color:{{ '#166534' if cat=='success' else ('#854D0E' if cat=='info' else '#991B1B') }};">{{ m }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  {% if not dirty %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:28px;text-align:center;color:var(--gray-500);max-width:900px;">
+      🎉 Every registered doctor's state already matches the standard list. Nothing to clean up.
+    </div>
+  {% else %}
+  <form method="POST" action="{{ url_for('pg_states_cleanup') }}">
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:auto;max-width:900px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead><tr>
+          {% set th='padding:0.6rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.7rem;text-transform:uppercase;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
+          <th style="{{ th }}">Current value (as typed)</th>
+          <th style="{{ th }}width:90px;">Doctors</th>
+          <th style="{{ th }}">Correct to</th>
+        </tr></thead>
+        <tbody>
+        {% for it in dirty %}
+          <tr style="border-top:1px solid var(--gray-100);">
+            <td style="padding:0.6rem 0.9rem;font-weight:600;color:{{ 'var(--navy)' if it.guess else '#b45309' }};">
+              {{ it.raw }}{% if not it.guess %} <span style="font-size:0.7rem;color:#b45309;">(no confident match — pick manually)</span>{% endif %}
+            </td>
+            <td style="padding:0.6rem 0.9rem;color:var(--gray-500);">{{ it.count }}</td>
+            <td style="padding:0.6rem 0.9rem;">
+              <input type="hidden" name="raw_{{ loop.index0 }}" value="{{ it.raw }}">
+              <select name="to_{{ loop.index0 }}" style="padding:6px 9px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;min-width:220px;{{ 'border-color:#16a34a;' if it.guess }}">
+                <option value="">— leave as-is —</option>
+                {% for s in canon %}<option value="{{ s }}" {{ 'selected' if it.guess==s }}>{{ s }}</option>{% endfor %}
+              </select>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:16px;max-width:900px;">
+      <button type="submit" onclick="return confirm('Apply the selected state corrections to these doctor records?');"
+              style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 24px;font-size:0.9rem;font-weight:600;cursor:pointer;">Apply corrections</button>
+      <span style="margin-left:12px;font-size:0.8rem;color:var(--gray-400);">Green = a suggested match is pre-selected. Review, then apply.</span>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
