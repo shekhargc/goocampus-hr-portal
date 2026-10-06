@@ -86,14 +86,12 @@ def build_news_email_html(news, is_free, name=""):
 
     heading = escape((news.get("heading") or "NEET-PG Update").strip())
     authority = escape(_authority_label(news))
-    date_s = _fmt_date(news.get("published_at"))
     has_doc = bool((news.get("pdf_name") or "").strip())
     source_url = (news.get("source_url") or "").strip()
 
-    rows = [("Authority", authority)]
-    if date_s:
-        rows.append(("Date", date_s))
-    details = brand_detail_rows(rows)
+    # Show only the authority — NOT the published date, which users can mistake for a
+    # counselling date. (founder 2026-10-06)
+    details = brand_detail_rows([("Authority", authority)])
 
     glimpse = _glimpse(news.get("body_text"))
     body_block = (
