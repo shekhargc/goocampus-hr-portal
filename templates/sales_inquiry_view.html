@@ -72,11 +72,11 @@
 <div class="iv-grid">
   <div>
     <div class="card">
-      <h3>Follow-up thread</h3>
+      <h3>Lead History</h3>
       <form method="POST" action="/sales/inquiries/{{ inq.id }}/followup" style="margin-bottom:1.1rem;">
         <div style="margin-bottom:8px;">
           <select class="inp" name="status" id="inqStatus" style="width:100%;"
-                  onchange="var s=this.value;document.getElementById('inqDateRow').style.display=(s==='Follow-up'||s==='Interested')?'block':'none';">
+                  onchange="var s=this.value;document.getElementById('inqDateRow').style.display=(s==='Follow-up'||s==='Interested')?'block':'none';document.getElementById('inqConvertRow').style.display=(s==='Converted')?'block':'none';">
             <option value="">— keep status ({{ inq.inquiry_status or 'New' }}) —</option>
             {% for s in pick_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
           </select>
@@ -92,10 +92,25 @@
             </select>
           </div>
         </div>
+        <div style="margin-bottom:8px;display:flex;gap:6px;align-items:center;">
+          <label style="font-size:.78rem;color:#64748b;white-space:nowrap;">Visit office?</label>
+          <select class="inp" name="visit_office" id="inqVisit" style="flex:0 0 90px;"
+                  onchange="document.getElementById('inqVisitDate').style.display=this.value==='yes'?'block':'none';">
+            <option value="">—</option>
+            <option value="yes" {{ 'selected' if fu_state.visit_office=='yes' }}>Yes</option>
+            <option value="no" {{ 'selected' if fu_state.visit_office=='no' }}>No</option>
+          </select>
+          <input type="date" class="inp" id="inqVisitDate" name="visit_date" value="{{ fu_state.visit_date or '' }}"
+                 style="flex:1;display:{{ 'block' if fu_state.visit_office=='yes' else 'none' }};" placeholder="visit date">
+        </div>
+        <div id="inqConvertRow" style="display:none;margin-bottom:8px;">
+          <label style="font-size:.75rem;color:#64748b;display:block;margin-bottom:3px;">Plan converted to</label>
+          <input type="text" class="inp" name="convert_plan" value="{{ fu_state.convert_plan or '' }}" style="width:100%;" placeholder="e.g. Premium / Elite / NEET-PG Mentorship">
+        </div>
         <textarea class="ta" name="note" placeholder="Log a call, WhatsApp, or next step…"></textarea>
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:.75rem;color:#94a3b8;">Saved with your name &amp; time (IST).</span>
-          <button type="submit" class="btn btn-primary">Add follow-up</button>
+          <button type="submit" class="btn btn-primary">Save</button>
         </div>
       </form>
       {% if followups %}

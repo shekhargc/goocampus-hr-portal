@@ -210,7 +210,7 @@
       {# ── Follow-up (shared with Sales → Inquiries by mobile/email) ── #}
       {% set fu_colors = {'New':['#eef2ff','#3730a3'],'Did not pick up':['#fff1f2','#9f1239'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
       <div class="card" style="border-top:3px solid var(--orange);">
-        <h3><i class="fa-solid fa-phone-volume"></i> Follow-up</h3>
+        <h3><i class="fa-solid fa-phone-volume"></i> Lead History</h3>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
           <span style="font-size:0.78rem;color:var(--gray-500);">Status:</span>
           {% set cs = fu_state.status or '' %}
@@ -222,7 +222,7 @@
 
         <form method="POST" action="/admin/pg/users/{{ d.id }}/followup">
           <div class="f"><label>Status</label>
-            <select name="status" id="fuStatus" onchange="var s=this.value;document.getElementById('fuDateRow').style.display=(s==='Follow-up'||s==='Interested')?'block':'none';">
+            <select name="status" id="fuStatus" onchange="var s=this.value;document.getElementById('fuDateRow').style.display=(s==='Follow-up'||s==='Interested')?'block':'none';document.getElementById('fuConvertRow').style.display=(s==='Converted')?'block':'none';">
               <option value="">— keep current —</option>
               {% for s in fu_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
             </select></div>
@@ -236,9 +236,19 @@
                 {% for t in fu_time_slots %}<option value="{{ t }}" {{ 'selected' if t==curt }}>{{ t }}</option>{% endfor %}
               </select></div>
           </div>
+          <div class="f"><label>Willing to visit office?</label>
+            <select name="visit_office" id="fuVisit" onchange="document.getElementById('fuVisitDateRow').style.display=this.value==='yes'?'block':'none';">
+              <option value="">—</option>
+              <option value="yes" {{ 'selected' if fu_state.visit_office=='yes' }}>Yes</option>
+              <option value="no" {{ 'selected' if fu_state.visit_office=='no' }}>No</option>
+            </select></div>
+          <div class="f" id="fuVisitDateRow" style="display:{{ 'block' if fu_state.visit_office=='yes' else 'none' }};"><label>Visit date</label>
+            <input type="date" name="visit_date" value="{{ fu_state.visit_date or '' }}"></div>
+          <div class="f" id="fuConvertRow" style="display:none;"><label>Plan converted to</label>
+            <input type="text" name="convert_plan" value="{{ fu_state.convert_plan or '' }}" placeholder="e.g. Premium / Elite / NEET-PG Mentorship"></div>
           <div class="f"><label>Note — what you spoke about</label>
             <textarea name="note" rows="3" placeholder="e.g. Called, explained Premium plan, interested — will decide by Friday"></textarea></div>
-          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Add follow-up</button>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
         </form>
 
         <div style="margin-top:1rem;border-top:1px solid var(--gray-100);padding-top:0.8rem;">

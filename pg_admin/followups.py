@@ -51,6 +51,11 @@ def ensure_followups_schema(conn):
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_followups_m10 ON pg_followups (mobile10)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_followups_email ON pg_followups (email)")
+        # Office-visit intent per entry — for the Office Visits CRM tab. (founder 2026-10-06)
+        conn.execute("ALTER TABLE pg_followups ADD COLUMN IF NOT EXISTS visit_office TEXT DEFAULT ''")   # '' | 'yes' | 'no'
+        conn.execute("ALTER TABLE pg_followups ADD COLUMN IF NOT EXISTS visit_date TEXT DEFAULT ''")     # YYYY-MM-DD
+        # Plan this lead converted to — captured when status=Converted, shown in the Converted tab. (founder 2026-10-06)
+        conn.execute("ALTER TABLE pg_followups ADD COLUMN IF NOT EXISTS convert_plan TEXT DEFAULT ''")
         conn.commit()
     except Exception as e:
         logging.error("ensure_followups_schema: %s", e)
@@ -119,15 +124,20 @@ def current_state(conn, mobile, email):
     a status / a date. Falls back to a matching inquiry's inquiry_status if the shared thread
     has no status yet (so migrated-only people still show their inquiry status)."""
     mob10, em = m10(mobile), norm_email(email)
-    out = {'status': '', 'next_followup_date': '', 'last_by': '', 'last_at': None}
+    out = {'status': '', 'next_followup_date': '', 'visit_office': '', 'visit_date': '',
+           'convert_plan': '', 'last_by': '', 'last_at': None}
     for r in get_thread(conn, mobile, email):
         if not out['last_at']:
             out['last_by'] = r.get('created_by_name') or ''
             out['last_at'] = r.get('created_at')
         if not out['status'] and (r.get('status') or ''):
             out['status'] = r['status']
+        if not out['convert_plan'] and (r.get('convert_plan') or ''):
+            out['convert_plan'] = r['convert_plan']
         if not out['next_followup_date'] and (r.get('next_followup_date') or ''):
             out['next_followup_date'] = r['next_followup_date']
+        if not out['visit_office'] and (r.get('visit_office') or ''):
+            out['visit_office'] = r['visit_office']; out['visit_date'] = r.get('visit_date') or ''
     if not out['status']:
         clause, params = _match(mob10, em)
         lead_clause = clause.replace('mobile10', "RIGHT(regexp_replace(COALESCE(phone,''),'\\D','','g'),10)") \
@@ -196,22 +206,27 @@ def statuses_for(conn, people):
             for mm, ee in norm]
 
 
-def add_followup(conn, mobile, email, note, status, next_date, user, src='doctor'):
+def add_followup(conn, mobile, email, note, status, next_date, user, src='doctor',
+                 visit_office='', visit_date='', convert_plan=''):
     """Append a follow-up entry + (when a status is given) sync it onto any matching website
     inquiry so the inquiry board stays in step. Returns the new entry dict."""
     mob10, em = m10(mobile), norm_email(email)
     status = status if status in STATUSES else ''
     next_date = (next_date or '').strip().replace('T', ' ')   # datetime-local → "YYYY-MM-DD HH:MM"
+    visit_office = visit_office if visit_office in ('yes', 'no') else ''
+    visit_date = (visit_date or '').strip() if visit_office == 'yes' else ''
+    convert_plan = (convert_plan or '').strip() if status == 'Converted' else ''
     uid = (user or {}).get('id')
     uname = (user or {}).get('name') or ''
     conn.execute(
         "INSERT INTO pg_followups (mobile10, email, note, status, next_followup_date, "
-        "created_by_id, created_by_name, src) VALUES (?,?,?,?,?,?,?,?)",
-        (mob10, em, (note or '').strip(), status, next_date, uid, uname, src))
+        "visit_office, visit_date, convert_plan, created_by_id, created_by_name, src) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (mob10, em, (note or '').strip(), status, next_date, visit_office, visit_date, convert_plan, uid, uname, src))
     conn.commit()
     if status:
         _sync_inquiry_status(conn, mob10, em, status)
     return {'note': (note or '').strip(), 'status': status, 'next_followup_date': next_date,
+            'visit_office': visit_office, 'visit_date': visit_date, 'convert_plan': convert_plan,
             'created_by_name': uname}
 
 
@@ -236,3 +251,133 @@ def _sync_inquiry_status(conn, mob10, em, status):
         logging.error("_sync_inquiry_status: %s", e)
         try: conn.rollback()
         except Exception: pass
+
+
+# ── Registered-Doctors CRM tabs (work queue by week + office visits) ──────────
+from datetime import date as _date, datetime as _dtm, timedelta as _td
+
+
+def ist_today():
+    """Today's date in IST (server stores UTC)."""
+    return (_dtm.utcnow() + _td(hours=5, minutes=30)).date()
+
+
+def _parse_date(s):
+    s = (s or '').strip()[:10]
+    if not s:
+        return None
+    try:
+        return _dtm.strptime(s, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def week_bucket(s, today=None):
+    """Classify a YYYY-MM-DD(…) date string into overdue/this/next/later (Mon–Sun weeks);
+    '' if no/invalid date."""
+    d = _parse_date(s)
+    if not d:
+        return ''
+    today = today or ist_today()
+    monday = today - _td(days=today.weekday())
+    sunday = monday + _td(days=6)
+    next_sunday = sunday + _td(days=7)
+    if d < monday:
+        return 'overdue'
+    if d <= sunday:
+        return 'this'
+    if d <= next_sunday:
+        return 'next'
+    return 'later'
+
+
+def crm_rows(conn):
+    """Per-person (keyed by mobile last-10) current snapshot for the CRM tabs: latest status +
+    its next-follow-up date, latest office-visit intent, name + links to the doctor profile /
+    inquiry. People with only an email (no mobile) are not aggregated here (doctors have mobiles)."""
+    ensure_followups_schema(conn)
+    try:
+        status_rows = [dict(r) for r in conn.execute(
+            "SELECT DISTINCT ON (mobile10) mobile10, status, next_followup_date, convert_plan, created_by_name, created_at "
+            "FROM pg_followups WHERE mobile10 <> '' AND status <> '' "
+            "ORDER BY mobile10, created_at DESC, id DESC").fetchall()]
+        visit_rows = [dict(r) for r in conn.execute(
+            "SELECT DISTINCT ON (mobile10) mobile10, visit_office, visit_date "
+            "FROM pg_followups WHERE mobile10 <> '' AND visit_office <> '' "
+            "ORDER BY mobile10, created_at DESC, id DESC").fetchall()]
+    except Exception as e:
+        logging.error("crm_rows snapshot: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return []
+    visit_by = {r['mobile10']: r for r in visit_rows}
+    rows = {}
+    for r in status_rows:
+        rows[r['mobile10']] = {
+            'mobile10': r['mobile10'], 'status': r['status'],
+            'next_followup_date': r.get('next_followup_date') or '',
+            'convert_plan': r.get('convert_plan') or '',
+            'visit_office': '', 'visit_date': '',
+            'last_by': r.get('created_by_name') or '', 'last_at': r.get('created_at'),
+            'name': '', 'doctor_id': None, 'inquiry_id': None}
+    for mv, v in visit_by.items():
+        if mv in rows:
+            rows[mv]['visit_office'] = v.get('visit_office') or ''
+            rows[mv]['visit_date'] = v.get('visit_date') or ''
+        elif v.get('visit_office') == 'yes':
+            rows[mv] = {'mobile10': mv, 'status': 'New', 'next_followup_date': '',
+                        'convert_plan': '',
+                        'visit_office': 'yes', 'visit_date': v.get('visit_date') or '',
+                        'last_by': '', 'last_at': None, 'name': '', 'doctor_id': None, 'inquiry_id': None}
+    out = list(rows.values())
+    m10s = [r['mobile10'] for r in out]
+    if m10s:
+        ph = ','.join(['?'] * len(m10s))
+        docs = {}
+        try:
+            for d in conn.execute(
+                    f"SELECT id, name, RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) AS m10 "
+                    f"FROM pg_users WHERE RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) IN ({ph})",
+                    m10s).fetchall():
+                d = dict(d); docs.setdefault(d['m10'], d)
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        leads = {}
+        try:
+            for l in conn.execute(
+                    f"SELECT id, lead_name, RIGHT(regexp_replace(COALESCE(phone,''),'\\D','','g'),10) AS m10 "
+                    f"FROM sales_leads WHERE COALESCE(is_inquiry,0)=1 AND "
+                    f"RIGHT(regexp_replace(COALESCE(phone,''),'\\D','','g'),10) IN ({ph}) ORDER BY id DESC",
+                    m10s).fetchall():
+                l = dict(l); leads.setdefault(l['m10'], l)
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        for r in out:
+            d = docs.get(r['mobile10']); l = leads.get(r['mobile10'])
+            if d:
+                r['doctor_id'] = d['id']; r['name'] = d.get('name') or ''
+            if l:
+                r['inquiry_id'] = l['id']; r['name'] = r['name'] or (l.get('lead_name') or '')
+            if not r['name']:
+                r['name'] = '+91 ' + r['mobile10']
+    return out
+
+
+def crm_counts(rows):
+    """Tally crm_rows() into the CRM tab badges."""
+    c = {'did': 0, 'contacted': 0, 'followups': 0, 'visits': 0, 'converted': 0}
+    for r in rows:
+        s = r.get('status')
+        if s == 'Did not pick up':
+            c['did'] += 1
+        elif s == 'Contacted':
+            c['contacted'] += 1
+        elif s in ('Follow-up', 'Interested'):
+            c['followups'] += 1
+        elif s == 'Converted':
+            c['converted'] += 1
+        if r.get('visit_office') == 'yes' and (r.get('visit_date') or ''):
+            c['visits'] += 1
+    return c

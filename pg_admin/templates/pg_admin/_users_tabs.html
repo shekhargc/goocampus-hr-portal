@@ -1,0 +1,12 @@
+{# Shared CRM tab bar. Expects `active` (all|did|contacted|followups|visits|converted) + `counts`. #}
+{% set _c = counts or {} %}
+{% set tcss = 'display:inline-block;padding:0.5rem 0.9rem;border-radius:9px 9px 0 0;font-weight:700;font-size:0.84rem;text-decoration:none;border:1px solid var(--gray-200);border-bottom:none;white-space:nowrap;' %}
+{% macro bdg(n) %}{% if n %}<span style="font-size:0.66rem;background:var(--gray-200);color:var(--gray-700);padding:0 6px;border-radius:12px;margin-left:5px;">{{ n }}</span>{% endif %}{% endmacro %}
+<div style="display:flex;gap:3px;border-bottom:2px solid var(--orange);margin-bottom:1.3rem;flex-wrap:wrap;">
+  <a href="/admin/pg/users" style="{{ tcss }}background:{{ '#fff7ed' if active=='all' else '#fff' }};color:{{ 'var(--navy)' if active=='all' else 'var(--gray-600)' }};">All Doctors</a>
+  <a href="/admin/pg/users/did-not-pick-up" style="{{ tcss }}background:{{ '#fff7ed' if active=='did' else '#fff' }};color:{{ 'var(--navy)' if active=='did' else 'var(--gray-600)' }};">☎ Did not pick up{{ bdg(_c.did) }}</a>
+  <a href="/admin/pg/users/contacted" style="{{ tcss }}background:{{ '#fff7ed' if active=='contacted' else '#fff' }};color:{{ 'var(--navy)' if active=='contacted' else 'var(--gray-600)' }};">Contacted{{ bdg(_c.contacted) }}</a>
+  <a href="/admin/pg/users/followups" style="{{ tcss }}background:{{ '#fff7ed' if active=='followups' else '#fff' }};color:{{ 'var(--navy)' if active=='followups' else 'var(--gray-600)' }};">📞 Follow-ups{{ bdg(_c.followups) }}</a>
+  <a href="/admin/pg/users/visits" style="{{ tcss }}background:{{ '#fff7ed' if active=='visits' else '#fff' }};color:{{ 'var(--navy)' if active=='visits' else 'var(--gray-600)' }};">🏢 Office Visits{{ bdg(_c.visits) }}</a>
+  <a href="/admin/pg/users/converted" style="{{ tcss }}background:{{ '#fff7ed' if active=='converted' else '#fff' }};color:{{ 'var(--navy)' if active=='converted' else 'var(--gray-600)' }};">✅ Converted{{ bdg(_c.converted) }}</a>
+</div>

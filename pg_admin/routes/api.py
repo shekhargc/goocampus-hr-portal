@@ -484,6 +484,7 @@ def api_pg_predictor():
     for r in rows:
         d = as_dict(r)
         d['chance'] = _chance(d.get('closing_rank'))
+        d['fee_period'] = 'year'                   # college fee is annual tuition (founder 2026-10-06)
         _k = _re.sub(r'[^a-z0-9]+', ' ', (d.get('institute') or '').lower()).strip()
         d['pg_college_id'] = key2master.get(_k)   # → /api/pg/pg-colleges/<id>, or None
         results.append(d)

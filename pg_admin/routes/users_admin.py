@@ -133,7 +133,7 @@ def users_admin():
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
     conn = get_db()
-    users, plans = [], []
+    users, plans, tab_counts = [], [], {}
     stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
              'blocked': 0, 'new_30d': 0}
     total_pages = 1
@@ -265,6 +265,11 @@ def users_admin():
             'team': cat_counts['team'], 'internal': cat_counts['internal'],
             'paid': cat_counts['paid'], 'free': cat_counts['free'],
         }
+        try:                                   # CRM tab badge counts
+            from pg_admin import followups as _fu2
+            tab_counts = _fu2.crm_counts(_fu2.crm_rows(conn))
+        except Exception:
+            conn.rollback(); tab_counts = {}
     except Exception as e:
         conn.rollback()
         logging.error("users_admin: %s", e)
@@ -278,9 +283,123 @@ def users_admin():
     return render_template('pg_admin/users.html', user=user, users=users,
                            plans=plans, stats=stats, q=q, f_plan=f_plan,
                            f_status=f_status, f_type=f_type,
-                           cat_labels=_CATEGORY_LABELS,
-                           page=page, total_pages=total_pages,
+                           cat_labels=_CATEGORY_LABELS, counts=tab_counts,
+                           page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
+
+
+# ── CRM tabs (pipeline stages) off the shared follow-up thread. (founder 2026-10-06) ──
+def _crm_week_groups(rows, date_key, bucket_order, labels):
+    """Group CRM rows into week buckets by a date field; closest date first within each."""
+    from pg_admin import followups as _fu
+    today = _fu.ist_today()
+    by = {}
+    for r in rows:
+        dstr = (r.get(date_key) or '')[:10]
+        b = _fu.week_bucket(dstr, today) if dstr else ''
+        by.setdefault(b, []).append(r)
+    groups = []
+    for b in bucket_order:
+        lst = by.get(b, [])
+        lst.sort(key=lambda r: (r.get(date_key) or '9999-99-99'))
+        if lst:
+            groups.append({'key': b, 'label': labels.get(b, b), 'rows': lst})
+    return groups
+
+
+# stage key → (status match set, tab label, active key)
+_CRM_STAGES = {
+    'did-not-pick-up': (('Did not pick up',), 'Did not pick up', 'did'),
+    'contacted':       (('Contacted',),        'Contacted',      'contacted'),
+    'converted':       (('Converted',),        'Converted',      'converted'),
+}
+
+
+@login_required
+def users_followups():
+    """Follow-up work queue — Follow-up + Interested (the ones with a date), grouped by week,
+    soonest first (Overdue pinned top). Reads the SHARED thread, so inquiry follow-ups show too."""
+    admin = _require_users_section("view")
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    groups, total, counts = [], 0, {}
+    try:
+        from pg_admin import followups as _fu
+        allrows = _fu.crm_rows(conn)
+        counts = _fu.crm_counts(allrows)
+        rows = [r for r in allrows if r.get('status') in ('Follow-up', 'Interested')]
+        total = len(rows)
+        groups = _crm_week_groups(
+            rows, 'next_followup_date', ['overdue', 'this', 'next', 'later', ''],
+            {'overdue': '⚠ Overdue', 'this': 'This week', 'next': 'Next week',
+             'later': 'Later', '': 'No follow-up date set'})
+    except Exception as e:
+        logging.error("users_followups: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return render_template('pg_admin/users_crm.html', mode='followups', active='followups',
+                           groups=groups, total=total, counts=counts, active_section='goocampus_in')
+
+
+@login_required
+def users_visits():
+    """Office-visits queue: everyone marked willing-to-visit with a date, grouped by visit week."""
+    admin = _require_users_section("view")
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    groups, total, counts = [], 0, {}
+    try:
+        from pg_admin import followups as _fu
+        allrows = _fu.crm_rows(conn)
+        counts = _fu.crm_counts(allrows)
+        rows = [r for r in allrows if r.get('visit_office') == 'yes' and (r.get('visit_date') or '')]
+        total = len(rows)
+        groups = _crm_week_groups(
+            rows, 'visit_date', ['overdue', 'this', 'next', 'later'],
+            {'overdue': 'Past', 'this': 'This week', 'next': 'Next week', 'later': 'Later'})
+    except Exception as e:
+        logging.error("users_visits: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return render_template('pg_admin/users_crm.html', mode='visits', active='visits',
+                           groups=groups, total=total, counts=counts, active_section='goocampus_in')
+
+
+@login_required
+def users_stage(stage):
+    """Flat stage lists: Did-not-pick-up / Contacted / Converted (most-recent activity first)."""
+    admin = _require_users_section("view")
+    if not admin:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    cfg = _CRM_STAGES.get(stage)
+    if not cfg:
+        return redirect(url_for('pg_users_admin'))
+    want, label, active = cfg
+    conn = get_db()
+    groups, total, counts = [], 0, {}
+    try:
+        from pg_admin import followups as _fu
+        allrows = _fu.crm_rows(conn)
+        counts = _fu.crm_counts(allrows)
+        rows = [r for r in allrows if r.get('status') in want]
+        rows.sort(key=lambda r: str(r.get('last_at') or ''), reverse=True)   # recent first
+        total = len(rows)
+        if rows:
+            groups = [{'key': '', 'label': '', 'rows': rows}]
+    except Exception as e:
+        logging.error("users_stage(%s): %s", stage, e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return render_template('pg_admin/users_crm.html', mode='stage', active=active, stage_label=label,
+                           groups=groups, total=total, counts=counts, active_section='goocampus_in')
 
 
 @login_required
@@ -498,8 +617,11 @@ def user_followup_add(user_id):
     next_date = (_nd + (' ' + _nt if _nt else '')).strip() if _nd else ''
     if status not in ('Follow-up', 'Interested'):
         next_date = ''                      # a next-date only applies to Follow-up / Interested
-    if not note and not status:
-        flash('Add a note or pick a status.', 'error')
+    visit_office = (request.form.get('visit_office') or '').strip()      # '' | yes | no
+    visit_date = (request.form.get('visit_date') or '').strip()
+    convert_plan = (request.form.get('convert_plan') or '').strip()      # plan this lead converted to
+    if not note and not status and not visit_office:
+        flash('Add a note, a status, or an office-visit.', 'error')
         return redirect(url_for('pg_user_detail', user_id=user_id))
     conn = get_db()
     try:
@@ -509,7 +631,8 @@ def user_followup_add(user_id):
         if d:
             d = dict(d)
             _fu.add_followup(conn, d.get('mobile'), d.get('email'), note, status, next_date,
-                             dict(admin), src='doctor')
+                             dict(admin), src='doctor', visit_office=visit_office, visit_date=visit_date,
+                             convert_plan=convert_plan)
             flash('Follow-up saved.', 'success')
         else:
             flash('Doctor not found.', 'error')
