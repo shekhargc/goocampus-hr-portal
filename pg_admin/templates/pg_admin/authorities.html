@@ -77,11 +77,16 @@
         <input name="note" placeholder="Short note shown under the document"
                style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
       </label>
-      <label style="display:block;margin-top:14px;font-size:0.85rem;font-weight:600;color:var(--gray-700);">File (PDF / image / Excel — max 25 MB)
-        <input type="file" name="doc_file" required accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.doc,.docx"
+      <label style="display:block;margin-top:14px;font-size:0.85rem;font-weight:600;color:var(--gray-700);">List / details (optional — e.g. a numbered list of registration documents)
+        <textarea name="body_text" rows="4" placeholder="1. Admit card&#10;2. NEET-PG scorecard&#10;3. MBBS degree / provisional certificate&#10;4. Internship completion certificate&#10;…"
+                  style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;resize:vertical;"></textarea>
+      </label>
+      <label style="display:block;margin-top:14px;font-size:0.85rem;font-weight:600;color:var(--gray-700);">File (optional — PDF / image / Excel, max 25 MB)
+        <input type="file" name="doc_file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.doc,.docx"
                style="display:block;width:100%;margin-top:5px;font-size:0.85rem;">
       </label>
-      <button type="submit" style="margin-top:16px;background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;">Upload</button>
+      <p style="margin:8px 0 0;font-size:0.78rem;color:var(--gray-400);">Add a file, a typed list, or both — at least one is required.</p>
+      <button type="submit" style="margin-top:14px;background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;">Save</button>
     </form>
   </div>
 
@@ -96,11 +101,17 @@
         {% for d in docs_by_cat[c] %}
           <tr style="border-top:1px solid var(--gray-100);">
             <td style="padding:8px 6px;">
-              <a href="{{ url_for('pg_authority_doc_file_admin', doc_id=d.id) }}" target="_blank" style="color:#2952a3;text-decoration:none;font-weight:600;">{{ d.title }}</a>
+              {% if d.file_name %}
+                <a href="{{ url_for('pg_authority_doc_file_admin', doc_id=d.id) }}" target="_blank" style="color:#2952a3;text-decoration:none;font-weight:600;">{{ d.title }}</a>
+              {% else %}
+                <span style="font-weight:600;color:var(--navy);">{{ d.title }}</span>
+                <span style="font-size:0.7rem;color:#0e7490;background:#ecfeff;padding:1px 7px;border-radius:10px;margin-left:6px;">list</span>
+              {% endif %}
               {% if not d.is_published %}<span style="font-size:0.72rem;color:#b45309;margin-left:6px;">(hidden)</span>{% endif %}
               <div style="font-size:0.74rem;color:var(--gray-400);">
                 {{ d.file_name }}{% if d.doc_date %} · {{ d.doc_date }}{% endif %}{% if d.note %} · {{ d.note }}{% endif %}
               </div>
+              {% if d.body_text %}<div style="font-size:0.78rem;color:var(--gray-600);white-space:pre-wrap;margin-top:4px;background:var(--gray-50);border-radius:6px;padding:6px 9px;">{{ d.body_text }}</div>{% endif %}
             </td>
             <td style="padding:8px 6px;text-align:right;white-space:nowrap;">
               <form method="POST" action="{{ url_for('pg_authority_doc_toggle') }}" style="display:inline;">

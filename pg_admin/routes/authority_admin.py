@@ -43,8 +43,8 @@ def authorities_admin():
             counts[r['authority_code']] = r['n']
         if authority:
             for r in conn.execute(
-                    "SELECT id, category, title, doc_date, note, file_name, is_published, uploaded_by, "
-                    "uploaded_at FROM pg_authority_docs WHERE authority_code=? "
+                    "SELECT id, category, title, doc_date, note, body_text, file_name, is_published, "
+                    "uploaded_by, uploaded_at FROM pg_authority_docs WHERE authority_code=? "
                     "ORDER BY category, sort_order, id DESC", (authority['code'],)).fetchall():
                 r = dict(r)
                 docs_by_cat.setdefault(r['category'], []).append(r)
@@ -77,31 +77,39 @@ def authority_doc_save():
     title = _s(request.form.get('title'))
     doc_date = _s(request.form.get('doc_date'))
     note = _s(request.form.get('note'))
+    body_text = _s(request.form.get('body_text'))      # typed list / details (optional)
     f = request.files.get('doc_file')
-    if not f or not f.filename:
-        flash('Choose a file to upload.', 'error')
+    has_file = bool(f and f.filename)
+    # A document needs a file OR a typed list — e.g. a registration-document checklist can
+    # be typed in without a PDF. (founder 2026-10-06)
+    if not has_file and not body_text:
+        flash('Add a file or type the list/details (one is required).', 'error')
         return redirect(url_for('pg_authorities_admin', code=code))
-    data = f.read()
-    if not data:
-        flash('That file looks empty.', 'error')
-        return redirect(url_for('pg_authorities_admin', code=code))
-    if len(data) > 25 * 1024 * 1024:
-        flash('File too large (max 25 MB).', 'error')
-        return redirect(url_for('pg_authorities_admin', code=code))
+    data = None; fname = ''; ctype = 'application/octet-stream'
+    if has_file:
+        data = f.read()
+        if not data:
+            flash('That file looks empty.', 'error')
+            return redirect(url_for('pg_authorities_admin', code=code))
+        if len(data) > 25 * 1024 * 1024:
+            flash('File too large (max 25 MB).', 'error')
+            return redirect(url_for('pg_authorities_admin', code=code))
+        fname = f.filename
+        ctype = f.mimetype or 'application/octet-stream'
     if not title:
-        title = f.filename.rsplit('.', 1)[0]
-    ctype = f.mimetype or 'application/octet-stream'
+        title = (fname.rsplit('.', 1)[0] if fname else category_label(category))
     who = (get_user() or {}).get('name') or (get_user() or {}).get('emp_code') or 'admin'
     conn = get_db()
     try:
         ensure_pg_authority_docs(conn)
         conn.execute(
             "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, "
-            "note, file_name, file_data, file_content_type, uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (authority['code'], authority['name'], category, title, doc_date, note,
-             f.filename, data, ctype, who))
+            "note, body_text, file_name, file_data, file_content_type, uploaded_by) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (authority['code'], authority['name'], category, title, doc_date, note, body_text,
+             fname, data, ctype, who))
         conn.commit()
-        flash(f'Uploaded "{title}" to {category_label(category)}.', 'success')
+        flash(f'Saved "{title}" to {category_label(category)}.', 'success')
     except Exception as e:
         logging.error("authority_doc_save: %s", e)
         try: conn.rollback()

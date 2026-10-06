@@ -66,9 +66,12 @@ def get_authority(code):
     return as_dict(a) if a else None
 
 
-# The five per-authority document buckets (founder-approved 2026-10-06).
+# The per-authority document buckets (founder 2026-10-06; brochure added on review).
+# A document may carry a file, a typed list/details (body_text), or both — e.g. a
+# "Registration Documents" entry is often a numbered checklist typed in, not a PDF.
 DOC_CATEGORIES = [
     ("registration",      "Registration Documents"),
+    ("brochure",          "Counselling Brochure"),
     ("formats_annexures", "Formats & Annexures"),
     ("fee_structure",     "Fee Structure"),
     ("seat_matrix",       "Seat Matrix"),

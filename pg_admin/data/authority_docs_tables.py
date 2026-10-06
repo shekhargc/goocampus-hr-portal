@@ -38,6 +38,9 @@ def ensure_pg_authority_docs(conn=None):
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_authority_docs_code ON pg_authority_docs (authority_code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_authority_docs_cat ON pg_authority_docs (authority_code, category)")
+        # A typed list / details (e.g. a numbered registration-document checklist) — a doc
+        # may have this instead of, or alongside, an uploaded file. (founder 2026-10-06)
+        conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS body_text TEXT DEFAULT ''")
         conn.commit()
         logging.info("pg_authority_docs table ensured")
     except Exception as e:

@@ -101,15 +101,17 @@ def api_pg_authority(code):
     seat_matrix = None
     try:
         rows = [dict(r) for r in conn.execute(
-            "SELECT id, category, title, doc_date, note, file_name "
+            "SELECT id, category, title, doc_date, note, body_text, file_name "
             "FROM pg_authority_docs WHERE authority_code=? AND COALESCE(is_published,TRUE) "
             "ORDER BY category, sort_order, id DESC", (authority['code'],)).fetchall()]
         by_cat = {}
         for r in rows:
+            has_file = bool(r.get('file_name'))
             by_cat.setdefault(r['category'], []).append({
                 'id': r['id'], 'title': r['title'], 'date': r['doc_date'] or '',
-                'note': r['note'] or '', 'file_name': r['file_name'] or '',
-                'file_url': _file_url(r['id']),
+                'note': r['note'] or '', 'body_text': r.get('body_text') or '',
+                'file_name': r['file_name'] or '',
+                'file_url': _file_url(r['id']) if has_file else '',
             })
         for cat, label in DOC_CATEGORIES:
             if by_cat.get(cat):
