@@ -29791,6 +29791,297 @@ def ops_plab_services_summary_download():
     return _services_summary_xlsx_response(rows, PLAB_SERVICE_COLUMNS, 'PLAB Services', 'PLAB_UK_Services_Summary')
 
 
+# ── PLAB/UK Services DETAIL — one row per service actually delivered (founder 2026-10-06) ──
+# Step 1 of per-client expense tracking: lists every delivered service line (what / provider /
+# date / status) so we can later attach a cost per service and compute each client's balance.
+# Each section picks its display fields EXPLICITLY — login IDs, passwords and secret answers
+# held in some ops tables (GMC/EPIC/English logins/subscriptions) are never read out.
+
+def _svc_first(r, *cols):
+    for c in cols:
+        v = r.get(c)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return ''
+
+
+def _svc_join(*parts, sep=' · '):
+    return sep.join(p for p in parts if p)
+
+
+def _svc_date(v):
+    s = str(v or '').strip()
+    return s[:10] if len(s) >= 10 and s[4:5] == '-' else s
+
+
+def _svc_range(r, a, b):
+    return _svc_join(_svc_date(r.get(a)), _svc_date(r.get(b)), sep=' → ')
+
+
+def _svc_amount(v):
+    """Numeric amounts only (some 'payment' fields hold text like 'Paid')."""
+    try:
+        s = str(v or '').replace(',', '').replace('₹', '').strip()
+        return f"{float(s):,.0f}" if s else ''
+    except Exception:
+        return ''
+
+
+def _svc_detail_row(key, r):
+    """→ dict(service, provider, date, status, details, amount) for one ops_* record."""
+    f, j = _svc_first, _svc_join
+    out = {'service': '', 'provider': '', 'date': '', 'status': '', 'details': '', 'amount': ''}
+    if key == 'gmc':
+        lic = f(r, 'license')
+        out.update(service='GMC Registration', date=_svc_date(f(r, 'license_received_date', 'registration_date')),
+                   status=j(f(r, 'gmc_setup'), ('Licence: ' + lic) if lic else ''),
+                   details=j(('Ref ' + f(r, 'gmc_reference_number')) if f(r, 'gmc_reference_number') else '',
+                             ('English: ' + f(r, 'english_exam')) if f(r, 'english_exam') else ''))
+    elif key == 'epic':
+        out.update(service='EPIC Verification', date=_svc_date(f(r, 'registration_date')),
+                   status=f(r, 'epic_status', 'epic_registration'),
+                   details=j(f(r, 'documents_stage'), f(r, 'document_stage_status'),
+                             ('Notary: ' + f(r, 'notary_camp')) if f(r, 'notary_camp') else ''))
+    elif key == 'coaching':
+        out.update(service=j(f(r, 'course_type'), f(r, 'coaching_method'), sep=' — ') or 'Coaching',
+                   provider=f(r, 'vendor_provider', 'plab1_partner', 'plab2_vendor', 'ielts_vendor',
+                              'oet_vendor', 'other_vendor'),
+                   date=_svc_range(r, 'start_date', 'end_date'), status=f(r, 'coaching_status'),
+                   details=j(('Batch ' + j(f(r, 'batch_month'), f(r, 'batch_year'), sep=' '))
+                             if f(r, 'batch_month', 'batch_year') else '', f(r, 'english_training')))
+    elif key == 'test_bookings':
+        out.update(service=j(f(r, 'exam'), f(r, 'exam_type'), sep=' — ') or 'Test booking',
+                   provider=j(f(r, 'test_center'), f(r, 'city_state'), f(r, 'country'), sep=', '),
+                   date=_svc_date(f(r, 'exam_date', 'booking_date')),
+                   status=j(f(r, 'exam_status'), f(r, 'exam_result')),
+                   details=j(('Score ' + f(r, 'score')) if f(r, 'score') else '',
+                             ('Reval: ' + f(r, 'reval_result')) if f(r, 'reval_result') else ''))
+    elif key == 'english_logins':
+        kinds = [k for k, c in (('IELTS', 'ielts_login_id'), ('OET', 'oet_login_id')) if f(r, c)]
+        out.update(service=(' + '.join(kinds) + ' login') if kinds else 'English test login')
+    elif key == 'online_courses':
+        vm = f(r, 'validity_months')
+        out.update(service=f(r, 'courses_name', 'course_type') or 'Online course',
+                   provider=f(r, 'course_provider', 'certification_body'),
+                   date=_svc_range(r, 'start_date', 'end_date'), status=f(r, 'course_status'),
+                   details=j(f(r, 'course_type'), f(r, 'subject_name'), (vm + ' months') if vm else ''))
+    elif key == 'subscriptions':
+        out.update(service=f(r, 'online_subscription') or 'Online subscription',
+                   date=_svc_date(f(r, 'issued_date')), details=f(r, 'activation_type'))
+    elif key == 'research':
+        out.update(service=f(r, 'research_topic') or 'Research', provider=f(r, 'research_provider'),
+                   date=_svc_range(r, 'research_start_date', 'research_end_date'),
+                   status=f(r, 'research_status'),
+                   details=j(f(r, 'published_journal_name'), f(r, 'author_position')))
+    elif key == 'webinars':
+        cpd = f(r, 'cpd_points')
+        out.update(service=f(r, 'event_name', 'event_type') or 'Event',
+                   date=_svc_range(r, 'start_date', 'end_date'),
+                   details=j(f(r, 'event_type'), f(r, 'participation_type'),
+                             (cpd + ' CPD') if cpd else '',
+                             ('Value: ' + f(r, 'event_value')) if f(r, 'event_value') else ''))
+    elif key == 'mentorship':
+        out.update(service='Mentorship session', provider=f(r, 'program_provider'),
+                   date=_svc_date(f(r, 'session_date')),
+                   status=j(f(r, 'session_confirmation'), f(r, 'candidate_attendance')),
+                   details=f(r, 'payment_status'), amount=_svc_amount(r.get('amount_paid')))
+    elif key == 'job_stage':
+        out.update(service=j(f(r, 'designation'), f(r, 'hospital_name'), sep=' @ ') or 'Job',
+                   date=_svc_date(f(r, 'joined_date')), details=f(r, 'job_location'),
+                   status=('Confirmed by ' + f(r, 'job_confirmed_by')) if f(r, 'job_confirmed_by') else '')
+    elif key == 'uk_visa':
+        vt = f(r, 'visa_type')
+        out.update(service=('UK Visa — ' + vt) if vt else 'UK Visa & Travel',
+                   date=_svc_date(f(r, 'visa_issued_date', 'departure_date', 'visa_interview_date')),
+                   status=f(r, 'visa_status', 'visa_application_status'),
+                   details=j(('Lodging: ' + f(r, 'lodging_name')) if f(r, 'lodging_name') else '',
+                             ('Departure ' + _svc_date(f(r, 'departure_date'))) if f(r, 'departure_date') else ''))
+    elif key == 'uk_cab':
+        route = j(f(r, 'pick_up_location'), f(r, 'drop_location'), sep=' → ')
+        out.update(service=('Cab: ' + route) if route else 'Cab booking', provider=f(r, 'vendor'),
+                   date=_svc_date(f(r, 'pick_up_date', 'booking_date')),
+                   details=('Invoice ' + f(r, 'invoice_number')) if f(r, 'invoice_number') else '')
+    elif key == 'uk_observerships':
+        sp, pay = f(r, 'speciality'), f(r, 'payment')
+        amt = _svc_amount(pay)
+        out.update(service=('Observership — ' + sp) if sp else 'Observership',
+                   provider=j(f(r, 'hospital_name'), f(r, 'hospital_location'), sep=', '),
+                   date=_svc_range(r, 'start_date', 'end_date'), amount=amt,
+                   details=('Payment: ' + pay) if (pay and not amt) else '')
+    elif key == 'ngo':
+        out.update(service=f(r, 'activity_type') or 'NGO activity', provider=f(r, 'ngo_vendor_name'),
+                   date=_svc_date(f(r, 'activity_start_date')), details=f(r, 'batch_name_no'))
+    return out
+
+
+def _plab_filtered_clients(conn, search='', status_filter='', stage_filter=''):
+    sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='plab' "
+    params = []
+    if status_filter:
+        sql += " AND account_status = ? "; params.append(status_filter)
+    if stage_filter:
+        sql += " AND current_stage = ? "; params.append(stage_filter)
+    if search:
+        sql += (" AND (first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ? "
+                " OR mobile ILIKE ? OR email ILIKE ? "
+                " OR (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?) ")
+        params.extend([f'%{search}%'] * 6)
+    sql += (" ORDER BY NULLIF(regexp_replace(COALESCE(registration_number,''),'[^0-9]','','g'),'')"
+            "::bigint DESC NULLS LAST, id DESC ")
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='', section_filter=''):
+    """Return (rows, statuses, stages): one row per delivered service line for PLAB/UK clients."""
+    clients = _plab_filtered_clients(conn, search, status_filter, stage_filter)
+    by_reg, by_id, order = {}, {}, {}
+    for i, c in enumerate(clients):
+        name = ' '.join(f"{c.get('prefix') or ''} {c.get('first_name') or ''} {c.get('last_name') or ''}".split())
+        info = {'client_id': c.get('id'), 'name': name or '—',
+                'registration_number': c.get('registration_number') or '',
+                'registration_date': c.get('registration_date') or '',
+                'account_status': c.get('account_status') or '',
+                'current_stage': c.get('current_stage') or ''}
+        rn = (c.get('registration_number') or '').strip().upper()
+        if rn:
+            by_reg[rn] = info
+        by_id[c.get('id')] = info
+        order[c.get('id')] = i
+    sec_order = {k: n for n, (k, _l, _t) in enumerate(PLAB_SERVICE_COLUMNS)}
+    sec_label = {k: l for k, l, _t in PLAB_SERVICE_COLUMNS}
+
+    rows = []
+    for key, label, tables in PLAB_SERVICE_COLUMNS:
+        if section_filter and key != section_filter:
+            continue
+        if key == 'certificates':
+            try:
+                for d in conn.execute(
+                        "SELECT client_id, doc_type, file_name, status, uploaded_at FROM plab_client_documents "
+                        "WHERE LOWER(COALESCE(doc_category,'')) = 'certificate' ORDER BY id").fetchall():
+                    d = dict(d)
+                    info = by_id.get(d.get('client_id'))
+                    if not info:
+                        continue
+                    rows.append({**info, 'section_key': key, 'section': label,
+                                 'service': d.get('doc_type') or 'Certificate', 'provider': '',
+                                 'date': _svc_date(d.get('uploaded_at')), 'status': d.get('status') or '',
+                                 'details': d.get('file_name') or '', 'amount': ''})
+            except Exception as e:
+                logging.warning(f"services detail certificates: {e}")
+                try: conn.rollback()
+                except Exception: pass
+            continue
+        for table in tables:
+            try:
+                recs = [dict(x) for x in conn.execute(
+                    f"SELECT * FROM {table} WHERE COALESCE(pathway,'plab')='plab' ORDER BY id").fetchall()]
+            except Exception as e:
+                logging.warning(f"services detail {table}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+                continue
+            for r in recs:
+                info = by_reg.get((r.get('registration_number') or '').strip().upper())
+                if not info:
+                    continue   # not a client in the current (filtered) list
+                rows.append({**info, 'section_key': key, 'section': label, **_svc_detail_row(key, r)})
+
+    rows.sort(key=lambda x: (order.get(x['client_id'], 10**9), sec_order.get(x['section_key'], 99),
+                             str(x.get('date') or '')))
+    statuses = sorted({c.get('account_status') for c in clients if c.get('account_status')})
+    stages = sorted({c.get('current_stage') for c in clients if c.get('current_stage')})
+    return rows, statuses, stages
+
+
+_SVC_DETAIL_PER_PAGE = 300
+
+
+@app.route('/operations/plab/services-detail')
+@admin_required
+def ops_plab_services_detail():
+    """PLAB/UK Services DETAIL — every delivered service line, per client."""
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    section_filter = (request.args.get('section', '') or '').strip()
+    try:
+        page = max(1, int(request.args.get('page', 1) or 1))
+    except Exception:
+        page = 1
+    rows, statuses, stages = [], [], []
+    try:
+        rows, statuses, stages = _plab_services_detail_data(conn, search, status_filter, stage_filter, section_filter)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_detail: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    total = len(rows)
+    total_pages = max(1, (total + _SVC_DETAIL_PER_PAGE - 1) // _SVC_DETAIL_PER_PAGE)
+    page = min(page, total_pages)
+    start = (page - 1) * _SVC_DETAIL_PER_PAGE
+    return render_template(
+        'ops_plab_services_detail.html',
+        rows=rows[start:start + _SVC_DETAIL_PER_PAGE], total=total, page=page, total_pages=total_pages,
+        page_offset=start, client_count=len({r['client_id'] for r in rows}),
+        statuses=statuses, stages=stages, sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
+        q=search, status_filter=status_filter, stage_filter=stage_filter, section_filter=section_filter,
+        active_ops_page='plab-services-summary',
+    )
+
+
+@app.route('/operations/plab/services-detail/download')
+@admin_required
+def ops_plab_services_detail_download():
+    """Excel of every delivered service line (respects current filters). Client Name +
+    Registration Number lead, per the export convention."""
+    import io
+    from datetime import datetime
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+    conn = get_db()
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    section_filter = (request.args.get('section', '') or '').strip()
+    try:
+        rows, _s, _g = _plab_services_detail_data(conn, search, status_filter, stage_filter, section_filter)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_detail_download: {e}")
+        rows = []
+    conn.close()
+
+    def _xs(v):
+        return ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
+
+    wb = Workbook(); ws = wb.active; ws.title = 'PLAB Services Detail'
+    headers = ['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
+               'Current Stage', 'Section', 'Service', 'Provider / Vendor', 'Date', 'Status',
+               'Details', 'Amount (if recorded)']
+    ws.append(headers)
+    for r in rows:
+        ws.append([_xs(r['name']), _xs(r['registration_number']), _xs(r['registration_date']),
+                   _xs(r['account_status']), _xs(r['current_stage']), _xs(r['section']),
+                   _xs(r['service']), _xs(r['provider']), _xs(r['date']), _xs(r['status']),
+                   _xs(r['details']), _xs(r['amount'])])
+    navy = PatternFill('solid', fgColor='0F1B33')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF'); cell.fill = navy
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.freeze_panes = 'C2'
+    ws.auto_filter.ref = ws.dimensions
+    for idx, w in enumerate([26, 20, 15, 14, 20, 22, 34, 28, 22, 20, 36, 14], 1):
+        ws.column_dimensions[get_column_letter(idx)].width = w
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    fn = f"PLAB_UK_Services_Detail_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=fn)
+
+
 @app.route('/operations/plab/clients/<int:client_id>/welcome-kit', methods=['POST'])
 @admin_required
 def ops_plab_welcome_kit_toggle(client_id):

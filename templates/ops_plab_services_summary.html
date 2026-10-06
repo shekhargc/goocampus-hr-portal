@@ -59,10 +59,15 @@
     <h1>Services Summary <span class="badge">UK / PLAB</span></h1>
     <div class="sub">Which services have been delivered to each PLAB/UK client — <strong>Yes (n)</strong> shows how many times. Live from all PLAB sections.</div>
   </div>
-  <a class="dl-btn" href="/operations/plab/services-summary/download?q={{ q|urlencode }}&status={{ status_filter|urlencode }}&stage={{ stage_filter|urlencode }}">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-    Download Excel
-  </a>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+    <a class="dl-btn" style="background:#fff;color:var(--navy);border:1px solid var(--gray-300);" href="/operations/plab/services-detail?q={{ q|urlencode }}&status={{ status_filter|urlencode }}&stage={{ stage_filter|urlencode }}">
+      📋 Detailed list (every service)
+    </a>
+    <a class="dl-btn" href="/operations/plab/services-summary/download?q={{ q|urlencode }}&status={{ status_filter|urlencode }}&stage={{ stage_filter|urlencode }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      Download Excel
+    </a>
+  </div>
 </div>
 
 <form class="filter-bar" method="GET" action="/operations/plab/services-summary">

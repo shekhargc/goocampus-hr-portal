@@ -1,0 +1,138 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}UK / PLAB Services Detail &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1.1rem;}
+  .page-head h1{margin:0;font-size:1.5rem;color:var(--navy);font-weight:700;}
+  .page-head .sub{font-size:.85rem;color:var(--gray-500);margin-top:.25rem;max-width:760px;}
+  .page-head .badge{display:inline-block;background:var(--orange);color:#fff;padding:.2rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;margin-left:.4rem;vertical-align:middle;}
+  .head-actions{display:flex;gap:.5rem;flex-wrap:wrap;}
+  .dl-btn{display:inline-flex;align-items:center;gap:7px;background:#0F1B33;color:#fff;border:0;border-radius:.55rem;padding:.6rem 1.1rem;font-size:.86rem;font-weight:600;text-decoration:none;cursor:pointer;}
+  .dl-btn:hover{background:#1B2A4A;}
+  .ghost-btn{display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--navy);border:1px solid var(--gray-300);border-radius:.55rem;padding:.6rem 1rem;font-size:.86rem;font-weight:600;text-decoration:none;}
+  .filter-bar{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.8rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1.1rem;}
+  .filter-bar input,.filter-bar select{padding:.5rem .65rem;font-size:.88rem;border:1px solid var(--gray-300);border-radius:.4rem;background:#fff;color:var(--navy);}
+  .filter-bar input[type=text]{min-width:240px;}
+  .filter-bar .btn{padding:.5rem .9rem;font-size:.85rem;font-weight:600;border:0;border-radius:.4rem;cursor:pointer;}
+  .filter-bar .btn-apply{background:var(--orange);color:#fff;}
+  .filter-bar .btn-clear{background:var(--gray-100);color:var(--gray-600);text-decoration:none;}
+  .ops-main{overflow-x:hidden;}
+  .table-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
+  table.detail{border-collapse:collapse;width:100%;font-size:13px;}
+  table.detail thead th{position:sticky;top:0;z-index:4;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:10px 12px;text-align:left;white-space:nowrap;}
+  table.detail tbody td{padding:8px 12px;border-bottom:1px solid var(--gray-100);color:var(--navy);vertical-align:top;}
+  table.detail tbody tr.client-start td{border-top:2px solid var(--gray-200);}
+  table.detail tbody tr:hover{background:#f8fafc;}
+  .cnum{color:var(--gray-400);font-weight:600;white-space:nowrap;}
+  .cname a{color:var(--navy);font-weight:700;text-decoration:none;white-space:nowrap;}
+  .cname a:hover{color:var(--orange);}
+  .cname .creg{display:block;color:var(--gray-500);font-weight:600;font-size:11.5px;}
+  .cname .cmeta{display:block;color:var(--gray-400);font-size:11px;}
+  .sec-pill{display:inline-block;background:#eef2ff;color:#3730a3;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;}
+  .svc{font-weight:600;}
+  .muted{color:var(--gray-400);}
+  .amt{font-weight:700;color:#15803d;white-space:nowrap;}
+  .nowrap{white-space:nowrap;}
+  .st-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;}
+  .st-inprocess{background:#dbeafe;color:#1d4ed8;} .st-onhold{background:#fef3c7;color:#b45309;}
+  .st-dropped{background:#fee2e2;color:#b91c1c;} .st-completed{background:#dcfce7;color:#15803d;}
+  .st-other{background:var(--gray-100);color:var(--gray-600);}
+  .empty{padding:3rem 1rem;text-align:center;color:var(--gray-500);}
+  .pager{display:flex;gap:.6rem;align-items:center;justify-content:center;margin:1rem 0;font-size:.88rem;}
+  .pager a{color:var(--navy);font-weight:600;text-decoration:none;border:1px solid var(--gray-300);border-radius:.4rem;padding:.35rem .8rem;background:#fff;}
+  .legend{margin-top:.7rem;font-size:12px;color:var(--gray-500);}
+</style>
+{% endblock %}
+
+{% block ops_content %}
+{% set qs = 'q=' ~ (q|urlencode) ~ '&status=' ~ (status_filter|urlencode) ~ '&stage=' ~ (stage_filter|urlencode) ~ '&section=' ~ (section_filter|urlencode) %}
+<div class="page-head">
+  <div>
+    <h1>Services Detail <span class="badge">UK / PLAB</span></h1>
+    <div class="sub">Every service actually delivered to each PLAB/UK client — one row per service line, live from all PLAB sections.
+      This is the base for per-client expense tracking (cost per service comes next).</div>
+  </div>
+  <div class="head-actions">
+    <a class="ghost-btn" href="/operations/plab/services-summary">&larr; Summary view</a>
+    <a class="dl-btn" href="/operations/plab/services-detail/download?{{ qs }}">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      Download Excel
+    </a>
+  </div>
+</div>
+
+<form class="filter-bar" method="GET" action="/operations/plab/services-detail">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name, reg no, mobile, email…">
+  <select name="section">
+    <option value="">All sections</option>
+    {% for k, l in sections %}<option value="{{ k }}" {% if k == section_filter %}selected{% endif %}>{{ l }}</option>{% endfor %}
+  </select>
+  <select name="status">
+    <option value="">All account statuses</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="stage">
+    <option value="">All stages</option>
+    {% for s in stages %}<option value="{{ s }}" {% if s == stage_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <button class="btn btn-apply" type="submit">Apply</button>
+  <a class="btn btn-clear" href="/operations/plab/services-detail">Clear</a>
+  <span style="margin-left:auto;color:var(--gray-500);font-size:.82rem;font-weight:600;">
+    {{ total }} service line{{ '' if total == 1 else 's' }} · {{ client_count }} client{{ '' if client_count == 1 else 's' }}
+  </span>
+</form>
+
+<div class="table-wrap">
+  <table class="detail">
+    <thead>
+      <tr>
+        <th>#</th><th>Client</th><th>Account Status</th><th>Section</th><th>Service</th>
+        <th>Provider / Vendor</th><th>Date</th><th>Status</th><th>Details</th><th>Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(prev=None) %}
+      {% for r in rows %}
+      {% set first = (r.client_id != ns.prev) %}
+      <tr class="{{ 'client-start' if first }}">
+        <td class="cnum">{{ page_offset + loop.index }}</td>
+        <td class="cname">
+          {% if first %}
+            <a href="/operations/plab/{{ r.client_id }}">{{ r.name }}</a>
+            <span class="creg">{{ r.registration_number|format_reg }}</span>
+            <span class="cmeta">{{ r.registration_date or '' }}{% if r.current_stage %} · {{ r.current_stage }}{% endif %}</span>
+          {% else %}<span class="muted">″</span>{% endif %}
+        </td>
+        <td class="nowrap">
+          {% if first %}
+            {% set s = r.account_status %}
+            {% set cls = 'st-inprocess' if s=='In Process' else 'st-onhold' if s=='On Hold' else 'st-completed' if s=='Completed' else 'st-dropped' if 'Drop' in s else 'st-other' %}
+            {% if s %}<span class="st-pill {{ cls }}">{{ s }}</span>{% endif %}
+          {% endif %}
+        </td>
+        <td><span class="sec-pill">{{ r.section }}</span></td>
+        <td class="svc">{{ r.service or '—' }}</td>
+        <td>{{ r.provider or '' }}</td>
+        <td class="nowrap">{{ r.date or '' }}</td>
+        <td>{{ r.status or '' }}</td>
+        <td>{{ r.details or '' }}</td>
+        <td class="amt">{% if r.amount %}₹{{ r.amount }}{% endif %}</td>
+      </tr>
+      {% set ns.prev = r.client_id %}
+      {% else %}
+      <tr><td colspan="10" class="empty">No delivered services match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pager">
+  {% if page > 1 %}<a href="?{{ qs }}&page={{ page - 1 }}">&lsaquo; Prev</a>{% endif %}
+  <span>Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="?{{ qs }}&page={{ page + 1 }}">Next &rsaquo;</a>{% endif %}
+</div>
+{% endif %}
+<div class="legend">One row per service line. <strong>Amount</strong> shows only where the team already records one (mentorship, observerships) — cost per service is the next step. Use filters, then <strong>Download Excel</strong> for exactly what you see (all pages).</div>
+{% endblock %}
