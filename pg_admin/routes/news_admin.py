@@ -80,6 +80,8 @@ def news_save():
     source_url = _s(request.form.get('source_url'))          # official link (optional)
     # Default published; only an explicit '0'/'off' unpublishes. (bool, not int → BOOLEAN col)
     is_published = False if request.form.get('is_published') in ('0', 'off') else True
+    # Email this update to all registered doctors? (founder 2026-10-06)
+    send_alert = request.form.get('send_alert') in ('1', 'on', 'true', 'yes')
 
     if not heading:
         flash('Please enter a heading.', 'error')
@@ -124,21 +126,78 @@ def news_save():
                 conn.execute("UPDATE pg_news SET published_at = ? WHERE id=?", (pub_dt, news_id))
             flash('Update saved.', 'success')
         else:
-            conn.execute(
+            news_id = conn.execute(
                 "INSERT INTO pg_news (scope, state, body_label, heading, body_text, source_url, pdf_name, "
                 "pdf_data, pdf_content_type, is_published, created_by, published_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
                 (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
-                 is_published, who, (pub_dt or _dt.utcnow())))
+                 is_published, who, (pub_dt or _dt.utcnow()))).fetchone()['id']
             flash('News posted.', 'success')
         conn.commit()
+        saved_ok = True
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
         logging.error("news_save: %s", e)
         flash('Could not save. Please try again.', 'error')
+        saved_ok = False
     finally:
         conn.close()
+
+    # Email alert to all registered doctors (only on a published item, when asked).
+    try: _blast_id = int(news_id)
+    except (TypeError, ValueError): _blast_id = None
+    if saved_ok and send_alert and is_published and _blast_id:
+        try:
+            from pg_admin.news_email import trigger_news_blast, recipient_count
+            n = recipient_count()
+            trigger_news_blast(_blast_id)
+            flash(f'Emailing this update to {n} registered users in the background…'
+                  if n is not None else 'Emailing this update to all registered users in the background…',
+                  'success')
+        except Exception as e:
+            logging.error("news_save: email alert failed to start: %s", e)
+            flash('Saved, but the email alert could not be started.', 'error')
+    return redirect(url_for('pg_news_admin'))
+
+
+@login_required
+def news_test_email():
+    """Send a TEST of a posted news item (both free + paid views) to one address, so the
+    founder can preview the real email in an inbox before blasting all users. Safe — goes
+    only to the typed address. (founder 2026-10-06)"""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    to = _s(request.form.get('to')).strip()
+    if not to or '@' not in to:
+        flash('Enter a valid email address to send the test to.', 'error')
+        return redirect(url_for('pg_news_admin'))
+    try: nid = int(_s(request.form.get('news_id')))
+    except (TypeError, ValueError): nid = None
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
+            "is_published, published_at FROM pg_news WHERE id = ?", (nid,)).fetchone() if nid else None
+    finally:
+        conn.close()
+    if not row:
+        flash('Could not find that update to test.', 'error')
+        return redirect(url_for('pg_news_admin'))
+    news = dict(row)
+    try:
+        from pg_admin.news_email import build_news_email_html
+        from email_utils import send_email
+        base = f"[TEST] 📢 NEET-PG Update: {(news.get('heading') or '').strip()}"[:150]
+        ok_free = send_email([to], base + " — FREE-user view", build_news_email_html(news, True))
+        ok_paid = send_email([to], base + " — PAID-user view", build_news_email_html(news, False))
+        if ok_free or ok_paid:
+            flash(f'Test email sent to {to} (free + paid views). Check that inbox.', 'success')
+        else:
+            flash('Test could not be sent — email service may be unconfigured on the server.', 'error')
+    except Exception as e:
+        logging.error("news_test_email: %s", e)
+        flash('Test could not be sent. Please try again.', 'error')
     return redirect(url_for('pg_news_admin'))
 
 

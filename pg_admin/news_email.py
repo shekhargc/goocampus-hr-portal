@@ -1,0 +1,212 @@
+"""Email alert blast when a NEET-PG news item is posted to the dashboard (founder 2026-10-06).
+
+When the founder posts a news item (and ticks "email this update"), every registered
+doctor on goocampus.in gets a branded email with a glimpse of the news + a CTA to log in
+and read / download the attached document. Free users (no active plan) also get a subtle
+"upgrade to personalised counselling" banner; paid/complimentary users get just the update.
+
+Access on the dashboard stays plan-gated — the email only teases + drives the login.
+
+Sends run in a background daemon thread (one email per user, throttled to respect Resend's
+2 req/sec cap), so posting news never blocks on the blast.
+"""
+
+import logging
+import threading
+import time
+from datetime import datetime
+from html import escape
+
+from db import get_db
+
+logger = logging.getLogger(__name__)
+
+LOGIN_URL = "https://goocampus.in"
+UPGRADE_URL = "https://goocampus.in"
+
+
+def _fmt_date(v):
+    """published_at → '06 Oct 2026' (best-effort; falls back to a trimmed string)."""
+    if not v:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%d %b %Y")
+    s = str(v)
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s[:len(fmt) + 2].strip(), fmt).strftime("%d %b %Y")
+        except Exception:
+            continue
+    return s[:10]
+
+
+def _glimpse(body, limit=320):
+    """A short plain-text teaser of the news body, HTML-escaped, newlines → <br>."""
+    txt = (body or "").strip()
+    if len(txt) > limit:
+        cut = txt[:limit].rsplit(" ", 1)[0].rstrip(".,;:")
+        txt = cut + "…"
+    return escape(txt).replace("\n", "<br>")
+
+
+def _authority_label(news):
+    """Human authority/scope label for the news item."""
+    lbl = (news.get("body_label") or "").strip()
+    if lbl:
+        return lbl
+    scope = (news.get("scope") or "").strip()
+    if scope == "state" and (news.get("state") or "").strip():
+        return news["state"].strip()
+    return "All India / MCC"
+
+
+def build_news_email_html(news, is_free):
+    """Branded HTML for one recipient. `is_free` adds the upgrade banner."""
+    from email_utils import render_branded_email, brand_button, brand_detail_rows, brand_callout
+
+    heading = escape((news.get("heading") or "NEET-PG Update").strip())
+    authority = escape(_authority_label(news))
+    date_s = _fmt_date(news.get("published_at"))
+    has_doc = bool((news.get("pdf_name") or "").strip())
+    source_url = (news.get("source_url") or "").strip()
+
+    rows = [("Authority", authority)]
+    if date_s:
+        rows.append(("Date", date_s))
+    details = brand_detail_rows(rows)
+
+    glimpse = _glimpse(news.get("body_text"))
+    body_block = (
+        f'<p style="margin:14px 0 4px;color:#0f172a;font-size:15px;line-height:1.65;">{glimpse}</p>'
+        if glimpse else ""
+    )
+
+    doc_note = ""
+    if has_doc:
+        doc_note = brand_callout(
+            "📄 A document is attached to this update — log in to view and download it.",
+            color="#FFF7ED", border="#FED7AA", tcolor="#9A3412")
+
+    cta = brand_button("Log in to read the full update →", LOGIN_URL)
+    access_note = (
+        '<p style="margin:14px 0 0;color:#64748b;font-size:13px;line-height:1.6;text-align:center;">'
+        'Open your GooCampus dashboard to see this and all your counselling updates. '
+        'What you can access depends on your plan.</p>'
+    )
+
+    upgrade = ""
+    if is_free:
+        upgrade = (
+            '<div style="margin:24px 0 4px;background:linear-gradient(135deg,#fff5eb,#fef3e6);'
+            'border:1px solid #fed7aa;border-radius:10px;padding:16px 18px;">'
+            '<p style="margin:0 0 6px;color:#9a3412;font-weight:700;font-size:14px;">'
+            '⭐ Get the best seat for your MBBS → PG</p>'
+            '<p style="margin:0 0 10px;color:#7c2d12;font-size:13px;line-height:1.6;">'
+            'Upgrade to GooCampus and get personalised NEET-PG counselling — expert, '
+            'one-on-one guidance on choices, documents and strategy to secure the best '
+            'possible seat for you.</p>'
+            f'<a href="{UPGRADE_URL}" style="color:#ea580c;font-weight:700;font-size:13px;'
+            'text-decoration:none;">Explore counselling plans →</a>'
+            '</div>'
+        )
+
+    inner = f"{details}{body_block}{doc_note}{cta}{access_note}{upgrade}"
+    preheader = _glimpse(news.get("body_text"), 110) or heading
+    return render_branded_email(f"📢 {heading}", inner, preheader=preheader)
+
+
+def _recipients(conn):
+    """All registered doctors with a usable email + whether they are a 'free' user.
+    Excludes explicit team (staff) accounts. 'free' = no active paid/counselling plan."""
+    rows = conn.execute(
+        "SELECT u.id, u.name, LOWER(TRIM(u.email)) AS email, "
+        "  COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) AS is_team, "
+        "  EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
+        "          WHERE s.user_id = u.id AND s.status = 'active' "
+        "          AND p.plan_kind IN ('paid','counselling') "
+        "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
+        "FROM pg_users u "
+        "WHERE COALESCE(u.email,'') <> '' AND u.email LIKE '%@%'"
+    ).fetchall()
+    out, seen = [], set()
+    for r in rows:
+        r = dict(r)
+        if r.get("is_team"):
+            continue
+        em = (r.get("email") or "").strip()
+        if not em or "@" not in em or em in seen:
+            continue
+        seen.add(em)
+        out.append({"email": em, "name": r.get("name") or "", "is_free": not r.get("has_plan")})
+    return out
+
+
+def send_news_blast(news_id):
+    """Load the news item + all recipients, send one branded email each (throttled).
+    Opens its own DB connection — safe to run in a background thread."""
+    try:
+        from email_utils import send_email
+    except Exception as e:
+        logger.error("news blast: email_utils import failed: %s", e)
+        return
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
+            "is_published, published_at FROM pg_news WHERE id = ?", (news_id,)).fetchone()
+        if not row:
+            logger.error("news blast: news %s not found", news_id)
+            return
+        news = dict(row)
+        if not news.get("is_published", True):
+            logger.info("news blast: news %s is not published — skipping", news_id)
+            return
+        recips = _recipients(conn)
+    except Exception as e:
+        logger.error("news blast: load failed: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    subject = f"📢 NEET-PG Update: {(news.get('heading') or '').strip()}"[:150]
+    sent = failed = 0
+    logger.info("news blast #%s → %s recipient(s)", news_id, len(recips))
+    for r in recips:
+        try:
+            html = build_news_email_html(news, r["is_free"])
+            if send_email([r["email"]], subject, html):
+                sent += 1
+            else:
+                failed += 1
+        except Exception as e:
+            failed += 1
+            logger.error("news blast: send to %s failed: %s", r.get("email"), e)
+        time.sleep(0.4)   # stay under Resend's 2 req/sec cap
+    logger.info("news blast #%s done: %s sent, %s failed", news_id, sent, failed)
+
+
+def trigger_news_blast(news_id):
+    """Fire the blast in a background daemon thread so the request returns immediately.
+    Returns the recipient count (quick pre-count) for the admin flash, or None."""
+    try:
+        t = threading.Thread(target=send_news_blast, args=(news_id,), daemon=True)
+        t.start()
+    except Exception as e:
+        logger.error("news blast: could not start thread: %s", e)
+
+
+def recipient_count():
+    """Quick count of who a blast would reach (for the admin confirmation flash)."""
+    conn = get_db()
+    try:
+        return len(_recipients(conn))
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+    finally:
+        try: conn.close()
+        except Exception: pass
