@@ -30079,6 +30079,24 @@ def _plab_iter_service_records(conn, by_reg, by_id, section_filter=''):
                     yield key, label, table, info, r
 
 
+def _svc_build_detail_row(key, label, table, info, r, meta):
+    """One display row (client info + chosen fields + resolved Paid by) for a raw record."""
+    if key == 'certificates':
+        base = {'service': r.get('doc_type') or 'Certificate', 'provider': '',
+                'date': _svc_date(r.get('uploaded_at')), 'status': r.get('status') or '',
+                'details': r.get('file_name') or '', 'amount': ''}
+    else:
+        base = _svc_detail_row(key, r)
+    pb, src = _resolve_paid_by(table, r.get('id'), r.get('booked_by'), meta)
+    m = meta.get((table, r.get('id'))) or {}
+    return {**info, 'section_key': key, 'section': label, **base,
+            'source_table': table, 'record_id': r.get('id'),
+            'booked_by': str(r.get('booked_by') or ''),
+            'paid_by': pb, 'paid_by_source': src,
+            'meta_notes': m.get('notes') or '', 'meta_by': m.get('updated_by') or '',
+            'meta_at': str(m.get('updated_at') or '')[:16]}
+
+
 def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='', section_filter='',
                                paid_filter=''):
     """Return (rows, statuses, stages): one row per delivered service line for PLAB/UK clients,
@@ -30091,24 +30109,12 @@ def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='
 
     rows = []
     for key, label, table, info, r in _plab_iter_service_records(conn, by_reg, by_id, section_filter):
-        if key == 'certificates':
-            base = {'service': r.get('doc_type') or 'Certificate', 'provider': '',
-                    'date': _svc_date(r.get('uploaded_at')), 'status': r.get('status') or '',
-                    'details': r.get('file_name') or '', 'amount': ''}
-        else:
-            base = _svc_detail_row(key, r)
-        pb, src = _resolve_paid_by(table, r.get('id'), r.get('booked_by'), meta)
-        if paid_filter == 'none' and pb:
+        row = _svc_build_detail_row(key, label, table, info, r, meta)
+        if paid_filter == 'none' and row['paid_by']:
             continue
-        if paid_filter in _PAID_BY_CHOICES and pb != paid_filter:
+        if paid_filter in _PAID_BY_CHOICES and row['paid_by'] != paid_filter:
             continue
-        m = meta.get((table, r.get('id'))) or {}
-        rows.append({**info, 'section_key': key, 'section': label, **base,
-                     'source_table': table, 'record_id': r.get('id'),
-                     'booked_by': str(r.get('booked_by') or ''),
-                     'paid_by': pb, 'paid_by_source': src,
-                     'meta_notes': m.get('notes') or '', 'meta_by': m.get('updated_by') or '',
-                     'meta_at': str(m.get('updated_at') or '')[:16]})
+        rows.append(row)
 
     rows.sort(key=lambda x: (order.get(x['client_id'], 10**9), sec_order.get(x['section_key'], 99),
                              str(x.get('date') or '')))
@@ -30129,36 +30135,57 @@ def _svc_filters(src):
     return {k: (src.get(k, '') or '').strip() for k in ('q', 'status', 'stage', 'section', 'paid')}
 
 
+import datetime as _svc_dtm
+from decimal import Decimal as _SvcDecimal
+try:
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE as _SVC_ILLEGAL_RE
+except Exception:          # openpyxl missing locally → exports simply won't strip
+    _SVC_ILLEGAL_RE = None
+
+
 def _svc_xl_value(v):
-    """Excel-safe cell value: no blobs, dates as text, strip illegal XML chars."""
-    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
-    import datetime as _dtm
-    from decimal import Decimal
+    """Excel-safe cell value: no blobs, dates as text, strip illegal XML chars.
+    (Called ~hundreds of thousands of times per workbook — keep it import-free.)"""
     if v is None or isinstance(v, (bytes, bytearray, memoryview)):
         return ''
     if isinstance(v, bool):
         return 'Yes' if v else 'No'
-    if isinstance(v, Decimal):
+    if isinstance(v, _SvcDecimal):
         return float(v)
-    if isinstance(v, (_dtm.datetime, _dtm.date)):
+    if isinstance(v, (_svc_dtm.datetime, _svc_dtm.date)):
         return str(v)[:19]
     if isinstance(v, str):
-        return ILLEGAL_CHARACTERS_RE.sub('', v)
+        return _SVC_ILLEGAL_RE.sub('', v) if _SVC_ILLEGAL_RE else v
     return v
 
 
-def _svc_xl_style(ws, widths, freeze='C2'):
+def _svc_xl_sheet(wb, title, headers, widths, freeze='C2'):
+    """Create a STREAMING (write-only) sheet: widths + frozen panes must be set before any row,
+    then a styled header row. Write-only keeps memory flat — the full workbook (~350k cells)
+    blew the worker's RAM in normal mode (502)."""
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
-    navy = PatternFill('solid', fgColor='0F1B33')
-    for cell in ws[1]:
-        cell.font = Font(bold=True, color='FFFFFF'); cell.fill = navy
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    ws.freeze_panes = freeze
-    if ws.max_row > 1:
-        ws.auto_filter.ref = ws.dimensions
+    from openpyxl.cell.cell import WriteOnlyCell
+    ws = wb.create_sheet(title)
     for idx, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(idx)].width = w
+    ws.freeze_panes = freeze
+    navy, font = PatternFill('solid', fgColor='0F1B33'), Font(bold=True, color='FFFFFF')
+    align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    cells = []
+    for h in headers:
+        c = WriteOnlyCell(ws, value=h)
+        c.font, c.fill, c.alignment = font, navy, align
+        cells.append(c)
+    ws.append(cells)
+    return ws
+
+
+def _svc_xl_filter(ws, ncols, nrows):
+    """Auto-filter over the written block (header + nrows)."""
+    from openpyxl.utils import get_column_letter
+    if nrows > 0 and ncols > 0:
+        ws.auto_filter.ref = f"A1:{get_column_letter(ncols)}{nrows + 1}"
 
 
 def _svc_xl_send(wb, fn_prefix):
@@ -30299,11 +30326,11 @@ def ops_plab_services_detail_download():
         logging.warning(f"ops_plab_services_detail_download: {e}")
         rows = []
     conn.close()
-    wb = Workbook(); ws = wb.active; ws.title = 'PLAB Services Detail'
-    ws.append(_SVC_ALL_HEADERS)
+    wb = Workbook(write_only=True)
+    ws = _svc_xl_sheet(wb, 'PLAB Services Detail', _SVC_ALL_HEADERS, _SVC_ALL_WIDTHS)
     for r in rows:
         ws.append(_svc_all_line(r))
-    _svc_xl_style(ws, _SVC_ALL_WIDTHS)
+    _svc_xl_filter(ws, len(_SVC_ALL_HEADERS), len(rows))
     return _svc_xl_send(wb, 'PLAB_UK_Services_Detail')
 
 
@@ -30318,16 +30345,16 @@ def ops_plab_services_workbook():
     conn = get_db()
     f = _svc_filters(request.args)
     sec_keys = [(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS]
+    sec_order = {k: n for n, (k, _l) in enumerate(sec_keys)}
     try:
         clients = _plab_filtered_clients(conn, f['q'], f['status'], f['stage'])
         by_reg, by_id, order = _plab_client_index(clients)
         _ensure_service_meta(conn)
         meta = _load_service_meta(conn)
-        per_section = {k: [] for k, _l in sec_keys}       # key -> [(info, table, raw, paid_by, src)]
+        # ONE read of every service record; each feeds Counts, All services and its section sheet.
+        per_section = {k: [] for k, _l in sec_keys}       # key -> [(info, raw, display_row)]
         for key, label, table, info, r in _plab_iter_service_records(conn, by_reg, by_id):
-            pb, src = _resolve_paid_by(table, r.get('id'), r.get('booked_by'), meta)
-            per_section[key].append((info, table, r, pb, src))
-        detail_rows, _st, _sg = _plab_services_detail_data(conn, f['q'], f['status'], f['stage'])
+            per_section[key].append((info, r, _svc_build_detail_row(key, label, table, info, r, meta)))
     except Exception as e:
         logging.error(f"ops_plab_services_workbook: {e}")
         try: conn.rollback()
@@ -30337,18 +30364,20 @@ def ops_plab_services_workbook():
         return redirect(url_for('ops_plab_services_detail'))
     conn.close()
 
-    wb = Workbook()
-    # 1) Counts — per client
-    ws = wb.active; ws.title = 'Counts'
-    ws.append(['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
-               'Current Stage'] + [l for _k, l in sec_keys] +
-              ['Total services', 'Paid by GooCampus', 'Paid by Client', 'Paid by — not set'])
+    wb = Workbook(write_only=True)      # streaming — keeps memory flat on the worker
+
+    # 1) Counts — per client: times each service was given + paid-by split
     tally = {}
     for key, recs in per_section.items():
-        for info, _t, _r, pb, _src in recs:
+        for info, _r, row in recs:
             t = tally.setdefault(info['client_id'], {'_gc': 0, '_cl': 0, '_ns': 0})
             t[key] = t.get(key, 0) + 1
+            pb = row['paid_by']
             t['_gc' if pb == 'GooCampus' else '_cl' if pb == 'Client' else '_ns'] += 1
+    headers = (['Client Name', 'Registration Number', 'Registration Date', 'Account Status', 'Current Stage']
+               + [l for _k, l in sec_keys] + ['Total services', 'Paid by GooCampus', 'Paid by Client',
+                                              'Paid by — not set'])
+    ws = _svc_xl_sheet(wb, 'Counts', headers, [26, 20, 15, 14, 20] + [12] * len(sec_keys) + [12, 14, 12, 14])
     for c in clients:
         info = by_id.get(c.get('id'))
         t = tally.get(c.get('id'), {})
@@ -30357,21 +30386,24 @@ def ops_plab_services_workbook():
                    _svc_xl_value(info['registration_date']), _svc_xl_value(info['account_status']),
                    _svc_xl_value(info['current_stage'])] + counts +
                   [sum(counts), t.get('_gc', 0), t.get('_cl', 0), t.get('_ns', 0)])
-    _svc_xl_style(ws, [26, 20, 15, 14, 20] + [12] * len(sec_keys) + [12, 14, 12, 14])
+    _svc_xl_filter(ws, len(headers), len(clients))
 
-    # 2) All services — one row per line
-    ws = wb.create_sheet('All services')
-    ws.append(_SVC_ALL_HEADERS)
-    for r in detail_rows:
-        ws.append(_svc_all_line(r))
-    _svc_xl_style(ws, _SVC_ALL_WIDTHS)
+    # 2) All services — one row per line (client → section → date, like the page)
+    all_rows = [row for recs in per_section.values() for _i, _r, row in recs]
+    all_rows.sort(key=lambda x: (order.get(x['client_id'], 10**9), sec_order.get(x['section_key'], 99),
+                                 str(x.get('date') or '')))
+    ws = _svc_xl_sheet(wb, 'All services', _SVC_ALL_HEADERS, _SVC_ALL_WIDTHS)
+    for row in all_rows:
+        ws.append(_svc_all_line(row))
+    _svc_xl_filter(ws, len(_SVC_ALL_HEADERS), len(all_rows))
+    del all_rows
 
-    # 3) One sheet per section — every recorded field
+    # 3) One sheet per section — every recorded field (credentials / ids / blobs excluded)
     used_titles = {'Counts', 'All services'}
     for key, label in sec_keys:
         recs = per_section.get(key) or []
         cols = []
-        for _i, _t, r, _p, _s in recs:
+        for _i, r, _row in recs:
             for c in r.keys():
                 cl = c.lower()
                 if c in cols or c in _SVC_EXPORT_SKIP_EXACT or any(p in cl for p in _SVC_EXPORT_SKIP_PATTERN):
@@ -30381,16 +30413,16 @@ def ops_plab_services_workbook():
         while title in used_titles:
             title = title[:28] + '_2'
         used_titles.add(title)
-        ws = wb.create_sheet(title)
-        ws.append(['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
-                   'Paid by', 'Paid by — source'] + [c.replace('_', ' ').title() for c in cols])
-        recs.sort(key=lambda x: (order.get(x[0]['client_id'], 10**9), x[2].get('id') or 0))
-        for info, _t, r, pb, src in recs:
+        headers = (['Client Name', 'Registration Number', 'Registration Date', 'Account Status',
+                    'Paid by', 'Paid by — source'] + [c.replace('_', ' ').title() for c in cols])
+        ws = _svc_xl_sheet(wb, title, headers, [26, 20, 15, 14, 12, 20] + [18] * len(cols))
+        recs.sort(key=lambda x: (order.get(x[0]['client_id'], 10**9), x[1].get('id') or 0))
+        for info, r, row in recs:
             ws.append([_svc_xl_value(info['name']), _svc_xl_value(info['registration_number']),
                        _svc_xl_value(info['registration_date']), _svc_xl_value(info['account_status']),
-                       pb or 'Not set', _SVC_PAID_SOURCE_LABEL.get(src, '')] +
+                       row['paid_by'] or 'Not set', _SVC_PAID_SOURCE_LABEL.get(row['paid_by_source'], '')] +
                       [_svc_xl_value(r.get(c)) for c in cols])
-        _svc_xl_style(ws, [26, 20, 15, 14, 12, 20] + [18] * len(cols))
+        _svc_xl_filter(ws, len(headers), len(recs))
     return _svc_xl_send(wb, 'PLAB_UK_Services_Full_Workbook')
 
 
