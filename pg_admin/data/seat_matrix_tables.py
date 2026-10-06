@@ -55,6 +55,18 @@ def ensure_pg_seat_matrix():
         )''')
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_seat_matrix_source "
                      "ON pg_seat_matrix_source (counselling_body, academic_year)")
+        # Explicit authority link (so a matrix ties to a counselling authority by its stable
+        # code, not a fuzzy name match). (founder 2026-10-06)
+        conn.execute("ALTER TABLE pg_seat_matrix ADD COLUMN IF NOT EXISTS authority_code TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_seat_matrix_source ADD COLUMN IF NOT EXISTS authority_code TEXT DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_seat_matrix_auth ON pg_seat_matrix (authority_code)")
+        # Backfill the existing All-India/MCC data to the 'mcc' authority (idempotent).
+        # NB: no literal % in LIKE (psycopg2 would choke with no bound params) — use strpos.
+        _mcc_where = ("WHERE COALESCE(authority_code,'')='' AND "
+                      "(strpos(upper(COALESCE(counselling_body,'')),'MCC')>0 "
+                      "OR strpos(upper(COALESCE(counselling_body,'')),'ALL INDIA')>0)")
+        conn.execute("UPDATE pg_seat_matrix SET authority_code='mcc' " + _mcc_where)
+        conn.execute("UPDATE pg_seat_matrix_source SET authority_code='mcc' " + _mcc_where)
         conn.commit()
         logging.info("pg_seat_matrix tables ensured")
     except Exception as e:

@@ -66,16 +66,19 @@ def _news_match_sql(authority):
 
 
 def _seat_matrix_for(conn, authority):
-    """Best-effort: is there a seat matrix for this authority? Match the authority's
-    state or short name against the free-text counselling_body."""
+    """The seat matrix for this authority: by explicit authority_code first (the reliable
+    link set at upload), falling back to a name/state match for legacy untagged rows."""
+    sel = ("SELECT counselling_body, academic_year, row_count, college_count, total_seats, "
+           "(pdf_data IS NOT NULL) AS has_pdf FROM pg_seat_matrix_source ")
     try:
-        like = f"%{authority['state']}%"
-        row = conn.execute(
-            "SELECT counselling_body, academic_year, row_count, college_count, total_seats, "
-            "(pdf_data IS NOT NULL) AS has_pdf FROM pg_seat_matrix_source "
-            "WHERE counselling_body ILIKE ? OR counselling_body ILIKE ? "
-            "ORDER BY academic_year DESC LIMIT 1",
-            (like, f"%{authority['name'].split(' ')[0]}%")).fetchone()
+        row = conn.execute(sel + "WHERE authority_code = ? ORDER BY academic_year DESC LIMIT 1",
+                           (authority['code'],)).fetchone()
+        if not row:
+            like = f"%{authority['state']}%"
+            row = conn.execute(
+                sel + "WHERE COALESCE(authority_code,'')='' AND (counselling_body ILIKE ? "
+                "OR counselling_body ILIKE ?) ORDER BY academic_year DESC LIMIT 1",
+                (like, f"%{authority['name'].split(' ')[0]}%")).fetchone()
         return dict(row) if row else None
     except Exception:
         try: conn.rollback()
@@ -102,9 +105,13 @@ def api_pg_authorities():
                 mcc_news = 1
             elif r['st']:
                 news_states.add(r['st'])
+        sm_codes = set()
         try:
-            sm_bodies = [(r['counselling_body'] or '').lower() for r in conn.execute(
-                "SELECT counselling_body FROM pg_seat_matrix_source").fetchall()]
+            smrows = [dict(r) for r in conn.execute(
+                "SELECT counselling_body, COALESCE(authority_code,'') AS authority_code "
+                "FROM pg_seat_matrix_source").fetchall()]
+            sm_bodies = [(r['counselling_body'] or '').lower() for r in smrows]
+            sm_codes = {r['authority_code'] for r in smrows if r['authority_code']}
         except Exception:
             try: conn.rollback()
             except Exception: pass
@@ -127,7 +134,8 @@ def api_pg_authorities():
     for a in all_authorities():
         docs = doc_counts.get(a['code'], 0)
         has_news = (a['kind'] == 'central' and mcc_news) or (a['state'].lower() in news_states)
-        sm = any(a['state'].lower() in b or a['name'].split(' ')[0].lower() in b for b in sm_bodies)
+        sm = (a['code'] in sm_codes) or any(
+            a['state'].lower() in b or a['name'].split(' ')[0].lower() in b for b in sm_bodies)
         if docs or has_news or sm:
             # locked only matters when we know the doctor (token sent). No token → not locked
             # (the frontend gates). Paid or MCC or home state → open.

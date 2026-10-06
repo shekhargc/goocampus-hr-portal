@@ -31,8 +31,11 @@
     <form method="POST" action="{{ url_for('pg_seat_matrix_upload') }}" enctype="multipart/form-data">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
         <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Counselling authority
-          <input name="counselling_body" value="{{ default_body }}" required
-                 style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+          <select name="authority_code" required
+                  style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+            <option value="">— select the authority —</option>
+            {% for a in authorities %}<option value="{{ a.code }}" {{ 'selected' if a.code=='mcc' }}>{{ a.name }} ({{ a.state }})</option>{% endfor %}
+          </select>
         </label>
         <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Academic year
           <input name="academic_year" value="{{ default_year }}" required
