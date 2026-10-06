@@ -49,6 +49,18 @@ def _glimpse(body, limit=320):
     return escape(txt).replace("\n", "<br>")
 
 
+def _dr_name(name):
+    """'Rahul Sharma' -> 'Dr. Rahul Sharma' (idempotent — won't double a 'Dr.' prefix).
+    Returns '' for a blank/unusable name so the caller can fall back to a generic greeting."""
+    n = (name or "").strip()
+    if not n:
+        return ""
+    low = n.lower()
+    if low.startswith("dr.") or low.startswith("dr "):
+        return n
+    return "Dr. " + n
+
+
 def _authority_label(news):
     """Human authority/scope label for the news item."""
     lbl = (news.get("body_label") or "").strip()
@@ -60,9 +72,17 @@ def _authority_label(news):
     return "All India / MCC"
 
 
-def build_news_email_html(news, is_free):
-    """Branded HTML for one recipient. `is_free` adds the upgrade banner."""
+def build_news_email_html(news, is_free, name=""):
+    """Branded HTML for one recipient. `is_free` adds the upgrade banner (free users, no name);
+    paid/internal users are greeted by name ('Dear Dr. <name>,')."""
     from email_utils import render_branded_email, brand_button, brand_detail_rows, brand_callout
+
+    # Greeting: paid/internal → by name (Dr. convention); free → generic, nameless.
+    dr = "" if is_free else _dr_name(name)
+    greeting = f"Dear {escape(dr)}," if dr else "Dear Doctor,"
+    greet_block = (
+        f'<p style="margin:0 0 10px;color:#0f172a;font-size:15px;">{greeting}</p>'
+    )
 
     heading = escape((news.get("heading") or "NEET-PG Update").strip())
     authority = escape(_authority_label(news))
@@ -110,7 +130,7 @@ def build_news_email_html(news, is_free):
             '</div>'
         )
 
-    inner = f"{details}{body_block}{doc_note}{cta}{access_note}{upgrade}"
+    inner = f"{greet_block}{details}{body_block}{doc_note}{cta}{access_note}{upgrade}"
     preheader = _glimpse(news.get("body_text"), 110) or heading
     return render_branded_email(f"📢 {heading}", inner, preheader=preheader)
 
@@ -176,7 +196,7 @@ def send_news_blast(news_id):
     logger.info("news blast #%s → %s recipient(s)", news_id, len(recips))
     for r in recips:
         try:
-            html = build_news_email_html(news, r["is_free"])
+            html = build_news_email_html(news, r["is_free"], r.get("name"))
             if send_email([r["email"]], subject, html):
                 sent += 1
             else:
