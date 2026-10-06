@@ -103,15 +103,19 @@
     <option value="active" {{ 'selected' if f_status=='active' }}>Active</option>
     <option value="blocked" {{ 'selected' if f_status=='blocked' }}>Blocked</option>
   </select>
+  <select name="state" onchange="this.form.submit()">
+    <option value="">All states</option>
+    {% for s in states %}<option value="{{ s }}" {{ 'selected' if f_state==s }}>{{ s }}</option>{% endfor %}
+  </select>
   <button class="pu-btn pu-btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
-  {% if q or f_plan or f_status or f_type %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
+  {% if q or f_plan or f_status or f_type or f_state %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
 </form>
 
 {% if users %}
 <div style="overflow-x:auto;">
 <table class="pu-table">
   <thead><tr>
-    <th style="width:46px;">#</th><th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Status</th><th>Joined</th><th></th>
+    <th style="width:46px;">#</th><th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Status</th><th>State</th><th></th>
   </tr></thead>
   <tbody>
     {% for u in users %}
@@ -138,7 +142,7 @@
       <td>{% set fc = {'New':['#eef2ff','#3730a3'],'Did not pick up':['#fff1f2','#9f1239'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
         {% set st = u.fu_status or 'New' %}
         <span class="chip" style="background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span></td>
-      <td style="white-space:nowrap;">{% if u.created_at %}{{ u.created_at|format_datetime }}{% endif %}</td>
+      <td style="white-space:nowrap;">{{ u.state or '—' }}</td>
       <td><a class="pu-btn pu-btn-ghost pu-btn-sm" href="/admin/pg/users/{{ u.id }}"
              style="padding:0.35rem 0.6rem;">Open <i class="fa-solid fa-arrow-right"></i></a></td>
     </tr>
@@ -149,7 +153,7 @@
 
 {% if total_pages > 1 %}
 <div class="pu-pager">
-  {% set qs = '&q=' ~ q ~ '&plan=' ~ f_plan ~ '&status=' ~ f_status ~ '&type=' ~ f_type %}
+  {% set qs = '&q=' ~ q ~ '&plan=' ~ f_plan ~ '&status=' ~ f_status ~ '&type=' ~ f_type ~ '&state=' ~ f_state %}
   {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
   <span class="cur">{{ page }} / {{ total_pages }}</span>
   {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}
