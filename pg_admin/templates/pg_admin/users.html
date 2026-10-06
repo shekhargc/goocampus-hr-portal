@@ -46,12 +46,8 @@
     <p>Everyone who has signed up on goocampus.in, and the plan each is on.</p></div>
 </div>
 
-{% set tab = 'display:inline-block;padding:0.55rem 1.1rem;border-radius:9px 9px 0 0;font-weight:700;font-size:0.88rem;text-decoration:none;border:1px solid var(--gray-200);border-bottom:none;' %}
-<div style="display:flex;gap:4px;border-bottom:2px solid var(--orange);margin-bottom:1.3rem;flex-wrap:wrap;">
-  <a href="/admin/pg/users" style="{{ tab }}background:#fff7ed;color:var(--navy);">All Doctors</a>
-  <a href="/admin/pg/users/followups" style="{{ tab }}background:#fff;color:var(--gray-600);">📞 Follow-ups</a>
-  <a href="/admin/pg/users/visits" style="{{ tab }}background:#fff;color:var(--gray-600);">🏢 Office Visits</a>
-</div>
+{% set active = 'all' %}
+{% include "pg_admin/_users_tabs.html" %}
 
 <details style="background:#fff;border:1px solid var(--gray-200);border-radius:0.6rem;padding:0.9rem 1.1rem;margin-bottom:1.25rem;">
   <summary style="cursor:pointer;font-weight:700;color:var(--navy);">＋ Add a team member (staff)</summary>
@@ -115,11 +111,12 @@
 <div style="overflow-x:auto;">
 <table class="pu-table">
   <thead><tr>
-    <th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Status</th><th>Joined</th><th></th>
+    <th style="width:46px;">#</th><th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Status</th><th>Joined</th><th></th>
   </tr></thead>
   <tbody>
     {% for u in users %}
     <tr>
+      <td style="color:var(--gray-400);font-weight:600;">{{ (page_offset or 0) + loop.index }}</td>
       <td>
         {% set _cat = u.client_category or 'free' %}
         {% set _catcolor = {'team':'purple','internal':'orange','paid':'green','free':'gray'} %}

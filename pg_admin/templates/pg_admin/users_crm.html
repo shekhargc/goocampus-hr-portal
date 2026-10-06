@@ -1,44 +1,59 @@
 {% extends "pg_admin/pg_admin_base.html" %}
-{% block title %}Registered Doctors · {{ 'Follow-ups' if mode=='followups' else 'Office Visits' }}{% endblock %}
+{% block title %}Registered Doctors · {{ stage_label if mode=='stage' else ('Follow-ups' if mode=='followups' else 'Office Visits') }}{% endblock %}
 
 {% block section_content %}
 <div style="max-width:1100px;margin:0 auto;padding:1.5rem;">
   <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">Registered Doctors</h1>
   <p style="color:var(--gray-500);font-size:0.9rem;margin:0 0 1rem;">
-    {{ 'Follow-up work queue — who to call, grouped by week (soonest first).' if mode=='followups'
-       else 'Doctors planning an office visit, grouped by week.' }}
+    {% if mode=='followups' %}Follow-up work queue — who to call, grouped by week (soonest first).
+    {% elif mode=='visits' %}Doctors planning an office visit, grouped by week.
+    {% elif stage_label=='Did not pick up' %}Tried to reach, didn't connect — retry these.
+    {% elif stage_label=='Contacted' %}Reached, but no follow-up scheduled yet.
+    {% elif stage_label=='Converted' %}Won — converted to paid.
+    {% endif %}
     <span style="color:var(--gray-400);">· {{ total }} total · synced with Sales Inquiries</span></p>
 
-  {# ── Tabs ── #}
-  {% set tab = 'display:inline-block;padding:0.55rem 1.1rem;border-radius:9px 9px 0 0;font-weight:700;font-size:0.88rem;text-decoration:none;border:1px solid var(--gray-200);border-bottom:none;' %}
-  <div style="display:flex;gap:4px;border-bottom:2px solid var(--orange);margin-bottom:1.3rem;flex-wrap:wrap;">
-    <a href="/admin/pg/users" style="{{ tab }}background:#fff;color:var(--gray-600);">All Doctors</a>
-    <a href="/admin/pg/users/followups" style="{{ tab }}background:{{ '#fff7ed' if mode=='followups' else '#fff' }};color:{{ 'var(--navy)' if mode=='followups' else 'var(--gray-600)' }};">📞 Follow-ups</a>
-    <a href="/admin/pg/users/visits" style="{{ tab }}background:{{ '#fff7ed' if mode=='visits' else '#fff' }};color:{{ 'var(--navy)' if mode=='visits' else 'var(--gray-600)' }};">🏢 Office Visits</a>
-  </div>
+  {% set active = active %}{% set counts = counts %}
+  {% include "pg_admin/_users_tabs.html" %}
 
   {% set fc = {'New':['#eef2ff','#3730a3'],'Did not pick up':['#fff1f2','#9f1239'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
+  {% set ns = namespace(sn=0) %}
 
   {% if groups %}
     {% for g in groups %}
-    <div style="margin-bottom:1.4rem;">
+    <div style="margin-bottom:1.3rem;">
+      {% if g.label %}
       <h3 style="font-size:0.95rem;font-weight:800;color:{{ '#b91c1c' if g.key=='overdue' else 'var(--navy)' }};margin:0 0 0.55rem;display:flex;align-items:center;gap:0.5rem;">
-        {{ g.label }}
-        <span style="font-size:0.72rem;font-weight:700;background:var(--gray-100);color:var(--gray-600);padding:1px 9px;border-radius:20px;">{{ g.rows|length }}</span></h3>
+        {{ g.label }} <span style="font-size:0.72rem;font-weight:700;background:var(--gray-100);color:var(--gray-600);padding:1px 9px;border-radius:20px;">{{ g.rows|length }}</span></h3>
+      {% endif %}
       <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:auto;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
         <table style="width:100%;border-collapse:collapse;font-size:0.85rem;white-space:nowrap;">
+          <thead><tr>
+            {% set th = 'padding:0.5rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
+            <th style="{{ th }}width:46px;">#</th><th style="{{ th }}">Doctor</th>
+            {% if mode=='visits' %}<th style="{{ th }}">Visit date</th><th style="{{ th }}">Status</th>
+            {% elif mode=='followups' %}<th style="{{ th }}">Status</th><th style="{{ th }}">Follow-up date &amp; time</th>
+            {% else %}<th style="{{ th }}">Status</th>{% endif %}
+            <th style="{{ th }}"></th>
+          </tr></thead>
           <tbody>
           {% for r in g.rows %}
+          {% set ns.sn = ns.sn + 1 %}
+          {% set st = r.status or 'New' %}
           <tr style="border-top:1px solid var(--gray-100);">
+            <td style="padding:0.6rem 0.9rem;color:var(--gray-400);font-weight:600;">{{ ns.sn }}</td>
             <td style="padding:0.6rem 0.9rem;font-weight:600;color:var(--navy);">{{ r.name }}
               <div style="font-size:0.72rem;color:var(--gray-400);font-weight:400;">+91 {{ r.mobile10 }}</div></td>
-            <td style="padding:0.6rem 0.9rem;">
-              {% set st=r.status or 'New' %}
-              <span style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span>
-              {% if mode=='followups' and r.visit_office=='yes' %}<span style="font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:20px;background:#ecfeff;color:#0e7490;margin-left:4px;">🏢 visit{% if r.visit_date %} {{ r.visit_date }}{% endif %}</span>{% endif %}</td>
-            <td style="padding:0.6rem 0.9rem;color:#b45309;font-weight:600;">
-              {% if mode=='followups' %}{{ r.next_followup_date or '—' }}{% else %}{{ r.visit_date or '—' }}{% endif %}</td>
-            <td style="padding:0.6rem 0.9rem;color:var(--gray-500);font-size:0.78rem;">{% if r.last_by %}by {{ r.last_by }}{% endif %}</td>
+            {% if mode=='visits' %}
+              <td style="padding:0.6rem 0.9rem;color:#b45309;font-weight:600;">{{ r.visit_date or '—' }}</td>
+              <td style="padding:0.6rem 0.9rem;"><span style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span></td>
+            {% elif mode=='followups' %}
+              <td style="padding:0.6rem 0.9rem;"><span style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span>
+                {% if r.visit_office=='yes' %}<span style="font-size:0.66rem;font-weight:700;padding:2px 8px;border-radius:20px;background:#ecfeff;color:#0e7490;margin-left:4px;">🏢{% if r.visit_date %} {{ r.visit_date }}{% endif %}</span>{% endif %}</td>
+              <td style="padding:0.6rem 0.9rem;color:#b45309;font-weight:600;">{{ r.next_followup_date or '—' }}</td>
+            {% else %}
+              <td style="padding:0.6rem 0.9rem;"><span style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:20px;background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span></td>
+            {% endif %}
             <td style="padding:0.6rem 0.9rem;text-align:right;white-space:nowrap;">
               {% if r.doctor_id %}<a href="/admin/pg/users/{{ r.doctor_id }}" style="color:var(--orange);font-weight:600;text-decoration:none;">Open profile →</a>
               {% elif r.inquiry_id %}<a href="/sales/inquiries/{{ r.inquiry_id }}" style="color:var(--orange);font-weight:600;text-decoration:none;">Open inquiry →</a>
@@ -52,8 +67,7 @@
     {% endfor %}
   {% else %}
     <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:2.5rem;text-align:center;color:var(--gray-400);box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-      {{ 'Nothing in the follow-up queue yet — set a status (Contacted / Follow-up / Interested …) on a doctor or inquiry and they appear here.' if mode=='followups'
-         else 'No office visits planned yet — mark "Willing to visit office? Yes" with a date on a doctor or inquiry.' }}
+      Nothing here yet.
     </div>
   {% endif %}
 </div>

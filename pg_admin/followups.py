@@ -355,3 +355,21 @@ def crm_rows(conn):
             if not r['name']:
                 r['name'] = '+91 ' + r['mobile10']
     return out
+
+
+def crm_counts(rows):
+    """Tally crm_rows() into the CRM tab badges."""
+    c = {'did': 0, 'contacted': 0, 'followups': 0, 'visits': 0, 'converted': 0}
+    for r in rows:
+        s = r.get('status')
+        if s == 'Did not pick up':
+            c['did'] += 1
+        elif s == 'Contacted':
+            c['contacted'] += 1
+        elif s in ('Follow-up', 'Interested'):
+            c['followups'] += 1
+        elif s == 'Converted':
+            c['converted'] += 1
+        if r.get('visit_office') == 'yes' and (r.get('visit_date') or ''):
+            c['visits'] += 1
+    return c
