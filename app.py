@@ -29843,12 +29843,15 @@ def _svc_detail_row(key, r):
                    details=j(f(r, 'documents_stage'), f(r, 'document_stage_status'),
                              ('Notary: ' + f(r, 'notary_camp')) if f(r, 'notary_camp') else ''))
     elif key == 'coaching':
-        out.update(service=j(f(r, 'course_type'), f(r, 'coaching_method'), sep=' — ') or 'Coaching',
+        # The training SUBJECT (e.g. "PLAB 2 Training", "OET Training") lives in english_training —
+        # lead with it, since it's what drives cost; course_type/method qualify it.
+        out.update(service=j(f(r, 'english_training'), f(r, 'course_type'), f(r, 'coaching_method'),
+                             sep=' — ') or 'Coaching',
                    provider=f(r, 'vendor_provider', 'plab1_partner', 'plab2_vendor', 'ielts_vendor',
                               'oet_vendor', 'other_vendor'),
                    date=_svc_range(r, 'start_date', 'end_date'), status=f(r, 'coaching_status'),
-                   details=j(('Batch ' + j(f(r, 'batch_month'), f(r, 'batch_year'), sep=' '))
-                             if f(r, 'batch_month', 'batch_year') else '', f(r, 'english_training')))
+                   details=('Batch ' + j(f(r, 'batch_month'), f(r, 'batch_year'), sep=' '))
+                           if f(r, 'batch_month', 'batch_year') else '')
     elif key == 'test_bookings':
         out.update(service=j(f(r, 'exam'), f(r, 'exam_type'), sep=' — ') or 'Test booking',
                    provider=j(f(r, 'test_center'), f(r, 'city_state'), f(r, 'country'), sep=', '),
