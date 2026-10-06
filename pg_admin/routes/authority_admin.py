@@ -102,6 +102,16 @@ def authority_doc_save():
     conn = get_db()
     try:
         ensure_pg_authority_docs(conn)
+        # Refuse a duplicate file name for the same authority (founder 2026-10-06).
+        if fname:
+            dup = conn.execute(
+                "SELECT 1 FROM pg_authority_docs WHERE authority_code = ? "
+                "AND LOWER(TRIM(file_name)) = LOWER(TRIM(?)) LIMIT 1",
+                (authority['code'], fname)).fetchone()
+            if dup:
+                flash(f'A file named "{fname}" is already uploaded for {authority["name"]}. '
+                      f'Rename the file or delete the existing one first.', 'error')
+                return redirect(url_for('pg_authorities_admin', code=code))
         conn.execute(
             "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, "
             "note, body_text, file_name, file_data, file_content_type, uploaded_by) "
