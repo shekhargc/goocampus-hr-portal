@@ -190,7 +190,8 @@ def news_test_email():
         from email_utils import send_email
         base = f"[TEST] 📢 NEET-PG Update: {(news.get('heading') or '').strip()}"[:150]
         ok_free = send_email([to], base + " — FREE-user view", build_news_email_html(news, True))
-        ok_paid = send_email([to], base + " — PAID-user view", build_news_email_html(news, False))
+        ok_paid = send_email([to], base + " — PAID-user view",
+                             build_news_email_html(news, False, name="Rahul Sharma"))
         if ok_free or ok_paid:
             flash(f'Test email sent to {to} (free + paid views). Check that inbox.', 'success')
         else:
