@@ -9,7 +9,7 @@
   .sg-chips a.on{background:var(--navy,#1e3a5f);color:#fff;border-color:var(--navy,#1e3a5f);}
   .g{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.75rem;font-weight:700;white-space:nowrap;}
   .g-clinical{background:#dcfce7;color:#166534;} .g-para_clinical{background:#e0f2fe;color:#075985;}
-  .g-pre_clinical{background:#f3e8ff;color:#6b21a8;} .g-{background:#fee2e2;color:#991b1b;}
+  .g-pre_clinical{background:#f3e8ff;color:#6b21a8;} .g-non_clinical{background:#fef9c3;color:#854d0e;} .g-{background:#fee2e2;color:#991b1b;}
   table.sg{width:100%;border-collapse:collapse;font-size:.86rem;background:#fff;}
   table.sg th{background:var(--gray-50);text-align:left;padding:.55rem .8rem;font-size:.7rem;text-transform:uppercase;color:var(--navy);border-bottom:2px solid var(--gray-200);}
   table.sg td{padding:.55rem .8rem;border-top:1px solid var(--gray-100);color:var(--navy);}
@@ -27,8 +27,9 @@
   <div style="margin-bottom:16px;max-width:980px;">
     <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Speciality groups</h1>
     <p style="margin:0;font-size:.88rem;color:var(--gray-500);">
-      Every speciality in the predictor data, grouped as <b>Clinical</b>, <b>Para-clinical</b> or <b>Pre-clinical</b>
-      (Non-clinical = Para + Pre). Groups are set automatically from the name — fix any that are wrong.
+      Every speciality in the predictor data, grouped as <b>Clinical</b> or <b>Non-clinical</b> (Para-clinical /
+      Pre-clinical where known). The group comes from the <b>cut-off file's Clinical/Non-clinical column</b>; only
+      specialities the file doesn't cover fall back to name rules. Override any row here.
       This drives the College Predictor's optional <i>Clinical / Non-clinical</i> filter. <b>Unclassified</b>
       specialities are left out of both filters until you place them.
     </p>
@@ -43,6 +44,8 @@
     <a href="?show=clinical&q={{ q|urlencode }}" class="{{ 'on' if show=='clinical' }}">Clinical · {{ counts.clinical }}</a>
     <a href="?show=para_clinical&q={{ q|urlencode }}" class="{{ 'on' if show=='para_clinical' }}">Para-clinical · {{ counts.para_clinical }}</a>
     <a href="?show=pre_clinical&q={{ q|urlencode }}" class="{{ 'on' if show=='pre_clinical' }}">Pre-clinical · {{ counts.pre_clinical }}</a>
+    <a href="?show=non_clinical&q={{ q|urlencode }}" class="{{ 'on' if show=='non_clinical' }}">Non-clinical (unspecified) · {{ counts.non_clinical }}</a>
+    <a href="?show=differ&q={{ q|urlencode }}" class="{{ 'on' if show=='differ' }}" style="{{ 'color:#b45309;' if counts.differ }}">File vs rule differ · {{ counts.differ }}</a>
     <a href="?show=none&q={{ q|urlencode }}" class="{{ 'on' if show=='none' }}" style="{{ 'color:#991b1b;' if counts[''] }}">Unclassified · {{ counts[''] }}</a>
     <a href="?show=overridden&q={{ q|urlencode }}" class="{{ 'on' if show=='overridden' }}">Changed by admin · {{ counts.overridden }}</a>
     <form method="GET" style="margin-left:auto;display:flex;gap:.4rem;">
@@ -53,19 +56,23 @@
 
   <div style="border:1px solid var(--gray-200);border-radius:12px;overflow:auto;max-width:980px;">
     <table class="sg">
-      <thead><tr><th>#</th><th>Speciality (as in the data)</th><th>Group</th><th>Seat rows</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>Speciality (as in the data)</th><th>Group</th><th>Cut-off file says</th><th>Seat rows</th><th></th></tr></thead>
       <tbody>
       {% for i in items %}
         <tr>
           <td class="muted">{{ loop.index }}</td>
           <td style="font-weight:600;">{{ i.course }}{% if i.last_year and year and i.last_year != year %} <span class="muted">(last seen {{ i.last_year }})</span>{% endif %}</td>
           <td><span class="g g-{{ i.group }}">{{ labels[i.group] }}</span>
-            {% if i.overridden %}<div class="muted">set by {{ i.by }}{% if i.at %} · {{ i.at }}{% endif %} · auto would be {{ labels[i.auto] }}</div>{% else %}<div class="muted">automatic</div>{% endif %}</td>
+            {% if i.overridden %}<div class="muted">set by {{ i.by }}{% if i.at %} · {{ i.at }}{% endif %} · automatic would be {{ labels[i.auto] }}</div>
+            {% elif i.source == 'file' %}<div class="muted">from cut-off file</div>
+            {% elif i.source == 'rule' %}<div class="muted">from name rule (not in file)</div>{% endif %}</td>
+          <td>{% if i.file_raw %}{{ i.file_raw }}{% if i.file_mixed %} <span class="muted" title="Rows for this speciality disagree in the file">(mixed)</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}
+            {% if i.differ %}<div style="font-size:.74rem;color:#b45309;font-weight:600;">name rule says {{ labels[i.rule] }}</div>{% endif %}</td>
           <td class="muted">{{ i.n }}</td>
           <td><button type="button" class="ebtn" data-course="{{ i.course }}" data-group="{{ i.group if i.overridden else 'auto' }}" data-auto="{{ labels[i.auto] }}" onclick="openSg(this)">✎</button></td>
         </tr>
       {% else %}
-        <tr><td colspan="5" style="padding:2.5rem;text-align:center;color:var(--gray-400);">No specialities match.</td></tr>
+        <tr><td colspan="6" style="padding:2.5rem;text-align:center;color:var(--gray-400);">No specialities match.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -85,6 +92,7 @@
       <label class="opt"><input type="radio" name="group" value="clinical"> <span class="g g-clinical">Clinical</span></label>
       <label class="opt"><input type="radio" name="group" value="para_clinical"> <span class="g g-para_clinical">Para-clinical</span> <span class="muted">(non-clinical)</span></label>
       <label class="opt"><input type="radio" name="group" value="pre_clinical"> <span class="g g-pre_clinical">Pre-clinical</span> <span class="muted">(non-clinical)</span></label>
+      <label class="opt"><input type="radio" name="group" value="non_clinical"> <span class="g g-non_clinical">Non-clinical</span> <span class="muted">(not split)</span></label>
       <label class="opt"><input type="radio" name="group" value="auto"> Automatic <span class="muted" id="sgAuto"></span></label>
     </div>
     <div class="df"><button type="button" onclick="closeSg()" style="background:var(--gray-100);color:var(--gray-600);">Cancel</button><button type="submit" style="background:var(--navy,#1e3a5f);color:#fff;">Save</button></div>

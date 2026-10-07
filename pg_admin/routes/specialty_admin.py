@@ -22,27 +22,38 @@ def specialty_groups_admin():
     show = (request.args.get('show') or '').strip()      # '' | clinical | para_clinical | pre_clinical | none | overridden
     q = (request.args.get('q') or '').strip()
     conn = get_db()
-    items, counts, year = [], {'clinical': 0, 'para_clinical': 0, 'pre_clinical': 0, '': 0, 'overridden': 0}, None
+    items, year = [], None
+    counts = {'clinical': 0, 'para_clinical': 0, 'pre_clinical': 0, 'non_clinical': 0, '': 0,
+              'overridden': 0, 'differ': 0, 'from_file': 0}
     try:
         SG.ensure_course_branch_table(conn)
         yr = conn.execute("SELECT COALESCE(MAX(year),0) AS y FROM pg_cutoffs").fetchone()
         year = int(yr['y']) if yr and yr['y'] else None
         ovr_rows = {r['course_key']: dict(r) for r in conn.execute(
             "SELECT course_key, branch_group, updated_by, updated_at FROM pg_course_branch").fetchall()}
+        ctx = SG.context(conn)            # all years — what the cut-off file says per course
         rows = conn.execute(
             "SELECT course, COUNT(*) AS n, MAX(year) AS last_year FROM pg_cutoffs "
             "WHERE COALESCE(course,'') <> '' AND COALESCE(is_reference,0) = 0 "
             "GROUP BY course ORDER BY course").fetchall()
         for r in rows:
             k = SG.course_key(r['course'])
-            auto = SG.classify(r['course'])
+            eff, src = SG.group_source(r['course'], ctx)
+            rule = SG.classify(r['course'])
+            f = ctx['file'].get(k)
             o = ovr_rows.get(k)
-            eff = (o['branch_group'] or '') if o else auto
+            # "differ": the file and the name rules disagree on clinical vs non-clinical
+            differ = bool(f and rule and ((f['group'] == 'clinical') != (rule == 'clinical')))
             counts[eff] = counts.get(eff, 0) + 1
-            if o:
-                counts['overridden'] += 1
+            counts['overridden'] += 1 if o else 0
+            counts['differ'] += 1 if differ else 0
+            counts['from_file'] += 1 if f else 0
+            # what "Automatic" would give if the admin override were removed
+            auto_ctx = {'ovr': {}, 'file': ctx['file']}
             items.append({'course': r['course'], 'key': k, 'n': r['n'], 'last_year': r['last_year'],
-                          'auto': auto, 'group': eff, 'overridden': bool(o),
+                          'auto': SG.group_of(r['course'], auto_ctx), 'group': eff, 'source': src,
+                          'overridden': bool(o), 'file_raw': (f or {}).get('raw', ''),
+                          'file_mixed': bool(f and f['mixed']), 'rule': rule, 'differ': differ,
                           'by': (o or {}).get('updated_by') or '',
                           'at': str((o or {}).get('updated_at') or '')[:16]})
     except Exception as e:
@@ -54,6 +65,8 @@ def specialty_groups_admin():
     total = len(items)
     if show == 'overridden':
         items = [i for i in items if i['overridden']]
+    elif show == 'differ':
+        items = [i for i in items if i['differ']]
     elif show == 'none':
         items = [i for i in items if not i['group']]
     elif show in SG.GROUPS:
@@ -77,7 +90,7 @@ def specialty_groups_set():
     k = SG.course_key(course)
     if not k:
         flash('Missing speciality.', 'error'); return redirect(url_for('pg_specialty_groups', **back))
-    if group not in SG.GROUPS + ('', 'auto'):
+    if group not in SG.GROUPS + ('auto',):
         flash('Pick Clinical, Para-clinical, Pre-clinical or Automatic.', 'error')
         return redirect(url_for('pg_specialty_groups', **back))
     who = (get_user() or {}).get('name') or (get_user() or {}).get('emp_code') or 'admin'
@@ -85,10 +98,11 @@ def specialty_groups_set():
     try:
         SG.ensure_course_branch_table(conn)
         old = conn.execute("SELECT branch_group FROM pg_course_branch WHERE course_key = ?", (k,)).fetchone()
-        old_g = (old['branch_group'] or '') if old else ('auto:' + SG.classify(course))
+        auto_now = SG.group_of(course, {'ovr': {}, 'file': SG.file_types(conn)})
+        old_g = (old['branch_group'] or '') if old else ('auto:' + auto_now)
         if group == 'auto':
             conn.execute("DELETE FROM pg_course_branch WHERE course_key = ?", (k,))
-            new_g = 'auto:' + SG.classify(course)
+            new_g = 'auto:' + auto_now
         else:
             conn.execute(
                 "INSERT INTO pg_course_branch (course_key, course_label, branch_group, updated_by, updated_at) "
@@ -101,7 +115,7 @@ def specialty_groups_set():
             conn.execute("INSERT INTO pg_course_branch_log (course_key, old_group, new_group, changed_by) "
                          "VALUES (?,?,?,?)", (k, old_g, new_g, who))
         conn.commit()
-        flash(f'"{course}" → {SG.GROUP_LABELS.get(group, "Automatic")}' if group != 'auto'
+        flash(f'"{course}" → {SG.GROUP_LABELS.get(group, group)}' if group != 'auto'
               else f'"{course}" reset to automatic grouping.', 'success')
     except Exception as e:
         logging.error("specialty_groups_set: %s", e)

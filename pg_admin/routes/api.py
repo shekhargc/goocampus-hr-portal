@@ -434,13 +434,13 @@ def api_pg_predictor():
             fi, pi = smart_name_clause("institute", q)
             where.append(f"({fc} OR {fi})"); params.extend(pc + pi)
         from pg_admin.data import specialty_groups as _SG
+        _sg_ctx = _SG.context(conn, year)
         if branch in _SG.BRANCH_PARAMS:
-            _bc = _SG.courses_in_branch(conn, year, branch) or []
+            _bc = _SG.courses_in_branch(conn, year, branch, _sg_ctx) or []
             if _bc:
                 where.append("course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
             else:
                 where.append("1 = 0")
-        _sg_ovr = _SG.overrides(conn)
         where_sql = ' AND '.join(where)
         # Exact match count (not just the page) so the site can say "N total"
         # truthfully even though only `limit` rows are returned for display.
@@ -499,7 +499,7 @@ def api_pg_predictor():
         d['fee_period'] = 'year'                   # college fee is annual tuition (founder 2026-10-06)
         _c = d.get('course') or ''
         if _c not in _sg_cache:
-            _sg_cache[_c] = _SG.group_of(_c, _sg_ovr)
+            _sg_cache[_c] = _SG.group_of(_c, _sg_ctx)
         d['speciality_group'] = _sg_cache[_c]      # clinical | para_clinical | pre_clinical | '' (2026-10-07)
         _k = _re.sub(r'[^a-z0-9]+', ' ', (d.get('institute') or '').lower()).strip()
         d['pg_college_id'] = key2master.get(_k)   # → /api/pg/pg-colleges/<id>, or None

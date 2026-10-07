@@ -14,16 +14,18 @@ import logging
 
 from db import get_db
 
-GROUPS = ('clinical', 'para_clinical', 'pre_clinical')
+GROUPS = ('clinical', 'para_clinical', 'pre_clinical', 'non_clinical')
 GROUP_LABELS = {'clinical': 'Clinical', 'para_clinical': 'Para-clinical',
-                'pre_clinical': 'Pre-clinical', '': 'Unclassified'}
-# What the public `branch` parameter accepts → which stored groups it covers.
+                'pre_clinical': 'Pre-clinical', 'non_clinical': 'Non-clinical', '': 'Unclassified'}
+# What the public `branch` parameter accepts → which groups it covers. 'non_clinical' (a
+# group of its own) = the cut-off file said Non-clinical without saying para/pre.
 BRANCH_PARAMS = {
     'clinical': ('clinical',),
-    'non_clinical': ('para_clinical', 'pre_clinical'),
+    'non_clinical': ('para_clinical', 'pre_clinical', 'non_clinical'),
     'para_clinical': ('para_clinical',),
     'pre_clinical': ('pre_clinical',),
 }
+NON_CLINICAL = ('para_clinical', 'pre_clinical', 'non_clinical')
 
 # Checked IN ORDER: pre-clinical → para-clinical → clinical. Order matters — e.g.
 # "Community Medicine" / "Forensic Medicine" must hit para before the generic "medicine".
@@ -121,20 +123,74 @@ def overrides(conn):
     return out
 
 
-def group_of(course, ovr):
-    """Effective group: admin override first, else the automatic rule."""
+def file_type_group(v):
+    """Cut-off file's course_type text → group ('' if it isn't a clinical-type value)."""
+    t = re.sub(r'[^a-z]', '', str(v or '').lower())
+    return {'clinical': 'clinical', 'nonclinical': 'non_clinical', 'paraclinical': 'para_clinical',
+            'preclinical': 'pre_clinical'}.get(t, '')
+
+
+def file_types(conn, year=None):
+    """{course_key: {'group', 'raw', 'mixed'}} — the MAJORITY course_type the uploaded cut-off
+    file gives each course (optionally for one year). 'mixed' flags inconsistent rows."""
+    out = {}
+    try:
+        sql = ("SELECT course, course_type, COUNT(*) AS n FROM pg_cutoffs "
+               "WHERE COALESCE(course,'') <> '' AND COALESCE(course_type,'') <> '' ")
+        params = []
+        if year:
+            sql += "AND year = ? "; params.append(year)
+        sql += "GROUP BY course, course_type"
+        agg = {}
+        for r in conn.execute(sql, params).fetchall():
+            g = file_type_group(r['course_type'])
+            if not g:
+                continue
+            k = course_key(r['course'])
+            d = agg.setdefault(k, {})
+            d[(g, str(r['course_type']).strip())] = d.get((g, str(r['course_type']).strip()), 0) + int(r['n'])
+        for k, d in agg.items():
+            (g, raw), _n = max(d.items(), key=lambda kv: kv[1])
+            out[k] = {'group': g, 'raw': raw, 'mixed': len({gg for gg, _ in d}) > 1}
+    except Exception as e:
+        logging.warning("specialty file_types: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    return out
+
+
+def context(conn, year=None):
+    """Everything group_of needs, loaded once per request."""
+    return {'ovr': overrides(conn), 'file': file_types(conn, year)}
+
+
+def group_source(course, ctx):
+    """→ (group, source) with source in admin | file | rule | ''.
+    Precedence: admin override > cut-off file's course_type > name rules. When the file only
+    says 'Non-clinical', the rules may refine it to para/pre — never flip it to clinical."""
     k = course_key(course)
-    if k in ovr:
-        return ovr[k]
-    return classify(course)
+    if k in ctx['ovr']:
+        return ctx['ovr'][k], 'admin'
+    f = ctx['file'].get(k)
+    if f:
+        if f['group'] == 'non_clinical':
+            r = classify(course)
+            return (r if r in ('para_clinical', 'pre_clinical') else 'non_clinical'), 'file'
+        return f['group'], 'file'
+    r = classify(course)
+    return r, ('rule' if r else '')
 
 
-def courses_in_branch(conn, year, branch):
-    """Exact pg_cutoffs course strings (for `year`) whose group falls in `branch`."""
+def group_of(course, ctx):
+    return group_source(course, ctx)[0]
+
+
+def courses_in_branch(conn, year, branch, ctx=None):
+    """Exact pg_cutoffs course strings (for `year`) whose effective group falls in `branch`."""
     want = BRANCH_PARAMS.get(branch)
     if not want:
         return None
-    ovr = overrides(conn)
+    ctx = ctx or context(conn, year)
     rows = conn.execute("SELECT DISTINCT course FROM pg_cutoffs WHERE year = ? "
                         "AND COALESCE(course,'') <> ''", (year,)).fetchall()
-    return [r['course'] for r in rows if group_of(r['course'], ovr) in want]
+    return [r['course'] for r in rows if group_of(r['course'], ctx) in want]
