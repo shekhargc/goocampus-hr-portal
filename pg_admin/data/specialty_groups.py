@@ -36,7 +36,7 @@ _RULES = [
         r'\bimmuno ?h(a)?ematology\b', r'\bblood transfusion\b', r'\btransfusion medicine\b',
         r'\blaboratory medicine\b', r'\blab medicine\b', r'\bhospital administration\b',
         r'\baerospace\b', r'\baviation medicine\b', r'\belectromyography\b',
-        r'\bclinical pathology\b', r'\bdcp\b', r'\bhealth administration\b', r'\bpublic health\b',
+        r'\bclinical pathology\b', r'\bdcp\b', r'\bhealth administration\b', r'\bpublic health\b', r'\bbacteriolog', r'\bepidemiolog', r'\bmph\b',
     ]),
     ('clinical', [
         r'\ban(a)?esth', r'\bdermatolog', r'\bvenereolog', r'\bemergency\b', r'\bfamily medicine\b',
@@ -48,7 +48,7 @@ _RULES = [
         r'\bent\b', r'\boto ?rhino', r'\botorhinolaryngology\b', r'\bsurgery\b', r'\bsurgical\b',
         r'\bobstetric', r'\bgyna?e?colog', r'\bobg\b', r'\bophthalm', r'\borthop', r'\btrauma',
         r'\bmaternal\b', r'\bvenereology\b', r'\bleprosy\b', r'\be n t\b', r'\bobst\b',
-        r'\bgyna?e\b', r'\bgyn\b', r'\bmedicine\b',
+        r'\bgyna?e\b', r'\bgyn\b', r'\bdiabetolog', r'\bultrasonograph', r'\bsonolog', r'\bmedicine\b',
     ]),
 ]
 # Common Indian PG diploma / degree acronyms (dots stripped: "D.M.R.D." → "dmrd").
