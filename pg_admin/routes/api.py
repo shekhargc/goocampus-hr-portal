@@ -175,6 +175,10 @@ def api_pg_otp_verify():
 
 def _authorized():
     """True if the request carries the correct X-PG-Key handshake."""
+    # Server-internal self-check (admin diag, via test_client environ — an outside HTTP
+    # request can't set a non-HTTP_ WSGI environ key, so this can't be spoofed).
+    if request.environ.get('pg.internal_check') is True:
+        return True
     expected = os.environ.get('PG_API_KEY') or ''
     got = request.headers.get('X-PG-Key') or ''
     return bool(expected) and got == expected
@@ -1671,14 +1675,16 @@ def admin_pg_branch_check():
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     from flask import current_app
     from pg_admin.data import specialty_groups as _SG
-    key = os.environ.get('PG_API_KEY') or ''
     client = current_app.test_client()
+    errors = []
 
     def call(path, **qs):
-        r = client.get(path, query_string=qs, headers={'X-PG-Key': key})
-        return r.get_json() or {}
+        r = client.get(path, query_string=qs, environ_overrides={'pg.internal_check': True})
+        if r.status_code != 200:
+            errors.append(f"{path} {qs} → HTTP {r.status_code}")
+        return r.get_json(silent=True) or {}
 
-    out = {'ok': True, 'predictor': [], 'explorer': [], 'dnb': {}, 'choice_fees': {}}
+    out = {'ok': True, 'predictor': [], 'explorer': [], 'dnb': {}, 'choice_fees': {}, 'errors': errors}
     want = {'clinical': {'clinical'}, 'non_clinical': set(_SG.BRANCH_PARAMS['non_clinical'])}
     for at in ('allindia', 'state'):
         for rank in (10000, 50000, 150000):
