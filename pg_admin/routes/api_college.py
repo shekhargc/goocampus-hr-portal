@@ -12,7 +12,8 @@ DB) + pg_cutoffs (predictor + stipend). Mirrors the goocampus.org admin screens:
 import logging
 from flask import request, jsonify, session
 from db import get_db
-from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token, smart_name_clause
+from pg_admin.routes.api import (_authorized, _bearer_token, _pg_user_by_token, smart_name_clause,
+                                 HIDE_DNB, no_dnb_sql)
 
 _PER_PAGE = 100
 _CAT_LABELS = [('mbbs', 'MBBS (UG)'), ('mdms', 'MD / MS'),
@@ -29,9 +30,14 @@ def _page():
 
 
 def _fam(family):
-    """(degree-clause, param) for the stipend degree family."""
+    """(degree-clause, param) for the stipend / fee degree family. DNB is hidden from
+    doctors (founder 2026-10-08): family=dnb → no rows; medical also drops NBEMS seats."""
+    if family == 'dnb' and HIDE_DNB:
+        return "(UPPER(COALESCE(c.degree,'')) LIKE ? AND 1 = 0)", '%DNB%'
     if family == 'dnb':
         return "UPPER(COALESCE(c.degree,'')) LIKE ?", '%DNB%'
+    if HIDE_DNB:
+        return "(UPPER(COALESCE(c.degree,'')) NOT LIKE ? AND " + no_dnb_sql('c') + ")", '%DNB%'
     return "UPPER(COALESCE(c.degree,'')) NOT LIKE ?", '%DNB%'
 
 
@@ -358,6 +364,8 @@ def _fee_where(f):
     params = []
     if f['family'] in ('medical', 'dnb'):
         dc, dp = _fam(f['family']); where.append(dc); params.append(dp)
+    elif HIDE_DNB:
+        where.append(no_dnb_sql('c'))
     if f['authority']:
         where.append("c.authority ILIKE ?"); params.append('%' + f['authority'] + '%')
     if f['state']:
@@ -454,6 +462,8 @@ def api_pg_fees_facets():
     if fam in ('medical', 'dnb'):
         base.append("UPPER(COALESCE(degree,'')) " + ("LIKE ?" if fam == 'dnb' else "NOT LIKE ?"))
         params.append('%DNB%')
+    if HIDE_DNB:
+        base.append(no_dnb_sql())
     wsql = " WHERE " + " AND ".join(base)
     conn = get_db()
     out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': [],
@@ -498,6 +508,8 @@ def api_pg_fees_college(college_id):
             if fam in ('medical', 'dnb'):
                 extra = " AND UPPER(COALESCE(c.degree,'')) " + ("LIKE ?" if fam == 'dnb' else "NOT LIKE ?")
                 xp.append('%DNB%')
+            if HIDE_DNB:
+                extra += " AND " + no_dnb_sql('c')
             rows = [{'course': r['course'], 'degree': r['degree'], 'quota': r['quota'],
                      'category': r['category'], 'fee': _num(r['fee']),
                      'fee_year': r['fee_year'], 'fee_period': 'year'} for r in conn.execute(

@@ -45,12 +45,13 @@ _SPECIAL_CUTOFF = {
 }
 
 # Fingerprint of the cut-off master file the founder shared, for the audit compare
-# ("GooCampus NEET PG 2025 - MASTER only.xlsx"; computed 2026-09-18).
+# ("GooCampus NEET PG 2025 - MASTER Corrected.xlsx"; re-uploaded 2026-10-08 — DNB removed,
+# fees + Clinical/Non-clinical corrected; stipend/bond/penalty now on every row).
 _CUTOFF_FILE = {
-    'name': 'GooCampus NEET PG 2025 - MASTER only.xlsx',
-    'rows': 37666, 'institutes': 847, 'states': 33, 'courses': 99, 'year': '2025',
-    'stipend': 37609, 'bond': 37189, 'penalty': 37609,
-    'med_institutes': 721, 'dnb_institutes': 154,   # by degree family (28 in both)
+    'name': 'GooCampus NEET PG 2025 - MASTER Corrected.xlsx',
+    'rows': 37220, 'institutes': 721, 'states': 33, 'courses': 66, 'year': '2025',
+    'stipend': 37220, 'bond': 37220, 'penalty': 37220,
+    'med_institutes': 721, 'dnb_institutes': 0,
 }
 
 

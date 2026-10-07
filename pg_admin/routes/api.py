@@ -175,6 +175,10 @@ def api_pg_otp_verify():
 
 def _authorized():
     """True if the request carries the correct X-PG-Key handshake."""
+    # Server-internal self-check (admin diag, via test_client environ — an outside HTTP
+    # request can't set a non-HTTP_ WSGI environ key, so this can't be spoofed).
+    if request.environ.get('pg.internal_check') is True:
+        return True
     expected = os.environ.get('PG_API_KEY') or ''
     got = request.headers.get('X-PG-Key') or ''
     return bool(expected) and got == expected
@@ -331,6 +335,20 @@ def api_pg_mentor_photo(mentor_id):
 # filters work on data uploaded BEFORE those columns existed, each clause prefers
 # the stored column and FALLS BACK to deriving from the raw degree / authority.
 # The fragments contain no user input (fixed literals) so they bind no params.
+# DNB is HIDDEN from doctors everywhere except the College Database (founder 2026-10-08):
+# predictor, cut-off explorer, choice lists, stipend/bond/penalty and fees never return a
+# DNB / NBEMS seat — whatever the site asks for. Flip to False to bring DNB back.
+HIDE_DNB = True
+
+
+def no_dnb_sql(alias=''):
+    """Param-less clause that drops DNB / NBEMS rows (POSITION — no literal %)."""
+    a = (alias + '.') if alias else ''
+    return (f"(POSITION('DNB' IN UPPER(COALESCE({a}degree,''))) = 0 "
+            f"AND POSITION('NBEMS' IN UPPER(COALESCE({a}course,''))) = 0 "
+            f"AND LOWER(COALESCE({a}degree_group,'')) <> 'dnb')")
+
+
 def _degree_group_sql(dg):
     dg = (dg or '').strip().lower()
     # DNB rows in pg_cutoffs carry the signal in the COURSE name ("(NBEMS) …" / "NBEMS …")
@@ -353,12 +371,16 @@ def _degree_group_sql(dg):
 
 def _authority_type_sql(at):
     at = (at or '').strip().lower()
+    # No literal % here: the db shim doesn't escape it, so 'MCC%' broke every query that also
+    # had ? params (HTTP 500). LEFT/POSITION match the same rows. (2026-10-08)
+    _ai = ("(LEFT(UPPER(COALESCE(authority,'')),3)='MCC' "
+           "OR POSITION('ALL INDIA' IN UPPER(COALESCE(authority,''))) > 0)")
     if at == 'allindia':
         return ("(LOWER(COALESCE(authority_type,''))='allindia' OR (COALESCE(authority_type,'')='' "
-                "AND (authority ILIKE 'MCC%' OR authority ILIKE '%all india%')))")
+                "AND " + _ai + "))")
     if at == 'state':
         return ("(LOWER(COALESCE(authority_type,''))='state' OR (COALESCE(authority_type,'')='' "
-                "AND COALESCE(authority,'')<>'' AND NOT (authority ILIKE 'MCC%' OR authority ILIKE '%all india%')))")
+                "AND COALESCE(authority,'')<>'' AND NOT " + _ai + "))")
     return None
 
 
@@ -390,6 +412,9 @@ def api_pg_predictor():
     q = (request.args.get('q') or '').strip()
     degree_group = (request.args.get('degree_group') or '').strip()
     authority_type = (request.args.get('authority_type') or '').strip()
+    # OPTIONAL clinical / non-clinical narrowing for an "any speciality" search
+    # (founder 2026-10-07). Absent/unknown → the query is exactly what it was before.
+    branch = (request.args.get('branch') or '').strip().lower()
     try:
         limit = min(int(request.args.get('limit') or 2000), 2000)
     except (TypeError, ValueError):
@@ -423,6 +448,8 @@ def api_pg_predictor():
         dg_sql = _degree_group_sql(degree_group)
         if dg_sql:
             where.append(dg_sql)
+        if HIDE_DNB:
+            where.append(no_dnb_sql())
         at_sql = _authority_type_sql(authority_type)
         if at_sql:
             where.append(at_sql)
@@ -430,6 +457,14 @@ def api_pg_predictor():
             fc, pc = smart_name_clause("course", q)
             fi, pi = smart_name_clause("institute", q)
             where.append(f"({fc} OR {fi})"); params.extend(pc + pi)
+        from pg_admin.data import specialty_groups as _SG
+        _sg_ctx = _SG.context(conn, year)
+        if branch in _SG.BRANCH_PARAMS:
+            _bc = _SG.courses_in_branch(conn, year, branch, _sg_ctx) or []
+            if _bc:
+                where.append("course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
+            else:
+                where.append("1 = 0")
         where_sql = ' AND '.join(where)
         # Exact match count (not just the page) so the site can say "N total"
         # truthfully even though only `limit` rows are returned for display.
@@ -481,16 +516,22 @@ def api_pg_predictor():
 
     import re as _re
     results = []
+    _sg_cache = {}
     for r in rows:
         d = as_dict(r)
         d['chance'] = _chance(d.get('closing_rank'))
         d['fee_period'] = 'year'                   # college fee is annual tuition (founder 2026-10-06)
+        _c = d.get('course') or ''
+        if _c not in _sg_cache:
+            _sg_cache[_c] = _SG.group_of(_c, _sg_ctx)
+        d['speciality_group'] = _sg_cache[_c]      # clinical | para_clinical | pre_clinical | '' (2026-10-07)
         _k = _re.sub(r'[^a-z0-9]+', ' ', (d.get('institute') or '').lower()).strip()
         d['pg_college_id'] = key2master.get(_k)   # → /api/pg/pg-colleges/<id>, or None
         results.append(d)
     return jsonify({'ok': True, 'year': year, 'rank': rank,
                     'count': len(results), 'total': total,
-                    'truncated': total > len(results), 'results': results})
+                    'truncated': total > len(results), 'results': results,
+                    'branch': branch if branch in _SG.BRANCH_PARAMS else ''})
 
 
 def api_pg_predictor_filters():
@@ -527,6 +568,8 @@ def api_pg_predictor_filters():
         _dg = _degree_group_sql(degree_group)
         if _dg:
             base += " AND " + _dg
+        if HIDE_DNB:
+            base += " AND " + no_dnb_sql()
         _at = _authority_type_sql(authority_type)
         if _at:
             base += " AND " + _at
@@ -569,6 +612,7 @@ def api_pg_predictor_courses():
     authority = (request.args.get('authority') or '').strip()
     degree_group = (request.args.get('degree_group') or '').strip()
     authority_type = (request.args.get('authority_type') or '').strip()
+    branch = (request.args.get('branch') or '').strip().lower()   # optional (2026-10-07)
     try:
         limit = min(int(request.args.get('limit') or 20), 50)
     except (TypeError, ValueError):
@@ -589,9 +633,18 @@ def api_pg_predictor_courses():
             _dg = _degree_group_sql(degree_group)
             if _dg:
                 where.append(_dg)
+            if HIDE_DNB:
+                where.append(no_dnb_sql())
             _at = _authority_type_sql(authority_type)
             if _at:
                 where.append(_at)
+            from pg_admin.data import specialty_groups as _SG
+            if branch in _SG.BRANCH_PARAMS:
+                _bc = _SG.courses_in_branch(conn, year, branch) or []
+                if _bc:
+                    where.append("course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
+                else:
+                    where.append("1 = 0")
             # Most-offered courses first: a doctor typing 'radio' should see the
             # common MD Radiodiagnosis before a one-off variant.
             courses = [r['course'] for r in conn.execute(
@@ -1614,6 +1667,79 @@ def admin_pg_predictor_diag():
         return jsonify({'ok': False, 'error': str(e)}), 500
     finally:
         conn.close()
+
+
+def admin_pg_branch_check():
+    """GET /admin/pg/diag/branch-check — admin-only, READ-ONLY cross-check (founder 2026-10-08):
+    1. Clinical + Non-clinical results add up to the unfiltered result (predictor + explorer),
+       and every row a branch returns carries that branch's group.
+    2. No DNB reaches doctors (predictor dnb / explorer dnb / stipend dnb all empty).
+    3. How many saved choice-list seats now show a different (corrected) fee."""
+    if not _pay_test_admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    from flask import current_app
+    from pg_admin.data import specialty_groups as _SG
+    client = current_app.test_client()
+    errors = []
+
+    def call(path, **qs):
+        r = client.get(path, query_string=qs, environ_overrides={'pg.internal_check': True})
+        if r.status_code != 200:
+            errors.append(f"{path} {qs} → HTTP {r.status_code}")
+        return r.get_json(silent=True) or {}
+
+    out = {'ok': True, 'predictor': [], 'explorer': [], 'dnb': {}, 'choice_fees': {}, 'errors': errors}
+    want = {'clinical': {'clinical'}, 'non_clinical': set(_SG.BRANCH_PARAMS['non_clinical'])}
+    for scope in ({}, {'authority': 'MCC'}, {'authority_type': 'state'}):
+        at = ' '.join(f"{k}={v}" for k, v in scope.items()) or '(all)'
+        for rank in (10000, 50000, 150000):
+            base = dict(rank=rank, degree_group='mdms', limit=2000, **scope)
+            a = call('/api/pg/predictor', **base)
+            c = call('/api/pg/predictor', branch='clinical', **base)
+            n = call('/api/pg/predictor', branch='non_clinical', **base)
+            unclassified = sum(1 for x in a.get('results', []) if not x.get('speciality_group'))
+            wrong = (sum(1 for x in c.get('results', []) if x.get('speciality_group') not in want['clinical'])
+                     + sum(1 for x in n.get('results', []) if x.get('speciality_group') not in want['non_clinical']))
+            out['predictor'].append({
+                'scope': at, 'rank': rank, 'all': a.get('total'), 'clinical': c.get('total'),
+                'non_clinical': n.get('total'), 'unclassified_in_page': unclassified,
+                'wrong_group_rows': wrong,
+                'adds_up': (a.get('total') or 0) == (c.get('total') or 0) + (n.get('total') or 0),
+                'dnb_rows': sum(1 for x in a.get('results', [])
+                                if 'DNB' in (x.get('degree') or '').upper()
+                                or 'NBEMS' in (x.get('course') or '').upper())})
+    for auth in ('', 'MCC'):
+        a = call('/api/pg/cutoff-explorer', authority=auth)
+        c = call('/api/pg/cutoff-explorer', authority=auth, branch='clinical')
+        n = call('/api/pg/cutoff-explorer', authority=auth, branch='non_clinical')
+        out['explorer'].append({'authority': auth or '(all)', 'all': a.get('total'),
+                                'clinical': c.get('total'), 'non_clinical': n.get('total'),
+                                'adds_up': (a.get('total') or 0) == (c.get('total') or 0) + (n.get('total') or 0)})
+    out['dnb'] = {
+        'predictor_dnb_total': call('/api/pg/predictor', rank=100000, degree_group='dnb').get('total'),
+        'explorer_dnb_total': call('/api/pg/cutoff-explorer', degree_group='dnb').get('total'),
+        'stipend_dnb_total': call('/api/pg/stipend', family='dnb').get('total'),
+        'fees_dnb_total': call('/api/pg/fees', family='dnb').get('total'),
+    }
+    conn = get_db()
+    try:
+        from pg_admin.routes.api_choice import live_fees
+        items = [dict(r) for r in conn.execute(
+            "SELECT i.id, i.set_id, i.institute, i.course, i.quota, i.category, i.fee, s.user_id "
+            "FROM pg_choice_items i JOIN pg_choice_sets s ON s.id = i.set_id").fetchall()]
+        stored = {it['id']: (float(it['fee']) if it['fee'] is not None else None) for it in items}
+        live_fees(conn, items)
+        changed = [it for it in items if it.get('fee') != stored[it['id']]]
+        out['choice_fees'] = {'saved_seats': len(items), 'fee_now_different': len(changed),
+                              'lists_affected': len({it['set_id'] for it in changed}),
+                              'doctors_affected': len({it['user_id'] for it in changed})}
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        out['choice_fees'] = {'error': str(e)}
+    finally:
+        conn.close()
+    return jsonify(out)
 
 
 def api_pg_bookings():
