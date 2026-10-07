@@ -17,6 +17,14 @@
   .filter-bar .btn{padding:.5rem .9rem;font-size:.85rem;font-weight:600;border:0;border-radius:.4rem;cursor:pointer;}
   .filter-bar .btn-apply{background:var(--orange);color:#fff;}
   .filter-bar .btn-clear{background:var(--gray-100);color:var(--gray-600);text-decoration:none;}
+  details.ms{position:relative;}
+  details.ms summary{list-style:none;cursor:pointer;padding:.5rem .75rem;border:1px solid var(--gray-300);border-radius:.4rem;background:#fff;color:var(--navy);font-size:.88rem;white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;}
+  details.ms summary::-webkit-details-marker{display:none;}
+  details.ms summary::after{content:' ▾';color:var(--gray-400);}
+  details.ms .ms-panel{position:absolute;z-index:20;top:110%;left:0;background:#fff;border:1px solid var(--gray-200);border-radius:.5rem;box-shadow:0 8px 24px rgba(15,27,51,.12);padding:.5rem .7rem;min-width:240px;}
+  details.ms label{display:flex;gap:.45rem;align-items:center;padding:.3rem 0;font-size:.86rem;color:var(--navy);cursor:pointer;}
+  details.ms .ms-actions{display:flex;justify-content:space-between;gap:.6rem;border-top:1px solid var(--gray-100);margin-top:.35rem;padding-top:.45rem;font-size:.78rem;}
+  details.ms .ms-actions a{color:var(--orange);text-decoration:none;font-weight:600;}
   .paid-stats{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem;font-size:.82rem;}
   .paid-stats a{padding:.3rem .7rem;border-radius:999px;text-decoration:none;font-weight:700;border:1px solid transparent;}
   .bulk-bar{display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:.6rem;padding:.6rem .9rem;margin-bottom:.8rem;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.86rem;color:#9a3412;}
@@ -72,12 +80,13 @@
 {% endblock %}
 
 {% block ops_content %}
-{% set qs = 'q=' ~ (q|urlencode) ~ '&status=' ~ (status_filter|urlencode) ~ '&stage=' ~ (stage_filter|urlencode) ~ '&section=' ~ (section_filter|urlencode) ~ '&paid=' ~ (paid_filter|urlencode) %}
-{% set cqs = 'q=' ~ (q|urlencode) ~ '&status=' ~ (status_filter|urlencode) ~ '&stage=' ~ (stage_filter|urlencode) %}
+{% set qs = 'q=' ~ (q|urlencode) ~ status_qs ~ '&stage=' ~ (stage_filter|urlencode) ~ '&section=' ~ (section_filter|urlencode) ~ '&paid=' ~ (paid_filter|urlencode) %}
+{% set cqs = 'q=' ~ (q|urlencode) ~ status_qs ~ '&stage=' ~ (stage_filter|urlencode) %}
+{% set status_label = (selected_statuses|join(', ')) if selected_statuses else 'All statuses' %}
 <div class="page-head">
   <div>
     <h1>Services Detail <span class="badge">UK / PLAB</span></h1>
-    <div class="sub">{% if not status_filter %}<strong>In Process &amp; On Hold clients</strong> — {% endif %}every service actually delivered to each PLAB/UK client — one row per service line (repeat bookings appear as separate rows),
+    <div class="sub"><strong>Showing: {{ status_label }}</strong> — every service actually delivered to each PLAB/UK client — one row per service line (repeat bookings appear as separate rows),
       with <strong>who paid</strong>. Base for per-client expense tracking (cost per service comes next).</div>
   </div>
   <div class="head-actions">
@@ -102,11 +111,19 @@
     {% for p in paid_choices %}<option value="{{ p }}" {% if p == paid_filter %}selected{% endif %}>Paid by {{ p }}</option>{% endfor %}
     <option value="none" {% if paid_filter == 'none' %}selected{% endif %}>Paid by: not set</option>
   </select>
-  <select name="status" title="Account status">
-    <option value="" {% if not status_filter %}selected{% endif %}>In Process + On Hold (default)</option>
-    {% for s in statuses %}<option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }} only</option>{% endfor %}
-    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All statuses</option>
-  </select>
+  <input type="hidden" name="status_set" value="1">
+  <details class="ms" id="statusMs">
+    <summary title="Account status — tick one or more">Status: {{ status_label }}</summary>
+    <div class="ms-panel">
+      {% for s in statuses %}
+      <label><input type="checkbox" name="status" value="{{ s }}" {% if s in selected_statuses %}checked{% endif %}> {{ s }}</label>
+      {% endfor %}
+      <div class="ms-actions">
+        <a href="#" onclick="msSet(['In Process','On Hold']);return false;">In Process + On Hold</a>
+        <a href="#" onclick="msSet([]);return false;">Clear (= all)</a>
+      </div>
+    </div>
+  </details>
   <select name="stage">
     <option value="">All stages</option>
     {% for s in stages %}<option value="{{ s }}" {% if s == stage_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
@@ -127,7 +144,7 @@
 
 {# Bulk "set Paid by" — checkboxes in the table belong to this form via form="bulkForm" #}
 <form id="bulkForm" method="POST" action="/operations/plab/services-detail/paid-by" class="bulk-bar">
-  <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status_filter }}">
+  <input type="hidden" name="q" value="{{ q }}">{% for s in selected_statuses %}<input type="hidden" name="status" value="{{ s }}">{% endfor %}<input type="hidden" name="status_set" value="1">
   <input type="hidden" name="stage" value="{{ stage_filter }}"><input type="hidden" name="section" value="{{ section_filter }}">
   <input type="hidden" name="paid" value="{{ paid_filter }}"><input type="hidden" name="page" value="{{ page }}">
   <strong><span id="selCount">0</span> selected</strong> — set Paid by:
@@ -212,7 +229,7 @@
 <div class="drawer" id="drawer" aria-hidden="true">
   <form method="POST" action="/operations/plab/services-detail/paid-by" style="display:flex;flex-direction:column;height:100%;">
     <input type="hidden" name="items" id="dItem">
-    <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status_filter }}">
+    <input type="hidden" name="q" value="{{ q }}">{% for s in selected_statuses %}<input type="hidden" name="status" value="{{ s }}">{% endfor %}<input type="hidden" name="status_set" value="1">
     <input type="hidden" name="stage" value="{{ stage_filter }}"><input type="hidden" name="section" value="{{ section_filter }}">
     <input type="hidden" name="paid" value="{{ paid_filter }}"><input type="hidden" name="page" value="{{ page }}">
     <div class="dh"><h3>Service line</h3><button type="button" class="cancel" style="background:none;border:0;font-size:1.3rem;cursor:pointer;" onclick="closeDrawer()">×</button></div>
@@ -236,6 +253,13 @@
 </div>
 
 <script>
+function msSet(vals){
+  document.querySelectorAll('#statusMs input[name=status]').forEach(function(c){ c.checked = vals.indexOf(c.value) >= 0; });
+}
+document.addEventListener('click', function(e){
+  var d = document.getElementById('statusMs');
+  if (d && d.open && !d.contains(e.target)) d.open = false;
+});
 function selSync(){
   var n=document.querySelectorAll('.rowchk:checked').length;
   document.getElementById('selCount').innerText=n;

@@ -30006,16 +30006,23 @@ def _resolve_paid_by(source_table, record_id, booked_by, meta):
     return (pb, 'booked_by') if pb else ('', '')
 
 
-# Statuses the per-client Services Detail report covers (founder 2026-10-07: only active clients).
-_SVC_ACTIVE_STATUSES_SQL = ("LOWER(REPLACE(TRIM(COALESCE(account_status,'')),'-',' ')) "
-                            "IN ('in process','on hold')")
+# Services Detail opens on active clients; the status filter is multi-select (founder 2026-10-07).
+_SVC_DEFAULT_STATUSES = ['In Process', 'On Hold']
 
 
-def _plab_filtered_clients(conn, search='', status_filter='', stage_filter='', active_only=False):
+def _svc_status_norm(s):
+    return ' '.join(str(s or '').replace('-', ' ').lower().split())
+
+
+def _plab_filtered_clients(conn, search='', status_filter='', stage_filter='', statuses=None):
+    """statuses: account statuses to include (case/space/hyphen-insensitive); None/empty = all."""
     sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='plab' "
     params = []
-    if active_only:
-        sql += " AND " + _SVC_ACTIVE_STATUSES_SQL + " "
+    norm = [_svc_status_norm(x) for x in (statuses or []) if _svc_status_norm(x)]
+    if norm:
+        sql += (" AND LOWER(REPLACE(TRIM(COALESCE(account_status,'')),'-',' ')) IN ("
+                + ','.join(['?'] * len(norm)) + ") ")
+        params.extend(norm)
     if status_filter:
         sql += " AND account_status = ? "; params.append(status_filter)
     if stage_filter:
@@ -30105,10 +30112,10 @@ def _svc_build_detail_row(key, label, table, info, r, meta):
 
 
 def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='', section_filter='',
-                               paid_filter='', active_only=False):
+                               paid_filter='', statuses=None):
     """Return (rows, statuses, stages): one row per delivered service line for PLAB/UK clients,
     each carrying its source record + resolved Paid by. paid_filter: GooCampus | Client | none."""
-    clients = _plab_filtered_clients(conn, search, status_filter, stage_filter, active_only)
+    clients = _plab_filtered_clients(conn, search, status_filter, stage_filter, statuses)
     by_reg, by_id, order = _plab_client_index(clients)
     _ensure_service_meta(conn)
     meta = _load_service_meta(conn)
@@ -30138,18 +30145,21 @@ _SVC_EXPORT_SKIP_EXACT = {'id', 'pathway', 'client_id', 'file_data', 'file_path'
 
 
 def _svc_filters(src):
-    """q/status/stage/section/paid from request.args or request.form."""
-    return {k: (src.get(k, '') or '').strip() for k in ('q', 'status', 'stage', 'section', 'paid')}
+    """q/stage/section/paid + MULTI-SELECT statuses from request.args / request.form.
+    Nothing sent at all (first visit) = In Process + On Hold; the form's hidden status_set=1
+    with nothing ticked = every status."""
+    f = {k: (src.get(k, '') or '').strip() for k in ('q', 'stage', 'section', 'paid')}
+    picked = [x.strip() for x in src.getlist('status') if x and x.strip()]
+    if not picked and not src.get('status_set'):
+        picked = list(_SVC_DEFAULT_STATUSES)
+    f['statuses'] = picked
+    return f
 
 
-def _svc_status_scope(status):
-    """Status filter → (exact status, active_only). Default (blank) = In Process + On Hold only
-    (founder 2026-10-07); 'all' = every status; anything else = that one status."""
-    if not status:
-        return '', True
-    if status == 'all':
-        return '', False
-    return status, False
+def _svc_status_qs(statuses):
+    """Query-string fragment that round-trips the multi-select (marks it as explicitly set)."""
+    from urllib.parse import quote_plus
+    return ''.join('&status=' + quote_plus(x) for x in statuses) + '&status_set=1'
 
 
 import datetime as _svc_dtm
@@ -30242,9 +30252,8 @@ def ops_plab_services_detail():
         page = 1
     rows, statuses, stages = [], [], []
     try:
-        st, act = _svc_status_scope(f['status'])
-        rows, statuses, stages = _plab_services_detail_data(conn, f['q'], st, f['stage'],
-                                                            f['section'], f['paid'], active_only=act)
+        rows, statuses, stages = _plab_services_detail_data(conn, f['q'], '', f['stage'],
+                                                            f['section'], f['paid'], statuses=f['statuses'])
     except Exception as e:
         logging.warning(f"ops_plab_services_detail: {e}")
         try: conn.rollback()
@@ -30263,7 +30272,8 @@ def ops_plab_services_detail():
         page_offset=start, client_count=len({r['client_id'] for r in rows}), paid_counts=paid_counts,
         statuses=ACCOUNT_STATUSES, stages=stages, sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
         paid_choices=_PAID_BY_CHOICES, paid_source_label=_SVC_PAID_SOURCE_LABEL,
-        q=f['q'], status_filter=f['status'], stage_filter=f['stage'], section_filter=f['section'],
+        q=f['q'], selected_statuses=f['statuses'], status_qs=_svc_status_qs(f['statuses']),
+        stage_filter=f['stage'], section_filter=f['section'],
         paid_filter=f['paid'], active_ops_page='plab-services-summary',
     )
 
@@ -30275,7 +30285,9 @@ def ops_plab_services_paid_by():
     row drawer (with notes) or the bulk bar (no notes field → notes untouched). Logged."""
     f = _svc_filters(request.form)
     page = (request.form.get('page') or '').strip()
-    back = {k: v for k, v in f.items() if v}
+    back = {k: v for k, v in f.items() if v and k != 'statuses'}
+    back['status'] = f['statuses']          # list → repeated ?status=… on the redirect
+    back['status_set'] = '1'
     if page.isdigit():
         back['page'] = page
     paid_by = (request.form.get('paid_by') or '').strip()
@@ -30339,9 +30351,8 @@ def ops_plab_services_detail_download():
     conn = get_db()
     f = _svc_filters(request.args)
     try:
-        st, act = _svc_status_scope(f['status'])
-        rows, _s, _g = _plab_services_detail_data(conn, f['q'], st, f['stage'], f['section'], f['paid'],
-                                                  active_only=act)
+        rows, _s, _g = _plab_services_detail_data(conn, f['q'], '', f['stage'], f['section'], f['paid'],
+                                                  statuses=f['statuses'])
     except Exception as e:
         logging.warning(f"ops_plab_services_detail_download: {e}")
         rows = []
@@ -30367,8 +30378,7 @@ def ops_plab_services_workbook():
     sec_keys = [(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS]
     sec_order = {k: n for n, (k, _l) in enumerate(sec_keys)}
     try:
-        st, act = _svc_status_scope(f['status'])
-        clients = _plab_filtered_clients(conn, f['q'], st, f['stage'], active_only=act)
+        clients = _plab_filtered_clients(conn, f['q'], '', f['stage'], statuses=f['statuses'])
         by_reg, by_id, order = _plab_client_index(clients)
         _ensure_service_meta(conn)
         meta = _load_service_meta(conn)
