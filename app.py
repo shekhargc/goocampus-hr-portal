@@ -30426,6 +30426,103 @@ def ops_plab_services_workbook():
     return _svc_xl_send(wb, 'PLAB_UK_Services_Full_Workbook')
 
 
+# ── Unique services catalogue (founder 2026-10-07) — the base for the price list ──
+# Groups every delivered PLAB/UK service line by Section + Service + Provider (provider text
+# already carries the location for test centres / hospitals). Grouping is case/space-insensitive
+# so "PLAB 2 " and "plab 2" land together; the most common spelling is shown.
+
+def _svc_norm_key(s):
+    return ' '.join(str(s or '').lower().split())
+
+
+def _plab_unique_services(conn, section_filter='', search=''):
+    rows, _s, _g = _plab_services_detail_data(conn, section_filter=section_filter)
+    sec_order = {k: n for n, (k, _l, _t) in enumerate(PLAB_SERVICE_COLUMNS)}
+    groups = {}
+    for r in rows:
+        k = (r['section_key'], _svc_norm_key(r['service']), _svc_norm_key(r['provider']))
+        g = groups.get(k)
+        if not g:
+            g = groups[k] = {'section_key': r['section_key'], 'section': r['section'],
+                             '_svc': {}, '_prov': {}, 'lines': 0, 'clients': set(),
+                             'gc': 0, 'cl': 0, 'ns': 0, 'first': '', 'last': ''}
+        g['_svc'][r['service'] or ''] = g['_svc'].get(r['service'] or '', 0) + 1
+        g['_prov'][r['provider'] or ''] = g['_prov'].get(r['provider'] or '', 0) + 1
+        g['lines'] += 1
+        g['clients'].add(r['client_id'])
+        g['gc' if r['paid_by'] == 'GooCampus' else 'cl' if r['paid_by'] == 'Client' else 'ns'] += 1
+        d = (r.get('date') or '')[:10]
+        if d[:4].isdigit():
+            g['first'] = min(g['first'], d) if g['first'] else d
+            g['last'] = max(g['last'], d) if g['last'] else d
+    out = []
+    q = _svc_norm_key(search)
+    for g in groups.values():
+        g['service'] = max(g.pop('_svc').items(), key=lambda kv: kv[1])[0]
+        g['provider'] = max(g.pop('_prov').items(), key=lambda kv: kv[1])[0]
+        g['clients'] = len(g['clients'])
+        if q and q not in _svc_norm_key(f"{g['section']} {g['service']} {g['provider']}"):
+            continue
+        out.append(g)
+    out.sort(key=lambda g: (sec_order.get(g['section_key'], 99), _svc_norm_key(g['service']),
+                            _svc_norm_key(g['provider'])))
+    return out
+
+
+@app.route('/operations/plab/services-unique')
+@admin_required
+def ops_plab_services_unique():
+    """Every UNIQUE service (Section · Service · Provider) delivered on the UK/PLAB pathway,
+    with how often, to how many clients and who paid — the list to build the price list from."""
+    conn = get_db()
+    section_filter = (request.args.get('section', '') or '').strip()
+    search = (request.args.get('q', '') or '').strip()
+    items = []
+    try:
+        items = _plab_unique_services(conn, section_filter, search)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_unique: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    by_section = {}
+    for g in items:
+        by_section.setdefault(g['section'], 0)
+        by_section[g['section']] += 1
+    return render_template('ops_plab_services_unique.html', items=items, by_section=by_section,
+                           sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
+                           section_filter=section_filter, q=search,
+                           total_lines=sum(g['lines'] for g in items),
+                           active_ops_page='plab-services-summary')
+
+
+@app.route('/operations/plab/services-unique/download')
+@admin_required
+def ops_plab_services_unique_download():
+    """Excel of the unique-services list with a blank 'Your price (₹)' column for drafting."""
+    from openpyxl import Workbook
+    conn = get_db()
+    section_filter = (request.args.get('section', '') or '').strip()
+    search = (request.args.get('q', '') or '').strip()
+    try:
+        items = _plab_unique_services(conn, section_filter, search)
+    except Exception as e:
+        logging.warning(f"ops_plab_services_unique_download: {e}")
+        items = []
+    conn.close()
+    headers = ['Section', 'Service', 'Provider / Vendor (incl. location)', 'Times delivered',
+               'Clients', 'Paid by GooCampus', 'Paid by Client', 'Paid by — not set',
+               'First date', 'Last date', 'Your price (₹)']
+    wb = Workbook(write_only=True)
+    ws = _svc_xl_sheet(wb, 'Unique services', headers, [22, 40, 36, 12, 10, 14, 12, 14, 12, 12, 14],
+                       freeze='D2')
+    for g in items:
+        ws.append([_svc_xl_value(g['section']), _svc_xl_value(g['service']), _svc_xl_value(g['provider']),
+                   g['lines'], g['clients'], g['gc'], g['cl'], g['ns'], g['first'], g['last'], ''])
+    _svc_xl_filter(ws, len(headers), len(items))
+    return _svc_xl_send(wb, 'PLAB_UK_Unique_Services')
+
+
 @app.route('/operations/plab/clients/<int:client_id>/welcome-kit', methods=['POST'])
 @admin_required
 def ops_plab_welcome_kit_toggle(client_id):
@@ -51050,6 +51147,8 @@ ACCESS_ROUTE_MAP = {
     'ops_plab_services_detail_download':  _ap('plab_pathway', 'services_summary'),
     'ops_plab_services_workbook':         _ap('plab_pathway', 'services_summary'),
     'ops_plab_services_paid_by':          _ap('plab_pathway', 'services_summary', 'edit'),
+    'ops_plab_services_unique':           _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_unique_download':  _ap('plab_pathway', 'services_summary'),
     'ops_plab_welcome_kit_toggle':        _ap('plab_pathway', 'registration', 'edit'),
     'ops_plab_list':                _ap('plab_pathway', 'registration'),
     'ops_plab_dashboard':           _ap('plab_pathway', 'registration'),
