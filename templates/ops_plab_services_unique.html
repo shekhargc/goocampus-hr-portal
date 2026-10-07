@@ -1,0 +1,106 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}UK / PLAB Unique Services &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1.1rem;}
+  .page-head h1{margin:0;font-size:1.5rem;color:var(--navy);font-weight:700;}
+  .page-head .sub{font-size:.85rem;color:var(--gray-500);margin-top:.25rem;max-width:780px;}
+  .page-head .badge{display:inline-block;background:var(--orange);color:#fff;padding:.2rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;margin-left:.4rem;vertical-align:middle;}
+  .head-actions{display:flex;gap:.5rem;flex-wrap:wrap;}
+  .dl-btn{display:inline-flex;align-items:center;gap:7px;background:#0F1B33;color:#fff;border:0;border-radius:.55rem;padding:.6rem 1.1rem;font-size:.86rem;font-weight:600;text-decoration:none;}
+  .ghost-btn{display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--navy);border:1px solid var(--gray-300);border-radius:.55rem;padding:.6rem 1rem;font-size:.86rem;font-weight:600;text-decoration:none;}
+  .filter-bar{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.8rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:.8rem;}
+  .filter-bar input,.filter-bar select{padding:.5rem .65rem;font-size:.88rem;border:1px solid var(--gray-300);border-radius:.4rem;background:#fff;color:var(--navy);}
+  .filter-bar input[type=text]{min-width:240px;}
+  .filter-bar .btn{padding:.5rem .9rem;font-size:.85rem;font-weight:600;border:0;border-radius:.4rem;cursor:pointer;}
+  .filter-bar .btn-apply{background:var(--orange);color:#fff;} .filter-bar .btn-clear{background:var(--gray-100);color:var(--gray-600);text-decoration:none;}
+  .chips{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem;}
+  .chips a{background:#eef2ff;color:#3730a3;border-radius:999px;padding:.25rem .7rem;font-size:.78rem;font-weight:700;text-decoration:none;}
+  .chips a.on{background:#3730a3;color:#fff;}
+  .ops-main{overflow-x:hidden;}
+  .table-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
+  table.u{border-collapse:collapse;width:100%;font-size:13px;}
+  table.u thead th{position:sticky;top:0;z-index:4;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:10px 12px;text-align:left;white-space:nowrap;}
+  table.u tbody td{padding:8px 12px;border-bottom:1px solid var(--gray-100);color:var(--navy);vertical-align:top;}
+  table.u tbody tr.sec-start td{border-top:2px solid var(--gray-200);}
+  table.u tbody tr:hover{background:#f8fafc;}
+  .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .sec-pill{display:inline-block;background:#eef2ff;color:#3730a3;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;}
+  .svc{font-weight:600;}
+  .pb{display:inline-block;min-width:22px;text-align:center;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700;}
+  .pb-gc{background:#ffedd5;color:#c2410c;} .pb-cl{background:#e0f2fe;color:#0369a1;} .pb-ns{background:#f3f4f6;color:#6b7280;}
+  .muted{color:var(--gray-400);}
+  .nowrap{white-space:nowrap;}
+  .legend{margin-top:.7rem;font-size:12px;color:var(--gray-500);}
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+  <div>
+    <h1>Unique Services <span class="badge">UK / PLAB</span></h1>
+    <div class="sub">Every distinct service delivered on the UK/PLAB pathway — grouped by <strong>Section · Service · Provider</strong>
+      (provider includes the location for test centres &amp; hospitals). Use it to build the price list.</div>
+  </div>
+  <div class="head-actions">
+    <a class="ghost-btn" href="/operations/plab/services-detail">&larr; Services Detail</a>
+    <a class="dl-btn" href="/operations/plab/services-unique/download?section={{ section_filter|urlencode }}&q={{ q|urlencode }}&by={{ by }}">⬇ Download Excel (with a price column)</a>
+  </div>
+</div>
+
+<form class="filter-bar" method="GET" action="/operations/plab/services-unique">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search service or provider…">
+  <select name="section">
+    <option value="">All sections</option>
+    {% for k, l in sections %}<option value="{{ k }}" {% if k == section_filter %}selected{% endif %}>{{ l }}</option>{% endfor %}
+  </select>
+  <select name="by" title="How to group">
+    <option value="provider" {% if by == 'provider' %}selected{% endif %}>Group by: Service + Provider</option>
+    <option value="service" {% if by == 'service' %}selected{% endif %}>Group by: Service only</option>
+  </select>
+  <button class="btn btn-apply" type="submit">Apply</button>
+  <a class="btn btn-clear" href="/operations/plab/services-unique">Clear</a>
+  <span style="margin-left:auto;color:var(--gray-500);font-size:.82rem;font-weight:600;">
+    {{ items|length }} unique service{{ '' if items|length == 1 else 's' }} · {{ total_lines }} service lines
+  </span>
+</form>
+
+{% if not section_filter and by_section %}
+<div class="chips">
+  {% for k, l in sections %}{% if by_section.get(l) %}
+    <a href="?section={{ k }}&q={{ q|urlencode }}&by={{ by }}">{{ l }} · {{ by_section.get(l) }}</a>
+  {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+<div class="table-wrap">
+  <table class="u">
+    <thead>
+      <tr><th>#</th><th>Section</th><th>Service</th><th>{{ "Provider / Vendor (incl. location)" if by == "provider" else "Main provider (+ others)" }}</th>
+          <th class="num">Times</th><th class="num">Clients</th><th>Paid by (GC · Client · not set)</th><th>First</th><th>Last</th></tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(prev=None) %}
+      {% for g in items %}
+      <tr class="{{ 'sec-start' if g.section != ns.prev }}">
+        <td class="muted">{{ loop.index }}</td>
+        <td>{% if g.section != ns.prev %}<span class="sec-pill">{{ g.section }}</span>{% endif %}</td>
+        <td class="svc">{{ g.service or '—' }}</td>
+        <td>{{ g.provider or '' }}</td>
+        <td class="num"><strong>{{ g.lines }}</strong></td>
+        <td class="num">{{ g.clients }}</td>
+        <td class="nowrap"><span class="pb pb-gc" title="Paid by GooCampus">{{ g.gc }}</span> <span class="pb pb-cl" title="Paid by Client">{{ g.cl }}</span> <span class="pb pb-ns" title="Not set">{{ g.ns }}</span></td>
+        <td class="muted">{{ g.first }}</td>
+        <td class="muted">{{ g.last }}</td>
+      </tr>
+      {% set ns.prev = g.section %}
+      {% else %}
+      <tr><td colspan="9" style="padding:3rem;text-align:center;color:var(--gray-500);">No services match.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="legend">Same spelling in different case/spacing is grouped together. Different wordings of the same thing
+  (e.g. "PLAB 2 Training — Online" vs "PLAB 2 Training — Full Course — Online") still show separately — note which ones belong together while pricing.</div>
+{% endblock %}

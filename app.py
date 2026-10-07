@@ -30006,9 +30006,23 @@ def _resolve_paid_by(source_table, record_id, booked_by, meta):
     return (pb, 'booked_by') if pb else ('', '')
 
 
-def _plab_filtered_clients(conn, search='', status_filter='', stage_filter=''):
+# Services Detail opens on active clients; the status filter is multi-select (founder 2026-10-07).
+_SVC_DEFAULT_STATUSES = ['In Process', 'On Hold']
+
+
+def _svc_status_norm(s):
+    return ' '.join(str(s or '').replace('-', ' ').lower().split())
+
+
+def _plab_filtered_clients(conn, search='', status_filter='', stage_filter='', statuses=None):
+    """statuses: account statuses to include (case/space/hyphen-insensitive); None/empty = all."""
     sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway,'plab')='plab' "
     params = []
+    norm = [_svc_status_norm(x) for x in (statuses or []) if _svc_status_norm(x)]
+    if norm:
+        sql += (" AND LOWER(REPLACE(TRIM(COALESCE(account_status,'')),'-',' ')) IN ("
+                + ','.join(['?'] * len(norm)) + ") ")
+        params.extend(norm)
     if status_filter:
         sql += " AND account_status = ? "; params.append(status_filter)
     if stage_filter:
@@ -30098,10 +30112,10 @@ def _svc_build_detail_row(key, label, table, info, r, meta):
 
 
 def _plab_services_detail_data(conn, search='', status_filter='', stage_filter='', section_filter='',
-                               paid_filter=''):
+                               paid_filter='', statuses=None):
     """Return (rows, statuses, stages): one row per delivered service line for PLAB/UK clients,
     each carrying its source record + resolved Paid by. paid_filter: GooCampus | Client | none."""
-    clients = _plab_filtered_clients(conn, search, status_filter, stage_filter)
+    clients = _plab_filtered_clients(conn, search, status_filter, stage_filter, statuses)
     by_reg, by_id, order = _plab_client_index(clients)
     _ensure_service_meta(conn)
     meta = _load_service_meta(conn)
@@ -30131,8 +30145,21 @@ _SVC_EXPORT_SKIP_EXACT = {'id', 'pathway', 'client_id', 'file_data', 'file_path'
 
 
 def _svc_filters(src):
-    """q/status/stage/section/paid from request.args or request.form."""
-    return {k: (src.get(k, '') or '').strip() for k in ('q', 'status', 'stage', 'section', 'paid')}
+    """q/stage/section/paid + MULTI-SELECT statuses from request.args / request.form.
+    Nothing sent at all (first visit) = In Process + On Hold; the form's hidden status_set=1
+    with nothing ticked = every status."""
+    f = {k: (src.get(k, '') or '').strip() for k in ('q', 'stage', 'section', 'paid')}
+    picked = [x.strip() for x in src.getlist('status') if x and x.strip()]
+    if not picked and not src.get('status_set'):
+        picked = list(_SVC_DEFAULT_STATUSES)
+    f['statuses'] = picked
+    return f
+
+
+def _svc_status_qs(statuses):
+    """Query-string fragment that round-trips the multi-select (marks it as explicitly set)."""
+    from urllib.parse import quote_plus
+    return ''.join('&status=' + quote_plus(x) for x in statuses) + '&status_set=1'
 
 
 import datetime as _svc_dtm
@@ -30225,8 +30252,8 @@ def ops_plab_services_detail():
         page = 1
     rows, statuses, stages = [], [], []
     try:
-        rows, statuses, stages = _plab_services_detail_data(conn, f['q'], f['status'], f['stage'],
-                                                            f['section'], f['paid'])
+        rows, statuses, stages = _plab_services_detail_data(conn, f['q'], '', f['stage'],
+                                                            f['section'], f['paid'], statuses=f['statuses'])
     except Exception as e:
         logging.warning(f"ops_plab_services_detail: {e}")
         try: conn.rollback()
@@ -30243,9 +30270,10 @@ def ops_plab_services_detail():
         'ops_plab_services_detail.html',
         rows=rows[start:start + _SVC_DETAIL_PER_PAGE], total=total, page=page, total_pages=total_pages,
         page_offset=start, client_count=len({r['client_id'] for r in rows}), paid_counts=paid_counts,
-        statuses=statuses, stages=stages, sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
+        statuses=ACCOUNT_STATUSES, stages=stages, sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
         paid_choices=_PAID_BY_CHOICES, paid_source_label=_SVC_PAID_SOURCE_LABEL,
-        q=f['q'], status_filter=f['status'], stage_filter=f['stage'], section_filter=f['section'],
+        q=f['q'], selected_statuses=f['statuses'], status_qs=_svc_status_qs(f['statuses']),
+        stage_filter=f['stage'], section_filter=f['section'],
         paid_filter=f['paid'], active_ops_page='plab-services-summary',
     )
 
@@ -30257,7 +30285,9 @@ def ops_plab_services_paid_by():
     row drawer (with notes) or the bulk bar (no notes field → notes untouched). Logged."""
     f = _svc_filters(request.form)
     page = (request.form.get('page') or '').strip()
-    back = {k: v for k, v in f.items() if v}
+    back = {k: v for k, v in f.items() if v and k != 'statuses'}
+    back['status'] = f['statuses']          # list → repeated ?status=… on the redirect
+    back['status_set'] = '1'
     if page.isdigit():
         back['page'] = page
     paid_by = (request.form.get('paid_by') or '').strip()
@@ -30321,7 +30351,8 @@ def ops_plab_services_detail_download():
     conn = get_db()
     f = _svc_filters(request.args)
     try:
-        rows, _s, _g = _plab_services_detail_data(conn, f['q'], f['status'], f['stage'], f['section'], f['paid'])
+        rows, _s, _g = _plab_services_detail_data(conn, f['q'], '', f['stage'], f['section'], f['paid'],
+                                                  statuses=f['statuses'])
     except Exception as e:
         logging.warning(f"ops_plab_services_detail_download: {e}")
         rows = []
@@ -30347,7 +30378,7 @@ def ops_plab_services_workbook():
     sec_keys = [(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS]
     sec_order = {k: n for n, (k, _l) in enumerate(sec_keys)}
     try:
-        clients = _plab_filtered_clients(conn, f['q'], f['status'], f['stage'])
+        clients = _plab_filtered_clients(conn, f['q'], '', f['stage'], statuses=f['statuses'])
         by_reg, by_id, order = _plab_client_index(clients)
         _ensure_service_meta(conn)
         meta = _load_service_meta(conn)
@@ -30424,6 +30455,112 @@ def ops_plab_services_workbook():
                       [_svc_xl_value(r.get(c)) for c in cols])
         _svc_xl_filter(ws, len(headers), len(recs))
     return _svc_xl_send(wb, 'PLAB_UK_Services_Full_Workbook')
+
+
+# ── Unique services catalogue (founder 2026-10-07) — the base for the price list ──
+# Groups every delivered PLAB/UK service line by Section + Service + Provider (provider text
+# already carries the location for test centres / hospitals). Grouping is case/space-insensitive
+# so "PLAB 2 " and "plab 2" land together; the most common spelling is shown.
+
+def _svc_norm_key(s):
+    return ' '.join(str(s or '').lower().split())
+
+
+def _plab_unique_services(conn, section_filter='', search='', by_provider=True):
+    """by_provider=False groups on Section + Service only (provider column then shows the most
+    common provider + how many others) — e.g. Test Bookings priced per exam, not per centre."""
+    rows, _s, _g = _plab_services_detail_data(conn, section_filter=section_filter)
+    sec_order = {k: n for n, (k, _l, _t) in enumerate(PLAB_SERVICE_COLUMNS)}
+    groups = {}
+    for r in rows:
+        k = (r['section_key'], _svc_norm_key(r['service']),
+             _svc_norm_key(r['provider']) if by_provider else '')
+        g = groups.get(k)
+        if not g:
+            g = groups[k] = {'section_key': r['section_key'], 'section': r['section'],
+                             '_svc': {}, '_prov': {}, 'lines': 0, 'clients': set(),
+                             'gc': 0, 'cl': 0, 'ns': 0, 'first': '', 'last': ''}
+        g['_svc'][r['service'] or ''] = g['_svc'].get(r['service'] or '', 0) + 1
+        g['_prov'][r['provider'] or ''] = g['_prov'].get(r['provider'] or '', 0) + 1
+        g['lines'] += 1
+        g['clients'].add(r['client_id'])
+        g['gc' if r['paid_by'] == 'GooCampus' else 'cl' if r['paid_by'] == 'Client' else 'ns'] += 1
+        d = (r.get('date') or '')[:10]
+        if d[:4].isdigit():
+            g['first'] = min(g['first'], d) if g['first'] else d
+            g['last'] = max(g['last'], d) if g['last'] else d
+    out = []
+    q = _svc_norm_key(search)
+    for g in groups.values():
+        g['service'] = max(g.pop('_svc').items(), key=lambda kv: kv[1])[0]
+        provs = g.pop('_prov')
+        top = max(provs.items(), key=lambda kv: kv[1])[0]
+        others = len([p for p in provs if _svc_norm_key(p) and _svc_norm_key(p) != _svc_norm_key(top)])
+        g['provider'] = (top + (f"  (+{others} other{'s' if others != 1 else ''})" if others else '')) \
+            if not by_provider else top
+        g['clients'] = len(g['clients'])
+        if q and q not in _svc_norm_key(f"{g['section']} {g['service']} {g['provider']}"):
+            continue
+        out.append(g)
+    out.sort(key=lambda g: (sec_order.get(g['section_key'], 99), _svc_norm_key(g['service']),
+                            _svc_norm_key(g['provider'])))
+    return out
+
+
+@app.route('/operations/plab/services-unique')
+@admin_required
+def ops_plab_services_unique():
+    """Every UNIQUE service (Section · Service · Provider) delivered on the UK/PLAB pathway,
+    with how often, to how many clients and who paid — the list to build the price list from."""
+    conn = get_db()
+    section_filter = (request.args.get('section', '') or '').strip()
+    search = (request.args.get('q', '') or '').strip()
+    by = 'service' if (request.args.get('by') or '') == 'service' else 'provider'
+    items = []
+    try:
+        items = _plab_unique_services(conn, section_filter, search, by_provider=(by == 'provider'))
+    except Exception as e:
+        logging.warning(f"ops_plab_services_unique: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    by_section = {}
+    for g in items:
+        by_section.setdefault(g['section'], 0)
+        by_section[g['section']] += 1
+    return render_template('ops_plab_services_unique.html', items=items, by_section=by_section,
+                           sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
+                           section_filter=section_filter, q=search, by=by,
+                           total_lines=sum(g['lines'] for g in items),
+                           active_ops_page='plab-services-summary')
+
+
+@app.route('/operations/plab/services-unique/download')
+@admin_required
+def ops_plab_services_unique_download():
+    """Excel of the unique-services list with a blank 'Your price (₹)' column for drafting."""
+    from openpyxl import Workbook
+    conn = get_db()
+    section_filter = (request.args.get('section', '') or '').strip()
+    search = (request.args.get('q', '') or '').strip()
+    by = 'service' if (request.args.get('by') or '') == 'service' else 'provider'
+    try:
+        items = _plab_unique_services(conn, section_filter, search, by_provider=(by == 'provider'))
+    except Exception as e:
+        logging.warning(f"ops_plab_services_unique_download: {e}")
+        items = []
+    conn.close()
+    headers = ['Section', 'Service', 'Provider / Vendor (incl. location)', 'Times delivered',
+               'Clients', 'Paid by GooCampus', 'Paid by Client', 'Paid by — not set',
+               'First date', 'Last date', 'Your price (₹)']
+    wb = Workbook(write_only=True)
+    ws = _svc_xl_sheet(wb, 'Unique services', headers, [22, 40, 36, 12, 10, 14, 12, 14, 12, 12, 14],
+                       freeze='D2')
+    for g in items:
+        ws.append([_svc_xl_value(g['section']), _svc_xl_value(g['service']), _svc_xl_value(g['provider']),
+                   g['lines'], g['clients'], g['gc'], g['cl'], g['ns'], g['first'], g['last'], ''])
+    _svc_xl_filter(ws, len(headers), len(items))
+    return _svc_xl_send(wb, 'PLAB_UK_Unique_Services' + ('_by_service' if by == 'service' else ''))
 
 
 @app.route('/operations/plab/clients/<int:client_id>/welcome-kit', methods=['POST'])
@@ -51050,6 +51187,8 @@ ACCESS_ROUTE_MAP = {
     'ops_plab_services_detail_download':  _ap('plab_pathway', 'services_summary'),
     'ops_plab_services_workbook':         _ap('plab_pathway', 'services_summary'),
     'ops_plab_services_paid_by':          _ap('plab_pathway', 'services_summary', 'edit'),
+    'ops_plab_services_unique':           _ap('plab_pathway', 'services_summary'),
+    'ops_plab_services_unique_download':  _ap('plab_pathway', 'services_summary'),
     'ops_plab_welcome_kit_toggle':        _ap('plab_pathway', 'registration', 'edit'),
     'ops_plab_list':                _ap('plab_pathway', 'registration'),
     'ops_plab_dashboard':           _ap('plab_pathway', 'registration'),
