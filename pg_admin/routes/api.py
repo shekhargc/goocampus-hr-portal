@@ -331,6 +331,20 @@ def api_pg_mentor_photo(mentor_id):
 # filters work on data uploaded BEFORE those columns existed, each clause prefers
 # the stored column and FALLS BACK to deriving from the raw degree / authority.
 # The fragments contain no user input (fixed literals) so they bind no params.
+# DNB is HIDDEN from doctors everywhere except the College Database (founder 2026-10-08):
+# predictor, cut-off explorer, choice lists, stipend/bond/penalty and fees never return a
+# DNB / NBEMS seat — whatever the site asks for. Flip to False to bring DNB back.
+HIDE_DNB = True
+
+
+def no_dnb_sql(alias=''):
+    """Param-less clause that drops DNB / NBEMS rows (POSITION — no literal %)."""
+    a = (alias + '.') if alias else ''
+    return (f"(POSITION('DNB' IN UPPER(COALESCE({a}degree,''))) = 0 "
+            f"AND POSITION('NBEMS' IN UPPER(COALESCE({a}course,''))) = 0 "
+            f"AND LOWER(COALESCE({a}degree_group,'')) <> 'dnb')")
+
+
 def _degree_group_sql(dg):
     dg = (dg or '').strip().lower()
     # DNB rows in pg_cutoffs carry the signal in the COURSE name ("(NBEMS) …" / "NBEMS …")
@@ -426,6 +440,8 @@ def api_pg_predictor():
         dg_sql = _degree_group_sql(degree_group)
         if dg_sql:
             where.append(dg_sql)
+        if HIDE_DNB:
+            where.append(no_dnb_sql())
         at_sql = _authority_type_sql(authority_type)
         if at_sql:
             where.append(at_sql)
@@ -544,6 +560,8 @@ def api_pg_predictor_filters():
         _dg = _degree_group_sql(degree_group)
         if _dg:
             base += " AND " + _dg
+        if HIDE_DNB:
+            base += " AND " + no_dnb_sql()
         _at = _authority_type_sql(authority_type)
         if _at:
             base += " AND " + _at
@@ -607,6 +625,8 @@ def api_pg_predictor_courses():
             _dg = _degree_group_sql(degree_group)
             if _dg:
                 where.append(_dg)
+            if HIDE_DNB:
+                where.append(no_dnb_sql())
             _at = _authority_type_sql(authority_type)
             if _at:
                 where.append(_at)
@@ -1639,6 +1659,76 @@ def admin_pg_predictor_diag():
         return jsonify({'ok': False, 'error': str(e)}), 500
     finally:
         conn.close()
+
+
+def admin_pg_branch_check():
+    """GET /admin/pg/diag/branch-check — admin-only, READ-ONLY cross-check (founder 2026-10-08):
+    1. Clinical + Non-clinical results add up to the unfiltered result (predictor + explorer),
+       and every row a branch returns carries that branch's group.
+    2. No DNB reaches doctors (predictor dnb / explorer dnb / stipend dnb all empty).
+    3. How many saved choice-list seats now show a different (corrected) fee."""
+    if not _pay_test_admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    from flask import current_app
+    from pg_admin.data import specialty_groups as _SG
+    key = os.environ.get('PG_API_KEY') or ''
+    client = current_app.test_client()
+
+    def call(path, **qs):
+        r = client.get(path, query_string=qs, headers={'X-PG-Key': key})
+        return r.get_json() or {}
+
+    out = {'ok': True, 'predictor': [], 'explorer': [], 'dnb': {}, 'choice_fees': {}}
+    want = {'clinical': {'clinical'}, 'non_clinical': set(_SG.BRANCH_PARAMS['non_clinical'])}
+    for at in ('allindia', 'state'):
+        for rank in (10000, 50000, 150000):
+            base = dict(rank=rank, degree_group='mdms', authority_type=at, limit=2000)
+            a = call('/api/pg/predictor', **base)
+            c = call('/api/pg/predictor', branch='clinical', **base)
+            n = call('/api/pg/predictor', branch='non_clinical', **base)
+            unclassified = sum(1 for x in a.get('results', []) if not x.get('speciality_group'))
+            wrong = (sum(1 for x in c.get('results', []) if x.get('speciality_group') not in want['clinical'])
+                     + sum(1 for x in n.get('results', []) if x.get('speciality_group') not in want['non_clinical']))
+            out['predictor'].append({
+                'scope': at, 'rank': rank, 'all': a.get('total'), 'clinical': c.get('total'),
+                'non_clinical': n.get('total'), 'unclassified_in_page': unclassified,
+                'wrong_group_rows': wrong,
+                'adds_up': (a.get('total') or 0) == (c.get('total') or 0) + (n.get('total') or 0),
+                'dnb_rows': sum(1 for x in a.get('results', [])
+                                if 'DNB' in (x.get('degree') or '').upper()
+                                or 'NBEMS' in (x.get('course') or '').upper())})
+    for auth in ('', 'MCC'):
+        a = call('/api/pg/cutoff-explorer', authority=auth)
+        c = call('/api/pg/cutoff-explorer', authority=auth, branch='clinical')
+        n = call('/api/pg/cutoff-explorer', authority=auth, branch='non_clinical')
+        out['explorer'].append({'authority': auth or '(all)', 'all': a.get('total'),
+                                'clinical': c.get('total'), 'non_clinical': n.get('total'),
+                                'adds_up': (a.get('total') or 0) == (c.get('total') or 0) + (n.get('total') or 0)})
+    out['dnb'] = {
+        'predictor_dnb_total': call('/api/pg/predictor', rank=100000, degree_group='dnb').get('total'),
+        'explorer_dnb_total': call('/api/pg/cutoff-explorer', degree_group='dnb').get('total'),
+        'stipend_dnb_total': call('/api/pg/stipend', family='dnb').get('total'),
+        'fees_dnb_total': call('/api/pg/fees', family='dnb').get('total'),
+    }
+    conn = get_db()
+    try:
+        from pg_admin.routes.api_choice import live_fees
+        items = [dict(r) for r in conn.execute(
+            "SELECT i.id, i.set_id, i.institute, i.course, i.quota, i.category, i.fee, s.user_id "
+            "FROM pg_choice_items i JOIN pg_choice_sets s ON s.id = i.set_id").fetchall()]
+        stored = {it['id']: (float(it['fee']) if it['fee'] is not None else None) for it in items}
+        live_fees(conn, items)
+        changed = [it for it in items if it.get('fee') != stored[it['id']]]
+        out['choice_fees'] = {'saved_seats': len(items), 'fee_now_different': len(changed),
+                              'lists_affected': len({it['set_id'] for it in changed}),
+                              'doctors_affected': len({it['user_id'] for it in changed})}
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        out['choice_fees'] = {'error': str(e)}
+    finally:
+        conn.close()
+    return jsonify(out)
 
 
 def api_pg_bookings():

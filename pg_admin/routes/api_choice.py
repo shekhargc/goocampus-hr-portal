@@ -7,7 +7,8 @@ import json
 import logging
 from flask import request, jsonify
 from db import get_db
-from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token, smart_name_clause
+from pg_admin.routes.api import (_authorized, _bearer_token, _pg_user_by_token, smart_name_clause,
+                                 HIDE_DNB, no_dnb_sql)
 from pg_admin.data import entitlements
 
 _PER_PAGE = 100
@@ -37,10 +38,12 @@ def _deg_clause(dg):
     # bound param; NBEMS is a fixed literal (escaped by the ?->%s shim). (2026-09-25)
     # '%DNB%' stays a BOUND param (safe); NBEMS uses POSITION (no literal % — the db shim
     # doesn't escape %, which errored the cut-off explorer).
+    if dg == 'dnb' and HIDE_DNB:              # DNB hidden from doctors (2026-10-08) → nothing
+        return ("(UPPER(COALESCE(c.degree,'')) LIKE ? AND 1 = 0)", '%DNB%')
     if dg == 'dnb':
         return ("(UPPER(COALESCE(c.degree,'')) LIKE ? OR POSITION('NBEMS' IN UPPER(COALESCE(c.course,''))) > 0 "
                 "OR LOWER(COALESCE(c.degree_group,'')) = 'dnb')", '%DNB%')
-    if dg == 'mdms':
+    if dg == 'mdms' or HIDE_DNB:              # no / unknown degree_group → still never DNB
         return ("(UPPER(COALESCE(c.degree,'')) NOT LIKE ? AND POSITION('NBEMS' IN UPPER(COALESCE(c.course,''))) = 0)", '%DNB%')
     return None, None
 
@@ -71,7 +74,8 @@ def _spec_core(s):
 
 # ── Cutoff Explorer (browse cut-offs by filter, NOT by rank) ─────────────────
 def api_pg_cutoff_explorer():
-    """GET /api/pg/cutoff-explorer?authority=&quota=&category=&state=&degree_group=&course=&q=&page="""
+    """GET /api/pg/cutoff-explorer?authority=&quota=&category=&state=&degree_group=&course=&q=&page=
+    &branch=clinical|non_clinical (OPTIONAL, 2026-10-08 — absent → exactly as before)"""
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     authority = (request.args.get('authority') or '').strip()
@@ -82,15 +86,24 @@ def api_pg_cutoff_explorer():
     course = (request.args.get('course') or '').strip()
     q = (request.args.get('q') or '').strip()
     dg = (request.args.get('degree_group') or '').strip()
+    branch = (request.args.get('branch') or '').strip().lower()
     fee_min = _fee_arg('fee_min')
     fee_max = _fee_arg('fee_max')
     page = _page()
     conn = get_db()
     try:
+        from pg_admin.data import specialty_groups as _SG
+        _sg_ctx = _SG.context(conn)
         where, params = ["COALESCE(c.is_reference,0)=0"], []
         dgc, dgp = _deg_clause(dg)
         if dgc:
             where.append(dgc); params.append(dgp)
+        if branch in _SG.BRANCH_PARAMS:
+            _bc = _SG.courses_in_branch(conn, None, branch, _sg_ctx) or []
+            if _bc:
+                where.append("c.course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
+            else:
+                where.append("1 = 0")
         if authority:
             where.append("c.authority ILIKE ?"); params.append('%' + authority + '%')
         if quota:
@@ -137,12 +150,17 @@ def api_pg_cutoff_explorer():
             " ORDER BY c.closing_rank ASC NULLS LAST, c.institute ASC LIMIT ? OFFSET ?",
             params + hparams + [_PER_PAGE, offset]).fetchall()
         out = []
+        _sg_cache = {}
         for r in rows:
             d = dict(r)
             if d.get('fee') is not None:
                 try: d['fee'] = float(d['fee'])
                 except Exception: d['fee'] = None
             d['fee_period'] = 'year'                 # college fee is annual tuition (founder 2026-10-06)
+            _c = d.get('course') or ''
+            if _c not in _sg_cache:
+                _sg_cache[_c] = _SG.group_of(_c, _sg_ctx)
+            d['speciality_group'] = _sg_cache[_c]    # clinical | para_clinical | pre_clinical | non_clinical | ''
             out.append(d)
     except Exception as e:
         logging.error("api_pg_cutoff_explorer: %s", e)
@@ -153,7 +171,8 @@ def api_pg_cutoff_explorer():
         except Exception: pass
     pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
     return jsonify({'ok': True, 'rows': out, 'count': len(out), 'total': total,
-                    'page': page, 'pages': pages, 'per_page': _PER_PAGE})
+                    'page': page, 'pages': pages, 'per_page': _PER_PAGE,
+                    'branch': branch if branch in _SG.BRANCH_PARAMS else ''})
 
 
 def api_pg_cutoff_facets():
@@ -162,12 +181,15 @@ def api_pg_cutoff_facets():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     conn = get_db()
     out = {'ok': True, 'authorities': [], 'quotas': [], 'categories': [], 'states': [],
-           'college_types': []}
+           'college_types': [],
+           'branches': [{'value': 'clinical', 'label': 'Clinical'},
+                        {'value': 'non_clinical', 'label': 'Non-clinical'}]}
+    nodnb = (" AND " + no_dnb_sql()) if HIDE_DNB else ""
     try:
         def distinct(col):
             return [r[col] for r in conn.execute(
                 f"SELECT DISTINCT {col} FROM pg_cutoffs WHERE COALESCE({col},'')<>'' "
-                f"AND COALESCE(is_reference,0)=0 ORDER BY {col}").fetchall()]
+                f"AND COALESCE(is_reference,0)=0{nodnb} ORDER BY {col}").fetchall()]
         out['authorities'] = distinct('authority')
         out['quotas'] = distinct('quota')
         out['categories'] = distinct('category')
@@ -478,6 +500,7 @@ def api_pg_choice_set(set_id):
         items = [dict(r) for r in conn.execute(
             "SELECT * FROM pg_choice_items WHERE set_id = ? ORDER BY round, position, id",
             [set_id]).fetchall()]
+        live_fees(conn, items)
         rounds = {1: [], 2: [], 3: []}
         for it in items:
             rounds.setdefault(it['round'], []).append(it)
@@ -495,6 +518,44 @@ def api_pg_choice_set(set_id):
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
+
+
+def _seat_key(institute, course, quota, category):
+    n = lambda v: ' '.join(str(v or '').lower().split())
+    return (n(institute), n(course), n(quota), n(category))
+
+
+def live_fees(conn, items):
+    """Overlay each saved choice item's fee with the CURRENT fee from the cut-off data
+    (founder 2026-10-08), so a corrected fee upload shows on every saved list at once.
+    Read-time only — the stored snapshot is never rewritten. A seat no longer in the data
+    keeps its saved fee. Sets item['fee_period'] = 'year'."""
+    if not items:
+        return items
+    insts = sorted({(it.get('institute') or '').strip() for it in items if it.get('institute')})
+    live = {}
+    if insts:
+        try:
+            ph = ','.join(['?'] * len(insts))
+            for r in conn.execute(
+                    "SELECT institute, course, quota, category, MAX(fee) AS fee FROM pg_cutoffs "
+                    f"WHERE COALESCE(is_reference,0)=0 AND TRIM(institute) IN ({ph}) "
+                    "GROUP BY institute, course, quota, category", insts).fetchall():
+                live[_seat_key(r['institute'], r['course'], r['quota'], r['category'])] = r['fee']
+        except Exception as e:
+            logging.warning("live_fees: %s", e)
+            try: conn.rollback()
+            except Exception: pass
+            live = {}
+    for it in items:
+        k = _seat_key(it.get('institute'), it.get('course'), it.get('quota'), it.get('category'))
+        if k in live:
+            it['fee'] = live[k]
+        if it.get('fee') is not None:
+            try: it['fee'] = float(it['fee'])
+            except Exception: it['fee'] = None
+        it['fee_period'] = 'year'
+    return items
 
 
 def api_pg_choice_items(set_id):

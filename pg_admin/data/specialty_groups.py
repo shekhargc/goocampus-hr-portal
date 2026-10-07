@@ -274,13 +274,18 @@ def group_of(course, ctx):
 
 
 def courses_in_branch(conn, year, branch, ctx=None):
-    """Exact pg_cutoffs course strings (for `year`) whose effective group falls in `branch`."""
+    """Exact pg_cutoffs course strings (for `year`; None = every year) whose effective group
+    falls in `branch`."""
     want = BRANCH_PARAMS.get(branch)
     if not want:
         return None
     ctx = ctx or context(conn, year)
-    rows = conn.execute("SELECT DISTINCT course FROM pg_cutoffs WHERE year = ? "
-                        "AND COALESCE(course,'') <> ''", (year,)).fetchall()
+    if year:
+        rows = conn.execute("SELECT DISTINCT course FROM pg_cutoffs WHERE year = ? "
+                            "AND COALESCE(course,'') <> ''", (year,)).fetchall()
+    else:
+        rows = conn.execute("SELECT DISTINCT course FROM pg_cutoffs "
+                            "WHERE COALESCE(course,'') <> ''").fetchall()
     return [r['course'] for r in rows if group_of(r['course'], ctx) in want]
 
 
