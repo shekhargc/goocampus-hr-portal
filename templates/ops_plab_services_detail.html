@@ -77,7 +77,7 @@
 <div class="page-head">
   <div>
     <h1>Services Detail <span class="badge">UK / PLAB</span></h1>
-    <div class="sub">Every service actually delivered to each PLAB/UK client — one row per service line (repeat bookings appear as separate rows),
+    <div class="sub">{% if not status_filter %}<strong>In Process &amp; On Hold clients</strong> — {% endif %}every service actually delivered to each PLAB/UK client — one row per service line (repeat bookings appear as separate rows),
       with <strong>who paid</strong>. Base for per-client expense tracking (cost per service comes next).</div>
   </div>
   <div class="head-actions">
@@ -102,9 +102,10 @@
     {% for p in paid_choices %}<option value="{{ p }}" {% if p == paid_filter %}selected{% endif %}>Paid by {{ p }}</option>{% endfor %}
     <option value="none" {% if paid_filter == 'none' %}selected{% endif %}>Paid by: not set</option>
   </select>
-  <select name="status">
-    <option value="">All account statuses</option>
-    {% for s in statuses %}<option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  <select name="status" title="Account status">
+    <option value="" {% if not status_filter %}selected{% endif %}>In Process + On Hold (default)</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }} only</option>{% endfor %}
+    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All statuses</option>
   </select>
   <select name="stage">
     <option value="">All stages</option>
