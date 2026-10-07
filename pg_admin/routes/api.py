@@ -390,6 +390,9 @@ def api_pg_predictor():
     q = (request.args.get('q') or '').strip()
     degree_group = (request.args.get('degree_group') or '').strip()
     authority_type = (request.args.get('authority_type') or '').strip()
+    # OPTIONAL clinical / non-clinical narrowing for an "any speciality" search
+    # (founder 2026-10-07). Absent/unknown → the query is exactly what it was before.
+    branch = (request.args.get('branch') or '').strip().lower()
     try:
         limit = min(int(request.args.get('limit') or 2000), 2000)
     except (TypeError, ValueError):
@@ -430,6 +433,14 @@ def api_pg_predictor():
             fc, pc = smart_name_clause("course", q)
             fi, pi = smart_name_clause("institute", q)
             where.append(f"({fc} OR {fi})"); params.extend(pc + pi)
+        from pg_admin.data import specialty_groups as _SG
+        if branch in _SG.BRANCH_PARAMS:
+            _bc = _SG.courses_in_branch(conn, year, branch) or []
+            if _bc:
+                where.append("course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
+            else:
+                where.append("1 = 0")
+        _sg_ovr = _SG.overrides(conn)
         where_sql = ' AND '.join(where)
         # Exact match count (not just the page) so the site can say "N total"
         # truthfully even though only `limit` rows are returned for display.
@@ -481,16 +492,22 @@ def api_pg_predictor():
 
     import re as _re
     results = []
+    _sg_cache = {}
     for r in rows:
         d = as_dict(r)
         d['chance'] = _chance(d.get('closing_rank'))
         d['fee_period'] = 'year'                   # college fee is annual tuition (founder 2026-10-06)
+        _c = d.get('course') or ''
+        if _c not in _sg_cache:
+            _sg_cache[_c] = _SG.group_of(_c, _sg_ovr)
+        d['speciality_group'] = _sg_cache[_c]      # clinical | para_clinical | pre_clinical | '' (2026-10-07)
         _k = _re.sub(r'[^a-z0-9]+', ' ', (d.get('institute') or '').lower()).strip()
         d['pg_college_id'] = key2master.get(_k)   # → /api/pg/pg-colleges/<id>, or None
         results.append(d)
     return jsonify({'ok': True, 'year': year, 'rank': rank,
                     'count': len(results), 'total': total,
-                    'truncated': total > len(results), 'results': results})
+                    'truncated': total > len(results), 'results': results,
+                    'branch': branch if branch in _SG.BRANCH_PARAMS else ''})
 
 
 def api_pg_predictor_filters():
@@ -569,6 +586,7 @@ def api_pg_predictor_courses():
     authority = (request.args.get('authority') or '').strip()
     degree_group = (request.args.get('degree_group') or '').strip()
     authority_type = (request.args.get('authority_type') or '').strip()
+    branch = (request.args.get('branch') or '').strip().lower()   # optional (2026-10-07)
     try:
         limit = min(int(request.args.get('limit') or 20), 50)
     except (TypeError, ValueError):
@@ -592,6 +610,13 @@ def api_pg_predictor_courses():
             _at = _authority_type_sql(authority_type)
             if _at:
                 where.append(_at)
+            from pg_admin.data import specialty_groups as _SG
+            if branch in _SG.BRANCH_PARAMS:
+                _bc = _SG.courses_in_branch(conn, year, branch) or []
+                if _bc:
+                    where.append("course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
+                else:
+                    where.append("1 = 0")
             # Most-offered courses first: a doctor typing 'radio' should see the
             # common MD Radiodiagnosis before a one-off variant.
             courses = [r['course'] for r in conn.execute(
