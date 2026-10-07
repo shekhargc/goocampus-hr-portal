@@ -103,12 +103,16 @@
     <option value="active" {{ 'selected' if f_status=='active' }}>Active</option>
     <option value="blocked" {{ 'selected' if f_status=='blocked' }}>Blocked</option>
   </select>
+  <select name="lead" onchange="this.form.submit()" title="Lead / follow-up status">
+    <option value="">All lead statuses</option>
+    {% for s in lead_options %}<option value="{{ s }}" {{ 'selected' if f_lead==s }}>{{ s }}</option>{% endfor %}
+  </select>
   <select name="state" onchange="this.form.submit()">
     <option value="">All states</option>
     {% for s in states %}<option value="{{ s }}" {{ 'selected' if f_state==s }}>{{ s }}</option>{% endfor %}
   </select>
   <button class="pu-btn pu-btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
-  {% if q or f_plan or f_status or f_type or f_state %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
+  {% if q or f_plan or f_status or f_type or f_state or f_lead %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
   {% if session.get('is_admin') %}<a class="pu-btn pu-btn-ghost" href="/admin/diag/pg-states" title="Fix misspelt / duplicate states">🧹 Clean up states</a>{% endif %}
 </form>
 
@@ -154,7 +158,7 @@
 
 {% if total_pages > 1 %}
 <div class="pu-pager">
-  {% set qs = '&q=' ~ q ~ '&plan=' ~ f_plan ~ '&status=' ~ f_status ~ '&type=' ~ f_type ~ '&state=' ~ f_state %}
+  {% set qs = '&q=' ~ (q|urlencode) ~ '&plan=' ~ (f_plan|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&type=' ~ (f_type|urlencode) ~ '&state=' ~ (f_state|urlencode) ~ '&lead=' ~ (f_lead|urlencode) %}
   {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
   <span class="cur">{{ page }} / {{ total_pages }}</span>
   {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}

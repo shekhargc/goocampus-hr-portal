@@ -10,7 +10,7 @@ the same reports as a paid one and can never be mistaken for revenue.
 """
 import logging
 from datetime import datetime, timedelta
-from flask import render_template, request, redirect, url_for, flash, abort
+from flask import render_template, request, redirect, url_for, flash, abort, session
 from db import get_db
 from core.auth import login_required
 from core.users import get_user
@@ -131,8 +131,10 @@ def users_admin():
     f_status = (request.args.get('status') or '').strip()  # 'active' | 'blocked'
     f_type = (request.args.get('type') or '').strip()      # 'team'|'internal'|'paid'|'free'
     f_state = (request.args.get('state') or '').strip()    # home state filter (founder 2026-10-06)
+    f_lead = (request.args.get('lead') or '').strip()      # lead/follow-up status filter (founder 2026-10-07)
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
+    session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
     conn = get_db()
     users, plans, tab_counts, states = [], [], {}, []
     stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
@@ -188,6 +190,29 @@ def users_admin():
             conds.append("u.state = ?")
             params.append(f_state)
         where = (' WHERE ' + ' AND '.join(conds)) if conds else ''
+
+        # Lead-status filter: the Status column is derived (latest shared follow-up, else
+        # the inquiry's status, else 'New'), so compute it for every doctor matching the other
+        # filters with the SAME lookup the column uses, then keep the matching ids.
+        lead_options = []
+        try:
+            from pg_admin import followups as _fuL
+            lead_options = list(_fuL.STATUSES)
+            if f_lead in lead_options:
+                pre = [dict(r) for r in conn.execute(
+                    f"SELECT u.id, u.mobile, u.email {base}{where}", tuple(params)).fetchall()]
+                sts = _fuL.statuses_for(conn, pre)
+                keep = [r['id'] for r, st in zip(pre, sts) if st == f_lead]
+                if keep:
+                    conds.append("u.id IN (" + ','.join(['?'] * len(keep)) + ")")
+                    params += keep
+                else:
+                    conds.append("1 = 0")
+                where = ' WHERE ' + ' AND '.join(conds)
+        except Exception as _le:
+            logging.error("users_admin lead filter: %s", _le)
+            try: conn.rollback()
+            except Exception: pass
 
         row = conn.execute(f"SELECT COUNT(*) AS n {base}{where}", tuple(params)).fetchone()
         total = int((row or {}).get('n') or 0)
@@ -298,6 +323,7 @@ def users_admin():
                            f_status=f_status, f_type=f_type,
                            cat_labels=_CATEGORY_LABELS, counts=tab_counts,
                            states=states, f_state=f_state,
+                           f_lead=f_lead, lead_options=lead_options,
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
 
@@ -336,6 +362,7 @@ def users_followups():
     admin = _require_users_section("view")
     if not admin:
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
     conn = get_db()
     groups, total, counts = [], 0, {}
     try:
@@ -364,6 +391,7 @@ def users_visits():
     admin = _require_users_section("view")
     if not admin:
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
     conn = get_db()
     groups, total, counts = [], 0, {}
     try:
@@ -395,6 +423,7 @@ def users_stage(stage):
     if not cfg:
         return redirect(url_for('pg_users_admin'))
     want, label, active = cfg
+    session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
     conn = get_db()
     groups, total, counts = [], 0, {}
     try:
@@ -424,6 +453,9 @@ def user_detail(user_id):
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
 
+    back_url = session.get('pg_users_back') or '/admin/pg/users'
+    if not str(back_url).startswith('/admin/pg/users'):
+        back_url = '/admin/pg/users'
     conn = get_db()
     try:
         row = conn.execute("SELECT * FROM pg_users WHERE id = ?", (user_id,)).fetchone()
@@ -628,6 +660,7 @@ def user_detail(user_id):
                            state_max_other=state_max_other,
                            specialty_mdms=_json2.dumps(specialty_mdms),
                            specialty_dnb=_json2.dumps(specialty_dnb),
+                           back_url=back_url,
                            fu_thread=fu_thread, fu_state=fu_state, fu_statuses=fu_statuses,
                            fu_time_slots=fu_time_slots,
                            active_section='goocampus_in')
