@@ -523,8 +523,8 @@ def api_pg_predictor():
         d['fee_period'] = 'year'                   # college fee is annual tuition (founder 2026-10-06)
         _c = d.get('course') or ''
         if _c not in _sg_cache:
-            _sg_cache[_c] = _SG.group_of(_c, _sg_ctx)
-        d['speciality_group'] = _sg_cache[_c]      # clinical | para_clinical | pre_clinical | '' (2026-10-07)
+            _sg_cache[_c] = _SG.public_group(_SG.group_of(_c, _sg_ctx))
+        d['speciality_group'] = _sg_cache[_c]      # clinical | non_clinical | '' (2026-10-08)
         _k = _re.sub(r'[^a-z0-9]+', ' ', (d.get('institute') or '').lower()).strip()
         d['pg_college_id'] = key2master.get(_k)   # → /api/pg/pg-colleges/<id>, or None
         results.append(d)

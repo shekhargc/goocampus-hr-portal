@@ -159,8 +159,8 @@ def api_pg_cutoff_explorer():
             d['fee_period'] = 'year'                 # college fee is annual tuition (founder 2026-10-06)
             _c = d.get('course') or ''
             if _c not in _sg_cache:
-                _sg_cache[_c] = _SG.group_of(_c, _sg_ctx)
-            d['speciality_group'] = _sg_cache[_c]    # clinical | para_clinical | pre_clinical | non_clinical | ''
+                _sg_cache[_c] = _SG.public_group(_SG.group_of(_c, _sg_ctx))
+            d['speciality_group'] = _sg_cache[_c]    # clinical | non_clinical | '' (2026-10-08)
             out.append(d)
     except Exception as e:
         logging.error("api_pg_cutoff_explorer: %s", e)
