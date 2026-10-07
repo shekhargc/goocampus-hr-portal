@@ -1,0 +1,263 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}UK / PLAB Services Detail &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1.1rem;}
+  .page-head h1{margin:0;font-size:1.5rem;color:var(--navy);font-weight:700;}
+  .page-head .sub{font-size:.85rem;color:var(--gray-500);margin-top:.25rem;max-width:760px;}
+  .page-head .badge{display:inline-block;background:var(--orange);color:#fff;padding:.2rem .55rem;border-radius:999px;font-size:.7rem;font-weight:700;margin-left:.4rem;vertical-align:middle;}
+  .head-actions{display:flex;gap:.5rem;flex-wrap:wrap;}
+  .dl-btn{display:inline-flex;align-items:center;gap:7px;background:#0F1B33;color:#fff;border:0;border-radius:.55rem;padding:.6rem 1.1rem;font-size:.86rem;font-weight:600;text-decoration:none;cursor:pointer;}
+  .dl-btn:hover{background:#1B2A4A;}
+  .ghost-btn{display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--navy);border:1px solid var(--gray-300);border-radius:.55rem;padding:.6rem 1rem;font-size:.86rem;font-weight:600;text-decoration:none;}
+  .filter-bar{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.8rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:.8rem;}
+  .filter-bar input,.filter-bar select{padding:.5rem .65rem;font-size:.88rem;border:1px solid var(--gray-300);border-radius:.4rem;background:#fff;color:var(--navy);}
+  .filter-bar input[type=text]{min-width:220px;}
+  .filter-bar .btn{padding:.5rem .9rem;font-size:.85rem;font-weight:600;border:0;border-radius:.4rem;cursor:pointer;}
+  .filter-bar .btn-apply{background:var(--orange);color:#fff;}
+  .filter-bar .btn-clear{background:var(--gray-100);color:var(--gray-600);text-decoration:none;}
+  .paid-stats{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem;font-size:.82rem;}
+  .paid-stats a{padding:.3rem .7rem;border-radius:999px;text-decoration:none;font-weight:700;border:1px solid transparent;}
+  .bulk-bar{display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:.6rem;padding:.6rem .9rem;margin-bottom:.8rem;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.86rem;color:#9a3412;}
+  .bulk-bar.show{display:flex;}
+  .bulk-bar select{padding:.4rem .6rem;border:1px solid #fdba74;border-radius:.4rem;}
+  .bulk-bar button{background:#ea580c;color:#fff;border:0;border-radius:.4rem;padding:.45rem .9rem;font-weight:700;cursor:pointer;}
+  .ops-main{overflow-x:hidden;}
+  .table-wrap{overflow-x:auto;max-width:100%;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
+  table.detail{border-collapse:collapse;width:100%;font-size:13px;}
+  table.detail thead th{position:sticky;top:0;z-index:4;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:10px 12px;text-align:left;white-space:nowrap;}
+  table.detail tbody td{padding:8px 12px;border-bottom:1px solid var(--gray-100);color:var(--navy);vertical-align:top;}
+  table.detail tbody tr.client-start td{border-top:2px solid var(--gray-200);}
+  table.detail tbody tr:hover{background:#f8fafc;}
+  .cnum{color:var(--gray-400);font-weight:600;white-space:nowrap;}
+  .cname a{color:var(--navy);font-weight:700;text-decoration:none;white-space:nowrap;}
+  .cname a:hover{color:var(--orange);}
+  .cname .creg{display:block;color:var(--gray-500);font-weight:600;font-size:11.5px;}
+  .cname .cmeta{display:block;color:var(--gray-400);font-size:11px;}
+  .sec-pill{display:inline-block;background:#eef2ff;color:#3730a3;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;}
+  .svc{font-weight:600;}
+  .muted{color:var(--gray-400);}
+  .amt{font-weight:700;color:#15803d;white-space:nowrap;}
+  .nowrap{white-space:nowrap;}
+  .pb{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;}
+  .pb-gc{background:#ffedd5;color:#c2410c;} .pb-cl{background:#e0f2fe;color:#0369a1;}
+  .pb-ns{background:#fff;color:var(--gray-400);border:1px dashed var(--gray-300);}
+  .pb-src{display:block;font-size:10px;color:var(--gray-400);margin-top:2px;white-space:nowrap;}
+  .edit-btn{background:none;border:1px solid var(--gray-300);border-radius:6px;padding:2px 8px;cursor:pointer;color:var(--navy);font-size:12px;}
+  .edit-btn:hover{border-color:var(--orange);color:var(--orange);}
+  .st-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;}
+  .st-inprocess{background:#dbeafe;color:#1d4ed8;} .st-onhold{background:#fef3c7;color:#b45309;}
+  .st-dropped{background:#fee2e2;color:#b91c1c;} .st-completed{background:#dcfce7;color:#15803d;}
+  .st-other{background:var(--gray-100);color:var(--gray-600);}
+  .empty{padding:3rem 1rem;text-align:center;color:var(--gray-500);}
+  .pager{display:flex;gap:.6rem;align-items:center;justify-content:center;margin:1rem 0;font-size:.88rem;}
+  .pager a{color:var(--navy);font-weight:600;text-decoration:none;border:1px solid var(--gray-300);border-radius:.4rem;padding:.35rem .8rem;background:#fff;}
+  .legend{margin-top:.7rem;font-size:12px;color:var(--gray-500);}
+  /* slide-in drawer */
+  .drawer-bg{position:fixed;inset:0;background:rgba(15,27,51,.35);display:none;z-index:900;}
+  .drawer{position:fixed;top:0;right:-440px;width:420px;max-width:92vw;height:100vh;background:#fff;box-shadow:-6px 0 24px rgba(0,0,0,.15);z-index:901;transition:right .2s;display:flex;flex-direction:column;}
+  .drawer.open{right:0;} .drawer-bg.open{display:block;}
+  .drawer .dh{padding:1rem 1.2rem;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center;}
+  .drawer .dh h3{margin:0;font-size:1rem;color:var(--navy);}
+  .drawer .db{padding:1rem 1.2rem;overflow:auto;flex:1;font-size:.88rem;color:var(--navy);}
+  .drawer .kv{margin-bottom:.55rem;} .drawer .kv b{display:block;font-size:.72rem;color:var(--gray-500);text-transform:uppercase;letter-spacing:.03em;}
+  .drawer label{display:block;margin:.9rem 0 .3rem;font-weight:700;font-size:.82rem;}
+  .drawer select,.drawer textarea{width:100%;padding:.55rem .65rem;border:1px solid var(--gray-300);border-radius:.45rem;font-size:.9rem;box-sizing:border-box;}
+  .drawer .df{padding:.9rem 1.2rem;border-top:1px solid var(--gray-200);display:flex;gap:.5rem;justify-content:flex-end;}
+  .drawer .df button{padding:.55rem 1.1rem;border-radius:.45rem;font-weight:700;cursor:pointer;border:0;}
+  .drawer .save{background:#0F1B33;color:#fff;} .drawer .cancel{background:var(--gray-100);color:var(--gray-600);}
+  .drawer .hint{font-size:.76rem;color:var(--gray-400);margin-top:.35rem;}
+</style>
+{% endblock %}
+
+{% block ops_content %}
+{% set qs = 'q=' ~ (q|urlencode) ~ '&status=' ~ (status_filter|urlencode) ~ '&stage=' ~ (stage_filter|urlencode) ~ '&section=' ~ (section_filter|urlencode) ~ '&paid=' ~ (paid_filter|urlencode) %}
+{% set cqs = 'q=' ~ (q|urlencode) ~ '&status=' ~ (status_filter|urlencode) ~ '&stage=' ~ (stage_filter|urlencode) %}
+<div class="page-head">
+  <div>
+    <h1>Services Detail <span class="badge">UK / PLAB</span></h1>
+    <div class="sub">Every service actually delivered to each PLAB/UK client — one row per service line (repeat bookings appear as separate rows),
+      with <strong>who paid</strong>. Base for per-client expense tracking (cost per service comes next).</div>
+  </div>
+  <div class="head-actions">
+    <a class="ghost-btn" href="/operations/plab/services-summary">&larr; Summary view</a>
+    <a class="ghost-btn" href="/operations/plab/services-detail/download?{{ qs }}">⬇ This list (Excel)</a>
+    <a class="dl-btn" href="/operations/plab/services-detail/workbook?{{ cqs }}" title="Counts per client + all services + one sheet per section with every field">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      Full workbook (all sections)
+    </a>
+  </div>
+</div>
+
+<form class="filter-bar" method="GET" action="/operations/plab/services-detail">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name, reg no, mobile, email…">
+  <select name="section">
+    <option value="">All sections</option>
+    {% for k, l in sections %}<option value="{{ k }}" {% if k == section_filter %}selected{% endif %}>{{ l }}</option>{% endfor %}
+  </select>
+  <select name="paid">
+    <option value="">Paid by: any</option>
+    {% for p in paid_choices %}<option value="{{ p }}" {% if p == paid_filter %}selected{% endif %}>Paid by {{ p }}</option>{% endfor %}
+    <option value="none" {% if paid_filter == 'none' %}selected{% endif %}>Paid by: not set</option>
+  </select>
+  <select name="status">
+    <option value="">All account statuses</option>
+    {% for s in statuses %}<option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="stage">
+    <option value="">All stages</option>
+    {% for s in stages %}<option value="{{ s }}" {% if s == stage_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+  </select>
+  <button class="btn btn-apply" type="submit">Apply</button>
+  <a class="btn btn-clear" href="/operations/plab/services-detail">Clear</a>
+  <span style="margin-left:auto;color:var(--gray-500);font-size:.82rem;font-weight:600;">
+    {{ total }} service line{{ '' if total == 1 else 's' }} · {{ client_count }} client{{ '' if client_count == 1 else 's' }}
+  </span>
+</form>
+
+<div class="paid-stats">
+  <span style="align-self:center;color:var(--gray-500);font-weight:600;">Paid by (in this view):</span>
+  <a class="pb-gc" href="?{{ cqs }}&section={{ section_filter|urlencode }}&paid=GooCampus">GooCampus · {{ paid_counts.GooCampus }}</a>
+  <a class="pb-cl" href="?{{ cqs }}&section={{ section_filter|urlencode }}&paid=Client">Client · {{ paid_counts.Client }}</a>
+  <a class="pb-ns" href="?{{ cqs }}&section={{ section_filter|urlencode }}&paid=none">Not set · {{ paid_counts.none }}</a>
+</div>
+
+{# Bulk "set Paid by" — checkboxes in the table belong to this form via form="bulkForm" #}
+<form id="bulkForm" method="POST" action="/operations/plab/services-detail/paid-by" class="bulk-bar">
+  <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status_filter }}">
+  <input type="hidden" name="stage" value="{{ stage_filter }}"><input type="hidden" name="section" value="{{ section_filter }}">
+  <input type="hidden" name="paid" value="{{ paid_filter }}"><input type="hidden" name="page" value="{{ page }}">
+  <strong><span id="selCount">0</span> selected</strong> — set Paid by:
+  <select name="paid_by">
+    {% for p in paid_choices %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+    <option value="">Clear (use section's Booked by)</option>
+  </select>
+  <button type="submit" onclick="return confirm('Set Paid by for ' + document.getElementById('selCount').innerText + ' selected service line(s)?');">Apply to selected</button>
+  <a href="#" onclick="document.querySelectorAll('.rowchk').forEach(c=>c.checked=false);selSync();return false;" style="color:#9a3412;">clear selection</a>
+</form>
+
+<div class="table-wrap">
+  <table class="detail">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="chkAll" title="Select all on this page" onclick="document.querySelectorAll('.rowchk').forEach(c=>c.checked=this.checked);selSync();"></th>
+        <th>#</th><th>Client</th><th>Account Status</th><th>Section</th><th>Service</th>
+        <th>Provider / Vendor</th><th>Date</th><th>Status</th><th>Details</th><th>Paid by</th><th>Amount</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(prev=None) %}
+      {% for r in rows %}
+      {% set first = (r.client_id != ns.prev) %}
+      <tr class="{{ 'client-start' if first }}">
+        <td><input type="checkbox" class="rowchk" form="bulkForm" name="items" value="{{ r.source_table }}:{{ r.record_id }}" onclick="selSync()"></td>
+        <td class="cnum">{{ page_offset + loop.index }}</td>
+        <td class="cname">
+          {% if first %}
+            <a href="/operations/plab/{{ r.client_id }}">{{ r.name }}</a>
+            <span class="creg">{{ r.registration_number|format_reg }}</span>
+            <span class="cmeta">{{ r.registration_date or '' }}{% if r.current_stage %} · {{ r.current_stage }}{% endif %}</span>
+          {% else %}<span class="muted">″</span>{% endif %}
+        </td>
+        <td class="nowrap">
+          {% if first %}
+            {% set s = r.account_status %}
+            {% set cls = 'st-inprocess' if s=='In Process' else 'st-onhold' if s=='On Hold' else 'st-completed' if s=='Completed' else 'st-dropped' if 'Drop' in s else 'st-other' %}
+            {% if s %}<span class="st-pill {{ cls }}">{{ s }}</span>{% endif %}
+          {% endif %}
+        </td>
+        <td><span class="sec-pill">{{ r.section }}</span></td>
+        <td class="svc">{{ r.service or '—' }}</td>
+        <td>{{ r.provider or '' }}</td>
+        <td class="nowrap">{{ r.date or '' }}</td>
+        <td>{{ r.status or '' }}</td>
+        <td>{{ r.details or '' }}{% if r.meta_notes %}<span class="pb-src">📝 {{ r.meta_notes }}</span>{% endif %}</td>
+        <td>
+          {% if r.paid_by == 'GooCampus' %}<span class="pb pb-gc">GooCampus</span>
+          {% elif r.paid_by == 'Client' %}<span class="pb pb-cl">Client</span>
+          {% else %}<span class="pb pb-ns">Not set</span>{% endif %}
+          {% if r.paid_by_source == 'booked_by' %}<span class="pb-src" title="{{ r.booked_by }}">from Booked by</span>{% endif %}
+        </td>
+        <td class="amt">{% if r.amount %}₹{{ r.amount }}{% endif %}</td>
+        <td><button type="button" class="edit-btn" title="Set Paid by / notes"
+              data-item="{{ r.source_table }}:{{ r.record_id }}" data-client="{{ r.name }}" data-reg="{{ r.registration_number }}"
+              data-section="{{ r.section }}" data-service="{{ r.service }}" data-provider="{{ r.provider }}" data-date="{{ r.date }}"
+              data-paid="{{ r.paid_by if r.paid_by_source == 'team' else '' }}" data-derived="{{ r.paid_by if r.paid_by_source == 'booked_by' else '' }}"
+              data-booked="{{ r.booked_by }}" data-notes="{{ r.meta_notes }}" data-by="{{ r.meta_by }}" data-at="{{ r.meta_at }}"
+              onclick="openDrawer(this)">✎</button></td>
+      </tr>
+      {% set ns.prev = r.client_id %}
+      {% else %}
+      <tr><td colspan="13" class="empty">No delivered services match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pager">
+  {% if page > 1 %}<a href="?{{ qs }}&page={{ page - 1 }}">&lsaquo; Prev</a>{% endif %}
+  <span>Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="?{{ qs }}&page={{ page + 1 }}">Next &rsaquo;</a>{% endif %}
+</div>
+{% endif %}
+<div class="legend">One row per service line. <strong>Paid by</strong>: set it here per row (✎) or tick rows and use the bar to set many at once; where a section already has a "Booked by" choice it's used until you set one ("Booking included in Package" counts as GooCampus).
+  <strong>Full workbook</strong> = a Counts sheet (times each service given + paid-by split per client), All services, and one sheet per section with every field. Login details / passwords are never exported.</div>
+
+{# Drawer — single-line edit #}
+<div class="drawer-bg" id="drawerBg" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer" aria-hidden="true">
+  <form method="POST" action="/operations/plab/services-detail/paid-by" style="display:flex;flex-direction:column;height:100%;">
+    <input type="hidden" name="items" id="dItem">
+    <input type="hidden" name="q" value="{{ q }}"><input type="hidden" name="status" value="{{ status_filter }}">
+    <input type="hidden" name="stage" value="{{ stage_filter }}"><input type="hidden" name="section" value="{{ section_filter }}">
+    <input type="hidden" name="paid" value="{{ paid_filter }}"><input type="hidden" name="page" value="{{ page }}">
+    <div class="dh"><h3>Service line</h3><button type="button" class="cancel" style="background:none;border:0;font-size:1.3rem;cursor:pointer;" onclick="closeDrawer()">×</button></div>
+    <div class="db">
+      <div class="kv"><b>Client</b><span id="dClient"></span></div>
+      <div class="kv"><b>Section · Service</b><span id="dService"></span></div>
+      <div class="kv"><b>Provider · Date</b><span id="dProv"></span></div>
+      <div class="kv" id="dBookedWrap"><b>Booked by (as entered in the section)</b><span id="dBooked"></span></div>
+      <label for="dPaid">Paid by</label>
+      <select name="paid_by" id="dPaid">
+        <option value="">— Not set (use section's Booked by) —</option>
+        {% for p in paid_choices %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+      <div class="hint" id="dDerived"></div>
+      <label for="dNotes">Notes (optional)</label>
+      <textarea name="notes" id="dNotes" rows="3" placeholder="e.g. Paid by GooCampus — included in Premium package"></textarea>
+      <div class="hint" id="dLast"></div>
+    </div>
+    <div class="df"><button type="button" class="cancel" onclick="closeDrawer()">Cancel</button><button type="submit" class="save">Save</button></div>
+  </form>
+</div>
+
+<script>
+function selSync(){
+  var n=document.querySelectorAll('.rowchk:checked').length;
+  document.getElementById('selCount').innerText=n;
+  document.getElementById('bulkForm').classList.toggle('show', n>0);
+}
+function openDrawer(b){
+  var d=b.dataset;
+  document.getElementById('dItem').value=d.item;
+  document.getElementById('dClient').innerText=d.client+(d.reg?' · '+d.reg:'');
+  document.getElementById('dService').innerText=d.section+' · '+(d.service||'—');
+  document.getElementById('dProv').innerText=[d.provider,d.date].filter(Boolean).join(' · ')||'—';
+  document.getElementById('dBooked').innerText=d.booked||'';
+  document.getElementById('dBookedWrap').style.display=d.booked?'block':'none';
+  document.getElementById('dPaid').value=d.paid||'';
+  document.getElementById('dDerived').innerText=d.derived?('Currently '+d.derived+' (from the section\'s Booked by). Pick a value to override.'):'';
+  document.getElementById('dNotes').value=d.notes||'';
+  document.getElementById('dLast').innerText=d.by?('Last updated by '+d.by+(d.at?' · '+d.at:'')):'';
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+}
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerBg').classList.remove('open');
+}
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeDrawer(); });
+</script>
+{% endblock %}
