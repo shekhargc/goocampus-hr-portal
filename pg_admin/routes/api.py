@@ -371,12 +371,16 @@ def _degree_group_sql(dg):
 
 def _authority_type_sql(at):
     at = (at or '').strip().lower()
+    # No literal % here: the db shim doesn't escape it, so 'MCC%' broke every query that also
+    # had ? params (HTTP 500). LEFT/POSITION match the same rows. (2026-10-08)
+    _ai = ("(LEFT(UPPER(COALESCE(authority,'')),3)='MCC' "
+           "OR POSITION('ALL INDIA' IN UPPER(COALESCE(authority,''))) > 0)")
     if at == 'allindia':
         return ("(LOWER(COALESCE(authority_type,''))='allindia' OR (COALESCE(authority_type,'')='' "
-                "AND (authority ILIKE 'MCC%' OR authority ILIKE '%all india%')))")
+                "AND " + _ai + "))")
     if at == 'state':
         return ("(LOWER(COALESCE(authority_type,''))='state' OR (COALESCE(authority_type,'')='' "
-                "AND COALESCE(authority,'')<>'' AND NOT (authority ILIKE 'MCC%' OR authority ILIKE '%all india%')))")
+                "AND COALESCE(authority,'')<>'' AND NOT " + _ai + "))")
     return None
 
 
@@ -1686,9 +1690,10 @@ def admin_pg_branch_check():
 
     out = {'ok': True, 'predictor': [], 'explorer': [], 'dnb': {}, 'choice_fees': {}, 'errors': errors}
     want = {'clinical': {'clinical'}, 'non_clinical': set(_SG.BRANCH_PARAMS['non_clinical'])}
-    for at in ('allindia', 'state'):
+    for scope in ({}, {'authority': 'MCC'}, {'authority_type': 'state'}):
+        at = ' '.join(f"{k}={v}" for k, v in scope.items()) or '(all)'
         for rank in (10000, 50000, 150000):
-            base = dict(rank=rank, degree_group='mdms', authority_type=at, limit=2000)
+            base = dict(rank=rank, degree_group='mdms', limit=2000, **scope)
             a = call('/api/pg/predictor', **base)
             c = call('/api/pg/predictor', branch='clinical', **base)
             n = call('/api/pg/predictor', branch='non_clinical', **base)
