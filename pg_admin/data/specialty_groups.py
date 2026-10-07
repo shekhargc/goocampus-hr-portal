@@ -159,26 +159,114 @@ def file_types(conn, year=None):
     return out
 
 
+# ── Founder's sheet (speciality type.xlsx, 2026-10-07): the AUTHORITY on Clinical vs
+# Non-clinical. Matched by exact course name, else by subject (so DNB/NBEMS + diploma variants
+# of the same subject inherit it). It only says clinical / non-clinical; para/pre detail comes
+# from the cut-off file or name rules when they agree it's non-clinical. ──
+_DEGREE_PREFIX = re.compile(
+    r'^(?:(?:md|ms|mch|dm|dnb|nbems|mph|diploma|m d|m s|md ms|m d m s)\b\s*(?:in\b)?\s*)+')
+_SHEET = None
+
+
+def subject_key(course):
+    """'MD - General Medicine' / '(NBEMS) General Medicine' / 'Diploma in X' → 'general medicine'."""
+    return _DEGREE_PREFIX.sub('', course_key(course)).strip()
+
+
+def _load_sheet():
+    global _SHEET
+    if _SHEET is None:
+        import json, os
+        exact, subj = {}, {}
+        try:
+            path = os.path.join(os.path.dirname(__file__), 'specialty_sheet.json')
+            for row in json.load(open(path, encoding='utf-8')).get('courses', []):
+                g = file_type_group(row.get('type'))
+                if g not in ('clinical', 'non_clinical'):
+                    continue
+                exact[course_key(row['course'])] = g
+                sk = subject_key(row['course'])
+                if sk:
+                    subj.setdefault(sk, set()).add(g)
+        except Exception as e:
+            logging.error("specialty sheet load: %s", e)
+        # a subject is only usable when every sheet row for it agrees
+        _SHEET = {'exact': exact, 'subject': {k: next(iter(v)) for k, v in subj.items() if len(v) == 1}}
+    return _SHEET
+
+
+def sheet_type(course):
+    """→ ('clinical'|'non_clinical'|'', 'exact'|'subject'|'') from the founder's sheet."""
+    sh = _load_sheet()
+    k = course_key(course)
+    if k in sh['exact']:
+        return sh['exact'][k], 'exact'
+    sk = subject_key(course)
+    if sk and sk in sh['subject']:
+        return sh['subject'][sk], 'subject'
+    return '', ''
+
+
 def context(conn, year=None):
     """Everything group_of needs, loaded once per request."""
     return {'ovr': overrides(conn), 'file': file_types(conn, year)}
 
 
+def _non_clinical_detail(course, ctx):
+    """For a course known to be non-clinical: para / pre if the file or rules say so."""
+    f = ctx['file'].get(course_key(course))
+    if f and f['group'] in ('para_clinical', 'pre_clinical'):
+        return f['group']
+    r = classify(course)
+    return r if r in ('para_clinical', 'pre_clinical') else 'non_clinical'
+
+
 def group_source(course, ctx):
-    """→ (group, source) with source in admin | file | rule | ''.
-    Precedence: admin override > cut-off file's course_type > name rules. When the file only
-    says 'Non-clinical', the rules may refine it to para/pre — never flip it to clinical."""
+    """→ (group, source) with source in admin | sheet | file | rule | ''.
+    Precedence: admin override > founder's sheet > cut-off file's course_type > name rules.
+    Non-clinical answers are refined to para/pre only when the file/rules agree."""
     k = course_key(course)
     if k in ctx['ovr']:
         return ctx['ovr'][k], 'admin'
+    st, _how = sheet_type(course)
+    if st == 'clinical':
+        return 'clinical', 'sheet'
+    if st == 'non_clinical':
+        return _non_clinical_detail(course, ctx), 'sheet'
     f = ctx['file'].get(k)
     if f:
         if f['group'] == 'non_clinical':
-            r = classify(course)
-            return (r if r in ('para_clinical', 'pre_clinical') else 'non_clinical'), 'file'
+            return _non_clinical_detail(course, ctx), 'file'
         return f['group'], 'file'
     r = classify(course)
     return r, ('rule' if r else '')
+
+
+def cutoff_corrections(conn):
+    """Cut-off rows whose course_type CONTRADICTS the founder's sheet on clinical vs
+    non-clinical → [{course, from, to, rows, how}]. Rows that already agree (incl. Para/Pre for
+    a non-clinical course) are left alone. Read-only; apply_cutoff_corrections() writes."""
+    out = []
+    rows = conn.execute(
+        "SELECT course, COALESCE(course_type,'') AS ct, COUNT(*) AS n FROM pg_cutoffs "
+        "WHERE COALESCE(course,'') <> '' GROUP BY course, COALESCE(course_type,'') "
+        "ORDER BY course").fetchall()
+    for r in rows:
+        st, how = sheet_type(r['course'])
+        if not st:
+            continue
+        cur = file_type_group(r['ct'])
+        cur_is_clin = (cur == 'clinical')
+        if cur and (cur_is_clin == (st == 'clinical')):
+            continue                                   # already consistent
+        if st == 'clinical':
+            new = 'Clinical'
+        else:
+            r2 = classify(r['course'])
+            new = {'para_clinical': 'Para-Clinical', 'pre_clinical': 'Pre-Clinical'}.get(r2, 'Non-Clinical')
+        out.append({'course': r['course'], 'from': r['ct'] or '(blank)', 'from_raw': r['ct'],
+                    'to': new, 'rows': int(r['n']), 'how': how})
+    return out
 
 
 def group_of(course, ctx):
@@ -194,3 +282,23 @@ def courses_in_branch(conn, year, branch, ctx=None):
     rows = conn.execute("SELECT DISTINCT course FROM pg_cutoffs WHERE year = ? "
                         "AND COALESCE(course,'') <> ''", (year,)).fetchall()
     return [r['course'] for r in rows if group_of(r['course'], ctx) in want]
+
+
+def apply_cutoff_corrections(conn, who):
+    """Fix cut-off rows that contradict the founder's sheet (see cutoff_corrections). Only
+    rows with the exact current (course, course_type) are touched; each change is logged in
+    pg_course_branch_log. Returns (courses_changed, rows_changed). Caller commits."""
+    ensure_course_branch_table(conn)
+    n_courses = n_rows = 0
+    for c in cutoff_corrections(conn):
+        cur = conn.execute(
+            "UPDATE pg_cutoffs SET course_type = ? WHERE course = ? AND COALESCE(course_type,'') = ?",
+            (c['to'], c['course'], c['from_raw']))
+        changed = getattr(cur, 'rowcount', None)
+        n_rows += changed if isinstance(changed, int) and changed >= 0 else c['rows']
+        n_courses += 1
+        conn.execute("INSERT INTO pg_course_branch_log (course_key, old_group, new_group, changed_by) "
+                     "VALUES (?,?,?,?)",
+                     (course_key(c['course']), 'cutoff:' + (c['from_raw'] or '(blank)'), 'cutoff:' + c['to'],
+                      (who or 'admin') + ' (sheet)'))
+    return n_courses, n_rows

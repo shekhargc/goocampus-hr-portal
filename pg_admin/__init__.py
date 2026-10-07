@@ -318,6 +318,8 @@ def register_pg_admin(app):
                      specialty_admin.specialty_groups_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/specialty-groups/set', 'pg_specialty_groups_set',
                      specialty_admin.specialty_groups_set, methods=['POST'])
+    app.add_url_rule('/admin/pg/specialty-groups/fix-cutoffs', 'pg_specialty_groups_fix_cutoffs',
+                     specialty_admin.specialty_groups_fix_cutoffs, methods=['POST'])
     app.add_url_rule('/admin/pg/predictor/upload', 'pg_predictor_upload',
                      predictor_admin.predictor_upload, methods=['POST'])
 

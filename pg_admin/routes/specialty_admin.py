@@ -24,7 +24,8 @@ def specialty_groups_admin():
     conn = get_db()
     items, year = [], None
     counts = {'clinical': 0, 'para_clinical': 0, 'pre_clinical': 0, 'non_clinical': 0, '': 0,
-              'overridden': 0, 'differ': 0, 'from_file': 0}
+              'overridden': 0, 'differ': 0, 'from_file': 0, 'from_sheet': 0}
+    corrections = []
     try:
         SG.ensure_course_branch_table(conn)
         yr = conn.execute("SELECT COALESCE(MAX(year),0) AS y FROM pg_cutoffs").fetchone()
@@ -48,14 +49,18 @@ def specialty_groups_admin():
             counts['overridden'] += 1 if o else 0
             counts['differ'] += 1 if differ else 0
             counts['from_file'] += 1 if f else 0
+            sh, sh_how = SG.sheet_type(r['course'])
+            counts['from_sheet'] += 1 if sh else 0
             # what "Automatic" would give if the admin override were removed
             auto_ctx = {'ovr': {}, 'file': ctx['file']}
             items.append({'course': r['course'], 'key': k, 'n': r['n'], 'last_year': r['last_year'],
                           'auto': SG.group_of(r['course'], auto_ctx), 'group': eff, 'source': src,
                           'overridden': bool(o), 'file_raw': (f or {}).get('raw', ''),
                           'file_mixed': bool(f and f['mixed']), 'rule': rule, 'differ': differ,
+                          'sheet': sh, 'sheet_how': sh_how,
                           'by': (o or {}).get('updated_by') or '',
                           'at': str((o or {}).get('updated_at') or '')[:16]})
+        corrections = SG.cutoff_corrections(conn)
     except Exception as e:
         logging.error("specialty_groups_admin: %s", e)
         try: conn.rollback()
@@ -75,6 +80,7 @@ def specialty_groups_admin():
         ql = q.lower()
         items = [i for i in items if ql in i['course'].lower()]
     return render_template('pg_admin/specialty_groups.html', items=items, counts=counts, total=total,
+                           corrections=corrections, corr_rows=sum(c['rows'] for c in corrections),
                            show=show, q=q, year=year, labels=SG.GROUP_LABELS, groups=SG.GROUPS,
                            active_section='goocampus_in')
 
@@ -125,3 +131,26 @@ def specialty_groups_set():
     finally:
         conn.close()
     return redirect(url_for('pg_specialty_groups', **back))
+
+
+@login_required
+def specialty_groups_fix_cutoffs():
+    """Apply the founder's sheet to the OLD cut-off data: rewrite course_type only on rows that
+    contradict it (preview shown on the page first). Logged."""
+    if not _admin():
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    who = (get_user() or {}).get('name') or (get_user() or {}).get('emp_code') or 'admin'
+    conn = get_db()
+    try:
+        n_courses, n_rows = SG.apply_cutoff_corrections(conn, who)
+        conn.commit()
+        flash(f'Corrected the Clinical/Non-clinical value on {n_rows} cut-off rows '
+              f'across {n_courses} course entries, to match your sheet.', 'success')
+    except Exception as e:
+        logging.error("specialty_groups_fix_cutoffs: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not apply the corrections. Nothing was changed.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_specialty_groups'))

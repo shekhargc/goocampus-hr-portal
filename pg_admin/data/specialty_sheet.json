@@ -1,0 +1,269 @@
+{
+ "source": "speciality type.xlsx (founder, 2026-10-07)",
+ "courses": [
+  {
+   "course": "Diploma in Anaesthesiology",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Child Health / Paediatrics",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Dermatology",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Diabetology",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in ENT",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Family Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Obstetrics and Gynaecology",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Ophthalmology",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Orthopaedics",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Physical Medicine and Rehabilitation",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Psychological Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Public Health",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Radiation Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Radio Diagnosis",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Radiotherapy / Radiation Oncology",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Respiratory Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Sports Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "M.D. Fecal Microbiota Transplantation",
+   "type": "Clinical"
+  },
+  {
+   "course": "M.D. Public Health",
+   "type": "Clinical"
+  },
+  {
+   "course": "MCh - Neuro Surgery",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Aerospace Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Anaesthesiology",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Dermatology",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Emergency Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Family Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - General Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Geriatrics",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Nuclear Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Paediatrics",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Palliative Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Physical Medicine and Rehabilitation",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Psychiatry",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Radio-Diagnosis",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Radiotherapy / Radiation Oncology",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Respiratory Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MD - Sports Medicine",
+   "type": "Clinical"
+  },
+  {
+   "course": "MS - ENT (Otorhinolaryngology)",
+   "type": "Clinical"
+  },
+  {
+   "course": "MS - General Surgery",
+   "type": "Clinical"
+  },
+  {
+   "course": "MS - Obstetrics and Gynaecology",
+   "type": "Clinical"
+  },
+  {
+   "course": "MS - Ophthalmology",
+   "type": "Clinical"
+  },
+  {
+   "course": "MS - Orthopaedics",
+   "type": "Clinical"
+  },
+  {
+   "course": "MS - Traumatology and Surgery",
+   "type": "Clinical"
+  },
+  {
+   "course": "Ultrasonography-Batch1",
+   "type": "Clinical"
+  },
+  {
+   "course": "Ultrasonography-Batch2",
+   "type": "Clinical"
+  },
+  {
+   "course": "Diploma in Bacteriology",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "Diploma in Community Medicine/Preventive and Social Medicine",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "Diploma in Forensic Medicine",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "Diploma in Health Administration",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "Diploma in Hospital Administration",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "Diploma in Immuno-Haematology and Blood Transfusion",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "Diploma in Microbiology",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "Diploma in Pathology",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Biochemistry",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Community Health & Administration",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Forensic Medicine",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Hospital Administration",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Laboratory Medicine",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Microbiology",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Pathology",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Pharmacology",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Physiology",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Social & Preventive Medicine / Community Medicine",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Transfusion Medicine / Immuno-Haematology and Blood Transfusion",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD - Tropical Medicine",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MD/MS - Anatomy",
+   "type": "Non-Clinical"
+  },
+  {
+   "course": "MPH - Epidemiology",
+   "type": "Non-Clinical"
+  }
+ ]
+}

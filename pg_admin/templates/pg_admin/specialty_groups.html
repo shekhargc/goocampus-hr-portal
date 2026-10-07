@@ -29,7 +29,8 @@
     <p style="margin:0;font-size:.88rem;color:var(--gray-500);">
       Every speciality in the predictor data, grouped as <b>Clinical</b> or <b>Non-clinical</b> (Para-clinical /
       Pre-clinical where known). The group comes from the <b>cut-off file's Clinical/Non-clinical column</b>; only
-      specialities the file doesn't cover fall back to name rules. Override any row here.
+      specialities the file doesn't cover fall back to name rules. <b>Your speciality-type sheet</b> takes priority over
+      the file (matched by course name, else by subject — so DNB/NBEMS versions inherit it). Override any row here.
       This drives the College Predictor's optional <i>Clinical / Non-clinical</i> filter. <b>Unclassified</b>
       specialities are left out of both filters until you place them.
     </p>
@@ -48,15 +49,32 @@
     <a href="?show=differ&q={{ q|urlencode }}" class="{{ 'on' if show=='differ' }}" style="{{ 'color:#b45309;' if counts.differ }}">File vs rule differ · {{ counts.differ }}</a>
     <a href="?show=none&q={{ q|urlencode }}" class="{{ 'on' if show=='none' }}" style="{{ 'color:#991b1b;' if counts[''] }}">Unclassified · {{ counts[''] }}</a>
     <a href="?show=overridden&q={{ q|urlencode }}" class="{{ 'on' if show=='overridden' }}">Changed by admin · {{ counts.overridden }}</a>
+    <span style="align-self:center;font-size:.78rem;color:var(--gray-500);">Covered by your sheet: <b>{{ counts.from_sheet }}</b> / {{ total }}</span>
     <form method="GET" style="margin-left:auto;display:flex;gap:.4rem;">
       <input type="hidden" name="show" value="{{ show }}">
       <input name="q" value="{{ q }}" placeholder="Search speciality…" style="padding:.4rem .7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:.85rem;">
     </form>
   </div>
 
+  {% if corrections %}
+  <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;margin-bottom:16px;max-width:980px;">
+    <div style="font-weight:700;color:#9a3412;margin-bottom:6px;">Correct the old cut-off data — {{ corrections|length }} course entries · {{ corr_rows }} rows contradict your sheet</div>
+    <div style="font-size:.82rem;color:#7c2d12;margin-bottom:8px;">These cut-off rows say Clinical where your sheet says Non-clinical (or vice-versa). Applying rewrites only their
+      Clinical/Non-clinical value; rows that already agree are untouched. Logged.</div>
+    <table class="sg" style="margin-bottom:10px;"><thead><tr><th>Course</th><th>Cut-off file now</th><th>Will become</th><th>Rows</th></tr></thead><tbody>
+      {% for c in corrections %}<tr><td>{{ c.course }}{% if c.how == 'subject' %} <span class="muted">(by subject)</span>{% endif %}</td><td>{{ c['from'] }}</td><td><b>{{ c.to }}</b></td><td class="muted">{{ c.rows }}</td></tr>{% endfor %}
+    </tbody></table>
+    <form method="POST" action="{{ url_for('pg_specialty_groups_fix_cutoffs') }}" onsubmit="return confirm('Rewrite the Clinical/Non-clinical value on {{ corr_rows }} cut-off rows to match your sheet?');">
+      <button type="submit" style="background:#ea580c;color:#fff;border:0;border-radius:8px;padding:.55rem 1.1rem;font-weight:700;cursor:pointer;">Apply to cut-off data</button>
+    </form>
+  </div>
+  {% else %}
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:10px 14px;margin-bottom:16px;max-width:980px;font-size:.85rem;color:#166534;">✓ The cut-off data agrees with your sheet on Clinical vs Non-clinical.</div>
+  {% endif %}
+
   <div style="border:1px solid var(--gray-200);border-radius:12px;overflow:auto;max-width:980px;">
     <table class="sg">
-      <thead><tr><th>#</th><th>Speciality (as in the data)</th><th>Group</th><th>Cut-off file says</th><th>Seat rows</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>Speciality (as in the data)</th><th>Group</th><th>Your sheet</th><th>Cut-off file says</th><th>Seat rows</th><th></th></tr></thead>
       <tbody>
       {% for i in items %}
         <tr>
@@ -64,15 +82,17 @@
           <td style="font-weight:600;">{{ i.course }}{% if i.last_year and year and i.last_year != year %} <span class="muted">(last seen {{ i.last_year }})</span>{% endif %}</td>
           <td><span class="g g-{{ i.group }}">{{ labels[i.group] }}</span>
             {% if i.overridden %}<div class="muted">set by {{ i.by }}{% if i.at %} · {{ i.at }}{% endif %} · automatic would be {{ labels[i.auto] }}</div>
+            {% elif i.source == 'sheet' %}<div class="muted">from your sheet</div>
             {% elif i.source == 'file' %}<div class="muted">from cut-off file</div>
             {% elif i.source == 'rule' %}<div class="muted">from name rule (not in file)</div>{% endif %}</td>
+          <td>{% if i.sheet %}{{ 'Clinical' if i.sheet == 'clinical' else 'Non-Clinical' }}{% if i.sheet_how == 'subject' %} <span class="muted" title="Matched by subject (e.g. the MD version of this course)">(by subject)</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
           <td>{% if i.file_raw %}{{ i.file_raw }}{% if i.file_mixed %} <span class="muted" title="Rows for this speciality disagree in the file">(mixed)</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}
             {% if i.differ %}<div style="font-size:.74rem;color:#b45309;font-weight:600;">name rule says {{ labels[i.rule] }}</div>{% endif %}</td>
           <td class="muted">{{ i.n }}</td>
           <td><button type="button" class="ebtn" data-course="{{ i.course }}" data-group="{{ i.group if i.overridden else 'auto' }}" data-auto="{{ labels[i.auto] }}" onclick="openSg(this)">✎</button></td>
         </tr>
       {% else %}
-        <tr><td colspan="6" style="padding:2.5rem;text-align:center;color:var(--gray-400);">No specialities match.</td></tr>
+        <tr><td colspan="7" style="padding:2.5rem;text-align:center;color:var(--gray-400);">No specialities match.</td></tr>
       {% endfor %}
       </tbody>
     </table>
