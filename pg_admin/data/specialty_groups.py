@@ -273,6 +273,12 @@ def group_of(course, ctx):
     return group_source(course, ctx)[0]
 
 
+def public_group(g):
+    """What doctors see: just 'clinical' or 'non_clinical' (the founder's sheet has only these
+    two); para/pre detail stays admin-side. '' stays ''."""
+    return 'non_clinical' if g in NON_CLINICAL else g
+
+
 def courses_in_branch(conn, year, branch, ctx=None):
     """Exact pg_cutoffs course strings (for `year`; None = every year) whose effective group
     falls in `branch`."""
