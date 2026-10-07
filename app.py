@@ -30435,12 +30435,15 @@ def _svc_norm_key(s):
     return ' '.join(str(s or '').lower().split())
 
 
-def _plab_unique_services(conn, section_filter='', search=''):
+def _plab_unique_services(conn, section_filter='', search='', by_provider=True):
+    """by_provider=False groups on Section + Service only (provider column then shows the most
+    common provider + how many others) — e.g. Test Bookings priced per exam, not per centre."""
     rows, _s, _g = _plab_services_detail_data(conn, section_filter=section_filter)
     sec_order = {k: n for n, (k, _l, _t) in enumerate(PLAB_SERVICE_COLUMNS)}
     groups = {}
     for r in rows:
-        k = (r['section_key'], _svc_norm_key(r['service']), _svc_norm_key(r['provider']))
+        k = (r['section_key'], _svc_norm_key(r['service']),
+             _svc_norm_key(r['provider']) if by_provider else '')
         g = groups.get(k)
         if not g:
             g = groups[k] = {'section_key': r['section_key'], 'section': r['section'],
@@ -30459,7 +30462,11 @@ def _plab_unique_services(conn, section_filter='', search=''):
     q = _svc_norm_key(search)
     for g in groups.values():
         g['service'] = max(g.pop('_svc').items(), key=lambda kv: kv[1])[0]
-        g['provider'] = max(g.pop('_prov').items(), key=lambda kv: kv[1])[0]
+        provs = g.pop('_prov')
+        top = max(provs.items(), key=lambda kv: kv[1])[0]
+        others = len([p for p in provs if _svc_norm_key(p) and _svc_norm_key(p) != _svc_norm_key(top)])
+        g['provider'] = (top + (f"  (+{others} other{'s' if others != 1 else ''})" if others else '')) \
+            if not by_provider else top
         g['clients'] = len(g['clients'])
         if q and q not in _svc_norm_key(f"{g['section']} {g['service']} {g['provider']}"):
             continue
@@ -30477,9 +30484,10 @@ def ops_plab_services_unique():
     conn = get_db()
     section_filter = (request.args.get('section', '') or '').strip()
     search = (request.args.get('q', '') or '').strip()
+    by = 'service' if (request.args.get('by') or '') == 'service' else 'provider'
     items = []
     try:
-        items = _plab_unique_services(conn, section_filter, search)
+        items = _plab_unique_services(conn, section_filter, search, by_provider=(by == 'provider'))
     except Exception as e:
         logging.warning(f"ops_plab_services_unique: {e}")
         try: conn.rollback()
@@ -30491,7 +30499,7 @@ def ops_plab_services_unique():
         by_section[g['section']] += 1
     return render_template('ops_plab_services_unique.html', items=items, by_section=by_section,
                            sections=[(k, l) for k, l, _t in PLAB_SERVICE_COLUMNS],
-                           section_filter=section_filter, q=search,
+                           section_filter=section_filter, q=search, by=by,
                            total_lines=sum(g['lines'] for g in items),
                            active_ops_page='plab-services-summary')
 
@@ -30504,8 +30512,9 @@ def ops_plab_services_unique_download():
     conn = get_db()
     section_filter = (request.args.get('section', '') or '').strip()
     search = (request.args.get('q', '') or '').strip()
+    by = 'service' if (request.args.get('by') or '') == 'service' else 'provider'
     try:
-        items = _plab_unique_services(conn, section_filter, search)
+        items = _plab_unique_services(conn, section_filter, search, by_provider=(by == 'provider'))
     except Exception as e:
         logging.warning(f"ops_plab_services_unique_download: {e}")
         items = []
@@ -30520,7 +30529,7 @@ def ops_plab_services_unique_download():
         ws.append([_svc_xl_value(g['section']), _svc_xl_value(g['service']), _svc_xl_value(g['provider']),
                    g['lines'], g['clients'], g['gc'], g['cl'], g['ns'], g['first'], g['last'], ''])
     _svc_xl_filter(ws, len(headers), len(items))
-    return _svc_xl_send(wb, 'PLAB_UK_Unique_Services')
+    return _svc_xl_send(wb, 'PLAB_UK_Unique_Services' + ('_by_service' if by == 'service' else ''))
 
 
 @app.route('/operations/plab/clients/<int:client_id>/welcome-kit', methods=['POST'])

@@ -45,7 +45,7 @@
   </div>
   <div class="head-actions">
     <a class="ghost-btn" href="/operations/plab/services-detail">&larr; Services Detail</a>
-    <a class="dl-btn" href="/operations/plab/services-unique/download?section={{ section_filter|urlencode }}&q={{ q|urlencode }}">⬇ Download Excel (with a price column)</a>
+    <a class="dl-btn" href="/operations/plab/services-unique/download?section={{ section_filter|urlencode }}&q={{ q|urlencode }}&by={{ by }}">⬇ Download Excel (with a price column)</a>
   </div>
 </div>
 
@@ -54,6 +54,10 @@
   <select name="section">
     <option value="">All sections</option>
     {% for k, l in sections %}<option value="{{ k }}" {% if k == section_filter %}selected{% endif %}>{{ l }}</option>{% endfor %}
+  </select>
+  <select name="by" title="How to group">
+    <option value="provider" {% if by == 'provider' %}selected{% endif %}>Group by: Service + Provider</option>
+    <option value="service" {% if by == 'service' %}selected{% endif %}>Group by: Service only</option>
   </select>
   <button class="btn btn-apply" type="submit">Apply</button>
   <a class="btn btn-clear" href="/operations/plab/services-unique">Clear</a>
@@ -65,7 +69,7 @@
 {% if not section_filter and by_section %}
 <div class="chips">
   {% for k, l in sections %}{% if by_section.get(l) %}
-    <a href="?section={{ k }}&q={{ q|urlencode }}">{{ l }} · {{ by_section.get(l) }}</a>
+    <a href="?section={{ k }}&q={{ q|urlencode }}&by={{ by }}">{{ l }} · {{ by_section.get(l) }}</a>
   {% endif %}{% endfor %}
 </div>
 {% endif %}
@@ -73,7 +77,7 @@
 <div class="table-wrap">
   <table class="u">
     <thead>
-      <tr><th>#</th><th>Section</th><th>Service</th><th>Provider / Vendor (incl. location)</th>
+      <tr><th>#</th><th>Section</th><th>Service</th><th>{{ "Provider / Vendor (incl. location)" if by == "provider" else "Main provider (+ others)" }}</th>
           <th class="num">Times</th><th class="num">Clients</th><th>Paid by (GC · Client · not set)</th><th>First</th><th>Last</th></tr>
     </thead>
     <tbody>
