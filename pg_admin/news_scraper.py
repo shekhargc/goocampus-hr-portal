@@ -20,7 +20,7 @@ from datetime import datetime, date
 from db import get_db
 
 UA = 'Mozilla/5.0 (compatible; GooCampus-NoticeMonitor/1.0; +https://goocampus.in)'
-TIMEOUT = 40
+TIMEOUT = (10, 30)          # (connect, read) seconds — a blocked site fails fast
 RECENT_SKIP_MINUTES = 20
 
 # code → config. authority_code matches pg_admin/authorities.py; news_authority is the
@@ -254,6 +254,13 @@ def run_all(trigger='schedule'):
     return [run_source(c, trigger) for c, s in SOURCES.items() if s.get('enabled')]
 
 
+def run_all_background(trigger='manual'):
+    """'Check now' without holding the web request open (a slow govt site must never tie
+    up / time out a web worker). Results show on the inbox page when done."""
+    import threading
+    threading.Thread(target=run_all, args=(trigger,), daemon=True, name='pg-news-scrape').start()
+
+
 def start_scheduler():
     """10:00 AM, 1:00 PM, 6:30 PM, 11:00 PM IST. Safe to call in every process (see module doc)."""
     try:
@@ -281,7 +288,7 @@ def fetch_pdf(url):
     """Download an official notice PDF → (bytes, filename) or (None, reason)."""
     import requests
     try:
-        r = requests.get(url, timeout=60, headers={'User-Agent': UA}, stream=True)
+        r = requests.get(url, timeout=(10, 60), headers={'User-Agent': UA}, stream=True)
         r.raise_for_status()
         buf = bytearray()
         for chunk in r.iter_content(64 * 1024):

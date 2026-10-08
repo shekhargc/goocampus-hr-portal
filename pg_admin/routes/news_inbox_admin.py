@@ -59,21 +59,13 @@ def news_inbox():
 
 @login_required
 def news_inbox_check():
-    """'Check now' — run every source immediately (bypasses the 20-minute skip)."""
+    """'Check now' — check every source right away, in the background (bypasses the
+    20-minute skip). The page shows the result once the check finishes."""
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
-    res = NS.run_all(trigger='manual')
-    new = sum(r['new'] for r in res)
-    bad = [r for r in res if r['error']]
-    busy = [r for r in res if r['skipped']]
-    if bad:
-        flash('Could not read: ' + '; '.join(f"{NS.SOURCES[r['source']]['label']} — {r['error']}" for r in bad),
-              'error')
-    if busy:
-        flash('Already being checked right now — try again in a minute.', 'info')
-    if not bad and not busy:
-        flash(f'Checked {len(res)} source(s): {new} new notice(s).' if new
-              else f'Checked {len(res)} source(s): nothing new.', 'success' if new else 'info')
+    NS.run_all_background(trigger='manual')
+    flash('Checking the websites now — this takes up to a minute. Refresh this page to see new notices.',
+          'info')
     return redirect(url_for('pg_news_inbox'))
 
 
