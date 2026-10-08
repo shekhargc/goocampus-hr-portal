@@ -37,7 +37,7 @@
           <td>{{ x.registration_number|format_reg }}</td>
           {% if is_admin %}<td>{{ x.counsellor_name or '—' }}</td>{% endif %}
           <td>{{ x.ordinal }}</td>
-          <td><input class="pf-inp" style="width:110px;" type="number" step="1" min="0" name="total_amount" value="{{ '%.0f'|format(x.total) }}"></td>
+          <td>{% if (x.currency or 'INR') != 'INR' %}<span style="font-size:0.75rem;color:#1E40AF;font-weight:700;">{{ x.cur }}</span> {% endif %}<input class="pf-inp" style="width:110px;" type="number" step="1" min="0" name="total_amount" value="{{ '%.0f'|format(x.total) }}"></td>
           <td><input class="pf-inp" type="date" name="due_date" value="{{ x.date }}"></td>
           <td><input class="pf-inp" style="width:120px;" type="text" name="method" value="{{ x.method }}" placeholder="e.g. Bank Transfer"></td>
           <td>
@@ -70,7 +70,7 @@
           <td>{{ x.registration_number|format_reg }}</td>
           {% if is_admin %}<td>{{ x.counsellor_name or '—' }}</td>{% endif %}
           <td>{{ x.ordinal }}</td>
-          <td>₹{{ '{:,.0f}'.format(x.total) }}</td>
+          <td>{{ x.cur or '₹' }}{{ '{:,.0f}'.format(x.total) }}</td>
           <td>{{ x.date or '—' }}</td>
           <td>{{ x.method or '—' }}</td>
           <td>{% if x.decision == 'approved' %}<span class="pf-badge pf-rec">Approved</span>{% else %}<span class="pf-badge pf-due">Awaiting admin</span>{% endif %}</td>

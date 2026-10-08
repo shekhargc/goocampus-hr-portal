@@ -16,7 +16,7 @@
                 <tr style="background:var(--gray-50);text-align:left;">
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Client</th>
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Installment</th>
-                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);text-align:right;">Total (₹, incl GST)</th>
+                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);text-align:right;">Total (incl GST · A$ = Website Link)</th>
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Method</th>
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Date</th>
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);text-align:center;">Action</th>
@@ -31,14 +31,15 @@
                     </td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.ordinal }}</td>
                     <td style="padding:0.7rem 0.9rem;text-align:right;">
-                        <div style="font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(x.total) }}</div>
-                        <div style="font-size:0.72rem;color:var(--gray-500);">₹{{ '{:,.0f}'.format(x.base) }} + GST ₹{{ '{:,.0f}'.format(x.gst) }}</div>
+                        <div style="font-weight:700;color:var(--navy);">{{ x.cur or '₹' }}{{ '{:,.0f}'.format(x.total) }}</div>
+                        {% if (x.currency or 'INR') == 'INR' %}<div style="font-size:0.72rem;color:var(--gray-500);">₹{{ '{:,.0f}'.format(x.base) }} + GST ₹{{ '{:,.0f}'.format(x.gst) }}</div>
+                        {% else %}<div style="font-size:0.72rem;color:#1E40AF;font-weight:600;">paid via Website Link · no GST</div>{% endif %}
                     </td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.method or '—' }}</td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.date or '—' }}</td>
                     <td style="padding:0.7rem 0.9rem;text-align:right;white-space:nowrap;">
                         <form method="POST" action="/operations/payment-approvals/{{ x.registration_id }}/{{ x.inst_no }}/approve" style="display:inline-flex;gap:5px;align-items:center;vertical-align:middle;">
-                            <span style="font-size:0.72rem;color:var(--gray-500);">₹</span>
+                            <span style="font-size:0.72rem;color:var(--gray-500);">{{ x.cur or '₹' }}</span>
                             <input type="number" name="total_amount" value="{{ '%.0f'|format(x.total) }}" step="0.01" title="Actual total received incl GST — edit if the client paid a different amount (e.g. Consulting + Training together)"
                                    style="width:104px;padding:5px 7px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;text-align:right;" />
                             <button type="submit" style="background:#16A34A;color:white;border:none;padding:0.42rem 0.9rem;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;">Approve</button>
@@ -67,7 +68,7 @@
                 <tr style="border-top:1px solid var(--gray-100);">
                     <td style="padding:0.55rem 0.9rem;color:var(--navy);font-weight:600;">{{ x.name | dr_name }} <span style="font-weight:400;color:var(--gray-500);">· {{ x.registration_number|format_reg }}</span></td>
                     <td style="padding:0.55rem 0.9rem;">{{ x.ordinal }}</td>
-                    <td style="padding:0.55rem 0.9rem;text-align:right;color:var(--gray-700);">₹{{ '{:,.0f}'.format(x.total) }}</td>
+                    <td style="padding:0.55rem 0.9rem;text-align:right;color:var(--gray-700);">{{ x.cur or '₹' }}{{ '{:,.0f}'.format(x.total) }}</td>
                     <td style="padding:0.55rem 0.9rem;color:#16A34A;font-weight:600;">✓ Posted</td>
                 </tr>
                 {% endfor %}

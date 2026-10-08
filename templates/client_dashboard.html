@@ -461,16 +461,31 @@
 
     <!-- ══ PAYMENTS (payments only — all programmes) ══ -->
     <div class="section" id="sec-payments">
-      {% set ns = namespace(recv=0, due=0, grand=0, any=false) %}
+      {# Combined totals only add up rupee programmes that show a full breakdown — an A$
+         (Website Link) programme or an installments-only programme (AMC MCQ) is never
+         mixed into a ₹ total. (founder 2026-10-08) #}
+      {% set ns = namespace(recv=0, due=0, grand=0, any=false, ncomb=0) %}
       {% for r in registrations %}{% if r.installments %}{% set ns.any = true %}
-        {% set ns.recv = ns.recv + r.pay_received_total %}{% set ns.due = ns.due + r.pay_due_total %}{% set ns.grand = ns.grand + r.grand_total %}
+        {% if r.currency == 'INR' and not r.installments_only %}{% set ns.ncomb = ns.ncomb + 1 %}
+        {% set ns.recv = ns.recv + r.pay_received_total %}{% set ns.due = ns.due + r.pay_due_total %}{% set ns.grand = ns.grand + r.grand_total %}{% endif %}
       {% endif %}{% endfor %}
       {% if ns.any %}
       {% for r in registrations %}{% if r.installments %}
+      {% set _simple = r.installments_only or r.currency != 'INR' %}
       <div class="card">
-        <h3><i class="bi bi-receipt"></i> Installments{% if registrations|length > 1 %} — {{ r.product_name or 'Programme' }}{% endif %}</h3>
+        <h3><i class="bi bi-receipt"></i> {{ 'Payments' if _simple else 'Installments' }}{% if registrations|length > 1 %} — {{ r.product_name or 'Programme' }}{% endif %}</h3>
         {% if registrations|length > 1 %}<div class="k" style="margin:-6px 0 12px;font-size:12px;color:var(--muted)">{{ r.registration_number|format_reg if r.registration_number else '' }}{% if r.plan_type %} · {{ r.plan_type }}{% endif %}</div>{% endif %}
         <div style="overflow-x:auto"><table class="pay">
+          {% if _simple %}
+          <tr><th>Installment</th><th>Amount paid</th><th>Status</th></tr>
+          {% for inst in r.installments %}
+          <tr>
+            <td style="font-weight:700;color:var(--navy)">{{ inst.ordinal | installment_label }}</td>
+            <td style="font-weight:700">{{ r.cur }}{{ '{:,.0f}'.format(inst.total) }}</td>
+            <td>{% if inst.received %}<span class="chip chip-ok">Received</span>{% else %}<span class="chip chip-warn">Pending</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+          {% else %}
           <tr><th>Installment</th><th>Amount</th><th>GST (18%)</th><th>Total</th><th>Status</th></tr>
           {% for inst in r.installments %}
           <tr>
@@ -481,15 +496,20 @@
             <td>{% if inst.received %}<span class="chip chip-ok">Received</span>{% else %}<span class="chip chip-warn">Pending</span>{% endif %}</td>
           </tr>
           {% endfor %}
+          {% endif %}
         </table></div>
         <div style="margin-top:14px">
+          {% if _simple %}
+          <div class="totrow big"><span>Total paid</span><span style="color:var(--ok)">{{ r.cur }}{{ '{:,.0f}'.format(r.pay_received_total) }}</span></div>
+          {% else %}
           <div class="totrow"><span style="color:var(--muted)">Received</span><span style="font-weight:700;color:var(--ok)">₹{{ '{:,.0f}'.format(r.pay_received_total) }}</span></div>
           <div class="totrow"><span style="color:var(--muted)">Balance due</span><span style="font-weight:700;color:{% if r.pay_due_total %}var(--warn){% else %}var(--muted){% endif %}">₹{{ '{:,.0f}'.format(r.pay_due_total) }}</span></div>
           <div class="totrow big"><span>Total (incl. GST)</span><span>₹{{ '{:,.0f}'.format(r.grand_total) }}</span></div>
+          {% endif %}
         </div>
       </div>
       {% endif %}{% endfor %}
-      {% if registrations|length > 1 %}
+      {% if ns.ncomb > 1 %}
       <div class="card" style="background:var(--navy);color:#fff">
         <h3 style="color:#fff"><i class="bi bi-cash-stack"></i> All programmes — combined</h3>
         <div class="totrow" style="border-color:rgba(255,255,255,.15)"><span style="color:rgba(255,255,255,.7)">Received</span><span style="font-weight:700">₹{{ '{:,.0f}'.format(ns.recv) }}</span></div>

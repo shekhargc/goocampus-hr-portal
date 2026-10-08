@@ -38,8 +38,8 @@
     {{ field('Account status', c.account_status) }}
     {{ field('Joined stage', c.joined_stage) }}
     {{ field('Counsellor', counsellor) }}
-    {{ field('Package', ('₹{:,.0f}'.format(c.package_amount|float)) if c.package_amount else '') }}
-    {{ field('Amount paid', ('₹{:,.0f}'.format(amount_paid)) if amount_paid else '₹0') }}
+    {{ field('Package', (((reg.get('cur') if reg else None) or '₹') ~ '{:,.0f}'.format(c.package_amount|float)) if c.package_amount else '') }}
+    {{ field('Amount paid', (((reg.get('cur') if reg else None) or '₹') ~ '{:,.0f}'.format(amount_paid)) if amount_paid else ((reg.get('cur') if reg else None) or '₹') ~ '0') }}
   </div>
 </div>
 
@@ -76,7 +76,7 @@
 <div class="card"><h3 style="font-size:14px;color:var(--navy);margin-bottom:12px"><i class="bi bi-box-seam" style="color:var(--orange)"></i> Programme</h3>
   {{ field('Service', reg.get('product_name')) }}
   {{ field('Plan', reg.get('plan_type')) }}
-  {{ field('Package', ('₹{:,.0f}'.format(c.package_amount|float)) if c.package_amount else (('₹{:,.0f}'.format(reg.get('package_amount')|float)) if reg.get('package_amount') else '')) }}
+  {{ field('Package', (((reg.get('cur') if reg else None) or '₹') ~ '{:,.0f}'.format(c.package_amount|float)) if c.package_amount else ((((reg.get('cur') if reg else None) or '₹') ~ '{:,.0f}'.format(reg.get('package_amount')|float)) if reg.get('package_amount') else '')) }}
 </div>
 
 {% if insts %}
@@ -85,7 +85,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:{% if not loop.first %}1px solid #F1F5F9{% else %}none{% endif %}">
     <div><div style="font-weight:600">{{ it.n }}{{ {1:'st',2:'nd',3:'rd',4:'th'}[it.n] }} Installment</div>
       {% if it.date %}<div style="font-size:12px;color:var(--muted)">{{ it.date }}</div>{% endif %}</div>
-    <div style="text-align:right"><div style="font-weight:700">₹{{ '{:,.0f}'.format(it.total) }}</div>
+    <div style="text-align:right"><div style="font-weight:700">{{ ((reg.get('cur') if reg else None) or '₹') }}{{ '{:,.0f}'.format(it.total) }}</div>
       <span class="chip {{ 'chip-ok' if it.received else '' }}" style="{{ '' if it.received else 'background:#FFFBEB;color:#B45309' }}">{{ 'Received' if it.received else it.status }}</span></div>
   </div>
   {% endfor %}

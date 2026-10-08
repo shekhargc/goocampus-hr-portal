@@ -16,7 +16,7 @@
                 <tr style="background:var(--gray-50);text-align:left;">
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Client</th>
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Installment</th>
-                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);text-align:right;">Total (₹, incl GST)</th>
+                    <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);text-align:right;">Total (incl GST · A$ = Website Link)</th>
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Method</th>
                     <th style="padding:0.7rem 0.9rem;font-weight:600;color:var(--gray-600);">Due date</th>
                 </tr>
@@ -30,8 +30,9 @@
                     </td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.ordinal }}</td>
                     <td style="padding:0.7rem 0.9rem;text-align:right;">
-                        <div style="font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(x.total) }}</div>
-                        <div style="font-size:0.72rem;color:var(--gray-500);">₹{{ '{:,.0f}'.format(x.base) }} + GST ₹{{ '{:,.0f}'.format(x.gst) }}</div>
+                        <div style="font-weight:700;color:var(--navy);">{{ x.cur or '₹' }}{{ '{:,.0f}'.format(x.total) }}</div>
+                        {% if (x.currency or 'INR') == 'INR' %}<div style="font-size:0.72rem;color:var(--gray-500);">₹{{ '{:,.0f}'.format(x.base) }} + GST ₹{{ '{:,.0f}'.format(x.gst) }}</div>
+                        {% else %}<div style="font-size:0.72rem;color:#1E40AF;font-weight:600;">paid via Website Link · no GST</div>{% endif %}
                     </td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.method or '—' }}</td>
                     <td style="padding:0.7rem 0.9rem;">{{ x.date or '—' }}</td>

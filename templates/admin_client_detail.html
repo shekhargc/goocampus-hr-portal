@@ -731,9 +731,9 @@
                    handler won't overwrite them. #}
                 <div class="sales-summary" style="margin-bottom:1.25rem;">
                     <div class="sales-item"><div class="sales-item-label">Plan Type</div><div class="sales-item-value">{{ reg.plan_type or '-' }}</div></div>
-                    <div class="sales-item"><div class="sales-item-label">Package Amount</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.package_amount) if reg.package_amount else '-' }}</div></div>
-                    <div class="sales-item"><div class="sales-item-label">Discount</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.discount_allowed) if reg.discount_allowed else '-' }}</div></div>
-                    <div class="sales-item" style="border:2px solid var(--success);background:var(--success-light);"><div class="sales-item-label">Final Package</div><div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.final_package) if reg.final_package else '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Package Amount</div><div class="sales-item-value">{{ (cur_sym(reg_currency(reg)) ~ '{:,.0f}'.format(reg.package_amount)) if reg.package_amount else '-' }}</div></div>
+                    <div class="sales-item"><div class="sales-item-label">Discount</div><div class="sales-item-value">{{ (cur_sym(reg_currency(reg)) ~ '{:,.0f}'.format(reg.discount_allowed)) if reg.discount_allowed else '-' }}</div></div>
+                    <div class="sales-item" style="border:2px solid var(--success);background:var(--success-light);"><div class="sales-item-label">Final Package</div><div class="sales-item-value">{{ (cur_sym(reg_currency(reg)) ~ '{:,.0f}'.format(reg.final_package)) if reg.final_package else '-' }}</div></div>
                     <div class="sales-item"><div class="sales-item-label">Lead Source</div><div class="sales-item-value">{{ reg.lead_source or '-' }}</div></div>
                 </div>
 
@@ -774,15 +774,16 @@
                         {% set _received = (_st == 'received') %}
                         {# Stored value is the ex-GST base (the lead form saves ÷1.18);
                            show it exactly as the lead form does: total = base × 1.18. #}
+                        {% set _rc = reg_currency(reg) %}{% set _rs = cur_sym(_rc) %}
                         {% set base = amt|float %}
-                        {% set total = (base * 1.18) %}
+                        {% set total = (base * 1.18) if _rc == 'INR' else base %}
                         {% set gst = (total - base) %}
                         {% set ns.tot = ns.tot + total %}
                         <tr>
                             <td>{{ i }}</td>
-                            <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
-                            <td style="text-align:right;color:var(--gray-500);">₹{{ '{:,.0f}'.format(gst) }}</td>
-                            <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
+                            <td style="text-align:right;">{{ _rs }}{{ '{:,.0f}'.format(base) }}</td>
+                            <td style="text-align:right;color:var(--gray-500);">{% if _rc == 'INR' %}₹{{ '{:,.0f}'.format(gst) }}{% else %}—{% endif %}</td>
+                            <td style="text-align:right;font-weight:600;">{{ _rs }}{{ '{:,.0f}'.format(total) }}</td>
                             <td>
                                 {% if _received %}
                                 <span style="display:inline-block;background:#DCFCE7;color:#166534;font-size:0.7rem;font-weight:700;padding:2px 9px;border-radius:999px;">Received</span>
@@ -797,7 +798,7 @@
                         {% endfor %}
                         {% if ns.tot == 0 %}<tr><td colspan="7" style="color:var(--gray-500);">No installments entered in the lead yet.</td></tr>{% endif %}
                         </tbody>
-                        {% if ns.tot > 0 %}<tfoot><tr style="font-weight:700;"><td colspan="3" style="text-align:right;">Total incl GST</td><td style="text-align:right;">₹{{ '{:,.0f}'.format(ns.tot) }}</td><td colspan="3"></td></tr></tfoot>{% endif %}
+                        {% if ns.tot > 0 %}<tfoot><tr style="font-weight:700;"><td colspan="3" style="text-align:right;">{{ 'Total incl GST' if reg_currency(reg) == 'INR' else 'Total (Website Link, no GST)' }}</td><td style="text-align:right;">{{ cur_sym(reg_currency(reg)) }}{{ '{:,.0f}'.format(ns.tot) }}</td><td colspan="3"></td></tr></tfoot>{% endif %}
                     </table>
                 </div>
 
@@ -870,15 +871,15 @@
                 </div>
                 <div class="sales-item">
                     <div class="sales-item-label">Package Amount</div>
-                    <div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.package_amount) if reg.package_amount else '-' }}</div>
+                    <div class="sales-item-value">{{ (cur_sym(reg_currency(reg)) ~ '{:,.0f}'.format(reg.package_amount)) if reg.package_amount else '-' }}</div>
                 </div>
                 <div class="sales-item">
                     <div class="sales-item-label">Discount</div>
-                    <div class="sales-item-value">{{ '₹{:,.0f}'.format(reg.discount_allowed) if reg.discount_allowed else '-' }}</div>
+                    <div class="sales-item-value">{{ (cur_sym(reg_currency(reg)) ~ '{:,.0f}'.format(reg.discount_allowed)) if reg.discount_allowed else '-' }}</div>
                 </div>
                 <div class="sales-item" style="border: 2px solid var(--success); background: var(--success-light);">
                     <div class="sales-item-label">Final Package</div>
-                    <div class="sales-item-value" style="font-size: 1.15rem;">{{ '₹{:,.0f}'.format(reg.final_package) if reg.final_package else '-' }}</div>
+                    <div class="sales-item-value" style="font-size: 1.15rem;">{{ (cur_sym(reg_currency(reg)) ~ '{:,.0f}'.format(reg.final_package)) if reg.final_package else '-' }}</div>
                 </div>
                 <div class="sales-item">
                     <div class="sales-item-label">Lead Source</div>

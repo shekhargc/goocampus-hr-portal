@@ -97,11 +97,18 @@
   {% if closure and (closure.get('plan_type') or _money or closure.get('inst1_amount')) %}
   <div class="lv-card">
     <div class="lv-h">Package &amp; Closure</div>
+    {# Website Link deals are flat A$ (no GST); everything else is ₹. (2026-10-08) #}
+    {% set _mfx = (closure.get('payment_route') == 'website_link') or (lead and lead.amc_payment_route == 'website_link')
+                  or ((closure.get('inst1_method') or '')|lower == 'website link') %}
+    {% set _mc = cur_sym(closure.get('currency') if (closure.get('currency') and closure.get('currency') != 'INR') else 'AUD') if _mfx else '₹' %}
+    {% set _tfx = (closure.get('training_payment_route') == 'website_link') or ((closure.get('training_inst1_method') or '')|lower == 'website link') %}
+    {% set _tc = 'A$' if _tfx else '₹' %}
     <div class="lv-grid">
       {{ field('Plan Type', closure.get('plan_type')) }}
-      {{ field('Package Amount', '₹{:,.0f}'.format(closure.get('package_amount')|float) if closure.get('package_amount') else None) }}
-      {{ field('Discount', '₹{:,.0f}'.format(closure.get('discount_allowed')|float) if closure.get('discount_allowed') else None) }}
-      {{ field('Final Package', '₹{:,.0f}'.format(closure.get('final_package')|float) if closure.get('final_package') else None) }}
+      {{ field('Package Amount', _mc ~ '{:,.0f}'.format(closure.get('package_amount')|float) if closure.get('package_amount') else None) }}
+      {{ field('Discount', _mc ~ '{:,.0f}'.format(closure.get('discount_allowed')|float) if closure.get('discount_allowed') else None) }}
+      {{ field('Final Package', _mc ~ '{:,.0f}'.format(closure.get('final_package')|float) if closure.get('final_package') else None) }}
+      {% if _mfx %}{{ field('Paid via', 'Website Link (' ~ _mc ~ ', no GST)') }}{% endif %}
     </div>
     {% if closure.get('additional_notes') %}
     <div style="margin-top:14px;"><div class="lv-h" style="margin-bottom:6px;">Notes</div>
@@ -117,13 +124,13 @@
         {% for i in [1,2,3,4] %}
         {% set amt = closure.get('inst' ~ i ~ '_amount') %}
         {% if amt %}
-        {% set base = amt|float %}{% set total = base * 1.18 %}
+        {% set base = amt|float %}{% set total = base if _mfx else base * 1.18 %}
         {% set rec = (closure.get('inst' ~ i ~ '_status') or '')|lower == 'received' %}
         <tr>
           <td>{{ i | installment_label }}</td>
-          <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
-          <td style="text-align:right;color:var(--gray-400);">₹{{ '{:,.0f}'.format(total - base) }}</td>
-          <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
+          <td style="text-align:right;">{{ _mc }}{{ '{:,.0f}'.format(base) }}</td>
+          <td style="text-align:right;color:var(--gray-400);">{% if _mfx %}—{% else %}₹{{ '{:,.0f}'.format(total - base) }}{% endif %}</td>
+          <td style="text-align:right;font-weight:600;">{{ _mc }}{{ '{:,.0f}'.format(total) }}</td>
           <td><span class="lv-pill {{ 'lv-rec' if rec else 'lv-due' }}">{{ 'Received' if rec else 'Pending' }}</span></td>
           <td>{% if closure.get('inst' ~ i ~ '_date') %}<span style="color:var(--gray-400);font-size:0.72rem;">{{ 'Received' if rec else 'Due' }}</span> {{ closure.get('inst' ~ i ~ '_date') }}{% else %}—{% endif %}</td>
           <td>{{ closure.get('inst' ~ i ~ '_note') or '—' }}</td>
@@ -148,13 +155,13 @@
         {% for i in [1,2,3,4] %}
         {% set amt = closure.get('training_inst' ~ i ~ '_amount') %}
         {% if amt %}
-        {% set base = amt|float %}{% set total = base * 1.18 %}
+        {% set base = amt|float %}{% set total = base if _tfx else base * 1.18 %}
         {% set rec = (closure.get('training_inst' ~ i ~ '_status') or '')|lower == 'received' %}
         <tr>
           <td>{{ i | installment_label }}</td>
-          <td style="text-align:right;">₹{{ '{:,.0f}'.format(base) }}</td>
-          <td style="text-align:right;color:var(--gray-400);">₹{{ '{:,.0f}'.format(total - base) }}</td>
-          <td style="text-align:right;font-weight:600;">₹{{ '{:,.0f}'.format(total) }}</td>
+          <td style="text-align:right;">{{ _tc }}{{ '{:,.0f}'.format(base) }}</td>
+          <td style="text-align:right;color:var(--gray-400);">{% if _tfx %}—{% else %}₹{{ '{:,.0f}'.format(total - base) }}{% endif %}</td>
+          <td style="text-align:right;font-weight:600;">{{ _tc }}{{ '{:,.0f}'.format(total) }}</td>
           <td><span class="lv-pill {{ 'lv-rec' if rec else 'lv-due' }}">{{ 'Received' if rec else 'Pending' }}</span></td>
           <td>{% if closure.get('training_inst' ~ i ~ '_date') %}<span style="color:var(--gray-400);font-size:0.72rem;">{{ 'Received' if rec else 'Due' }}</span> {{ closure.get('training_inst' ~ i ~ '_date') }}{% else %}—{% endif %}</td>
           <td>{{ closure.get('training_inst' ~ i ~ '_note') or '—' }}</td>

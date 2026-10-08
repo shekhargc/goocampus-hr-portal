@@ -150,13 +150,20 @@
                 <!-- AUD-priced plan (AMC 1 / AMC 2): live rate, locked on save -->
                 <div id="amcAudBox" style="display:none;margin:0.2rem 0 0.9rem;padding:0.8rem 1rem;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0.55rem;">
                     <div style="font-size:0.74rem;font-weight:700;color:#1E40AF;margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.03em;">AUD-priced plan · rate locks when you save</div>
-                    <div id="amcAudBreak" style="font-size:0.9rem;color:#1E3A5F;line-height:1.6;"></div>
-                    <label style="display:flex;align-items:flex-start;gap:7px;font-size:0.8rem;color:#1E3A5F;margin-top:0.55rem;cursor:pointer;">
-                        <input type="checkbox" name="amc_website_link" id="amcWebsiteLink" value="1" style="margin-top:2px;"
-                               {% if lead and lead.amc_payment_route == 'website_link' %}checked{% endif %} onchange="amcAudCheck()">
-                        <span>Client paid the fee <b>directly via Website Link</b> — record the <b>flat AUD amount, no &#8377; conversion / no 3%</b>. (For our record of where the payment was made; the installment is marked &ldquo;Website Link&rdquo;.)</span>
+                    {% set _amc_wl = (lead and lead.amc_payment_route == 'website_link') %}
+                    <div style="font-size:0.8rem;font-weight:700;color:#1E3A5F;margin-bottom:0.35rem;">How is the client paying?</div>
+                    <label style="display:flex;align-items:flex-start;gap:7px;font-size:0.82rem;color:#1E3A5F;margin-bottom:0.3rem;cursor:pointer;">
+                        <input type="radio" name="amc_website_link" id="amcPayInr" value="" style="margin-top:2px;"
+                               {% if not _amc_wl %}checked{% endif %} onchange="amcAudCheck()">
+                        <span><b>Pays GooCampus in &#8377;</b> (bank transfer etc.) — package converted to rupees; the client sees only rupees.</span>
                     </label>
-                    <div id="amcAudNote" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">The rate + exact date/time are frozen on save; the client is billed this INR total (collected in installments).</div>
+                    <label style="display:flex;align-items:flex-start;gap:7px;font-size:0.82rem;color:#1E3A5F;margin-bottom:0.5rem;cursor:pointer;">
+                        <input type="radio" name="amc_website_link" id="amcWebsiteLink" value="1" style="margin-top:2px;"
+                               {% if _amc_wl %}checked{% endif %} onchange="amcAudCheck()">
+                        <span><b>Pays directly via Website Link in A$</b> — flat AUD amount, no conversion, no GST; shown in A$ everywhere.</span>
+                    </label>
+                    <div id="amcAudBreak" style="font-size:0.9rem;color:#1E3A5F;line-height:1.6;"></div>
+                    <div id="amcAudNote" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">The rate + exact date/time are frozen on save; the client is billed this rupee total (collected in installments). This breakup is for you only — the client never sees AUD.</div>
                 </div>
 
                 <div class="slf-row3">
@@ -165,7 +172,7 @@
                         <input type="number" step="1" min="0" name="package_amount" id="pkgAmount" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
                     </div>
                     <div>
-                        <label class="slf-lbl">Discount Allowed (₹)</label>
+                        <label class="slf-lbl">Discount Allowed (<span id="discCur">₹</span>)</label>
                         <input type="number" step="1" min="0" name="discount_allowed" id="discAllowed" oninput="updateFinal()" value="{{ '{:.0f}'.format(closure.discount_allowed|float) if closure and closure.discount_allowed else 0 }}" class="slf-inp" />
                     </div>
                     <div>
@@ -446,7 +453,8 @@
                     .then(function(r){ return r.json(); }).then(function(d){
                         // Auto-fill Package Value from the PLAN's package amount when set.
                         // Only on a live change (autoFill), never when re-opening an edit.
-                        if (autoFill && pkgValue && d.package_amount != null && d.package_amount > 0) {
+                        if (autoFill && pkgValue && d.package_amount != null && d.package_amount > 0 &&
+                            (d.currency || 'INR') === 'INR') {
                             pkgValue.value = d.package_amount;
                             syncPackage();
                         }
@@ -489,6 +497,7 @@
                     if (current && !found) { var o=document.createElement('option'); o.value=current; o.textContent=current; o.selected=true; planSel.appendChild(o); }
                     updateDisplays();
                     loadPlanPackage(false);
+                    if (window.amcAudCheck) window.amcAudCheck();   // plan list just loaded (edit) → show AUD box
                 }).catch(function(){});
             }
             // AUD-priced plans (AMC 1 / AMC 2): show the AUD→INR breakup + set the package.
@@ -503,13 +512,14 @@
                 effective_rate: {{ '{:.4f}'.format(lead.amc_fx_effective|float) if lead.amc_fx_effective else 0 }},
                 markup: {{ '{:g}'.format(lead.amc_fx_markup|float) if lead.amc_fx_markup else 3 }},
                 inr: {{ '{:.2f}'.format(lead.amc_inr_amount|float) if lead.amc_inr_amount else 0 }},
+                route: {{ (lead.amc_payment_route or 'inr')|tojson }},
                 locked_at: {{ (lead.amc_fx_locked_at|string)|tojson }}
             }{% else %}null{% endif %};
             // Flip the package-field currency labels. On the flat-AUD Website Link
             // route the fields literally hold the AUD amount, so show A$; otherwise
             // they hold the INR the client is billed, so show ₹.
             function setPkgCur(sym) {
-                ['pkgValueCur','pkgAmountCur','finalPkgCur'].forEach(function(id){
+                ['pkgValueCur','pkgAmountCur','finalPkgCur','discCur'].forEach(function(id){
                     var el = document.getElementById(id); if (el) el.textContent = sym;
                 });
             }
@@ -534,7 +544,8 @@
                     amcBox.style.display = 'block';
                 }
                 // Frozen rate on an existing lead — show it, don't re-fetch live.
-                if (AMC_LOCK && AMC_LOCK.plan_type === pt && AMC_LOCK.aud > 0) {
+                if (AMC_LOCK && AMC_LOCK.plan_type === pt && AMC_LOCK.aud > 0 &&
+                    (isWL || (AMC_LOCK.route !== 'website_link' && AMC_LOCK.effective_rate > 1))) {
                     var lc = AMC_LOCK.currency || 'AUD';
                     if (isWL) {
                         amcBreak.innerHTML = '<b>' + Number(AMC_LOCK.aud).toLocaleString('en-IN') + ' ' + lc + '</b> paid directly via <b>Website Link</b> &mdash; no &#8377; conversion, no markup.';
