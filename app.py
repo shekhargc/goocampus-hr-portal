@@ -4772,15 +4772,10 @@ def client_dashboard():
     acct_id = session.get('user_id')
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
-    # Pathway rollout: if the client's pathway isn't switched on yet, show a friendly
-    # "coming soon" screen instead of the dashboard. (Admin preview bypasses this.)
-    if not session.get('client_preview') and not _client_dashboard_allowed(conn, acct_id):
-        _nm = (account['first_name'] if account else '') or 'Doctor'
-        conn.close()
-        return render_template('client_dashboard_unavailable.html', name=_nm)
     # Post-submit onboarding gate: lock the dashboard until the client has
     # digitally agreed to their Contract (if one is on file) and the Refund
-    # Policy. Redirect to whichever step is still pending.
+    # Policy. Redirect to whichever step is still pending. Runs BEFORE the rollout
+    # switch so onboarding steps are never hidden behind "coming soon".
     _greg, _gate_step, onboarding_stages = _client_gate_status(conn, acct_id)
     if _gate_step == 'contract':
         conn.close()
@@ -4793,6 +4788,13 @@ def client_dashboard():
         # schedule page until they request a slot. (founder 2026-07-22)
         conn.close()
         return redirect(url_for('client_welcome_call_page'))
+    # Pathway rollout: if the client's pathway isn't switched on yet, show a friendly
+    # "coming soon" screen instead of the dashboard. (Admin preview bypasses this.)
+    # Clients still registering are always let through (see _client_access_state).
+    if not session.get('client_preview') and not _client_dashboard_allowed(conn, acct_id):
+        _nm = (account['first_name'] if account else '') or 'Doctor'
+        conn.close()
+        return render_template('client_dashboard_unavailable.html', name=_nm)
     # Item C-2: fetch counsellor contact for "Your counsellor" card.
     registrations_raw = conn.execute('''
         SELECT cr.*, ps.name as product_name,
@@ -7337,7 +7339,8 @@ def _client_access_state(conn, acct_id, is_active=None):
     enabled = {row['pathway']: row['enabled'] for row in
                conn.execute("SELECT pathway, enabled FROM client_dashboard_pathways").fetchall()}
     rows = conn.execute(
-        "SELECT COALESCE(ps.pathway,'plab') AS pathway, pc.account_status AS st "
+        "SELECT COALESCE(ps.pathway,'plab') AS pathway, pc.account_status AS st, "
+        "COALESCE(cr.ops_status,'') AS ops_status "
         "FROM client_registrations cr LEFT JOIN products_services ps ON ps.id = cr.product_id "
         "LEFT JOIN plab_clients pc ON pc.registration_number = cr.registration_number "
         "WHERE cr.account_id = ?", (acct_id,)).fetchall()
@@ -7347,6 +7350,13 @@ def _client_access_state(conn, acct_id, is_active=None):
         return {'allowed': False, 'reason': 'Disabled by admin', 'statuses': statuses, 'pathways': pathways}
     if not rows:
         return {'allowed': True, 'reason': 'Active', 'statuses': statuses, 'pathways': pathways}
+    # A client still REGISTERING (invite → photo → form → submit, not yet verified by
+    # ops) must always reach the dashboard — that's where the registration form lives.
+    # The pathway rollout switch is for onboarded clients only; it was trapping new
+    # invitees of switched-off pathways on "coming soon" before they could fill the
+    # form. (founder 2026-10-08)
+    if any((r['ops_status'] or '').strip().lower() != 'verified' for r in rows):
+        return {'allowed': True, 'reason': 'Registering', 'statuses': statuses, 'pathways': pathways}
     active = any(enabled.get(r['pathway'], 1) and not _status_blocks_dashboard(r['st']) for r in rows)
     if active:
         return {'allowed': True, 'reason': 'Active', 'statuses': statuses, 'pathways': pathways}
