@@ -18,8 +18,9 @@ from pg_admin import news_scraper as NS
 
 CATEGORIES = ('registration', 'choice_filling', 'seat_allotment', 'fee_payment', 'reporting',
               'notification', 'other')
-DATE_FIELDS = ('registration_start', 'registration_end', 'choice_filling_start', 'choice_filling_end',
-               'payment_last_date', 'reporting_last_date', 'result_date')
+DATE_FIELDS = ('registration_start', 'registration_end', 'verification_start', 'verification_end',
+               'choice_filling_start', 'choice_filling_end', 'payment_last_date', 'reporting_last_date',
+               'result_date')
 MAX_PDF = 25 * 1024 * 1024
 
 

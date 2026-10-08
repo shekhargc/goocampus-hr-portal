@@ -34,6 +34,8 @@ Never edit any other file, never publish anything, never run other commands.
   "dates": {
     "registration_start":   {"date": "YYYY-MM-DD", "time": "e.g. 11:00 AM", "quote": "exact line from the notice"},
     "registration_end":     {"date": "...", "time": "...", "quote": "..."},
+    "verification_start":   {...},   // document verification / slot booking opens
+    "verification_end":     {...},   // last date of document verification
     "choice_filling_start": {...},
     "choice_filling_end":   {...},
     "payment_last_date":    {...},

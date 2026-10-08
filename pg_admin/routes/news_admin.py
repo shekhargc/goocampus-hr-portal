@@ -18,6 +18,8 @@ NEWS_CATEGORIES = [('registration', 'Registration'), ('choice_filling', 'Choice 
                    ('reporting', 'Reporting to college'), ('notification', 'Notification / schedule'),
                    ('other', 'Other')]
 NEWS_DATE_FIELDS = [('registration_start', 'Registration starts'), ('registration_end', 'Registration last date'),
+                    ('verification_start', 'Document verification / slot booking starts'),
+                    ('verification_end', 'Document verification last date'),
                     ('choice_filling_start', 'Choice filling starts'), ('choice_filling_end', 'Choice filling last date'),
                     ('payment_last_date', 'Fee payment last date'), ('reporting_last_date', 'Reporting last date'),
                     ('result_date', 'Result / allotment date')]
