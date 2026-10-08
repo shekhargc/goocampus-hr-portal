@@ -108,6 +108,27 @@ def split_title_date(raw):
     return (title or raw.strip()), d
 
 
+def norm_title(t):
+    """For repeat detection: case/punctuation/space-insensitive."""
+    return re.sub(r'[^a-z0-9]+', ' ', (t or '').lower()).strip()
+
+
+def is_repeat(conn, code, it):
+    """A notice the site RE-POSTED under a new id (founder: only fresh news): the same PDF
+    file again, or the same title with the same date / same link. A new title on an old
+    link (e.g. 'Round 2 payment' on the same portal) is fresh news, not a repeat."""
+    nt = norm_title(it['title'])
+    for r in conn.execute("SELECT title, url, kind, notice_date FROM pg_news_inbox WHERE source_code = ? "
+                          "AND (url = ? OR LOWER(title) = LOWER(?) OR notice_date = ?)",
+                          (code, it['url'], it['title'], it['notice_date'])).fetchall():
+        if it['kind'] == 'pdf' and r['url'] == it['url']:
+            return True
+        if norm_title(r['title']) == nt and (r['url'] == it['url'] or
+                                             (it['notice_date'] and r['notice_date'] == it['notice_date'])):
+            return True
+    return False
+
+
 def _kind(url):
     return 'pdf' if re.search(r'\.pdf($|[?#])', url or '', re.I) else 'link'
 
@@ -194,6 +215,11 @@ def run_source(code, trigger='schedule'):
             return out
         new = 0
         for it in items:
+            if conn.execute("SELECT 1 FROM pg_news_inbox WHERE source_code = ? AND item_key = ?",
+                            (code, it['item_key'])).fetchone():
+                continue                                    # already have this exact notice
+            if is_repeat(conn, code, it):
+                continue                                    # re-posted copy of an earlier notice
             row = conn.execute(
                 "INSERT INTO pg_news_inbox (source_code, authority_code, item_key, title, raw_title, url, "
                 "kind, notice_date) VALUES (?,?,?,?,?,?,?,?) "
