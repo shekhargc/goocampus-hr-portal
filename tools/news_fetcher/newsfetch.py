@@ -148,11 +148,28 @@ def push():
     print(f'LEFT {len(left)}')
 
 
+def text(iid, first=None, last=None):
+    """Print a pending PDF's text page by page (for long PDFs — Claude reads this instead of
+    the whole file). `text <id> [first] [last]` (1-based pages)."""
+    from pypdf import PdfReader
+    p = next((x for x in _load_pending() if x['id'] == iid), None)
+    path = p['pdf_path'] if p else os.path.join(PDFS, iid + '.pdf')
+    r = PdfReader(path)
+    n = len(r.pages)
+    a = max(1, int(first or 1)); b = min(n, int(last or n))
+    print(f'[{n} pages — showing {a}-{b}]')
+    for i in range(a - 1, b):
+        print(f'\n--- page {i + 1} ---')
+        print((r.pages[i].extract_text() or '').strip())
+
+
 if __name__ == '__main__':
     cmd = (sys.argv[1] if len(sys.argv) > 1 else '').strip()
     if cmd == 'scan':
         scan()
     elif cmd == 'push':
         push()
+    elif cmd == 'text' and len(sys.argv) > 2:
+        text(sys.argv[2], *(sys.argv[3:5]))
     else:
         print(__doc__)

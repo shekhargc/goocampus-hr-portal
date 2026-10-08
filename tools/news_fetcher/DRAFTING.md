@@ -10,9 +10,11 @@ date can cost a doctor their seat. A human reviews every draft before it is publ
 2. If the output says `PENDING 0` → stop. Nothing to do.
 3. For each pending item (one JSON line each, after the PENDING line) whose `draft_path` file
    does not exist yet:
-   - If `pdf_path` is set: read the PDF with the Read tool. For long PDFs read pages 1-10
-     first (cover, schedule tables, important dates); read more only if the dates/schedule
-     aren't there yet.
+   - If `pdf_path` is set: get its text with
+     `./venv/bin/python tools/news_fetcher/newsfetch.py text <id> 1 12` (pages 1-12; it prints
+     the total page count). Read more pages (e.g. `text <id> 13 40`) only if the schedule /
+     dates aren't found yet. If the text comes out empty or garbled (a scanned image), read
+     the PDF itself with the Read tool instead.
    - If there's no PDF (a link to an application/payment/slot-booking page): use only the
      title. Do NOT open the link.
    - Write the draft JSON (schema below) to `draft_path` with the Write tool.
