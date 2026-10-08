@@ -5,7 +5,7 @@ Watches each counselling authority's notices page and drops every NEW notice int
 inbox the team clicks "Add to News", which pre-fills the newsroom form (heading,
 authority, date, official link) and, for a PDF notice, attaches the PDF on save.
 
-Runs 3x a day on the server — 10:00 AM, 1:00 PM and 6:30 PM IST — plus a "Check now"
+Runs 4x a day on the server — 10:00 AM, 1:00 PM, 6:30 PM and 11:00 PM IST — plus a "Check now"
 button. Several processes may start the schedule (2 gunicorn workers x live + staging,
 one shared DB), so each run takes a Postgres advisory lock and skips a source that was
 checked in the last 20 minutes; inbox rows are unique per (source, item) anyway.
@@ -229,18 +229,18 @@ def run_all(trigger='schedule'):
 
 
 def start_scheduler():
-    """10:00 AM, 1:00 PM, 6:30 PM IST. Safe to call in every process (see module doc)."""
+    """10:00 AM, 1:00 PM, 6:30 PM, 11:00 PM IST. Safe to call in every process (see module doc)."""
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
         import pytz
         ist = pytz.timezone('Asia/Kolkata')
         sch = BackgroundScheduler()
-        for jid, (h, m) in {'am': (10, 0), 'pm': (13, 0), 'eve': (18, 30)}.items():
+        for jid, (h, m) in {'am': (10, 0), 'pm': (13, 0), 'eve': (18, 30), 'night': (23, 0)}.items():
             sch.add_job(run_all, CronTrigger(hour=h, minute=m, timezone=ist),
                         id=f'pg_news_scrape_{jid}', misfire_grace_time=1800, coalesce=True)
         sch.start()
-        logging.info("PG news scraper scheduled (10:00, 13:00, 18:30 IST)")
+        logging.info("PG news scraper scheduled (10:00, 13:00, 18:30, 23:00 IST)")
     except ImportError:
         logging.warning("APScheduler not installed — news scraper schedule disabled")
     except Exception as e:

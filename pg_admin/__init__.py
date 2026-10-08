@@ -177,7 +177,7 @@ def register_pg_admin(app):
                      news_inbox_admin.news_inbox_check, methods=['POST'])
     app.add_url_rule('/admin/pg/news-inbox/status', 'pg_news_inbox_status',
                      news_inbox_admin.news_inbox_status, methods=['POST'])
-    # Scraper schedule (10:00 / 13:00 / 18:30 IST) — same boot guard as app.py's scheduler.
+    # Scraper schedule (10:00 / 13:00 / 18:30 / 23:00 IST) — same boot guard as app.py's scheduler.
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
         _news_scraper.start_scheduler()
 
