@@ -28,11 +28,29 @@ def news_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
     items = []
+    prefill = None
     try:
         try:
             conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")
         except Exception:
             conn.rollback()
+        # "Add to News" from the News Inbox → pre-fill the form (founder 2026-10-08)
+        inbox_id = _s(request.args.get('inbox'))
+        if inbox_id.isdigit():
+            try:
+                from pg_admin import news_scraper as _NS
+                r = conn.execute("SELECT * FROM pg_news_inbox WHERE id = ?", (int(inbox_id),)).fetchone()
+                if r:
+                    r = dict(r)
+                    src = _NS.SOURCES.get(r['source_code']) or {}
+                    prefill = {'inbox_id': r['id'], 'heading': r['title'], 'source_url': r['url'],
+                               'kind': r['kind'], 'status': r['status'],
+                               'authority': src.get('news_authority') or '__all__',
+                               'source_label': src.get('label') or r['source_code'],
+                               'news_date': r['notice_date'].strftime('%Y-%m-%d') if r.get('notice_date') else ''}
+            except Exception as e:
+                logging.warning("news_admin inbox prefill: %s", e)
+                conn.rollback()
         items = [dict(r) for r in conn.execute(
             "SELECT id, scope, state, body_label, heading, body_text, source_url, "
             "(pdf_data IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by "
@@ -43,7 +61,7 @@ def news_admin():
         except Exception: pass
     finally:
         conn.close()
-    return render_template('pg_admin/news.html', items=items,
+    return render_template('pg_admin/news.html', items=items, prefill=prefill,
                            states=_canonical_states(), active_section='goocampus_in')
 
 
@@ -82,6 +100,8 @@ def news_save():
     is_published = False if request.form.get('is_published') in ('0', 'off') else True
     # Email this update to all registered doctors? (founder 2026-10-06)
     send_alert = request.form.get('send_alert') in ('1', 'on', 'true', 'yes')
+    inbox_id = _s(request.form.get('inbox_id'))
+    inbox_id = int(inbox_id) if inbox_id.isdigit() and not news_id else None
 
     if not heading:
         flash('Please enter a heading.', 'error')
@@ -91,7 +111,7 @@ def news_save():
         return redirect(url_for('pg_news_admin'))
     if not body_text and not (request.files.get('pdf_file') and request.files.get('pdf_file').filename):
         # allow text-less if an existing item already has a PDF/text and we're editing
-        if not news_id:
+        if not news_id and not (inbox_id and source_url):     # an inbox notice: heading + official link is enough
             flash('Add some news text or attach a PDF.', 'error')
             return redirect(url_for('pg_news_admin'))
 
@@ -102,6 +122,16 @@ def news_save():
             flash('The attachment must be a .pdf file.', 'error')
             return redirect(url_for('pg_news_admin'))
         pdf_bytes = pf.read(); pdf_name = pf.filename; pdf_ctype = pf.mimetype or 'application/pdf'
+    elif inbox_id and source_url.lower().split('?')[0].endswith('.pdf') \
+            and request.form.get('attach_pdf', '1') in ('1', 'on'):
+        # Inbox notice that IS a PDF → download the official PDF and attach it.
+        from pg_admin.news_scraper import fetch_pdf
+        data, name_or_err = fetch_pdf(source_url)
+        if data:
+            pdf_bytes, pdf_name = data, name_or_err
+        else:
+            flash(f"Posted without the PDF — couldn't download it ({name_or_err}). "
+                  "The official link is still on the update; you can attach the PDF via Edit.", 'info')
 
     user = get_user() or {}
     who = user.get('name') or user.get('emp_code') or 'admin'
@@ -133,6 +163,9 @@ def news_save():
                 (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
                  is_published, who, (pub_dt or _dt.utcnow()))).fetchone()['id']
             flash('News posted.', 'success')
+            if inbox_id:
+                conn.execute("UPDATE pg_news_inbox SET status='posted', news_id=?, reviewed_by=?, "
+                             "reviewed_at=CURRENT_TIMESTAMP WHERE id=?", (news_id, who, inbox_id))
         conn.commit()
         saved_ok = True
     except Exception as e:
@@ -158,6 +191,8 @@ def news_save():
         except Exception as e:
             logging.error("news_save: email alert failed to start: %s", e)
             flash('Saved, but the email alert could not be started.', 'error')
+    if inbox_id and saved_ok:
+        return redirect(url_for('pg_news_inbox'))
     return redirect(url_for('pg_news_admin'))
 
 

@@ -30,7 +30,8 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              api_events, events_admin, api_track, analytics_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
-                             specialty_admin)
+                             specialty_admin, news_inbox_admin)
+from pg_admin import news_scraper as _news_scraper
 
 
 def register_pg_admin(app):
@@ -59,7 +60,8 @@ def register_pg_admin(app):
                _seat_matrix.ensure_pg_seat_matrix,
                _news_tables.ensure_pg_news,
                _authority_docs.ensure_pg_authority_docs,
-               _specialty_groups.ensure_course_branch_table):
+               _specialty_groups.ensure_course_branch_table,
+               _news_scraper.ensure_news_inbox_tables):
         try:
             fn()
         except Exception as e:
@@ -168,6 +170,16 @@ def register_pg_admin(app):
                      news_admin.news_delete, methods=['POST'])
     app.add_url_rule('/admin/pg/news/pdf', 'pg_news_pdf_admin',
                      news_admin.news_pdf_admin, methods=['GET'])
+    # News Inbox — notices the scraper finds on authority sites, for review (2026-10-08)
+    app.add_url_rule('/admin/pg/news-inbox', 'pg_news_inbox',
+                     news_inbox_admin.news_inbox, methods=['GET'])
+    app.add_url_rule('/admin/pg/news-inbox/check', 'pg_news_inbox_check',
+                     news_inbox_admin.news_inbox_check, methods=['POST'])
+    app.add_url_rule('/admin/pg/news-inbox/status', 'pg_news_inbox_status',
+                     news_inbox_admin.news_inbox_status, methods=['POST'])
+    # Scraper schedule (10:00 / 13:00 / 18:30 IST) — same boot guard as app.py's scheduler.
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
+        _news_scraper.start_scheduler()
 
     # ── Public API for goocampus.in: News feed (X-PG-Key; PDF is public) ──
     app.add_url_rule('/api/pg/news', 'api_pg_news',

@@ -28,6 +28,22 @@
     <h2 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:var(--navy);">Post an update</h2>
     <form id="newsForm" method="POST" action="{{ url_for('pg_news_save') }}" enctype="multipart/form-data">
       <input type="hidden" name="news_id" value="">
+      <input type="hidden" name="inbox_id" value="{{ prefill.inbox_id if prefill else '' }}">
+      {% if prefill %}
+      <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.84rem;">
+        <b>From the News Inbox</b> · {{ prefill.source_label }}{% if prefill.status == 'posted' %} · <b>already posted once</b>{% endif %}<br>
+        Check the heading, add a line of text if useful, then post.
+        {% if prefill.kind == 'pdf' %}
+          <label style="display:flex;gap:6px;align-items:center;margin-top:6px;cursor:pointer;">
+            <input type="checkbox" name="attach_pdf" value="1" checked>
+            Attach the official PDF automatically (downloaded from the link below when you post)
+          </label>
+        {% else %}
+          <div style="margin-top:4px;">This notice is a <b>link</b> (e.g. application / slot booking page) — doctors will get the official link.</div>
+        {% endif %}
+        <a href="{{ url_for('pg_news_inbox') }}" style="display:inline-block;margin-top:6px;color:#2952a3;">← Back to News Inbox</a>
+      </div>
+      {% endif %}
       <div id="editingBanner" style="display:none;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:0.84rem;">
         Editing an existing update. <button type="button" onclick="newsClearEdit()" style="background:none;border:0;color:#2952a3;cursor:pointer;font-weight:600;">Cancel edit / new post</button>
       </div>
@@ -150,15 +166,19 @@ function newsTest(id){
   function submitLabel(t){ var b=f.querySelector('button[type="submit"]'); if(b) b.textContent=t; }
   function setAlert(on){ var a=document.getElementById('send_alert'); if(a) a.checked=on; }
   window.newsClearEdit=function(){
-    set('news_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
+    set('news_id',''); set('inbox_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
     set('body_text',''); set('source_url','');
     setAlert(true);   // new post → default to emailing everyone
     document.getElementById('editingBanner').style.display='none';
     submitLabel('Post update');
   };
+  {% if prefill %}
+  set('authority', {{ prefill.authority|tojson }}); set('heading', {{ prefill.heading|tojson }});
+  set('news_date', {{ prefill.news_date|tojson }}); set('source_url', {{ prefill.source_url|tojson }});
+  {% endif %}
   document.querySelectorAll('.newsEditBtn').forEach(function(btn){
     btn.addEventListener('click',function(){
-      set('news_id',btn.dataset.id); set('authority',btn.dataset.authority);
+      set('news_id',btn.dataset.id); set('inbox_id',''); set('authority',btn.dataset.authority);
       set('heading',btn.dataset.heading); set('news_date',btn.dataset.date);
       set('body_text',btn.dataset.body); set('source_url',btn.dataset.source);
       setAlert(false);  // editing → don't re-blast unless the user ticks it back on
