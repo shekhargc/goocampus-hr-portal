@@ -48,7 +48,7 @@
 
       <!-- Total + auto GST -->
       <div style="background:var(--gray-50);border-radius:10px;padding:16px;">
-        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Total Amount (₹) *  <span style="font-weight:400;color:var(--gray-400);">— what the client paid</span></label>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Total Amount (<span id="curLbl">₹</span>) *  <span style="font-weight:400;color:var(--gray-400);">— what the client paid</span></label>
         <input type="number" name="total_amount_paid" id="total" step="0.01" min="0" required
                value="{{ record.total_amount_paid if record else '' }}"
                style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:1.05rem;font-weight:700;">
@@ -114,6 +114,7 @@
     amountEl.value = total ? base.toFixed(2) : '';
     gstEl.value    = (noGst || !total) ? '' : gst.toFixed(2);
     gstNote.textContent = noGst ? '(not applied)' : '';
+    const cl = document.getElementById('curLbl'); if (cl) cl.textContent = (method === 'Website Link') ? 'A$' : '₹';
     const isTransfer = (method === TRANSFER);
     srcWrap.style.display = isTransfer ? '' : 'none';
     if (srcSel) srcSel.required = isTransfer;

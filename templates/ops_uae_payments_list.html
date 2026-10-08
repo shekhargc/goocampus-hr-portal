@@ -219,9 +219,9 @@
                 </td>
                 <td>{{ r.payment_date or '—' }}</td>
                 <td>{{ r.instalment | installment_label or '—' }}</td>
-                <td class="amt">{% if r.amount_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.amount_paid|float) }}{% else %}—{% endif %}</td>
+                <td class="amt">{% if r.amount_paid is not none %}{{ ('A$' if ((r.currency or 'INR') != 'INR' or (r.payment_method or '')|lower == 'website link') else '&#8377;')|safe }} {{ '{:,.0f}'.format(r.amount_paid|float) }}{% else %}—{% endif %}</td>
                 <td class="amt">{% if r.gst_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.gst_paid|float) }}{% else %}—{% endif %}</td>
-                <td class="amt">{% if r.total_amount_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}—{% endif %}</td>
+                <td class="amt">{% if r.total_amount_paid is not none %}{{ ('A$' if ((r.currency or 'INR') != 'INR' or (r.payment_method or '')|lower == 'website link') else '&#8377;')|safe }} {{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}—{% endif %}</td>
                 <td class="amt">{% if r.total_package is not none %}&#8377; {{ '{:,.0f}'.format(r.total_package|float) }}{% else %}—{% endif %}</td>
                 <td>
                     {% set pm = (r.payment_method or '')|lower %}

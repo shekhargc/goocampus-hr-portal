@@ -28,6 +28,12 @@
       <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">GST Component</div>
       <div style="font-size:1.8rem;font-weight:800;color:var(--navy);margin-top:4px;">₹{{ '{:,.0f}'.format(stats.gst or 0) }}</div>
     </div>
+    {% if stats.fx_total %}
+    <div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">Paid via Website Link (A$)</div>
+      <div style="font-size:1.8rem;font-weight:800;color:#1E40AF;margin-top:4px;">A${{ '{:,.0f}'.format(stats.fx_total or 0) }}</div>
+    </div>
+    {% endif %}
   </div>
 
   <!-- filters -->
@@ -83,9 +89,11 @@
             {{ r.payment_method or '—' }}
             {% if r.source_product %}<div style="font-size:0.72rem;color:var(--orange);font-weight:600;">⇄ from {{ r.source_product }}</div>{% endif %}
           </td>
-          <td style="padding:10px 12px;text-align:right;color:var(--gray-700);">₹{{ '{:,.0f}'.format(r.amount_paid or 0) }}</td>
-          <td style="padding:10px 12px;text-align:right;color:var(--gray-500);">{% if r.gst_paid %}₹{{ '{:,.0f}'.format(r.gst_paid) }}{% else %}—{% endif %}</td>
-          <td style="padding:10px 12px;text-align:right;font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(r.total_amount_paid or 0) }}</td>
+          {% set _fx = ((r.currency or 'INR') != 'INR') or ((r.payment_method or '')|lower == 'website link') %}
+          {% set _c = cur_sym(r.currency if (r.currency and r.currency != 'INR') else 'AUD') if _fx else '₹' %}
+          <td style="padding:10px 12px;text-align:right;color:var(--gray-700);">{{ _c }}{{ '{:,.0f}'.format(r.amount_paid or 0) }}</td>
+          <td style="padding:10px 12px;text-align:right;color:var(--gray-500);">{% if r.gst_paid and not _fx %}₹{{ '{:,.0f}'.format(r.gst_paid) }}{% else %}—{% endif %}</td>
+          <td style="padding:10px 12px;text-align:right;font-weight:700;color:var(--navy);">{{ _c }}{{ '{:,.0f}'.format(r.total_amount_paid or 0) }}</td>
           <td style="padding:10px 12px;color:var(--gray-500);">{{ r.instalment | installment_label or '—' }}</td>
           <td style="padding:10px 12px;text-align:right;"><a href="{{ url_for('admin_payments_edit', record_id=r.id) }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.82rem;">Edit</a></td>
         </tr>

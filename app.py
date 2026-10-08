@@ -1628,6 +1628,19 @@ def client_register(token):
         if _close_date:
             conn.execute("UPDATE client_registrations SET sales_close_date = ? WHERE registration_number = ?",
                          (_close_date, reg_num))
+        # Deal currency (A$ when the client paid via the Website Link). (2026-10-08)
+        try:
+            ensure_pay_currency_cols(conn)
+            _pc = 'INR'
+            if closure_meta.get('payment_route') == 'website_link' or \
+                    any((m or '').strip().lower() == 'website link' for m in inst_mts):
+                _pc = (closure_meta.get('currency') or 'AUD').upper()
+                if _pc == 'INR':
+                    _pc = 'AUD'
+            conn.execute("UPDATE client_registrations SET pay_currency = ? WHERE registration_number = ?",
+                         (_pc, reg_num))
+        except Exception as _pce:
+            logging.warning(f"pay_currency (register): {_pce}")
 
         # Auto-close the originating sales lead(s) → 'Closed Won' when the client
         # onboards, matched by phone. Robust across every creation path so a lead
@@ -1707,6 +1720,12 @@ def client_register(token):
                         [trow[k] for k in tcols])
                     conn.execute("UPDATE client_registrations SET sales_completed_at = CURRENT_TIMESTAMP "
                                  "WHERE registration_number = ?", (t_reg,))
+                    _tpc = 'AUD' if (closure_meta.get('training_payment_route') == 'website_link' or any(
+                        (closure_meta.get(f'training_inst{i}_method') or '').strip().lower() == 'website link'
+                        for i in (1, 2, 3, 4))) else 'INR'
+                    ensure_pay_currency_cols(conn)
+                    conn.execute("UPDATE client_registrations SET pay_currency = ? WHERE registration_number = ?",
+                                 (_tpc, t_reg))
                     conn.commit()
             except Exception as _te:
                 logging.warning(f"combined AMC 1 training registration failed: {_te}")
@@ -2563,11 +2582,13 @@ def staff_client_profile(reg):
         regrow = dict(regrow) if regrow else {}
         # Installments (base + 18% GST) from the registration.
         insts = []
+        _scur = reg_currency(regrow) if regrow else 'INR'      # A$ Website Link = flat, no GST
+        regrow['cur'] = cur_sym(_scur)
         for i in (1, 2, 3, 4):
             amt = float(regrow.get(f'inst{i}_amount') or 0)
             if not amt and not (regrow.get(f'inst{i}_date')):
                 continue
-            gst = round(amt * 0.18); total = round(amt + gst)
+            gst = round(amt * 0.18) if _scur == 'INR' else 0; total = round(amt + gst)
             st = (regrow.get(f'inst{i}_status') or '').strip()
             insts.append({'n': i, 'total': total, 'received': st.lower() == 'received',
                           'status': st or 'Pending', 'date': regrow.get(f'inst{i}_date') or ''})
@@ -3184,6 +3205,168 @@ def admin_consulting_counsellor_sync():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+def _amc_currency_fixes(conn):
+    """Proposed corrections for existing AUD deals (founder 2026-10-08: 'rectify all
+    existing'). Each fix = (label, sql, params). Read-only until applied."""
+    import json as _json
+    ensure_pay_currency_cols(conn)
+    fixes = []
+    # A. Registrations paid via Website Link → pay_currency AUD.
+    for r in conn.execute(
+            "SELECT id, registration_number, first_name, last_name, COALESCE(pay_currency,'INR') AS pc, "
+            "inst1_method, inst2_method, inst3_method, inst4_method FROM client_registrations").fetchall():
+        if r['pc'] == 'INR' and any((r[f'inst{i}_method'] or '').strip().lower() == 'website link' for i in (1, 2, 3, 4)):
+            fixes.append((f"A · {r['registration_number']} {r['first_name'] or ''} {r['last_name'] or ''} → A$ (Website Link)",
+                          "UPDATE client_registrations SET pay_currency = 'AUD' WHERE id = ?", (r['id'],)))
+    # B. Website Link payments that were given 18% GST at approval → flat A$.
+    for t in conn.execute(
+            "SELECT id, registration_number, amount_paid, gst_paid, total_amount_paid FROM ops_payments "
+            "WHERE LOWER(COALESCE(payment_method,'')) = 'website link' AND (COALESCE(gst_paid,0) <> 0 "
+            "OR COALESCE(currency,'INR') = 'INR')").fetchall():
+        fixes.append((f"B · payment #{t['id']} {t['registration_number']}: total {float(t['total_amount_paid'] or 0):,.0f} "
+                      f"(GST {float(t['gst_paid'] or 0):,.0f}) → A${float(t['amount_paid'] or 0):,.0f} flat",
+                      "UPDATE ops_payments SET gst_paid = 0, total_amount_paid = amount_paid, currency = 'AUD' WHERE id = ?",
+                      (t['id'],)))
+        fixes.append((f"B · approval row for payment #{t['id']} → flat",
+                      "UPDATE installment_approvals SET gst_amount = 0, total_amount = base_amount WHERE ops_payment_id = ?",
+                      (t['id'],)))
+    # C. Rupee-route AUD leads whose rupee value holds the raw AUD figure.
+    for l in conn.execute(
+            "SELECT id, lead_name, phone, product_id, expected_value, amc_aud_amount, amc_inr_amount, amc_fx_effective "
+            "FROM sales_leads WHERE amc_fx_locked_at IS NOT NULL AND COALESCE(amc_payment_route,'inr') <> 'website_link' "
+            "AND COALESCE(amc_fx_effective,0) > 1").fetchall():
+        aud, inr = float(l['amc_aud_amount'] or 0), float(l['amc_inr_amount'] or 0)
+        if not aud or not inr:
+            continue
+        ev = float(l['expected_value'] or 0)
+        if ev and ev < aud * 2:          # an AUD-sized number sitting in the ₹ field
+            fixes.append((f"C · lead {l['id']} {l['lead_name']}: Package Value {ev:,.0f} → ₹{inr:,.0f}",
+                          "UPDATE sales_leads SET expected_value = ? WHERE id = ?", (inr, l['id'])))
+        mob = ''.join(ch for ch in (l['phone'] or '') if ch.isdigit())[-10:]
+        if not mob:
+            continue
+        for iv in conn.execute("SELECT id, closure_metadata FROM client_invitations WHERE "
+                               "RIGHT(regexp_replace(COALESCE(client_mobile,''),'[^0-9]','','g'),10) = ? AND product_id = ?",
+                               (mob, l['product_id'])).fetchall():
+            try: m = _json.loads(iv['closure_metadata'] or '{}')
+            except Exception: continue
+            pk = float(m.get('package_amount') or 0)
+            if pk and pk < aud * 2:
+                disc = float(m.get('discount_allowed') or 0)
+                m['package_amount'] = inr; m['final_package'] = max(0.0, inr - disc)
+                m['payment_route'] = 'inr'; m['currency'] = 'INR'
+                fixes.append((f"C · invite {iv['id']} ({l['lead_name']}): package {pk:,.0f} → ₹{inr:,.0f}",
+                              "UPDATE client_invitations SET closure_metadata = ? WHERE id = ?",
+                              (_json.dumps(m), iv['id'])))
+                fixes.append((f"C · registration from invite {iv['id']}: package → ₹{inr:,.0f}",
+                              "UPDATE client_registrations SET package_amount = ?, final_package = ? - COALESCE(discount_allowed,0) "
+                              "WHERE invitation_id = ? AND COALESCE(package_amount,0) < ?",
+                              (inr, inr, iv['id'], aud * 2)))
+    return fixes
+
+
+@app.route('/admin/diag/amc-currency/apply', methods=['POST'])
+@login_required
+def admin_diag_amc_currency_apply():
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        fixes = _amc_currency_fixes(conn)
+        for _label, sql, params in fixes:
+            conn.execute(sql, params)
+        conn.commit()
+        logging.info("amc-currency apply by %s: %d statements", user.get('name'), len(fixes))
+        flash(f'Applied {len(fixes)} correction(s).', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Nothing changed — error: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('admin_diag_amc_currency'))
+
+
+@app.route('/admin/diag/amc-currency', methods=['GET'])
+@login_required
+def admin_diag_amc_currency():
+    """READ-ONLY audit of every foreign-priced (AUD) deal — single AMC 1/2 and the AMC
+    Consulting + AMC 1 combo: what's stored (lead lock, invitation closure_metadata,
+    client registration) and which currency each SHOULD show (A$ for Website Link,
+    ₹ otherwise). Changes nothing. (founder 2026-10-08)"""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    import json as _json, html as _h
+    conn = get_db()
+    out = []
+    try:
+        fx_plans = {r['plan_type'] for r in conn.execute(
+            "SELECT DISTINCT plan_type FROM plan_packages WHERE COALESCE(NULLIF(currency,''),'INR') <> 'INR'").fetchall()}
+        invs = conn.execute(
+            "SELECT ci.id, ci.client_name, ci.client_mobile, ci.product_id, ci.status, ci.closure_metadata, "
+            "ps.name AS product FROM client_invitations ci LEFT JOIN products_services ps ON ps.id = ci.product_id "
+            "WHERE ci.closure_metadata IS NOT NULL ORDER BY ci.id DESC").fetchall()
+        for iv in invs:
+            try: m = _json.loads(iv['closure_metadata'] or '{}')
+            except Exception: m = {}
+            single = (m.get('plan_type') or '') in fx_plans
+            combo = bool(m.get('include_training'))
+            if not (single or combo):
+                continue
+            mob = (iv['client_mobile'] or '')
+            lead = conn.execute(
+                "SELECT id, amc_plan_type, amc_payment_route, amc_aud_amount, amc_inr_amount, amc_fx_effective, "
+                "expected_value FROM sales_leads WHERE RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) = ? "
+                "AND product_id = ? ORDER BY id DESC LIMIT 1", (mob[-10:], iv['product_id'])).fetchone()
+            methods = [m.get(f'inst{i}_method') or '' for i in (1, 2, 3, 4)]
+            tmethods = [m.get(f'training_inst{i}_method') or '' for i in (1, 2, 3, 4)]
+            main_wl = (m.get('payment_route') == 'website_link') or (lead and lead['amc_payment_route'] == 'website_link') \
+                or (single and 'Website Link' in methods)
+            tr_wl = combo and ((m.get('training_payment_route') == 'website_link') or 'Website Link' in tmethods)
+            out.append({'inv': iv['id'], 'client': iv['client_name'], 'mob': ('…' + mob[-4:]) if mob else '',
+                        'product': iv['product'], 'plan': m.get('plan_type'), 'status': iv['status'],
+                        'kind': 'single' if single else 'combo',
+                        'lead': dict(lead) if lead else None,
+                        'pkg': m.get('package_amount'), 'final': m.get('final_package'),
+                        'insts': [(m.get(f'inst{i}_amount'), m.get(f'inst{i}_method'), m.get(f'inst{i}_status'))
+                                  for i in (1, 2, 3, 4) if m.get(f'inst{i}_amount')],
+                        'tr': ([(m.get(f'training_inst{i}_amount'), m.get(f'training_inst{i}_method'),
+                                 m.get(f'training_inst{i}_status')) for i in (1, 2, 3, 4) if m.get(f'training_inst{i}_amount')]
+                               if combo else []),
+                        'tr_pkg': m.get('training_package') if combo else None,
+                        'main_should': ('A$ (Website Link)' if main_wl else ('₹' if single else '₹ (main product)')),
+                        'tr_should': ('A$ (Website Link)' if tr_wl else '₹') if combo else '',
+                        'meta_route': m.get('payment_route') or '', 'meta_tr_route': m.get('training_payment_route') or ''})
+    except Exception as e:
+        conn.rollback()
+        return f"<pre>error: {_h.escape(str(e))}</pre>"
+    finally:
+        conn.close()
+    e = lambda v: _h.escape('' if v is None else str(v))
+    rows = ''.join(
+        f"<tr><td>{r['inv']}</td><td>{e(r['client'])}<br><small>{e(r['mob'])} · {e(r['status'])}</small></td>"
+        f"<td>{e(r['product'])} / {e(r['plan'])}<br><small>{r['kind']}</small></td>"
+        f"<td>{('lead ' + str(r['lead']['id']) + ' · route ' + e(r['lead']['amc_payment_route']) + ' · AUD ' + e(r['lead']['amc_aud_amount']) + ' · ₹lock ' + e(r['lead']['amc_inr_amount']) + ' · value ' + e(r['lead']['expected_value'])) if r['lead'] else '—'}</td>"
+        f"<td>pkg {e(r['pkg'])} · final {e(r['final'])}<br>{'<br>'.join(e(a) + ' ' + e(mt) + ' ' + e(st) for a, mt, st in r['insts'])}"
+        f"<br><small>meta route: {e(r['meta_route'])}</small></td>"
+        f"<td><b>{e(r['main_should'])}</b></td>"
+        f"<td>{('pkg ' + e(r['tr_pkg']) + '<br>' + '<br>'.join(e(a) + ' ' + e(mt) + ' ' + e(st) for a, mt, st in r['tr']) + '<br><small>meta: ' + e(r['meta_tr_route']) + '</small>') if r['kind'] == 'combo' else ''}</td>"
+        f"<td><b>{e(r['tr_should'])}</b></td></tr>" for r in out)
+    try:
+        _c2 = get_db(); _fx = _amc_currency_fixes(_c2); _c2.close()
+    except Exception as _fe:
+        _fx = [(f'(could not compute fixes: {_fe})', '', ())]
+    _fixhtml = ("<h3>Proposed corrections (" + str(len(_fx)) + ")</h3><ul>" + ''.join(f"<li>{e(lbl)}</li>" for lbl, _q, _p in _fx) + "</ul>"
+                + (f"<form method='POST' action='{url_for('admin_diag_amc_currency_apply')}' onsubmit=\"return confirm('Apply these corrections?')\">"
+                   "<button style='padding:8px 16px;background:#166534;color:#fff;border:0;border-radius:6px;'>Apply corrections</button></form>" if _fx else ''))
+    return (f"<div style='font-family:system-ui;padding:20px;'>{_fixhtml}<h2>AMC / foreign-priced deals — currency audit ({len(out)})</h2>"
+            "<p>Read-only. Installment amounts are stored as entered for Website Link (flat A$) and as base (÷1.18) for ₹.</p>"
+            "<table border=1 cellpadding=6 style='border-collapse:collapse;font-size:13px;'>"
+            "<tr><th>Inv</th><th>Client</th><th>Product / plan</th><th>Lead lock</th><th>Main: stored</th><th>Main should show</th>"
+            f"<th>Training add-on: stored</th><th>Training should show</th></tr>{rows}</table></div>")
 
 
 @app.route('/admin/diag/no-counsellor', methods=['GET', 'POST'])
@@ -4696,9 +4879,16 @@ def sales_plan_package_info():
     _fixed = bool(_prow and _prow['fixed_sales_revenue'] and float(_prow['fixed_sales_revenue']) > 0)
     _rev, _cost = _closure_revenue_cost(conn, product_id, plan_type,
                                         fallback_revenue=(amt or 0))
+    try:
+        _cur = conn.execute("SELECT COALESCE(NULLIF(currency,''),'INR') AS c FROM plan_packages "
+                            "WHERE product_id = ? AND plan_type = ?", (product_id, plan_type)).fetchone()
+        _cur = (_cur['c'] if _cur else 'INR').upper()
+    except Exception:
+        conn.rollback(); _cur = 'INR'
     conn.close()
     return jsonify({
         'package_amount': amt,
+        'currency': _cur,            # a foreign-priced plan's amount is NOT rupees (the AUD box converts it)
         'plan_cost': round(_cost, 2),
         'fixed': _fixed,
         'sales_revenue': round(_rev - _cost, 2),  # base = Package - Cost (before deal Discount)
@@ -4869,6 +5059,11 @@ def client_dashboard():
         # must NOT be independently editable/fillable by the client; its details
         # come from the main registration. (A genuine in-progress form is 'draft'.)
         d['is_combined_addon'] = ((d.get('form_status') == 'submitted') and not d.get('client_submitted_at'))
+        # Deal currency: A$ (Website Link, flat, no GST) or ₹. AMC MCQ training shows the
+        # client ONLY the installments they paid — never a package value. (2026-10-08)
+        d['currency'] = reg_currency(d)
+        d['cur'] = cur_sym(d['currency'])
+        d['installments_only'] = 'amc mcq' in (d.get('product_name') or '').lower()
         insts = []
         for i in (1, 2, 3, 4):
             base = float(d.get(f'inst{i}_amount') or 0)
@@ -4881,7 +5076,7 @@ def client_dashboard():
             received = (status.lower() == 'received')
             # Amounts are stored as the BASE; 18% GST is added on top so the
             # client sees Amount + GST = Total (the total is what was received).
-            gst = round(base * 0.18)
+            gst = round(base * 0.18) if d['currency'] == 'INR' else 0
             total = round(base + gst)
             insts.append({
                 'n': i, 'ordinal': _ORD[i],
@@ -9251,13 +9446,13 @@ def _notify_sales_completed(reg_id):
         details = brand_detail_rows([
             ('Client', client_name), ('Registration #', reg['registration_number']),
             ('Product', reg['product_name']), ('Plan', reg['plan_type']),
-            ('Package', ('₹{:,.0f}'.format(reg['final_package']) if reg['final_package'] else '—'))])
+            ('Package', ((cur_sym(reg_currency(reg)) + '{:,.0f}'.format(reg['final_package'])) if reg['final_package'] else '—'))])
         # Operations team — NOW gets the action button (Ops Verification).
         if ops_emails:
             o_inner = (f"<p><strong>Sales verification is complete</strong> for <strong>{client_name}</strong>. "
                        f"Please complete the <strong>Ops Verification</strong>.</p>" + details +
                        brand_button('Open Ops Verification', 'https://goocampus.org/verifications/ops'))
-            _pkg_txt = ('₹{:,.0f}'.format(reg['final_package']) if reg['final_package'] else '—')
+            _pkg_txt = ((cur_sym(reg_currency(reg)) + '{:,.0f}'.format(reg['final_package'])) if reg['final_package'] else '—')
             _t = _sc_render(conn, 'notify_ops_verification_needed', {
                 'client_name': client_name,
                 'registration_number': (reg['registration_number'] or ''),
@@ -9279,7 +9474,7 @@ def _notify_sales_completed(reg_id):
                 'registration_number': (reg['registration_number'] or ''),
                 'product_name': (reg['product_name'] or ''),
                 'plan_type': (reg['plan_type'] or ''),
-                'package': ('₹{:,.0f}'.format(reg['final_package']) if reg['final_package'] else '—')})
+                'package': ((cur_sym(reg_currency(reg)) + '{:,.0f}'.format(reg['final_package'])) if reg['final_package'] else '—')})
             _subj_m, _body_m = _t if _t else (
                 f"Sales Verification Complete — {client_name}",
                 render_branded_email('Sales Verification Complete', m_inner))
@@ -17212,6 +17407,53 @@ def api_forex_rates():
         'updated': _fx_cache.get('updated_iso', ''),
         'currencies': SUPPORTED_CURRENCIES
     })
+
+
+# ── Deal currency (founder 2026-10-08) ─────────────────────────────────────────
+# A client pays EITHER GooCampus in rupees (installments incl. 18% GST, stored base)
+# OR — for foreign-priced plans like AMC 1 — directly via the Website Link in that
+# currency (flat amount, no GST, no conversion). Every money screen reads the deal's
+# currency from client_registrations.pay_currency / ops_payments.currency (default
+# INR); 'Website Link' installments imply AUD for records saved before the column.
+CUR_SYMBOLS = {'INR': '₹', 'AUD': 'A$', 'USD': '$', 'GBP': '£', 'EUR': '€', 'NZD': 'NZ$',
+               'CAD': 'C$', 'SGD': 'S$', 'AED': 'AED '}
+_PAY_CUR_READY = False
+
+
+def cur_sym(code):
+    c = (code or 'INR').upper()
+    return CUR_SYMBOLS.get(c, c + ' ')
+
+
+def ensure_pay_currency_cols(conn):
+    global _PAY_CUR_READY
+    if _PAY_CUR_READY:
+        return
+    try:
+        conn.execute("ALTER TABLE client_registrations ADD COLUMN IF NOT EXISTS pay_currency TEXT DEFAULT 'INR'")
+        conn.execute("ALTER TABLE ops_payments ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR'")
+        conn.commit()
+        _PAY_CUR_READY = True
+    except Exception as e:
+        logging.warning(f"ensure_pay_currency_cols: {e}")
+        try: conn.rollback()
+        except Exception: pass
+
+
+def reg_currency(reg):
+    """'INR' or the foreign code a registration's money is in (dict / Row)."""
+    try:
+        keys = reg.keys()
+    except AttributeError:
+        keys = []
+    c = ((reg['pay_currency'] if 'pay_currency' in keys else '') or '').upper()
+    if c and c != 'INR':
+        return c
+    for i in (1, 2, 3, 4):
+        k = f'inst{i}_method'
+        if k in keys and (reg[k] or '').strip().lower() == 'website link':
+            return 'AUD'
+    return 'INR'
 
 
 def amc_aud_quote(plan_type, conn=None, product_id=None):
@@ -34044,9 +34286,11 @@ def ops_payments_add():
         notes = request.form.get('notes', '')
 
         try:
-            # Total is entered incl. GST; split into base + GST @18% (÷1.18).
+            # Total is entered incl. GST; split into base + GST @18% (÷1.18) — except a
+            # Website Link payment (flat A$, no GST). (2026-10-08)
             total_amount_paid = float(total_amount_paid or 0)
-            amount_paid = round(total_amount_paid / 1.18, 2)
+            _wl_pay = (payment_method or '').strip().lower() == 'website link'
+            amount_paid = total_amount_paid if _wl_pay else round(total_amount_paid / 1.18, 2)
             gst_paid = round(total_amount_paid - amount_paid, 2)
 
             # Stamp the client's real pathway (from their master record) so the
@@ -34110,9 +34354,11 @@ def ops_payments_edit(record_id):
         notes = request.form.get('notes', '')
 
         try:
-            # Total is entered incl. GST; split into base + GST @18% (÷1.18).
+            # Total is entered incl. GST; split into base + GST @18% (÷1.18) — except a
+            # Website Link payment (flat A$, no GST). (2026-10-08)
             total_amount_paid = float(total_amount_paid or 0)
-            amount_paid = round(total_amount_paid / 1.18, 2)
+            _wl_pay = (payment_method or '').strip().lower() == 'website link'
+            amount_paid = total_amount_paid if _wl_pay else round(total_amount_paid / 1.18, 2)
             gst_paid = round(total_amount_paid - amount_paid, 2)
 
             conn.execute('''UPDATE ops_payments SET
@@ -34173,10 +34419,12 @@ def _reg_pathway(conn, product_id):
 
 def _new_reg_installments(conn):
     """Every installment with an amount on a new-registration client, with its
-    base/gst/total (base stored; total = base+18%) and current decision state."""
+    base/gst/total (base stored; total = base+18%) and current decision state.
+    A Website Link (A$) deal is flat — no GST — and carries its currency. (2026-10-08)"""
+    ensure_pay_currency_cols(conn)
     rows = conn.execute(
         "SELECT id, registration_number, product_id, first_name, last_name, "
-        "       counsellor_id, counsellor_name, "
+        "       counsellor_id, counsellor_name, COALESCE(pay_currency,'INR') AS pay_currency, "
         "       inst1_amount, inst1_date, inst1_method, inst1_status, "
         "       inst2_amount, inst2_date, inst2_method, inst2_status, "
         "       inst3_amount, inst3_date, inst3_method, inst3_status, "
@@ -34193,11 +34441,12 @@ def _new_reg_installments(conn):
         pass
     out = []
     for r in rows:
+        _cur = reg_currency(r)
         for i in (1, 2, 3, 4):
             base = float(r[f'inst{i}_amount'] or 0)
             if base <= 0:
                 continue
-            gst = round(base * 0.18)
+            gst = round(base * 0.18) if _cur == 'INR' else 0
             total = round(base + gst)
             status = (r[f'inst{i}_status'] or '').strip()
             out.append({
@@ -34208,6 +34457,7 @@ def _new_reg_installments(conn):
                 'counsellor_name': r['counsellor_name'] or '',
                 'inst_no': i, 'ordinal': _INST_ORD[i],
                 'base': base, 'gst': gst, 'total': total,
+                'currency': _cur, 'cur': cur_sym(_cur),
                 'date': r[f'inst{i}_date'] or '',
                 'method': r[f'inst{i}_method'] or '',
                 'status': status or 'Pending',
@@ -34292,26 +34542,30 @@ def ops_payment_approve(reg_id, inst_no):
             flash('This client is not onboarded to Operations yet — complete Ops Verification first, then approve the payment.', 'error')
             return redirect(url_for('ops_payment_approvals'))
         base_plan = float(r[f'inst{inst_no}_amount'] or 0)
+        # Website Link (A$) deals are flat — no GST, no ÷1.18. (founder 2026-10-08)
+        ensure_pay_currency_cols(conn)
+        _pcur = reg_currency(r)
+        _gstf = 1.18 if _pcur == 'INR' else 1.0
         # Editable at approval: the ACTUAL total received (incl GST). Defaults to the
         # planned installment total (base + 18%); admin can adjust for split / combined
         # / bundled collections (e.g. AMC Consulting + Training) before it posts.
         try:
-            total = float(request.form.get('total_amount') or round(base_plan * 1.18, 2))
+            total = float(request.form.get('total_amount') or round(base_plan * _gstf, 2))
         except (TypeError, ValueError):
-            total = round(base_plan * 1.18, 2)
+            total = round(base_plan * _gstf, 2)
         if total <= 0:
             conn.close(); flash('Enter the amount received before approving.', 'error'); return redirect(url_for('ops_payment_approvals'))
-        amount = round(total / 1.18, 2)
+        amount = round(total / _gstf, 2)
         gst = round(total - amount, 2)
         method = (request.form.get('payment_method') or r[f'inst{inst_no}_method'] or '')
         pdate = (request.form.get('payment_date') or r[f'inst{inst_no}_date'] or None)
         pathway = _reg_pathway(conn, r['product_id'])
         conn.execute(
             "INSERT INTO ops_payments (registration_number, payment_date, amount_paid, gst_paid, "
-            " total_amount_paid, instalment, payment_method, notes, pathway, source, created_by) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'installment', ?)",
+            " total_amount_paid, instalment, payment_method, notes, pathway, source, created_by, currency) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'installment', ?, ?)",
             (reg_no, pdate, amount, gst, total, _INST_ORD[inst_no], method,
-             f"Auto-posted from {_INST_ORD[inst_no]} (approved)", pathway, session.get('user_id')))
+             f"Auto-posted from {_INST_ORD[inst_no]} (approved)", pathway, session.get('user_id'), _pcur))
         pay = conn.execute(
             "SELECT id FROM ops_payments WHERE registration_number = ? AND source = 'installment' "
             "AND instalment = ? ORDER BY id DESC LIMIT 1", (reg_no, _INST_ORD[inst_no])).fetchone()
@@ -34337,7 +34591,7 @@ def ops_payment_approve(reg_id, inst_no):
         try:
             if r['account_id']:
                 send_client_push(conn, r['account_id'], 'Payment received',
-                                 f"We've received your {_INST_ORD[inst_no]} (₹{total:,.0f}). Thank you!",
+                                 f"We've received your {_INST_ORD[inst_no]} ({cur_sym(_pcur)}{total:,.0f}). Thank you!",
                                  url='/client/dashboard#payments', tag='pay')
         except Exception:
             pass
@@ -34429,7 +34683,8 @@ def sales_payment_update(reg_id, inst_no):
         return redirect(url_for('sales_payment_followup'))
     user = get_user()
     conn = get_db()
-    reg = conn.execute("SELECT counsellor_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    ensure_pay_currency_cols(conn)
+    reg = conn.execute("SELECT * FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
     if not reg:
         conn.close(); flash('Client not found.', 'error'); return redirect(url_for('sales_payment_followup'))
     if not session.get('is_admin') and reg['counsellor_id'] and reg['counsellor_id'] != user['id']:
@@ -34444,7 +34699,9 @@ def sales_payment_update(reg_id, inst_no):
     status = (request.form.get('status') or '').strip()
     sets, vals = [], []
     if total > 0:
-        sets.append(f"inst{inst_no}_amount = ?"); vals.append(round(total / 1.18, 2))
+        # A$ (Website Link) deals are stored flat — no GST split. (2026-10-08)
+        _div = 1.18 if (reg_currency(reg) == 'INR' and method.lower() != 'website link') else 1.0
+        sets.append(f"inst{inst_no}_amount = ?"); vals.append(round(total / _div, 2))
     sets.append(f"inst{inst_no}_date = ?"); vals.append(due_date)
     if method:
         sets.append(f"inst{inst_no}_method = ?"); vals.append(method)
@@ -34467,8 +34724,10 @@ def sales_payment_update(reg_id, inst_no):
 # (internal-transfer groundwork). Adding a payment notifies the ops team.
 
 HUB_PAYMENT_METHODS = ['Bank Transfer', 'Cash Deposit', 'Online Payment', 'Cheque',
-                       'Discount', 'Switched from other program']
-HUB_NO_GST_METHODS = {'Discount'}
+                       'Website Link', 'Discount', 'Switched from other program']
+FX_PAY_ROW_SQL = ("(COALESCE(t.currency,'INR') <> 'INR' "
+                  "OR LOWER(COALESCE(t.payment_method,'')) = 'website link')")
+HUB_NO_GST_METHODS = {'Discount', 'Website Link'}   # Website Link = flat A$ (2026-10-08)
 HUB_TRANSFER_METHOD = 'Switched from other program'
 
 
@@ -34543,9 +34802,12 @@ def admin_payments_hub():
           {wsql}
       ORDER BY t.payment_date DESC, t.id DESC
          LIMIT 500""", params).fetchall()
+    ensure_pay_currency_cols(conn)
+    # ₹ totals never include Website Link (A$) payments — those are summed apart. (2026-10-08)
     stats = conn.execute(f"""SELECT COUNT(*) AS n,
-               COALESCE(SUM(t.total_amount_paid),0) AS total,
-               COALESCE(SUM(t.gst_paid),0) AS gst
+               COALESCE(SUM(CASE WHEN {FX_PAY_ROW_SQL} THEN 0 ELSE t.total_amount_paid END),0) AS total,
+               COALESCE(SUM(CASE WHEN {FX_PAY_ROW_SQL} THEN 0 ELSE t.gst_paid END),0) AS gst,
+               COALESCE(SUM(CASE WHEN {FX_PAY_ROW_SQL} THEN t.total_amount_paid ELSE 0 END),0) AS fx_total
           FROM ops_payments t
      LEFT JOIN plab_clients p ON t.registration_number = p.registration_number {wsql}""", params).fetchone()
     methods = conn.execute("SELECT DISTINCT payment_method FROM ops_payments WHERE payment_method IS NOT NULL AND payment_method <> '' ORDER BY payment_method").fetchall()
@@ -40715,8 +40977,12 @@ def sales_leads_add():
                             # AUD plans (AMC 1/AMC 2): the client pays the locked INR
                             # (aud × frozen rate), no discount. Otherwise use the form values.
                             'package_amount':           (amc_lock['inr'] if amc_lock else _n('package_amount')),
-                            'discount_allowed':         (0 if amc_lock else _n('discount_allowed')),
-                            'final_package':            (amc_lock['inr'] if amc_lock else _n('final_package')),
+                            'discount_allowed':         _n('discount_allowed'),
+                            'final_package':            (max(0, amc_lock['inr'] - _n('discount_allowed')) if amc_lock else _n('final_package')),
+                            # Which currency this deal is in: Website Link = flat foreign (A$),
+                            # else rupees. Every screen reads this to pick ₹ vs A$. (2026-10-08)
+                            'payment_route':            ('website_link' if (amc_lock and request.form.get('amc_website_link')) else 'inr'),
+                            'currency':                 ((amc_lock.get('currency') or 'AUD') if (amc_lock and request.form.get('amc_website_link')) else 'INR'),
                             'additional_package_notes': _f('additional_package_notes'),
                             # Installment amounts are ENTERED as the total incl. GST;
                             # store the base (÷1.18) so existing base-stored records and
@@ -40974,6 +41240,36 @@ def sales_leads_edit(lead_id):
                 lead_id
             )
         )
+        # --- Foreign-priced plan (AMC 1/2 in AUD): keep the lock in step with the
+        # payment route chosen on EDIT. Website Link = flat AUD (rate 1, no markup);
+        # Rupees = keep an existing rupee lock (never re-floats), else lock today's
+        # live rate now. Before this, editing never touched the lock, so switching the
+        # route left the wrong currency behind. (founder 2026-10-08)
+        try:
+            _e_plan = (request.form.get('plan_type') or '').strip()
+            _e_wl = bool(request.form.get('amc_website_link'))
+            _e_q = amc_aud_quote(_e_plan, conn=conn, product_id=product_id) if _e_plan else None
+            if _e_q:
+                _same = (lead['amc_plan_type'] or '') == _e_plan and lead['amc_aud_amount']
+                _amt = float(lead['amc_aud_amount']) if _same else float(_e_q['aud'])
+                if _e_wl:
+                    conn.execute(
+                        "UPDATE sales_leads SET amc_plan_type=?, amc_currency=?, amc_aud_amount=?, amc_fx_rate=1, "
+                        "amc_fx_markup=0, amc_fx_effective=1, amc_inr_amount=?, amc_payment_route='website_link', "
+                        "amc_fx_locked_at=COALESCE(amc_fx_locked_at, CURRENT_TIMESTAMP) WHERE id=?",
+                        (_e_plan, _e_q.get('currency', 'AUD'), _amt, _amt, lead_id))
+                elif not (_same and (lead['amc_payment_route'] or 'inr') != 'website_link'
+                          and float(lead['amc_fx_effective'] or 0) > 1):
+                    conn.execute(
+                        "UPDATE sales_leads SET amc_plan_type=?, amc_currency=?, amc_aud_amount=?, amc_fx_rate=?, "
+                        "amc_fx_markup=?, amc_fx_effective=?, amc_inr_amount=?, amc_payment_route='inr', "
+                        "amc_fx_locked_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (_e_plan, _e_q.get('currency', 'AUD'), _amt, _e_q['live_rate'], _e_q['markup_pct'],
+                         _e_q['effective_rate'], round(_amt * float(_e_q['effective_rate']), 2), lead_id))
+        except Exception as _fxe:
+            logging.warning(f"AMC lock (edit): {_fxe}")
+            try: conn.rollback()
+            except Exception: pass
         # --- Auto-create closure when stage changes to Won -----------------
         if stage_id:
             won_stage = conn.execute(
@@ -41072,6 +41368,14 @@ def sales_leads_edit(lead_id):
             # saving an edit wiped the training enrolment out of closure_metadata.
             edited['include_training'] = (request.form.get('include_training') in ('on', '1', 'true', 'yes'))
             edited['training_payment_route'] = ('website_link' if request.form.get('training_website_link') else 'inr')
+            # Main plan's payment route / currency (A$ for a Website Link payment). (2026-10-08)
+            try:
+                _eq = amc_aud_quote((request.form.get('plan_type') or '').strip(), conn=conn)
+            except Exception:
+                _eq = None
+            _ewl = bool(_eq and request.form.get('amc_website_link'))
+            edited['payment_route'] = 'website_link' if _ewl else 'inr'
+            edited['currency'] = ((_eq.get('currency') or 'AUD') if _ewl else 'INR')
             edited['training_package']  = _en('training_package')
             edited['training_discount'] = _en('training_discount')
             edited['training_final']    = _en('training_final')
@@ -51448,6 +51752,8 @@ def rec_json(r):
 
 # Expose to every template (no per-route render_template change needed).
 app.jinja_env.globals['can_access'] = can_access
+app.jinja_env.globals['cur_sym'] = cur_sym
+app.jinja_env.globals['reg_currency'] = reg_currency
 
 
 def can_use_route(endpoint):
@@ -53590,6 +53896,15 @@ def start_neetpg_scheduler():
 # Start scheduler on app boot (only in production, not in reloader child)
 if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
     start_neetpg_scheduler()
+
+# Deal-currency columns (client_registrations.pay_currency, ops_payments.currency).
+# Also guarded at request time — boot DDL can skip on a Render cold start.
+try:
+    _pc_conn = get_db()
+    ensure_pay_currency_cols(_pc_conn)
+    _pc_conn.close()
+except Exception as _pc_e:
+    logging.warning(f"boot pay_currency cols: {_pc_e}")
 
 
 @app.route('/psychometric-test')
