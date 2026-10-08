@@ -11,7 +11,14 @@ one shared DB), so each run takes a Postgres advisory lock and skips a source th
 checked in the last 20 minutes; inbox rows are unique per (source, item) anyway.
 
 Sources are site-specific (each govt site lays notices out differently), so each
-source names a reader. Start: Karnataka KEA — PG Medical/DNB 2026.
+source names a reader. Start: All-India MCC (PG) + Karnataka KEA — PG Medical/DNB 2026.
+
+FETCHING NOW RUNS ON THE FOUNDER'S MAC (2026-10-08): KEA + MCC refuse connections from
+foreign data-centre IPs (Render), so tools/news_fetcher/newsfetch.py runs on the Mac (Indian
+IP) from a Claude Code scheduled task, which also reads each new PDF and writes an AI draft
+(headline / summary / 150-250 word article / category / key dates with source quotes), then
+POSTs it to /api/pg/news-inbox/ingest. The server-side schedule only runs if env
+NEWS_SERVER_FETCH=1 (e.g. once an India proxy/server exists).
 """
 import os
 import re
@@ -20,7 +27,9 @@ import logging
 from datetime import datetime, date
 from db import get_db
 
-UA = 'Mozilla/5.0 (compatible; GooCampus-NoticeMonitor/1.0; +https://goocampus.in)'
+# A normal browser UA — MCC answers 403 to bot-style user agents.
+UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) '
+      'Chrome/124.0 Safari/537.36')
 TIMEOUT = (10, 30)          # (connect, read) seconds — a blocked site fails fast
 RECENT_SKIP_MINUTES = 20
 
@@ -35,6 +44,16 @@ def _proxies():
 # code → config. authority_code matches pg_admin/authorities.py; news_authority is the
 # value the newsroom form's "Counselling Authority" dropdown expects.
 SOURCES = {
+    'mcc_pg': {
+        'label': 'All-India MCC — PG Medical Counselling',
+        'authority_code': 'mcc',
+        'news_authority': '__all__',
+        'url': 'https://mcc.nic.in/pg-medical-counselling/',
+        'pages': ['https://mcc.nic.in/pg-medical-counselling/', 'https://mcc.nic.in/news-events-pg/',
+                  'https://mcc.nic.in/current-events-pg/', 'https://mcc.nic.in/eservices-schedule-pg/'],
+        'reader': 'pdf_links',
+        'enabled': True,
+    },
     'kea_pgmed_2026': {
         'label': 'Karnataka KEA — PG Medical / DNB 2026',
         'authority_code': 'kea',
@@ -69,6 +88,10 @@ def ensure_news_inbox_tables(conn=None):
             UNIQUE (source_code, item_key)
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_inbox_status ON pg_news_inbox (status, first_seen_at)")
+        # AI draft + the official PDF (fetched on the Mac — the server can't reach the sites).
+        for col, typ in (('draft_json', 'TEXT'), ('drafted_at', 'TIMESTAMP'), ('pdf_data', 'BYTEA'),
+                         ('pdf_name', "TEXT DEFAULT ''")):
+            conn.execute(f"ALTER TABLE pg_news_inbox ADD COLUMN IF NOT EXISTS {col} {typ}")
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_news_scrape_runs (
             id SERIAL PRIMARY KEY,
             source_code TEXT NOT NULL,
@@ -183,7 +206,50 @@ def read_kea_aspnet(url):
     return items
 
 
-READERS = {'kea_aspnet': read_kea_aspnet}
+_URL_DATE_RE = re.compile(r'(20\d{2})(\d{2})(\d{2})\d{2,}')
+
+
+def read_pdf_links(url, pages=None):
+    """Generic: every <a href="...pdf">TITLE</a> on the given pages (MCC style). The date
+    comes from the title if present, else from a yyyymmdd stamp in the file name.
+    item_key = the PDF URL (stable)."""
+    import requests
+    from urllib.parse import urljoin
+    items, seen = [], set()
+    s = requests.Session()
+    s.headers['User-Agent'] = UA
+    if _proxies():
+        s.proxies.update(_proxies())
+    for pg in (pages or [url]):
+        r = s.get(pg, timeout=TIMEOUT)
+        r.raise_for_status()
+        for href, inner in re.findall(r'<a\b[^>]*href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>', r.text, re.S | re.I):
+            href = urljoin(r.url, _html.unescape(href).strip())
+            raw = _text(inner)
+            if href in seen or not raw or raw.lower() in ('view', 'download', 'click here'):
+                continue
+            seen.add(href)
+            title, d = split_title_date(raw)
+            if not d:
+                m = _URL_DATE_RE.search(href.rsplit('/', 1)[-1])
+                if m:
+                    try: d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                    except ValueError: d = None
+            items.append({'item_key': href, 'raw_title': raw, 'title': title, 'url': href,
+                          'kind': 'pdf', 'notice_date': d})
+    if not items:
+        raise ValueError('No notices found on the page — the site layout may have changed.')
+    return items
+
+
+READERS = {'kea_aspnet': read_kea_aspnet, 'pdf_links': read_pdf_links}
+
+
+def read_source(code):
+    src = SOURCES[code]
+    if src['reader'] == 'pdf_links':
+        return read_pdf_links(src['url'], src.get('pages'))
+    return READERS[src['reader']](src['url'])
 
 
 # ── running ──────────────────────────────────────────────────────────────────
@@ -216,7 +282,7 @@ def run_source(code, trigger='schedule'):
             if recent:
                 out['skipped'] = 'checked recently'; return out
         try:
-            items = READERS[src['reader']](src['url'])
+            items = read_source(code)
         except Exception as e:
             out['error'] = str(e)[:400]
             conn.execute("INSERT INTO pg_news_scrape_runs (source_code, ok, error, trigger) VALUES (?,?,?,?)",
@@ -273,7 +339,11 @@ def run_all_background(trigger='manual'):
 
 
 def start_scheduler():
-    """10:00 AM, 1:00 PM, 6:30 PM, 11:00 PM IST. Safe to call in every process (see module doc)."""
+    """10:00 AM, 1:00 PM, 6:30 PM, 11:00 PM IST. Safe to call in every process (see module doc).
+    Off unless NEWS_SERVER_FETCH=1 — the Mac fetches today (sites block the server's IP)."""
+    if (os.environ.get('NEWS_SERVER_FETCH') or '').strip() != '1':
+        logging.info("PG news: server-side fetch off (Mac fetcher in use)")
+        return
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger

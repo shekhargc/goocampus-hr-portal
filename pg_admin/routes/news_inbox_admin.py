@@ -34,7 +34,9 @@ def news_inbox():
         for r in conn.execute("SELECT status, COUNT(*) AS n FROM pg_news_inbox GROUP BY status").fetchall():
             counts[r['status']] = r['n']
         items = [dict(r) for r in conn.execute(
-            "SELECT * FROM pg_news_inbox WHERE status = ? "
+            "SELECT id, source_code, authority_code, item_key, title, url, kind, notice_date, status, news_id, "
+            "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL) AS has_pdf "
+            "FROM pg_news_inbox WHERE status = ? "
             "ORDER BY notice_date DESC NULLS LAST, first_seen_at DESC, id DESC LIMIT 300", (tab,)).fetchall()]
         for code, s in NS.SOURCES.items():
             last = conn.execute(
@@ -52,6 +54,10 @@ def news_inbox():
         except Exception: pass
     finally:
         conn.close()
+    import json as _json
+    for it in items:
+        try: it['draft'] = _json.loads(it.get('draft_json') or '{}') or None
+        except Exception: it['draft'] = None
     labels = {c: s['label'] for c, s in NS.SOURCES.items()}
     return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab,
                            sources=sources, labels=labels, active_section='goocampus_in')

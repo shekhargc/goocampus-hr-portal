@@ -16,6 +16,25 @@ from pg_admin.routes.api import _authorized
 from pg_admin.routes.api_choice import _user, _plan_has, _doctor_states
 
 
+_NEWS_COLS_OK = False
+
+
+def ensure_news_seo_cols(conn):
+    """category / summary / key_dates on pg_news — request-time guard (boot DDL can skip
+    on a Render cold start)."""
+    global _NEWS_COLS_OK
+    if _NEWS_COLS_OK:
+        return
+    try:
+        for c in ('category', 'summary', 'key_dates'):
+            conn.execute(f"ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS {c} TEXT DEFAULT ''")
+        conn.commit()
+        _NEWS_COLS_OK = True
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+
 def _s(v):
     return (str(v).strip() if v is not None else '')
 
@@ -110,10 +129,13 @@ def api_pg_news():
         if body:
             where += " AND body_label = ?"; params.append(body)
 
+        ensure_news_seo_cols(conn)
         total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_news WHERE {where}", params).fetchone()['n']
         offset = (page - 1) * page_size
         rows = conn.execute(
             f"SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
+            f"COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
+            f"COALESCE(key_dates,'') AS key_dates, "
             f"(pdf_data IS NOT NULL) AS has_pdf, published_at "
             f"FROM pg_news WHERE {where} ORDER BY published_at DESC, id DESC "
             f"LIMIT {page_size} OFFSET {offset}", params).fetchall()
@@ -121,6 +143,12 @@ def api_pg_news():
         for r in rows:
             d = dict(r)
             d['pdf_url'] = (f"/api/pg/news/{d['id']}/pdf" if d.get('has_pdf') else None)
+            # key_dates: {field: {date, time}} — only the dates the notice states (2026-10-08)
+            try:
+                import json as _json
+                d['key_dates'] = _json.loads(d.get('key_dates') or '{}') or {}
+            except Exception:
+                d['key_dates'] = {}
             items.append(d)
         return jsonify({'ok': True, 'items': items, 'count': len(items),
                         'total': total, 'page': page, 'page_size': page_size,

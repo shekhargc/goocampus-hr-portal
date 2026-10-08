@@ -24,14 +24,13 @@
     <div>
       <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">News Inbox</h1>
       <p style="margin:0;font-size:0.88rem;color:var(--gray-500);max-width:720px;">
-        New notices picked up from counselling-authority websites, checked automatically at
-        <b>10:00 AM, 1:00 PM, 6:30 PM and 11:00 PM IST</b>. Nothing goes to doctors until you click
-        <b>Add to News</b> and post it.
+        New notices from counselling-authority websites, checked from the office Mac at
+        <b>10:00 AM, 1:00 PM, 6:30 PM and 11:00 PM IST</b> (the sites block our server). Each new
+        notice arrives with an <b>AI draft</b> — headline, article, key dates. Nothing goes to doctors
+        until you click <b>Add to News</b>, check it and post.
       </p>
     </div>
-    <form method="POST" action="{{ url_for('pg_news_inbox_check') }}">
-      <button class="nb-btn" style="background:var(--navy,#1e3a5f);color:#fff;padding:9px 16px;">↻ Check now</button>
-    </form>
+
   </div>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}
@@ -77,9 +76,18 @@
         <tr>
           <td style="white-space:nowrap;">{{ it.notice_date|format_date }}</td>
           <td>
+            {% if it.draft and it.draft.headline %}
+            <div style="font-weight:700;color:var(--navy);">{{ it.draft.headline }}</div>
+            {% if it.draft.summary %}<div style="font-size:0.82rem;color:var(--gray-600);margin-top:2px;">{{ it.draft.summary }}</div>{% endif %}
+            <div style="font-size:0.74rem;color:var(--gray-500);margin-top:2px;">Official title: {{ it.title }}</div>
+            {% if it.draft.dates %}<div style="font-size:0.74rem;color:#065f46;margin-top:3px;">
+              {% for k, v in it.draft.dates.items() %}<span style="margin-right:10px;">{{ k.replace('_',' ') }}: <b>{{ v.date }}</b></span>{% endfor %}</div>{% endif %}
+            {% else %}
             <div style="font-weight:600;color:var(--navy);">{{ it.title }}</div>
+            {% endif %}
             <div style="margin-top:4px;">
               <span class="nb-kind {{ 'nb-pdf' if it.kind=='pdf' else 'nb-link' }}">{{ 'PDF' if it.kind=='pdf' else 'LINK' }}</span>
+              {% if it.draft %}<span class="nb-kind" style="background:#ede9fe;color:#5b21b6;">AI DRAFT</span>{% endif %}
               <a href="{{ it.url }}" target="_blank" rel="noopener" style="font-size:0.8rem;color:#2952a3;margin-left:6px;">{{ 'Open PDF' if it.kind=='pdf' else 'Open page' }} ↗</a>
               {% if it.status == 'posted' and it.news_id %}<span style="font-size:0.8rem;color:#166534;margin-left:8px;">✓ posted{% if it.reviewed_by %} by {{ it.reviewed_by }}{% endif %}</span>{% endif %}
               {% if it.status == 'dismissed' and it.reviewed_by %}<span style="font-size:0.8rem;color:var(--gray-500);margin-left:8px;">dismissed by {{ it.reviewed_by }}</span>{% endif %}

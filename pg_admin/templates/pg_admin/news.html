@@ -32,11 +32,14 @@
       {% if prefill %}
       <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.84rem;">
         <b>From the News Inbox</b> · {{ prefill.source_label }}{% if prefill.status == 'posted' %} · <b>already posted once</b>{% endif %}<br>
-        Check the heading, add a line of text if useful, then post.
+        {% if prefill.drafted %}<b>AI draft filled in below</b> — check the heading, article and every date against the official notice, then post.
+        {% if prefill.applies_to %}<div style="margin-top:4px;"><b>Applies to:</b> {{ prefill.applies_to }}</div>{% endif %}
+        {% if prefill.action %}<div><b>What doctors should do:</b> {{ prefill.action }}</div>{% endif %}
+        {% else %}Check the heading, add a line of text if useful, then post.{% endif %}
         {% if prefill.kind == 'pdf' %}
           <label style="display:flex;gap:6px;align-items:center;margin-top:6px;cursor:pointer;">
             <input type="checkbox" name="attach_pdf" value="1" checked>
-            Attach the official PDF automatically (downloaded from the link below when you post)
+            Attach the official PDF automatically{% if prefill.has_pdf %} (already fetched){% else %} (downloaded from the link below when you post){% endif %}
           </label>
         {% else %}
           <div style="margin-top:4px;">This notice is a <b>link</b> (e.g. application / slot booking page) — doctors will get the official link.</div>
@@ -67,6 +70,29 @@
                style="display:block;margin-top:5px;margin-bottom:14px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
         <span style="font-weight:400;font-size:0.75rem;color:var(--gray-500);">Leave blank to use today. This is the date shown on the dashboard + used to sort.</span>
       </label>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:14px;">
+        <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Category
+          <select name="category" style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+            <option value="">—</option>
+            {% for v, l in categories %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
+          </select>
+        </label>
+        <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">One-line summary <span style="font-weight:400;color:var(--gray-500);">(news list + email)</span>
+          <input name="summary" maxlength="300" placeholder="e.g. Round 1 choice filling for Karnataka PG Medical opens 12 Oct, closes 15 Oct."
+                 style="display:block;width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;">
+        </label>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--gray-700);margin-bottom:4px;">Key dates <span style="font-weight:400;color:var(--gray-500);">— fill only what the notice states; they power the "Upcoming deadlines" strip</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">
+          {% for k, l in date_fields %}
+          <label style="font-size:0.78rem;color:var(--gray-600);">{{ l }}
+            <input type="date" name="kd_{{ k }}" style="display:block;width:100%;margin-top:3px;padding:7px 9px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+            {% if prefill and prefill.quotes.get(k) %}<span style="display:block;font-size:0.7rem;color:#065f46;margin-top:2px;">“{{ prefill.quotes.get(k) }}”</span>{% endif %}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
       <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">News text
         <textarea name="body_text" rows="4" placeholder="Paste the update here…"
                   style="display:block;width:100%;margin-top:5px;margin-bottom:14px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;resize:vertical;"></textarea>
@@ -126,7 +152,9 @@
                     data-id="{{ it.id }}" data-heading="{{ it.heading }}"
                     data-authority="{{ '__all__' if it.scope=='all_india' else 'state:' + (it.state or '') }}"
                     data-date="{{ it.published_at.strftime('%Y-%m-%d') if it.published_at else '' }}"
-                    data-body="{{ it.body_text or '' }}" data-source="{{ it.source_url or '' }}">Edit</button>
+                    data-body="{{ it.body_text or '' }}" data-source="{{ it.source_url or '' }}"
+                    data-category="{{ it.category or '' }}" data-summary="{{ it.summary or '' }}"
+                    data-dates="{{ it.key_dates_d|tojson|forceescape }}">Edit</button>
             <button type="button" onclick="newsTest({{ it.id }})" style="background:none;border:0;color:#b45309;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">✉️ Test</button>
             <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to ALL registered users + staff now?');" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
@@ -167,7 +195,8 @@ function newsTest(id){
   function setAlert(on){ var a=document.getElementById('send_alert'); if(a) a.checked=on; }
   window.newsClearEdit=function(){
     set('news_id',''); set('inbox_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
-    set('body_text',''); set('source_url','');
+    set('body_text',''); set('source_url',''); set('category',''); set('summary','');
+    document.querySelectorAll('[name^="kd_"]').forEach(function(el){ el.value=''; });
     setAlert(true);   // new post → default to emailing everyone
     document.getElementById('editingBanner').style.display='none';
     submitLabel('Post update');
@@ -175,12 +204,18 @@ function newsTest(id){
   {% if prefill %}
   set('authority', {{ prefill.authority|tojson }}); set('heading', {{ prefill.heading|tojson }});
   set('news_date', {{ prefill.news_date|tojson }}); set('source_url', {{ prefill.source_url|tojson }});
+  set('body_text', {{ prefill.body_text|tojson }}); set('summary', {{ prefill.summary|tojson }});
+  set('category', {{ prefill.category|tojson }});
+  (function(d){ for (var k in d) { set('kd_' + k, d[k]); } })({{ prefill.dates|tojson }});
   {% endif %}
   document.querySelectorAll('.newsEditBtn').forEach(function(btn){
     btn.addEventListener('click',function(){
       set('news_id',btn.dataset.id); set('inbox_id',''); set('authority',btn.dataset.authority);
       set('heading',btn.dataset.heading); set('news_date',btn.dataset.date);
       set('body_text',btn.dataset.body); set('source_url',btn.dataset.source);
+      set('category',btn.dataset.category||''); set('summary',btn.dataset.summary||'');
+      document.querySelectorAll('[name^="kd_"]').forEach(function(el){ el.value=''; });
+      try { var dd = JSON.parse(btn.dataset.dates||'{}'); for (var k in dd) set('kd_'+k, dd[k]); } catch(e) {}
       setAlert(false);  // editing → don't re-blast unless the user ticks it back on
       document.getElementById('editingBanner').style.display='block';
       submitLabel('Save changes');

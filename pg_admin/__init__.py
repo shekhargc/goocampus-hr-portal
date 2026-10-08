@@ -30,7 +30,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              api_events, events_admin, api_track, analytics_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
-                             specialty_admin, news_inbox_admin)
+                             specialty_admin, news_inbox_admin, api_news_ingest)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -177,6 +177,13 @@ def register_pg_admin(app):
                      news_inbox_admin.news_inbox_check, methods=['POST'])
     app.add_url_rule('/admin/pg/news-inbox/status', 'pg_news_inbox_status',
                      news_inbox_admin.news_inbox_status, methods=['POST'])
+    # The founder's Mac pushes notices + AI drafts here (X-News-Key = env NEWS_INGEST_KEY).
+    app.add_url_rule('/api/pg/news-inbox/known', 'api_news_inbox_known',
+                     api_news_ingest.api_news_inbox_known, methods=['GET'])
+    app.add_url_rule('/api/pg/news-inbox/ingest', 'api_news_inbox_ingest',
+                     api_news_ingest.api_news_inbox_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/news-inbox/heartbeat', 'api_news_inbox_heartbeat',
+                     api_news_ingest.api_news_inbox_heartbeat, methods=['POST'])
     # Scraper schedule (10:00 / 13:00 / 18:30 / 23:00 IST) — same boot guard as app.py's scheduler.
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
         _news_scraper.start_scheduler()
