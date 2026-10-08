@@ -184,6 +184,8 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_ingest, methods=['POST'])
     app.add_url_rule('/api/pg/news-inbox/heartbeat', 'api_news_inbox_heartbeat',
                      api_news_ingest.api_news_inbox_heartbeat, methods=['POST'])
+    app.add_url_rule('/admin/pg/diag/news-key', 'pg_news_key_check',
+                     api_news_ingest.admin_news_key_check, methods=['GET'])
     # Scraper schedule (10:00 / 13:00 / 18:30 / 23:00 IST) — same boot guard as app.py's scheduler.
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
         _news_scraper.start_scheduler()

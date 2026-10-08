@@ -165,3 +165,17 @@ def api_news_inbox_heartbeat():
         return jsonify({'ok': False}), 500
     finally:
         conn.close()
+
+
+def admin_news_key_check():
+    """Admin-only: is NEWS_INGEST_KEY set, and its fingerprint (sha256 prefix + length) — to
+    match against the Mac's copy without ever showing the key. (2026-10-08)"""
+    from core.users import get_user
+    import hashlib
+    u = get_user()
+    if not (u and u.get('is_admin')):
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    raw = os.environ.get('NEWS_INGEST_KEY') or ''
+    k = raw.strip()
+    return jsonify({'ok': True, 'configured': bool(k), 'length': len(k), 'raw_length': len(raw),
+                    'fingerprint': hashlib.sha256(k.encode()).hexdigest()[:12] if k else ''})
