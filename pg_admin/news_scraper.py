@@ -13,6 +13,7 @@ checked in the last 20 minutes; inbox rows are unique per (source, item) anyway.
 Sources are site-specific (each govt site lays notices out differently), so each
 source names a reader. Start: Karnataka KEA — PG Medical/DNB 2026.
 """
+import os
 import re
 import html as _html
 import logging
@@ -22,6 +23,14 @@ from db import get_db
 UA = 'Mozilla/5.0 (compatible; GooCampus-NoticeMonitor/1.0; +https://goocampus.in)'
 TIMEOUT = (10, 30)          # (connect, read) seconds — a blocked site fails fast
 RECENT_SKIP_MINUTES = 20
+
+
+def _proxies():
+    """Indian govt sites (KEA, MCC) refuse connections from foreign data-centre IPs, and the
+    portal runs on Render outside India. Set env PG_INDIA_PROXY (e.g. http://user:pass@<india-ip>:3128)
+    to fetch through a server in India. Unset → direct (works only from Indian IPs)."""
+    p = (os.environ.get('PG_INDIA_PROXY') or '').strip()
+    return {'http': p, 'https': p} if p else None
 
 # code → config. authority_code matches pg_admin/authorities.py; news_authority is the
 # value the newsroom form's "Counselling Authority" dropdown expects.
@@ -141,6 +150,8 @@ def read_kea_aspnet(url):
     import requests
     s = requests.Session()
     s.headers['User-Agent'] = UA
+    if _proxies():
+        s.proxies.update(_proxies())
     r = s.get(url, timeout=TIMEOUT)
     r.raise_for_status()
     page = r.text
@@ -288,7 +299,7 @@ def fetch_pdf(url):
     """Download an official notice PDF → (bytes, filename) or (None, reason)."""
     import requests
     try:
-        r = requests.get(url, timeout=(10, 60), headers={'User-Agent': UA}, stream=True)
+        r = requests.get(url, timeout=(10, 60), headers={'User-Agent': UA}, stream=True, proxies=_proxies())
         r.raise_for_status()
         buf = bytearray()
         for chunk in r.iter_content(64 * 1024):
