@@ -30,7 +30,7 @@ Never edit any other file, never publish anything, never run other commands.
   "headline": "≤110 chars. Authority + exam/year + the action + key date. e.g. \"MCC NEET PG 2026: Round 1 Registration Opens 12 October, Closes 18 October\"",
   "summary": "ONE sentence, ≤200 chars, for the news list + email.",
   "article": "150–250 words, plain text, 2–4 short paragraphs, IN YOUR OWN WORDS (never copy sentences from the PDF). What was announced, who it applies to, the dates, what the doctor should do next, and where the official notice is. Neutral, factual, Indian English. No hype, no emojis, no invented facts.",
-  "category": "one of: registration | choice_filling | seat_allotment | fee_payment | reporting | notification | other",
+  "category": "one of: registration | verification | choice_filling | seat_allotment | fee_payment | reporting | notification | other",
   "applies_to": "e.g. All NEET PG 2026 candidates for AIQ seats / Karnataka in-service candidates / NRI candidates",
   "action": "the one thing a doctor should do now, e.g. Register on mcc.nic.in before 18 Oct 2026, 12 noon.",
   "dates": {

@@ -23,6 +23,81 @@ logger = logging.getLogger(__name__)
 
 LOGIN_URL = "https://goocampus.in"
 UPGRADE_URL = "https://goocampus.in"
+NEWS_URL = "https://goocampus.in/news/{id}"      # site redirects /news/<id> → /news/<id>-<slug>
+
+# Key dates (founder 2026-10-09: make deadlines the most eye-catching part of the email).
+DATE_LABELS = [
+    ('registration_start', 'Registration opens', 'start'),
+    ('registration_end', 'Registration closes', 'end'),
+    ('verification_start', 'Document verification / slot booking opens', 'start'),
+    ('verification_end', 'Document verification closes', 'end'),
+    ('choice_filling_start', 'Choice filling opens', 'start'),
+    ('choice_filling_end', 'Choice filling closes', 'end'),
+    ('payment_last_date', 'Fee payment last date', 'end'),
+    ('result_date', 'Result / seat allotment', 'info'),
+    ('reporting_last_date', 'Reporting / joining last date', 'end'),
+]
+CATEGORY_LABELS = {'registration': 'Registration', 'verification': 'Document verification',
+                   'choice_filling': 'Choice filling',
+                   'seat_allotment': 'Seat allotment', 'fee_payment': 'Fee payment',
+                   'reporting': 'Reporting', 'notification': 'Notification', 'other': 'Update'}
+
+
+def _key_dates(news):
+    """[(label, date, kind, days_left)] for upcoming key dates, in date order (past dropped)."""
+    import json as _json
+    from datetime import date as _date
+    try:
+        kd = news.get('key_dates')
+        kd = _json.loads(kd) if isinstance(kd, str) else (kd or {})
+    except Exception:
+        kd = {}
+    today = _date.today()
+    out = []
+    for k, label, kind in DATE_LABELS:
+        v = (kd or {}).get(k) or {}
+        try:
+            d = _date.fromisoformat(str(v.get('date') or '')[:10])
+        except ValueError:
+            continue
+        if d >= today:
+            out.append((label, d, kind, (d - today).days))
+    return sorted(out, key=lambda x: x[1])
+
+
+def news_subject(news):
+    """Subject leads with the nearest upcoming DEADLINE when the update has one."""
+    heading = (news.get('heading') or '').strip()
+    ends = [x for x in _key_dates(news) if x[2] == 'end']
+    if ends:
+        label, d, _k, _n = ends[0]
+        return f"⏰ {label}: {d.strftime('%d %b')} — {heading}"[:150]
+    return f"📢 NEET-PG Update: {heading}"[:150]
+
+
+def _dates_card(news):
+    rows = _key_dates(news)
+    if not rows:
+        return ''
+    trs = []
+    for label, d, kind, left in rows:
+        urgent = kind == 'end' and left <= 3
+        colour = '#b91c1c' if kind == 'end' else ('#1d4ed8' if kind == 'start' else '#0f172a')
+        when = 'Today' if left == 0 else ('Tomorrow' if left == 1 else f'in {left} days')
+        badge = (f'<span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;'
+                 f'font-size:11px;font-weight:700;background:{"#fee2e2" if urgent else "#f1f5f9"};'
+                 f'color:{"#b91c1c" if urgent else "#475569"};">{when}</span>')
+        trs.append(
+            '<tr>'
+            f'<td style="padding:9px 12px;border-top:1px solid #fde4cf;color:#334155;font-size:14px;">{escape(label)}</td>'
+            f'<td style="padding:9px 12px;border-top:1px solid #fde4cf;text-align:right;white-space:nowrap;">'
+            f'<span style="font-size:16px;font-weight:800;color:{colour};">{d.strftime("%d %b %Y")}</span>{badge}</td>'
+            '</tr>')
+    return ('<div style="margin:16px 0 6px;border:2px solid #fb923c;border-radius:12px;overflow:hidden;background:#fffaf5;">'
+            '<div style="background:#f97316;color:#ffffff;padding:9px 12px;font-size:13px;font-weight:800;'
+            'letter-spacing:.04em;text-transform:uppercase;">📅 Important dates</div>'
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">'
+            + ''.join(trs) + '</table></div>')
 
 
 def _fmt_date(v):
@@ -89,27 +164,38 @@ def build_news_email_html(news, is_free, name=""):
     has_doc = bool((news.get("pdf_name") or "").strip())
     source_url = (news.get("source_url") or "").strip()
 
-    # Show only the authority — NOT the published date, which users can mistake for a
+    # Authority + category chip — NOT the published date, which users can mistake for a
     # counselling date. (founder 2026-10-06)
-    details = brand_detail_rows([("Authority", authority)])
+    cat = CATEGORY_LABELS.get((news.get("category") or "").strip(), "")
+    details = (
+        '<p style="margin:0 0 4px;">'
+        + (f'<span style="display:inline-block;padding:3px 10px;border-radius:999px;background:#eef2ff;'
+           f'color:#3730a3;font-size:12px;font-weight:700;margin-right:6px;">{escape(cat)}</span>' if cat else '')
+        + f'<span style="color:#64748b;font-size:13px;">{authority}</span></p>')
 
-    glimpse = _glimpse(news.get("body_text"))
+    # Lead with the one-line summary (bold), then the key-dates card, then a short glimpse.
+    summary = (news.get("summary") or "").strip()
+    lead = (f'<p style="margin:12px 0 4px;color:#0f172a;font-size:16px;line-height:1.55;font-weight:700;">'
+            f'{escape(summary)}</p>' if summary else '')
+    glimpse = _glimpse(news.get("body_text"), 260 if summary else 320)
     body_block = (
-        f'<p style="margin:14px 0 4px;color:#0f172a;font-size:15px;line-height:1.65;">{glimpse}</p>'
-        if glimpse else ""
+        lead + _dates_card(news)
+        + (f'<p style="margin:14px 0 4px;color:#334155;font-size:15px;line-height:1.65;">{glimpse}</p>'
+           if glimpse else "")
     )
 
     doc_note = ""
     if has_doc:
         doc_note = brand_callout(
-            "📄 A document is attached to this update — log in to view and download it.",
+            "📄 The official notice (PDF) is attached — open the update to view or download it.",
             color="#FFF7ED", border="#FED7AA", tcolor="#9A3412")
 
-    cta = brand_button("Log in to read the full update →", LOGIN_URL)
+    nid = news.get("id")
+    cta = brand_button("Read the full update →", NEWS_URL.format(id=nid) if nid else LOGIN_URL)
     access_note = (
         '<p style="margin:14px 0 0;color:#64748b;font-size:13px;line-height:1.6;text-align:center;">'
-        'Open your GooCampus dashboard to see this and all your counselling updates. '
-        'What you can access depends on your plan.</p>'
+        f'Track every deadline for your states on your <a href="{LOGIN_URL}" style="color:#ea580c;'
+        'font-weight:700;text-decoration:none;">GooCampus dashboard</a>.</p>'
     )
 
     upgrade = ""
@@ -129,7 +215,9 @@ def build_news_email_html(news, is_free, name=""):
         )
 
     inner = f"{greet_block}{details}{body_block}{doc_note}{cta}{access_note}{upgrade}"
-    preheader = _glimpse(news.get("body_text"), 110) or heading
+    _kd = _key_dates(news)
+    preheader = (escape(f"{_kd[0][0]}: {_kd[0][1].strftime('%d %b %Y')}") + " · " if _kd else "") + (
+        escape((news.get("summary") or "").strip()[:110]) or _glimpse(news.get("body_text"), 110) or heading)
     return render_branded_email(f"📢 {heading}", inner, preheader=preheader)
 
 
@@ -193,6 +281,8 @@ def send_news_blast(news_id):
     try:
         row = conn.execute(
             "SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
+            "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
+            "COALESCE(key_dates,'') AS key_dates, "
             "is_published, published_at FROM pg_news WHERE id = ?", (news_id,)).fetchone()
         if not row:
             logger.error("news blast: news %s not found", news_id)
@@ -211,7 +301,7 @@ def send_news_blast(news_id):
         try: conn.close()
         except Exception: pass
 
-    subject = f"📢 NEET-PG Update: {(news.get('heading') or '').strip()}"[:150]
+    subject = news_subject(news)
     sent = failed = 0
     logger.info("news blast #%s → %s recipient(s)", news_id, len(recips))
     for r in recips:
