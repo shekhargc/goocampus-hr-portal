@@ -83,11 +83,17 @@
         </label>
       </div>
       <div style="margin-bottom:14px;">
+        <label style="font-size:0.8rem;color:var(--gray-600);display:inline-flex;gap:6px;align-items:center;margin-bottom:6px;">Round these dates belong to
+          <select name="kd_round" style="padding:5px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;">
+            <option value="">— not stated —</option>
+            {% for r in ['Round 1','Round 2','Round 3','Round 4','Mop-up','Stray','Special Stray'] %}<option>{{ r }}</option>{% endfor %}
+          </select></label>
         <div style="font-size:0.85rem;font-weight:600;color:var(--gray-700);margin-bottom:4px;">Key dates <span style="font-weight:400;color:var(--gray-500);">— fill only what the notice states; they power the "Upcoming deadlines" strip</span></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">
           {% for k, l in date_fields %}
           <label style="font-size:0.78rem;color:var(--gray-600);">{{ l }}
             <input type="date" name="kd_{{ k }}" style="display:block;width:100%;margin-top:3px;padding:7px 9px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+            <input name="kdt_{{ k }}" placeholder="time (optional) e.g. 12 noon" style="display:block;width:100%;margin-top:3px;padding:5px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:0.75rem;">
             {% if prefill and prefill.quotes.get(k) %}<span style="display:block;font-size:0.7rem;color:#065f46;margin-top:2px;">“{{ prefill.quotes.get(k) }}”</span>{% endif %}
           </label>
           {% endfor %}
@@ -186,7 +192,8 @@ Result | 24 Oct | 14 Nov | 4 Dec"
                     data-date="{{ it.published_at.strftime('%Y-%m-%d') if it.published_at else '' }}"
                     data-body="{{ it.body_text or '' }}" data-source="{{ it.source_url or '' }}"
                     data-category="{{ it.category or '' }}" data-summary="{{ it.summary or '' }}"
-                    data-dates="{{ it.key_dates_d|tojson|forceescape }}" data-schedule="{{ it.schedule_text or '' }}">Edit</button>
+                    data-dates="{{ it.key_dates_d|tojson|forceescape }}" data-schedule="{{ it.schedule_text or '' }}"
+                    data-ktimes="{{ (it.key_times_d or {})|tojson|forceescape }}" data-kround="{{ it.key_round or '' }}">Edit</button>
             <button type="button" onclick="newsTest({{ it.id }})" style="background:none;border:0;color:#b45309;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">✉️ Test</button>
             <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to ALL registered users + staff now?');" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
@@ -276,6 +283,8 @@ function newsTest(id){
   set('body_text', {{ prefill.body_text|tojson }}); set('summary', {{ prefill.summary|tojson }});
   set('category', {{ prefill.category|tojson }}); set('schedule_text', {{ (prefill.schedule_text or '')|tojson }});
   (function(d){ for (var k in d) { set('kd_' + k, d[k]); } })({{ prefill.dates|tojson }});
+  (function(d){ for (var k in d) { set('kdt_' + k, d[k]); } })({{ (prefill.times or {})|tojson }});
+  set('kd_round', {{ (prefill.round or '')|tojson }});
   {% endif %}
   document.querySelectorAll('.newsEditBtn').forEach(function(btn){
     btn.addEventListener('click',function(){
@@ -284,7 +293,9 @@ function newsTest(id){
       set('body_text',btn.dataset.body); set('source_url',btn.dataset.source);
       set('category',btn.dataset.category||''); set('summary',btn.dataset.summary||''); set('schedule_text',btn.dataset.schedule||'');
       document.querySelectorAll('[name^="kd_"]').forEach(function(el){ el.value=''; });
+      document.querySelectorAll('[name^="kdt_"]').forEach(function(el){ el.value=''; }); set('kd_round', btn.dataset.kround||'');
       try { var dd = JSON.parse(btn.dataset.dates||'{}'); for (var k in dd) set('kd_'+k, dd[k]); } catch(e) {}
+      try { var tt = JSON.parse(btn.dataset.ktimes||'{}'); for (var k2 in tt) set('kdt_'+k2, tt[k2]); } catch(e) {}
       setAlert(false);  // editing → don't re-blast unless the user ticks it back on
       document.getElementById('editingBanner').style.display='block';
       submitLabel('Save changes');

@@ -21,7 +21,26 @@ EVENT_TYPES = [
     ('other', 'Other'),
 ]
 EVENT_LABELS = dict(EVENT_TYPES)
-ROUNDS = ['Round 1', 'Round 2', 'Round 3', 'Round 4', 'Stray', 'Mop-up', 'Special', '']
+ROUNDS = ['Round 1', 'Round 2', 'Round 3', 'Round 4', 'Mop-up', 'Stray', 'Special Stray', '']
+
+
+def norm_round(v):
+    """'round 2' / 'R2' / 'Second round' / 'stray vacancy' → the shared vocabulary (or '')."""
+    t = str(v or '').strip().lower().replace('-', ' ')
+    if not t:
+        return ''
+    if 'special' in t and 'stray' in t:
+        return 'Special Stray'
+    if 'stray' in t:
+        return 'Stray'
+    if 'mop' in t:
+        return 'Mop-up'
+    for n, words in ((1, ('1', 'one', 'first', 'i')), (2, ('2', 'two', 'second', 'ii')),
+                     (3, ('3', 'three', 'third', 'iii')), (4, ('4', 'four', 'fourth', 'iv'))):
+        toks = t.replace('round', ' ').replace('r', ' ').split() if t.startswith('r') else t.replace('round', ' ').split()
+        if any(w in toks for w in words):
+            return f'Round {n}'
+    return ''
 
 
 def ensure_calendar_table(conn=None):
@@ -79,7 +98,7 @@ def clean_events(raw):
             continue
         en = _d(e.get('end'))
         ev = e.get('event') if e.get('event') in EVENT_LABELS else 'other'
-        out.append({'round': str(e.get('round') or '').strip()[:30],
+        out.append({'round': norm_round(e.get('round')),
                     'event': ev,
                     'label': (str(e.get('label') or '').strip() or EVENT_LABELS[ev])[:120],
                     'start': s.isoformat(), 'end': en.isoformat() if en and en >= s else '',

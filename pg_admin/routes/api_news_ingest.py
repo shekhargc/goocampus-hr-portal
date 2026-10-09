@@ -55,8 +55,10 @@ def _clean_draft(dr):
     for k in DATE_FIELDS:
         v = (dr.get('dates') or {}).get(k)
         if isinstance(v, dict) and _d(v.get('date')):
+            from pg_admin.data.calendar import norm_round
             out['dates'][k] = {'date': _d(v.get('date')).isoformat(),
-                               'time': str(v.get('time') or '').strip()[:20],
+                               'time': str(v.get('time') or '').strip()[:40],
+                               'round': norm_round(v.get('round')) or None,
                                'quote': str(v.get('quote') or '').strip()[:400]}
     sch = dr.get('schedule')
     if isinstance(sch, dict) and isinstance(sch.get('rows'), list):

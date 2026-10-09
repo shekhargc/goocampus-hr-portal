@@ -57,30 +57,29 @@ def set_enabled(conn, on, who):
 
 # ── what's due today ────────────────────────────────────────────────────────
 def due_items(conn, today=None):
-    """[(event_row, kind, when_text)] — steps to remind about today."""
+    """[(event_row, kind, when_text)] — steps to remind about today: opens today, and closing
+    steps 3 days and 1 day before (website + founder, 2026-10-09)."""
     from pg_admin.data import calendar as CAL
     CAL.ensure_calendar_table(conn)
     today = today or date.today()
-    soon = today + timedelta(days=CLOSE_LEAD_DAYS)
+    d1, d3 = today + timedelta(days=1), today + timedelta(days=3)
     rows = conn.execute(
-        "SELECT * FROM pg_counselling_events WHERE is_active AND (start_date IN (?, ?) OR end_date IN (?, ?))",
-        (today, soon, today, soon)).fetchall()
+        "SELECT * FROM pg_counselling_events WHERE is_active AND (start_date IN (?, ?, ?) OR end_date IN (?, ?))",
+        (today, d1, d3, d1, d3)).fetchall()
+    closing_single = ('payment', 'reporting', 'registration', 'choice_filling', 'verification', 'choice_locking')
     out = []
     for r in rows:
         r = dict(r)
         s, e = r.get('start_date'), r.get('end_date')
-        if e:
-            if s == today and r['event'] in OPEN_EVENTS:
-                out.append((r, 'opens', 'opens today'))
-            if e == soon:
-                out.append((r, 'close3', f'closes in {CLOSE_LEAD_DAYS} days ({e.strftime("%d %b")})'))
-            if e == today:
-                out.append((r, 'close0', 'closes TODAY'))
-        else:   # single-date step
-            if s == today:
-                out.append((r, 'on', 'today'))
-            if s == soon and r['event'] in ('payment', 'reporting', 'registration', 'choice_filling', 'verification'):
-                out.append((r, 'close3', f'in {CLOSE_LEAD_DAYS} days ({s.strftime("%d %b")})'))
+        last = e or (s if r['event'] in closing_single else None)
+        if e and s == today and r['event'] in OPEN_EVENTS:
+            out.append((r, 'opens', 'opens today'))
+        if not e and s == today and r['event'] == 'result':
+            out.append((r, 'on', 'today'))
+        if last == d3:
+            out.append((r, 'close3', f'closes in 3 days ({last.strftime("%d %b")})'))
+        if last == d1:
+            out.append((r, 'close1', f'closes TOMORROW ({last.strftime("%d %b")})'))
     return out
 
 
@@ -146,9 +145,9 @@ def build_email(doctor, mine):
     from pg_admin.news_email import _dr_name
     dr = _dr_name(doctor.get('name'))
     rows = []
-    for r, kind, when in sorted(mine, key=lambda x: (x[1] != 'close0', x[0]['end_date'] or x[0]['start_date'])):
+    for r, kind, when in sorted(mine, key=lambda x: (x[1] != 'close1', x[0]['end_date'] or x[0]['start_date'])):
         a = get_authority(r['authority_code']) or {}
-        urgent = kind == 'close0'
+        urgent = kind == 'close1'
         rng = r['start_date'].strftime('%d %b')
         if r.get('end_date'):
             rng += ' – ' + r['end_date'].strftime('%d %b %Y')
@@ -178,8 +177,8 @@ def build_email(doctor, mine):
              + table + brand_button("Open my counselling dashboard →", DASHBOARD_URL) +
              '<p style="margin:12px 0 0;color:#94a3b8;font-size:12px;text-align:center;">Always confirm dates on the '
              'official counselling website before acting.</p>')
-    n_today = sum(1 for _r, k, _w in mine if k == 'close0')
-    subject = ((f"⏰ {n_today} NEET-PG deadlines close TODAY" if n_today > 1 else "⏰ A NEET-PG deadline closes TODAY")
+    n_today = sum(1 for _r, k, _w in mine if k == 'close1')
+    subject = ((f"⏰ {n_today} NEET-PG deadlines close TOMORROW" if n_today > 1 else "⏰ A NEET-PG deadline closes TOMORROW")
                if n_today
                else "⏰ NEET-PG counselling: your upcoming deadlines")
     return subject, render_branded_email("Your NEET-PG deadlines", inner,

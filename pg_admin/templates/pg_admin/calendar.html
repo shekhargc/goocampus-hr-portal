@@ -35,7 +35,7 @@
       <b>⏰ Deadline reminder emails:</b>
       {% if rem.on %}<span style="color:#166534;font-weight:800;">ON</span>{% else %}<span style="color:#b45309;font-weight:800;">OFF</span>{% endif %}
       <span style="color:var(--gray-500);font-size:0.8rem;"> — every morning 8 AM IST, one email per doctor: MCC + their home / counselling / followed states
-      (opens today · closes in 3 days · closes today). Today: {{ rem.today_items }} step(s) due → {{ rem.today_doctors }} doctor(s).</span>
+      (opens today · closes in 3 days · closes tomorrow). Today: {{ rem.today_items }} step(s) due → {{ rem.today_doctors }} doctor(s).</span>
     </div>
     <form method="POST" action="{{ url_for('pg_calendar_reminders_toggle') }}" style="display:inline;"
           onsubmit="return confirm('{{ 'Turn OFF deadline reminder emails?' if rem.on else 'Turn ON deadline reminder emails to registered doctors (8 AM IST daily)?' }}');">

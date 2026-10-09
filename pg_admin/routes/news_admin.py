@@ -109,6 +109,8 @@ def news_admin():
                                'body_text': dr.get('article') or '', 'summary': dr.get('summary') or '',
                                'category': dr.get('category') or '',
                                'dates': {k: (v or {}).get('date', '') for k, v in (dr.get('dates') or {}).items()},
+                               'times': {k: (v or {}).get('time', '') for k, v in (dr.get('dates') or {}).items()},
+                               'round': next((v.get('round') for v in (dr.get('dates') or {}).values() if (v or {}).get('round')), ''),
                                'quotes': {k: (v or {}).get('quote', '') for k, v in (dr.get('dates') or {}).items()},
                                'applies_to': dr.get('applies_to') or '', 'action': dr.get('action') or '',
                                'schedule_text': schedule_to_text(dr.get('schedule')),
@@ -142,7 +144,10 @@ def news_admin():
     for it in items:
         try:
             import json as _json
-            it['key_dates_d'] = {k: (v or {}).get('date', '') for k, v in (_json.loads(it.get('key_dates') or '{}') or {}).items()}
+            _kd = _json.loads(it.get('key_dates') or '{}') or {}
+            it['key_dates_d'] = {k: (v or {}).get('date', '') for k, v in _kd.items()}
+            it['key_times_d'] = {k: (v or {}).get('time', '') for k, v in _kd.items() if (v or {}).get('time')}
+            it['key_round'] = next((v.get('round') for v in _kd.values() if (v or {}).get('round')), '')
         except Exception:
             it['key_dates_d'] = {}
         try:
@@ -205,7 +210,15 @@ def news_save():
     for k, _lbl in NEWS_DATE_FIELDS:
         v = _s(request.form.get('kd_' + k))
         if v:
-            key_dates[k] = {'date': v[:10]}
+            from pg_admin.data.calendar import norm_round
+            ent = {'date': v[:10]}
+            t = _s(request.form.get('kdt_' + k))[:40]
+            if t:
+                ent['time'] = t
+            rd = norm_round(request.form.get('kd_round'))
+            if rd:
+                ent['round'] = rd
+            key_dates[k] = ent
     key_dates_json = _json.dumps(key_dates) if key_dates else ''
     schedule_json = text_to_schedule(request.form.get('schedule_text'))
     save_brochure = request.form.get('save_brochure') in ('1', 'on')

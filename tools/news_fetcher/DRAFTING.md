@@ -34,7 +34,7 @@ Never edit any other file, never publish anything, never run other commands.
   "applies_to": "e.g. All NEET PG 2026 candidates for AIQ seats / Karnataka in-service candidates / NRI candidates",
   "action": "the one thing a doctor should do now, e.g. Register on mcc.nic.in before 18 Oct 2026, 12 noon.",
   "dates": {
-    "registration_start":   {"date": "YYYY-MM-DD", "time": "e.g. 11:00 AM", "quote": "exact line from the notice"},
+    "registration_start":   {"date": "YYYY-MM-DD", "time": "e.g. 11:00 AM", "round": "Round 1", "quote": "exact line from the notice"},
     "registration_end":     {"date": "...", "time": "...", "quote": "..."},
     "verification_start":   {...},   // document verification / slot booking opens
     "verification_end":     {...},   // last date of document verification
@@ -88,6 +88,9 @@ Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochu
 (the reviewer will also save it as that authority's main brochure document).
 
 Rules for `dates`:
+- `round`: exactly one of "Round 1", "Round 2", "Round 3", "Round 4", "Mop-up", "Stray", "Special Stray",
+  or omit it if the notice doesn't say. `dates` holds ONE round (the earliest upcoming); every other
+  round's dates go in `events` (the calendar), never extra keys here.
 - Include a key ONLY if the notice explicitly states that date. Omit the key otherwise —
   never guess, never infer from another round or another year.
 - `quote` = the exact text from the notice that shows it (≤300 chars), so the reviewer can

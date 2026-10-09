@@ -241,7 +241,42 @@ def api_pg_news_deadlines():
             "WHERE is_published AND deleted_at IS NULL AND COALESCE(key_dates,'') <> '' AND (" + " OR ".join(parts) + ")",
             params).fetchall()
         today, until = _date.today(), _date.today() + _td(days=days)
-        out = []
+        _base = {'registration_start': 'registration', 'registration_end': 'registration',
+                 'verification_start': 'verification', 'verification_end': 'verification',
+                 'choice_filling_start': 'choice_filling', 'choice_filling_end': 'choice_filling',
+                 'payment_last_date': 'payment', 'reporting_last_date': 'reporting', 'result_date': 'result'}
+        out, seen = [], set()
+        headings = {r['id']: r['heading'] for r in rows}
+        # 1) Counselling Calendar first — it carries the ROUND (and time) for every step, across
+        #    all rounds of a notice. (founder + website session 2026-10-09)
+        try:
+            from pg_admin.data import calendar as CAL
+            from pg_admin.authorities import get_authority
+            CAL.ensure_calendar_table(conn)
+            codes = _codes_for_states(states if states else [], include_all)
+            for r in CAL.events_for(conn, codes, upcoming_only=True):
+                a = get_authority(r['authority_code']) or {}
+                st = '' if r['authority_code'] == 'mcc' else a.get('state', '')
+                pairs = ([('start', r['start_date']), ('end', r['end_date'])] if r.get('end_date')
+                         else [('on', r['start_date'])])
+                lbl = r['label'] or CAL.EVENT_LABELS.get(r['event'], '')
+                for kind, d in pairs:
+                    if not d or not (today <= d <= until):
+                        continue
+                    seen.add(((st or 'ALL').lower(), d.isoformat(), r['event']))
+                    suffix = {'start': ' opens', 'end': ' closes', 'on': ''}[kind]
+                    out.append({'date': d.isoformat(), 'field': f"{r['event']}_{kind}",
+                                'label': f"{lbl}{suffix}", 'round': r['round'] or None,
+                                'time': (r.get('time_text') or None) if kind != 'start' else None,
+                                'news_id': r.get('news_id'), 'heading': headings.get(r.get('news_id'), ''),
+                                'body_label': a.get('name', ''),
+                                'scope': 'all_india' if r['authority_code'] == 'mcc' else 'state',
+                                'state': st, 'source': 'calendar'})
+        except Exception as _e:
+            logging.warning("deadlines calendar: %s", _e)
+            try: conn.rollback()
+            except Exception: pass
+        # 2) News key dates — skipped when the calendar already has that step on that date.
         for r in rows:
             try:
                 kd = _json.loads(r['key_dates'] or '{}') or {}
@@ -252,47 +287,18 @@ def api_pg_news_deadlines():
                     d = _date.fromisoformat(str((v or {}).get('date') or '')[:10])
                 except ValueError:
                     continue
-                if today <= d <= until:
-                    out.append({'date': d.isoformat(), 'field': field,
-                                'label': DEADLINE_LABELS.get(field, field.replace('_', ' ').title()),
-                                'news_id': r['id'], 'heading': r['heading'], 'body_label': r['body_label'],
-                                'scope': r['scope'], 'state': r['state'] or ''})
-        # + Counselling Calendar steps (round-wise). A step already covered by a news key date
-        # (same state, date and kind of step) isn't repeated. (2026-10-09)
-        try:
-            from pg_admin.data import calendar as CAL
-            from pg_admin.authorities import get_authority
-            _base = {'registration_start': 'registration', 'registration_end': 'registration',
-                     'verification_start': 'verification', 'verification_end': 'verification',
-                     'choice_filling_start': 'choice_filling', 'choice_filling_end': 'choice_filling',
-                     'payment_last_date': 'payment', 'reporting_last_date': 'reporting', 'result_date': 'result'}
-            seen = {((x['state'] or 'ALL').lower(), x['date'], _base.get(x['field'], x['field'])) for x in out}
-            CAL.ensure_calendar_table(conn)
-            codes = _codes_for_states(states if states else [], include_all)
-            for r in CAL.events_for(conn, codes, upcoming_only=True):
-                a = get_authority(r['authority_code']) or {}
-                st = '' if r['authority_code'] == 'mcc' else a.get('state', '')
-                rnd = (r['round'] + ' · ') if r['round'] else ''
-                pairs = ([('opens', r['start_date']), ('closes', r['end_date'])] if r.get('end_date')
-                         else [('', r['start_date'])])
-                for kind, d in pairs:
-                    if not d or not (today <= d <= until):
-                        continue
-                    key = ((st or 'ALL').lower(), d.isoformat(), r['event'])
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    lbl = r['label'] or CAL.EVENT_LABELS.get(r['event'], '')
-                    out.append({'date': d.isoformat(), 'field': f"{r['event']}_{kind or 'on'}",
-                                'label': f"{rnd}{lbl}{(' ' + kind) if kind else ''}".strip(),
-                                'news_id': r.get('news_id'), 'heading': '',
-                                'body_label': a.get('name', ''), 'scope': 'all_india' if r['authority_code'] == 'mcc' else 'state',
-                                'state': st, 'round': r['round'] or '', 'source': 'calendar',
-                                'time': r.get('time_text') or ''})
-        except Exception as _e:
-            logging.warning("deadlines calendar merge: %s", _e)
-            try: conn.rollback()
-            except Exception: pass
+                if not (today <= d <= until):
+                    continue
+                st = r['state'] or ''
+                key = ((st if r['scope'] == 'state' else 'ALL').lower(), d.isoformat(), _base.get(field, field))
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append({'date': d.isoformat(), 'field': field,
+                            'label': DEADLINE_LABELS.get(field, field.replace('_', ' ').title()),
+                            'round': (v or {}).get('round') or None, 'time': (v or {}).get('time') or None,
+                            'news_id': r['id'], 'heading': r['heading'], 'body_label': r['body_label'],
+                            'scope': r['scope'], 'state': st, 'source': 'news'})
         out.sort(key=lambda x: (x['date'], x.get('news_id') or 0))
         return jsonify({'ok': True, 'days': days, 'count': len(out), 'deadlines': out})
     except Exception as e:
