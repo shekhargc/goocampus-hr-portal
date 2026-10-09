@@ -75,6 +75,19 @@ def _clean_draft(dr):
     return out
 
 
+def _auto_calendar(conn, inbox_id):
+    """The AI's schedule goes straight into the Counselling Calendar (no posting needed)."""
+    try:
+        from pg_admin.data.calendar import sync_from_inbox
+        n = sync_from_inbox(conn, inbox_id)
+        conn.commit()
+        logging.info("calendar auto-fill: inbox %s → %d rows", inbox_id, n)
+    except Exception as e:
+        logging.warning("calendar auto-fill %s: %s", inbox_id, e)
+        try: conn.rollback()
+        except Exception: pass
+
+
 def api_news_inbox_known():
     if not _ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
@@ -138,6 +151,8 @@ def api_news_inbox_ingest():
             if sets:
                 conn.execute(f"UPDATE pg_news_inbox SET {', '.join(sets)} WHERE id = ?", vals + [row['id']])
                 conn.commit()
+                if draft and draft.get('events'):
+                    _auto_calendar(conn, row['id'])
             return jsonify({'ok': True, 'id': row['id'], 'result': 'updated' if sets else 'known'})
         it = {'item_key': key, 'title': title, 'url': url, 'kind': kind, 'notice_date': nd}
         if status == 'new' and NS.is_repeat(conn, code, it):
@@ -151,6 +166,8 @@ def api_news_inbox_ingest():
         if draft:
             conn.execute("UPDATE pg_news_inbox SET drafted_at = CURRENT_TIMESTAMP WHERE id = ?", (new_id,))
         conn.commit()
+        if status == 'new' and draft and draft.get('events'):
+            _auto_calendar(conn, new_id)
         return jsonify({'ok': True, 'id': new_id, 'result': status})
     except Exception as e:
         try: conn.rollback()

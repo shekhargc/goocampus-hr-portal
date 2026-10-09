@@ -28,6 +28,12 @@ def calendar_admin():
     rem = {'on': False, 'today_doctors': 0, 'today_items': 0}
     try:
         CAL.ensure_calendar_table(conn)
+        try:   # catch up any AI drafts whose schedule isn't in the calendar yet (idempotent)
+            if CAL.sync_from_inbox(conn):
+                conn.commit()
+        except Exception as _se:
+            logging.warning("calendar sync: %s", _se)
+            conn.rollback()
         try:
             from pg_admin import deadline_reminders as DR
             DR.ensure_tables(conn)

@@ -17,9 +17,9 @@
   <div style="max-width:1100px;margin-bottom:14px;">
     <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Counselling Calendar</h1>
     <p style="margin:0;font-size:0.88rem;color:var(--gray-500);">
-      Every dated step of NEET-PG counselling, by authority and round. Filled automatically when you post an
-      AI-drafted schedule notice (the 📅 tick box); you can also add or fix a date here. It feeds the website's
-      schedule section, the "upcoming deadlines" strip and deadline reminders.
+      Every dated step of NEET-PG counselling, by authority and round — <b>filled automatically</b> the moment the
+      AI reads a schedule notice (no posting needed). Use this page only to check or fix a date. It feeds the
+      website's stage bar, schedule tabs, "upcoming deadlines" and the reminder emails.
     </p>
   </div>
 
@@ -87,7 +87,7 @@
           <td style="white-space:nowrap;">{{ e.start_date|format_date }}</td>
           <td style="white-space:nowrap;">{{ e.end_date|format_date if e.end_date else '—' }}</td>
           <td class="cal-hide-sm">{{ e.time_text or '' }}</td>
-          <td class="cal-hide-sm" style="font-size:0.76rem;">{% if e.news_id %}🤖 news #{{ e.news_id }}{% else %}✍️ added here{% endif %}</td>
+          <td class="cal-hide-sm" style="font-size:0.76rem;">{% if e.inbox_id or e.news_id %}🤖 AI from the official notice{% if e.news_id %} · news #{{ e.news_id }}{% endif %}{% else %}✍️ added here{% endif %}</td>
           <td style="text-align:right;white-space:nowrap;">
             <button type="button" style="background:none;border:0;color:#166534;font-weight:600;cursor:pointer;"
               onclick='calEdit({{ {"id": e.id, "round": e.round, "event": e.event, "label": e.label,

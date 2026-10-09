@@ -132,7 +132,7 @@ def events_for(conn, codes=None, upcoming_only=False):
         where.append("COALESCE(end_date, start_date) >= CURRENT_DATE")
     return [dict(r) for r in conn.execute(
         "SELECT id, authority_code, year, round, event, label, start_date, end_date, time_text, note, "
-        "news_id FROM pg_counselling_events WHERE " + " AND ".join(where) +
+        "news_id, inbox_id, created_by FROM pg_counselling_events WHERE " + " AND ".join(where) +
         " ORDER BY start_date, CASE WHEN round = '' THEN 'zz' ELSE round END, id", params).fetchall()]
 
 
@@ -143,3 +143,33 @@ def as_json_row(r):
             'start_date': r['start_date'].isoformat() if r.get('start_date') else '',
             'end_date': r['end_date'].isoformat() if r.get('end_date') else '',
             'time': r.get('time_text') or '', 'note': r.get('note') or '', 'news_id': r.get('news_id')}
+
+
+def sync_from_inbox(conn, inbox_id=None):
+    """AUTO-FILL (founder 2026-10-09): put every AI-drafted notice's schedule `events` into the
+    calendar as soon as the draft arrives — no posting needed. Idempotent: a notice whose rows
+    already exist is left alone unless `inbox_id` is given (fresh/re-drafted → replaced).
+    Returns rows written."""
+    from pg_admin import news_scraper as NS
+    ensure_calendar_table(conn)
+    where = "draft_json IS NOT NULL AND status <> 'seen'"
+    params = []
+    if inbox_id:
+        where += " AND id = ?"; params.append(inbox_id)
+    n = 0
+    for r in conn.execute(f"SELECT id, source_code, news_id, draft_json FROM pg_news_inbox WHERE {where}",
+                          params).fetchall():
+        try:
+            ev = clean_events((json.loads(r['draft_json'] or '{}') or {}).get('events'))
+        except Exception:
+            ev = []
+        if not ev:
+            continue
+        if not inbox_id and conn.execute("SELECT 1 FROM pg_counselling_events WHERE inbox_id = ? LIMIT 1",
+                                         (r['id'],)).fetchone():
+            continue
+        code = (NS.SOURCES.get(r['source_code']) or {}).get('authority_code')
+        if not code:
+            continue
+        n += replace_events_for_news(conn, code, r['news_id'], r['id'], ev, 'AI (auto)')
+    return n
