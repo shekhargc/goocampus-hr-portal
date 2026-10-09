@@ -376,6 +376,89 @@ def api_pg_calendar():
         conn.close()
 
 
+STEP_ORDER = ['registration', 'verification', 'choice_filling', 'choice_locking', 'payment',
+              'seat_processing', 'result', 'reporting']
+BAR_STEPS = {'registration': 'Registration', 'verification': 'Document verification',
+             'choice_filling': 'Choice filling', 'result': 'Result', 'reporting': 'Reporting / joining'}
+
+
+def counselling_status(conn, code, today=None):
+    """Where an authority's counselling is right now, from its calendar (2026-10-09):
+    rounds → steps (done / live / upcoming), the current step and the next deadline."""
+    from datetime import date as _date
+    from pg_admin.data import calendar as CAL
+    today = today or _date.today()
+    rows = CAL.events_for(conn, [code])
+    if not rows:
+        return None
+    rorder = {r: i for i, r in enumerate(CAL.ROUNDS)}
+    steps = {}
+    for r in rows:
+        if r['event'] not in STEP_ORDER:
+            continue
+        k = (r['round'] or '', r['event'])
+        s0, e0 = r['start_date'], r['end_date'] or r['start_date']
+        cur = steps.get(k)
+        steps[k] = (min(cur[0], s0), max(cur[1], e0)) if cur else (s0, e0)
+    rounds, flat = {}, []
+    for (rnd, ev), (s0, e0) in steps.items():
+        st = 'done' if e0 < today else ('live' if s0 <= today <= e0 else 'upcoming')
+        item = {'round': rnd or None, 'step': ev, 'label': CAL.EVENT_LABELS.get(ev, ev),
+                'bar_label': BAR_STEPS.get(ev), 'start': s0.isoformat(), 'end': e0.isoformat(), 'status': st}
+        rounds.setdefault(rnd, []).append(item)
+        flat.append(item)
+    out_rounds = []
+    for rnd in sorted(rounds, key=lambda x: rorder.get(x, 50)):
+        its = sorted(rounds[rnd], key=lambda i: (STEP_ORDER.index(i['step']), i['start']))
+        st = ('done' if all(i['status'] == 'done' for i in its)
+              else 'live' if any(i['status'] == 'live' for i in its)
+              else 'upcoming' if all(i['status'] == 'upcoming' for i in its) else 'live')
+        out_rounds.append({'round': rnd or 'General', 'status': st, 'steps': its})
+    flat.sort(key=lambda i: (i['start'], STEP_ORDER.index(i['step'])))
+    live = [i for i in flat if i['status'] == 'live']
+    nxt = next((i for i in flat if i['status'] == 'upcoming'), None)
+    current = live[0] if live else None
+    deadline = min((i for i in flat if i['status'] in ('live', 'upcoming')), key=lambda i: i['end'], default=None)
+    if current:
+        headline = f"{current['round'] + ' · ' if current['round'] else ''}{current['label']} open — closes {current['end']}"
+    elif nxt:
+        headline = f"Next: {nxt['round'] + ' · ' if nxt['round'] else ''}{nxt['label']} from {nxt['start']}"
+    else:
+        headline = 'All scheduled rounds completed'
+    done = sum(1 for i in flat if i['status'] == 'done')
+    return {'stage': current or nxt, 'headline': headline, 'next_deadline': deadline,
+            'progress': round(100 * done / len(flat)) if flat else 0, 'rounds': out_rounds}
+
+
+def api_pg_counselling_status():
+    """GET /api/pg/counselling-status[?authority=<code> | states=<list|all>] — per-authority
+    counselling STAGE for the website's stage bar (2026-10-09). Doctor token → MCC + their states."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import calendar as CAL
+    from pg_admin.authorities import get_authority
+    conn = get_db()
+    try:
+        CAL.ensure_calendar_table(conn)
+        code = _s(request.args.get('authority')).lower()
+        codes = ([code] if get_authority(code) else []) if code else _codes_for_states(
+            _viewer_states(conn, request.args.get('states')), _s(request.args.get('all')) != '0')
+        out = []
+        for c in codes:
+            st = counselling_status(conn, c)
+            if st:
+                a = get_authority(c)
+                out.append({'code': c, 'name': a['name'], 'state': a['state'], **st})
+        return jsonify({'ok': True, 'authorities': out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_counselling_status: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 def api_pg_news_states():
     """GET /api/pg/news/states — states that have published news (for the picker)."""
     if not _authorized():

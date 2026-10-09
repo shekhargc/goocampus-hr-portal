@@ -206,6 +206,8 @@ def register_pg_admin(app):
                      api_news.api_pg_news, methods=['GET'])
     app.add_url_rule('/api/pg/calendar', 'api_pg_calendar',
                      api_news.api_pg_calendar, methods=['GET'])
+    app.add_url_rule('/api/pg/counselling-status', 'api_pg_counselling_status',
+                     api_news.api_pg_counselling_status, methods=['GET'])
     # Counselling Calendar admin (round-wise dates per authority; 2026-10-09)
     app.add_url_rule('/admin/pg/calendar', 'pg_calendar_admin', calendar_admin.calendar_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/calendar/save', 'pg_calendar_save', calendar_admin.calendar_save, methods=['POST'])
