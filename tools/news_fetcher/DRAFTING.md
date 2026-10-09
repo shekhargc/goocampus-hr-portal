@@ -83,6 +83,9 @@ dated step for EVERY round (this fills the authority's calendar automatically wh
   "Stray", "Mop-up", "Special", or "" if not round-specific (e.g. session start → event "other").
 - `start` / `end` = YYYY-MM-DD; `end` only for a range. Only dates the notice states — never guess.
 - One entry per step per round. Omit `events` if the notice has no schedule.
+- The `event` types describe THIS authority's own process. Dates in the notice that belong to a
+  DIFFERENT process (e.g. an MCC notice listing the state-quota counselling windows / state joining
+  dates) use event "other" with a clear label ("State quota counselling window (all states)").
 
 Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochure for the year
 (the reviewer will also save it as that authority's main brochure document).
