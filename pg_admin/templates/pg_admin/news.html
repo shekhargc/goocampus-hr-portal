@@ -135,7 +135,7 @@ Result | 24 Oct | 14 Nov | 4 Dec"
                style="display:block;width:100%;margin-top:5px;margin-bottom:16px;font-size:0.85rem;">
       </label>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.85rem;color:var(--gray-700);background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;margin-bottom:16px;cursor:pointer;">
-        <input type="checkbox" name="send_alert" id="send_alert" value="1" checked style="margin-top:2px;">
+        <input type="checkbox" name="send_alert" id="send_alert" value="1" {% if not (prefill and prefill.news_id) %}checked{% endif %} style="margin-top:2px;">
         <span><strong>📧 Email this update to all registered users</strong> (free + paid). They get a glimpse + a link to log in and read/download. Free users also see a gentle upgrade note. Leave unticked when just fixing a typo.</span>
       </label>
       <button type="submit"
