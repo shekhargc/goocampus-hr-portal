@@ -37,7 +37,8 @@ DATE_LABELS = [
     ('result_date', 'Result / seat allotment', 'info'),
     ('reporting_last_date', 'Reporting / joining last date', 'end'),
 ]
-CATEGORY_LABELS = {'registration': 'Registration', 'verification': 'Document verification',
+CATEGORY_LABELS = {'bulletin': 'Information bulletin', 'registration': 'Registration',
+                   'verification': 'Document verification',
                    'choice_filling': 'Choice filling',
                    'seat_allotment': 'Seat allotment', 'fee_payment': 'Fee payment',
                    'reporting': 'Reporting', 'notification': 'Notification', 'other': 'Update'}
@@ -63,6 +64,30 @@ def _key_dates(news):
         if d >= today:
             out.append((label, d, kind, (d - today).days))
     return sorted(out, key=lambda x: x[1])
+
+
+def _schedule_table(news):
+    """The round-wise schedule as an email-safe table (from pg_news.schedule)."""
+    try:
+        from pg_admin.routes.api_news import parse_schedule
+        sch = parse_schedule(news.get('schedule'))
+    except Exception:
+        sch = None
+    if not sch:
+        return ''
+    cols, rows = sch.get('columns') or [], sch.get('rows') or []
+    th = ''.join(f'<th style="padding:8px 10px;background:#1e3a5f;color:#ffffff;font-size:12px;text-align:left;'
+                 f'border:1px solid #1e3a5f;">{escape(c)}</th>' for c in cols)
+    trs = ''.join(
+        '<tr>' + ''.join(
+            f'<td style="padding:8px 10px;border:1px solid #e2e8f0;font-size:13px;color:#0f172a;'
+            f'{"font-weight:700;background:#f8fafc;" if i == 0 else ""}">{escape(c)}</td>'
+            for i, c in enumerate(r)) + '</tr>' for r in rows)
+    title = (f'<div style="font-size:13px;font-weight:800;color:#1e3a5f;margin:0 0 6px;">'
+             f'🗓️ {escape(sch.get("title") or "Schedule")}</div>')
+    return (f'<div style="margin:16px 0 6px;">{title}<div style="overflow-x:auto;">'
+            '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">'
+            f'{"<tr>" + th + "</tr>" if th else ""}{trs}</table></div></div>')
 
 
 def news_subject(news):
@@ -179,7 +204,7 @@ def build_news_email_html(news, is_free, name=""):
             f'{escape(summary)}</p>' if summary else '')
     glimpse = _glimpse(news.get("body_text"), 260 if summary else 320)
     body_block = (
-        lead + _dates_card(news)
+        lead + _dates_card(news) + _schedule_table(news)
         + (f'<p style="margin:14px 0 4px;color:#334155;font-size:15px;line-height:1.65;">{glimpse}</p>'
            if glimpse else "")
     )
@@ -282,7 +307,7 @@ def send_news_blast(news_id):
         row = conn.execute(
             "SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
             "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
-            "COALESCE(key_dates,'') AS key_dates, "
+            "COALESCE(key_dates,'') AS key_dates, COALESCE(schedule,'') AS schedule, "
             "is_published, published_at FROM pg_news WHERE id = ?", (news_id,)).fetchone()
         if not row:
             logger.error("news blast: news %s not found", news_id)

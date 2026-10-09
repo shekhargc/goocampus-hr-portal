@@ -26,7 +26,7 @@ def ensure_news_seo_cols(conn):
     if _NEWS_COLS_OK:
         return
     try:
-        for c in ('category', 'summary', 'key_dates'):
+        for c in ('category', 'summary', 'key_dates', 'schedule'):
             conn.execute(f"ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS {c} TEXT DEFAULT ''")
         conn.commit()
         _NEWS_COLS_OK = True
@@ -137,7 +137,7 @@ def api_pg_news():
         rows = conn.execute(
             f"SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
             f"COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
-            f"COALESCE(key_dates,'') AS key_dates, "
+            f"COALESCE(key_dates,'') AS key_dates, COALESCE(schedule,'') AS schedule, "
             f"(pdf_data IS NOT NULL) AS has_pdf, published_at "
             f"FROM pg_news WHERE {where} ORDER BY published_at DESC, id DESC "
             f"LIMIT {page_size} OFFSET {offset}", params).fetchall()
@@ -151,6 +151,7 @@ def api_pg_news():
                 d['key_dates'] = _json.loads(d.get('key_dates') or '{}') or {}
             except Exception:
                 d['key_dates'] = {}
+            d['schedule'] = parse_schedule(d.get('schedule'))
             items.append(d)
         return jsonify({'ok': True, 'items': items, 'count': len(items),
                         'total': total, 'page': page, 'page_size': page_size,
@@ -163,6 +164,19 @@ def api_pg_news():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+def parse_schedule(raw):
+    """pg_news.schedule JSON → {"columns": [...], "rows": [[...]]} or None."""
+    import json as _json
+    try:
+        t = _json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None
+    if not isinstance(t, dict) or not t.get('rows'):
+        return None
+    return {'title': str(t.get('title') or ''), 'columns': [str(c) for c in (t.get('columns') or [])],
+            'rows': [[str(c) for c in r] for r in t['rows'] if isinstance(r, list)]}
 
 
 DEADLINE_LABELS = {

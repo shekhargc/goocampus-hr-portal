@@ -93,6 +93,18 @@
           {% endfor %}
         </div>
       </div>
+      <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">Schedule table <span style="font-weight:400;color:var(--gray-500);">(optional — round-wise dates; shown as a table on the site + email)</span>
+        <textarea name="schedule_text" rows="5" placeholder="# AIQ Round-wise schedule (optional title line)
+Activity | Round 1 | Round 2 | Round 3
+Registration | 12–21 Oct (12 noon) | 6–11 Nov | 26 Nov–1 Dec
+Result | 24 Oct | 14 Nov | 4 Dec"
+                  style="display:block;width:100%;margin-top:5px;margin-bottom:4px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.82rem;font-family:ui-monospace,Menlo,monospace;resize:vertical;"></textarea>
+        <span style="display:block;font-weight:400;font-size:0.74rem;color:var(--gray-500);margin-bottom:14px;">One row per line, columns separated by <b>|</b>. First line = column headings. Leave empty if not needed.</span>
+      </label>
+      <label id="brochureBox" style="display:flex;align-items:flex-start;gap:8px;font-size:0.85rem;color:var(--gray-700);background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:14px;cursor:pointer;">
+        <input type="checkbox" name="save_brochure" id="save_brochure" value="1" style="margin-top:2px;">
+        <span><strong>📘 Also save the PDF as this authority's main Information Bulletin / Brochure</strong> — doctors who've registered can download it from the counselling section of their dashboard. (Ticks itself when the category is "Information bulletin / brochure".)</span>
+      </label>
       <label style="font-size:0.85rem;font-weight:600;color:var(--gray-700);">News text
         <textarea name="body_text" rows="4" placeholder="Paste the update here…"
                   style="display:block;width:100%;margin-top:5px;margin-bottom:14px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.9rem;resize:vertical;"></textarea>
@@ -154,7 +166,7 @@
                     data-date="{{ it.published_at.strftime('%Y-%m-%d') if it.published_at else '' }}"
                     data-body="{{ it.body_text or '' }}" data-source="{{ it.source_url or '' }}"
                     data-category="{{ it.category or '' }}" data-summary="{{ it.summary or '' }}"
-                    data-dates="{{ it.key_dates_d|tojson|forceescape }}">Edit</button>
+                    data-dates="{{ it.key_dates_d|tojson|forceescape }}" data-schedule="{{ it.schedule_text or '' }}">Edit</button>
             <button type="button" onclick="newsTest({{ it.id }})" style="background:none;border:0;color:#b45309;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">✉️ Test</button>
             <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to ALL registered users + staff now?');" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
@@ -190,12 +202,17 @@ function newsTest(id){
 }
 (function(){
   var f=document.getElementById('newsForm');
+  var catSel=f.querySelector('[name="category"]'), sb=document.getElementById('save_brochure');
+  function syncBrochure(){ if (catSel && sb && catSel.value === 'bulletin') sb.checked = true; }
+  if (catSel) catSel.addEventListener('change', syncBrochure);
+  setTimeout(syncBrochure, 0);
   function set(n,v){ var el=f.querySelector('[name="'+n+'"]'); if(el) el.value=v; }
   function submitLabel(t){ var b=f.querySelector('button[type="submit"]'); if(b) b.textContent=t; }
   function setAlert(on){ var a=document.getElementById('send_alert'); if(a) a.checked=on; }
   window.newsClearEdit=function(){
     set('news_id',''); set('inbox_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
-    set('body_text',''); set('source_url',''); set('category',''); set('summary','');
+    set('body_text',''); set('source_url',''); set('category',''); set('summary',''); set('schedule_text','');
+    var sb=document.getElementById('save_brochure'); if(sb) sb.checked=false;
     document.querySelectorAll('[name^="kd_"]').forEach(function(el){ el.value=''; });
     setAlert(true);   // new post → default to emailing everyone
     document.getElementById('editingBanner').style.display='none';
@@ -205,7 +222,7 @@ function newsTest(id){
   set('authority', {{ prefill.authority|tojson }}); set('heading', {{ prefill.heading|tojson }});
   set('news_date', {{ prefill.news_date|tojson }}); set('source_url', {{ prefill.source_url|tojson }});
   set('body_text', {{ prefill.body_text|tojson }}); set('summary', {{ prefill.summary|tojson }});
-  set('category', {{ prefill.category|tojson }});
+  set('category', {{ prefill.category|tojson }}); set('schedule_text', {{ (prefill.schedule_text or '')|tojson }});
   (function(d){ for (var k in d) { set('kd_' + k, d[k]); } })({{ prefill.dates|tojson }});
   {% endif %}
   document.querySelectorAll('.newsEditBtn').forEach(function(btn){
@@ -213,7 +230,7 @@ function newsTest(id){
       set('news_id',btn.dataset.id); set('inbox_id',''); set('authority',btn.dataset.authority);
       set('heading',btn.dataset.heading); set('news_date',btn.dataset.date);
       set('body_text',btn.dataset.body); set('source_url',btn.dataset.source);
-      set('category',btn.dataset.category||''); set('summary',btn.dataset.summary||'');
+      set('category',btn.dataset.category||''); set('summary',btn.dataset.summary||''); set('schedule_text',btn.dataset.schedule||'');
       document.querySelectorAll('[name^="kd_"]').forEach(function(el){ el.value=''; });
       try { var dd = JSON.parse(btn.dataset.dates||'{}'); for (var k in dd) set('kd_'+k, dd[k]); } catch(e) {}
       setAlert(false);  // editing → don't re-blast unless the user ticks it back on

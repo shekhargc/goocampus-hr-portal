@@ -44,6 +44,8 @@ def ensure_pg_news():
         conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS category TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS summary TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS key_dates TEXT DEFAULT ''")
+        # Schedule table (JSON {"columns":[...],"rows":[[...]]}) — round-wise timetables. (2026-10-09)
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS schedule TEXT DEFAULT ''")
 
         # Per-doctor "followed states" for the news feed (beyond All-India + home state).
         # Saved to the doctor's profile so the admin can see their subscriptions.
