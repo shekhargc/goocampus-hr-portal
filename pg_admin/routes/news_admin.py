@@ -13,7 +13,8 @@ from core.auth import login_required
 from pg_admin.routes.users_admin import _canonical_states
 
 
-NEWS_CATEGORIES = [('registration', 'Registration'), ('choice_filling', 'Choice filling'),
+NEWS_CATEGORIES = [('registration', 'Registration'), ('verification', 'Document verification'),
+                   ('choice_filling', 'Choice filling'),
                    ('seat_allotment', 'Seat allotment / result'), ('fee_payment', 'Fee payment'),
                    ('reporting', 'Reporting to college'), ('notification', 'Notification / schedule'),
                    ('other', 'Other')]

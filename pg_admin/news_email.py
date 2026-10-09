@@ -37,7 +37,8 @@ DATE_LABELS = [
     ('result_date', 'Result / seat allotment', 'info'),
     ('reporting_last_date', 'Reporting / joining last date', 'end'),
 ]
-CATEGORY_LABELS = {'registration': 'Registration', 'choice_filling': 'Choice filling',
+CATEGORY_LABELS = {'registration': 'Registration', 'verification': 'Document verification',
+                   'choice_filling': 'Choice filling',
                    'seat_allotment': 'Seat allotment', 'fee_payment': 'Fee payment',
                    'reporting': 'Reporting', 'notification': 'Notification', 'other': 'Update'}
 
