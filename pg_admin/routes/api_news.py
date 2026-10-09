@@ -358,15 +358,21 @@ def api_pg_calendar():
         by_auth = {}
         for r in rows:
             by_auth.setdefault(r['authority_code'], {}).setdefault(r['round'] or '', []).append(CAL.as_json_row(r))
+        heads = {r['id']: r['heading'] for r in conn.execute(
+            "SELECT id, heading FROM pg_news WHERE deleted_at IS NULL").fetchall()} if rows else {}
+        for evs in by_auth.values():
+            for lst in evs.values():
+                for e in lst:
+                    e['heading'] = heads.get(e.get('news_id'), '')
         out = []
-        for c in codes:
+        for c in _authority_order(codes):
             if c not in by_auth:
                 continue
             a = get_authority(c) or {'code': c, 'name': c, 'state': ''}
             out.append({'code': c, 'name': a['name'], 'state': a['state'],
                         'rounds': [{'round': rd or 'General', 'events': evs}
                                    for rd, evs in sorted(by_auth[c].items(), key=lambda kv: order.get(kv[0], 50))]})
-        return jsonify({'ok': True, 'count': len(rows), 'authorities': out})
+        return jsonify({'ok': True, 'as_of': _ist_today().isoformat(), 'count': len(rows), 'authorities': out})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -382,15 +388,23 @@ BAR_STEPS = {'registration': 'Registration', 'verification': 'Document verificat
              'choice_filling': 'Choice filling', 'result': 'Result', 'reporting': 'Reporting / joining'}
 
 
-def counselling_status(conn, code, today=None):
-    """Where an authority's counselling is right now, from its calendar (2026-10-09):
-    rounds → steps (done / live / upcoming), the current step and the next deadline."""
-    from datetime import date as _date
+def _fmt_d(d):
+    return d.strftime('%d %b').lstrip('0') if d else ''
+
+
+def _ist_today():
+    from datetime import datetime, timedelta
+    return (datetime.utcnow() + timedelta(hours=5, minutes=30)).date()
+
+
+def counselling_status(conn, code, today=None, headings=None):
+    """Where an authority's counselling is right now (2026-10-09; shape agreed with the
+    website session): status not_started | in_progress | completed, rounds → steps
+    (done / live / upcoming), current stage, next deadline, progress, headline (≤90 chars)."""
     from pg_admin.data import calendar as CAL
-    today = today or _date.today()
+    today = today or _ist_today()
+    headings = headings or {}
     rows = CAL.events_for(conn, [code])
-    if not rows:
-        return None
     rorder = {r: i for i, r in enumerate(CAL.ROUNDS)}
     steps = {}
     for r in rows:
@@ -399,40 +413,64 @@ def counselling_status(conn, code, today=None):
         k = (r['round'] or '', r['event'])
         s0, e0 = r['start_date'], r['end_date'] or r['start_date']
         cur = steps.get(k)
-        steps[k] = (min(cur[0], s0), max(cur[1], e0)) if cur else (s0, e0)
+        if cur:
+            steps[k] = {**cur, 'start': min(cur['start'], s0), 'end': max(cur['end'], e0),
+                        'time': (r.get('time_text') or cur['time']) if e0 >= cur['end'] else cur['time']}
+        else:
+            steps[k] = {'start': s0, 'end': e0, 'time': r.get('time_text') or None, 'news_id': r.get('news_id')}
+    if not steps:
+        return None
     rounds, flat = {}, []
-    for (rnd, ev), (s0, e0) in steps.items():
-        st = 'done' if e0 < today else ('live' if s0 <= today <= e0 else 'upcoming')
+    for (rnd, ev), v in steps.items():
+        st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
         item = {'round': rnd or None, 'step': ev, 'label': CAL.EVENT_LABELS.get(ev, ev),
-                'bar_label': BAR_STEPS.get(ev), 'start': s0.isoformat(), 'end': e0.isoformat(), 'status': st}
+                'bar_label': BAR_STEPS.get(ev), 'start': v['start'].isoformat(), 'end': v['end'].isoformat(),
+                'time': v['time'] or None, 'status': st, 'news_id': v['news_id']}
         rounds.setdefault(rnd, []).append(item)
         flat.append(item)
     out_rounds = []
     for rnd in sorted(rounds, key=lambda x: rorder.get(x, 50)):
         its = sorted(rounds[rnd], key=lambda i: (STEP_ORDER.index(i['step']), i['start']))
-        st = ('done' if all(i['status'] == 'done' for i in its)
-              else 'live' if any(i['status'] == 'live' for i in its)
-              else 'upcoming' if all(i['status'] == 'upcoming' for i in its) else 'live')
-        out_rounds.append({'round': rnd or 'General', 'status': st, 'steps': its})
+        if all(i['status'] == 'done' for i in its):
+            rst = 'done'
+        elif all(i['status'] == 'upcoming' for i in its):
+            rst = 'upcoming'
+        else:
+            rst = 'live'
+        live_bar = next((i['bar_label'] for i in its if i['status'] == 'live' and i['bar_label']), None)
+        out_rounds.append({'round': rnd or 'General', 'status': rst, 'start': min(i['start'] for i in its),
+                           'end': max(i['end'] for i in its), 'live_step': live_bar, 'steps': its})
     flat.sort(key=lambda i: (i['start'], STEP_ORDER.index(i['step'])))
     live = [i for i in flat if i['status'] == 'live']
     nxt = next((i for i in flat if i['status'] == 'upcoming'), None)
     current = live[0] if live else None
-    deadline = min((i for i in flat if i['status'] in ('live', 'upcoming')), key=lambda i: i['end'], default=None)
+    dl = min((i for i in flat if i['status'] in ('live', 'upcoming')), key=lambda i: i['end'], default=None)
+    next_deadline = ({'date': dl['end'], 'label': dl['label'], 'round': dl['round'], 'time': dl['time'],
+                      'news_id': dl['news_id'], 'heading': headings.get(dl['news_id'], '')} if dl else None)
+    from datetime import date as _date
     if current:
-        headline = f"{current['round'] + ' · ' if current['round'] else ''}{current['label']} open — closes {current['end']}"
+        headline = (f"{current['round'] + ': ' if current['round'] else ''}{current['label']} open"
+                    f" — closes {_fmt_d(_date.fromisoformat(current['end']))}")
     elif nxt:
-        headline = f"Next: {nxt['round'] + ' · ' if nxt['round'] else ''}{nxt['label']} from {nxt['start']}"
+        headline = (f"Next: {nxt['round'] + ' ' if nxt['round'] else ''}{nxt['label'].lower()}"
+                    f" from {_fmt_d(_date.fromisoformat(nxt['start']))}")
     else:
         headline = 'All scheduled rounds completed'
     done = sum(1 for i in flat if i['status'] == 'done')
-    return {'stage': current or nxt, 'headline': headline, 'next_deadline': deadline,
+    status = 'completed' if done == len(flat) else 'in_progress'
+    return {'status': status, 'stage': current or nxt, 'headline': headline[:90], 'next_deadline': next_deadline,
             'progress': round(100 * done / len(flat)) if flat else 0, 'rounds': out_rounds}
+
+
+def _authority_order(codes):
+    from pg_admin.authorities import get_authority
+    return sorted(codes, key=lambda c: (c != 'mcc', ((get_authority(c) or {}).get('state') or '').lower()))
 
 
 def api_pg_counselling_status():
     """GET /api/pg/counselling-status[?authority=<code> | states=<list|all>] — per-authority
-    counselling STAGE for the website's stage bar (2026-10-09). Doctor token → MCC + their states."""
+    counselling STAGE for the website's stage bar (2026-10-09). Doctor token → MCC + their states.
+    Authorities with a bulletin / news but no dates yet come back as status 'not_started'."""
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     from pg_admin.data import calendar as CAL
@@ -443,13 +481,32 @@ def api_pg_counselling_status():
         code = _s(request.args.get('authority')).lower()
         codes = ([code] if get_authority(code) else []) if code else _codes_for_states(
             _viewer_states(conn, request.args.get('states')), _s(request.args.get('all')) != '0')
+        headings = {r['id']: r['heading'] for r in conn.execute(
+            "SELECT id, heading FROM pg_news WHERE deleted_at IS NULL").fetchall()}
+        brochure = set()
+        try:
+            brochure = {r['authority_code'] for r in conn.execute(
+                "SELECT DISTINCT authority_code FROM pg_authority_docs WHERE COALESCE(is_main, FALSE) "
+                "AND COALESCE(is_published, TRUE)").fetchall()}
+        except Exception:
+            conn.rollback()
+        news_states = set()
+        for r in conn.execute("SELECT DISTINCT scope, LOWER(TRIM(COALESCE(state,''))) AS st FROM pg_news "
+                              "WHERE is_published AND deleted_at IS NULL").fetchall():
+            news_states.add('mcc' if r['scope'] == 'all_india' else r['st'])
         out = []
-        for c in codes:
-            st = counselling_status(conn, c)
-            if st:
-                a = get_authority(c)
-                out.append({'code': c, 'name': a['name'], 'state': a['state'], **st})
-        return jsonify({'ok': True, 'authorities': out})
+        for c in _authority_order(codes):
+            a = get_authority(c)
+            st = counselling_status(conn, c, headings=headings)
+            has_news = ('mcc' in news_states) if c == 'mcc' else ((a['state'] or '').lower() in news_states)
+            if not st:
+                if not (c in brochure or has_news):
+                    continue
+                st = {'status': 'not_started', 'stage': None, 'next_deadline': None, 'progress': 0, 'rounds': [],
+                      'headline': ('Information bulletin released — schedule awaited' if c in brochure
+                                   else 'Counselling updates out — schedule awaited')}
+            out.append({'code': c, 'name': a['name'], 'state': a['state'], 'has_brochure': c in brochure, **st})
+        return jsonify({'ok': True, 'as_of': _ist_today().isoformat(), 'authorities': out})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
