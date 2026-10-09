@@ -191,13 +191,22 @@ def api_pg_authority(code):
 
         nwhere, nparams = _news_match_sql(authority)
         try:
+            from pg_admin.routes.api_news import ensure_news_seo_cols
+            ensure_news_seo_cols(conn)
             news = [dict(r) for r in conn.execute(
                 "SELECT id, heading, body_text, source_url, published_at, "
+                "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
+                "COALESCE(key_dates,'') AS key_dates, "
                 "(pdf_data IS NOT NULL) AS has_pdf FROM pg_news "
                 f"WHERE COALESCE(is_published,TRUE) AND {nwhere} "
                 "ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 20", nparams).fetchall()]
+            import json as _json
             for n in news:
                 n['published_at'] = str(n['published_at'])[:10] if n.get('published_at') else ''
+                try:
+                    n['key_dates'] = _json.loads(n.get('key_dates') or '{}') or {}
+                except Exception:
+                    n['key_dates'] = {}
                 n['pdf_url'] = (f"{request.url_root.rstrip('/')}/api/pg/news/{n['id']}/pdf"
                                 if n.get('has_pdf') else '')
         except Exception:

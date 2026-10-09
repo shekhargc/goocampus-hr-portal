@@ -119,7 +119,9 @@ def api_pg_news():
         params = []
         if include_all:
             scope_parts.append("scope = 'all_india'")
-        if states:
+        if any(x.lower() == 'all' for x in states):
+            scope_parts.append("scope = 'state'")            # states=all → every state (public pages)
+        elif states:
             placeholders = ','.join(['?'] * len(states))
             scope_parts.append(f"(scope = 'state' AND state IN ({placeholders}))")
             params.extend(states)
@@ -202,7 +204,9 @@ def api_pg_news_deadlines():
         parts, params = [], []
         if include_all:
             parts.append("scope = 'all_india'")
-        if states:
+        if any(x.lower() == 'all' for x in states):
+            parts.append("scope = 'state'")
+        elif states:
             parts.append("(scope = 'state' AND state IN (" + ','.join(['?'] * len(states)) + "))")
             params.extend(states)
         if not parts:
