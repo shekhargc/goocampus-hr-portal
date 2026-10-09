@@ -13,6 +13,18 @@ from core.auth import login_required
 from pg_admin.routes.users_admin import _canonical_states
 
 
+NEWS_CATEGORIES = [('registration', 'Registration'), ('choice_filling', 'Choice filling'),
+                   ('seat_allotment', 'Seat allotment / result'), ('fee_payment', 'Fee payment'),
+                   ('reporting', 'Reporting to college'), ('notification', 'Notification / schedule'),
+                   ('other', 'Other')]
+NEWS_DATE_FIELDS = [('registration_start', 'Registration starts'), ('registration_end', 'Registration last date'),
+                    ('verification_start', 'Document verification / slot booking starts'),
+                    ('verification_end', 'Document verification last date'),
+                    ('choice_filling_start', 'Choice filling starts'), ('choice_filling_end', 'Choice filling last date'),
+                    ('payment_last_date', 'Fee payment last date'), ('reporting_last_date', 'Reporting last date'),
+                    ('result_date', 'Result / allotment date')]
+
+
 def _require_admin():
     u = get_user()
     return u if (u and u.get('is_admin')) else None
@@ -28,13 +40,43 @@ def news_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
     items = []
+    prefill = None
     try:
         try:
             conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")
         except Exception:
             conn.rollback()
+        # "Add to News" from the News Inbox → pre-fill the form (founder 2026-10-08)
+        inbox_id = _s(request.args.get('inbox'))
+        if inbox_id.isdigit():
+            try:
+                from pg_admin import news_scraper as _NS
+                r = conn.execute("SELECT * FROM pg_news_inbox WHERE id = ?", (int(inbox_id),)).fetchone()
+                if r:
+                    r = dict(r)
+                    src = _NS.SOURCES.get(r['source_code']) or {}
+                    import json as _json
+                    try: dr = _json.loads(r.get('draft_json') or '{}') or {}
+                    except Exception: dr = {}
+                    prefill = {'inbox_id': r['id'], 'heading': dr.get('headline') or r['title'], 'source_url': r['url'],
+                               'kind': r['kind'], 'status': r['status'],
+                               'authority': src.get('news_authority') or '__all__',
+                               'source_label': src.get('label') or r['source_code'],
+                               'news_date': r['notice_date'].strftime('%Y-%m-%d') if r.get('notice_date') else '',
+                               'has_pdf': bool(r.get('pdf_data')), 'drafted': bool(dr),
+                               'body_text': dr.get('article') or '', 'summary': dr.get('summary') or '',
+                               'category': dr.get('category') or '',
+                               'dates': {k: (v or {}).get('date', '') for k, v in (dr.get('dates') or {}).items()},
+                               'quotes': {k: (v or {}).get('quote', '') for k, v in (dr.get('dates') or {}).items()},
+                               'applies_to': dr.get('applies_to') or '', 'action': dr.get('action') or ''}
+            except Exception as e:
+                logging.warning("news_admin inbox prefill: %s", e)
+                conn.rollback()
+        from pg_admin.routes.api_news import ensure_news_seo_cols
+        ensure_news_seo_cols(conn)
         items = [dict(r) for r in conn.execute(
             "SELECT id, scope, state, body_label, heading, body_text, source_url, "
+            "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, COALESCE(key_dates,'') AS key_dates, "
             "(pdf_data IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by "
             "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()]
     except Exception as e:
@@ -43,7 +85,14 @@ def news_admin():
         except Exception: pass
     finally:
         conn.close()
-    return render_template('pg_admin/news.html', items=items,
+    for it in items:
+        try:
+            import json as _json
+            it['key_dates_d'] = {k: (v or {}).get('date', '') for k, v in (_json.loads(it.get('key_dates') or '{}') or {}).items()}
+        except Exception:
+            it['key_dates_d'] = {}
+    return render_template('pg_admin/news.html', items=items, prefill=prefill,
+                           categories=NEWS_CATEGORIES, date_fields=NEWS_DATE_FIELDS,
                            states=_canonical_states(), active_section='goocampus_in')
 
 
@@ -82,6 +131,18 @@ def news_save():
     is_published = False if request.form.get('is_published') in ('0', 'off') else True
     # Email this update to all registered doctors? (founder 2026-10-06)
     send_alert = request.form.get('send_alert') in ('1', 'on', 'true', 'yes')
+    inbox_id = _s(request.form.get('inbox_id'))
+    inbox_id = int(inbox_id) if inbox_id.isdigit() and not news_id else None
+    category = _s(request.form.get('category'))
+    category = category if category in dict(NEWS_CATEGORIES) else ''
+    summary = _s(request.form.get('summary'))[:300]
+    import json as _json
+    key_dates = {}
+    for k, _lbl in NEWS_DATE_FIELDS:
+        v = _s(request.form.get('kd_' + k))
+        if v:
+            key_dates[k] = {'date': v[:10]}
+    key_dates_json = _json.dumps(key_dates) if key_dates else ''
 
     if not heading:
         flash('Please enter a heading.', 'error')
@@ -91,7 +152,7 @@ def news_save():
         return redirect(url_for('pg_news_admin'))
     if not body_text and not (request.files.get('pdf_file') and request.files.get('pdf_file').filename):
         # allow text-less if an existing item already has a PDF/text and we're editing
-        if not news_id:
+        if not news_id and not (inbox_id and source_url):     # an inbox notice: heading + official link is enough
             flash('Add some news text or attach a PDF.', 'error')
             return redirect(url_for('pg_news_admin'))
 
@@ -102,6 +163,26 @@ def news_save():
             flash('The attachment must be a .pdf file.', 'error')
             return redirect(url_for('pg_news_admin'))
         pdf_bytes = pf.read(); pdf_name = pf.filename; pdf_ctype = pf.mimetype or 'application/pdf'
+    elif inbox_id and request.form.get('attach_pdf', '1') in ('1', 'on'):
+        # Inbox notice that IS a PDF → attach the copy the Mac fetched (the server can't
+        # reach the govt sites), else try downloading it.
+        data, name_or_err = None, 'no PDF on this notice'
+        try:
+            _c = get_db()
+            _r = _c.execute("SELECT pdf_data, pdf_name FROM pg_news_inbox WHERE id = ?", (inbox_id,)).fetchone()
+            _c.close()
+            if _r and _r['pdf_data']:
+                data, name_or_err = bytes(_r['pdf_data']), (_r['pdf_name'] or 'notice.pdf')
+        except Exception as _pe:
+            logging.warning("news_save inbox pdf: %s", _pe)
+        if not data and source_url.lower().split('?')[0].endswith('.pdf'):
+            from pg_admin.news_scraper import fetch_pdf
+            data, name_or_err = fetch_pdf(source_url)
+        if data:
+            pdf_bytes, pdf_name = data, name_or_err
+        elif source_url.lower().split('?')[0].endswith('.pdf'):
+            flash(f"Posted without the PDF — couldn't download it ({name_or_err}). "
+                  "The official link is still on the update; you can attach the PDF via Edit.", 'info')
 
     user = get_user() or {}
     who = user.get('name') or user.get('emp_code') or 'admin'
@@ -109,6 +190,8 @@ def news_save():
     conn = get_db()
     try:
         conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")  # cold-start guard
+        from pg_admin.routes.api_news import ensure_news_seo_cols
+        ensure_news_seo_cols(conn)
         if news_id:
             if pdf_bytes is not None:
                 conn.execute(
@@ -125,6 +208,8 @@ def news_save():
             if pub_dt:
                 conn.execute("UPDATE pg_news SET published_at = ? WHERE id=?", (pub_dt, news_id))
             flash('Update saved.', 'success')
+            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ? WHERE id = ?",
+                         (category, summary, key_dates_json, news_id))
         else:
             news_id = conn.execute(
                 "INSERT INTO pg_news (scope, state, body_label, heading, body_text, source_url, pdf_name, "
@@ -133,6 +218,11 @@ def news_save():
                 (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
                  is_published, who, (pub_dt or _dt.utcnow()))).fetchone()['id']
             flash('News posted.', 'success')
+            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ? WHERE id = ?",
+                         (category, summary, key_dates_json, news_id))
+            if inbox_id:
+                conn.execute("UPDATE pg_news_inbox SET status='posted', news_id=?, reviewed_by=?, "
+                             "reviewed_at=CURRENT_TIMESTAMP WHERE id=?", (news_id, who, inbox_id))
         conn.commit()
         saved_ok = True
     except Exception as e:
@@ -158,6 +248,8 @@ def news_save():
         except Exception as e:
             logging.error("news_save: email alert failed to start: %s", e)
             flash('Saved, but the email alert could not be started.', 'error')
+    if inbox_id and saved_ok:
+        return redirect(url_for('pg_news_inbox'))
     return redirect(url_for('pg_news_admin'))
 
 

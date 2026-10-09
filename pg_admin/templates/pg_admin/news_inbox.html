@@ -1,0 +1,123 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}News Inbox · goocampus.in{% endblock %}
+
+{% block section_content %}
+<style>
+  .nb-wrap{padding:24px;background:var(--gray-50);min-height:100vh;}
+  .nb-card{background:#fff;border:1px solid var(--gray-200);border-radius:12px;max-width:1100px;}
+  .nb-tabs{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap;}
+  .nb-tab{padding:7px 14px;border-radius:999px;font-size:0.84rem;font-weight:600;text-decoration:none;
+          color:var(--gray-600);background:#fff;border:1px solid var(--gray-200);}
+  .nb-tab.on{background:var(--navy,#1e3a5f);color:#fff;border-color:var(--navy,#1e3a5f);}
+  .nb-table{width:100%;border-collapse:collapse;font-size:0.86rem;}
+  .nb-table th{padding:10px 14px;text-align:left;color:var(--gray-600);background:var(--gray-50);font-weight:600;}
+  .nb-table td{padding:10px 14px;border-top:1px solid var(--gray-100);vertical-align:top;}
+  .nb-kind{display:inline-block;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:999px;}
+  .nb-pdf{background:#fee2e2;color:#991b1b;} .nb-link{background:#e0f2fe;color:#075985;}
+  .nb-btn{border:0;border-radius:8px;padding:7px 12px;font-size:0.8rem;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;}
+  .nb-add{background:#166534;color:#fff;} .nb-dis{background:none;color:var(--gray-500);}
+  .nb-src{font-size:0.82rem;color:var(--gray-600);}
+  @media (max-width:760px){ .nb-hide-sm{display:none;} .nb-table td,.nb-table th{padding:8px;} }
+</style>
+<div class="nb-wrap">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:16px;max-width:1100px;">
+    <div>
+      <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">News Inbox</h1>
+      <p style="margin:0;font-size:0.88rem;color:var(--gray-500);max-width:720px;">
+        New notices from counselling-authority websites, checked from the office Mac at
+        <b>10:00 AM, 1:00 PM, 6:30 PM and 11:00 PM IST</b> (the sites block our server). Each new
+        notice arrives with an <b>AI draft</b> — headline, article, key dates. Nothing goes to doctors
+        until you click <b>Add to News</b>, check it and post.
+      </p>
+    </div>
+
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;max-width:1100px;
+                  background:{{ '#DCFCE7' if cat == 'success' else ('#FEF9C3' if cat == 'info' else '#FEE2E2') }};
+                  color:{{ '#166534' if cat == 'success' else ('#854D0E' if cat == 'info' else '#991B1B') }};">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Sources being watched -->
+  <div class="nb-card" style="padding:12px 16px;margin-bottom:18px;">
+    <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--gray-500);margin-bottom:6px;">Watching</div>
+    {% for s in sources %}
+    <div class="nb-src" style="padding:4px 0;">
+      <b style="color:var(--navy);">{{ s.label }}</b>
+      · <a href="{{ s.url }}" target="_blank" rel="noopener" style="color:#2952a3;">open site ↗</a>
+      {% if s.last %}
+        · last check {{ s.last.ran_at|format_datetime }}
+        {% if s.last.ok %}<span style="color:#166534;">✓ {{ s.last.found }} notices on page{% if s.last.new_count %}, {{ s.last.new_count }} new{% endif %}</span>
+        {% else %}<span style="color:#b91c1c;">✗ couldn't read the site{% if s.last_ok_at %} (last good check {{ s.last_ok_at|format_datetime }}){% endif %} — {{ s.last.error }}</span>{% endif %}
+      {% else %}
+        · <span style="color:var(--gray-500);">not checked yet — click “Check now”</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="nb-tabs">
+    <a class="nb-tab {{ 'on' if tab=='new' }}" href="{{ url_for('pg_news_inbox', tab='new') }}">New ({{ counts.new }})</a>
+    <a class="nb-tab {{ 'on' if tab=='posted' }}" href="{{ url_for('pg_news_inbox', tab='posted') }}">Posted ({{ counts.posted }})</a>
+    <a class="nb-tab {{ 'on' if tab=='dismissed' }}" href="{{ url_for('pg_news_inbox', tab='dismissed') }}">Dismissed ({{ counts.dismissed }})</a>
+  </div>
+
+  {% if items %}
+  <div class="nb-card" style="overflow-x:auto;">
+    <table class="nb-table">
+      <thead><tr>
+        <th>Date</th><th>Notice</th><th class="nb-hide-sm">Source</th><th class="nb-hide-sm">Found</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for it in items %}
+        <tr>
+          <td style="white-space:nowrap;">{{ it.notice_date|format_date }}</td>
+          <td>
+            {% if it.draft and it.draft.headline %}
+            <div style="font-weight:700;color:var(--navy);">{{ it.draft.headline }}</div>
+            {% if it.draft.summary %}<div style="font-size:0.82rem;color:var(--gray-600);margin-top:2px;">{{ it.draft.summary }}</div>{% endif %}
+            <div style="font-size:0.74rem;color:var(--gray-500);margin-top:2px;">Official title: {{ it.title }}</div>
+            {% if it.draft.dates %}<div style="font-size:0.74rem;color:#065f46;margin-top:3px;">
+              {% for k, v in it.draft.dates.items() %}<span style="margin-right:10px;">{{ k.replace('_',' ') }}: <b>{{ v.date }}</b></span>{% endfor %}</div>{% endif %}
+            {% else %}
+            <div style="font-weight:600;color:var(--navy);">{{ it.title }}</div>
+            {% endif %}
+            <div style="margin-top:4px;">
+              <span class="nb-kind {{ 'nb-pdf' if it.kind=='pdf' else 'nb-link' }}">{{ 'PDF' if it.kind=='pdf' else 'LINK' }}</span>
+              {% if it.draft %}<span class="nb-kind" style="background:#ede9fe;color:#5b21b6;">AI DRAFT</span>{% endif %}
+              <a href="{{ it.url }}" target="_blank" rel="noopener" style="font-size:0.8rem;color:#2952a3;margin-left:6px;">{{ 'Open PDF' if it.kind=='pdf' else 'Open page' }} ↗</a>
+              {% if it.status == 'posted' and it.news_id %}<span style="font-size:0.8rem;color:#166534;margin-left:8px;">✓ posted{% if it.reviewed_by %} by {{ it.reviewed_by }}{% endif %}</span>{% endif %}
+              {% if it.status == 'dismissed' and it.reviewed_by %}<span style="font-size:0.8rem;color:var(--gray-500);margin-left:8px;">dismissed by {{ it.reviewed_by }}</span>{% endif %}
+            </div>
+          </td>
+          <td class="nb-hide-sm" style="color:var(--gray-600);font-size:0.8rem;">{{ labels.get(it.source_code, it.source_code) }}</td>
+          <td class="nb-hide-sm" style="color:var(--gray-500);font-size:0.78rem;white-space:nowrap;">{{ it.first_seen_at|format_datetime }}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            {% if it.status == 'new' %}
+              <a class="nb-btn nb-add" href="{{ url_for('pg_news_admin', inbox=it.id) }}">Add to News</a>
+              <form method="POST" action="{{ url_for('pg_news_inbox_status') }}" style="display:inline;">
+                <input type="hidden" name="id" value="{{ it.id }}"><input type="hidden" name="to" value="dismissed"><input type="hidden" name="tab" value="{{ tab }}">
+                <button class="nb-btn nb-dis">Dismiss</button>
+              </form>
+            {% elif it.status == 'dismissed' %}
+              <form method="POST" action="{{ url_for('pg_news_inbox_status') }}" style="display:inline;">
+                <input type="hidden" name="id" value="{{ it.id }}"><input type="hidden" name="to" value="new"><input type="hidden" name="tab" value="{{ tab }}">
+                <button class="nb-btn nb-dis" style="color:#2952a3;">Restore</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:var(--gray-500);font-size:0.9rem;">
+    {% if tab == 'new' %}No new notices. The next automatic check runs at 10:00 AM, 1:00 PM, 6:30 PM or 11:00 PM IST.{% else %}Nothing here yet.{% endif %}
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

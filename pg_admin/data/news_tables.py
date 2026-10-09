@@ -39,6 +39,11 @@ def ensure_pg_news():
         # Official source link for the item (e.g. the authority's page), shown + clickable
         # on the dashboard alongside the PDF. (founder 2026-10-05)
         conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")
+        # SEO news + deadlines (2026-10-08): category, one-line summary, key dates (JSON
+        # {field: {date, time}} — only dates the notice actually states).
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS category TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS summary TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS key_dates TEXT DEFAULT ''")
 
         # Per-doctor "followed states" for the news feed (beyond All-India + home state).
         # Saved to the doctor's profile so the admin can see their subscriptions.

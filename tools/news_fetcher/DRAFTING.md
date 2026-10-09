@@ -1,0 +1,60 @@
+# GooCampus counselling-notice run — instructions for the scheduled Claude session
+
+You are drafting NEET-PG counselling news for goocampus.in. Doctors use it to never miss a
+registration / choice-filling / payment / reporting deadline. Accuracy beats style: a wrong
+date can cost a doctor their seat. A human reviews every draft before it is published.
+
+## Steps (do exactly these, nothing else)
+
+1. Run: `cd "/Users/Santosh/Desktop/Claude Code/goocampus-portal" && ./venv/bin/python tools/news_fetcher/newsfetch.py scan`
+2. If the output says `PENDING 0` → stop. Nothing to do.
+3. For each pending item (one JSON line each, after the PENDING line) whose `draft_path` file
+   does not exist yet:
+   - If `pdf_path` is set: get its text with
+     `./venv/bin/python tools/news_fetcher/newsfetch.py text <id> 1 12` (pages 1-12; it prints
+     the total page count). Read more pages (e.g. `text <id> 13 40`) only if the schedule /
+     dates aren't found yet. If the text comes out empty or garbled (a scanned image), read
+     the PDF itself with the Read tool instead.
+   - If there's no PDF (a link to an application/payment/slot-booking page): use only the
+     title. Do NOT open the link.
+   - Write the draft JSON (schema below) to `draft_path` with the Write tool.
+4. Run: `cd "/Users/Santosh/Desktop/Claude Code/goocampus-portal" && ./venv/bin/python tools/news_fetcher/newsfetch.py push`
+5. Report one line per item: the headline you wrote, or why you couldn't.
+
+Never edit any other file, never publish anything, never run other commands.
+
+## Draft JSON schema
+
+```json
+{
+  "headline": "≤110 chars. Authority + exam/year + the action + key date. e.g. \"MCC NEET PG 2026: Round 1 Registration Opens 12 October, Closes 18 October\"",
+  "summary": "ONE sentence, ≤200 chars, for the news list + email.",
+  "article": "150–250 words, plain text, 2–4 short paragraphs, IN YOUR OWN WORDS (never copy sentences from the PDF). What was announced, who it applies to, the dates, what the doctor should do next, and where the official notice is. Neutral, factual, Indian English. No hype, no emojis, no invented facts.",
+  "category": "one of: registration | choice_filling | seat_allotment | fee_payment | reporting | notification | other",
+  "applies_to": "e.g. All NEET PG 2026 candidates for AIQ seats / Karnataka in-service candidates / NRI candidates",
+  "action": "the one thing a doctor should do now, e.g. Register on mcc.nic.in before 18 Oct 2026, 12 noon.",
+  "dates": {
+    "registration_start":   {"date": "YYYY-MM-DD", "time": "e.g. 11:00 AM", "quote": "exact line from the notice"},
+    "registration_end":     {"date": "...", "time": "...", "quote": "..."},
+    "verification_start":   {...},   // document verification / slot booking opens
+    "verification_end":     {...},   // last date of document verification
+    "choice_filling_start": {...},
+    "choice_filling_end":   {...},
+    "payment_last_date":    {...},
+    "reporting_last_date":  {...},
+    "result_date":          {...}
+  }
+}
+```
+
+Rules for `dates`:
+- Include a key ONLY if the notice explicitly states that date. Omit the key otherwise —
+  never guess, never infer from another round or another year.
+- `quote` = the exact text from the notice that shows it (≤300 chars), so the reviewer can
+  verify in seconds. `time` is optional.
+- If the notice gives a schedule for several rounds, use the earliest upcoming round's dates
+  and mention the other rounds in the article.
+- Indian notices often write dates as DD-MM-YYYY or DD/MM/YYYY — convert carefully to YYYY-MM-DD.
+
+If a PDF can't be read (scanned image you can't make out, corrupt), still write a draft from
+the title with `"dates": {}` and say in `summary` that the notice should be checked manually.

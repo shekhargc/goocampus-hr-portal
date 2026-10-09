@@ -175,6 +175,75 @@ def api_pg_cutoff_explorer():
                     'branch': branch if branch in _SG.BRANCH_PARAMS else ''})
 
 
+def api_pg_cutoff_summary():
+    """GET /api/pg/cutoff-explorer/summary — one call per public cut-off page instead of ~26
+    (speed audit 2026-10-09). Same rules as /api/pg/cutoff-explorer (closing rank as
+    stored, no re-classification, DNB never returned, reference rows excluded).
+      ?authority=<name>  → per COURSE   [{course, best_closing_rank, max_closing_rank, records}]
+      ?course=<exact>    → per AUTHORITY [{authority, best_closing_rank, max_closing_rank, records}]
+    Optional: degree_group (default mdms), state, quota, category, branch. best = lowest
+    (most competitive) closing rank; max = highest (last admitted). Cached per worker."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    authority = (request.args.get('authority') or '').strip()
+    course = (request.args.get('course') or '').strip()
+    if not authority and not course:
+        return jsonify({'ok': False, 'error': 'authority or course is required'}), 400
+    dg = (request.args.get('degree_group') or 'mdms').strip()
+    state = (request.args.get('state') or '').strip()
+    quota = (request.args.get('quota') or '').strip()
+    category = (request.args.get('category') or '').strip()
+    branch = (request.args.get('branch') or '').strip().lower()
+    from pg_admin import perf
+    conn = get_db()
+    try:
+        ck = ('cutsum', perf.cutoffs_version(conn), authority, course, dg, state, quota, category, branch)
+        hit = perf.cache_get(ck)
+        if hit is not None:
+            return jsonify(hit)
+        where, params = ["COALESCE(c.is_reference,0)=0"], []
+        dgc, dgp = _deg_clause(dg)
+        if dgc:
+            where.append(dgc); params.append(dgp)
+        if authority:
+            where.append("c.authority ILIKE ?"); params.append('%' + authority + '%')
+        if course:
+            where.append("LOWER(TRIM(c.course)) = LOWER(TRIM(?))"); params.append(course)
+        if state:
+            where.append("c.state ILIKE ?"); params.append('%' + state + '%')
+        if quota:
+            where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(quota)
+        if category:
+            where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(category)
+        if branch:
+            from pg_admin.data import specialty_groups as _SG
+            if branch in _SG.BRANCH_PARAMS:
+                _bc = _SG.courses_in_branch(conn, None, branch, _SG.context(conn)) or []
+                if _bc:
+                    where.append("c.course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
+                else:
+                    where.append("1 = 0")
+        by = 'c.course' if authority and not course else 'c.authority'
+        label = 'course' if by == 'c.course' else 'authority'
+        rows = conn.execute(
+            f"SELECT {by} AS k, MIN(c.closing_rank) AS best, MAX(c.closing_rank) AS worst, COUNT(*) AS n "
+            f"FROM pg_cutoffs c WHERE {' AND '.join(where)} AND COALESCE({by},'') <> '' "
+            f"GROUP BY {by} ORDER BY MIN(c.closing_rank) ASC NULLS LAST, {by} ASC", params).fetchall()
+        out = {'ok': True, 'by': label, 'authority': authority, 'course': course, 'degree_group': dg,
+               'rows': [{label: r['k'], 'best_closing_rank': r['best'], 'max_closing_rank': r['worst'],
+                         'records': r['n']} for r in rows]}
+        out['count'] = len(out['rows'])
+        perf.cache_set(ck, out, ttl=1800)
+        return jsonify(out)
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_cutoff_summary: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 def api_pg_cutoff_facets():
     """GET /api/pg/cutoff-explorer/facets → distinct authorities/quotas/categories/states."""
     if not _authorized():

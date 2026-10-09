@@ -30,10 +30,13 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              api_events, events_admin, api_track, analytics_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
-                             specialty_admin)
+                             specialty_admin, news_inbox_admin, api_news_ingest)
+from pg_admin import news_scraper as _news_scraper
 
 
 def register_pg_admin(app):
+    from pg_admin import perf as _perf
+    _perf.register(app)          # gzip + Cache-Control on public /api/pg/* GETs (2026-10-09)
     # Make pg_admin/templates/ resolvable as 'pg_admin/<name>.html'
     tpl_dir = os.path.join(os.path.dirname(__file__), 'templates')
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
@@ -59,7 +62,8 @@ def register_pg_admin(app):
                _seat_matrix.ensure_pg_seat_matrix,
                _news_tables.ensure_pg_news,
                _authority_docs.ensure_pg_authority_docs,
-               _specialty_groups.ensure_course_branch_table):
+               _specialty_groups.ensure_course_branch_table,
+               _news_scraper.ensure_news_inbox_tables):
         try:
             fn()
         except Exception as e:
@@ -78,6 +82,8 @@ def register_pg_admin(app):
                      mentors_admin.mentors_migrate_photos, methods=['POST'])
     app.add_url_rule('/admin/pg/mentors/<int:mentor_id>', 'pg_mentor_detail',
                      mentors_admin.mentor_detail, methods=['GET'])
+    app.add_url_rule('/admin/pg/mentors/country-visibility', 'pg_mentors_country_visibility',
+                     mentors_admin.mentors_country_visibility, methods=['POST'])
     app.add_url_rule('/admin/pg/mentors/<int:mentor_id>/toggle', 'pg_mentor_toggle',
                      mentors_admin.mentor_toggle, methods=['POST'])
     app.add_url_rule('/admin/pg/mentors/<int:mentor_id>/delete', 'pg_mentor_delete',
@@ -168,10 +174,31 @@ def register_pg_admin(app):
                      news_admin.news_delete, methods=['POST'])
     app.add_url_rule('/admin/pg/news/pdf', 'pg_news_pdf_admin',
                      news_admin.news_pdf_admin, methods=['GET'])
+    # News Inbox — notices the scraper finds on authority sites, for review (2026-10-08)
+    app.add_url_rule('/admin/pg/news-inbox', 'pg_news_inbox',
+                     news_inbox_admin.news_inbox, methods=['GET'])
+    app.add_url_rule('/admin/pg/news-inbox/check', 'pg_news_inbox_check',
+                     news_inbox_admin.news_inbox_check, methods=['POST'])
+    app.add_url_rule('/admin/pg/news-inbox/status', 'pg_news_inbox_status',
+                     news_inbox_admin.news_inbox_status, methods=['POST'])
+    # The founder's Mac pushes notices + AI drafts here (X-News-Key = env NEWS_INGEST_KEY).
+    app.add_url_rule('/api/pg/news-inbox/known', 'api_news_inbox_known',
+                     api_news_ingest.api_news_inbox_known, methods=['GET'])
+    app.add_url_rule('/api/pg/news-inbox/ingest', 'api_news_inbox_ingest',
+                     api_news_ingest.api_news_inbox_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/news-inbox/heartbeat', 'api_news_inbox_heartbeat',
+                     api_news_ingest.api_news_inbox_heartbeat, methods=['POST'])
+    app.add_url_rule('/admin/pg/diag/news-key', 'pg_news_key_check',
+                     api_news_ingest.admin_news_key_check, methods=['GET'])
+    # Scraper schedule (10:00 / 13:00 / 18:30 / 23:00 IST) — same boot guard as app.py's scheduler.
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
+        _news_scraper.start_scheduler()
 
     # ── Public API for goocampus.in: News feed (X-PG-Key; PDF is public) ──
     app.add_url_rule('/api/pg/news', 'api_pg_news',
                      api_news.api_pg_news, methods=['GET'])
+    app.add_url_rule('/api/pg/news/deadlines', 'api_pg_news_deadlines',
+                     api_news.api_pg_news_deadlines, methods=['GET'])
     app.add_url_rule('/api/pg/news/states', 'api_pg_news_states',
                      api_news.api_pg_news_states, methods=['GET'])
     app.add_url_rule('/api/pg/news/follows', 'api_pg_news_follows',
@@ -251,6 +278,8 @@ def register_pg_admin(app):
                      api_choice.api_pg_cutoff_explorer, methods=['GET'])
     app.add_url_rule('/api/pg/cutoff-explorer/facets', 'api_pg_cutoff_facets',
                      api_choice.api_pg_cutoff_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/cutoff-explorer/summary', 'api_pg_cutoff_summary',
+                     api_choice.api_pg_cutoff_summary, methods=['GET'])
     app.add_url_rule('/api/pg/choice-entitlement', 'api_pg_choice_entitlement',
                      api_choice.api_pg_choice_entitlement, methods=['GET'])
     app.add_url_rule('/api/pg/my-states', 'api_pg_my_states',
@@ -446,6 +475,8 @@ def register_pg_admin(app):
                      api.admin_pg_predictor_diag, methods=['GET'])
     app.add_url_rule('/admin/pg/diag/branch-check', 'pg_branch_check',
                      api.admin_pg_branch_check, methods=['GET'])
+    app.add_url_rule('/admin/pg/diag/speed', 'pg_speed_check',
+                     api.admin_pg_speed_check, methods=['GET'])
     app.add_url_rule('/admin/pg/pay-test', 'pg_pay_test', api.admin_pg_pay_test, methods=['GET'])
     app.add_url_rule('/admin/pg/pay-test/verify', 'pg_pay_test_verify',
                      api.admin_pg_pay_test_verify, methods=['POST'])
