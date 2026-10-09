@@ -171,11 +171,17 @@ def api_pg_authority(code):
         return jsonify({'ok': True, 'authority': authority, 'locked': True,
                         'document_groups': [], 'news': [], 'seat_matrix': None,
                         'viewer': {'is_paid': is_paid, 'home_state': home}}), 200
+    main_brochure = None
     try:
+        try:
+            conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE")
+        except Exception:
+            conn.rollback()
         rows = [dict(r) for r in conn.execute(
-            "SELECT id, category, title, doc_date, note, body_text, file_name "
+            "SELECT id, category, title, doc_date, note, body_text, file_name, "
+            "COALESCE(is_main, FALSE) AS is_main "
             "FROM pg_authority_docs WHERE authority_code=? AND COALESCE(is_published,TRUE) "
-            "ORDER BY category, sort_order, id DESC", (authority['code'],)).fetchall()]
+            "ORDER BY category, COALESCE(is_main, FALSE) DESC, sort_order, id DESC", (authority['code'],)).fetchall()]
         by_cat = {}
         for r in rows:
             has_file = bool(r.get('file_name'))
@@ -184,7 +190,11 @@ def api_pg_authority(code):
                 'note': r['note'] or '', 'body_text': r.get('body_text') or '',
                 'file_name': r['file_name'] or '',
                 'file_url': _file_url(r['id']) if has_file else '',
+                'is_main': bool(r.get('is_main')),
             })
+            if r.get('is_main') and has_file and not main_brochure:
+                main_brochure = {'id': r['id'], 'title': r['title'], 'date': r['doc_date'] or '',
+                                 'file_url': _file_url(r['id'])}
         for cat, label in DOC_CATEGORIES:
             if by_cat.get(cat):
                 groups.append({'category': cat, 'label': label, 'documents': by_cat[cat]})
@@ -196,7 +206,7 @@ def api_pg_authority(code):
             news = [dict(r) for r in conn.execute(
                 "SELECT id, heading, body_text, source_url, published_at, "
                 "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
-                "COALESCE(key_dates,'') AS key_dates, "
+                "COALESCE(key_dates,'') AS key_dates, COALESCE(schedule,'') AS schedule, "
                 "(pdf_data IS NOT NULL) AS has_pdf FROM pg_news "
                 f"WHERE COALESCE(is_published,TRUE) AND {nwhere} "
                 "ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 20", nparams).fetchall()]
@@ -207,6 +217,8 @@ def api_pg_authority(code):
                     n['key_dates'] = _json.loads(n.get('key_dates') or '{}') or {}
                 except Exception:
                     n['key_dates'] = {}
+                from pg_admin.routes.api_news import parse_schedule
+                n['schedule'] = parse_schedule(n.get('schedule'))
                 n['pdf_url'] = (f"{request.url_root.rstrip('/')}/api/pg/news/{n['id']}/pdf"
                                 if n.get('has_pdf') else '')
         except Exception:
@@ -222,6 +234,7 @@ def api_pg_authority(code):
     finally:
         conn.close()
     return jsonify({'ok': True, 'authority': authority, 'locked': False,
+                    'main_brochure': main_brochure,
                     'document_groups': groups, 'news': news, 'seat_matrix': seat_matrix,
                     'viewer': {'is_paid': is_paid, 'home_state': home}}), 200
 

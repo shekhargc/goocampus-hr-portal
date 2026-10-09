@@ -41,6 +41,9 @@ def ensure_pg_authority_docs(conn=None):
         # A typed list / details (e.g. a numbered registration-document checklist) — a doc
         # may have this instead of, or alongside, an uploaded file. (founder 2026-10-06)
         conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS body_text TEXT DEFAULT ''")
+        # The authority's MAIN information bulletin / brochure (one per authority) — set when
+        # a bulletin is posted as news, shown first on the dashboard. (founder 2026-10-09)
+        conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE")
         conn.commit()
         logging.info("pg_authority_docs table ensured")
     except Exception as e:

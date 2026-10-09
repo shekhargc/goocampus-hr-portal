@@ -13,7 +13,8 @@ from core.auth import login_required
 from pg_admin.routes.users_admin import _canonical_states
 
 
-NEWS_CATEGORIES = [('registration', 'Registration'), ('verification', 'Document verification'),
+NEWS_CATEGORIES = [('bulletin', 'Information bulletin / brochure'),
+                   ('registration', 'Registration'), ('verification', 'Document verification'),
                    ('choice_filling', 'Choice filling'),
                    ('seat_allotment', 'Seat allotment / result'), ('fee_payment', 'Fee payment'),
                    ('reporting', 'Reporting to college'), ('notification', 'Notification / schedule'),
@@ -24,6 +25,46 @@ NEWS_DATE_FIELDS = [('registration_start', 'Registration starts'), ('registratio
                     ('choice_filling_start', 'Choice filling starts'), ('choice_filling_end', 'Choice filling last date'),
                     ('payment_last_date', 'Fee payment last date'), ('reporting_last_date', 'Reporting last date'),
                     ('result_date', 'Result / allotment date')]
+
+
+def schedule_to_text(sch):
+    """{"columns","rows"} → editable pipe text (header line first)."""
+    if not isinstance(sch, dict) or not sch.get('rows'):
+        return ''
+    lines = []
+    if sch.get('title'):
+        lines.append('# ' + sch['title'])
+    if sch.get('columns'):
+        lines.append(' | '.join(sch['columns']))
+    lines += [' | '.join(str(c) for c in r) for r in sch['rows']]
+    return '\n'.join(lines)
+
+
+def text_to_schedule(txt):
+    """Pipe text → {"title","columns","rows"} (first non-# line = header). '' if empty."""
+    import json as _json
+    lines = [l.strip() for l in (txt or '').splitlines() if l.strip()]
+    if not lines:
+        return ''
+    title = ''
+    if lines[0].startswith('#'):
+        title = lines.pop(0).lstrip('#').strip()
+    rows = [[c.strip() for c in l.split('|')] for l in lines]
+    if len(rows) < 2:
+        return ''
+    return _json.dumps({'title': title, 'columns': rows[0], 'rows': rows[1:]})
+
+
+def _authority_code_for(scope, state):
+    """News scope → counselling-authority code (MCC for All-India, else the state's body)."""
+    from pg_admin.authorities import all_authorities
+    if scope == 'all_india':
+        return 'mcc'
+    st = (state or '').strip().lower()
+    for a in all_authorities():
+        if a['kind'] == 'state' and a['state'].strip().lower() == st:
+            return a['code']
+    return ''
 
 
 def _require_admin():
@@ -69,7 +110,8 @@ def news_admin():
                                'category': dr.get('category') or '',
                                'dates': {k: (v or {}).get('date', '') for k, v in (dr.get('dates') or {}).items()},
                                'quotes': {k: (v or {}).get('quote', '') for k, v in (dr.get('dates') or {}).items()},
-                               'applies_to': dr.get('applies_to') or '', 'action': dr.get('action') or ''}
+                               'applies_to': dr.get('applies_to') or '', 'action': dr.get('action') or '',
+                               'schedule_text': schedule_to_text(dr.get('schedule'))}
             except Exception as e:
                 logging.warning("news_admin inbox prefill: %s", e)
                 conn.rollback()
@@ -78,6 +120,7 @@ def news_admin():
         items = [dict(r) for r in conn.execute(
             "SELECT id, scope, state, body_label, heading, body_text, source_url, "
             "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, COALESCE(key_dates,'') AS key_dates, "
+            "COALESCE(schedule,'') AS schedule, "
             "(pdf_data IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by "
             "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()]
     except Exception as e:
@@ -92,6 +135,11 @@ def news_admin():
             it['key_dates_d'] = {k: (v or {}).get('date', '') for k, v in (_json.loads(it.get('key_dates') or '{}') or {}).items()}
         except Exception:
             it['key_dates_d'] = {}
+        try:
+            from pg_admin.routes.api_news import parse_schedule
+            it['schedule_text'] = schedule_to_text(parse_schedule(it.get('schedule')))
+        except Exception:
+            it['schedule_text'] = ''
     return render_template('pg_admin/news.html', items=items, prefill=prefill,
                            categories=NEWS_CATEGORIES, date_fields=NEWS_DATE_FIELDS,
                            states=_canonical_states(), active_section='goocampus_in')
@@ -144,6 +192,8 @@ def news_save():
         if v:
             key_dates[k] = {'date': v[:10]}
     key_dates_json = _json.dumps(key_dates) if key_dates else ''
+    schedule_json = text_to_schedule(request.form.get('schedule_text'))
+    save_brochure = request.form.get('save_brochure') in ('1', 'on')
 
     if not heading:
         flash('Please enter a heading.', 'error')
@@ -209,8 +259,8 @@ def news_save():
             if pub_dt:
                 conn.execute("UPDATE pg_news SET published_at = ? WHERE id=?", (pub_dt, news_id))
             flash('Update saved.', 'success')
-            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ? WHERE id = ?",
-                         (category, summary, key_dates_json, news_id))
+            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ?, schedule = ? WHERE id = ?",
+                         (category, summary, key_dates_json, schedule_json, news_id))
         else:
             news_id = conn.execute(
                 "INSERT INTO pg_news (scope, state, body_label, heading, body_text, source_url, pdf_name, "
@@ -219,13 +269,46 @@ def news_save():
                 (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
                  is_published, who, (pub_dt or _dt.utcnow()))).fetchone()['id']
             flash('News posted.', 'success')
-            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ? WHERE id = ?",
-                         (category, summary, key_dates_json, news_id))
+            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ?, schedule = ? WHERE id = ?",
+                         (category, summary, key_dates_json, schedule_json, news_id))
             if inbox_id:
                 conn.execute("UPDATE pg_news_inbox SET status='posted', news_id=?, reviewed_by=?, "
                              "reviewed_at=CURRENT_TIMESTAMP WHERE id=?", (news_id, who, inbox_id))
+        # Information bulletin / brochure → also the authority's MAIN brochure document, so
+        # registered doctors can download it from the dashboard. (founder 2026-10-09)
+        brochure_msg = ''
+        if save_brochure:
+            code = _authority_code_for(scope, state)
+            pdf_row = conn.execute("SELECT pdf_name, pdf_data, pdf_content_type FROM pg_news WHERE id = ?",
+                                   (news_id,)).fetchone()
+            if not code:
+                brochure_msg = 'Not saved as a brochure — no counselling authority matches this state yet.'
+            elif not (pdf_row and pdf_row['pdf_data']):
+                brochure_msg = 'Not saved as a brochure — attach the bulletin PDF first.'
+            else:
+                from pg_admin.authorities import get_authority
+                conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE")
+                conn.execute("UPDATE pg_authority_docs SET is_main = FALSE WHERE authority_code = ? AND category = 'brochure'",
+                             (code,))
+                existing = conn.execute("SELECT id FROM pg_authority_docs WHERE authority_code = ? AND category = 'brochure' "
+                                        "AND file_name = ? LIMIT 1", (code, pdf_row['pdf_name'] or '')).fetchone()
+                _ddate = (pub_dt or _dt.utcnow()).strftime('%Y-%m-%d')
+                if existing:
+                    conn.execute("UPDATE pg_authority_docs SET is_main = TRUE, title = ?, doc_date = ?, is_published = TRUE, "
+                                 "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (heading, _ddate, existing['id']))
+                else:
+                    conn.execute(
+                        "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, note, "
+                        "file_name, file_data, file_content_type, is_published, uploaded_by, is_main) "
+                        "VALUES (?,?,'brochure',?,?,?,?,?,?,TRUE,?,TRUE)",
+                        (code, (get_authority(code) or {}).get('name', ''), heading, _ddate, summary,
+                         pdf_row['pdf_name'] or 'brochure.pdf', pdf_row['pdf_data'],
+                         pdf_row['pdf_content_type'] or 'application/pdf', who))
+                brochure_msg = f"Also saved as the main brochure for {(get_authority(code) or {}).get('name', code)} — doctors can download it from the dashboard."
         conn.commit()
         saved_ok = True
+        if brochure_msg:
+            flash(brochure_msg, 'success' if brochure_msg.startswith('Also') else 'info')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -272,6 +355,7 @@ def news_test_email():
         row = conn.execute(
             "SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
             "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, COALESCE(key_dates,'') AS key_dates, "
+            "COALESCE(schedule,'') AS schedule, "
             "is_published, published_at FROM pg_news WHERE id = ?", (nid,)).fetchone() if nid else None
     finally:
         conn.close()

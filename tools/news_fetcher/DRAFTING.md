@@ -30,7 +30,7 @@ Never edit any other file, never publish anything, never run other commands.
   "headline": "≤110 chars. Authority + exam/year + the action + key date. e.g. \"MCC NEET PG 2026: Round 1 Registration Opens 12 October, Closes 18 October\"",
   "summary": "ONE sentence, ≤200 chars, for the news list + email.",
   "article": "150–250 words, plain text, 2–4 short paragraphs, IN YOUR OWN WORDS (never copy sentences from the PDF). What was announced, who it applies to, the dates, what the doctor should do next, and where the official notice is. Neutral, factual, Indian English. No hype, no emojis, no invented facts.",
-  "category": "one of: registration | verification | choice_filling | seat_allotment | fee_payment | reporting | notification | other",
+  "category": "one of: bulletin | registration | verification | choice_filling | seat_allotment | fee_payment | reporting | notification | other",
   "applies_to": "e.g. All NEET PG 2026 candidates for AIQ seats / Karnataka in-service candidates / NRI candidates",
   "action": "the one thing a doctor should do now, e.g. Register on mcc.nic.in before 18 Oct 2026, 12 noon.",
   "dates": {
@@ -46,6 +46,26 @@ Never edit any other file, never publish anything, never run other commands.
   }
 }
 ```
+
+Optional `schedule` (add it whenever the notice has a timetable — e.g. round-wise counselling
+schedule, verification slots by date, a fee table by round):
+
+```json
+"schedule": {
+  "title": "AIQ PG 2026 — round-wise schedule",
+  "columns": ["Activity", "Round 1", "Round 2", "Round 3", "Stray"],
+  "rows": [
+    ["Registration & payment", "12–21 Oct (till 12 noon)", "6–11 Nov", "26 Nov–1 Dec", "16–21 Dec"],
+    ["Choice filling", "13–22 Oct (till 10 AM)", "...", "...", "..."],
+    ["Result", "24 Oct", "14 Nov", "4 Dec", "24 Dec"]
+  ]
+}
+```
+Copy the dates exactly as the notice states them (human-readable, e.g. "12–21 Oct 2026, 12 noon").
+Max 8 columns, 40 rows. Omit `schedule` if the notice has no timetable.
+
+Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochure for the year
+(the reviewer will also save it as that authority's main brochure document).
 
 Rules for `dates`:
 - Include a key ONLY if the notice explicitly states that date. Omit the key otherwise —

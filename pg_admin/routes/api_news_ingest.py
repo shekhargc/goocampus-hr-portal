@@ -16,7 +16,7 @@ from flask import request, jsonify
 from db import get_db
 from pg_admin import news_scraper as NS
 
-CATEGORIES = ('registration', 'verification', 'choice_filling', 'seat_allotment', 'fee_payment', 'reporting',
+CATEGORIES = ('registration', 'verification', 'bulletin', 'choice_filling', 'seat_allotment', 'fee_payment', 'reporting',
               'notification', 'other')
 DATE_FIELDS = ('registration_start', 'registration_end', 'verification_start', 'verification_end',
                'choice_filling_start', 'choice_filling_end', 'payment_last_date', 'reporting_last_date',
@@ -58,6 +58,12 @@ def _clean_draft(dr):
             out['dates'][k] = {'date': _d(v.get('date')).isoformat(),
                                'time': str(v.get('time') or '').strip()[:20],
                                'quote': str(v.get('quote') or '').strip()[:400]}
+    sch = dr.get('schedule')
+    if isinstance(sch, dict) and isinstance(sch.get('rows'), list):
+        cols = [str(c).strip()[:60] for c in (sch.get('columns') or [])][:8]
+        rows = [[str(c).strip()[:160] for c in r][:8] for r in sch['rows'] if isinstance(r, list)][:40]
+        if rows:
+            out['schedule'] = {'title': str(sch.get('title') or '').strip()[:120], 'columns': cols, 'rows': rows}
     if not out['headline'] and not out['article']:
         return None
     return out
