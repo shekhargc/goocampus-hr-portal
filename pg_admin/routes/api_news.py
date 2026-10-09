@@ -163,6 +163,82 @@ def api_pg_news():
         except Exception: pass
 
 
+DEADLINE_LABELS = {
+    'registration_start': 'Registration starts', 'registration_end': 'Registration closes',
+    'verification_start': 'Document verification / slot booking starts',
+    'verification_end': 'Document verification closes',
+    'choice_filling_start': 'Choice filling starts', 'choice_filling_end': 'Choice filling closes',
+    'payment_last_date': 'Fee payment last date', 'reporting_last_date': 'Reporting / joining last date',
+    'result_date': 'Result / seat allotment',
+}
+
+
+def api_pg_news_deadlines():
+    """GET /api/pg/news/deadlines — upcoming key dates across published news, flattened +
+    sorted, for an "Upcoming deadlines" strip (site, /news, dashboard). (2026-10-09)
+    Params: states (comma list), all ('0' hides All-India), days (default 45, max 180).
+    A doctor's Bearer token adds their home + followed states, like /api/pg/news.
+    Returns {deadlines:[{date, field, label, news_id, heading, body_label, scope, state}]}."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    import json as _json
+    from datetime import date as _date, timedelta as _td
+    states = [x.strip() for x in _s(request.args.get('states')).split(',') if x.strip()]
+    include_all = _s(request.args.get('all')) != '0'
+    try:
+        days = min(180, max(1, int(request.args.get('days') or 45)))
+    except (TypeError, ValueError):
+        days = 45
+    conn = get_db()
+    try:
+        ensure_news_seo_cols(conn)
+        user = _user(conn)
+        if user:
+            hs = _home_state(conn, user['id'])
+            if hs:
+                states.append(hs)
+            states.extend(_follows(conn, user['id']))
+        states = list({x for x in states if x})
+        parts, params = [], []
+        if include_all:
+            parts.append("scope = 'all_india'")
+        if states:
+            parts.append("(scope = 'state' AND state IN (" + ','.join(['?'] * len(states)) + "))")
+            params.extend(states)
+        if not parts:
+            parts.append("scope = 'all_india'")
+        rows = conn.execute(
+            "SELECT id, heading, body_label, scope, state, key_dates FROM pg_news "
+            "WHERE is_published AND COALESCE(key_dates,'') <> '' AND (" + " OR ".join(parts) + ")",
+            params).fetchall()
+        today, until = _date.today(), _date.today() + _td(days=days)
+        out = []
+        for r in rows:
+            try:
+                kd = _json.loads(r['key_dates'] or '{}') or {}
+            except Exception:
+                continue
+            for field, v in kd.items():
+                try:
+                    d = _date.fromisoformat(str((v or {}).get('date') or '')[:10])
+                except ValueError:
+                    continue
+                if today <= d <= until:
+                    out.append({'date': d.isoformat(), 'field': field,
+                                'label': DEADLINE_LABELS.get(field, field.replace('_', ' ').title()),
+                                'news_id': r['id'], 'heading': r['heading'], 'body_label': r['body_label'],
+                                'scope': r['scope'], 'state': r['state'] or ''})
+        out.sort(key=lambda x: (x['date'], x['news_id']))
+        return jsonify({'ok': True, 'days': days, 'count': len(out), 'deadlines': out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_news_deadlines: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 def api_pg_news_states():
     """GET /api/pg/news/states — states that have published news (for the picker)."""
     if not _authorized():

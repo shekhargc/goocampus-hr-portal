@@ -1759,7 +1759,8 @@ def admin_pg_speed_check():
     calls = [('courses q=radio', '/api/pg/predictor/courses', {'q': 'radio', 'degree_group': 'mdms'}),
              ('courses q=gen med', '/api/pg/predictor/courses', {'q': 'gen med', 'degree_group': 'mdms'}),
              ('summary authority=MCC', '/api/pg/cutoff-explorer/summary', {'authority': 'MCC'}),
-             ('summary course', '/api/pg/cutoff-explorer/summary', {'course': crs['course'] if crs else ''})]
+             ('summary course', '/api/pg/cutoff-explorer/summary', {'course': crs['course'] if crs else ''}),
+             ('news deadlines', '/api/pg/news/deadlines', {'states': 'Karnataka', 'days': 60})]
     if m:
         calls.append(('mentor photo w=200', f"/api/pg/mentors/{m['id']}/photo", {'w': 200}))
     out = []
