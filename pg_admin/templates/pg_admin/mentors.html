@@ -125,6 +125,36 @@
     <div class="pgm-stat ver"><div class="lbl">Verified</div><div class="val">{{ stats.verified }}</div></div>
 </div>
 
+{% if country_stats %}
+<details class="pgm-country-vis" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 16px;margin-bottom:14px;" {% if request.args.get('vis') %}open{% endif %}>
+  <summary style="cursor:pointer;font-weight:700;color:var(--navy);">🌍 Website visibility by country
+    <span style="font-weight:400;color:#64748b;font-size:0.85rem;"> — choose which countries' mentors show on goocampus.in</span></summary>
+  <form method="POST" action="{{ url_for('pg_mentors_country_visibility') }}" style="margin-top:10px;"
+        onsubmit="return confirm('Apply this to the ticked countries?');">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      <button type="button" class="pgm-btn pgm-btn-ghost" onclick="pgmTickAllBut('India')">Tick all except India</button>
+      <button type="button" class="pgm-btn pgm-btn-ghost" onclick="pgmTickAllBut(null)">Clear ticks</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px 14px;font-size:0.85rem;">
+      {% for c in country_stats %}
+      <label style="display:flex;gap:6px;align-items:center;cursor:pointer;">
+        <input type="checkbox" name="countries" value="{{ c.country }}" class="pgm-cty">
+        <span><b>{{ c.country }}</b> — {{ c.published }} live / {{ c.total }}{% if c.hidden %} <span style="color:#b45309;">({{ c.hidden }} hidden)</span>{% endif %}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button name="action" value="hide" class="pgm-btn" style="background:#b91c1c;color:#fff;">Hide ticked countries from website</button>
+      <button name="action" value="show" class="pgm-btn" style="background:#166534;color:#fff;">Show ticked countries again</button>
+    </div>
+    <p style="font-size:0.78rem;color:#64748b;margin:8px 0 0;">Hide = unpublish (mentor stays here, nothing deleted). Show again = re-publishes only the mentors this tool hid — mentors you kept as Draft stay Draft.</p>
+  </form>
+</details>
+<script>
+function pgmTickAllBut(keep){ document.querySelectorAll('.pgm-cty').forEach(function(cb){ cb.checked = keep ? (cb.value !== keep) : false; }); }
+</script>
+{% endif %}
+
 <form method="GET" action="/admin/pg/mentors" class="pgm-controls">
     <input type="hidden" name="type" value="{{ active_type }}">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name, specialization, qualification…">
@@ -151,17 +181,17 @@
         <option value="false" {% if f_avail == 'false' %}selected{% endif %}>Unavailable</option>
     </select>
     <button type="submit" class="pgm-btn pgm-btn-ghost"><i class="fas fa-filter"></i> Filter</button>
-    {% if q or f_spec or f_pub or f_avail %}<a href="/admin/pg/mentors" class="pgm-btn pgm-btn-ghost">Clear</a>{% endif %}
+    {% if q or f_spec or f_pub or f_avail or f_country %}<a href="/admin/pg/mentors" class="pgm-btn pgm-btn-ghost">Clear</a>{% endif %}
 </form>
 
 <div class="table-wrapper">
 <table class="pgm-table">
     <thead>
-        <tr><th>Mentor</th><th>Specialization</th><th>Exp.</th><th>Fees (₹)</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>Mentor</th><th>Country</th><th>Specialization</th><th>Exp.</th><th>Fees (₹)</th><th>Status</th><th>Actions</th></tr>
     </thead>
     <tbody>
     {% if not mentors %}
-        <tr><td colspan="6"><div class="pgm-empty">No mentors yet. Click <strong>Add Mentor</strong> to create one.</div></td></tr>
+        <tr><td colspan="7"><div class="pgm-empty">No mentors yet. Click <strong>Add Mentor</strong> to create one.</div></td></tr>
     {% endif %}
     {% for m in mentors %}
         <tr>
@@ -178,6 +208,7 @@
                     </div>
                 </div>
             </td>
+            <td>{{ m.country or '—' }}{% if m.hidden_by_country %}<div class="sub" style="color:#b45309;">hidden by country</div>{% endif %}</td>
             <td>{{ m.specialization }}{% if m.designation %}<div class="sub">{{ m.designation }}</div>{% endif %}</td>
             <td>{% if m.experience_years is not none %}{{ m.experience_years }} yr{% else %}—{% endif %}</td>
             <td>

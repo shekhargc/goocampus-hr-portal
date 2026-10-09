@@ -147,13 +147,21 @@ def mentors_admin():
         countries = [r['country'] for r in conn.execute(
             "SELECT DISTINCT country FROM pg_mentors "
             "WHERE is_active AND COALESCE(country,'') <> '' ORDER BY country").fetchall()]
+        # Website visibility by country (founder 2026-10-09): per-country totals +
+        # how many are live on goocampus.in and how many were hidden by this tool.
+        _ensure_country_hide_col(conn)
+        country_stats = [dict(r) for r in conn.execute(
+            "SELECT COALESCE(NULLIF(country,''),'(no country)') AS country, COUNT(*) AS total, "
+            "SUM(CASE WHEN is_published THEN 1 ELSE 0 END) AS published, "
+            "SUM(CASE WHEN COALESCE(hidden_by_country, FALSE) THEN 1 ELSE 0 END) AS hidden "
+            "FROM pg_mentors WHERE is_active GROUP BY 1 ORDER BY COUNT(*) DESC, 1").fetchall()]
     except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
         logging.error("mentors_admin: %s", e)
-        mentors, specializations, countries = [], [], []
+        mentors, specializations, countries, country_stats = [], [], [], []
         type_counts = {t: 0 for t in _MENTOR_TYPES}; type_counts['all'] = 0
         stats = {'total': 0, 'published': 0, 'available': 0, 'verified': 0}
     finally:
@@ -177,7 +185,7 @@ def mentors_admin():
                            mentor_type_labels=_MENTOR_TYPE_LABELS,
                            active_type=mtype, type_counts=type_counts,
                            q=q, f_spec=f_spec, f_pub=f_pub, f_avail=f_avail,
-                           countries=countries, f_country=f_country,
+                           countries=countries, f_country=f_country, country_stats=country_stats,
                            active_section='goocampus_in')
 
 
@@ -347,6 +355,54 @@ def mentor_save():
     return redirect(url_for('pg_mentors_admin', type=mentor_type))
 
 
+def _ensure_country_hide_col(conn):
+    conn.execute("ALTER TABLE pg_mentors ADD COLUMN IF NOT EXISTS hidden_by_country BOOLEAN DEFAULT FALSE")
+
+
+@login_required
+def mentors_country_visibility():
+    """Hide / show mentors on goocampus.in by COUNTRY (founder 2026-10-09: show only
+    India-based mentors for now). Hide = unpublish + mark hidden_by_country; Show = re-publish
+    ONLY mentors this tool hid (never publishes an intentional draft). Fully reversible."""
+    user = _require_admin()
+    if not user:
+        return redirect(url_for('dashboard'))
+    action = (request.form.get('action') or '').strip()
+    picked = [c for c in request.form.getlist('countries') if c is not None]
+    if action not in ('hide', 'show') or not picked:
+        flash('Pick at least one country.', 'error')
+        return redirect(url_for('pg_mentors_admin', type='all'))
+    vals = ['' if c == '(no country)' else c for c in picked]
+    ph = ','.join(['?'] * len(vals))
+    conn = get_db()
+    try:
+        _ensure_country_hide_col(conn)
+        if action == 'hide':
+            n = conn.execute(
+                f"UPDATE pg_mentors SET is_published = FALSE, hidden_by_country = TRUE, updated_by = ?, "
+                f"updated_at = CURRENT_TIMESTAMP WHERE is_active AND is_published "
+                f"AND COALESCE(country,'') IN ({ph}) RETURNING id", [user.get('id')] + vals).fetchall()
+            msg = f"Hid {len(n)} mentor(s) from the website ({', '.join(picked)})."
+        else:
+            n = conn.execute(
+                f"UPDATE pg_mentors SET is_published = TRUE, hidden_by_country = FALSE, updated_by = ?, "
+                f"updated_at = CURRENT_TIMESTAMP WHERE is_active AND COALESCE(hidden_by_country, FALSE) "
+                f"AND COALESCE(country,'') IN ({ph}) RETURNING id", [user.get('id')] + vals).fetchall()
+            msg = f"Showing {len(n)} mentor(s) again ({', '.join(picked)})."
+        conn.commit()
+        logging.info("mentors_country_visibility %s by %s: %s → %d", action, user.get('name'), picked, len(n))
+        flash(msg, 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("mentors_country_visibility: %s", e)
+        flash('Could not update. Nothing was changed.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_mentors_admin', type='all'))
+
+
 @login_required
 def mentor_toggle(mentor_id):
     """Flip one boolean flag: ?flag=is_published|is_verified|is_available."""
@@ -359,8 +415,10 @@ def mentor_toggle(mentor_id):
         return redirect(url_for('pg_mentors_admin'))
     conn = get_db()
     try:
+        _ensure_country_hide_col(conn)
         conn.execute(
             f"UPDATE pg_mentors SET {flag} = NOT {flag}, "
+            + ("hidden_by_country = FALSE, " if flag == 'is_published' else "") +   # a manual choice wins
             f"updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (user.get('id'), mentor_id))
         conn.commit()
