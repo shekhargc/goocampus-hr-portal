@@ -88,14 +88,24 @@
             <div style="margin-top:4px;">
               <span class="nb-kind {{ 'nb-pdf' if it.kind=='pdf' else 'nb-link' }}">{{ 'PDF' if it.kind=='pdf' else 'LINK' }}</span>
               {% if it.draft %}<span class="nb-kind" style="background:#ede9fe;color:#5b21b6;">AI DRAFT</span>{% endif %}
+              {% if it.redraft_requested %}<span class="nb-kind" style="background:#fef3c7;color:#92400e;">↻ RE-DRAFT REQUESTED</span>{% endif %}
+              {% if it.draft and it.draft.events %}<span class="nb-kind" style="background:#dcfce7;color:#166534;">📅 {{ it.draft.events|length }} CALENDAR DATES</span>{% endif %}
               <a href="{{ it.url }}" target="_blank" rel="noopener" style="font-size:0.8rem;color:#2952a3;margin-left:6px;">{{ 'Open PDF' if it.kind=='pdf' else 'Open page' }} ↗</a>
               {% if it.status == 'posted' and it.news_id %}<span style="font-size:0.8rem;color:#166534;margin-left:8px;">✓ posted{% if it.reviewed_by %} by {{ it.reviewed_by }}{% endif %}</span>{% endif %}
               {% if it.status == 'dismissed' and it.reviewed_by %}<span style="font-size:0.8rem;color:var(--gray-500);margin-left:8px;">dismissed by {{ it.reviewed_by }}</span>{% endif %}
             </div>
+            {% if it.history_note %}<div style="font-size:0.76rem;color:#b45309;margin-top:3px;">↩ {{ it.history_note }}</div>{% endif %}
           </td>
           <td class="nb-hide-sm" style="color:var(--gray-600);font-size:0.8rem;">{{ labels.get(it.source_code, it.source_code) }}</td>
           <td class="nb-hide-sm" style="color:var(--gray-500);font-size:0.78rem;white-space:nowrap;">{{ it.first_seen_at|format_datetime }}</td>
           <td style="text-align:right;white-space:nowrap;">
+            {% if it.status == 'posted' and it.draft %}
+              <a class="nb-btn nb-add" href="{{ url_for('pg_news_admin', inbox=it.id) }}" title="Opens the posted news with this draft to update it">Update posted news</a>
+            {% endif %}
+            <form method="POST" action="{{ url_for('pg_news_inbox_redraft') }}" style="display:inline;">
+              <input type="hidden" name="id" value="{{ it.id }}"><input type="hidden" name="tab" value="{{ tab }}">
+              <button class="nb-btn nb-dis" style="color:#5b21b6;" title="Your Mac re-reads the notice and sends a fresh AI draft">↻ Re-draft</button>
+            </form>
             {% if it.status == 'new' %}
               <a class="nb-btn nb-add" href="{{ url_for('pg_news_admin', inbox=it.id) }}">Add to News</a>
               <form method="POST" action="{{ url_for('pg_news_inbox_status') }}" style="display:inline;">

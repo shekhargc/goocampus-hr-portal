@@ -27,11 +27,11 @@
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px;margin-bottom:22px;max-width:860px;">
     <h2 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:var(--navy);">Post an update</h2>
     <form id="newsForm" method="POST" action="{{ url_for('pg_news_save') }}" enctype="multipart/form-data">
-      <input type="hidden" name="news_id" value="">
+      <input type="hidden" name="news_id" value="{{ prefill.news_id if prefill and prefill.news_id else '' }}">
       <input type="hidden" name="inbox_id" value="{{ prefill.inbox_id if prefill else '' }}">
       {% if prefill %}
       <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.84rem;">
-        <b>From the News Inbox</b> · {{ prefill.source_label }}{% if prefill.status == 'posted' %} · <b>already posted once</b>{% endif %}<br>
+        <b>From the News Inbox</b> · {{ prefill.source_label }}{% if prefill.news_id %} · <b>updating the posted news #{{ prefill.news_id }}</b> (no duplicate){% elif prefill.status == 'posted' %} · <b>already posted once</b>{% endif %}<br>
         {% if prefill.drafted %}<b>AI draft filled in below</b> — check the heading, article and every date against the official notice, then post.
         {% if prefill.applies_to %}<div style="margin-top:4px;"><b>Applies to:</b> {{ prefill.applies_to }}</div>{% endif %}
         {% if prefill.action %}<div><b>What doctors should do:</b> {{ prefill.action }}</div>{% endif %}
@@ -101,6 +101,23 @@ Result | 24 Oct | 14 Nov | 4 Dec"
                   style="display:block;width:100%;margin-top:5px;margin-bottom:4px;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.82rem;font-family:ui-monospace,Menlo,monospace;resize:vertical;"></textarea>
         <span style="display:block;font-weight:400;font-size:0.74rem;color:var(--gray-500);margin-bottom:14px;">One row per line, columns separated by <b>|</b>. First line = column headings. Leave empty if not needed.</span>
       </label>
+      {% if prefill and prefill.events %}
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.85rem;color:#14532d;cursor:pointer;">
+          <input type="checkbox" name="add_events" value="1" checked style="margin-top:2px;">
+          <span><strong>📅 Add these {{ prefill.events|length }} dates to the Counselling Calendar</strong> for this authority (feeds the website's schedule + deadline reminders). Re-posting replaces them — never duplicates.</span>
+        </label>
+        <div style="max-height:220px;overflow:auto;margin-top:8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+            <tr style="color:#166534;text-align:left;"><th style="padding:3px 6px;">Round</th><th style="padding:3px 6px;">Step</th><th style="padding:3px 6px;">From</th><th style="padding:3px 6px;">To</th><th style="padding:3px 6px;">Time</th></tr>
+            {% for e in prefill.events %}
+            <tr style="border-top:1px solid #dcfce7;"><td style="padding:3px 6px;">{{ e.round or '—' }}</td><td style="padding:3px 6px;">{{ e.label or event_labels.get(e.event, e.event) }}</td>
+              <td style="padding:3px 6px;white-space:nowrap;">{{ e.start|format_date }}</td><td style="padding:3px 6px;white-space:nowrap;">{{ e.end|format_date if e.end else '' }}</td><td style="padding:3px 6px;">{{ e.time }}</td></tr>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
+      {% endif %}
       <label id="brochureBox" style="display:flex;align-items:flex-start;gap:8px;font-size:0.85rem;color:var(--gray-700);background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:14px;cursor:pointer;">
         <input type="checkbox" name="save_brochure" id="save_brochure" value="1" style="margin-top:2px;">
         <span><strong>📘 Also save the PDF as this authority's main Information Bulletin / Brochure</strong> — doctors who've registered can download it from the counselling section of their dashboard. (Ticks itself when the category is "Information bulletin / brochure".)</span>
@@ -140,7 +157,8 @@ Result | 24 Oct | 14 Nov | 4 Dec"
           <th style="padding:10px 14px;">Heading</th>
           <th style="padding:10px 14px;">PDF</th>
           <th style="padding:10px 14px;">Status</th>
-          <th style="padding:10px 14px;">Posted</th>
+          <th style="padding:10px 14px;">News date</th>
+          <th style="padding:10px 14px;">Posted on</th>
           <th style="padding:10px 14px;"></th>
         </tr>
       </thead>
@@ -149,7 +167,8 @@ Result | 24 Oct | 14 Nov | 4 Dec"
         <tr style="border-top:1px solid var(--gray-100);">
           <td style="padding:10px 14px;">{{ 'All India' if it.scope == 'all_india' else it.state }}</td>
           <td style="padding:10px 14px;font-weight:600;color:var(--navy);">{{ it.body_label }}</td>
-          <td style="padding:10px 14px;">{{ it.heading }}</td>
+          <td style="padding:10px 14px;">{{ it.heading }}
+            <div style="margin-top:3px;">{% if it.source == 'ai_inbox' %}<span style="font-size:0.68rem;font-weight:700;background:#ede9fe;color:#5b21b6;padding:1px 7px;border-radius:999px;">🤖 AI draft</span>{% else %}<span style="font-size:0.68rem;font-weight:700;background:#f1f5f9;color:#475569;padding:1px 7px;border-radius:999px;">✍️ Manual</span>{% endif %}</div></td>
           <td style="padding:10px 14px;">
             {% if it.has_pdf %}
               <a href="{{ url_for('pg_news_pdf_admin') }}?id={{ it.id }}" target="_blank" style="color:#2952a3;text-decoration:none;font-weight:600;">View</a>
@@ -158,7 +177,8 @@ Result | 24 Oct | 14 Nov | 4 Dec"
           <td style="padding:10px 14px;">
             {% if it.is_published %}<span style="color:#166534;font-weight:600;">Live</span>{% else %}<span style="color:#b45309;font-weight:600;">Hidden</span>{% endif %}
           </td>
-          <td style="padding:10px 14px;color:var(--gray-500);font-size:0.78rem;">{{ it.published_at }}</td>
+          <td style="padding:10px 14px;color:var(--gray-600);font-size:0.78rem;white-space:nowrap;">{{ it.published_at|format_date }}</td>
+          <td style="padding:10px 14px;color:var(--gray-500);font-size:0.76rem;">{{ it.created_at|format_datetime }}{% if it.created_by %}<div>by {{ it.created_by }}</div>{% endif %}</td>
           <td style="padding:10px 14px;text-align:right;white-space:nowrap;">
             <button type="button" class="newsEditBtn" style="background:none;border:0;color:#166534;font-size:0.82rem;cursor:pointer;font-weight:600;"
                     data-id="{{ it.id }}" data-heading="{{ it.heading }}"
@@ -176,7 +196,7 @@ Result | 24 Oct | 14 Nov | 4 Dec"
               <input type="hidden" name="news_id" value="{{ it.id }}">
               <button type="submit" style="background:none;border:0;color:#2952a3;font-size:0.82rem;cursor:pointer;margin-left:8px;">{{ 'Hide' if it.is_published else 'Show' }}</button>
             </form>
-            <form method="POST" action="{{ url_for('pg_news_delete') }}" onsubmit="return confirm('Delete this update?');" style="display:inline;">
+            <form method="POST" action="{{ url_for('pg_news_delete') }}" onsubmit="return confirm('Move this update to Deleted? It disappears from the website; you can restore it.');" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}">
               <button type="submit" style="background:none;border:0;color:#dc2626;font-size:0.82rem;cursor:pointer;margin-left:8px;">Delete</button>
             </form>
@@ -188,6 +208,38 @@ Result | 24 Oct | 14 Nov | 4 Dec"
   </div>
   {% else %}
   <p style="color:var(--gray-500);font-size:0.9rem;">No updates posted yet.</p>
+  {% endif %}
+
+  {% if deleted %}
+  <details style="margin-top:22px;max-width:1000px;">
+    <summary style="cursor:pointer;font-size:1rem;font-weight:700;color:var(--navy);">🗑️ Deleted ({{ deleted|length }}) — hidden from the website; restore any time</summary>
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;margin-top:10px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+        <thead><tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+          <th style="padding:9px 14px;">Heading</th><th style="padding:9px 14px;">Authority</th>
+          <th style="padding:9px 14px;">Deleted</th><th style="padding:9px 14px;"></th></tr></thead>
+        <tbody>
+        {% for it in deleted %}
+          <tr style="border-top:1px solid var(--gray-100);">
+            <td style="padding:9px 14px;">{{ it.heading }}</td>
+            <td style="padding:9px 14px;">{{ it.body_label }}</td>
+            <td style="padding:9px 14px;color:var(--gray-500);font-size:0.76rem;">{{ it.deleted_at|format_datetime }}{% if it.deleted_by %}<div>by {{ it.deleted_by }}</div>{% endif %}</td>
+            <td style="padding:9px 14px;text-align:right;white-space:nowrap;">
+              <form method="POST" action="{{ url_for('pg_news_restore') }}" style="display:inline;">
+                <input type="hidden" name="news_id" value="{{ it.id }}">
+                <button type="submit" style="background:none;border:0;color:#166534;font-weight:700;cursor:pointer;">↩ Restore</button>
+              </form>
+              <form method="POST" action="{{ url_for('pg_news_purge') }}" onsubmit="return confirm('Delete this update PERMANENTLY? This cannot be undone.');" style="display:inline;">
+                <input type="hidden" name="news_id" value="{{ it.id }}">
+                <button type="submit" style="background:none;border:0;color:#dc2626;cursor:pointer;margin-left:8px;">Delete permanently</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
   {% endif %}
 
 </div>

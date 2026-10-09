@@ -28,8 +28,19 @@ def ensure_news_seo_cols(conn):
     try:
         for c in ('category', 'summary', 'key_dates', 'schedule'):
             conn.execute(f"ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS {c} TEXT DEFAULT ''")
+        # source ('ai_inbox' | 'manual'), the inbox notice it came from, soft delete (2026-10-09)
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual'")
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS inbox_id INTEGER")
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP")
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS deleted_by TEXT DEFAULT ''")
         conn.commit()
         _NEWS_COLS_OK = True
+        try:   # label news that was posted from the News Inbox (metadata only)
+            conn.execute("UPDATE pg_news n SET source = 'ai_inbox', inbox_id = i.id FROM pg_news_inbox i "
+                         "WHERE i.news_id = n.id AND n.inbox_id IS NULL")
+            conn.commit()
+        except Exception:
+            conn.rollback()
     except Exception:
         try: conn.rollback()
         except Exception: pass
@@ -127,7 +138,7 @@ def api_pg_news():
             params.extend(states)
         if not scope_parts:
             scope_parts.append("scope = 'all_india'")
-        where = "is_published AND (" + " OR ".join(scope_parts) + ")"
+        where = "is_published AND deleted_at IS NULL AND (" + " OR ".join(scope_parts) + ")"
         if body:
             where += " AND body_label = ?"; params.append(body)
 
@@ -227,7 +238,7 @@ def api_pg_news_deadlines():
             parts.append("scope = 'all_india'")
         rows = conn.execute(
             "SELECT id, heading, body_label, scope, state, key_dates FROM pg_news "
-            "WHERE is_published AND COALESCE(key_dates,'') <> '' AND (" + " OR ".join(parts) + ")",
+            "WHERE is_published AND deleted_at IS NULL AND COALESCE(key_dates,'') <> '' AND (" + " OR ".join(parts) + ")",
             params).fetchall()
         today, until = _date.today(), _date.today() + _td(days=days)
         out = []
@@ -246,12 +257,114 @@ def api_pg_news_deadlines():
                                 'label': DEADLINE_LABELS.get(field, field.replace('_', ' ').title()),
                                 'news_id': r['id'], 'heading': r['heading'], 'body_label': r['body_label'],
                                 'scope': r['scope'], 'state': r['state'] or ''})
-        out.sort(key=lambda x: (x['date'], x['news_id']))
+        # + Counselling Calendar steps (round-wise). A step already covered by a news key date
+        # (same state, date and kind of step) isn't repeated. (2026-10-09)
+        try:
+            from pg_admin.data import calendar as CAL
+            from pg_admin.authorities import get_authority
+            _base = {'registration_start': 'registration', 'registration_end': 'registration',
+                     'verification_start': 'verification', 'verification_end': 'verification',
+                     'choice_filling_start': 'choice_filling', 'choice_filling_end': 'choice_filling',
+                     'payment_last_date': 'payment', 'reporting_last_date': 'reporting', 'result_date': 'result'}
+            seen = {((x['state'] or 'ALL').lower(), x['date'], _base.get(x['field'], x['field'])) for x in out}
+            CAL.ensure_calendar_table(conn)
+            codes = _codes_for_states(states if states else [], include_all)
+            for r in CAL.events_for(conn, codes, upcoming_only=True):
+                a = get_authority(r['authority_code']) or {}
+                st = '' if r['authority_code'] == 'mcc' else a.get('state', '')
+                rnd = (r['round'] + ' · ') if r['round'] else ''
+                pairs = ([('opens', r['start_date']), ('closes', r['end_date'])] if r.get('end_date')
+                         else [('', r['start_date'])])
+                for kind, d in pairs:
+                    if not d or not (today <= d <= until):
+                        continue
+                    key = ((st or 'ALL').lower(), d.isoformat(), r['event'])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    lbl = r['label'] or CAL.EVENT_LABELS.get(r['event'], '')
+                    out.append({'date': d.isoformat(), 'field': f"{r['event']}_{kind or 'on'}",
+                                'label': f"{rnd}{lbl}{(' ' + kind) if kind else ''}".strip(),
+                                'news_id': r.get('news_id'), 'heading': '',
+                                'body_label': a.get('name', ''), 'scope': 'all_india' if r['authority_code'] == 'mcc' else 'state',
+                                'state': st, 'round': r['round'] or '', 'source': 'calendar',
+                                'time': r.get('time_text') or ''})
+        except Exception as _e:
+            logging.warning("deadlines calendar merge: %s", _e)
+            try: conn.rollback()
+            except Exception: pass
+        out.sort(key=lambda x: (x['date'], x.get('news_id') or 0))
         return jsonify({'ok': True, 'days': days, 'count': len(out), 'deadlines': out})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
         logging.error("api_pg_news_deadlines: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def _viewer_states(conn, states_param):
+    """(include_all_india, state list or ['all']) from ?states= + the doctor's token."""
+    states = [x.strip() for x in _s(states_param).split(',') if x.strip()]
+    user = _user(conn)
+    if user:
+        hs = _home_state(conn, user['id'])
+        if hs:
+            states.append(hs)
+        states.extend(_follows(conn, user['id']))
+    return list({x for x in states if x})
+
+
+def _codes_for_states(states, include_all=True):
+    from pg_admin.authorities import all_authorities
+    auths = all_authorities()
+    if any(x.lower() == 'all' for x in states):
+        return [a['code'] for a in auths if a['kind'] == 'state' or include_all]
+    sl = {x.strip().lower() for x in states}
+    codes = [a['code'] for a in auths if a['kind'] == 'state' and a['state'].strip().lower() in sl]
+    if include_all:
+        codes.insert(0, 'mcc')
+    return codes
+
+
+def api_pg_calendar():
+    """GET /api/pg/calendar — the Counselling Calendar, per authority and round (2026-10-09).
+    Params: authority=<code> (one) OR states=<comma list | all> (+ MCC unless all=0);
+    upcoming=1 hides finished steps. A doctor's Bearer token adds home + followed states.
+    → {authorities:[{code,name,state,rounds:[{round, events:[{event,event_label,label,start_date,
+       end_date,time,note,news_id}]}]}]}"""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import calendar as CAL
+    from pg_admin.authorities import get_authority
+    conn = get_db()
+    try:
+        CAL.ensure_calendar_table(conn)
+        code = _s(request.args.get('authority')).lower()
+        if code:
+            codes = [code] if get_authority(code) else []
+        else:
+            codes = _codes_for_states(_viewer_states(conn, request.args.get('states')),
+                                      _s(request.args.get('all')) != '0')
+        rows = CAL.events_for(conn, codes, upcoming_only=_s(request.args.get('upcoming')) == '1') if codes else []
+        order = {r: i for i, r in enumerate(CAL.ROUNDS)}
+        by_auth = {}
+        for r in rows:
+            by_auth.setdefault(r['authority_code'], {}).setdefault(r['round'] or '', []).append(CAL.as_json_row(r))
+        out = []
+        for c in codes:
+            if c not in by_auth:
+                continue
+            a = get_authority(c) or {'code': c, 'name': c, 'state': ''}
+            out.append({'code': c, 'name': a['name'], 'state': a['state'],
+                        'rounds': [{'round': rd or 'General', 'events': evs}
+                                   for rd, evs in sorted(by_auth[c].items(), key=lambda kv: order.get(kv[0], 50))]})
+        return jsonify({'ok': True, 'count': len(rows), 'authorities': out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_calendar: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()

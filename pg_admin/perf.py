@@ -55,7 +55,7 @@ _CACHEABLE = (
     '/api/pg/cutoff-explorer', '/api/pg/predictor/filters', '/api/pg/predictor/courses',
     '/api/pg/seat-matrix', '/api/pg/pg-colleges', '/api/pg/stipend', '/api/pg/fees',
     '/api/pg/college-lookup', '/api/pg/authorities', '/api/pg/mentors',
-    '/api/pg/news/deadlines',
+    '/api/pg/news/deadlines', '/api/pg/calendar',
 )
 
 

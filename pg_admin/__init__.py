@@ -30,7 +30,8 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              api_events, events_admin, api_track, analytics_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
-                             specialty_admin, news_inbox_admin, api_news_ingest)
+                             specialty_admin, news_inbox_admin, api_news_ingest,
+                             calendar_admin)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -172,6 +173,10 @@ def register_pg_admin(app):
                      news_admin.news_toggle, methods=['POST'])
     app.add_url_rule('/admin/pg/news/delete', 'pg_news_delete',
                      news_admin.news_delete, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/restore', 'pg_news_restore',
+                     news_admin.news_restore, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/purge', 'pg_news_purge',
+                     news_admin.news_purge, methods=['POST'])
     app.add_url_rule('/admin/pg/news/pdf', 'pg_news_pdf_admin',
                      news_admin.news_pdf_admin, methods=['GET'])
     # News Inbox — notices the scraper finds on authority sites, for review (2026-10-08)
@@ -179,6 +184,8 @@ def register_pg_admin(app):
                      news_inbox_admin.news_inbox, methods=['GET'])
     app.add_url_rule('/admin/pg/news-inbox/check', 'pg_news_inbox_check',
                      news_inbox_admin.news_inbox_check, methods=['POST'])
+    app.add_url_rule('/admin/pg/news-inbox/redraft', 'pg_news_inbox_redraft',
+                     news_inbox_admin.news_inbox_redraft, methods=['POST'])
     app.add_url_rule('/admin/pg/news-inbox/status', 'pg_news_inbox_status',
                      news_inbox_admin.news_inbox_status, methods=['POST'])
     # The founder's Mac pushes notices + AI drafts here (X-News-Key = env NEWS_INGEST_KEY).
@@ -197,6 +204,19 @@ def register_pg_admin(app):
     # ── Public API for goocampus.in: News feed (X-PG-Key; PDF is public) ──
     app.add_url_rule('/api/pg/news', 'api_pg_news',
                      api_news.api_pg_news, methods=['GET'])
+    app.add_url_rule('/api/pg/calendar', 'api_pg_calendar',
+                     api_news.api_pg_calendar, methods=['GET'])
+    # Counselling Calendar admin (round-wise dates per authority; 2026-10-09)
+    app.add_url_rule('/admin/pg/calendar', 'pg_calendar_admin', calendar_admin.calendar_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/calendar/save', 'pg_calendar_save', calendar_admin.calendar_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/calendar/remove', 'pg_calendar_remove', calendar_admin.calendar_remove, methods=['POST'])
+    app.add_url_rule('/admin/pg/calendar/reminders', 'pg_calendar_reminders_toggle',
+                     calendar_admin.calendar_reminders_toggle, methods=['POST'])
+    app.add_url_rule('/admin/pg/calendar/reminders/preview', 'pg_calendar_reminders_preview',
+                     calendar_admin.calendar_reminders_preview, methods=['POST'])
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
+        from pg_admin import deadline_reminders as _dr
+        _dr.start_scheduler()         # 8 AM IST; no-op unless switched ON + live service
     app.add_url_rule('/api/pg/news/deadlines', 'api_pg_news_deadlines',
                      api_news.api_pg_news_deadlines, methods=['GET'])
     app.add_url_rule('/api/pg/news/states', 'api_pg_news_states',

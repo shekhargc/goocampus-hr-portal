@@ -75,9 +75,32 @@ def scan():
         res = {'source': code, 'ok': False, 'found': 0, 'new': 0, 'error': ''}
         try:
             items = NS.read_source(code)
-            known = set(_api('GET', '/api/pg/news-inbox/known', params={'source': code}).get('known') or [])
+            kinfo = _api('GET', '/api/pg/news-inbox/known', params={'source': code})
+            known = set(kinfo.get('known') or [])
             first_run = not known
             res['found'] = len(items)
+            # Notices the founder asked to re-draft ("↻ Re-draft with AI" in the News Inbox)
+            for rd in (kinfo.get('redraft') or []):
+                iid = _id(code, rd['item_key'])
+                if iid in have:
+                    continue
+                pdf_path = ''
+                if rd.get('kind') == 'pdf' and rd.get('url'):
+                    data, _n = NS.fetch_pdf(rd['url'])
+                    if data:
+                        pdf_path = os.path.join(PDFS, iid + '.pdf')
+                        with open(pdf_path, 'wb') as f:
+                            f.write(data)
+                dp = os.path.join(DRAFTS, iid + '.json')
+                if os.path.exists(dp):
+                    os.remove(dp)                       # force a fresh draft
+                pending.append({'id': iid, 'source_code': code, 'source_label': src['label'],
+                                'item_key': rd['item_key'], 'title': rd.get('title') or '',
+                                'raw_title': rd.get('title') or '', 'url': rd.get('url') or '',
+                                'kind': rd.get('kind') or 'link', 'notice_date': rd.get('notice_date'),
+                                'pdf_path': pdf_path, 'draft_path': dp, 'redraft': True})
+                have.add(iid)
+                res['new'] += 1
             for it in items:
                 if it['item_key'] in known:
                     continue

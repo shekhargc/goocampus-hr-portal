@@ -1,0 +1,121 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Counselling Calendar · goocampus.in{% endblock %}
+
+{% block section_content %}
+<style>
+  .cal-wrap{padding:24px;background:var(--gray-50);min-height:100vh;}
+  .cal-card{background:#fff;border:1px solid var(--gray-200);border-radius:12px;max-width:1100px;margin-bottom:16px;}
+  .cal-round{font-size:0.95rem;font-weight:800;color:var(--navy);padding:10px 16px;border-bottom:1px solid var(--gray-100);background:#f8fafc;border-radius:12px 12px 0 0;}
+  .cal-t{width:100%;border-collapse:collapse;font-size:0.86rem;}
+  .cal-t th{padding:8px 14px;text-align:left;color:var(--gray-600);font-weight:600;}
+  .cal-t td{padding:8px 14px;border-top:1px solid var(--gray-100);vertical-align:top;}
+  .cal-in{padding:8px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.86rem;}
+  .cal-past{color:var(--gray-400);}
+  @media (max-width:760px){ .cal-hide-sm{display:none;} }
+</style>
+<div class="cal-wrap">
+  <div style="max-width:1100px;margin-bottom:14px;">
+    <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Counselling Calendar</h1>
+    <p style="margin:0;font-size:0.88rem;color:var(--gray-500);">
+      Every dated step of NEET-PG counselling, by authority and round. Filled automatically when you post an
+      AI-drafted schedule notice (the 📅 tick box); you can also add or fix a date here. It feeds the website's
+      schedule section, the "upcoming deadlines" strip and deadline reminders.
+    </p>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;max-width:1100px;
+                  background:{{ '#DCFCE7' if cat == 'success' else '#FEE2E2' }};color:{{ '#166534' if cat == 'success' else '#991B1B' }};">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="cal-card" style="padding:12px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+    <div style="font-size:0.88rem;">
+      <b>⏰ Deadline reminder emails:</b>
+      {% if rem.on %}<span style="color:#166534;font-weight:800;">ON</span>{% else %}<span style="color:#b45309;font-weight:800;">OFF</span>{% endif %}
+      <span style="color:var(--gray-500);font-size:0.8rem;"> — every morning 8 AM IST, one email per doctor: MCC + their home / counselling / followed states
+      (opens today · closes in 3 days · closes today). Today: {{ rem.today_items }} step(s) due → {{ rem.today_doctors }} doctor(s).</span>
+    </div>
+    <form method="POST" action="{{ url_for('pg_calendar_reminders_toggle') }}" style="display:inline;"
+          onsubmit="return confirm('{{ 'Turn OFF deadline reminder emails?' if rem.on else 'Turn ON deadline reminder emails to registered doctors (8 AM IST daily)?' }}');">
+      <input type="hidden" name="on" value="{{ '0' if rem.on else '1' }}"><input type="hidden" name="authority" value="{{ auth.code }}">
+      <button class="cal-in" style="cursor:pointer;font-weight:700;background:{{ '#fee2e2' if rem.on else '#dcfce7' }};border:0;">{{ 'Turn OFF' if rem.on else 'Turn ON' }}</button>
+    </form>
+    <form method="POST" action="{{ url_for('pg_calendar_reminders_preview') }}" style="display:inline-flex;gap:6px;">
+      <input type="hidden" name="authority" value="{{ auth.code }}">
+      <input name="to" class="cal-in" placeholder="your email" style="width:200px;">
+      <button class="cal-in" style="cursor:pointer;background:#fff;">✉️ Send me a preview</button>
+    </form>
+  </div>
+
+  <form method="GET" style="margin-bottom:14px;">
+    <select name="authority" class="cal-in" onchange="this.form.submit()" style="min-width:320px;">
+      {% for a in authorities %}
+      <option value="{{ a.code }}" {% if a.code == auth.code %}selected{% endif %}>{{ a.name }}{% if a.kind == 'state' %} — {{ a.state }}{% endif %}{% if counts.get(a.code) %} ({{ counts[a.code] }}){% endif %}</option>
+      {% endfor %}
+    </select>
+  </form>
+
+  <!-- add / edit -->
+  <div class="cal-card" style="padding:14px 16px;">
+    <form method="POST" action="{{ url_for('pg_calendar_save') }}" id="calForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <input type="hidden" name="authority" value="{{ auth.code }}"><input type="hidden" name="id" value="">
+      <label style="font-size:0.75rem;color:var(--gray-600);">Round<br>
+        <select name="round" class="cal-in"><option value="">—</option>{% for r in rounds %}<option>{{ r }}</option>{% endfor %}</select></label>
+      <label style="font-size:0.75rem;color:var(--gray-600);">Step<br>
+        <select name="event" class="cal-in">{% for v, l in event_types %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label>
+      <label style="font-size:0.75rem;color:var(--gray-600);">Label (optional)<br><input name="label" class="cal-in" placeholder="e.g. Registration & fee payment"></label>
+      <label style="font-size:0.75rem;color:var(--gray-600);">From<br><input type="date" name="start_date" class="cal-in" required></label>
+      <label style="font-size:0.75rem;color:var(--gray-600);">To (if a range)<br><input type="date" name="end_date" class="cal-in"></label>
+      <label style="font-size:0.75rem;color:var(--gray-600);">Time<br><input name="time" class="cal-in" placeholder="e.g. till 12 noon"></label>
+      <button class="cal-in" style="background:var(--navy,#1e3a5f);color:#fff;border:0;font-weight:700;cursor:pointer;" id="calBtn">Add date</button>
+      <button type="button" class="cal-in" style="background:#fff;cursor:pointer;display:none;" id="calCancel" onclick="calReset()">Cancel edit</button>
+    </form>
+  </div>
+
+  {% if grouped %}
+    {% for rnd, evs in grouped %}
+    <div class="cal-card">
+      <div class="cal-round">{{ rnd or 'General' }}</div>
+      <table class="cal-t">
+        <tr><th>Step</th><th>From</th><th>To</th><th class="cal-hide-sm">Time</th><th class="cal-hide-sm">Source</th><th></th></tr>
+        {% for e in evs %}
+        {% set _past = (e.end_date or e.start_date) and (e.end_date or e.start_date) < today %}
+        <tr class="{{ 'cal-past' if _past }}">
+          <td style="font-weight:600;">{{ e.label }}</td>
+          <td style="white-space:nowrap;">{{ e.start_date|format_date }}</td>
+          <td style="white-space:nowrap;">{{ e.end_date|format_date if e.end_date else '—' }}</td>
+          <td class="cal-hide-sm">{{ e.time_text or '' }}</td>
+          <td class="cal-hide-sm" style="font-size:0.76rem;">{% if e.news_id %}🤖 news #{{ e.news_id }}{% else %}✍️ added here{% endif %}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            <button type="button" style="background:none;border:0;color:#166534;font-weight:600;cursor:pointer;"
+              onclick='calEdit({{ {"id": e.id, "round": e.round, "event": e.event, "label": e.label,
+                "start_date": (e.start_date.isoformat() if e.start_date else ""), "end_date": (e.end_date.isoformat() if e.end_date else ""),
+                "time": e.time_text or ""}|tojson }})'>Edit</button>
+            <form method="POST" action="{{ url_for('pg_calendar_remove') }}" style="display:inline;" onsubmit="return confirm('Remove this date from the calendar?');">
+              <input type="hidden" name="id" value="{{ e.id }}"><input type="hidden" name="authority" value="{{ auth.code }}">
+              <button style="background:none;border:0;color:#dc2626;cursor:pointer;margin-left:6px;">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p style="color:var(--gray-500);">No dates for {{ auth.name }} yet. Post its schedule notice from the News Inbox with the 📅 box ticked, or add a date above.</p>
+  {% endif %}
+</div>
+<script>
+function calEdit(e){
+  var f=document.getElementById('calForm');
+  ['id','round','event','label','start_date','end_date','time'].forEach(function(k){ var el=f.querySelector('[name="'+k+'"]'); if(el) el.value=e[k]||''; });
+  document.getElementById('calBtn').textContent='Save changes';
+  document.getElementById('calCancel').style.display='';
+  f.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function calReset(){ var f=document.getElementById('calForm'); f.reset(); f.querySelector('[name=id]').value='';
+  document.getElementById('calBtn').textContent='Add date'; document.getElementById('calCancel').style.display='none'; }
+</script>
+{% endblock %}

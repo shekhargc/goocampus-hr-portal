@@ -90,7 +90,8 @@ def ensure_news_inbox_tables(conn=None):
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_news_inbox_status ON pg_news_inbox (status, first_seen_at)")
         # AI draft + the official PDF (fetched on the Mac — the server can't reach the sites).
         for col, typ in (('draft_json', 'TEXT'), ('drafted_at', 'TIMESTAMP'), ('pdf_data', 'BYTEA'),
-                         ('pdf_name', "TEXT DEFAULT ''")):
+                         ('pdf_name', "TEXT DEFAULT ''"), ('redraft_requested', 'BOOLEAN DEFAULT FALSE'),
+                         ('history_note', "TEXT DEFAULT ''")):
             conn.execute(f"ALTER TABLE pg_news_inbox ADD COLUMN IF NOT EXISTS {col} {typ}")
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_news_scrape_runs (
             id SERIAL PRIMARY KEY,

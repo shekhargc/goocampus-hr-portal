@@ -64,6 +64,10 @@ def _clean_draft(dr):
         rows = [[str(c).strip()[:160] for c in r][:8] for r in sch['rows'] if isinstance(r, list)][:40]
         if rows:
             out['schedule'] = {'title': str(sch.get('title') or '').strip()[:120], 'columns': cols, 'rows': rows}
+    from pg_admin.data.calendar import clean_events
+    ev = clean_events(dr.get('events'))
+    if ev:
+        out['events'] = ev
     if not out['headline'] and not out['article']:
         return None
     return out
@@ -76,10 +80,16 @@ def api_news_inbox_known():
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
-        rows = conn.execute("SELECT item_key, (draft_json IS NOT NULL) AS drafted FROM pg_news_inbox "
+        rows = conn.execute("SELECT item_key, url, title, kind, notice_date, (draft_json IS NOT NULL) AS drafted, "
+                            "COALESCE(redraft_requested, FALSE) AS redraft FROM pg_news_inbox "
                             "WHERE source_code = ?", (code,)).fetchall()
         return jsonify({'ok': True, 'source': code, 'known': [r['item_key'] for r in rows],
-                        'drafted': [r['item_key'] for r in rows if r['drafted']]})
+                        'drafted': [r['item_key'] for r in rows if r['drafted']],
+                        # notices the founder asked to re-draft ("↻ Re-draft with AI")
+                        'redraft': [{'item_key': r['item_key'], 'url': r['url'], 'title': r['title'],
+                                     'kind': r['kind'],
+                                     'notice_date': r['notice_date'].isoformat() if r['notice_date'] else None}
+                                    for r in rows if r['redraft']]})
     finally:
         conn.close()
 
@@ -111,13 +121,15 @@ def api_news_inbox_ingest():
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
-        row = conn.execute("SELECT id, status, draft_json FROM pg_news_inbox WHERE source_code = ? AND item_key = ?",
-                           (code, key)).fetchone()
+        row = conn.execute("SELECT id, status, draft_json, COALESCE(redraft_requested, FALSE) AS redraft "
+                           "FROM pg_news_inbox WHERE source_code = ? AND item_key = ?", (code, key)).fetchone()
         if row:
-            # Known notice — only fill in what's missing (a draft / PDF from a later run).
+            # Known notice — only fill in what's missing (a draft / PDF from a later run), or
+            # take the fresh draft the founder asked for (Re-draft with AI).
             sets, vals = [], []
-            if draft and not row['draft_json']:
-                sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP"]; vals.append(json.dumps(draft))
+            if draft and (not row['draft_json'] or row['redraft']):
+                sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP", "redraft_requested = FALSE"]
+                vals.append(json.dumps(draft))
             if pdf:
                 sets += ["pdf_data = COALESCE(pdf_data, ?)", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
                 vals += [pdf, pdf_name]

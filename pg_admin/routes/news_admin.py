@@ -111,7 +111,16 @@ def news_admin():
                                'dates': {k: (v or {}).get('date', '') for k, v in (dr.get('dates') or {}).items()},
                                'quotes': {k: (v or {}).get('quote', '') for k, v in (dr.get('dates') or {}).items()},
                                'applies_to': dr.get('applies_to') or '', 'action': dr.get('action') or '',
-                               'schedule_text': schedule_to_text(dr.get('schedule'))}
+                               'schedule_text': schedule_to_text(dr.get('schedule')),
+                               'events': dr.get('events') or [], 'news_id': ''}
+                    # Already posted (and not deleted) → this opens THAT news to update it.
+                    if r.get('news_id'):
+                        from pg_admin.routes.api_news import ensure_news_seo_cols as _ens
+                        _ens(conn)
+                        live = conn.execute("SELECT id FROM pg_news WHERE id = ? AND deleted_at IS NULL",
+                                            (r['news_id'],)).fetchone()
+                        if live:
+                            prefill['news_id'] = live['id']
             except Exception as e:
                 logging.warning("news_admin inbox prefill: %s", e)
                 conn.rollback()
@@ -121,7 +130,8 @@ def news_admin():
             "SELECT id, scope, state, body_label, heading, body_text, source_url, "
             "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, COALESCE(key_dates,'') AS key_dates, "
             "COALESCE(schedule,'') AS schedule, "
-            "(pdf_data IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by "
+            "(pdf_data IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by, created_at, "
+            "COALESCE(source,'manual') AS source, deleted_at, COALESCE(deleted_by,'') AS deleted_by "
             "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()]
     except Exception as e:
         logging.error("news_admin list: %s", e)
@@ -140,7 +150,11 @@ def news_admin():
             it['schedule_text'] = schedule_to_text(parse_schedule(it.get('schedule')))
         except Exception:
             it['schedule_text'] = ''
-    return render_template('pg_admin/news.html', items=items, prefill=prefill,
+    deleted = [it for it in items if it.get('deleted_at')]
+    items = [it for it in items if not it.get('deleted_at')]
+    from pg_admin.data.calendar import EVENT_LABELS
+    return render_template('pg_admin/news.html', items=items, prefill=prefill, deleted=deleted,
+                           event_labels=EVENT_LABELS,
                            categories=NEWS_CATEGORIES, date_fields=NEWS_DATE_FIELDS,
                            states=_canonical_states(), active_section='goocampus_in')
 
@@ -181,7 +195,8 @@ def news_save():
     # Email this update to all registered doctors? (founder 2026-10-06)
     send_alert = request.form.get('send_alert') in ('1', 'on', 'true', 'yes')
     inbox_id = _s(request.form.get('inbox_id'))
-    inbox_id = int(inbox_id) if inbox_id.isdigit() and not news_id else None
+    inbox_id = int(inbox_id) if inbox_id.isdigit() else None
+    add_events = request.form.get('add_events') in ('1', 'on')
     category = _s(request.form.get('category'))
     category = category if category in dict(NEWS_CATEGORIES) else ''
     summary = _s(request.form.get('summary'))[:300]
@@ -269,11 +284,28 @@ def news_save():
                 (scope, state, body_label, heading, body_text, source_url, pdf_name, pdf_bytes, pdf_ctype,
                  is_published, who, (pub_dt or _dt.utcnow()))).fetchone()['id']
             flash('News posted.', 'success')
-            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ?, schedule = ? WHERE id = ?",
-                         (category, summary, key_dates_json, schedule_json, news_id))
+            conn.execute("UPDATE pg_news SET category = ?, summary = ?, key_dates = ?, schedule = ?, "
+                         "source = ?, inbox_id = ? WHERE id = ?",
+                         (category, summary, key_dates_json, schedule_json,
+                          'ai_inbox' if inbox_id else 'manual', inbox_id, news_id))
             if inbox_id:
                 conn.execute("UPDATE pg_news_inbox SET status='posted', news_id=?, reviewed_by=?, "
                              "reviewed_at=CURRENT_TIMESTAMP WHERE id=?", (news_id, who, inbox_id))
+        # Counselling Calendar: the AI-extracted dated steps of this notice (posting = review).
+        cal_msg = ''
+        if add_events and inbox_id:
+            try:
+                _ir = conn.execute("SELECT draft_json FROM pg_news_inbox WHERE id = ?", (inbox_id,)).fetchone()
+                _ev = (_json.loads(_ir['draft_json'] or '{}') or {}).get('events') if _ir else None
+                if _ev:
+                    from pg_admin.data.calendar import ensure_calendar_table, clean_events, replace_events_for_news
+                    ensure_calendar_table(conn)
+                    _code = _authority_code_for(scope, state)
+                    if _code:
+                        n_ev = replace_events_for_news(conn, _code, int(news_id), inbox_id, clean_events(_ev), who)
+                        cal_msg = f'{n_ev} date(s) added to the Counselling Calendar.'
+            except Exception as _ce:
+                logging.warning("news_save calendar: %s", _ce)
         # Information bulletin / brochure → also the authority's MAIN brochure document, so
         # registered doctors can download it from the dashboard. (founder 2026-10-09)
         brochure_msg = ''
@@ -309,6 +341,8 @@ def news_save():
         saved_ok = True
         if brochure_msg:
             flash(brochure_msg, 'success' if brochure_msg.startswith('Also') else 'info')
+        if cal_msg:
+            flash(cal_msg, 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -470,18 +504,101 @@ def news_toggle():
 
 @login_required
 def news_delete():
+    """Move to Deleted (soft delete — founder 2026-10-09: nothing lost by mistake). Hidden
+    from the site + emails; Restore brings it back. If it came from the News Inbox, that
+    notice goes back to New (noted) so it can be posted again."""
+    user = _require_admin()
+    if not user:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    nid = _s(request.form.get('news_id'))
+    who = user.get('name') or user.get('emp_code') or 'admin'
+    conn = get_db()
+    try:
+        from pg_admin.data.calendar import ensure_calendar_table
+        from pg_admin.news_scraper import ensure_news_inbox_tables
+        ensure_calendar_table(conn); ensure_news_inbox_tables(conn)
+        from pg_admin.routes.api_news import ensure_news_seo_cols
+        ensure_news_seo_cols(conn)
+        conn.execute("UPDATE pg_news SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, is_published = FALSE "
+                     "WHERE id = ?", (who, nid))
+        try:
+            from datetime import datetime, timedelta
+            ist = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime('%d %b %Y, %I:%M %p')
+            conn.execute("UPDATE pg_news_inbox SET status = 'new', news_id = NULL, "
+                         "history_note = ? WHERE news_id = ?",
+                         (f'Was posted as news #{nid}; removed from the news section on {ist} IST by {who}.', nid))
+            conn.execute("UPDATE pg_counselling_events SET is_active = FALSE WHERE news_id = ?", (nid,))
+        except Exception:
+            conn.rollback()
+            conn.execute("UPDATE pg_news SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, is_published = FALSE "
+                         "WHERE id = ?", (who, nid))
+        conn.commit()
+        flash('Moved to Deleted — hidden from the website. You can Restore it from the Deleted list below.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("news_delete: %s", e)
+        flash('Could not delete.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_news_admin'))
+
+
+@login_required
+def news_restore():
+    user = _require_admin()
+    if not user:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    nid = _s(request.form.get('news_id'))
+    conn = get_db()
+    try:
+        from pg_admin.data.calendar import ensure_calendar_table
+        from pg_admin.news_scraper import ensure_news_inbox_tables
+        ensure_calendar_table(conn); ensure_news_inbox_tables(conn)
+        conn.execute("UPDATE pg_news SET deleted_at = NULL, deleted_by = '', is_published = TRUE, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (nid,))
+        try:
+            conn.execute("UPDATE pg_news_inbox SET status = 'posted', news_id = ?, history_note = '' "
+                         "WHERE id = (SELECT inbox_id FROM pg_news WHERE id = ?) AND status <> 'posted'", (nid, nid))
+            conn.execute("UPDATE pg_counselling_events SET is_active = TRUE WHERE news_id = ?", (nid,))
+        except Exception:
+            conn.rollback()
+            conn.execute("UPDATE pg_news SET deleted_at = NULL, deleted_by = '', is_published = TRUE WHERE id = ?", (nid,))
+        conn.commit()
+        flash('Restored — the update is live again.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("news_restore: %s", e)
+        flash('Could not restore.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_news_admin'))
+
+
+@login_required
+def news_purge():
+    """Delete permanently — only from the Deleted list."""
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     nid = _s(request.form.get('news_id'))
     conn = get_db()
     try:
-        conn.execute("DELETE FROM pg_news WHERE id=?", (nid,))
+        from pg_admin.data.calendar import ensure_calendar_table
+        from pg_admin.news_scraper import ensure_news_inbox_tables
+        ensure_calendar_table(conn); ensure_news_inbox_tables(conn)
+        conn.execute("DELETE FROM pg_news WHERE id = ? AND deleted_at IS NOT NULL", (nid,))
+        try:
+            conn.execute("DELETE FROM pg_counselling_events WHERE news_id = ?", (nid,))
+        except Exception:
+            conn.rollback()
+            conn.execute("DELETE FROM pg_news WHERE id = ? AND deleted_at IS NOT NULL", (nid,))
         conn.commit()
-        flash('News deleted.', 'success')
+        flash('Deleted permanently.', 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
-        logging.error("news_delete: %s", e)
+        logging.error("news_purge: %s", e)
         flash('Could not delete.', 'error')
     finally:
         conn.close()
