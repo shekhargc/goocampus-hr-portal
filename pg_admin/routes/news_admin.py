@@ -270,6 +270,7 @@ def news_test_email():
     try:
         row = conn.execute(
             "SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
+            "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, COALESCE(key_dates,'') AS key_dates, "
             "is_published, published_at FROM pg_news WHERE id = ?", (nid,)).fetchone() if nid else None
     finally:
         conn.close()
@@ -278,9 +279,9 @@ def news_test_email():
         return redirect(url_for('pg_news_admin'))
     news = dict(row)
     try:
-        from pg_admin.news_email import build_news_email_html
+        from pg_admin.news_email import build_news_email_html, news_subject
         from email_utils import send_email
-        base = f"[TEST] 📢 NEET-PG Update: {(news.get('heading') or '').strip()}"[:150]
+        base = ("[TEST] " + news_subject(news))[:150]
         ok_free = send_email([to], base + " — FREE-user view", build_news_email_html(news, True))
         ok_paid = send_email([to], base + " — PAID-user view",
                              build_news_email_html(news, False, name="Rahul Sharma"))
