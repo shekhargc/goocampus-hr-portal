@@ -35,6 +35,8 @@ from pg_admin import news_scraper as _news_scraper
 
 
 def register_pg_admin(app):
+    from pg_admin import perf as _perf
+    _perf.register(app)          # gzip + Cache-Control on public /api/pg/* GETs (2026-10-09)
     # Make pg_admin/templates/ resolvable as 'pg_admin/<name>.html'
     tpl_dir = os.path.join(os.path.dirname(__file__), 'templates')
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
@@ -272,6 +274,8 @@ def register_pg_admin(app):
                      api_choice.api_pg_cutoff_explorer, methods=['GET'])
     app.add_url_rule('/api/pg/cutoff-explorer/facets', 'api_pg_cutoff_facets',
                      api_choice.api_pg_cutoff_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/cutoff-explorer/summary', 'api_pg_cutoff_summary',
+                     api_choice.api_pg_cutoff_summary, methods=['GET'])
     app.add_url_rule('/api/pg/choice-entitlement', 'api_pg_choice_entitlement',
                      api_choice.api_pg_choice_entitlement, methods=['GET'])
     app.add_url_rule('/api/pg/my-states', 'api_pg_my_states',
@@ -475,6 +479,8 @@ def register_pg_admin(app):
                      api.admin_pg_predictor_diag, methods=['GET'])
     app.add_url_rule('/admin/pg/diag/branch-check', 'pg_branch_check',
                      api.admin_pg_branch_check, methods=['GET'])
+    app.add_url_rule('/admin/pg/diag/speed', 'pg_speed_check',
+                     api.admin_pg_speed_check, methods=['GET'])
     app.add_url_rule('/admin/pg/pay-test', 'pg_pay_test', api.admin_pg_pay_test, methods=['GET'])
     app.add_url_rule('/admin/pg/pay-test/verify', 'pg_pay_test_verify',
                      api.admin_pg_pay_test_verify, methods=['POST'])

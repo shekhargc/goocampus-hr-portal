@@ -46,6 +46,19 @@ def smart_name_clause(col_expr, q, runon=True):
     return ("(" + " OR ".join(conds) + ")", params)
 
 
+def smart_name_match(text, q, runon=True):
+    """Python twin of smart_name_clause (same normalisation, token-AND + run-on)."""
+    qn = re.sub(r'[^a-z0-9]+', ' ', (q or '').lower()).strip()
+    tokens = [t for t in qn.split() if t][:6]
+    if not tokens:
+        return True
+    norm = re.sub(r'[^a-z0-9]+', ' ', (text or '').lower()).strip()
+    if all(t in norm for t in tokens):
+        return True
+    despaced = qn.replace(' ', '')
+    return bool(runon and len(despaced) >= 4 and despaced in norm.replace(' ', ''))
+
+
 def api_pg_otp_send():
     """POST /api/pg/otp/send  {mobile}  → {ok:true}. Sends a WhatsApp OTP for the
     goocampus.in doctor login. X-PG-Key guarded. (founder 2026-07-24)"""
@@ -270,8 +283,43 @@ def api_pg_mentor_detail(mentor_id):
             pass
 
 
+def _mentor_photo_bytes(key, w=0):
+    """(bytes, content_type, etag) for a mentor photo in R2, optionally resized to width w
+    (JPEG ~80%). Cached per worker for 6 h; None if it can't be read."""
+    import hashlib
+    from pg_admin import perf
+    ck = ('mphoto', key, w)
+    hit = perf.cache_get(ck)
+    if hit:
+        return hit
+    from core import storage
+    raw = storage.download_bytes(key)
+    if not raw:
+        return None
+    ctype = 'image/png' if key.lower().endswith('.png') else (
+        'image/webp' if key.lower().endswith('.webp') else 'image/jpeg')
+    data = raw
+    if w:
+        try:
+            import io
+            from PIL import Image
+            im = Image.open(io.BytesIO(raw))
+            im = im.convert('RGB')
+            if im.width > w:
+                im = im.resize((w, max(1, round(im.height * w / im.width))), Image.LANCZOS)
+            out = io.BytesIO()
+            im.save(out, 'JPEG', quality=80, optimize=True, progressive=True)
+            data, ctype = out.getvalue(), 'image/jpeg'
+        except Exception as e:                       # Pillow missing / odd image → original
+            logging.warning("mentor thumb %s: %s", key, e)
+            data = raw
+    etag = '"' + hashlib.sha1(data).hexdigest()[:20] + '"'
+    return perf.cache_set(ck, (data, ctype, etag), ttl=6 * 3600)
+
+
 def api_pg_mentor_photo(mentor_id):
-    """GET /api/pg/mentors/:id/photo — 302 to a fresh presigned R2 URL.
+    """GET /api/pg/mentors/:id/photo[?w=200] — streams the photo (or a w-px thumbnail) from a
+    stable URL with a 7-day Cache-Control + ETag (was a 302 to a 15-min presigned link).
 
     Deliberately UNKEYED: it's referenced directly from <img> tags on goocampus.in,
     where the browser can't send X-PG-Key. Only published + active mentors' photos
@@ -301,6 +349,22 @@ def api_pg_mentor_photo(mentor_id):
         abort(404)
     key = row.get('photo_url')
     if key and key.startswith('pg_mentors/'):
+        # Stream the bytes from a STABLE url (no redirect to a 15-min presigned link) so
+        # browsers + CDNs can cache it; optional ?w= thumbnail (the site shows 88 px).
+        # Cached in memory per worker. (speed audit 2026-10-09)
+        try:
+            w = int(request.args.get('w') or 0)
+        except (TypeError, ValueError):
+            w = 0
+        w = max(0, min(w, 600))
+        img = _mentor_photo_bytes(key, w)
+        if img:
+            data, ctype, etag = img
+            if request.headers.get('If-None-Match') == etag:
+                return Response(status=304, headers={'ETag': etag,
+                                                     'Cache-Control': 'public, max-age=604800'})
+            return Response(data, mimetype=ctype,
+                            headers={'Cache-Control': 'public, max-age=604800', 'ETag': etag})
         url = storage.presigned_get_url(key)
         if url:
             return redirect(url, code=302)
@@ -623,35 +687,42 @@ def api_pg_predictor_courses():
         yr = conn.execute("SELECT COALESCE(MAX(year), 0) AS y FROM pg_cutoffs").fetchone()
         year = int(yr['y']) if yr and yr['y'] else 0
         if year:
-            where = ["year = ?", "COALESCE(course,'') <> ''", "COALESCE(is_reference,0) = 0"]
-            params = [year]
-            if q:
-                fc, pc = smart_name_clause("course", q); where.append(fc); params.extend(pc)
-            if authority:
-                where.append("authority = ?")
-                params.append(authority)
-            _dg = _degree_group_sql(degree_group)
-            if _dg:
-                where.append(_dg)
-            if HIDE_DNB:
-                where.append(no_dnb_sql())
-            _at = _authority_type_sql(authority_type)
-            if _at:
-                where.append(_at)
-            from pg_admin.data import specialty_groups as _SG
-            if branch in _SG.BRANCH_PARAMS:
-                _bc = _SG.courses_in_branch(conn, year, branch) or []
-                if _bc:
-                    where.append("course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
-                else:
-                    where.append("1 = 0")
-            # Most-offered courses first: a doctor typing 'radio' should see the
-            # common MD Radiodiagnosis before a one-off variant.
-            courses = [r['course'] for r in conn.execute(
-                f"SELECT course, COUNT(*) AS n FROM pg_cutoffs "
-                f" WHERE {' AND '.join(where)} "
-                f" GROUP BY course ORDER BY n DESC, course ASC LIMIT ?",
-                params + [limit]).fetchall()]
+            # The scope's full course list (course, count) is cached per worker and keyed
+            # by the dataset version; the typed text is matched in Python with the SAME
+            # rules as smart_name_clause. ~1.3 s → a few ms. (speed audit 2026-10-09)
+            from pg_admin import perf
+            ck = ('courses', perf.cutoffs_version(conn), year, authority, degree_group.lower(),
+                  authority_type.lower(), branch)
+            scope = perf.cache_get(ck)
+            if scope is None:
+                where = ["year = ?", "COALESCE(course,'') <> ''", "COALESCE(is_reference,0) = 0"]
+                params = [year]
+                if authority:
+                    where.append("authority = ?")
+                    params.append(authority)
+                _dg = _degree_group_sql(degree_group)
+                if _dg:
+                    where.append(_dg)
+                if HIDE_DNB:
+                    where.append(no_dnb_sql())
+                _at = _authority_type_sql(authority_type)
+                if _at:
+                    where.append(_at)
+                from pg_admin.data import specialty_groups as _SG
+                if branch in _SG.BRANCH_PARAMS:
+                    _bc = _SG.courses_in_branch(conn, year, branch) or []
+                    if _bc:
+                        where.append("course IN (" + ','.join(['?'] * len(_bc)) + ")"); params.extend(_bc)
+                    else:
+                        where.append("1 = 0")
+                # Most-offered courses first: a doctor typing 'radio' should see the
+                # common MD Radiodiagnosis before a one-off variant.
+                scope = [(r['course'], r['n']) for r in conn.execute(
+                    f"SELECT course, COUNT(*) AS n FROM pg_cutoffs "
+                    f" WHERE {' AND '.join(where)} "
+                    f" GROUP BY course ORDER BY n DESC, course ASC", params).fetchall()]
+                perf.cache_set(ck, scope, ttl=1800)
+            courses = [c for c, _n in scope if smart_name_match(c, q)][:limit]
     except Exception as e:
         logging.error("api_pg_predictor_courses: %s", e)
     finally:
@@ -1667,6 +1738,44 @@ def admin_pg_predictor_diag():
         return jsonify({'ok': False, 'error': str(e)}), 500
     finally:
         conn.close()
+
+
+def admin_pg_speed_check():
+    """GET /admin/pg/diag/speed — admin-only timings of the public APIs, run server-side
+    (cold = first call after deploy, warm = second). (speed audit 2026-10-09)"""
+    if not _pay_test_admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    import time
+    from flask import current_app
+    client = current_app.test_client()
+    conn = get_db()
+    try:
+        m = conn.execute("SELECT id FROM pg_mentors WHERE is_published AND is_active AND photo_url LIKE ? "
+                         "ORDER BY id LIMIT 1", ('pg_mentors/%',)).fetchone()
+        crs = conn.execute("SELECT course FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 "
+                           "GROUP BY course ORDER BY COUNT(*) DESC LIMIT 1").fetchone()
+    finally:
+        conn.close()
+    calls = [('courses q=radio', '/api/pg/predictor/courses', {'q': 'radio', 'degree_group': 'mdms'}),
+             ('courses q=gen med', '/api/pg/predictor/courses', {'q': 'gen med', 'degree_group': 'mdms'}),
+             ('summary authority=MCC', '/api/pg/cutoff-explorer/summary', {'authority': 'MCC'}),
+             ('summary course', '/api/pg/cutoff-explorer/summary', {'course': crs['course'] if crs else ''})]
+    if m:
+        calls.append(('mentor photo w=200', f"/api/pg/mentors/{m['id']}/photo", {'w': 200}))
+    out = []
+    for label, path, qs in calls:
+        row = {'call': label}
+        for run in ('cold', 'warm'):
+            t = time.time()
+            r = client.get(path, query_string=qs, environ_overrides={'pg.internal_check': True},
+                           headers={'Accept-Encoding': 'gzip'})
+            row[run + '_ms'] = round((time.time() - t) * 1000)
+            row['status'] = r.status_code
+            row['bytes'] = len(r.data)
+            row['encoding'] = r.headers.get('Content-Encoding', '')
+            row['cache'] = r.headers.get('Cache-Control', '')
+        out.append(row)
+    return jsonify({'ok': True, 'timings': out})
 
 
 def admin_pg_branch_check():
