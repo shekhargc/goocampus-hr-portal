@@ -410,7 +410,7 @@ SOURCES = {
         'reader': 'pdf_links_lastmod',
         'include': 'NEET[\\s-]*PG|PG[\\s-]*NEET|post[\\s-]*MBBS|\\bMD\\b|MD\\s*/\\s*MS|\\bDNB\\b|Post[\\s-]*Graduate\\s+(Medical|Degree|Diploma|course|seat|counsel|admission)|\\bPG\\s+(Medical|Degree|Diploma|course|seat|counsel|admission)|CPS\\s+Mumbai',
         'exclude': 'study\\s+leave|nursing|pharm|M\\.?\\s*Sc|AYUSH|ayurved|homoeo|BAMS|BHMS|\\bMDS\\b|dental|bond|RIPANS|paramedical|para-medical',
-        'enabled': True,
+        'enabled': False,      # 2026-10-13: Meghalaya has no own PG counselling (MCC + RIMS Imphal); NEIGRIHMS is a central institute, not a counselling body
     },
     # Mizoram: no_pg_2026_yet — Mizoram does run a state-quota NEET-PG counselling: the State Selection Board under the Dept of Higher & Technical Education (dhte.mizoram.gov.in, official) for
     'dict_mz_pg': {
