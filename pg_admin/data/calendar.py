@@ -128,6 +128,10 @@ def _key(rnd, event, label):
     return ((rnd or '').strip(), event, _norm_label(label) if event == 'other' else '')
 
 
+# Which row represents a step when old (pre-merge) data has several: active, newest notice, last edited.
+_PICK_ORDER = ("ORDER BY is_active DESC, source_notice_date DESC NULLS LAST, updated_at DESC NULLS LAST, id DESC")
+
+
 def merge_events(conn, authority_code, events, news_id=None, inbox_id=None, notice_date=None,
                  who='AI (auto)'):
     """MERGE a notice's steps into the authority's calendar (founder 2026-10-10):
@@ -140,12 +144,12 @@ def merge_events(conn, authority_code, events, news_id=None, inbox_id=None, noti
     stats = {'added': 0, 'changed': 0, 'unchanged': 0, 'skipped_older': 0}
     nd = notice_date if isinstance(notice_date, date) else _d(notice_date)
     existing = {}
-    for r in conn.execute("SELECT * FROM pg_counselling_events WHERE authority_code = ?", (authority_code,)).fetchall():
+    for r in conn.execute("SELECT * FROM pg_counselling_events WHERE authority_code = ? " + _PICK_ORDER,
+                          (authority_code,)).fetchall():
         r = dict(r)
         k = _key(r['round'], r['event'], r['label'])
-        # prefer an active row if there are several (legacy duplicates)
-        if k not in existing or (r['is_active'] and not existing[k]['is_active']):
-            existing[k] = r
+        # several rows for one step (legacy, pre-merge) → the first in _PICK_ORDER is "the" entry
+        existing.setdefault(k, r)
     for e in events:
         k = _key(e['round'], e['event'], e['label'])
         s0, e0 = _d(e['start']), _d(e['end']) if e.get('end') else None
@@ -204,11 +208,34 @@ def events_for(conn, codes=None, upcoming_only=False):
         where.append("authority_code IN (" + ','.join(['?'] * len(codes)) + ")"); params.extend(codes)
     if upcoming_only:
         where.append("COALESCE(end_date, start_date) >= CURRENT_DATE")
-    return [dict(r) for r in conn.execute(
+    rows = [dict(r) for r in conn.execute(
         "SELECT id, authority_code, year, round, event, label, start_date, end_date, time_text, note, "
         "news_id, inbox_id, created_by, changed_at, prev_start, prev_end, COALESCE(change_count,0) AS change_count, "
-        "COALESCE(manual_edit, FALSE) AS manual_edit FROM pg_counselling_events WHERE " + " AND ".join(where) +
+        "COALESCE(manual_edit, FALSE) AS manual_edit, "
+        # the posted news article of the notice that last changed this step (website links the "Revised" tag)
+        "(SELECT n.id FROM pg_news n WHERE n.inbox_id = pg_counselling_events.inbox_id AND n.deleted_at IS NULL "
+        "ORDER BY n.id DESC LIMIT 1) AS change_news_id FROM pg_counselling_events WHERE " + " AND ".join(where) +
         " ORDER BY start_date, CASE WHEN round = '' THEN 'zz' ELSE round END, id", params).fetchall()]
+    hide = {d["id"] for d in duplicate_steps(conn, codes)}
+    return [r for r in rows if r["id"] not in hide]
+
+
+def duplicate_steps(conn, codes=None):
+    """Old (pre-merge) leftovers: active rows for a step that already has a preferred entry.
+    Hidden from every feed; the Calendar page lists them with a "Tidy up" button (founder decides)."""
+    where, params = ["is_active"], []
+    if codes:
+        where.append("authority_code IN (" + ','.join(['?'] * len(codes)) + ")"); params.extend(codes)
+    seen, dups = set(), []
+    for r in conn.execute("SELECT id, authority_code, round, event, label, start_date, end_date, news_id, inbox_id "
+                          "FROM pg_counselling_events WHERE " + " AND ".join(where) + " " + _PICK_ORDER,
+                          params).fetchall():
+        k = (r['authority_code'],) + _key(r['round'], r['event'], r['label'])
+        if k in seen:
+            dups.append(dict(r))
+        else:
+            seen.add(k)
+    return dups
 
 
 def as_json_row(r):
@@ -221,7 +248,8 @@ def as_json_row(r):
             # date moved by a newer notice → the website can show "Revised" (2026-10-10)
             'revised': ({'at': r['changed_at'].date().isoformat() if r.get('changed_at') else '',
                          'previous_start': r['prev_start'].isoformat() if r.get('prev_start') else '',
-                         'previous_end': r['prev_end'].isoformat() if r.get('prev_end') else ''}
+                         'previous_end': r['prev_end'].isoformat() if r.get('prev_end') else '',
+                         'news_id': None if r.get('manual_edit') else r.get('change_news_id')}
                         if r.get('change_count') else None)}
 
 

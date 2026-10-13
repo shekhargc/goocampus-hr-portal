@@ -413,11 +413,14 @@ def counselling_status(conn, code, today=None, headings=None):
         k = (r['round'] or '', r['event'])
         s0, e0 = r['start_date'], r['end_date'] or r['start_date']
         cur = steps.get(k)
+        rev = CAL.as_json_row(r)['revised']   # date moved by a newer notice (website "was …" tag)
         if cur:
             steps[k] = {**cur, 'start': min(cur['start'], s0), 'end': max(cur['end'], e0),
-                        'time': (r.get('time_text') or cur['time']) if e0 >= cur['end'] else cur['time']}
+                        'time': (r.get('time_text') or cur['time']) if e0 >= cur['end'] else cur['time'],
+                        'revised': max([x for x in (cur['revised'], rev) if x], key=lambda x: x['at'], default=None)}
         else:
-            steps[k] = {'start': s0, 'end': e0, 'time': r.get('time_text') or None, 'news_id': r.get('news_id')}
+            steps[k] = {'start': s0, 'end': e0, 'time': r.get('time_text') or None, 'news_id': r.get('news_id'),
+                        'revised': rev}
     if not steps:
         return None
     rounds, flat = {}, []
@@ -425,7 +428,7 @@ def counselling_status(conn, code, today=None, headings=None):
         st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
         item = {'round': rnd or None, 'step': ev, 'label': CAL.EVENT_LABELS.get(ev, ev),
                 'bar_label': BAR_STEPS.get(ev), 'start': v['start'].isoformat(), 'end': v['end'].isoformat(),
-                'time': v['time'] or None, 'status': st, 'news_id': v['news_id']}
+                'time': v['time'] or None, 'status': st, 'news_id': v['news_id'], 'revised': v['revised']}
         rounds.setdefault(rnd, []).append(item)
         flat.append(item)
     out_rounds = []

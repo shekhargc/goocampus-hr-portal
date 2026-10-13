@@ -24,7 +24,7 @@ def calendar_admin():
     code = (request.args.get('authority') or 'mcc').strip().lower()
     auth = get_authority(code) or get_authority('mcc')
     conn = get_db()
-    events, counts = [], {}
+    events, counts, dups = [], {}, []
     rem = {'on': False, 'today_doctors': 0, 'today_items': 0}
     try:
         CAL.ensure_calendar_table(conn)
@@ -44,6 +44,7 @@ def calendar_admin():
             logging.warning("calendar reminders status: %s", _re)
             conn.rollback()
         events = CAL.events_for(conn, [auth['code']])
+        dups = CAL.duplicate_steps(conn, [auth['code']])
         for r in conn.execute("SELECT authority_code, COUNT(*) AS n FROM pg_counselling_events "
                               "WHERE is_active GROUP BY authority_code").fetchall():
             counts[r['authority_code']] = r['n']
@@ -61,7 +62,8 @@ def calendar_admin():
     grouped = sorted(rounds.items(), key=lambda kv: order.get(kv[0], 50))
     from datetime import date as _date
     return render_template('pg_admin/calendar.html', auth=auth, authorities=all_authorities(), today=_date.today(),
-                           counts=counts, grouped=grouped, event_types=CAL.EVENT_TYPES,
+                           counts=counts, grouped=grouped, dups=dups,
+                           event_labels=CAL.EVENT_LABELS, event_types=CAL.EVENT_TYPES,
                            rounds=[r for r in CAL.ROUNDS if r], rem=rem, active_section='goocampus_in')
 
 
@@ -139,6 +141,33 @@ def calendar_remove():
         except Exception: pass
         logging.error("calendar_remove: %s", ex)
         flash('Could not remove.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_calendar_admin', authority=code))
+
+
+@login_required
+def calendar_tidy():
+    """Hide old (pre-merge) duplicate entries for an authority's steps — only after the founder
+    reviews the list on the Calendar page. Soft: is_active FALSE (nothing deleted)."""
+    user = _admin()
+    if not user:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    code = (request.form.get('authority') or 'mcc').strip().lower()
+    who = user.get('name') or user.get('emp_code') or 'admin'
+    conn = get_db()
+    try:
+        ids = [d['id'] for d in CAL.duplicate_steps(conn, [code])]
+        for i in ids:
+            conn.execute("UPDATE pg_counselling_events SET is_active = FALSE, updated_by = ?, "
+                         "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (who, i))
+        conn.commit()
+        flash(f'Tidied up {len(ids)} duplicate entr{"y" if len(ids) == 1 else "ies"}.', 'success')
+    except Exception as ex:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("calendar_tidy: %s", ex)
+        flash('Could not tidy up.', 'error')
     finally:
         conn.close()
     return redirect(url_for('pg_calendar_admin', authority=code))

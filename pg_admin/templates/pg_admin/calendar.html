@@ -74,6 +74,23 @@
     </form>
   </div>
 
+  {% if dups %}
+  <div class="cal-card" style="padding:12px 16px;border-color:#f59e0b;background:#fffbeb;">
+    <div style="font-size:0.88rem;font-weight:700;color:#92400e;">⚠️ {{ dups|length }} older duplicate entr{{ 'y' if dups|length == 1 else 'ies' }} for steps already in the calendar</div>
+    <div style="font-size:0.8rem;color:#92400e;margin:4px 0 8px;">Saved before the calendar started merging dates. They are already <b>hidden</b> from the website and reminders — the entry shown below is used. Tidy up to remove them from this list (nothing is deleted).</div>
+    <table class="cal-t" style="background:#fff;border-radius:8px;">
+      <tr><th>Round</th><th>Step</th><th>From</th><th>To</th><th class="cal-hide-sm">Source</th></tr>
+      {% for d in dups %}<tr><td>{{ d.round or 'General' }}</td><td>{{ d.label or event_labels.get(d.event, d.event) }}</td>
+        <td>{{ d.start_date|format_date }}</td><td>{{ d.end_date|format_date if d.end_date else '—' }}</td>
+        <td class="cal-hide-sm" style="font-size:0.76rem;">{% if d.news_id %}news #{{ d.news_id }}{% elif d.inbox_id %}inbox #{{ d.inbox_id }}{% else %}added here{% endif %}</td></tr>{% endfor %}
+    </table>
+    <form method="POST" action="{{ url_for('pg_calendar_tidy') }}" style="margin-top:8px;" onsubmit="return confirm('Hide these {{ dups|length }} duplicate entries?');">
+      <input type="hidden" name="authority" value="{{ auth.code }}">
+      <button class="cal-in" style="cursor:pointer;font-weight:700;background:#f59e0b;color:#fff;border:0;">Tidy up duplicates</button>
+    </form>
+  </div>
+  {% endif %}
+
   {% if grouped %}
     {% for rnd, evs in grouped %}
     <div class="cal-card">
