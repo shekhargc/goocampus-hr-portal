@@ -35,7 +35,7 @@ AUTHORITIES = [
     ("cetcell_mh", "CET CELL",                              "Maharashtra",        "https://cetcell.mahacet.org",                 "state"),
     ("dhs_manipur","DHS Manipur",                           "Manipur",            "https://manipurhealthdirectorate.mn.gov.in",  "state"),
     ("rims_imphal","RIMS Imphal — common PG counselling (7 NE states)", "Manipur", "https://rims.edu.in/rimsman/category/admission/", "state"),
-    ("neigrihms",  "NEIGRIHMS",                             "Meghalaya",          "https://meghealth.gov.in",                    "state"),
+    ("neigrihms",  "Meghalaya — no own PG counselling (MCC + RIMS Imphal)", "Meghalaya", "https://meghealth.gov.in",       "state"),
     ("dict_mz",    "Mizoram H&TE — State Selection Board",  "Mizoram",            "https://dhte.mizoram.gov.in",                 "state"),
     ("dte_nagaland","DTE Nagaland",                         "Nagaland",           "",                                            "state"),
     ("ojee",       "DMET Odisha (PG Medical counselling)",  "Odisha",             "https://dmetodisha.in",                       "state"),
