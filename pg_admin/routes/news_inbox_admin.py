@@ -25,21 +25,37 @@ def news_inbox():
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     tab = (request.args.get('tab') or 'new').strip()
-    if tab not in ('new', 'posted', 'dismissed'):
+    if tab not in ('new', 'posted', 'document', 'dismissed'):
         tab = 'new'
+    # authority tabs (founder 2026-10-13): '' = all authorities, else a source code
+    src = (request.args.get('src') or '').strip()
+    if src not in NS.SOURCES:
+        src = ''
     conn = get_db()
-    items, counts, sources = [], {'new': 0, 'posted': 0, 'dismissed': 0}, []
+    items, counts, sources = [], {'new': 0, 'posted': 0, 'document': 0, 'dismissed': 0}, []
+    new_by_src, auth_tabs = {}, []
     try:
         NS.ensure_news_inbox_tables(conn)
-        for r in conn.execute("SELECT status, COUNT(*) AS n FROM pg_news_inbox GROUP BY status").fetchall():
-            counts[r['status']] = r['n']
+        for r in conn.execute("SELECT source_code, status, COUNT(*) AS n FROM pg_news_inbox "
+                              "WHERE status IN ('new','posted','document','dismissed') GROUP BY source_code, status").fetchall():
+            if not src or r['source_code'] == src:
+                counts[r['status']] += r['n']
+            if r['status'] == 'new':
+                new_by_src[r['source_code']] = new_by_src.get(r['source_code'], 0) + r['n']
+        where, params = "status = ?", [tab]
+        if src:
+            where += " AND source_code = ?"; params.append(src)
         items = [dict(r) for r in conn.execute(
             "SELECT id, source_code, authority_code, item_key, title, url, kind, notice_date, status, news_id, "
             "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL) AS has_pdf, "
             "COALESCE(redraft_requested, FALSE) AS redraft_requested, COALESCE(history_note,'') AS history_note "
-            "FROM pg_news_inbox WHERE status = ? "
-            "ORDER BY notice_date DESC NULLS LAST, first_seen_at DESC, id DESC LIMIT 300", (tab,)).fetchall()]
+            "FROM pg_news_inbox WHERE " + where + " "
+            "ORDER BY notice_date DESC NULLS LAST, first_seen_at DESC, id DESC LIMIT 300", params).fetchall()]
+        auth_tabs = [{'code': c, 'name': s.get('short') or s['label'], 'new': new_by_src.get(c, 0)}
+                     for c, s in NS.SOURCES.items() if s.get('enabled')]
         for code, s in NS.SOURCES.items():
+            if src and code != src:
+                continue
             last = conn.execute(
                 "SELECT ran_at, ok, found, new_count, error, trigger FROM pg_news_scrape_runs "
                 "WHERE source_code = ? ORDER BY ran_at DESC LIMIT 1", (code,)).fetchone()
@@ -61,7 +77,9 @@ def news_inbox():
         except Exception: it['draft'] = None
     labels = {c: s['label'] for c, s in NS.SOURCES.items()}
     return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab,
-                           sources=sources, labels=labels, active_section='goocampus_in')
+                           sources=sources, labels=labels, src=src, auth_tabs=auth_tabs,
+                           doc_labels=dict(__import__('pg_admin.authorities', fromlist=['x']).DOC_CATEGORIES),
+                           new_total=sum(new_by_src.values()), active_section='goocampus_in')
 
 
 @login_required
@@ -87,6 +105,7 @@ def news_inbox_redraft():
     except ValueError:
         iid = 0
     back = request.form.get('tab') or 'new'
+    back_src = request.form.get('src') or None
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
@@ -102,7 +121,7 @@ def news_inbox_redraft():
         flash('Could not request a re-draft.', 'error')
     finally:
         conn.close()
-    return redirect(url_for('pg_news_inbox', tab=back))
+    return redirect(url_for('pg_news_inbox', tab=back, src=back_src))
 
 
 @login_required
@@ -116,8 +135,9 @@ def news_inbox_status():
         iid = 0
     to = (request.form.get('to') or '').strip()
     back = request.form.get('tab') or 'new'
+    back_src = request.form.get('src') or None
     if not iid or to not in ('new', 'dismissed'):
-        flash('Nothing to update.', 'error'); return redirect(url_for('pg_news_inbox', tab=back))
+        flash('Nothing to update.', 'error'); return redirect(url_for('pg_news_inbox', tab=back, src=back_src))
     conn = get_db()
     try:
         conn.execute("UPDATE pg_news_inbox SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP "
@@ -131,4 +151,4 @@ def news_inbox_status():
         flash('Could not update.', 'error')
     finally:
         conn.close()
-    return redirect(url_for('pg_news_inbox', tab=back))
+    return redirect(url_for('pg_news_inbox', tab=back, src=back_src))

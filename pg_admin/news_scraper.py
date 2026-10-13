@@ -45,6 +45,7 @@ def _proxies():
 # value the newsroom form's "Counselling Authority" dropdown expects.
 SOURCES = {
     'mcc_pg': {
+        'short': 'All India MCC',            # News Inbox tab name
         'label': 'All-India MCC — PG Medical Counselling',
         'authority_code': 'mcc',
         'news_authority': '__all__',
@@ -55,15 +56,21 @@ SOURCES = {
         'enabled': True,
     },
     'kea_pgmed_2026': {
+        'short': 'Karnataka',            # News Inbox tab name
         'label': 'Karnataka KEA — PG Medical / DNB 2026',
         'authority_code': 'kea',
         'news_authority': 'state:Karnataka',
         'url': 'https://cetonline.karnataka.gov.in/kea/pgetmed2026',
         'reader': 'kea_aspnet',
+        # bulletins that live somewhere else than the notices page (founder 2026-10-13): KEA's
+        # PGET 2026 brochure sits behind "Download Brochure" on the application login page.
+        'fixed_docs': [{'url': 'https://cetonline.karnataka.gov.in/pgneet2026/docs/CET2026_Brochure.pdf',
+                        'title': 'Karnataka PGET 2026 (PG Medical) Information Brochure'}],
         'enabled': True,
     },
     # ── batch 2 (founder 2026-10-13): Kerala, Tamil Nadu, Andhra Pradesh, Telangana ──
     'cee_kerala_pgm': {
+        'short': 'Kerala',            # News Inbox tab name
         'label': 'Kerala CEE — PG Medical 2026',
         'authority_code': 'cee_kerala',
         'news_authority': 'state:Kerala',
@@ -72,10 +79,13 @@ SOURCES = {
         'url': 'https://cee.kerala.gov.in/pgmonline2026/notification',
         'pages': ['https://cee.kerala.gov.in/pgmonline2026/notification',
                   'https://cee.kerala.gov.in/pgm2026/notification'],
+        # course home pages: prospectus + menu PDFs + the "Important Dates" box (founder 2026-10-13)
+        'home': ['https://cee.kerala.gov.in/pgmonline2026/', 'https://cee.kerala.gov.in/pgm2026/'],
         'reader': 'cee_kerala',
         'enabled': True,
     },
     'tn_pg_medical': {
+        'short': 'Tamil Nadu',            # News Inbox tab name
         'label': 'Tamil Nadu DME Selection Committee — PG Medical (MD/MS/Diploma)',
         'authority_code': 'dmer_tn',
         'news_authority': 'state:Tamil Nadu',
@@ -85,6 +95,7 @@ SOURCES = {
         'enabled': True,
     },
     'ap_pg_medical': {
+        'short': 'Andhra Pradesh',            # News Inbox tab name
         'label': 'Andhra Pradesh Dr NTR UHS — PG Medical (CQ + MQ)',
         'authority_code': 'ntruhs',
         'news_authority': 'state:Andhra Pradesh',
@@ -96,6 +107,7 @@ SOURCES = {
         'enabled': True,
     },
     'tg_pg_medical': {
+        'short': 'Telangana',            # News Inbox tab name
         'label': 'Telangana KNRUHS — PG Medical',
         'authority_code': 'knruhs',
         'news_authority': 'state:Telangana',
@@ -125,7 +137,7 @@ def ensure_news_inbox_tables(conn=None):
             url TEXT DEFAULT '',
             kind TEXT DEFAULT 'link',               -- 'pdf' | 'link'
             notice_date DATE,
-            status TEXT DEFAULT 'new',              -- new | posted | dismissed
+            status TEXT DEFAULT 'new',              -- new | posted | dismissed | document | seen
             news_id INTEGER,
             reviewed_by TEXT DEFAULT '',
             reviewed_at TIMESTAMP,
@@ -308,7 +320,40 @@ def read_pdf_links(url, pages=None, include=None, exclude=None):
     return items
 
 
-def read_cee_kerala(pages):
+# how-to / help PDFs on the course home pages — not news
+_KERALA_HELP = re.compile(r'prerequisite|imageupload|howto|faq|postoffice|contact|forget|login|instruction', re.I)
+
+
+def _kerala_home(s, url):
+    """Kerala course home page → menu PDFs (prospectus, seat distribution, lists…) + one item
+    for the Important Dates box, keyed by the dates themselves (a changed date = new item)."""
+    from urllib.parse import urljoin
+    r = s.get(url, timeout=TIMEOUT)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    out = []
+    for href, inner in re.findall(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', r.text, re.S | re.I):
+        href = urljoin(r.url, _html.unescape(href).strip())
+        if not re.search(r'\.pdf($|\?)', href, re.I) or _KERALA_HELP.search(href):
+            continue
+        t = _text(inner)
+        if t:
+            out.append({'item_key': href, 'raw_title': t, 'title': 'Kerala PG Medical 2026 — ' + t, 'url': href,
+                        'kind': 'pdf', 'notice_date': None})
+    box = re.search(r'Important Dates(.*?)</table>', r.text, re.S | re.I)
+    if box:
+        pairs = [(_text(a), _text(b)) for a, b in re.findall(r'<label>(.*?)</label>.*?<td[^>]*>(.*?)</td>', box.group(1), re.S | re.I)]
+        pairs = [(a.rstrip(':'), b) for a, b in pairs if a and b]
+        if pairs:
+            line = '; '.join(f'{a}: {b}' for a, b in pairs)
+            out.append({'item_key': 'important-dates|' + url + '|' + line, 'raw_title': line,
+                        'title': 'Kerala PG Medical 2026 — Important dates: ' + line, 'url': url,
+                        'kind': 'link', 'notice_date': None})
+    return out
+
+
+def read_cee_kerala(pages, home=None):
     """Kerala CEE (cee.kerala.gov.in/<course><year>/notification) — rows of
     TITLE · [Notification] [Press Release] [Vacancy] links (noti_view/<id>/UploadN, serve PDFs) · dd-mm-yyyy.
     A page that doesn't exist yet (404, e.g. the candidate portal before it opens) is skipped."""
@@ -336,6 +381,15 @@ def read_cee_kerala(pages):
                 title = head if (len(links) == 1 or not lt) else f"{head} — {lt}"
                 items.append({'item_key': href, 'raw_title': title, 'title': title or lt, 'url': href,
                               'kind': 'pdf', 'notice_date': d})
+    for hp in (home or []):
+        got = _kerala_home(s, hp)
+        if got is None:
+            continue
+        ok = True
+        for it in got:
+            if it['item_key'] not in seen:
+                seen.add(it['item_key'])
+                items.append(it)
     if not ok:
         raise ValueError('Notices page not found — the site may have moved it (new year?).')
     return items          # an empty list is fine early in the season
@@ -398,11 +452,21 @@ READERS = {'kea_aspnet': read_kea_aspnet, 'pdf_links': read_pdf_links}
 
 
 def read_source(code):
+    items = _read_source(code)
+    have = {i['item_key'] for i in items}
+    for fd in SOURCES[code].get('fixed_docs') or []:      # e.g. a brochure on another page
+        if fd['url'] not in have:
+            items.append({'item_key': fd['url'], 'raw_title': fd['title'], 'title': fd['title'],
+                          'url': fd['url'], 'kind': 'pdf', 'notice_date': None})
+    return items
+
+
+def _read_source(code):
     src = SOURCES[code]
     if src['reader'] == 'pdf_links':
         return read_pdf_links(src['url'], src.get('pages'), src.get('include'), src.get('exclude'))
     if src['reader'] == 'cee_kerala':
-        return read_cee_kerala(src.get('pages') or [src['url']])
+        return read_cee_kerala(src.get('pages') or [src['url']], src.get('home'))
     if src['reader'] == 'tn_tagged':
         return read_tn_tagged(src['url'], src['tag'])
     if src['reader'] == 'date_table':

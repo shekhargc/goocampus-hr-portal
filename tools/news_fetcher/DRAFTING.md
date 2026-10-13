@@ -104,8 +104,50 @@ HOW THE CALENDAR USES `events` (it MERGES — read this):
   quota ONLY. Management-quota dates go as event "other" with a label starting "Management quota — "
   (e.g. "Management quota — Phase 1 web options"), so they never overwrite the government-quota dates.
 - Only PG Medical (MD/MS/Diploma/DNB broad speciality). If a notice is about MDS / nursing / AYUSH /
-  MBBS (some state sites mix them), write the draft with category "other", `"events": []`, `"dates": {}`
+  MBBS (some state sites mix them), write the draft with category "other", `"events": []`, `"dates": {}`, `"document": {"category": "none", "news": true}`
   and say in `summary` "Not a PG Medical notice — dismiss."
+
+REQUIRED `document` — every PDF is also filed in the authority's DOCUMENTS section (hidden until the
+team publishes it). Classify it:
+
+```json
+"document": {"category": "results", "title": "Karnataka PG Medical 2026 — Round 1 Provisional Allotment List", "news": false}
+```
+- `category`, exactly one of:
+  - `brochure` — Information Bulletin / Prospectus / Brochure / Counselling user manual or user guide
+  - `registration` — list of documents/certificates to keep ready or upload for registration / verification
+  - `formats_annexures` — certificate formats, annexures, affidavits, proformas to fill
+  - `fee_structure` — fee structure / tuition fee / fee order
+  - `seat_matrix` — seat matrix / seat distribution / vacant seats list
+  - `merit_list` — merit list / rank list / list of eligible or registered candidates / candidate data
+  - `results` — seat allotment result / allotted list (provisional or final, any round, mock allotment too)
+  - `other` — any other official PDF worth keeping (schedules, notifications, notes)
+  - `none` — not worth keeping as a document (e.g. a link to a login page — no PDF).
+- `title`: clean and specific — "<State/MCC> PG Medical 2026 — <what it is> (<round if any>)". No dates in the title.
+- `news`: `false` when the PDF is ONLY a list or reference document with nothing for a doctor to do
+  (merit/rank lists, candidate data, allotment results lists, seat matrix, fee structure, vacancy list).
+  Such items skip the News Inbox and go straight to Documents — for them a short draft is enough:
+  headline = the title, summary one sentence, article 2–3 sentences, `dates: {}`, but STILL add `events`
+  if the PDF states dated steps. `news`: `true` for anything with dates, actions, deadlines, rule
+  changes, or a new bulletin/prospectus (a new bulletin is news AND a `brochure` document).
+
+Optional `registration_documents` — when the PDF (an Information Bulletin / Prospectus, or a
+"keep these certificates ready" notice) lists the documents/certificates a candidate must upload or
+produce for registration / document verification, write that list out (it becomes the authority's
+"Registration Documents" checklist on the dashboard, after review):
+
+```json
+"registration_documents": [
+  {"title": "Tamil Nadu PG Medical 2026-27 — Documents to upload (Government quota)",
+   "items": ["NEET PG 2026 score card", "NEET PG 2026 admit card", "MBBS degree / provisional pass certificate", "..."]},
+  {"title": "Tamil Nadu PG Medical 2026-27 — Documents to upload (Management quota)", "items": ["..."]}
+]
+```
+- One list per quota / category of candidate if the notice gives separate lists; otherwise one list.
+- Each item short and plain (≤ 120 chars), in the notice's order; keep conditions in brackets
+  ("Community certificate (if claiming reservation)"). Only what the PDF states — never add items.
+- For a long bulletin, find the "documents to be produced / uploaded" section with
+  `newsfetch.py text <id> <first> <last>` (search a few page ranges) — it is often an annexure.
 
 Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochure for the year
 (the reviewer will also save it as that authority's main brochure document).

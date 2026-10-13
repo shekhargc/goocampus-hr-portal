@@ -34,20 +34,29 @@ def authorities_admin():
     authority = get_authority(code) if code else None
     conn = get_db()
     docs_by_cat = {c: [] for c, _ in DOC_CATEGORIES}
-    counts = {}
+    counts, waiting_by_auth, waiting = {}, {}, []
     try:
         ensure_pg_authority_docs(conn)
-        # Per-authority document counts (for the picker badges).
+        # Per-authority document counts (for the picker badges) + auto-filed docs still waiting.
         for r in conn.execute(
-                "SELECT authority_code, COUNT(*) AS n FROM pg_authority_docs GROUP BY authority_code").fetchall():
+                "SELECT authority_code, COUNT(*) AS n, "
+                "SUM(CASE WHEN COALESCE(review_pending, FALSE) THEN 1 ELSE 0 END) AS w "
+                "FROM pg_authority_docs GROUP BY authority_code").fetchall():
             counts[r['authority_code']] = r['n']
+            if r['w']:
+                waiting_by_auth[r['authority_code']] = int(r['w'])
         if authority:
             for r in conn.execute(
                     "SELECT id, category, title, doc_date, note, body_text, file_name, is_published, "
-                    "uploaded_by, uploaded_at FROM pg_authority_docs WHERE authority_code=? "
+                    "uploaded_by, uploaded_at, COALESCE(review_pending, FALSE) AS review_pending, "
+                    "auto_inbox_id, COALESCE(source_url,'') AS source_url, COALESCE(is_main, FALSE) AS is_main "
+                    "FROM pg_authority_docs WHERE authority_code=? "
                     "ORDER BY category, sort_order, id DESC", (authority['code'],)).fetchall():
                 r = dict(r)
-                docs_by_cat.setdefault(r['category'], []).append(r)
+                if r['review_pending']:
+                    waiting.append(r)
+                else:
+                    docs_by_cat.setdefault(r['category'], []).append(r)
     except Exception as e:
         logging.error("authorities_admin: %s", e)
         try: conn.rollback()
@@ -57,7 +66,8 @@ def authorities_admin():
     return render_template('pg_admin/authorities.html',
                            authorities=all_authorities(), authority=authority,
                            categories=DOC_CATEGORIES, docs_by_cat=docs_by_cat,
-                           counts=counts, active_section='goocampus_in')
+                           counts=counts, waiting=waiting, waiting_by_auth=waiting_by_auth,
+                           cat_labels=dict(DOC_CATEGORIES), active_section='goocampus_in')
 
 
 @login_required
@@ -139,7 +149,7 @@ def authority_doc_toggle():
     conn = get_db()
     try:
         conn.execute("UPDATE pg_authority_docs SET is_published = NOT COALESCE(is_published, TRUE), "
-                     "updated_at=CURRENT_TIMESTAMP WHERE id=?", (did,))
+                     "review_pending = FALSE, updated_at=CURRENT_TIMESTAMP WHERE id=?", (did,))
         conn.commit()
         flash('Visibility updated.', 'success')
     except Exception as e:
@@ -160,6 +170,11 @@ def authority_doc_delete():
     code = _s(request.form.get('authority_code'))
     conn = get_db()
     try:
+        r = conn.execute("SELECT auto_inbox_id FROM pg_authority_docs WHERE id=?", (did,)).fetchone()
+        if r and r['auto_inbox_id']:
+            from pg_admin.data.auto_docs import ensure_cols
+            ensure_cols(conn)
+            conn.execute("UPDATE pg_news_inbox SET doc_rejected = TRUE WHERE id = ?", (r['auto_inbox_id'],))
         conn.execute("DELETE FROM pg_authority_docs WHERE id=?", (did,))
         conn.commit()
         flash('Document deleted.', 'success')
@@ -191,3 +206,76 @@ def authority_doc_file_admin(doc_id):
     return Response(bytes(row['file_data']),
                     mimetype=row['file_content_type'] or 'application/octet-stream',
                     headers={'Content-Disposition': f'inline; filename="{row["file_name"] or "document"}"'})
+
+
+def _publish(conn, ids, who):
+    """Publish auto-filed documents. A brochure becomes the authority's MAIN brochure when it has none."""
+    n = 0
+    for did in ids:
+        r = conn.execute("SELECT id, authority_code, category FROM pg_authority_docs WHERE id=?", (did,)).fetchone()
+        if not r:
+            continue
+        main = False
+        if r['category'] == 'brochure':
+            main = not conn.execute("SELECT 1 FROM pg_authority_docs WHERE authority_code=? AND category='brochure' "
+                                    "AND COALESCE(is_main,FALSE) AND COALESCE(is_published,TRUE) LIMIT 1",
+                                    (r['authority_code'],)).fetchone()
+        conn.execute("UPDATE pg_authority_docs SET is_published = TRUE, review_pending = FALSE, "
+                     "is_main = (COALESCE(is_main,FALSE) OR ?), updated_at = CURRENT_TIMESTAMP WHERE id=?", (main, did))
+        n += 1
+    return n
+
+
+@login_required
+def authority_doc_publish():
+    """Publish one auto-filed document (or all waiting ones for the authority with all=1),
+    optionally moving it to another category first."""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    code = _s(request.form.get('authority_code'))
+    conn = get_db()
+    try:
+        if request.form.get('all') == '1':
+            ids = [r['id'] for r in conn.execute(
+                "SELECT id FROM pg_authority_docs WHERE authority_code=? AND COALESCE(review_pending,FALSE)",
+                (code,)).fetchall()]
+        else:
+            ids = [int(_s(request.form.get('doc_id')) or 0)]
+            cat = _s(request.form.get('category'))
+            if cat and valid_category(cat):
+                conn.execute("UPDATE pg_authority_docs SET category=? WHERE id=?", (cat, ids[0]))
+        n = _publish(conn, ids, session.get('name') or 'admin')
+        conn.commit()
+        flash(f'Published {n} document(s) — doctors can see them on the dashboard now.', 'success')
+    except Exception as e:
+        logging.error("authority_doc_publish: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not publish.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_authorities_admin', code=code))
+
+
+@login_required
+def authority_doc_category():
+    """Move a document to another category (e.g. the AI picked the wrong bucket)."""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    code = _s(request.form.get('authority_code'))
+    cat = _s(request.form.get('category'))
+    conn = get_db()
+    try:
+        if valid_category(cat):
+            conn.execute("UPDATE pg_authority_docs SET category=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                         (cat, int(_s(request.form.get('doc_id')) or 0)))
+            conn.commit()
+            flash('Category changed.', 'success')
+    except Exception as e:
+        logging.error("authority_doc_category: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not change the category.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_authorities_admin', code=code))

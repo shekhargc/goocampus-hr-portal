@@ -70,6 +70,23 @@ def _clean_draft(dr):
     ev = clean_events(dr.get('events'))
     if ev:
         out['events'] = ev
+    # which Documents bucket the PDF belongs in + whether it is news at all (2026-10-13)
+    doc = dr.get('document')
+    if isinstance(doc, dict):
+        from pg_admin.authorities import valid_category
+        cat = str(doc.get('category') or '').strip()
+        out['document'] = {'category': cat if valid_category(cat) else 'none',
+                           'title': str(doc.get('title') or '').strip()[:300],
+                           'news': doc.get('news') is not False}
+    # documents required for registration, read out of a bulletin / prospectus / checklist (2026-10-13)
+    regs = []
+    for g in (dr.get('registration_documents') or [])[:4]:
+        if isinstance(g, dict):
+            its = [str(x).strip()[:300] for x in (g.get('items') or []) if str(x).strip()][:60]
+            if its:
+                regs.append({'title': str(g.get('title') or '').strip()[:200], 'items': its})
+    if regs:
+        out['registration_documents'] = regs
     if not out['headline'] and not out['article']:
         return None
     return out
@@ -145,6 +162,19 @@ def api_news_inbox_ingest():
             if draft and (not row['draft_json'] or row['redraft']):
                 sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP", "redraft_requested = FALSE"]
                 vals.append(json.dumps(draft))
+            elif draft and draft.get('document') and row['draft_json']:
+                # a draft from before documents were filed: add ONLY the missing document
+                # classification, nothing else in the reviewed draft changes (2026-10-13)
+                try:
+                    old = json.loads(row['draft_json']) or {}
+                except Exception:
+                    old = {}
+                if isinstance(old, dict) and (not old.get('document') or
+                                              (draft.get('registration_documents') and not old.get('registration_documents'))):
+                    old.setdefault('document', draft['document'])
+                    if draft.get('registration_documents'):
+                        old.setdefault('registration_documents', draft['registration_documents'])
+                    sets.append("draft_json = ?"); vals.append(json.dumps(old))
             if pdf:
                 sets += ["pdf_data = COALESCE(pdf_data, ?)", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
                 vals += [pdf, pdf_name]
@@ -153,6 +183,9 @@ def api_news_inbox_ingest():
                 conn.commit()
                 if draft and draft.get('events'):
                     _auto_calendar(conn, row['id'])
+                if row['status'] != 'seen':
+                    from pg_admin.data.auto_docs import file_safely
+                    file_safely(conn, row['id'])
             return jsonify({'ok': True, 'id': row['id'], 'result': 'updated' if sets else 'known'})
         it = {'item_key': key, 'title': title, 'url': url, 'kind': kind, 'notice_date': nd}
         if status == 'new' and NS.is_repeat(conn, code, it):
@@ -168,7 +201,11 @@ def api_news_inbox_ingest():
         conn.commit()
         if status == 'new' and draft and draft.get('events'):
             _auto_calendar(conn, new_id)
-        return jsonify({'ok': True, 'id': new_id, 'result': status})
+        doc_res = None
+        if status == 'new' and draft:
+            from pg_admin.data.auto_docs import file_safely
+            doc_res = file_safely(conn, new_id)                  # PDF → authority Documents (hidden)
+        return jsonify({'ok': True, 'id': new_id, 'result': status, 'document': doc_res})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

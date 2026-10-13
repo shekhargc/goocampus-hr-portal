@@ -238,6 +238,10 @@ def register_pg_admin(app):
                      authority_admin.authority_doc_toggle, methods=['POST'])
     app.add_url_rule('/admin/pg/authorities/doc/delete', 'pg_authority_doc_delete',
                      authority_admin.authority_doc_delete, methods=['POST'])
+    app.add_url_rule('/admin/pg/authorities/doc/publish', 'pg_authority_doc_publish',
+                     authority_admin.authority_doc_publish, methods=['POST'])
+    app.add_url_rule('/admin/pg/authorities/doc/category', 'pg_authority_doc_category',
+                     authority_admin.authority_doc_category, methods=['POST'])
     app.add_url_rule('/admin/pg/authority-docs/<int:doc_id>/file', 'pg_authority_doc_file_admin',
                      authority_admin.authority_doc_file_admin, methods=['GET'])
     # ── Public API for goocampus.in: per-authority sections (X-PG-Key; file is public) ──
