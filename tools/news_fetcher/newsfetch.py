@@ -10,7 +10,8 @@ sites block our Render server). Driven by a Claude Code scheduled task (founder 
 
 No AI here and no secrets in the repo: portal URL + key live in ~/.goocampus/news_ingest.json
   {"portal": "https://goocampus.org", "key": "<same value as Render env NEWS_INGEST_KEY>"}
-First run per source: notices older than BASELINE_DAYS are recorded as already seen (no draft).
+Notices from the PREVIOUS NEET-PG season are recorded as already seen (no draft); every notice of the
+current season (news_scraper.SEASON_FROM) is drafted, however old.
 """
 import os
 import sys
@@ -28,7 +29,6 @@ CONF = os.path.expanduser('~/.goocampus/news_ingest.json')
 PENDING = os.path.join(WORK, 'pending.json')
 DRAFTS = os.path.join(WORK, 'drafts')
 PDFS = os.path.join(WORK, 'pdf')
-BASELINE_DAYS = 7
 
 
 def _conf():
@@ -108,7 +108,10 @@ def scan():
                 if iid in have:
                     continue
                 d = it.get('notice_date')
-                if first_run and (not d or d < date.today() - timedelta(days=BASELINE_DAYS)):
+                # Only last season's notices are set aside (recorded as seen, never drafted). Every
+                # notice of the current NEET-PG season is drafted, however old — also on a new
+                # source's first run (founder 2026-10-13).
+                if not NS.in_season(it):
                     # baseline: record as already seen — no draft, no PDF
                     _api('POST', '/api/pg/news-inbox/ingest', json={
                         'source_code': code, 'item_key': it['item_key'], 'title': it['title'],
@@ -151,6 +154,8 @@ def push():
     left = []
     for p in pending:
         body = {k: p.get(k) for k in ('source_code', 'item_key', 'title', 'raw_title', 'url', 'kind', 'notice_date')}
+        if p.get('revive'):
+            body['revive'] = True            # a current-season notice that was set aside earlier
         if os.path.exists(p['draft_path']):
             try:
                 with open(p['draft_path']) as f:

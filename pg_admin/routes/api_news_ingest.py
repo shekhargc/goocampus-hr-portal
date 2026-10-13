@@ -178,6 +178,13 @@ def api_news_inbox_ingest():
             if pdf:
                 sets += ["pdf_data = COALESCE(pdf_data, ?)", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
                 vals += [pdf, pdf_name]
+            if b.get('revive') and row['status'] == 'seen' and draft:
+                # a notice set aside as "already seen" on a source's first run, brought back on
+                # the founder's request (2026-10-13) — it lands in New like any fresh notice
+                sets.append("status = 'new'")
+                if "draft_json = ?" not in sets:
+                    sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP"]; vals.append(json.dumps(draft))
+                row = dict(row); row['status'] = 'new'
             if sets:
                 conn.execute(f"UPDATE pg_news_inbox SET {', '.join(sets)} WHERE id = ?", vals + [row['id']])
                 conn.commit()
