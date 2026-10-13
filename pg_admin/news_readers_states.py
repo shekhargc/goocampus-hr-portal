@@ -508,6 +508,204 @@ def read_raj_orderportal(dept_codes, include=None, exclude=None, page_size=300):
     return items      # empty is normal until the PG board posts
 
 
+# ── East & North-East batch ──
+# ===== ojee =====
+def read_dmet_odisha(pages, include=None, exclude=None):
+    """Odisha DMET PG Medical counselling (dmetodisha.in/PGMCC_Static/...) — static HTML tables:
+    each row = [date cell 'DD<br>Mon-YYYY'] [title cell] [<a href=PDF>View PDF</a>]. The bulletin page uses
+    [course 'PG-Medical'] [title] [View PDF] with no date. Title = the row's text before the link, minus the
+    date and the course label. The 'Doc/Council Affidavit Notification OSCOTP.pdf' href is the template's
+    placeholder header link — ignored."""
+    from urllib.parse import urljoin
+    _MON = {m: i for i, m in enumerate(['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'], 1)}
+    s, items, seen = _session(), [], set()
+    for pg in pages:
+        r = s.get(pg, timeout=TIMEOUT)
+        r.raise_for_status()
+        body = r.text
+        prev = 0
+        for m in re.finditer(r'<a\b[^>]*href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>', body, re.S | re.I):
+            href_raw, inner = m.group(1), m.group(2)
+            chunk = body[prev:m.start()]
+            prev = m.end()
+            if 'OSCOTP' in href_raw:                     # template placeholder link
+                continue
+            # the row = from the last '<tr' that opens this row's outer table row
+            rows = [x.start() for x in re.finditer(r'<tr\b', chunk, re.I)]
+            row = chunk
+            for st in reversed(rows):                    # walk back until the row holds some text
+                if _text(re.sub(r'<a\b.*?</a>', ' ', chunk[st:], flags=re.S | re.I)):
+                    row = chunk[st:]
+                    break
+            d = None                                     # the row's date cell sits before the title cell
+            dms = list(re.finditer(r'class="date">\s*(\d{1,2})\s*(?:<br\s*/?>)?\s*([A-Za-z]{3})[a-z]*\s*[-\s]\s*(20\d{2})', chunk))
+            if dms and dms[-1].group(2).lower() in _MON:
+                dm = dms[-1]
+                try: d = date(int(dm.group(3)), _MON[dm.group(2).lower()], int(dm.group(1)))
+                except ValueError: d = None
+            raw = _text(row)
+            raw = re.sub(r'^(PG[\s-]*Medical)\s+', '', raw, flags=re.I).strip()
+            link_txt = _text(inner)
+            if not raw:
+                raw = link_txt
+            href = urljoin(r.url, _html.unescape(href_raw).strip()).replace(' ', '%20')
+            if not raw or href in seen or not _wanted(raw, include, exclude):
+                continue
+            seen.add(href)
+            title, d2 = split_title_date(raw)
+            items.append({'item_key': href, 'raw_title': raw, 'title': title, 'url': href,
+                          'kind': 'pdf', 'notice_date': d or d2})
+    if not items:
+        raise ValueError('No notices found — the site layout may have changed.')
+    return items
+
+
+
+# ===== dme_assam =====
+def read_pdf_links_lastmod(url, pages=None, include=None, exclude=None, max_head=80):
+    """pdf_links for sites whose notice list carries NO dates and mixes every course and several years
+    (Assam DME 'Admission Notice-UG/PG/Others(New)', Meghalaya meghealth.gov.in home 'News' box).
+    1) read every PDF link on the page(s) unfiltered — raises only if the page has no PDF links at all
+       (= layout changed); 2) apply include/exclude on the title — an EMPTY result is fine (no PG notice
+       yet this season) instead of an error; 3) for each undated match (up to max_head) a HEAD request
+       reads the server's Last-Modified header as the notice date, so in_season() drops the previous
+       session's notices (e.g. Assam 'Stray round online PG counselling_2026' = 2025 session, uploaded
+       Feb 2026). A failed HEAD leaves the date None (kept as current season)."""
+    from email.utils import parsedate_to_datetime
+    items = [i for i in read_pdf_links(url, pages) if _wanted(i['raw_title'], include, exclude)]
+    s = _session()
+    for it in items[:max_head]:
+        if it['notice_date']:
+            continue
+        try:
+            h = s.head(it['url'], timeout=TIMEOUT, allow_redirects=True)
+            lm = h.headers.get('Last-Modified')
+            if h.ok and lm:
+                it['notice_date'] = parsedate_to_datetime(lm).date()
+        except Exception as e:
+            logging.warning("last-modified %s: %s", it['url'], e)
+    return items
+
+
+
+# ===== dhs_manipur =====
+def read_badge_list(url, include=None, exclude=None):
+    """Manipur DHS (manipurhealthdirectorate.mn.gov.in/notifications) — one long list, newest first:
+    <li class="list-group-item"><a class="text-primary" href="PDF or /news/<id>">TITLE</a>
+    <span class="badge">October 9, 2026</span></li>. Mixes every course + HR orders, so filter by title.
+    A /news/<id> link is an HTML notice page (kind 'link')."""
+    from urllib.parse import urljoin
+    r = _session().get(url, timeout=TIMEOUT)
+    r.raise_for_status()
+    items, seen, rows = [], set(), 0
+    for href, inner, dtxt in re.findall(
+            r'<a\s+class="text-primary"\s+href="([^"]+)"[^>]*>(.*?)</a>\s*<span class="badge"\s*>(.*?)</span>', r.text, re.S):
+        rows += 1
+        raw = _text(inner)
+        href = urljoin(r.url, _html.unescape(href).strip())
+        if not raw or href in seen or not _wanted(raw, include, exclude):
+            continue
+        seen.add(href)
+        try:
+            d = datetime.strptime(_text(dtxt), '%B %d, %Y').date()
+        except ValueError:
+            d = None
+        title, d2 = split_title_date(raw)
+        items.append({'item_key': href, 'raw_title': raw, 'title': title, 'url': href,
+                      'kind': _kind(href), 'notice_date': d or d2})
+    if not rows:
+        raise ValueError('No notices list found — the site layout may have changed.')
+    return items          # empty is fine: no PG notice yet this season
+
+
+
+# ===== arunachal =====
+def read_wp_feed(feeds, include=None, exclude=None):
+    """Any WordPress site's RSS feed (e.g. RIMS Imphal https://rims.edu.in/rimsman/category/admission/feed/,
+    page 2 = ?paged=2): <item><title>…</title><link>POST</link><pubDate>RFC-822</pubDate>
+    <content:encoded>… <a href="…pdf">…</content:encoded>. Date = pubDate; url = the first PDF linked in
+    the post body if any (kind 'pdf'), else the post link. item_key = the post link.
+    A feed page past the end (404) is skipped; raises only if no feed answered with items."""
+    from email.utils import parsedate_to_datetime
+    s, items, seen, ok = _session(), [], set(), False
+    for fd in feeds:
+        r = s.get(fd, timeout=TIMEOUT)
+        if r.status_code == 404:
+            continue
+        r.raise_for_status()
+        for block in re.findall(r'<item>(.*?)</item>', r.text, re.S):
+            ok = True
+            tm = re.search(r'<title>(.*?)</title>', block, re.S)
+            lm = re.search(r'<link>(.*?)</link>', block, re.S)
+            if not tm or not lm:
+                continue
+            raw = _text(re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', tm.group(1), flags=re.S))
+            link = _html.unescape(lm.group(1)).strip()
+            if not raw or link in seen or not _wanted(raw, include, exclude):
+                continue
+            seen.add(link)
+            d = None
+            pm = re.search(r'<pubDate>(.*?)</pubDate>', block)
+            if pm:
+                try: d = parsedate_to_datetime(pm.group(1).strip()).date()
+                except (TypeError, ValueError): d = None
+            url, kind = link, 'link'
+            cm = re.search(r'<content:encoded>(.*?)</content:encoded>', block, re.S)
+            pdf = re.search(r'href=["\']([^"\']+\.pdf)["\']', cm.group(1) if cm else '', re.I)
+            if pdf:
+                url, kind = _html.unescape(pdf.group(1)).strip(), 'pdf'
+            title, _d2 = split_title_date(raw)
+            items.append({'item_key': link, 'raw_title': raw, 'title': title, 'url': url,
+                          'kind': kind, 'notice_date': d})
+    if not ok:
+        raise ValueError('Feed empty or missing — the site may have changed.')
+    return items          # empty is fine: no PG notice yet this season
+
+
+
+# ===== dict_mz =====
+def read_mizoram_posts(pages, include=None, exclude=None):
+    """Mizoram Higher & Technical Education (dhte.mizoram.gov.in/category/notice-board?page=N) — the State
+    Selection Board posts every selection notice (NEET-UG, NEET-PG ZMC&H state quota, BAMS, engineering, HR)
+    as a post; the list has titles only:
+    <div class="list-single-item"><a href="/post/<slug>" title="TITLE">…</a>.
+    For each wanted title the post page is opened: date = 'Post Created On: 10<sup>th</sup> Dec 25',
+    url = the first attachment PDF (/uploads/attachments/…pdf) if any, else the post link.
+    item_key = the post URL."""
+    from urllib.parse import urljoin
+    s, items, seen, rows = _session(), [], set(), 0
+    for pg in pages:
+        r = s.get(pg, timeout=TIMEOUT)
+        r.raise_for_status()
+        for href, ttl in re.findall(r'list-single-item">\s*<a href="([^"]+)"\s+title="([^"]*)"', r.text):
+            rows += 1
+            raw = _text(ttl)
+            href = urljoin(r.url, _html.unescape(href).strip())
+            if not raw or href in seen or not _wanted(raw, include, exclude):
+                continue
+            seen.add(href)
+            url, kind, d = href, 'link', None
+            try:
+                p = s.get(href, timeout=TIMEOUT)
+                if p.ok:
+                    m = re.search(r'class="attachment-link"\s+href="([^"]+\.pdf)"', p.text, re.I)
+                    if m:
+                        url, kind = urljoin(p.url, _html.unescape(m.group(1)).strip()), 'pdf'
+                    dm = re.search(r'Post Created On:\s*(\d{1,2})\s*(?:<sup>\w*</sup>)?\s*([A-Za-z]{3})\w*\s+(\d{2,4})', p.text)
+                    if dm:
+                        yy = int(dm.group(3)); yy = yy + 2000 if yy < 100 else yy
+                        try: d = datetime.strptime(f'{dm.group(1)} {dm.group(2)} {yy}', '%d %b %Y').date()
+                        except ValueError: d = None
+            except Exception as e:
+                logging.warning("dhte mizoram post %s: %s", href, e)
+            title, d2 = split_title_date(raw)
+            items.append({'item_key': href, 'raw_title': raw, 'title': title, 'url': url,
+                          'kind': kind, 'notice_date': d or d2})
+    if not rows:
+        raise ValueError('No notices list found — the site layout may have changed.')
+    return items          # empty is fine: no PG notice yet this season
+
+
 # reader name (SOURCES[...]['reader']) → call with the source config
 DISPATCH = {
     'pdf_links_url': lambda s: read_pdf_links_url(s['url'], s.get('pages'), s.get('url_include'), s.get('include'), s.get('exclude')),
@@ -523,4 +721,9 @@ DISPATCH = {
     'jceceb_grid': lambda s: read_jceceb_grid(s.get('pages') or [s['url']], s.get('include'), s.get('exclude')),
     'jk_bopee': lambda s: read_jk_bopee(s['url']),
     'raj_orderportal': lambda s: read_raj_orderportal(s['dept_codes'], s.get('include'), s.get('exclude')),
+    'dmet_odisha': lambda s: read_dmet_odisha(s.get('pages') or [s['url']], s.get('include'), s.get('exclude')),
+    'pdf_links_lastmod': lambda s: read_pdf_links_lastmod(s['url'], s.get('pages'), s.get('include'), s.get('exclude')),
+    'badge_list': lambda s: read_badge_list(s['url'], s.get('include'), s.get('exclude')),
+    'wp_feed': lambda s: read_wp_feed(s.get('feeds') or [s['url'].rstrip('/') + '/feed/'], s.get('include'), s.get('exclude')),
+    'mizoram_posts': lambda s: read_mizoram_posts(s.get('pages') or [s['url']], s.get('include'), s.get('exclude')),
 }

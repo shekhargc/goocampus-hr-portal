@@ -344,6 +344,114 @@ SOURCES = {
         'dept_codes': [102, 357],
         'enabled': True,
     },
+    # ── East & North-East (found + verified on official sites; survey notes in states/<code>.json) ──
+    # West Bengal: ready — wbmcc.nic.in is WBMCC's NIC/S3WaaS site; it links to Govt of West Bengal (wb.gov.in) and the WB Health dept (wbhealth.gov.in) in its header. Menu 'PG Medical' (
+    'wbmcc_pg': {
+        'label': 'West Bengal WBMCC — PG Medical (MD/MS/Diploma/DNB) 2026',
+        'short': 'West Bengal',
+        'authority_code': 'wbmcc',
+        'news_authority': 'state:West Bengal',
+        'url': 'https://wbmcc.nic.in/pg-medical-notice-events/',
+        'pages': ['https://wbmcc.nic.in/pg-medical-notice-events/', 'https://wbmcc.nic.in/pg-medical-counselling/', 'https://wbmcc.nic.in/pg-medical-eservices-schedule/'],
+        'reader': 'pdf_links',
+        'enabled': True,
+    },
+    # Odisha: needs_reader — Odisha PG Medical counselling is run by DMET Odisha, not OJEE; OJEE (ojee.nic.in) only lists MBBS/BDS/BAMS/BHMS/pharmacy. How it was confirmed: the official DME
+    'ojee_pg': {
+        'label': 'Odisha DMET — PG Medical Counselling (State Quota) 2026-27',
+        'short': 'Odisha',
+        'authority_code': 'ojee',
+        'news_authority': 'state:Odisha',
+        'url': 'https://dmetodisha.in/PGMCC_Static/MEDICAL%20COUNSELLING%201/Notifications.html',
+        'pages': ['https://dmetodisha.in/PGMCC_Static/MEDICAL%20COUNSELLING%201/Notifications.html', 'https://dmetodisha.in/PGMCC_Static/MEDICAL%20COUNSELLING%201/Information%20Bulletin.html', 'https://dmetodisha.in/PGMCC_Static/MEDICAL%20COUNSELLING%201/Counselling%20Schedule.html'],
+        'reader': 'dmet_odisha',
+        'enabled': True,
+    },
+    # Assam: needs_reader — dme.assam.gov.in is the official Assam DME site. Its home page has a link 'Admission Notice-UG/PG/Others(New)' → /node/95928, which 301-redirects to /latest/adm
+    'dme_assam_pg': {
+        'label': 'Assam DME — PG Medical (NEET-PG State Quota)',
+        'short': 'Assam',
+        'authority_code': 'dme_assam',
+        'news_authority': 'state:Assam',
+        'url': 'https://dme.assam.gov.in/latest/admission-notice-ugpgothersnew',
+        'reader': 'pdf_links_lastmod',
+        'include': 'NEET[\\s_-]*PG|\\bPG\\b|P\\.G\\.|post[\\s-]*graduate|\\bMD\\b|\\bMS\\b|\\bDNB\\b|prospectus|bulletin',
+        'exclude': '\\bMDS\\b|dental|nursing|M\\.?\\s*Sc|pharm|ayush|homoeo|ayurved|post[\\s_-]*PG|\\bSR\\b|engagement',
+        'enabled': True,
+    },
+    # Tripura: ready — Official link: the DME Tripura home page (dme.tripura.gov.in) has a menu link 'NEET Counselling' → https://trmcc.admissions.nic.in/ (Tripura Medical Counselling
+    'dme_tripura_pg': {
+        'label': 'Tripura TRMCC (DME) — PG Medical Counselling 2026',
+        'short': 'Tripura',
+        'authority_code': 'dme_tripura',
+        'news_authority': 'state:Tripura',
+        'url': 'https://trmcc.admissions.nic.in/pg-counselling/',
+        'reader': 'pdf_links',
+        'enabled': True,
+    },
+    # Manipur: needs_reader — manipurhealthdirectorate.mn.gov.in is the official Directorate of Health Services, Govt of Manipur (mn.gov.in). Its /notifications ('News & Notifications') page
+    'dhs_manipur_pg': {
+        'label': 'Manipur DHS — State Level PG (MD/MS) Counselling notices',
+        'short': 'Manipur',
+        'authority_code': 'dhs_manipur',
+        'news_authority': 'state:Manipur',
+        'url': 'https://manipurhealthdirectorate.mn.gov.in/notifications',
+        'reader': 'badge_list',
+        'include': 'NEET[\\s_-]*PG|\\bP\\.?\\s*G\\.?\\b|post[\\s-]*graduate|\\bMD\\b|\\bM\\.?S\\.?\\b(?!c)|\\bDNB\\b|MD\\s*/\\s*MS',
+        'exclude': '\\bMDS\\b|dental|nursing|M\\.?\\s*Sc|pharm|ayush|homoeo|ayurved|post[\\s_-]*PG|engagement|projectionist|\\bMS\\s*\\(RP\\)|study\\s+leave',
+        'enabled': True,
+    },
+    # Arunachal Pradesh: no_pg_2026_yet — Official link: the Arunachal Health & FW dept site health.arunachal.gov.in → 'Directorate of Medical Education (T&R)' page (/dometr.php) links to https://www.dm
+    'arunachal_pg': {
+        'label': 'Arunachal DMETR — NEET-PG State Quota (MD/MS/DNB) notices',
+        'short': 'Arunachal Pradesh',
+        'authority_code': 'arunachal',
+        'news_authority': 'state:Arunachal Pradesh',
+        'url': 'https://dmetrap.in/notices/',
+        'feeds': ['https://dmetrap.in/notices/feed/'],
+        'reader': 'wp_feed',
+        'include': 'NEET[\\s_-]*PG|\\bP\\.?\\s*G\\.?\\b|post[\\s-]*graduate|\\bMD\\b|MD\\s*/\\s*MS|\\bDNB\\b',
+        'exclude': '\\bMDS\\b|dental|nursing|M\\.?\\s*Sc|pharm|ayush|homoeo|ayurved|post[\\s_-]*PG',
+        'enabled': True,
+    },
+    # Meghalaya: no_pg_2026_yet — meghealth.gov.in is the official Health & FW dept, Govt of Meghalaya (DHS-MER posts admissions there). Meghalaya has no state MD/MS counselling. What it does po
+    'neigrihms_pg': {
+        'label': 'Meghalaya DHS (MER) — PG / Post-MBBS Diploma notices',
+        'short': 'Meghalaya',
+        'authority_code': 'neigrihms',
+        'news_authority': 'state:Meghalaya',
+        'url': 'https://meghealth.gov.in/',
+        'reader': 'pdf_links_lastmod',
+        'include': 'NEET[\\s-]*PG|PG[\\s-]*NEET|post[\\s-]*MBBS|\\bMD\\b|MD\\s*/\\s*MS|\\bDNB\\b|Post[\\s-]*Graduate\\s+(Medical|Degree|Diploma|course|seat|counsel|admission)|\\bPG\\s+(Medical|Degree|Diploma|course|seat|counsel|admission)|CPS\\s+Mumbai',
+        'exclude': 'study\\s+leave|nursing|pharm|M\\.?\\s*Sc|AYUSH|ayurved|homoeo|BAMS|BHMS|\\bMDS\\b|dental|bond|RIPANS|paramedical|para-medical',
+        'enabled': True,
+    },
+    # Mizoram: no_pg_2026_yet — Mizoram does run a state-quota NEET-PG counselling: the State Selection Board under the Dept of Higher & Technical Education (dhte.mizoram.gov.in, official) for
+    'dict_mz_pg': {
+        'label': 'Mizoram Higher & Technical Education (State Selection Board) — NEET-PG ZMC&H state quota',
+        'short': 'Mizoram',
+        'authority_code': 'dict_mz',
+        'news_authority': 'state:Mizoram',
+        'url': 'https://dhte.mizoram.gov.in/category/notice-board',
+        'pages': ['https://dhte.mizoram.gov.in/category/notice-board', 'https://dhte.mizoram.gov.in/category/notice-board?page=2', 'https://dhte.mizoram.gov.in/category/notice-board?page=3'],
+        'reader': 'mizoram_posts',
+        'include': 'NEET[\\s_-]*\\(?PG|\\bPG\\b|post[\\s-]*graduate|\\bMD\\b|MD\\s*/\\s*MS|\\bDNB\\b',
+        'exclude': 'RIPANS|\\bMDS\\b|dental|nursing|M\\.?\\s*Sc|pharm|ayush|homoeo|ayurved|BAMS|BHMS',
+        'enabled': True,
+    },
+    # NE common: None — 
+    'rims_imphal_pg': {
+        'label': 'RIMS Imphal — common State Level PG Counselling (7 NE states)',
+        'short': 'RIMS Imphal (NE)',
+        'authority_code': 'rims_imphal',
+        'news_authority': 'state:Manipur',
+        'url': 'https://rims.edu.in/rimsman/category/admission/',
+        'feeds': ['https://rims.edu.in/rimsman/category/admission/feed/', 'https://rims.edu.in/rimsman/category/admission/feed/?paged=2', 'https://rims.edu.in/rimsman/category/admission/feed/?paged=3'],
+        'reader': 'wp_feed',
+        'include': '\\bMD\\b|MD\\s*/\\s*MS|\\bPG\\b|P\\.G\\.|post[\\s-]*graduate|NEET[\\s-]*PG|\\bDCP\\b',
+        'exclude': '\\bMDS\\b|dental|MBBS|B\\.?Sc|nursing|protocol|senior\\s+resid|M\\.?\\s*Sc',
+        'enabled': True,
+    },
 }
 
 
