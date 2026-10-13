@@ -153,6 +153,16 @@ def api_news_inbox_ingest():
             if draft and (not row['draft_json'] or row['redraft']):
                 sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP", "redraft_requested = FALSE"]
                 vals.append(json.dumps(draft))
+            elif draft and draft.get('document') and row['draft_json']:
+                # a draft from before documents were filed: add ONLY the missing document
+                # classification, nothing else in the reviewed draft changes (2026-10-13)
+                try:
+                    old = json.loads(row['draft_json']) or {}
+                except Exception:
+                    old = {}
+                if isinstance(old, dict) and not old.get('document'):
+                    old['document'] = draft['document']
+                    sets.append("draft_json = ?"); vals.append(json.dumps(old))
             if pdf:
                 sets += ["pdf_data = COALESCE(pdf_data, ?)", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
                 vals += [pdf, pdf_name]
