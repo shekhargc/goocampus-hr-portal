@@ -34,10 +34,11 @@ AUTHORITIES = [
     ("dme_mp",     "DME Madhya Pradesh",                    "Madhya Pradesh",     "https://dme.mponline.gov.in",                 "state"),
     ("cetcell_mh", "CET CELL",                              "Maharashtra",        "https://cetcell.mahacet.org",                 "state"),
     ("dhs_manipur","DHS Manipur",                           "Manipur",            "https://manipurhealthdirectorate.mn.gov.in",  "state"),
+    ("rims_imphal","RIMS Imphal — common PG counselling (7 NE states)", "Manipur", "https://rims.edu.in/rimsman/category/admission/", "state"),
     ("neigrihms",  "NEIGRIHMS",                             "Meghalaya",          "https://meghealth.gov.in",                    "state"),
-    ("dict_mz",    "DICT Mizoram",                          "Mizoram",            "https://dhte.mizoram.gov.in",                 "state"),
+    ("dict_mz",    "Mizoram H&TE — State Selection Board",  "Mizoram",            "https://dhte.mizoram.gov.in",                 "state"),
     ("dte_nagaland","DTE Nagaland",                         "Nagaland",           "",                                            "state"),
-    ("ojee",       "OJEE",                                  "Odisha",             "https://ojee.nic.in",                         "state"),
+    ("ojee",       "DMET Odisha (PG Medical counselling)",  "Odisha",             "https://dmetodisha.in",                       "state"),
     ("centac",     "CENTAC",                                "Puducherry",         "https://centacpuducherry.in",                 "state"),
     ("bfuhs",      "BFUHS",                                 "Punjab",             "https://bfuhs.ac.in",                         "state"),
     ("ruhs",       "RUHS",                                  "Rajasthan",          "https://ruhsraj.org",                         "state"),
@@ -53,17 +54,33 @@ AUTHORITIES = [
 _BY_CODE = {a[0]: a for a in AUTHORITIES}
 
 
+# An authority whose counselling serves doctors of several states (founder 2026-10-13): RIMS Imphal
+# runs one State Level PG Counselling for Arunachal, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim,
+# Tripura (RIMS circular ACADEM/ADMN/PG/1/2025-RIMS). `covers_states` lets the website show it to all.
+COVERS_STATES = {
+    "rims_imphal": ["Arunachal Pradesh", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Sikkim", "Tripura"],
+}
+
+
 def as_dict(a):
-    return {"code": a[0], "name": a[1], "state": a[2], "homepage": a[3], "kind": a[4]}
+    return {"code": a[0], "name": a[1], "state": a[2], "homepage": a[3], "kind": a[4],
+            "covers_states": COVERS_STATES.get(a[0], [a[2]])}
+
+
+# Not a counselling authority for our doctors (founder 2026-10-13): Delhi has no state PG counselling —
+# all Delhi MD/MS seats (incl. DU + IP University quotas) are counselled by MCC. GGSIPU's own PGMC
+# counselling is only a handful of seats for its own graduates. Kept here (codes never reused) but
+# hidden from every list, dropdown, API and the news scraper.
+REMOVED = {"ggsipu"}
 
 
 def all_authorities():
-    return [as_dict(a) for a in AUTHORITIES]
+    return [as_dict(a) for a in AUTHORITIES if a[0] not in REMOVED]
 
 
 def get_authority(code):
     a = _BY_CODE.get((code or "").strip().lower())
-    return as_dict(a) if a else None
+    return as_dict(a) if a and a[0] not in REMOVED else None
 
 
 # The per-authority document buckets (founder 2026-10-06; brochure added on review).
