@@ -292,7 +292,7 @@ SOURCES = {
         'news_authority': 'state:Uttarakhand',
         'url': 'https://meta-secure.com/HNBUMU_NEETPG',
         'reader': 'hnbumu_pg',
-        'enabled': True,
+        'enabled': False,      # founder 2026-10-13: off for now — PDFs are on the vendor portal (meta-secure.com), not an official domain
     },
     # Jharkhand: needs_reader — Official: jceceb.jharkhand.gov.in = Jharkhand Combined Entrance Competitive Examination Board; home page menu Notices » "Counselling Notices" (Links/counselling.aspx) and "Download
     'jceceb_pg': {
