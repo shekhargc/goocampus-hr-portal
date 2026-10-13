@@ -131,7 +131,8 @@ def plan(conn, today=None):
                 mine.append((r, kind, when))
             else:
                 a = get_authority(r['authority_code']) or {}
-                if (a.get('state') or '').strip().lower() in st:
+                serves = {x.strip().lower() for x in (a.get('covers_states') or [a.get('state') or ''])}
+                if serves & st:                         # incl. RIMS Imphal for all 7 NE states
                     mine.append((r, kind, when))
         if mine:
             out.append((d, mine))

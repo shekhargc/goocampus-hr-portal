@@ -343,7 +343,9 @@ def _codes_for_states(states, include_all=True):
     if any(x.lower() == 'all' for x in states):
         return [a['code'] for a in auths if a['kind'] == 'state' or include_all]
     sl = {x.strip().lower() for x in states}
-    codes = [a['code'] for a in auths if a['kind'] == 'state' and a['state'].strip().lower() in sl]
+    # an authority serves every state in its covers_states (e.g. RIMS Imphal → 7 NE states)
+    codes = [a['code'] for a in auths if a['kind'] == 'state' and
+             ({x.strip().lower() for x in (a.get('covers_states') or [a['state']])} & sl)]
     if include_all:
         codes.insert(0, 'mcc')
     return codes
