@@ -131,6 +131,24 @@ team publishes it). Classify it:
   if the PDF states dated steps. `news`: `true` for anything with dates, actions, deadlines, rule
   changes, or a new bulletin/prospectus (a new bulletin is news AND a `brochure` document).
 
+Optional `registration_documents` — when the PDF (an Information Bulletin / Prospectus, or a
+"keep these certificates ready" notice) lists the documents/certificates a candidate must upload or
+produce for registration / document verification, write that list out (it becomes the authority's
+"Registration Documents" checklist on the dashboard, after review):
+
+```json
+"registration_documents": [
+  {"title": "Tamil Nadu PG Medical 2026-27 — Documents to upload (Government quota)",
+   "items": ["NEET PG 2026 score card", "NEET PG 2026 admit card", "MBBS degree / provisional pass certificate", "..."]},
+  {"title": "Tamil Nadu PG Medical 2026-27 — Documents to upload (Management quota)", "items": ["..."]}
+]
+```
+- One list per quota / category of candidate if the notice gives separate lists; otherwise one list.
+- Each item short and plain (≤ 120 chars), in the notice's order; keep conditions in brackets
+  ("Community certificate (if claiming reservation)"). Only what the PDF states — never add items.
+- For a long bulletin, find the "documents to be produced / uploaded" section with
+  `newsfetch.py text <id> <first> <last>` (search a few page ranges) — it is often an annexure.
+
 Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochure for the year
 (the reviewer will also save it as that authority's main brochure document).
 

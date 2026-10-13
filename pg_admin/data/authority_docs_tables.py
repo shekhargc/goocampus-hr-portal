@@ -47,7 +47,7 @@ def ensure_pg_authority_docs(conn=None):
         # Auto-filed from the News Inbox (2026-10-13): which notice, the file's fingerprint (no
         # duplicates), the official link, and "waiting for approval" (hidden until published).
         for col, typ in (('auto_inbox_id', 'INTEGER'), ('file_sha256', 'TEXT'), ('source_url', "TEXT DEFAULT ''"),
-                         ('review_pending', 'BOOLEAN DEFAULT FALSE')):
+                         ('review_pending', 'BOOLEAN DEFAULT FALSE'), ('auto_kind', "TEXT DEFAULT ''")):
             conn.execute(f"ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS {col} {typ}")
         conn.commit()
         logging.info("pg_authority_docs table ensured")

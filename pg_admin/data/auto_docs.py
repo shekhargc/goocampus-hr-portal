@@ -47,18 +47,27 @@ def file_from_inbox(conn, inbox_id):
     r = conn.execute("SELECT id, source_code, status, title, url, notice_date, draft_json, pdf_data, pdf_name, "
                      "COALESCE(doc_rejected, FALSE) AS doc_rejected FROM pg_news_inbox WHERE id = ?",
                      (inbox_id,)).fetchone()
-    if not r or not r['draft_json'] or not r['pdf_data'] or r['doc_rejected']:
+    if not r or not r['draft_json'] or r['doc_rejected']:
+        return 'skip'
+    if not r['pdf_data']:                       # no PDF (a link) — only typed lists can be filed
+        try:
+            file_reg_lists(conn, r, json.loads(r['draft_json']) or {})
+        except Exception:
+            pass
         return 'skip'
     try:
-        doc = (json.loads(r['draft_json']) or {}).get('document') or {}
+        dj = json.loads(r['draft_json']) or {}
+        doc = dj.get('document') or {}
     except Exception:
         return 'skip'
+    file_reg_lists(conn, r, dj)
     cat = (doc.get('category') or '').strip()
     code = (NS.SOURCES.get(r['source_code']) or {}).get('authority_code')
     if not code or not valid_category(cat):
         return 'skip'
     news_only_doc = doc.get('news') is False
-    if conn.execute("SELECT 1 FROM pg_authority_docs WHERE auto_inbox_id = ? LIMIT 1", (inbox_id,)).fetchone():
+    if conn.execute("SELECT 1 FROM pg_authority_docs WHERE auto_inbox_id = ? AND COALESCE(auto_kind,'') <> 'reg_list' "
+                    "LIMIT 1", (inbox_id,)).fetchone():
         res = 'already'
     elif find_same_file(conn, code, r['pdf_data']):
         res = 'duplicate'
@@ -67,7 +76,7 @@ def file_from_inbox(conn, inbox_id):
         conn.execute(
             "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, note, "
             "file_name, file_data, file_content_type, is_published, uploaded_by, auto_inbox_id, file_sha256, "
-            "source_url, review_pending) VALUES (?,?,?,?,?,?,?,?,?,FALSE,?,?,?,?,TRUE)",
+            "source_url, review_pending, auto_kind) VALUES (?,?,?,?,?,?,?,?,?,FALSE,?,?,?,?,TRUE,'pdf')",
             (code, (get_authority(code) or {}).get('name', ''), cat, title,
              r['notice_date'].isoformat() if r['notice_date'] else '', '',
              (r['pdf_name'] or 'document.pdf')[:200], r['pdf_data'], 'application/pdf', 'AI (auto)',
@@ -76,6 +85,35 @@ def file_from_inbox(conn, inbox_id):
     if news_only_doc and r['status'] == 'new':
         conn.execute("UPDATE pg_news_inbox SET status = 'document' WHERE id = ?", (inbox_id,))
     return res
+
+
+def file_reg_lists(conn, r, dj):
+    """'Documents required for registration' lists the AI read out of a bulletin / checklist →
+    typed list entries (no file) under Registration Documents, hidden + waiting. One per list title."""
+    from pg_admin import news_scraper as NS
+    code = (NS.SOURCES.get(r['source_code']) or {}).get('authority_code')
+    if not code:
+        return 0
+    n = 0
+    auth = (get_authority(code) or {}).get('name', code)
+    for g in (dj.get('registration_documents') or []):
+        items = [str(x).strip() for x in (g.get('items') or []) if str(x).strip()]
+        if not items:
+            continue
+        title = (str(g.get('title') or '').strip() or f'{auth} — Documents required for registration')[:300]
+        if conn.execute("SELECT 1 FROM pg_authority_docs WHERE auto_inbox_id = ? AND auto_kind = 'reg_list' "
+                        "AND title = ? LIMIT 1", (r['id'], title)).fetchone():
+            continue
+        body = '\n'.join(f'{i}. {x}' for i, x in enumerate(items, 1))
+        conn.execute(
+            "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, note, body_text, "
+            "file_name, is_published, uploaded_by, auto_inbox_id, source_url, review_pending, auto_kind) "
+            "VALUES (?,?,'registration',?,?,?,?,'',FALSE,'AI (auto)',?,?,TRUE,'reg_list')",
+            (code, auth, title, r['notice_date'].isoformat() if r['notice_date'] else '',
+             'Read from the official notice — check against the PDF before publishing.', body,
+             r['id'], (r['url'] or '')[:1000]))
+        n += 1
+    return n
 
 
 def file_safely(conn, inbox_id):

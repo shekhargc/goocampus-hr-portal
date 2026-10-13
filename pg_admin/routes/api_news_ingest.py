@@ -78,6 +78,15 @@ def _clean_draft(dr):
         out['document'] = {'category': cat if valid_category(cat) else 'none',
                            'title': str(doc.get('title') or '').strip()[:300],
                            'news': doc.get('news') is not False}
+    # documents required for registration, read out of a bulletin / prospectus / checklist (2026-10-13)
+    regs = []
+    for g in (dr.get('registration_documents') or [])[:4]:
+        if isinstance(g, dict):
+            its = [str(x).strip()[:300] for x in (g.get('items') or []) if str(x).strip()][:60]
+            if its:
+                regs.append({'title': str(g.get('title') or '').strip()[:200], 'items': its})
+    if regs:
+        out['registration_documents'] = regs
     if not out['headline'] and not out['article']:
         return None
     return out
@@ -160,8 +169,11 @@ def api_news_inbox_ingest():
                     old = json.loads(row['draft_json']) or {}
                 except Exception:
                     old = {}
-                if isinstance(old, dict) and not old.get('document'):
-                    old['document'] = draft['document']
+                if isinstance(old, dict) and (not old.get('document') or
+                                              (draft.get('registration_documents') and not old.get('registration_documents'))):
+                    old.setdefault('document', draft['document'])
+                    if draft.get('registration_documents'):
+                        old.setdefault('registration_documents', draft['registration_documents'])
                     sets.append("draft_json = ?"); vals.append(json.dumps(old))
             if pdf:
                 sets += ["pdf_data = COALESCE(pdf_data, ?)", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
