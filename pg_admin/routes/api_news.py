@@ -139,6 +139,9 @@ def api_pg_news():
             placeholders = ','.join(['?'] * len(states))
             scope_parts.append(f"(scope = 'state' AND state IN ({placeholders}))")
             params.extend(states)
+            _rsql, _rp = _regional_news_sql(states)        # e.g. RIMS Imphal news for a Meghalaya doctor
+            if _rsql:
+                scope_parts.append(_rsql); params.extend(_rp)
         if not scope_parts:
             scope_parts.append("scope = 'all_india'")
         where = "is_published AND deleted_at IS NULL AND (" + " OR ".join(scope_parts) + ")"
@@ -243,6 +246,9 @@ def api_pg_news_deadlines():
         elif states:
             parts.append("(scope = 'state' AND state IN (" + ','.join(['?'] * len(states)) + "))")
             params.extend(states)
+            _rsql, _rp = _regional_news_sql(states)
+            if _rsql:
+                parts.append(_rsql); params.extend(_rp)
         if not parts:
             parts.append("scope = 'all_india'")
         rows = conn.execute(
@@ -335,6 +341,23 @@ def _viewer_states(conn, states_param):
             states.append(hs)
         states.extend(_follows(conn, user['id']))
     return list({x for x in states if x})
+
+
+def _regional_news_sql(states):
+    """News of a REGIONAL authority (covers several states, e.g. RIMS Imphal posted under 'Manipur')
+    also reaches doctors of every state it covers (Meghalaya/Nagaland/Sikkim…). Matched through the
+    inbox notice it came from. → (sql or '', params). (2026-10-13)"""
+    from pg_admin.authorities import all_authorities
+    sl = {x.strip().lower() for x in states if x and x.lower() != 'all'}
+    if not sl:
+        return '', []
+    codes = [a['code'] for a in all_authorities()
+             if len(a.get('covers_states') or []) > 1
+             and ({x.lower() for x in a['covers_states']} & sl) and a['state'].lower() not in sl]
+    if not codes:
+        return '', []
+    return ("(inbox_id IN (SELECT id FROM pg_news_inbox WHERE authority_code IN (" +
+            ','.join(['?'] * len(codes)) + ")))"), codes
 
 
 def _codes_for_states(states, include_all=True):
