@@ -65,14 +65,15 @@ Copy the dates exactly as the notice states them (human-readable, e.g. "12–21 
 Max 8 columns, 40 rows. Omit `schedule` if the notice has no timetable.
 
 Optional `events` — the COUNSELLING CALENDAR. Whenever the notice gives a schedule, list EVERY
-dated step for EVERY round (this fills the authority's calendar automatically when posted):
+dated step for EVERY round (this fills the authority's calendar automatically as soon as the draft
+arrives — no posting needed):
 
 ```json
 "events": [
   {"round": "Round 1", "event": "registration",  "label": "Registration & fee payment",
-   "start": "2026-10-12", "end": "2026-10-21", "time": "till 12 noon on 21 Oct", "quote": "exact text"},
-  {"round": "Round 1", "event": "choice_filling", "label": "Choice filling", "start": "2026-10-13", "end": "2026-10-22", "time": "till 10 AM", "quote": "..."},
-  {"round": "Round 1", "event": "choice_locking", "label": "Choice locking", "start": "2026-10-21", "end": "2026-10-22", "time": "4 PM 21 Oct – 10 AM 22 Oct", "quote": "..."},
+   "start": "2026-10-12", "end": "2026-10-21", "time": "12 noon", "quote": "exact text"},
+  {"round": "Round 1", "event": "choice_filling", "label": "Choice filling", "start": "2026-10-13", "end": "2026-10-22", "time": "10 AM", "quote": "..."},
+  {"round": "Round 1", "event": "choice_locking", "label": "Choice locking", "start": "2026-10-21", "end": "2026-10-22", "time": "10 AM", "quote": "..."},
   {"round": "Round 1", "event": "result",         "label": "Result",          "start": "2026-10-24", "end": "", "time": "", "quote": "..."},
   {"round": "Round 1", "event": "reporting",      "label": "Reporting / joining", "start": "2026-10-26", "end": "2026-11-02", "time": "", "quote": "..."},
   {"round": "Round 2", "event": "registration",  ...}
@@ -87,6 +88,25 @@ dated step for EVERY round (this fills the authority's calendar automatically wh
   DIFFERENT process (e.g. an MCC notice listing the state-quota counselling windows / state joining
   dates) use event "other" with a clear label ("State quota counselling window (all states)").
 
+HOW THE CALENDAR USES `events` (it MERGES — read this):
+- Each step is identified by authority + `round` + `event` (+ `label` when event is "other").
+  The same step from a later notice with the SAME dates changes nothing; with DIFFERENT dates it
+  UPDATES that step and the website shows "Date changed — was …". So:
+- An extension / revised schedule / corrigendum notice: list the changed step(s) with the SAME
+  `round` and `event` as the original and the FULL NEW `start` and `end` (not just the new end).
+  Don't add a new step for it.
+- Keep `round` names and `event` types consistent across notices ("Phase-I"/"First round" → "Round 1",
+  "Mop-up round" → "Mop-up", "Stray vacancy round" → "Stray"). For event "other", reuse the exact same
+  `label` every time for the same thing.
+- States with SEPARATE quotas in separate counselling (e.g. Andhra Pradesh "CQ" Competent/Convener
+  quota vs "MQ" Management quota; Tamil Nadu Government vs Management quota): the standard events
+  (registration, choice_filling, result, reporting…) are for the Government / Competent-authority
+  quota ONLY. Management-quota dates go as event "other" with a label starting "Management quota — "
+  (e.g. "Management quota — Phase 1 web options"), so they never overwrite the government-quota dates.
+- Only PG Medical (MD/MS/Diploma/DNB broad speciality). If a notice is about MDS / nursing / AYUSH /
+  MBBS (some state sites mix them), write the draft with category "other", `"events": []`, `"dates": {}`
+  and say in `summary` "Not a PG Medical notice — dismiss."
+
 Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochure for the year
 (the reviewer will also save it as that authority's main brochure document).
 
@@ -97,7 +117,7 @@ Rules for `dates`:
 - Include a key ONLY if the notice explicitly states that date. Omit the key otherwise —
   never guess, never infer from another round or another year.
 - `quote` = the exact text from the notice that shows it (≤300 chars), so the reviewer can
-  verify in seconds. `time` is optional.
+  verify in seconds. `time` is optional and SHORT — just the clock time on the closing day, max 16 characters ("12 noon", "11:59 PM", "3 PM"); never dates or sentences in `time` (the website shows it in a small badge). If two times apply (e.g. registration noon, payment 3 PM), put the step's own time and leave the rest in `quote`.
 - If the notice gives a schedule for several rounds, use the earliest upcoming round's dates
   and mention the other rounds in the article.
 - Indian notices often write dates as DD-MM-YYYY or DD/MM/YYYY — convert carefully to YYYY-MM-DD.

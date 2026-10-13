@@ -109,6 +109,9 @@ def api_pg_news():
     try:
         # Resolve the doctor's home + followed states (when a token is supplied).
         user = _user(conn)
+        if scope_req in ('home', 'others') and not user:   # those tabs are the doctor's own — no token, no items
+            return jsonify({'ok': True, 'items': [], 'count': 0, 'total': 0, 'page': page,
+                            'page_size': page_size, 'total_pages': 0}), 200
         hs = _home_state(conn, user['id']) if user else None
         folls = _follows(conn, user['id']) if user else []
         if scope_req == 'mcc':
@@ -162,6 +165,12 @@ def api_pg_news():
                 d['key_dates'] = _json.loads(d.get('key_dates') or '{}') or {}
             except Exception:
                 d['key_dates'] = {}
+            from pg_admin.data.calendar import short_time
+            for _v in d['key_dates'].values():
+                if isinstance(_v, dict) and _v.get('time'):
+                    _v['time'], _full = short_time(_v['time'])
+                    if _full:
+                        _v['note'] = _full
             d['schedule'] = parse_schedule(d.get('schedule'))
             items.append(d)
         return jsonify({'ok': True, 'items': items, 'count': len(items),
@@ -264,18 +273,23 @@ def api_pg_news_deadlines():
                     if not d or not (today <= d <= until):
                         continue
                     seen.add(((st or 'ALL').lower(), d.isoformat(), r['event']))
+                    if r['event'] == 'registration' and kind != 'start':
+                        # the news "fee payment last date" is the same deadline as registration closing
+                        seen.add(((st or 'ALL').lower(), d.isoformat(), 'payment'))
                     suffix = {'start': ' opens', 'end': ' closes', 'on': ''}[kind]
+                    _t, _full = CAL.short_time(r.get('time_text')) if kind != 'start' else (None, None)
                     out.append({'date': d.isoformat(), 'field': f"{r['event']}_{kind}",
                                 'label': f"{lbl}{suffix}", 'round': r['round'] or None,
-                                'time': (r.get('time_text') or None) if kind != 'start' else None,
+                                'time': _t, 'note': _full,
                                 'news_id': r.get('news_id'), 'heading': headings.get(r.get('news_id'), ''),
-                                'body_label': a.get('name', ''),
+                                'body_label': 'All India MCC' if r['authority_code'] == 'mcc' else a.get('name', ''),
                                 'scope': 'all_india' if r['authority_code'] == 'mcc' else 'state',
                                 'state': st, 'source': 'calendar'})
         except Exception as _e:
             logging.warning("deadlines calendar: %s", _e)
             try: conn.rollback()
             except Exception: pass
+        from pg_admin.data.calendar import short_time as _short
         # 2) News key dates — skipped when the calendar already has that step on that date.
         for r in rows:
             try:
@@ -296,7 +310,8 @@ def api_pg_news_deadlines():
                 seen.add(key)
                 out.append({'date': d.isoformat(), 'field': field,
                             'label': DEADLINE_LABELS.get(field, field.replace('_', ' ').title()),
-                            'round': (v or {}).get('round') or None, 'time': (v or {}).get('time') or None,
+                            'round': (v or {}).get('round') or None,
+                            'time': _short((v or {}).get('time'))[0], 'note': _short((v or {}).get('time'))[1],
                             'news_id': r['id'], 'heading': r['heading'], 'body_label': r['body_label'],
                             'scope': r['scope'], 'state': st, 'source': 'news'})
         out.sort(key=lambda x: (x['date'], x.get('news_id') or 0))
@@ -428,7 +443,8 @@ def counselling_status(conn, code, today=None, headings=None):
         st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
         item = {'round': rnd or None, 'step': ev, 'label': CAL.EVENT_LABELS.get(ev, ev),
                 'bar_label': BAR_STEPS.get(ev), 'start': v['start'].isoformat(), 'end': v['end'].isoformat(),
-                'time': v['time'] or None, 'status': st, 'news_id': v['news_id'], 'revised': v['revised']}
+                'time': CAL.short_time(v['time'])[0], 'note': CAL.short_time(v['time'])[1],
+                'status': st, 'news_id': v['news_id'], 'revised': v['revised']}
         rounds.setdefault(rnd, []).append(item)
         flat.append(item)
     out_rounds = []
@@ -448,7 +464,7 @@ def counselling_status(conn, code, today=None, headings=None):
     nxt = next((i for i in flat if i['status'] == 'upcoming'), None)
     current = live[0] if live else None
     dl = min((i for i in flat if i['status'] in ('live', 'upcoming')), key=lambda i: i['end'], default=None)
-    next_deadline = ({'date': dl['end'], 'label': dl['label'], 'round': dl['round'], 'time': dl['time'],
+    next_deadline = ({'date': dl['end'], 'label': dl['label'], 'round': dl['round'], 'time': dl['time'], 'note': dl['note'],
                       'news_id': dl['news_id'], 'heading': headings.get(dl['news_id'], '')} if dl else None)
     from datetime import date as _date
     if current:
