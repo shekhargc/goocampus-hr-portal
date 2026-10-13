@@ -340,10 +340,10 @@ def news_save():
                              (code,))
                 existing = conn.execute("SELECT id FROM pg_authority_docs WHERE authority_code = ? AND category = 'brochure' "
                                         "AND file_name = ? LIMIT 1", (code, pdf_row['pdf_name'] or '')).fetchone()
+                from pg_admin.data.authority_docs_tables import ensure_pg_authority_docs
+                ensure_pg_authority_docs(conn)
                 if not existing:     # the same PDF already auto-filed from the inbox (any category) → use it
                     from pg_admin.data.auto_docs import find_same_file
-                    from pg_admin.data.authority_docs_tables import ensure_pg_authority_docs
-                    ensure_pg_authority_docs(conn)
                     _sid = find_same_file(conn, code, pdf_row['pdf_data'])
                     if _sid:
                         conn.execute("UPDATE pg_authority_docs SET category = 'brochure', review_pending = FALSE WHERE id = ?", (_sid,))
@@ -351,7 +351,8 @@ def news_save():
                 _ddate = (pub_dt or _dt.utcnow()).strftime('%Y-%m-%d')
                 if existing:
                     conn.execute("UPDATE pg_authority_docs SET is_main = TRUE, title = ?, doc_date = ?, is_published = TRUE, "
-                                 "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (heading, _ddate, existing['id']))
+                                 "review_pending = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                 (heading, _ddate, existing['id']))
                 else:
                     conn.execute(
                         "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, note, "
