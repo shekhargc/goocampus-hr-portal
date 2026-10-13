@@ -86,17 +86,27 @@ def calendar_save():
     try:
         CAL.ensure_calendar_table(conn)
         if eid.isdigit():
+            old = conn.execute("SELECT start_date, end_date FROM pg_counselling_events WHERE id = ?",
+                               (int(eid),)).fetchone()
+            if old and (str(old['start_date']) != e['start'] or str(old['end_date'] or '') != (e['end'] or '')):
+                conn.execute("INSERT INTO pg_counselling_event_log (event_id, old_start, old_end, new_start, "
+                             "new_end, changed_by, note) VALUES (?,?,?,?,?,?,'edited on the Calendar page')",
+                             (int(eid), old['start_date'], old['end_date'], e['start'], e['end'] or None, who))
+            # A manual fix counts as "today's notice": older notices can't overwrite it; a newer one can.
             conn.execute("UPDATE pg_counselling_events SET round=?, event=?, label=?, start_date=?, end_date=?, "
-                         "time_text=?, note=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                         "time_text=?, note=?, manual_edit=TRUE, source_notice_date=CURRENT_DATE, is_active=TRUE, "
+                         "updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                          (e['round'], e['event'], e['label'], e['start'], e['end'] or None, e['time'],
                           (f.get('note') or '').strip()[:300], who, int(eid)))
             flash('Date updated.', 'success')
         else:
-            conn.execute("INSERT INTO pg_counselling_events (authority_code, round, event, label, start_date, "
-                         "end_date, time_text, note, created_by, updated_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                         (code, e['round'], e['event'], e['label'], e['start'], e['end'] or None, e['time'],
-                          (f.get('note') or '').strip()[:300], who, who))
-            flash('Date added.', 'success')
+            from pg_admin.data.calendar import merge_events
+            from datetime import date as _date
+            st = merge_events(conn, code, [e], None, None, _date.today(), who)
+            conn.execute("UPDATE pg_counselling_events SET manual_edit = TRUE WHERE authority_code = ? AND round = ? "
+                         "AND event = ? AND start_date = ?", (code, e['round'], e['event'], e['start']))
+            flash('Date added.' if st['added'] else ('That step already existed — its date was updated.'
+                  if st['changed'] else 'That step is already in the calendar with these dates.'), 'success')
         conn.commit()
     except Exception as ex:
         try: conn.rollback()

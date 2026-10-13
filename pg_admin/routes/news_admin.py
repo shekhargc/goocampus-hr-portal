@@ -308,15 +308,18 @@ def news_save():
         cal_msg = ''
         if add_events and inbox_id:
             try:
-                _ir = conn.execute("SELECT draft_json FROM pg_news_inbox WHERE id = ?", (inbox_id,)).fetchone()
+                _ir = conn.execute("SELECT draft_json, notice_date FROM pg_news_inbox WHERE id = ?", (inbox_id,)).fetchone()
                 _ev = (_json.loads(_ir['draft_json'] or '{}') or {}).get('events') if _ir else None
                 if _ev:
                     from pg_admin.data.calendar import ensure_calendar_table, clean_events, replace_events_for_news
                     ensure_calendar_table(conn)
                     _code = _authority_code_for(scope, state)
                     if _code:
-                        n_ev = replace_events_for_news(conn, _code, int(news_id), inbox_id, clean_events(_ev), who)
-                        cal_msg = f'{n_ev} date(s) added to the Counselling Calendar.'
+                        from pg_admin.data.calendar import merge_events
+                        _st = merge_events(conn, _code, clean_events(_ev), int(news_id), inbox_id,
+                                           _ir['notice_date'], who)
+                        cal_msg = (f"Counselling Calendar: {_st['added']} new, {_st['changed']} revised, "
+                                   f"{_st['unchanged']} unchanged.")
             except Exception as _ce:
                 logging.warning("news_save calendar: %s", _ce)
         # Information bulletin / brochure → also the authority's MAIN brochure document, so
@@ -540,7 +543,7 @@ def news_delete():
             conn.execute("UPDATE pg_news_inbox SET status = 'new', news_id = NULL, "
                          "history_note = ? WHERE news_id = ?",
                          (f'Was posted as news #{nid}; removed from the news section on {ist} IST by {who}.', nid))
-            conn.execute("UPDATE pg_counselling_events SET is_active = FALSE WHERE news_id = ?", (nid,))
+            pass   # calendar dates belong to the authority — not removed with the article (2026-10-10)
         except Exception:
             conn.rollback()
             conn.execute("UPDATE pg_news SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, is_published = FALSE "
@@ -573,7 +576,7 @@ def news_restore():
         try:
             conn.execute("UPDATE pg_news_inbox SET status = 'posted', news_id = ?, history_note = '' "
                          "WHERE id = (SELECT inbox_id FROM pg_news WHERE id = ?) AND status <> 'posted'", (nid, nid))
-            conn.execute("UPDATE pg_counselling_events SET is_active = TRUE WHERE news_id = ?", (nid,))
+            pass   # calendar dates belong to the authority — not removed with the article (2026-10-10)
         except Exception:
             conn.rollback()
             conn.execute("UPDATE pg_news SET deleted_at = NULL, deleted_by = '', is_published = TRUE WHERE id = ?", (nid,))
@@ -602,7 +605,7 @@ def news_purge():
         ensure_calendar_table(conn); ensure_news_inbox_tables(conn)
         conn.execute("DELETE FROM pg_news WHERE id = ? AND deleted_at IS NOT NULL", (nid,))
         try:
-            conn.execute("DELETE FROM pg_counselling_events WHERE news_id = ?", (nid,))
+            pass   # calendar dates belong to the authority — not removed with the article (2026-10-10)
         except Exception:
             conn.rollback()
             conn.execute("DELETE FROM pg_news WHERE id = ? AND deleted_at IS NOT NULL", (nid,))

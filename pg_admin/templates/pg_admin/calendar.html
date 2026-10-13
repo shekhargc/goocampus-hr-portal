@@ -85,7 +85,8 @@
         <tr class="{{ 'cal-past' if _past }}">
           <td style="font-weight:600;">{{ e.label }}</td>
           <td style="white-space:nowrap;">{{ e.start_date|format_date }}</td>
-          <td style="white-space:nowrap;">{{ e.end_date|format_date if e.end_date else '—' }}</td>
+          <td style="white-space:nowrap;">{{ e.end_date|format_date if e.end_date else '—' }}
+            {% if e.change_count %}<div style="font-size:0.7rem;color:#b45309;font-weight:700;">🔁 Revised {{ e.changed_at|format_date }} — was {{ e.prev_start|format_date }}{% if e.prev_end %}–{{ e.prev_end|format_date }}{% endif %}</div>{% endif %}</td>
           <td class="cal-hide-sm">{{ e.time_text or '' }}</td>
           <td class="cal-hide-sm" style="font-size:0.76rem;">{% if e.inbox_id or e.news_id %}🤖 AI from the official notice{% if e.news_id %} · news #{{ e.news_id }}{% endif %}{% else %}✍️ added here{% endif %}</td>
           <td style="text-align:right;white-space:nowrap;">
