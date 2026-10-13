@@ -70,9 +70,9 @@ dated step for EVERY round (this fills the authority's calendar automatically wh
 ```json
 "events": [
   {"round": "Round 1", "event": "registration",  "label": "Registration & fee payment",
-   "start": "2026-10-12", "end": "2026-10-21", "time": "till 12 noon on 21 Oct", "quote": "exact text"},
-  {"round": "Round 1", "event": "choice_filling", "label": "Choice filling", "start": "2026-10-13", "end": "2026-10-22", "time": "till 10 AM", "quote": "..."},
-  {"round": "Round 1", "event": "choice_locking", "label": "Choice locking", "start": "2026-10-21", "end": "2026-10-22", "time": "4 PM 21 Oct – 10 AM 22 Oct", "quote": "..."},
+   "start": "2026-10-12", "end": "2026-10-21", "time": "12 noon", "quote": "exact text"},
+  {"round": "Round 1", "event": "choice_filling", "label": "Choice filling", "start": "2026-10-13", "end": "2026-10-22", "time": "10 AM", "quote": "..."},
+  {"round": "Round 1", "event": "choice_locking", "label": "Choice locking", "start": "2026-10-21", "end": "2026-10-22", "time": "10 AM", "quote": "..."},
   {"round": "Round 1", "event": "result",         "label": "Result",          "start": "2026-10-24", "end": "", "time": "", "quote": "..."},
   {"round": "Round 1", "event": "reporting",      "label": "Reporting / joining", "start": "2026-10-26", "end": "2026-11-02", "time": "", "quote": "..."},
   {"round": "Round 2", "event": "registration",  ...}
@@ -97,7 +97,7 @@ Rules for `dates`:
 - Include a key ONLY if the notice explicitly states that date. Omit the key otherwise —
   never guess, never infer from another round or another year.
 - `quote` = the exact text from the notice that shows it (≤300 chars), so the reviewer can
-  verify in seconds. `time` is optional.
+  verify in seconds. `time` is optional and SHORT — just the clock time on the closing day, max 16 characters ("12 noon", "11:59 PM", "3 PM"); never dates or sentences in `time` (the website shows it in a small badge). If two times apply (e.g. registration noon, payment 3 PM), put the step's own time and leave the rest in `quote`.
 - If the notice gives a schedule for several rounds, use the earliest upcoming round's dates
   and mention the other rounds in the article.
 - Indian notices often write dates as DD-MM-YYYY or DD/MM/YYYY — convert carefully to YYYY-MM-DD.

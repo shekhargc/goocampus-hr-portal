@@ -238,13 +238,38 @@ def duplicate_steps(conn, codes=None):
     return dups
 
 
+_TIME_RE = None
+
+
+def short_time(t):
+    """Website wants `time` short (≤16 chars, e.g. "12 noon"); the full wording goes to `note`.
+    → (short or None, full text when it was shortened else None). (website session 2026-10-13)"""
+    global _TIME_RE
+    import re
+    t = (t or '').strip()
+    if not t:
+        return None, None
+    if len(t) <= 16:
+        return t, None
+    if _TIME_RE is None:
+        _TIME_RE = re.compile(r"\b(\d{1,2}(?:[:.]\d{2})?\s*(?:a\.?m\.?|p\.?m\.?|hrs)|12\s*noon|noon|midnight|\d{1,2}:\d{2})",
+                              re.I)
+    m = _TIME_RE.search(t)
+    return ((m.group(0).strip()[:16] if m else None), t)
+
+
+def _join_note(*parts):
+    return ' · '.join(p for p in parts if p) or ''
+
+
 def as_json_row(r):
     return {'id': r['id'], 'authority_code': r['authority_code'], 'round': r['round'] or '',
             'event': r['event'], 'event_label': EVENT_LABELS.get(r['event'], 'Other'),
             'label': r['label'] or EVENT_LABELS.get(r['event'], ''),
             'start_date': r['start_date'].isoformat() if r.get('start_date') else '',
             'end_date': r['end_date'].isoformat() if r.get('end_date') else '',
-            'time': r.get('time_text') or '', 'note': r.get('note') or '', 'news_id': r.get('news_id'),
+            'time': short_time(r.get('time_text'))[0] or '',
+            'note': _join_note(short_time(r.get('time_text'))[1], r.get('note')), 'news_id': r.get('news_id'),
             # date moved by a newer notice → the website can show "Revised" (2026-10-10)
             'revised': ({'at': r['changed_at'].date().isoformat() if r.get('changed_at') else '',
                          'previous_start': r['prev_start'].isoformat() if r.get('prev_start') else '',
