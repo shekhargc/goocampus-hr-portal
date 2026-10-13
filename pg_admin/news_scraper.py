@@ -100,9 +100,10 @@ SOURCES = {
         'authority_code': 'ntruhs',
         'news_authority': 'state:Andhra Pradesh',
         'url': 'https://drntr.uhsap.in/index/notification_admission',
-        'reader': 'pdf_links',
-        # the page lists ALL admissions (MBBS, MDS, nursing…) — keep PG Medical only
-        'include': r'PG\s*\(\s*Medical\s*\)|Medical\s+PG|PG\s+Medical|POST\s*GRADUATE\s+MEDICAL|NEET[\s-]*PG',
+        'reader': 'aspnet_filter',
+        # the page lists ALL admissions; use the site's own "Degree" filter = Medical PG Diploma/Degree
+        # (founder 2026-10-13: titles like "PG Degree-Diploma …" / DNB were missed by a keyword filter)
+        'form': {'ctl00$ContentPlaceHolder1$DropDownList1': '3', 'ctl00$ContentPlaceHolder1$Button1': 'Submit'},
         'exclude': r'\bMDS\b|dental|homoeo|ayurved|ayush|nursing',
         'enabled': True,
     },
@@ -196,6 +197,24 @@ def split_title_date(raw):
         if title.endswith(')') and title.count(')') > title.count('('):
             title = title[:-1]
     return (title or raw.strip()), d
+
+
+SEASON_FROM = date(2026, 7, 1)       # NEET-PG 2026 counselling season (bump each year)
+
+
+def in_season(it, season_from=None):
+    """Founder 2026-10-13: EVERY notice of the current NEET-PG counselling season is news, however
+    old — only the previous season (2025-26) is left out."""
+    t = f"{it.get('title') or ''} {it.get('url') or ''}"
+    cur = season_from or SEASON_FROM
+    y = cur.year
+    if (re.search(rf'{y - 1}\s*[-–/]\s*(20)?{str(y)[2:]}|\b{y - 1}\b', t)
+            and not re.search(rf'{y}\s*[-–/]\s*(20)?{str(y + 1)[2:]}|\b{y}\b', t)):
+        return False
+    d = it.get('notice_date')
+    if d:
+        return d >= cur
+    return True                       # undated on a current-season page → keep
 
 
 def norm_title(t):
@@ -353,6 +372,42 @@ def _kerala_home(s, url):
     return out
 
 
+def read_aspnet_filter(url, form, include=None, exclude=None):
+    """ASP.NET page with a filter form (e.g. AP Dr NTR UHS "Degree" dropdown): GET, re-post every
+    hidden/text field with the chosen filter, then read the PDF links of the filtered result."""
+    from urllib.parse import urljoin
+    s = _session()
+    r = s.get(url, timeout=(10, 60))
+    r.raise_for_status()
+    page = r.text[r.text.find('<form'):]
+    data = {}
+    for tag in re.findall(r'<input\b[^>]*>', page, re.I):
+        n, v, ty = (re.search(r'name="([^"]+)"', tag), re.search(r'value="([^"]*)"', tag),
+                    re.search(r'type="([^"]+)"', tag))
+        if n and (not ty or ty.group(1).lower() in ('hidden', 'text')):
+            data[n.group(1)] = _html.unescape(v.group(1)) if v else ''
+    data.update(form)
+    r2 = s.post(r.url, data=data, timeout=(10, 60), headers={'Referer': r.url})
+    r2.raise_for_status()
+    items, seen = [], set()
+    for href, inner in re.findall(r'<a\b[^>]*href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>', r2.text, re.S | re.I):
+        href = urljoin(r2.url, _html.unescape(href).strip())
+        raw = _text(inner)
+        if href in seen or not raw or not _wanted(raw, include, exclude):
+            continue
+        seen.add(href)
+        title, d = split_title_date(raw)
+        if not d:
+            m = _URL_DATE_RE.search(href.rsplit('/', 1)[-1])
+            if m:
+                try: d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                except ValueError: d = None
+        items.append({'item_key': href, 'raw_title': raw, 'title': title, 'url': href, 'kind': 'pdf', 'notice_date': d})
+    if not items:
+        raise ValueError('No notices found after filtering — the site layout may have changed.')
+    return items
+
+
 def read_cee_kerala(pages, home=None):
     """Kerala CEE (cee.kerala.gov.in/<course><year>/notification) — rows of
     TITLE · [Notification] [Press Release] [Vacancy] links (noti_view/<id>/UploadN, serve PDFs) · dd-mm-yyyy.
@@ -469,6 +524,8 @@ def _read_source(code):
         return read_cee_kerala(src.get('pages') or [src['url']], src.get('home'))
     if src['reader'] == 'tn_tagged':
         return read_tn_tagged(src['url'], src['tag'])
+    if src['reader'] == 'aspnet_filter':
+        return read_aspnet_filter(src['url'], src['form'], src.get('include'), src.get('exclude'))
     if src['reader'] == 'date_table':
         return read_date_table(src.get('pages') or [src['url']], src.get('include'), src.get('exclude'))
     return READERS[src['reader']](src['url'])
