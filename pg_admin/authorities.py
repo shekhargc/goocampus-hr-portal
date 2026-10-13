@@ -15,7 +15,7 @@ Source: reference list of the 35 counselling authorities (MCC + 34 state/UT bodi
 AUTHORITIES = [
     ("mcc",        "MCC — All India (AIQ)",                 "All India",          "https://mcc.nic.in",                          "central"),
     ("aniims",     "ANIIMS",                                "Andaman & Nicobar",  "https://andssw1.and.nic.in/aniims",           "state"),
-    ("ntruhs",     "NTRUHS",                                "Andhra Pradesh",     "https://drysr.uhsap.in",                      "state"),
+    ("ntruhs",     "NTRUHS",                                "Andhra Pradesh",     "https://drntr.uhsap.in",                      "state"),
     ("arunachal",  "Dir. Higher & Tech Education",          "Arunachal Pradesh",  "https://dmetrap.in",                          "state"),
     ("dme_assam",  "DME Assam",                             "Assam",              "https://dme.assam.gov.in",                    "state"),
     ("bceceb",     "BCECEB",                                "Bihar",              "https://bceceboard.bihar.gov.in",             "state"),

@@ -62,6 +62,51 @@ SOURCES = {
         'reader': 'kea_aspnet',
         'enabled': True,
     },
+    # ── batch 2 (founder 2026-10-13): Kerala, Tamil Nadu, Andhra Pradesh, Telangana ──
+    'cee_kerala_pgm': {
+        'label': 'Kerala CEE — PG Medical 2026',
+        'authority_code': 'cee_kerala',
+        'news_authority': 'state:Kerala',
+        # application-phase page now; the candidate portal (pgm2026) opens later — both read, a
+        # missing page is skipped. Next year: bump the year here.
+        'url': 'https://cee.kerala.gov.in/pgmonline2026/notification',
+        'pages': ['https://cee.kerala.gov.in/pgmonline2026/notification',
+                  'https://cee.kerala.gov.in/pgm2026/notification'],
+        'reader': 'cee_kerala',
+        'enabled': True,
+    },
+    'tn_pg_medical': {
+        'label': 'Tamil Nadu DME Selection Committee — PG Medical (MD/MS/Diploma)',
+        'authority_code': 'dmer_tn',
+        'news_authority': 'state:Tamil Nadu',
+        'url': 'https://tnmedicalselection.net/',
+        'tag': 'cssPG002',                      # the site tags each news line by course; PG002 = PG Medical
+        'reader': 'tn_tagged',
+        'enabled': True,
+    },
+    'ap_pg_medical': {
+        'label': 'Andhra Pradesh Dr NTR UHS — PG Medical (CQ + MQ)',
+        'authority_code': 'ntruhs',
+        'news_authority': 'state:Andhra Pradesh',
+        'url': 'https://drntr.uhsap.in/index/notification_admission',
+        'reader': 'pdf_links',
+        # the page lists ALL admissions (MBBS, MDS, nursing…) — keep PG Medical only
+        'include': r'PG\s*\(\s*Medical\s*\)|Medical\s+PG|PG\s+Medical|POST\s*GRADUATE\s+MEDICAL|NEET[\s-]*PG',
+        'exclude': r'\bMDS\b|dental|homoeo|ayurved|ayush|nursing',
+        'enabled': True,
+    },
+    'tg_pg_medical': {
+        'label': 'Telangana KNRUHS — PG Medical',
+        'authority_code': 'knruhs',
+        'news_authority': 'state:Telangana',
+        'url': 'https://www.knruhs.telangana.gov.in/admission-notification/',
+        'pages': ['https://www.knruhs.telangana.gov.in/admission-notification/?results_page=1',
+                  'https://www.knruhs.telangana.gov.in/admission-notification/?results_page=2'],
+        'reader': 'date_table',
+        'include': r'MEDICAL\s+PG|PG\s+MEDICAL|P\.\s*G\.?\s+MEDICAL|POST\s*GRADUATE\s+MEDICAL|NEET[\s-]*PG|MD\s*/\s*MS',
+        'exclude': r'\bMDS\b|DENTAL|AYUSH|NURSING|HOMOEO|AYURVED',
+        'enabled': True,
+    },
 }
 
 
@@ -210,7 +255,25 @@ def read_kea_aspnet(url):
 _URL_DATE_RE = re.compile(r'(20\d{2})(\d{2})(\d{2})\d{2,}')
 
 
-def read_pdf_links(url, pages=None):
+def _wanted(title, include=None, exclude=None):
+    """Course filter for sites that list every course on one page."""
+    if include and not re.search(include, title or '', re.I):
+        return False
+    if exclude and re.search(exclude, title or '', re.I):
+        return False
+    return True
+
+
+def _session():
+    import requests
+    s = requests.Session()
+    s.headers['User-Agent'] = UA
+    if _proxies():
+        s.proxies.update(_proxies())
+    return s
+
+
+def read_pdf_links(url, pages=None, include=None, exclude=None):
     """Generic: every <a href="...pdf">TITLE</a> on the given pages (MCC style). The date
     comes from the title if present, else from a yyyymmdd stamp in the file name.
     item_key = the PDF URL (stable)."""
@@ -230,6 +293,8 @@ def read_pdf_links(url, pages=None):
             if href in seen or not raw or raw.lower() in ('view', 'download', 'click here'):
                 continue
             seen.add(href)
+            if not _wanted(raw, include, exclude):
+                continue
             title, d = split_title_date(raw)
             if not d:
                 m = _URL_DATE_RE.search(href.rsplit('/', 1)[-1])
@@ -243,13 +308,105 @@ def read_pdf_links(url, pages=None):
     return items
 
 
+def read_cee_kerala(pages):
+    """Kerala CEE (cee.kerala.gov.in/<course><year>/notification) — rows of
+    TITLE · [Notification] [Press Release] [Vacancy] links (noti_view/<id>/UploadN, serve PDFs) · dd-mm-yyyy.
+    A page that doesn't exist yet (404, e.g. the candidate portal before it opens) is skipped."""
+    from urllib.parse import urljoin
+    s, items, seen, ok = _session(), [], set(), False
+    for pg in pages:
+        r = s.get(pg, timeout=TIMEOUT)
+        if r.status_code == 404:
+            continue
+        r.raise_for_status()
+        ok = True
+        for chunk in re.split(r'<div class="row">', r.text):
+            links = re.findall(r"<a\s+href=['\"]([^'\"]*noti_view[^'\"]*)['\"][^>]*>(.*?)</a>", chunk, re.S | re.I)
+            if not links:
+                continue
+            head = _text(re.sub(r'<!--.*?-->', ' ', chunk.split('<a', 1)[0], flags=re.S))
+            head = re.sub(r'^\W+', '', head)
+            _t, d = split_title_date(_text(re.sub(r'<!--.*?-->', ' ', chunk, flags=re.S)))
+            for href, lt in links:
+                href = urljoin(r.url, _html.unescape(href).strip())
+                if href in seen:
+                    continue
+                seen.add(href)
+                lt = _text(lt)
+                title = head if (len(links) == 1 or not lt) else f"{head} — {lt}"
+                items.append({'item_key': href, 'raw_title': title, 'title': title or lt, 'url': href,
+                              'kind': 'pdf', 'notice_date': d})
+    if not ok:
+        raise ValueError('Notices page not found — the site may have moved it (new year?).')
+    return items          # an empty list is fine early in the season
+
+
+_DMY_FILE_RE = re.compile(r'(\d{2})(\d{2})(20\d{2})\d{4,}')
+
+
+def read_tn_tagged(url, tag):
+    """Tamil Nadu Selection Committee home page: every news line is
+    <div class="cssNLink css<COURSE>"> … <a href='news/ddmmyyyyhhmmss.pdf'>TITLE</a>; keep one course tag."""
+    from urllib.parse import urljoin
+    r = _session().get(url, timeout=TIMEOUT)
+    r.raise_for_status()
+    items, seen = [], set()
+    for cls, block in re.findall(r'<div class="cssNLink (css\w+)">(.*?)</div>', r.text, re.S):
+        if cls != tag:
+            continue
+        for href, inner in re.findall(r"<a\s+href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>", block, re.S | re.I):
+            raw = _text(inner)
+            href = urljoin(r.url, _html.unescape(href).strip())
+            if not raw or href in seen:
+                continue
+            seen.add(href)
+            title, d = split_title_date(raw)
+            m = _DMY_FILE_RE.search(href.rsplit('/', 1)[-1])
+            if m:
+                try: d = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                except ValueError: pass
+            items.append({'item_key': href, 'raw_title': raw, 'title': title, 'url': href,
+                          'kind': _kind(href), 'notice_date': d})
+    if not items:
+        raise ValueError('No PG Medical notices found — the site layout may have changed.')
+    return items
+
+
+def read_date_table(pages, include=None, exclude=None):
+    """Telangana KNRUHS style: table rows <td class="date-cell">dd-mm-yyyy</td><td>TITLE</td><td><a href=PDF>."""
+    s, items, seen, rows = _session(), [], set(), 0
+    for pg in pages:
+        r = s.get(pg, timeout=TIMEOUT)
+        r.raise_for_status()
+        for dtxt, inner, href in re.findall(
+                r'<td class="date-cell">\s*([\d./-]+)\s*</td>\s*<td>(.*?)</td>\s*<td>.*?href="([^"]+)"', r.text, re.S):
+            rows += 1
+            raw = _text(inner)
+            href = _html.unescape(href).strip()
+            if href in seen or not _wanted(raw, include, exclude):
+                continue
+            seen.add(href)
+            _x, d = split_title_date(dtxt)
+            items.append({'item_key': href, 'raw_title': raw, 'title': raw, 'url': href,
+                          'kind': _kind(href), 'notice_date': d})
+    if not rows:
+        raise ValueError('No notices table found — the site layout may have changed.')
+    return items
+
+
 READERS = {'kea_aspnet': read_kea_aspnet, 'pdf_links': read_pdf_links}
 
 
 def read_source(code):
     src = SOURCES[code]
     if src['reader'] == 'pdf_links':
-        return read_pdf_links(src['url'], src.get('pages'))
+        return read_pdf_links(src['url'], src.get('pages'), src.get('include'), src.get('exclude'))
+    if src['reader'] == 'cee_kerala':
+        return read_cee_kerala(src.get('pages') or [src['url']])
+    if src['reader'] == 'tn_tagged':
+        return read_tn_tagged(src['url'], src['tag'])
+    if src['reader'] == 'date_table':
+        return read_date_table(src.get('pages') or [src['url']], src.get('include'), src.get('exclude'))
     return READERS[src['reader']](src['url'])
 
 

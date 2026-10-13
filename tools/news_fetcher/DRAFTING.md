@@ -65,7 +65,8 @@ Copy the dates exactly as the notice states them (human-readable, e.g. "12–21 
 Max 8 columns, 40 rows. Omit `schedule` if the notice has no timetable.
 
 Optional `events` — the COUNSELLING CALENDAR. Whenever the notice gives a schedule, list EVERY
-dated step for EVERY round (this fills the authority's calendar automatically when posted):
+dated step for EVERY round (this fills the authority's calendar automatically as soon as the draft
+arrives — no posting needed):
 
 ```json
 "events": [
@@ -86,6 +87,25 @@ dated step for EVERY round (this fills the authority's calendar automatically wh
 - The `event` types describe THIS authority's own process. Dates in the notice that belong to a
   DIFFERENT process (e.g. an MCC notice listing the state-quota counselling windows / state joining
   dates) use event "other" with a clear label ("State quota counselling window (all states)").
+
+HOW THE CALENDAR USES `events` (it MERGES — read this):
+- Each step is identified by authority + `round` + `event` (+ `label` when event is "other").
+  The same step from a later notice with the SAME dates changes nothing; with DIFFERENT dates it
+  UPDATES that step and the website shows "Date changed — was …". So:
+- An extension / revised schedule / corrigendum notice: list the changed step(s) with the SAME
+  `round` and `event` as the original and the FULL NEW `start` and `end` (not just the new end).
+  Don't add a new step for it.
+- Keep `round` names and `event` types consistent across notices ("Phase-I"/"First round" → "Round 1",
+  "Mop-up round" → "Mop-up", "Stray vacancy round" → "Stray"). For event "other", reuse the exact same
+  `label` every time for the same thing.
+- States with SEPARATE quotas in separate counselling (e.g. Andhra Pradesh "CQ" Competent/Convener
+  quota vs "MQ" Management quota; Tamil Nadu Government vs Management quota): the standard events
+  (registration, choice_filling, result, reporting…) are for the Government / Competent-authority
+  quota ONLY. Management-quota dates go as event "other" with a label starting "Management quota — "
+  (e.g. "Management quota — Phase 1 web options"), so they never overwrite the government-quota dates.
+- Only PG Medical (MD/MS/Diploma/DNB broad speciality). If a notice is about MDS / nursing / AYUSH /
+  MBBS (some state sites mix them), write the draft with category "other", `"events": []`, `"dates": {}`
+  and say in `summary` "Not a PG Medical notice — dismiss."
 
 Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochure for the year
 (the reviewer will also save it as that authority's main brochure document).
