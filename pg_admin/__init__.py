@@ -193,6 +193,8 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_known, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/ingest', 'api_news_inbox_ingest',
                      api_news_ingest.api_news_inbox_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/news-inbox/status', 'api_news_inbox_status',
+                     api_news_ingest.api_news_inbox_status, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/heartbeat', 'api_news_inbox_heartbeat',
                      api_news_ingest.api_news_inbox_heartbeat, methods=['POST'])
     app.add_url_rule('/admin/pg/diag/news-key', 'pg_news_key_check',

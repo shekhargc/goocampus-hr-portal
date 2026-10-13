@@ -162,7 +162,7 @@ def api_news_inbox_ingest():
             if draft and (not row['draft_json'] or row['redraft']):
                 sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP", "redraft_requested = FALSE"]
                 vals.append(json.dumps(draft))
-            elif draft and draft.get('document') and row['draft_json']:
+            elif draft and (draft.get('document') or draft.get('events')) and row['draft_json']:
                 # a draft from before documents were filed: add ONLY the missing document
                 # classification, nothing else in the reviewed draft changes (2026-10-13)
                 try:
@@ -170,8 +170,12 @@ def api_news_inbox_ingest():
                 except Exception:
                     old = {}
                 if isinstance(old, dict) and (not old.get('document') or
-                                              (draft.get('registration_documents') and not old.get('registration_documents'))):
-                    old.setdefault('document', draft['document'])
+                                              (draft.get('registration_documents') and not old.get('registration_documents')) or
+                                              (draft.get('events') and not old.get('events'))):
+                    if draft.get('document'):
+                        old.setdefault('document', draft['document'])
+                    if draft.get('events'):
+                        old.setdefault('events', draft['events'])
                     if draft.get('registration_documents'):
                         old.setdefault('registration_documents', draft['registration_documents'])
                     sets.append("draft_json = ?"); vals.append(json.dumps(old))
@@ -261,3 +265,70 @@ def admin_news_key_check():
     k = raw.strip()
     return jsonify({'ok': True, 'configured': bool(k), 'length': len(k), 'raw_length': len(raw),
                     'fingerprint': hashlib.sha256(k.encode()).hexdigest()[:12] if k else ''})
+
+
+def api_news_inbox_status():
+    """GET /api/pg/news-inbox/status?authority=<code> (X-News-Key) — READ-ONLY check of what the
+    pipeline produced for an authority: inbox notices, calendar steps, documents (incl. waiting)
+    and exactly what the website receives from /api/pg/authority/<code>. (2026-10-13)"""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.authorities import get_authority
+    code = (request.args.get('authority') or '').strip().lower()
+    if not get_authority(code):
+        return jsonify({'ok': False, 'error': 'unknown authority'}), 400
+    srcs = [c for c, s in NS.SOURCES.items() if s.get('authority_code') == code]
+    out = {'ok': True, 'authority': code}
+    conn = get_db()
+    try:
+        inbox = []
+        for r in conn.execute("SELECT id, status, title, notice_date, news_id, draft_json, (pdf_data IS NOT NULL) AS has_pdf "
+                              "FROM pg_news_inbox WHERE source_code IN (" + ','.join(['?'] * len(srcs)) + ") "
+                              "AND status <> 'seen' ORDER BY notice_date DESC NULLS LAST, id DESC", srcs).fetchall() if srcs else []:
+            try: d = json.loads(r['draft_json'] or '{}') or {}
+            except Exception: d = {}
+            inbox.append({'id': r['id'], 'status': r['status'], 'title': (r['title'] or '')[:120],
+                          'date': str(r['notice_date'] or ''), 'news_id': r['news_id'], 'pdf': bool(r['has_pdf']),
+                          'events': len(d.get('events') or []), 'doc': (d.get('document') or {}).get('category')})
+        out['inbox'] = inbox
+        out['calendar'] = [{'round': r['round'], 'event': r['event'], 'label': r['label'], 'start': str(r['start_date']),
+                            'end': str(r['end_date'] or ''), 'active': r['is_active']}
+                           for r in conn.execute("SELECT round, event, label, start_date, end_date, is_active FROM "
+                                                 "pg_counselling_events WHERE authority_code = ? ORDER BY start_date",
+                                                 (code,)).fetchall()]
+        out['documents'] = [{'id': r['id'], 'category': r['category'], 'title': (r['title'] or '')[:120],
+                             'published': r['is_published'], 'waiting': r['rp'], 'main': r['is_main'],
+                             'file': bool(r['file_name']), 'auto': r['auto_inbox_id']}
+                            for r in conn.execute("SELECT id, category, title, is_published, COALESCE(review_pending,FALSE) AS rp, "
+                                                  "COALESCE(is_main,FALSE) AS is_main, file_name, auto_inbox_id "
+                                                  "FROM pg_authority_docs WHERE authority_code = ? ORDER BY category, id",
+                                                  (code,)).fetchall()]
+        out['news'] = [{'id': r['id'], 'heading': (r['heading'] or '')[:120], 'published': r['is_published'],
+                        'deleted': bool(r['deleted_at']), 'state': r['state'], 'scope': r['scope']}
+                       for r in conn.execute("SELECT id, heading, is_published, deleted_at, state, scope FROM pg_news "
+                                             "ORDER BY id DESC LIMIT 60").fetchall()
+                       if (code == 'mcc' and r['scope'] == 'all_india') or
+                          (code != 'mcc' and (r['state'] or '').lower() == (get_authority(code)['state'] or '').lower())]
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        out['db_error'] = str(e)[:300]
+    finally:
+        conn.close()
+    # what the website actually gets (server-internal call, same as the site would see)
+    from flask import current_app
+    try:
+        with current_app.test_client() as c:
+            for path in (f'/api/pg/authority/{code}', '/api/pg/counselling-status', '/api/pg/calendar'):
+                r = c.get(path, query_string={'authority': code}, environ_overrides={'pg.internal_check': True})
+                body = r.get_json(silent=True) or {}
+                if path.startswith('/api/pg/authority/'):
+                    body = {'main_brochure': body.get('main_brochure'),
+                            'document_groups': [{'category': g.get('category'), 'n': len(g.get('documents') or []),
+                                                 'titles': [x.get('title') for x in (g.get('documents') or [])][:6]}
+                                                for g in (body.get('document_groups') or [])],
+                            'news': len(body.get('news') or []), 'keys': sorted(body.keys())}
+                out['api:' + path] = {'status': r.status_code, 'body': body}
+    except Exception as e:
+        out['api_error'] = str(e)[:300]
+    return jsonify(out)
