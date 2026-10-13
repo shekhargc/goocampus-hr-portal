@@ -329,6 +329,11 @@ def api_news_inbox_status():
                                                 for g in (body.get('document_groups') or [])],
                             'news': len(body.get('news') or []), 'keys': sorted(body.keys())}
                 out['api:' + path] = {'status': r.status_code, 'body': body}
+            r = c.get('/api/pg/authorities', query_string={'all': '1'}, environ_overrides={'pg.internal_check': True})
+            out['api:/api/pg/authorities?all=1'] = {'status': r.status_code, 'authorities': [
+                {'code': x.get('code'), 'has_content': x.get('has_content'), 'watched': x.get('watched'),
+                 'covers': len(x.get('covers_states') or [])}
+                for x in ((r.get_json(silent=True) or {}).get('authorities') or [])]}
     except Exception as e:
         out['api_error'] = str(e)[:300]
     return jsonify(out)
