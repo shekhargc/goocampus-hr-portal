@@ -70,11 +70,13 @@ def get_authority(code):
 # A document may carry a file, a typed list/details (body_text), or both — e.g. a
 # "Registration Documents" entry is often a numbered checklist typed in, not a PDF.
 DOC_CATEGORIES = [
+    ("brochure",          "Counselling Brochure / Bulletin / User Manual"),
     ("registration",      "Registration Documents"),
-    ("brochure",          "Counselling Brochure"),
     ("formats_annexures", "Formats & Annexures"),
     ("fee_structure",     "Fee Structure"),
     ("seat_matrix",       "Seat Matrix"),
+    ("merit_list",        "Merit List"),                  # 2026-10-13
+    ("results",           "Results"),                     # round-wise allotment results (2026-10-13)
     ("other",             "Other / Notifications"),
 ]
 _CAT_CODES = {c for c, _ in DOC_CATEGORIES}

@@ -79,6 +79,7 @@
   <div class="nb-tabs">
     <a class="nb-tab {{ 'on' if tab=='new' }}" href="{{ url_for('pg_news_inbox', tab='new', src=src or None) }}">New ({{ counts.new }})</a>
     <a class="nb-tab {{ 'on' if tab=='posted' }}" href="{{ url_for('pg_news_inbox', tab='posted', src=src or None) }}">Posted ({{ counts.posted }})</a>
+    <a class="nb-tab {{ 'on' if tab=='document' }}" href="{{ url_for('pg_news_inbox', tab='document', src=src or None) }}" title="Merit lists, results, seat matrices… filed straight into the authority's Documents (not news)">📄 Documents only ({{ counts.document }})</a>
     <a class="nb-tab {{ 'on' if tab=='dismissed' }}" href="{{ url_for('pg_news_inbox', tab='dismissed', src=src or None) }}">Dismissed ({{ counts.dismissed }})</a>
   </div>
 
@@ -106,6 +107,7 @@
               <span class="nb-kind {{ 'nb-pdf' if it.kind=='pdf' else 'nb-link' }}">{{ 'PDF' if it.kind=='pdf' else 'LINK' }}</span>
               {% if it.draft %}<span class="nb-kind" style="background:#ede9fe;color:#5b21b6;">AI DRAFT</span>{% endif %}
               {% if it.redraft_requested %}<span class="nb-kind" style="background:#fef3c7;color:#92400e;">↻ RE-DRAFT REQUESTED</span>{% endif %}
+              {% if it.draft and it.draft.document and it.draft.document.category and it.draft.document.category != 'none' %}<span class="nb-kind" style="background:#e0e7ff;color:#3730a3;" title="Filed (hidden) in the authority's Documents — publish it on the Authorities page">📄 {{ doc_labels.get(it.draft.document.category, it.draft.document.category) }}</span>{% endif %}
               {% if it.draft and it.draft.events %}<span class="nb-kind" style="background:#dcfce7;color:#166534;">📅 {{ it.draft.events|length }} CALENDAR DATES</span>{% endif %}
               <a href="{{ it.url }}" target="_blank" rel="noopener" style="font-size:0.8rem;color:#2952a3;margin-left:6px;">{{ 'Open PDF' if it.kind=='pdf' else 'Open page' }} ↗</a>
               {% if it.status == 'posted' and it.news_id %}<span style="font-size:0.8rem;color:#166534;margin-left:8px;">✓ posted{% if it.reviewed_by %} by {{ it.reviewed_by }}{% endif %}</span>{% endif %}
@@ -123,6 +125,10 @@
               <input type="hidden" name="id" value="{{ it.id }}"><input type="hidden" name="tab" value="{{ tab }}"><input type="hidden" name="src" value="{{ src }}">
               <button class="nb-btn nb-dis" style="color:#5b21b6;" title="Your Mac re-reads the notice and sends a fresh AI draft">↻ Re-draft</button>
             </form>
+            {% if it.status == 'document' %}
+              <a class="nb-btn nb-add" href="{{ url_for('pg_authorities_admin', code=it.authority_code) }}">Open Documents</a>
+              <a class="nb-btn nb-dis" style="color:#166534;" href="{{ url_for('pg_news_admin', inbox=it.id) }}" title="Post it as news anyway">Add to News</a>
+            {% endif %}
             {% if it.status == 'new' %}
               <a class="nb-btn nb-add" href="{{ url_for('pg_news_admin', inbox=it.id) }}">Add to News</a>
               <form method="POST" action="{{ url_for('pg_news_inbox_status') }}" style="display:inline;">

@@ -25,19 +25,19 @@ def news_inbox():
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     tab = (request.args.get('tab') or 'new').strip()
-    if tab not in ('new', 'posted', 'dismissed'):
+    if tab not in ('new', 'posted', 'document', 'dismissed'):
         tab = 'new'
     # authority tabs (founder 2026-10-13): '' = all authorities, else a source code
     src = (request.args.get('src') or '').strip()
     if src not in NS.SOURCES:
         src = ''
     conn = get_db()
-    items, counts, sources = [], {'new': 0, 'posted': 0, 'dismissed': 0}, []
+    items, counts, sources = [], {'new': 0, 'posted': 0, 'document': 0, 'dismissed': 0}, []
     new_by_src, auth_tabs = {}, []
     try:
         NS.ensure_news_inbox_tables(conn)
         for r in conn.execute("SELECT source_code, status, COUNT(*) AS n FROM pg_news_inbox "
-                              "WHERE status IN ('new','posted','dismissed') GROUP BY source_code, status").fetchall():
+                              "WHERE status IN ('new','posted','document','dismissed') GROUP BY source_code, status").fetchall():
             if not src or r['source_code'] == src:
                 counts[r['status']] += r['n']
             if r['status'] == 'new':
@@ -78,6 +78,7 @@ def news_inbox():
     labels = {c: s['label'] for c, s in NS.SOURCES.items()}
     return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab,
                            sources=sources, labels=labels, src=src, auth_tabs=auth_tabs,
+                           doc_labels=dict(__import__('pg_admin.authorities', fromlist=['x']).DOC_CATEGORIES),
                            new_total=sum(new_by_src.values()), active_section='goocampus_in')
 
 

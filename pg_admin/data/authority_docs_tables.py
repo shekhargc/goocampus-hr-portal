@@ -44,6 +44,11 @@ def ensure_pg_authority_docs(conn=None):
         # The authority's MAIN information bulletin / brochure (one per authority) — set when
         # a bulletin is posted as news, shown first on the dashboard. (founder 2026-10-09)
         conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE")
+        # Auto-filed from the News Inbox (2026-10-13): which notice, the file's fingerprint (no
+        # duplicates), the official link, and "waiting for approval" (hidden until published).
+        for col, typ in (('auto_inbox_id', 'INTEGER'), ('file_sha256', 'TEXT'), ('source_url', "TEXT DEFAULT ''"),
+                         ('review_pending', 'BOOLEAN DEFAULT FALSE')):
+            conn.execute(f"ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS {col} {typ}")
         conn.commit()
         logging.info("pg_authority_docs table ensured")
     except Exception as e:

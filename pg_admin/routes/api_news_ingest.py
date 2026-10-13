@@ -70,6 +70,14 @@ def _clean_draft(dr):
     ev = clean_events(dr.get('events'))
     if ev:
         out['events'] = ev
+    # which Documents bucket the PDF belongs in + whether it is news at all (2026-10-13)
+    doc = dr.get('document')
+    if isinstance(doc, dict):
+        from pg_admin.authorities import valid_category
+        cat = str(doc.get('category') or '').strip()
+        out['document'] = {'category': cat if valid_category(cat) else 'none',
+                           'title': str(doc.get('title') or '').strip()[:300],
+                           'news': doc.get('news') is not False}
     if not out['headline'] and not out['article']:
         return None
     return out
@@ -153,6 +161,9 @@ def api_news_inbox_ingest():
                 conn.commit()
                 if draft and draft.get('events'):
                     _auto_calendar(conn, row['id'])
+                if row['status'] != 'seen':
+                    from pg_admin.data.auto_docs import file_safely
+                    file_safely(conn, row['id'])
             return jsonify({'ok': True, 'id': row['id'], 'result': 'updated' if sets else 'known'})
         it = {'item_key': key, 'title': title, 'url': url, 'kind': kind, 'notice_date': nd}
         if status == 'new' and NS.is_repeat(conn, code, it):
@@ -168,7 +179,11 @@ def api_news_inbox_ingest():
         conn.commit()
         if status == 'new' and draft and draft.get('events'):
             _auto_calendar(conn, new_id)
-        return jsonify({'ok': True, 'id': new_id, 'result': status})
+        doc_res = None
+        if status == 'new' and draft:
+            from pg_admin.data.auto_docs import file_safely
+            doc_res = file_safely(conn, new_id)                  # PDF → authority Documents (hidden)
+        return jsonify({'ok': True, 'id': new_id, 'result': status, 'document': doc_res})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

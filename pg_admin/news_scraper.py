@@ -62,6 +62,10 @@ SOURCES = {
         'news_authority': 'state:Karnataka',
         'url': 'https://cetonline.karnataka.gov.in/kea/pgetmed2026',
         'reader': 'kea_aspnet',
+        # bulletins that live somewhere else than the notices page (founder 2026-10-13): KEA's
+        # PGET 2026 brochure sits behind "Download Brochure" on the application login page.
+        'fixed_docs': [{'url': 'https://cetonline.karnataka.gov.in/pgneet2026/docs/CET2026_Brochure.pdf',
+                        'title': 'Karnataka PGET 2026 (PG Medical) Information Brochure'}],
         'enabled': True,
     },
     # ── batch 2 (founder 2026-10-13): Kerala, Tamil Nadu, Andhra Pradesh, Telangana ──
@@ -133,7 +137,7 @@ def ensure_news_inbox_tables(conn=None):
             url TEXT DEFAULT '',
             kind TEXT DEFAULT 'link',               -- 'pdf' | 'link'
             notice_date DATE,
-            status TEXT DEFAULT 'new',              -- new | posted | dismissed
+            status TEXT DEFAULT 'new',              -- new | posted | dismissed | document | seen
             news_id INTEGER,
             reviewed_by TEXT DEFAULT '',
             reviewed_at TIMESTAMP,
@@ -448,6 +452,16 @@ READERS = {'kea_aspnet': read_kea_aspnet, 'pdf_links': read_pdf_links}
 
 
 def read_source(code):
+    items = _read_source(code)
+    have = {i['item_key'] for i in items}
+    for fd in SOURCES[code].get('fixed_docs') or []:      # e.g. a brochure on another page
+        if fd['url'] not in have:
+            items.append({'item_key': fd['url'], 'raw_title': fd['title'], 'title': fd['title'],
+                          'url': fd['url'], 'kind': 'pdf', 'notice_date': None})
+    return items
+
+
+def _read_source(code):
     src = SOURCES[code]
     if src['reader'] == 'pdf_links':
         return read_pdf_links(src['url'], src.get('pages'), src.get('include'), src.get('exclude'))
