@@ -274,20 +274,6 @@ SOURCES = {
         'fixed_docs': [{'url': 'https://dte.goa.gov.in/sites/default/files/2026-10/PG-MEDICAL-Rules-2026.pdf', 'title': 'Goa PG Medical Admission Rules 2026 (Goa Medical College)'}],
         'enabled': True,
     },
-    # Delhi: no_pg_2026_yet — Official: ipu.ac.in home page menu "Admission 2026-27 > Notices - Admission" -> /adm2026/adm2026notices.php; PDFs are ipu.ac.in/Pubinfo2026/*.pdf. The page lists ALL GGSIPU courses
-    'ggsipu_pg': {
-        'label': 'Delhi GGSIPU — PG Medical (PGMC, MD/MS/Diploma) — GGSIP University quota',
-        'short': 'Delhi',
-        'authority_code': 'ggsipu',
-        'news_authority': 'state:Delhi',
-        'url': 'https://ipu.ac.in/adm2026/adm2026notices.php',
-        'pages': ['https://ipu.ac.in/adm2026/adm2026notices.php', 'https://ipu.ac.in/adm2026/adm2026notices.php?page=2&limit=25', 'https://ipu.ac.in/adm2026/adm2026notices.php?page=3&limit=25'],
-        'reader': 'pdf_links_soft',
-        'include': 'PGMC|POST\\s*-?\\s*GRADUATE\\s+MEDICAL|NEET[\\s-]*PG|PG\\s+MEDICAL|\\bMD\\b|MD\\s*/\\s*MS|\\bDNB\\b|CODE\\s*[-:]?\\s*102\\b',
-        'exclude': 'AYURVED|HOMOEO|HOMEO|NURSING|\\bMDS\\b|DENTAL|PGAC|\\bBAMS\\b|\\bBHMS\\b|PACKAGING|CUET',
-        'fixed_docs': [{'url': 'https://ipu.ac.in/adm2026/adm2026br/br280126pgprg/ch09.pdf', 'title': 'GGSIPU Admission Brochure 2026-27 — Chapter 9: PGMC (MD/MS/PG Diploma) admission information'}],
-        'enabled': True,
-    },
     # Chandigarh: no_pg_2026_yet — Official: gmch.gov.in > Admissions (/admissions) lists one page per session: "Admission MD/MS-2025" (/node/6481 = /admission-mdms-2025, 37 PDFs: prospectus, eligibility lists, seat
     'gmch_chd_pg': {
         'label': 'Chandigarh GMCH-32 — MD/MS (UT state quota) 2026',

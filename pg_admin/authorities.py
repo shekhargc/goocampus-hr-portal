@@ -67,13 +67,20 @@ def as_dict(a):
             "covers_states": COVERS_STATES.get(a[0], [a[2]])}
 
 
+# Not a counselling authority for our doctors (founder 2026-10-13): Delhi has no state PG counselling —
+# all Delhi MD/MS seats (incl. DU + IP University quotas) are counselled by MCC. GGSIPU's own PGMC
+# counselling is only a handful of seats for its own graduates. Kept here (codes never reused) but
+# hidden from every list, dropdown, API and the news scraper.
+REMOVED = {"ggsipu"}
+
+
 def all_authorities():
-    return [as_dict(a) for a in AUTHORITIES]
+    return [as_dict(a) for a in AUTHORITIES if a[0] not in REMOVED]
 
 
 def get_authority(code):
     a = _BY_CODE.get((code or "").strip().lower())
-    return as_dict(a) if a else None
+    return as_dict(a) if a and a[0] not in REMOVED else None
 
 
 # The per-authority document buckets (founder 2026-10-06; brochure added on review).
