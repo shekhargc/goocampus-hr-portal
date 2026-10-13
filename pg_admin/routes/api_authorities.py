@@ -171,15 +171,16 @@ def api_pg_authority(code):
         return jsonify({'ok': True, 'authority': authority, 'locked': True,
                         'document_groups': [], 'news': [], 'seat_matrix': None,
                         'viewer': {'is_paid': is_paid, 'home_state': home}}), 200
-    main_brochure = None
+    main_brochure, main_brochures = None, []
     try:
         try:
             conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE")
+            conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS main_label TEXT DEFAULT ''")
         except Exception:
             conn.rollback()
         rows = [dict(r) for r in conn.execute(
             "SELECT id, category, title, doc_date, note, body_text, file_name, "
-            "COALESCE(is_main, FALSE) AS is_main "
+            "COALESCE(is_main, FALSE) AS is_main, COALESCE(main_label, '') AS main_label "
             "FROM pg_authority_docs WHERE authority_code=? AND COALESCE(is_published,TRUE) "
             "ORDER BY category, COALESCE(is_main, FALSE) DESC, sort_order, id DESC", (authority['code'],)).fetchall()]
         by_cat = {}
@@ -191,10 +192,17 @@ def api_pg_authority(code):
                 'file_name': r['file_name'] or '',
                 'file_url': _file_url(r['id']) if has_file else '',
                 'is_main': bool(r.get('is_main')),
+                'main_label': (r.get('main_label') or '') if r.get('is_main') else '',
             })
-            if r.get('is_main') and has_file and not main_brochure:
-                main_brochure = {'id': r['id'], 'title': r['title'], 'date': r['doc_date'] or '',
-                                 'file_url': _file_url(r['id'])}
+            if r.get('is_main') and has_file:
+                main_brochures.append({'id': r['id'], 'title': r['title'], 'date': r['doc_date'] or '',
+                                       'label': r.get('main_label') or 'Information Bulletin',
+                                       'file_url': _file_url(r['id'])})
+        # several main bulletins (founder 2026-10-13, e.g. TN Government quota + Management/NRI quota):
+        # general bulletin / government quota first; main_brochure (singular) stays = the first one
+        _ord = {'information bulletin': 0, 'prospectus': 1, 'government quota': 2, 'management / nri quota': 3, 'user guide': 9}
+        main_brochures.sort(key=lambda m: (_ord.get((m['label'] or '').lower(), 5), m['id']))
+        main_brochure = main_brochures[0] if main_brochures else None
         for cat, label in DOC_CATEGORIES:
             if by_cat.get(cat):
                 groups.append({'category': cat, 'label': label, 'documents': by_cat[cat]})
@@ -234,7 +242,7 @@ def api_pg_authority(code):
     finally:
         conn.close()
     return jsonify({'ok': True, 'authority': authority, 'locked': False,
-                    'main_brochure': main_brochure,
+                    'main_brochure': main_brochure, 'main_brochures': main_brochures,
                     'document_groups': groups, 'news': news, 'seat_matrix': seat_matrix,
                     'viewer': {'is_paid': is_paid, 'home_state': home}}), 200
 

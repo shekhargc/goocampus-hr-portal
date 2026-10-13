@@ -114,7 +114,9 @@ team publishes it). Classify it:
 "document": {"category": "results", "title": "Karnataka PG Medical 2026 — Round 1 Provisional Allotment List", "news": false}
 ```
 - `category`, exactly one of:
-  - `brochure` — Information Bulletin / Prospectus / Brochure / Counselling user manual or user guide
+  - `brochure` — the AUTHORITY's own Information Bulletin / Prospectus / Brochure / counselling user manual
+    or user guide (a single college's own admission bulletin, e.g. "St John's Medical College PG admission
+    bulletin", is `other`, never `brochure`)
   - `registration` — list of documents/certificates to keep ready or upload for registration / verification
   - `formats_annexures` — certificate formats, annexures, affidavits, proformas to fill
   - `fee_structure` — fee structure / tuition fee / fee order
