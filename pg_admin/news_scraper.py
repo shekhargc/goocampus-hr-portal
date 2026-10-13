@@ -120,6 +120,230 @@ SOURCES = {
         'exclude': r'\bMDS\b|DENTAL|AYUSH|NURSING|HOMOEO|AYURVED',
         'enabled': True,
     },
+    # ── batch 3 (founder 2026-10-13: all other states) — found + verified on each authority's
+    #    OFFICIAL site (survey notes: scratchpad states/<code>.json); readers in news_readers_states ──
+    # Gujarat: ready — medadmgujarat.org is the Admission Committee for Professional Post Graduate Medical Courses (ACPPGMEC), constituted under the Gujarat Professional Medical Educational Colleges or I
+    'acpmec_pg': {
+        'label': 'Gujarat ACPPGMEC — PG Medical (MD/MS/Diploma) Admission 2026',
+        'short': 'Gujarat',
+        'authority_code': 'acpmec',
+        'news_authority': 'state:Gujarat',
+        'url': 'https://medadmgujarat.org/pg/home.aspx',
+        'reader': 'pdf_links_url',
+        'url_include': '/PG2026/MDMS/',
+        'enabled': True,
+    },
+    # Himachal Pradesh: ready — Official: amruhp.ac.in menu Admissions > "Apply for Admission & Various Counselling" -> /counselling-notifications/. The page has one sub-tab per course; <div id="mdms_neetpg"> = "
+    'amru_hp_pg': {
+        'label': 'Himachal Pradesh AMRU — PG Medical (MD/MS/DNB) 2026',
+        'short': 'Himachal Pradesh',
+        'authority_code': 'amru_hp',
+        'news_authority': 'state:Himachal Pradesh',
+        'url': 'https://amruhp.ac.in/counselling-notifications/',
+        'reader': 'amru_hp',
+        'enabled': True,
+    },
+    # Andaman & Nicobar: no_pg_2026_yet — andssw1.and.nic.in/aniims (homepage in authorities.py): HTTPS connection reset, HTTP 403/404 from this Mac — unusable. ANIIMS announcements are instead published on the A&N Adminis
+    'aniims_pg': {
+        'label': 'Andaman & Nicobar — ANIIMS (via UT college-admission portal)',
+        'short': 'Andaman & Nicobar',
+        'authority_code': 'aniims',
+        'news_authority': 'state:Andaman & Nicobar',
+        'url': 'https://collegeadmission.andamannicobar.gov.in/',
+        'reader': 'pdf_links_soft',
+        'include': '(?=.*ANIIMS|.*Andaman\\s*&?\\s*Nicobar\\s*Islands\\s*Institute)(?=.*(P\\.?\\s*G\\.?\\s*Medical|Post[\\s-]*Graduate|NEET[\\s-]*PG|\\bM\\.?\\s*D\\.?\\s*/\\s*M\\.?\\s*S\\b|\\bMD\\b|\\bMS\\b))',
+        'enabled': False,
+    },
+    # Bihar: no_pg_2026_yet — Official: bceceboard.bihar.gov.in is the BCECE Board (Govt of Bihar); PGMACIndex.php is the "PGMAC" entry of its Examinations menu, page heading "NOTICE BOARD of PGMAC - 2026" (Pos
+    'bceceb_pg': {
+        'label': 'Bihar BCECEB — PGMAC (PG Medical MD/MS/PGD/DNB) 2026',
+        'short': 'Bihar',
+        'authority_code': 'bceceb',
+        'news_authority': 'state:Bihar',
+        'url': 'https://bceceboard.bihar.gov.in/PGMACIndex.php',
+        'pages': ['https://bceceboard.bihar.gov.in/PGMACIndex.php', 'https://bceceboard.bihar.gov.in/NoticeBoard.php'],
+        'reader': 'pdf_links_soft',
+        'include': 'P(?:GM|MG)AC(?!\\s*[\\[(]?\\s*AYUSH)|Post\\s*Graduate\\s*Medical|PG\\s*Medical|NEET\\s*\\(?\\s*PG',
+        'exclude': '^(?!.*PGMAC\\s*/).*(AYUSH|UNANI|HOMOEO|AYURVED|DENTAL|PGDAC)|P(?:GM|MG)AC\\s*-?\\s*20(?:1\\d|2[0-4])\\b',
+        'enabled': True,
+    },
+    # Punjab: ready — Official: bfuhs.ac.in > Admissions (index1.aspx) > "NEET PG 2026" -> https://admission.bfuhsonline.ac.in/mdms/mdms.asp (BFUHS admissions subdomain, bfuhsonline.ac.in). The one page
+    'bfuhs_pg': {
+        'label': 'Punjab BFUHS — PG Medical (MD/MS) NEET-PG 2026',
+        'short': 'Punjab',
+        'authority_code': 'bfuhs',
+        'news_authority': 'state:Punjab',
+        'url': 'https://admission.bfuhsonline.ac.in/mdms/mdms.asp',
+        'reader': 'pdf_links_soft',
+        'include': 'MD\\s*[/-]?\\s*MS\\b|\\bMD\\b|PG\\s*MEDICAL|MEDICAL\\s*PG|POST\\s*-?\\s*GRADUATE\\s+MEDICAL|PCMS|IN[\\s-]*SERVICE|NEET[\\s-]*PG(?![\\s-]*MDS)|DNB|DIPLOMA',
+        'exclude': '\\bMDS\\b|DENTAL|\\bBDS\\b|NURSING|AYUR|HOMOEO',
+        'enabled': True,
+    },
+    # Puducherry: no_pg_2026_yet — Official: centacpuducherry.in is linked from the Govt of Puducherry Directorate of Higher & Technical Education site (dhte.py.gov.in → https://www.centacpuducherry.in/); header "GO
+    'centac_pg': {
+        'label': 'Puducherry CENTAC — PG Medical (MD/MS) 2026-27',
+        'short': 'Puducherry',
+        'authority_code': 'centac',
+        'news_authority': 'state:Puducherry',
+        'url': 'https://centacpuducherry.in/',
+        'reader': 'centac_home',
+        'include': 'P\\.?\\s*G\\.?\\s*MEDICAL|M\\.\\s*D\\.?\\s*/\\s*M\\.\\s*S|\\bMD\\s*/\\s*MS\\b|NEET[\\s-]*PG|POST[\\s-]*GRADUATE\\s+MEDICAL|\\bDNB\\b|NON[\\s-]*CLINICAL\\s+P\\.?\\s*G|\\bP\\.?\\s*G\\.?\\s+COURSES',
+        'exclude': '^(?!.*(P\\.?\\s*G\\.?\\s*MEDICAL|M\\.\\s*D\\.?\\s*/\\s*M\\.\\s*S|\\bMD\\s*/\\s*MS\\b)).*(DENTAL|M\\.\\s*D\\.\\s*S|\\bMDS\\b|AYUSH|NURSING)',
+        'enabled': True,
+    },
+    # Maharashtra: no_pg_2026_yet — Official: cetcell.mahacet.org = State Common Entrance Test Cell, Maharashtra (statutory body under the 2015 Act; listed as such in the Govt eGovernance URL directory dhepune.gov.in
+    'cetcell_mh_pg': {
+        'label': 'Maharashtra State CET Cell — NEET-PG (MD/MS) CAP 2026',
+        'short': 'Maharashtra',
+        'authority_code': 'cetcell_mh',
+        'news_authority': 'state:Maharashtra',
+        'url': 'https://medical2026.mahacet.org/NEET-PGM-2026/login',
+        'pages': ['https://medical2026.mahacet.org/NEET-PGM-2026/login'],
+        'reader': 'mh_cetcell',
+        'enabled': True,
+    },
+    # Chhattisgarh: no_pg_2026_yet — Official: cgdme.admissions.nic.in is the NIC (S3WaaS, .nic.in) eCounselling site 'Content Owned and Managed by Chhattisgarh Directorate of Medical Education'; linked from cgdme.co.
+    'dme_cg_pg': {
+        'label': 'Chhattisgarh DME — CG State NEET PG (MD/MS) Counselling (NIC eCounselling portal)',
+        'short': 'Chhattisgarh',
+        'authority_code': 'dme_cg',
+        'news_authority': 'state:Chhattisgarh',
+        'url': 'https://cgdme.admissions.nic.in/',
+        'pages': ['https://cgdme.admissions.nic.in/', 'https://cgdme.admissions.nic.in/notices/', 'https://cgdme.admissions.nic.in/information-bulletin/', 'https://cgdme.admissions.nic.in/schedule/', 'https://cgdme.admissions.nic.in/seat-matrix/', 'https://cgdme.admissions.nic.in/merit-list/', 'https://cgdme.admissions.nic.in/allotment-result/', 'https://cgdme.admissions.nic.in/or-cr/', 'https://cgdme.admissions.nic.in/procedures/'],
+        'reader': 'pdf_links_soft',
+        'include': 'NEET[\\s-]*PG|MD\\s*/\\s*MS|PG\\s*\\(\\s*MD|PG\\s*Medical|\\bPG\\b|Post\\s*Graduate',
+        'exclude': '\\bMDS\\b|^\\s*PG\\s+DENTAL|\\bUG\\b|MBBS|\\bBDS\\b|BPT|nursing',
+        'enabled': True,
+    },
+    # Madhya Pradesh: ready — Official: medicaleducation.mp.gov.in (Dept of Medical Education, MP) links to dme.mponline.gov.in (MPOnline is the GoMP portal, .gov.in). From DMEhome.aspx: 'DME Post Graduate Coun
+    'dme_mp_pg': {
+        'label': 'Madhya Pradesh DME — State NEET PG Counselling (MD/MS) 2026-27',
+        'short': 'Madhya Pradesh',
+        'authority_code': 'dme_mp',
+        'news_authority': 'state:Madhya Pradesh',
+        'url': 'https://dme.mponline.gov.in/portal/services/dmemp/DMEPG/Profile/ProfileLoginHome.aspx?Counstype=rfZR9zLVYzySY17sU9L9gA%3d%3d',
+        'reader': 'pdf_links',
+        'enabled': True,
+    },
+    # Haryana: no_pg_2026_yet — Official: dmer.haryana.gov.in (reachable from the Mac today, 2026-10-13). DMER Haryana itself runs MD/MS/DNB/Diploma state counselling (not UHSR): the counselling portal hry.online
+    'dmer_hr_pg': {
+        'label': 'Haryana DMER — PG Medical (MD/MS/Post-MBBS DNB & Diploma) 2026',
+        'short': 'Haryana',
+        'authority_code': 'dmer_hr',
+        'news_authority': 'state:Haryana',
+        'url': 'https://dmer.haryana.gov.in/',
+        'reader': 'dmer_hr',
+        'enabled': True,
+    },
+    # Uttar Pradesh: ready — Official: dgme.up.gov.in is the Directorate General of Medical Education & Training, UP (.gov.in); its home menu 'COUNSELLING & ALLOTMENT' -> /Welcome/counselling. The counselling 
+    'dmetup_pg': {
+        'label': 'Uttar Pradesh DGME — UP NEET PG (MD/MS/Diploma/DNB) Counselling',
+        'short': 'Uttar Pradesh',
+        'authority_code': 'dmetup',
+        'news_authority': 'state:Uttar Pradesh',
+        'url': 'https://dgme.up.gov.in/Welcome/counselling',
+        'pages': ['https://dgme.up.gov.in/Welcome/counselling'],
+        'reader': 'row_table',
+        'include': 'NEET[\\s-]*PG|\\bPG\\b|M\\.?D\\.?\\s*/\\s*M\\.?S\\.?|\\bMD\\b|D\\.?N\\.?B\\.?|post[\\s-]*graduate',
+        'exclude': '\\bMDS\\b|DENTAL|\\bUG\\b|MBBS|\\bBDS\\b|bond|deploy|senior resident|junior resident|\\bDM\\s*/\\s*M\\.?CH|NEET[\\s-]*SS|PNDT',
+        'strip': 'Size\\s*:.*$',
+        'max_rows': 150,
+        'enabled': True,
+    },
+    # Dadra & Nagar Haveli: unreachable — vbch.dnh.nic.in (Shri Vinoba Bhave Civil Hospital / NAMO MERI site, the homepage listed in authorities.py) does not resolve at all — NXDOMAIN on this Mac and via 8.8.8.8; namomeri.
+    'dmhs_dnh_pg': {
+        'label': 'DNH & DD — NAMO MERI Silvassa PG (MD/MS)',
+        'short': 'Dadra & Nagar Haveli',
+        'authority_code': 'dmhs_dnh',
+        'news_authority': 'state:Dadra & Nagar Haveli',
+        'url': 'http://vbch.dnh.nic.in/content/latest-announcement',
+        'reader': 'pdf_links_soft',
+        'include': 'P\\.?\\s*G\\.?\\s*Medical|Post[\\s-]*Graduate\\s*(Medical|Degree)|NEET[\\s-]*PG|\\bM\\.?D\\.?\\s*/\\s*M\\.?S\\b',
+        'enabled': False,
+    },
+    # Goa: needs_reader — Official + confirmed by the PDF itself: PG-Medical-Advt.pdf (DTE/CAD/PG-MED/2026, dated 09/10/2026) says "As designated State Counselling Authority for conducting admissions to Pos
+    'dte_goa_pg': {
+        'label': 'Goa DTE — PG Medical (Goa Medical College) 2026',
+        'short': 'Goa',
+        'authority_code': 'dte_goa',
+        'news_authority': 'state:Goa',
+        'url': 'https://dte.goa.gov.in/news',
+        'reader': 'drupal_news',
+        'include': 'PG\\s*Medical|Post[\\s-]*Graduate\\s*Medical|NEET[\\s-]*PG|\\bMD\\s*/\\s*MS\\b|\\bDNB\\b|Goa\\s*Medical\\s*College',
+        'exclude': 'Ayurved|AYUSH|Homo?eo|Dental|\\bMDS\\b|Nursing',
+        'fixed_docs': [{'url': 'https://dte.goa.gov.in/sites/default/files/2026-10/PG-MEDICAL-Rules-2026.pdf', 'title': 'Goa PG Medical Admission Rules 2026 (Goa Medical College)'}],
+        'enabled': True,
+    },
+    # Delhi: no_pg_2026_yet — Official: ipu.ac.in home page menu "Admission 2026-27 > Notices - Admission" -> /adm2026/adm2026notices.php; PDFs are ipu.ac.in/Pubinfo2026/*.pdf. The page lists ALL GGSIPU courses
+    'ggsipu_pg': {
+        'label': 'Delhi GGSIPU — PG Medical (PGMC, MD/MS/Diploma) — GGSIP University quota',
+        'short': 'Delhi',
+        'authority_code': 'ggsipu',
+        'news_authority': 'state:Delhi',
+        'url': 'https://ipu.ac.in/adm2026/adm2026notices.php',
+        'pages': ['https://ipu.ac.in/adm2026/adm2026notices.php', 'https://ipu.ac.in/adm2026/adm2026notices.php?page=2&limit=25', 'https://ipu.ac.in/adm2026/adm2026notices.php?page=3&limit=25'],
+        'reader': 'pdf_links_soft',
+        'include': 'PGMC|POST\\s*-?\\s*GRADUATE\\s+MEDICAL|NEET[\\s-]*PG|PG\\s+MEDICAL|\\bMD\\b|MD\\s*/\\s*MS|\\bDNB\\b|CODE\\s*[-:]?\\s*102\\b',
+        'exclude': 'AYURVED|HOMOEO|HOMEO|NURSING|\\bMDS\\b|DENTAL|PGAC|\\bBAMS\\b|\\bBHMS\\b|PACKAGING|CUET',
+        'fixed_docs': [{'url': 'https://ipu.ac.in/adm2026/adm2026br/br280126pgprg/ch09.pdf', 'title': 'GGSIPU Admission Brochure 2026-27 — Chapter 9: PGMC (MD/MS/PG Diploma) admission information'}],
+        'enabled': True,
+    },
+    # Chandigarh: no_pg_2026_yet — Official: gmch.gov.in > Admissions (/admissions) lists one page per session: "Admission MD/MS-2025" (/node/6481 = /admission-mdms-2025, 37 PDFs: prospectus, eligibility lists, seat
+    'gmch_chd_pg': {
+        'label': 'Chandigarh GMCH-32 — MD/MS (UT state quota) 2026',
+        'short': 'Chandigarh',
+        'authority_code': 'gmch_chd',
+        'news_authority': 'state:Chandigarh',
+        'url': 'https://gmch.gov.in/admissions',
+        'reader': 'gmch_chd',
+        'enabled': True,
+    },
+    # Uttarakhand: no_pg_2026_yet — Official link chain: hnbumu.ac.in home page (HNB Uttarakhand Medical Education University) links "NEET MDS 2026 Uttarakhand State Centralized Counselling" -> https://meta-secure.co
+    'hnbumu_pg': {
+        'label': 'Uttarakhand HNBUMU — PG Medical (MD/MS) state counselling 2026',
+        'short': 'Uttarakhand',
+        'authority_code': 'hnbumu',
+        'news_authority': 'state:Uttarakhand',
+        'url': 'https://meta-secure.com/HNBUMU_NEETPG',
+        'reader': 'hnbumu_pg',
+        'enabled': True,
+    },
+    # Jharkhand: needs_reader — Official: jceceb.jharkhand.gov.in = Jharkhand Combined Entrance Competitive Examination Board; home page menu Notices » "Counselling Notices" (Links/counselling.aspx) and "Download
+    'jceceb_pg': {
+        'label': 'Jharkhand JCECEB — PG Medical (MD/MS/Diploma & DNB) State Quota 2026',
+        'short': 'Jharkhand',
+        'authority_code': 'jceceb',
+        'news_authority': 'state:Jharkhand',
+        'url': 'https://jceceb.jharkhand.gov.in/Links/counselling.aspx',
+        'pages': ['https://jceceb.jharkhand.gov.in/Links/counselling.aspx', 'https://jceceb.jharkhand.gov.in/Links/download.aspx'],
+        'reader': 'jceceb_grid',
+        'include': 'NEET\\s*[\\(\\-]?\\s*PG|Post[\\s-]*Graduate\\s*(Medical|Courses\\s*\\(MD)|\\bPG\\s*Medical|Medical\\s*PG|MD\\s*/\\s*MS|\\bDNB\\b',
+        'exclude': 'Homo?eopath|AIAPGET|AYUSH|Ayurved|Unani|^(?!.*NEET\\s*[\\(\\-]?\\s*PG)(?=.*(\\bMDS\\b|Dental))',
+        'enabled': True,
+    },
+    # Jammu & Kashmir: no_pg_2026_yet — Official: jkbopee.gov.in/NoticeBoard.aspx (BOPEE's own Notice Board; 1,368 notices of all courses and years in one list). Rows are <li data-date="dd-mm-yyyy"><a href="Pdf/Downloade
+    'jk_bopee_pg': {
+        'label': 'J&K BOPEE — NEET-PG (MD/MS/PG Diploma) + Post-MBBS DNB 2026',
+        'short': 'Jammu & Kashmir',
+        'authority_code': 'jk_bopee',
+        'news_authority': 'state:Jammu & Kashmir',
+        'url': 'https://jkbopee.gov.in/NoticeBoard.aspx',
+        'reader': 'jk_bopee',
+        'enabled': True,
+    },
+    # Rajasthan: no_pg_2026_yet — RUHS (ruhsraj.org, admissions.ruhsraj.org 2026-27) does NOT run NEET-PG MD/MS state counselling — its admissions portal lists only CUET/PGET (nursing/pharmacy/MSc), PhD etc.; no MD
+    'ruhs_pg': {
+        'label': 'Rajasthan NEET PG Counselling Board (SMS Medical College) — via Medical Education Dept order portal',
+        'short': 'Rajasthan',
+        'authority_code': 'ruhs',
+        'news_authority': 'state:Rajasthan',
+        'url': 'https://medicaleducation.rajasthan.gov.in/smsjaipur/#/department-order/102',
+        'reader': 'raj_orderportal',
+        'include': 'NEET[\\s-]*PG|PG\\s*Medical|Medical\\s*PG|M\\.?D\\.?\\s*/\\s*M\\.?S|post[\\s-]*graduate|स्नातकोत्तर|DNB',
+        'exclude': '\\bMDS\\b|dental|nursing|pharm|ayush|ayurved|homoeo|bond|सेवा बन्ध|super\\s*speciality|सुपर',
+        'dept_codes': [102, 357],
+        'enabled': True,
+    },
 }
 
 
@@ -210,6 +434,9 @@ def in_season(it, season_from=None):
     y = cur.year
     if (re.search(rf'{y - 1}\s*[-–/]\s*(20)?{str(y)[2:]}|\b{y - 1}\b', t)
             and not re.search(rf'{y}\s*[-–/]\s*(20)?{str(y + 1)[2:]}|\b{y}\b', t)):
+        return False
+    yrs = [int(x) for x in re.findall(r'\b(20\d{2})\b', t)]
+    if yrs and max(yrs) < y:          # names only past years (e.g. "PGMAC-2024", "Session 2023")
         return False
     d = it.get('notice_date')
     if d:
@@ -524,6 +751,9 @@ def _read_source(code):
         return read_cee_kerala(src.get('pages') or [src['url']], src.get('home'))
     if src['reader'] == 'tn_tagged':
         return read_tn_tagged(src['url'], src['tag'])
+    from pg_admin import news_readers_states as _SR      # batch-3 state readers
+    if src['reader'] in _SR.DISPATCH:
+        return _SR.DISPATCH[src['reader']](src)
     if src['reader'] == 'aspnet_filter':
         return read_aspnet_filter(src['url'], src['form'], src.get('include'), src.get('exclude'))
     if src['reader'] == 'date_table':
@@ -656,6 +886,22 @@ def fetch_pdf(url):
             if len(buf) > MAX_PDF_BYTES:
                 return None, 'PDF is larger than 25 MB'
         data = bytes(buf)
+        if not data.startswith(b'%PDF'):
+            return None, 'the link did not return a PDF'
+        name = (url.split('?')[0].rstrip('/').rsplit('/', 1)[-1] or 'notice.pdf')[:200]
+        return data, (name if name.lower().endswith('.pdf') else name + '.pdf')
+    except Exception as e:
+        if 'SSL' in type(e).__name__ or 'SSL' in str(e):
+            return _fetch_pdf_curl(url)           # e.g. TLS-1.3-only govt hosts vs the Mac's old LibreSSL
+        return None, str(e)[:200]
+
+
+def _fetch_pdf_curl(url):
+    import subprocess
+    try:
+        out = subprocess.run(['curl', '-sL', '-A', UA, '-m', '90', '--max-filesize', str(MAX_PDF_BYTES), url],
+                             capture_output=True, timeout=120)
+        data = out.stdout
         if not data.startswith(b'%PDF'):
             return None, 'the link did not return a PDF'
         name = (url.split('?')[0].rstrip('/').rsplit('/', 1)[-1] or 'notice.pdf')[:200]
