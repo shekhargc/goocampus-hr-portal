@@ -35,7 +35,8 @@ def news_inbox():
             counts[r['status']] = r['n']
         items = [dict(r) for r in conn.execute(
             "SELECT id, source_code, authority_code, item_key, title, url, kind, notice_date, status, news_id, "
-            "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL) AS has_pdf "
+            "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL) AS has_pdf, "
+            "COALESCE(redraft_requested, FALSE) AS redraft_requested, COALESCE(history_note,'') AS history_note "
             "FROM pg_news_inbox WHERE status = ? "
             "ORDER BY notice_date DESC NULLS LAST, first_seen_at DESC, id DESC LIMIT 300", (tab,)).fetchall()]
         for code, s in NS.SOURCES.items():
@@ -73,6 +74,35 @@ def news_inbox_check():
     flash('Checking the websites now — this takes up to a minute. Refresh this page to see new notices.',
           'info')
     return redirect(url_for('pg_news_inbox'))
+
+
+@login_required
+def news_inbox_redraft():
+    """'↻ Re-draft with AI' — the Mac re-reads this notice at its next check and sends a fresh
+    draft (headline/article/dates/schedule/calendar events). (founder 2026-10-09)"""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    try:
+        iid = int(request.form.get('id') or 0)
+    except ValueError:
+        iid = 0
+    back = request.form.get('tab') or 'new'
+    conn = get_db()
+    try:
+        NS.ensure_news_inbox_tables(conn)
+        conn.execute("UPDATE pg_news_inbox SET redraft_requested = TRUE WHERE id = ?", (iid,))
+        conn.commit()
+        flash('Re-draft requested — your Mac will send a fresh AI draft at its next check '
+              '(10 AM / 1 PM / 6:30 PM / 11 PM), or straight away if you click "Run now" on the '
+              'scheduled task in the Claude app.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("news_inbox_redraft: %s", e)
+        flash('Could not request a re-draft.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_news_inbox', tab=back))
 
 
 @login_required

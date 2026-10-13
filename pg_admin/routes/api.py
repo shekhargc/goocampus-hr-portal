@@ -1760,7 +1760,8 @@ def admin_pg_speed_check():
              ('courses q=gen med', '/api/pg/predictor/courses', {'q': 'gen med', 'degree_group': 'mdms'}),
              ('summary authority=MCC', '/api/pg/cutoff-explorer/summary', {'authority': 'MCC'}),
              ('summary course', '/api/pg/cutoff-explorer/summary', {'course': crs['course'] if crs else ''}),
-             ('news deadlines', '/api/pg/news/deadlines', {'states': 'Karnataka', 'days': 60})]
+             ('news deadlines', '/api/pg/news/deadlines', {'states': 'Karnataka', 'days': 60}),
+             ('counselling status mcc', '/api/pg/counselling-status', {'authority': 'mcc'})]
     if m:
         calls.append(('mentor photo w=200', f"/api/pg/mentors/{m['id']}/photo", {'w': 200}))
     out = []
@@ -1775,6 +1776,12 @@ def admin_pg_speed_check():
             row['bytes'] = len(r.data)
             row['encoding'] = r.headers.get('Content-Encoding', '')
             row['cache'] = r.headers.get('Cache-Control', '')
+        if request.args.get('show') and label.startswith(request.args.get('show')):
+            import gzip as _gz
+            body = r.data
+            try: body = _gz.decompress(body)
+            except Exception: pass
+            row['body'] = json.loads(body.decode())
         out.append(row)
     return jsonify({'ok': True, 'timings': out})
 

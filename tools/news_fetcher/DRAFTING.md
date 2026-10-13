@@ -34,7 +34,7 @@ Never edit any other file, never publish anything, never run other commands.
   "applies_to": "e.g. All NEET PG 2026 candidates for AIQ seats / Karnataka in-service candidates / NRI candidates",
   "action": "the one thing a doctor should do now, e.g. Register on mcc.nic.in before 18 Oct 2026, 12 noon.",
   "dates": {
-    "registration_start":   {"date": "YYYY-MM-DD", "time": "e.g. 11:00 AM", "quote": "exact line from the notice"},
+    "registration_start":   {"date": "YYYY-MM-DD", "time": "e.g. 11:00 AM", "round": "Round 1", "quote": "exact line from the notice"},
     "registration_end":     {"date": "...", "time": "...", "quote": "..."},
     "verification_start":   {...},   // document verification / slot booking opens
     "verification_end":     {...},   // last date of document verification
@@ -64,10 +64,36 @@ schedule, verification slots by date, a fee table by round):
 Copy the dates exactly as the notice states them (human-readable, e.g. "12–21 Oct 2026, 12 noon").
 Max 8 columns, 40 rows. Omit `schedule` if the notice has no timetable.
 
+Optional `events` — the COUNSELLING CALENDAR. Whenever the notice gives a schedule, list EVERY
+dated step for EVERY round (this fills the authority's calendar automatically when posted):
+
+```json
+"events": [
+  {"round": "Round 1", "event": "registration",  "label": "Registration & fee payment",
+   "start": "2026-10-12", "end": "2026-10-21", "time": "till 12 noon on 21 Oct", "quote": "exact text"},
+  {"round": "Round 1", "event": "choice_filling", "label": "Choice filling", "start": "2026-10-13", "end": "2026-10-22", "time": "till 10 AM", "quote": "..."},
+  {"round": "Round 1", "event": "choice_locking", "label": "Choice locking", "start": "2026-10-21", "end": "2026-10-22", "time": "4 PM 21 Oct – 10 AM 22 Oct", "quote": "..."},
+  {"round": "Round 1", "event": "result",         "label": "Result",          "start": "2026-10-24", "end": "", "time": "", "quote": "..."},
+  {"round": "Round 1", "event": "reporting",      "label": "Reporting / joining", "start": "2026-10-26", "end": "2026-11-02", "time": "", "quote": "..."},
+  {"round": "Round 2", "event": "registration",  ...}
+]
+```
+- `event` is one of: registration | verification | choice_filling | choice_locking | payment |
+  seat_processing | result | reporting | other. `round`: "Round 1", "Round 2", "Round 3", "Round 4",
+  "Stray", "Mop-up", "Special", or "" if not round-specific (e.g. session start → event "other").
+- `start` / `end` = YYYY-MM-DD; `end` only for a range. Only dates the notice states — never guess.
+- One entry per step per round. Omit `events` if the notice has no schedule.
+- The `event` types describe THIS authority's own process. Dates in the notice that belong to a
+  DIFFERENT process (e.g. an MCC notice listing the state-quota counselling windows / state joining
+  dates) use event "other" with a clear label ("State quota counselling window (all states)").
+
 Category `bulletin` = the authority's Information Bulletin / Prospectus / Brochure for the year
 (the reviewer will also save it as that authority's main brochure document).
 
 Rules for `dates`:
+- `round`: exactly one of "Round 1", "Round 2", "Round 3", "Round 4", "Mop-up", "Stray", "Special Stray",
+  or omit it if the notice doesn't say. `dates` holds ONE round (the earliest upcoming); every other
+  round's dates go in `events` (the calendar), never extra keys here.
 - Include a key ONLY if the notice explicitly states that date. Omit the key otherwise —
   never guess, never infer from another round or another year.
 - `quote` = the exact text from the notice that shows it (≤300 chars), so the reviewer can
