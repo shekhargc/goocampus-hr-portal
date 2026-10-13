@@ -51,7 +51,9 @@ def _can_access(authority, home, is_paid):
         return True
     if authority['kind'] == 'central':
         return True
-    return (authority.get('state') or '').strip().lower() == (home or '').strip().lower()
+    # an authority that serves the doctor's home state (incl. regional ones like RIMS Imphal → 7 NE states)
+    serves = {x.strip().lower() for x in (authority.get('covers_states') or [authority.get('state') or ''])}
+    return (home or '').strip().lower() in serves
 
 
 def _file_url(doc_id):
@@ -87,7 +89,9 @@ def _seat_matrix_for(conn, authority):
 
 
 def api_pg_authorities():
-    """List authorities that have content, with per-segment counts, for the dashboard."""
+    """List authorities that have content, with per-segment counts, for the dashboard.
+    ?all=1 → EVERY active authority (also those with nothing published yet), each with has_content,
+    so the site can show regional coverage + "updates awaited" from day one (2026-10-13)."""
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     conn = get_db()
@@ -130,18 +134,23 @@ def api_pg_authorities():
         try: conn2.close()
         except Exception: pass
 
+    want_all = (request.args.get('all') or '').strip() == '1'
+    from pg_admin import news_scraper as _NS        # authorities whose official site we follow
+    watched = {x.get('authority_code') for x in _NS.SOURCES.values() if x.get('enabled')}
     out = []
     for a in all_authorities():
         docs = doc_counts.get(a['code'], 0)
         has_news = (a['kind'] == 'central' and mcc_news) or (a['state'].lower() in news_states)
         sm = (a['code'] in sm_codes) or any(
             a['state'].lower() in b or a['name'].split(' ')[0].lower() in b for b in sm_bodies)
-        if docs or has_news or sm:
+        has_content = bool(docs or has_news or sm)
+        if has_content or want_all:
             # locked only matters when we know the doctor (token sent). No token → not locked
             # (the frontend gates). Paid or MCC or home state → open.
             locked = bool(user) and not _can_access(a, home, is_paid)
             out.append({**a, 'doc_count': docs, 'has_news': bool(has_news),
-                        'has_seat_matrix': bool(sm), 'locked': locked})
+                        'has_seat_matrix': bool(sm), 'locked': locked, 'has_content': has_content,
+                        'watched': a['code'] in watched})
     return jsonify({'ok': True, 'authorities': out,
                     'viewer': {'is_paid': is_paid, 'home_state': home,
                                'known': bool(user)}}), 200
