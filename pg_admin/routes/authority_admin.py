@@ -37,6 +37,8 @@ def authorities_admin():
     counts, waiting_by_auth, waiting = {}, {}, []
     try:
         ensure_pg_authority_docs(conn)
+        from pg_admin.data.main_brochures import ensure_cols as _mb_cols
+        _mb_cols(conn)
         # Per-authority document counts (for the picker badges) + auto-filed docs still waiting.
         for r in conn.execute(
                 "SELECT authority_code, COUNT(*) AS n, "
@@ -49,7 +51,8 @@ def authorities_admin():
             for r in conn.execute(
                     "SELECT id, category, title, doc_date, note, body_text, file_name, is_published, "
                     "uploaded_by, uploaded_at, COALESCE(review_pending, FALSE) AS review_pending, "
-                    "auto_inbox_id, COALESCE(source_url,'') AS source_url, COALESCE(is_main, FALSE) AS is_main "
+                    "auto_inbox_id, COALESCE(source_url,'') AS source_url, COALESCE(is_main, FALSE) AS is_main, "
+                    "COALESCE(main_label,'') AS main_label "
                     "FROM pg_authority_docs WHERE authority_code=? "
                     "ORDER BY category, sort_order, id DESC", (authority['code'],)).fetchall():
                 r = dict(r)
@@ -69,6 +72,9 @@ def authorities_admin():
                            counts=counts, waiting=waiting, waiting_by_auth=waiting_by_auth,
                            cat_labels=dict(DOC_CATEGORIES),
                            has_main=any(d.get('is_main') and d.get('is_published') for d in docs_by_cat.get('brochure', [])),
+                           main_n=sum(1 for d in docs_by_cat.get('brochure', []) if d.get('is_main')),
+                           label_suggestions=__import__('pg_admin.data.main_brochures', fromlist=['x']).LABEL_SUGGESTIONS,
+                           guess=__import__('pg_admin.data.main_brochures', fromlist=['x']).guess_label,
                            active_section='goocampus_in')
 
 
@@ -210,24 +216,21 @@ def authority_doc_file_admin(doc_id):
                     headers={'Content-Disposition': f'inline; filename="{row["file_name"] or "document"}"'})
 
 
-def _publish(conn, ids, who, make_main=False):
+def _publish(conn, ids, who, make_main=False, main_label=None):
     """Publish auto-filed documents. A brochure becomes the authority's MAIN brochure when it has none."""
     n = 0
     for did in ids:
         r = conn.execute("SELECT id, authority_code, category FROM pg_authority_docs WHERE id=?", (did,)).fetchone()
         if not r:
             continue
-        main = False
-        if r['category'] == 'brochure' and make_main:      # replace the current main brochure
-            conn.execute("UPDATE pg_authority_docs SET is_main = FALSE WHERE authority_code=? AND category='brochure'",
-                         (r['authority_code'],))
-            main = True
-        elif r['category'] == 'brochure':
-            main = not conn.execute("SELECT 1 FROM pg_authority_docs WHERE authority_code=? AND category='brochure' "
-                                    "AND COALESCE(is_main,FALSE) AND COALESCE(is_published,TRUE) LIMIT 1",
-                                    (r['authority_code'],)).fetchone()
         conn.execute("UPDATE pg_authority_docs SET is_published = TRUE, review_pending = FALSE, "
-                     "is_main = (COALESCE(is_main,FALSE) OR ?), updated_at = CURRENT_TIMESTAMP WHERE id=?", (main, did))
+                     "updated_at = CURRENT_TIMESTAMP WHERE id=?", (did,))
+        if r['category'] == 'brochure':
+            from pg_admin.data.main_brochures import set_main
+            first = not conn.execute("SELECT 1 FROM pg_authority_docs WHERE authority_code=? AND category='brochure' "
+                                     "AND COALESCE(is_main,FALSE) AND id <> ? LIMIT 1", (r['authority_code'], did)).fetchone()
+            if make_main or first:      # ticked, or the authority has no main bulletin yet
+                set_main(conn, did, True, main_label)
         n += 1
     return n
 
@@ -250,7 +253,8 @@ def authority_doc_publish():
             cat = _s(request.form.get('category'))
             if cat and valid_category(cat):
                 conn.execute("UPDATE pg_authority_docs SET category=? WHERE id=?", (cat, ids[0]))
-        n = _publish(conn, ids, session.get('name') or 'admin', make_main=request.form.get('make_main') == '1')
+        n = _publish(conn, ids, session.get('name') or 'admin', make_main=request.form.get('make_main') == '1',
+                     main_label=(_s(request.form.get('main_label')) or None))
         conn.commit()
         flash(f'Published {n} document(s) — doctors can see them on the dashboard now.', 'success')
     except Exception as e:
@@ -282,6 +286,29 @@ def authority_doc_category():
         try: conn.rollback()
         except Exception: pass
         flash('Could not change the category.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_authorities_admin', code=code))
+
+
+@login_required
+def authority_doc_main():
+    """Make a brochure a main bulletin (with a short label) or remove it from the mains."""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    code = _s(request.form.get('authority_code'))
+    conn = get_db()
+    try:
+        from pg_admin.data.main_brochures import set_main
+        ok, msg = set_main(conn, int(_s(request.form.get('doc_id')) or 0), request.form.get('on') == '1',
+                           _s(request.form.get('main_label')) or None)
+        conn.commit()
+        flash(msg, 'success' if ok else 'error')
+    except Exception as e:
+        logging.error("authority_doc_main: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        flash('Could not update.', 'error')
     finally:
         conn.close()
     return redirect(url_for('pg_authorities_admin', code=code))

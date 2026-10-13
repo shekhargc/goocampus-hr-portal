@@ -336,8 +336,6 @@ def news_save():
             else:
                 from pg_admin.authorities import get_authority
                 conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS is_main BOOLEAN DEFAULT FALSE")
-                conn.execute("UPDATE pg_authority_docs SET is_main = FALSE WHERE authority_code = ? AND category = 'brochure'",
-                             (code,))
                 existing = conn.execute("SELECT id FROM pg_authority_docs WHERE authority_code = ? AND category = 'brochure' "
                                         "AND file_name = ? LIMIT 1", (code, pdf_row['pdf_name'] or '')).fetchone()
                 from pg_admin.data.authority_docs_tables import ensure_pg_authority_docs
@@ -350,18 +348,24 @@ def news_save():
                         existing = {'id': _sid}
                 _ddate = (pub_dt or _dt.utcnow()).strftime('%Y-%m-%d')
                 if existing:
-                    conn.execute("UPDATE pg_authority_docs SET is_main = TRUE, title = ?, doc_date = ?, is_published = TRUE, "
+                    conn.execute("UPDATE pg_authority_docs SET title = ?, doc_date = ?, is_published = TRUE, "
                                  "review_pending = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                                  (heading, _ddate, existing['id']))
+                    _doc_id = existing['id']
                 else:
                     conn.execute(
                         "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, note, "
                         "file_name, file_data, file_content_type, is_published, uploaded_by, is_main) "
-                        "VALUES (?,?,'brochure',?,?,?,?,?,?,TRUE,?,TRUE)",
+                        "VALUES (?,?,'brochure',?,?,?,?,?,?,TRUE,?,FALSE) RETURNING id",
                         (code, (get_authority(code) or {}).get('name', ''), heading, _ddate, summary,
                          pdf_row['pdf_name'] or 'brochure.pdf', pdf_row['pdf_data'],
                          pdf_row['pdf_content_type'] or 'application/pdf', who))
-                brochure_msg = f"Also saved as the main brochure for {(get_authority(code) or {}).get('name', code)} — doctors can download it from the dashboard."
+                    _doc_id = conn.execute("SELECT id FROM pg_authority_docs WHERE authority_code = ? AND category = 'brochure' "
+                                           "ORDER BY id DESC LIMIT 1", (code,)).fetchone()['id']
+                from pg_admin.data.main_brochures import set_main
+                _ok_main, _main_msg = set_main(conn, _doc_id, True, None)     # added alongside other mains (max 3)
+                brochure_msg = (f"Also saved as a main bulletin for {(get_authority(code) or {}).get('name', code)} — doctors can download it from the dashboard. {_main_msg}"
+                                if _ok_main else f"Also saved under Brochure for {(get_authority(code) or {}).get('name', code)}, but not as a main bulletin: {_main_msg}")
         conn.commit()
         saved_ok = True
         if brochure_msg:
