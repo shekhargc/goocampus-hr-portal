@@ -92,6 +92,7 @@
             <select name="category" style="padding:5px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;">
               {% for c, label in categories %}<option value="{{ c }}" {{ 'selected' if c == d.category }}>{{ label }}</option>{% endfor %}
             </select>
+            {% if d.category == 'brochure' and d.file_name %}<label style="font-size:0.74rem;color:var(--gray-600);" title="Shown first on the dashboard as this authority's information bulletin"><input type="checkbox" name="make_main" value="1" {{ 'checked' if not has_main }}> main brochure</label>{% endif %}
             <button style="background:#166534;color:#fff;border:0;border-radius:6px;padding:5px 12px;font-weight:700;cursor:pointer;font-size:0.8rem;">Publish</button>
           </form>
           <form method="POST" action="{{ url_for('pg_authority_doc_delete') }}" onsubmit="return confirm('Remove this document? It will not be filed again.');" style="display:inline;">

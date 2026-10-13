@@ -75,11 +75,57 @@ def news_inbox():
     for it in items:
         try: it['draft'] = _json.loads(it.get('draft_json') or '{}') or None
         except Exception: it['draft'] = None
+    _flag_similar(items)
     labels = {c: s['label'] for c, s in NS.SOURCES.items()}
     return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab,
                            sources=sources, labels=labels, src=src, auth_tabs=auth_tabs,
                            doc_labels=dict(__import__('pg_admin.authorities', fromlist=['x']).DOC_CATEGORIES),
                            new_total=sum(new_by_src.values()), active_section='goocampus_in')
+
+
+_STOP = set('the a an of for to in on and or by with from is are be at as 2026 2027 2026-27 neet pg medical counselling '
+             'notice notification courses course admission admissions candidates round'.split())
+
+
+def _words(t):
+    import re
+    return {w for w in re.findall(r'[a-z0-9]+', (t or '').lower()) if len(w) > 2 and w not in _STOP}
+
+
+def _flag_similar(items):
+    """Warn when a NEW notice looks like news already published for the same authority (founder
+    2026-10-13: no duplicate news). Word overlap of headlines, within the last 120 days."""
+    news_items = [it for it in items if it.get('status') in ('new', 'document')]
+    if not news_items:
+        return
+    conn = get_db()
+    try:
+        pub = [dict(r) for r in conn.execute(
+            "SELECT id, heading, scope, COALESCE(state,'') AS state FROM pg_news WHERE deleted_at IS NULL "
+            "AND COALESCE(is_published, TRUE) AND published_at > CURRENT_TIMESTAMP - INTERVAL '120 days'").fetchall()]
+    except Exception as e:
+        logging.warning("inbox similar: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        pub = []
+    finally:
+        conn.close()
+    from pg_admin.authorities import get_authority
+    for it in news_items:
+        a = get_authority(it.get('authority_code') or '') or {}
+        mine = _words((it.get('draft') or {}).get('headline') or it.get('title'))
+        best = None
+        for n in pub:
+            same_auth = (n['scope'] == 'all_india') if it.get('authority_code') == 'mcc' else \
+                        (n['state'] or '').lower() == (a.get('state') or '').lower()
+            if not same_auth or not mine:
+                continue
+            w = _words(n['heading'])
+            score = len(mine & w) / max(1, min(len(mine), len(w)))
+            if score >= 0.6 and (not best or score > best[0]):
+                best = (score, n)
+        if best:
+            it['similar'] = {'id': best[1]['id'], 'heading': best[1]['heading']}
 
 
 @login_required

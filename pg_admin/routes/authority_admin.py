@@ -67,7 +67,9 @@ def authorities_admin():
                            authorities=all_authorities(), authority=authority,
                            categories=DOC_CATEGORIES, docs_by_cat=docs_by_cat,
                            counts=counts, waiting=waiting, waiting_by_auth=waiting_by_auth,
-                           cat_labels=dict(DOC_CATEGORIES), active_section='goocampus_in')
+                           cat_labels=dict(DOC_CATEGORIES),
+                           has_main=any(d.get('is_main') and d.get('is_published') for d in docs_by_cat.get('brochure', [])),
+                           active_section='goocampus_in')
 
 
 @login_required
@@ -208,7 +210,7 @@ def authority_doc_file_admin(doc_id):
                     headers={'Content-Disposition': f'inline; filename="{row["file_name"] or "document"}"'})
 
 
-def _publish(conn, ids, who):
+def _publish(conn, ids, who, make_main=False):
     """Publish auto-filed documents. A brochure becomes the authority's MAIN brochure when it has none."""
     n = 0
     for did in ids:
@@ -216,7 +218,11 @@ def _publish(conn, ids, who):
         if not r:
             continue
         main = False
-        if r['category'] == 'brochure':
+        if r['category'] == 'brochure' and make_main:      # replace the current main brochure
+            conn.execute("UPDATE pg_authority_docs SET is_main = FALSE WHERE authority_code=? AND category='brochure'",
+                         (r['authority_code'],))
+            main = True
+        elif r['category'] == 'brochure':
             main = not conn.execute("SELECT 1 FROM pg_authority_docs WHERE authority_code=? AND category='brochure' "
                                     "AND COALESCE(is_main,FALSE) AND COALESCE(is_published,TRUE) LIMIT 1",
                                     (r['authority_code'],)).fetchone()
@@ -244,7 +250,7 @@ def authority_doc_publish():
             cat = _s(request.form.get('category'))
             if cat and valid_category(cat):
                 conn.execute("UPDATE pg_authority_docs SET category=? WHERE id=?", (cat, ids[0]))
-        n = _publish(conn, ids, session.get('name') or 'admin')
+        n = _publish(conn, ids, session.get('name') or 'admin', make_main=request.form.get('make_main') == '1')
         conn.commit()
         flash(f'Published {n} document(s) — doctors can see them on the dashboard now.', 'success')
     except Exception as e:

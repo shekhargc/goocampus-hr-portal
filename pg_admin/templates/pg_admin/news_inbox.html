@@ -113,6 +113,7 @@
               {% if it.status == 'posted' and it.news_id %}<span style="font-size:0.8rem;color:#166534;margin-left:8px;">✓ posted{% if it.reviewed_by %} by {{ it.reviewed_by }}{% endif %}</span>{% endif %}
               {% if it.status == 'dismissed' and it.reviewed_by %}<span style="font-size:0.8rem;color:var(--gray-500);margin-left:8px;">dismissed by {{ it.reviewed_by }}</span>{% endif %}
             </div>
+            {% if it.similar %}<div style="font-size:0.78rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:4px 8px;margin-top:5px;">⚠️ Looks similar to already-published news #{{ it.similar.id }}: “{{ it.similar.heading }}” — check before posting (Dismiss if it's the same).</div>{% endif %}
             {% if it.history_note %}<div style="font-size:0.76rem;color:#b45309;margin-top:3px;">↩ {{ it.history_note }}</div>{% endif %}
           </td>
           <td class="nb-hide-sm" style="color:var(--gray-600);font-size:0.8rem;">{{ labels.get(it.source_code, it.source_code) }}</td>
