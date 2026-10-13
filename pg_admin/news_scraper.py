@@ -420,6 +420,7 @@ def split_title_date(raw):
         title = re.sub(r'[\s.,:;\-–(\[]+$', '', title).strip()
         if title.endswith(')') and title.count(')') > title.count('('):
             title = title[:-1]
+    title = re.sub(r'\s*[(\[]?\s*Dated?\s*[-:–]?\s*[)\]]?\s*$', '', title, flags=re.I).strip()  # leftover "( Dated )"
     return (title or raw.strip()), d
 
 
