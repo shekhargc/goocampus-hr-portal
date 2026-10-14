@@ -197,3 +197,7 @@ def register_operations_modules(app):
     # (plab / consulting / uae / australia / portfolio / training).
     from . import call_notes_report
     call_notes_report.register_routes(app)
+
+    # UK PGCP contracts register + bulk zip (admins only; founder 2026-10-14)
+    from . import uk_contracts
+    uk_contracts.register_routes(app)
