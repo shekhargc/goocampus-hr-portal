@@ -347,3 +347,28 @@ def api_news_inbox_status():
     except Exception as e:
         out['api_error'] = str(e)[:300]
     return jsonify(out)
+
+
+def api_cutoffs_dump():
+    """GET /api/pg/news-inbox/cutoffs-dump?year=2025 (X-News-Key) — READ-ONLY export of the stored
+    cut-off rows (the same public data the predictor serves) so an updated Excel can be checked
+    against what is ONLINE before re-uploading (founder 2026-10-14)."""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    try:
+        year = int(request.args.get('year') or 0)
+    except ValueError:
+        year = 0
+    from pg_admin.routes.predictor_admin import _FIELD_MAP
+    cols = [c for _k, c in _FIELD_MAP] + ['authority_type', 'degree_group', 'is_reference', 'closing_rank']
+    conn = get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            f"SELECT {', '.join(cols)}, created_at FROM pg_cutoffs WHERE year = ? ORDER BY id", (year,)).fetchall()]
+    finally:
+        conn.close()
+    for r in rows:
+        for k, v in list(r.items()):
+            if v is not None and not isinstance(v, (int, float, str)):
+                r[k] = float(v) if hasattr(v, 'as_integer_ratio') or type(v).__name__ == 'Decimal' else str(v)
+    return jsonify({'ok': True, 'year': year, 'count': len(rows), 'columns': cols, 'rows': rows})
