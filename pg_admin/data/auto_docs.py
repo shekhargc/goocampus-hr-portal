@@ -63,6 +63,14 @@ def file_from_inbox(conn, inbox_id):
     file_reg_lists(conn, r, dj)
     cat = (doc.get('category') or '').strip()
     code = (NS.SOURCES.get(r['source_code']) or {}).get('authority_code')
+    not_pg = (dj.get('summary') or '').strip().lower().startswith('not a pg medical')
+    if (doc.get('news') is False or not_pg) and not valid_category(cat) and r['status'] == 'new':
+        # not news AND nothing to file (a duplicate / superseded / non-PG notice) → set aside so it
+        # never sits in New looking postable (founder 2026-10-14: duplicates got published)
+        conn.execute("UPDATE pg_news_inbox SET status = 'dismissed', reviewed_by = 'AI (auto)', "
+                     "reviewed_at = CURRENT_TIMESTAMP, history_note = ? WHERE id = ?",
+                     ((dj.get('summary') or 'Duplicate / superseded — set aside automatically')[:300], inbox_id))
+        return 'dismissed'
     if not code or not valid_category(cat):
         return 'skip'
     news_only_doc = doc.get('news') is False
