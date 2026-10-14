@@ -10,6 +10,9 @@ import logging
 from datetime import date
 
 EVENT_TYPES = [
+    # a whole counselling round's window when the notice gives only that (e.g. the national schedule's
+    # "State counselling Round-1: 21 Oct – 2 Nov") — founder 2026-10-14, Gujarat back-check
+    ('round_window', 'Counselling round'),
     ('registration', 'Registration & fee payment'),
     ('verification', 'Document verification / slot booking'),
     ('choice_filling', 'Choice filling'),
@@ -109,7 +112,15 @@ def clean_events(raw):
             continue
         en = _d(e.get('end'))
         ev = e.get('event') if e.get('event') in EVENT_LABELS else 'other'
-        out.append({'round': norm_round(e.get('round')),
+        rnd = norm_round(e.get('round'))
+        if not rnd:      # safety net: the date's own quote/label names the round but the AI left it blank
+            import re as _re
+            m = _re.search(r'\b(?:round|phase)[\s-]*(?:\d|i{1,3}v?|iv|one|two|three|four|first|second|third|fourth)\b'
+                           r'|special\s+stray|stray(?:\s+vacancy)?(?:\s+round)?|mop[\s-]*up',
+                           f"{e.get('label') or ''} {e.get('quote') or ''}", _re.I)
+            if m:
+                rnd = norm_round(m.group(0).replace('phase', 'round').replace('Phase', 'round'))
+        out.append({'round': rnd,
                     'event': ev,
                     'label': (str(e.get('label') or '').strip() or EVENT_LABELS[ev])[:120],
                     'start': s.isoformat(), 'end': en.isoformat() if en and en >= s else '',
@@ -154,6 +165,19 @@ def merge_events(conn, authority_code, events, news_id=None, inbox_id=None, noti
         k = _key(e['round'], e['event'], e['label'])
         s0, e0 = _d(e['start']), _d(e['end']) if e.get('end') else None
         row = existing.get(k)
+        if not row:
+            # the same step re-classified (e.g. 'other' → 'round_window'): same round + same label →
+            # update that entry's step type instead of adding a second one
+            for k2, r2 in list(existing.items()):
+                if (k2[0] == (e['round'] or '').strip() and _norm_label(r2.get('label')) == _norm_label(e['label'])
+                        and r2.get('event') != e['event']):
+                    conn.execute("UPDATE pg_counselling_events SET event = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP "
+                                 "WHERE id = ?", (e['event'], who, r2['id']))
+                    r2 = dict(r2, event=e['event'])
+                    existing.pop(k2, None)
+                    existing[k] = r2
+                    row = r2
+                    break
         if not row:
             new_id = conn.execute(
                 "INSERT INTO pg_counselling_events (authority_code, round, event, label, start_date, end_date, "

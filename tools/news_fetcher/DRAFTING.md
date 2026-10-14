@@ -79,14 +79,29 @@ arrives — no posting needed):
   {"round": "Round 2", "event": "registration",  ...}
 ]
 ```
-- `event` is one of: registration | verification | choice_filling | choice_locking | payment |
-  seat_processing | result | reporting | other. `round`: "Round 1", "Round 2", "Round 3", "Round 4",
+- `event` is one of: round_window | registration | verification | choice_filling | choice_locking | payment |
+  seat_processing | result | reporting | other.
+  `round_window` = a WHOLE counselling round given only as a window (e.g. "State Counselling Round-1:
+  21 Oct – 2 Nov"). Use it instead of "other" so the round shows on the stage bar. `round`: "Round 1", "Round 2", "Round 3", "Round 4",
   "Stray", "Mop-up", "Special", or "" if not round-specific (e.g. session start → event "other").
 - `start` / `end` = YYYY-MM-DD; `end` only for a range. Only dates the notice states — never guess.
 - One entry per step per round. Omit `events` if the notice has no schedule.
 - The `event` types describe THIS authority's own process. Dates in the notice that belong to a
   DIFFERENT process (e.g. an MCC notice listing the state-quota counselling windows / state joining
   dates) use event "other" with a clear label ("State quota counselling window (all states)").
+
+DATE SELF-CHECK — before writing the draft, go through EVERY date in the notice and ask (founder 2026-10-14):
+  1. Which ROUND is it for? If the table row, heading or sentence names a round (Round-1, Phase-I, Mop-up,
+     Stray…), set `round`. Leave it "" only for steps that come BEFORE the rounds (registration, document
+     verification, PwD boards) or that apply to the whole season.
+  2. Which STEP is it? A whole-round window → `round_window`; registration / choice filling / locking /
+     result / reporting/joining / payment → those types. Use "other" only for things that are not one of
+     these (and for another body's dates, e.g. MCC/AIQ dates in a state notice, management quota).
+  3. Keep the TIME of day when stated ("till 5 PM" → time "5 PM"), for the last day of a range.
+  4. National schedules re-posted by a STATE (the NMC/MCC "AIQ and State counselling schedule" table): put
+     ONLY the "State Counselling" column into the state's calendar — each round as `round_window` +
+     its "Last date of joining" as `reporting` with that round. Never add the AIQ/MCC columns to a state.
+  5. Re-read your `events` against the quotes: every event's round + type must match its quote.
 
 HOW THE CALENDAR USES `events` (it MERGES — read this):
 - Each step is identified by authority + `round` + `event` (+ `label` when event is "other").

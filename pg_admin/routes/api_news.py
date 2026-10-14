@@ -422,9 +422,9 @@ def api_pg_calendar():
         conn.close()
 
 
-STEP_ORDER = ['registration', 'verification', 'choice_filling', 'choice_locking', 'payment',
+STEP_ORDER = ['round_window', 'registration', 'verification', 'choice_filling', 'choice_locking', 'payment',
               'seat_processing', 'result', 'reporting']
-BAR_STEPS = {'registration': 'Registration', 'verification': 'Document verification',
+BAR_STEPS = {'round_window': 'Counselling round', 'registration': 'Registration', 'verification': 'Document verification',
              'choice_filling': 'Choice filling', 'result': 'Result', 'reporting': 'Reporting / joining'}
 
 

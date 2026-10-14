@@ -182,6 +182,16 @@ def api_news_inbox_ingest():
             if pdf:
                 sets += ["pdf_data = COALESCE(pdf_data, ?)", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
                 vals += [pdf, pdf_name]
+            if b.get('force_events') and draft and draft.get('events') and row['draft_json'] and not sets:
+                # corrected calendar dates for an already-received notice (operator back-check, 2026-10-14):
+                # replace ONLY the draft's events; the calendar merge then updates the entries in place
+                try:
+                    old = json.loads(row['draft_json']) or {}
+                except Exception:
+                    old = {}
+                if isinstance(old, dict):
+                    old['events'] = draft['events']
+                    sets.append("draft_json = ?"); vals.append(json.dumps(old))
             if b.get('revive') and row['status'] == 'seen' and draft:
                 # a notice set aside as "already seen" on a source's first run, brought back on
                 # the founder's request (2026-10-13) — it lands in New like any fresh notice
