@@ -113,6 +113,43 @@ def _sources(conn):
     return clients, src, digital
 
 
+def _contacts(conn):
+    """{client_id: (phones[], emails[])} — every number / email we hold for each UK client (client record,
+    their registration form, their login account), de-duplicated; the client record's own values first."""
+    out = {}
+    def add(cid, phones, emails):
+        ph, em = out.setdefault(cid, ([], []))
+        for v in phones:
+            d = re.sub(r'\D', '', str(v or ''))
+            if len(d) >= 7 and not any(re.sub(r'\D', '', x)[-10:] == d[-10:] for x in ph):
+                ph.append(str(v).strip())
+        for v in emails:
+            v = (v or '').strip()
+            if '@' in v and v.lower() not in [x.lower() for x in em]:
+                em.append(v)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, registration_number, mobile, whatsapp1, whatsapp2, email FROM plab_clients "
+        "WHERE COALESCE(pathway,'plab') = 'plab'").fetchall()]
+    by_rn = {}
+    for r in rows:
+        add(r['id'], [r.get('mobile'), r.get('whatsapp1'), r.get('whatsapp2')], [r.get('email')])
+        if r.get('registration_number'):
+            by_rn[r['registration_number'].strip().upper()] = r['id']
+    try:
+        for r in conn.execute(
+                "SELECT UPPER(TRIM(cr.registration_number)) AS rn, cr.mobile, cr.whatsapp, cr.email, "
+                "ca.mobile AS acc_mobile, ca.email AS acc_email FROM client_registrations cr "
+                "LEFT JOIN client_accounts ca ON ca.id = cr.account_id "
+                "WHERE cr.registration_number IS NOT NULL ORDER BY cr.id DESC").fetchall():
+            cid = by_rn.get(r['rn'] or '')
+            if cid:
+                add(cid, [r['mobile'], r['whatsapp'], r['acc_mobile']], [r['email'], r['acc_email']])
+    except Exception as e:
+        logging.warning("uk contracts contacts: %s", e)
+        conn.rollback()
+    return out
+
+
 def _kv_get(conn):
     try:
         conn.execute("CREATE TABLE IF NOT EXISTS pg_kv (key TEXT PRIMARY KEY, value TEXT DEFAULT '', "
@@ -137,6 +174,7 @@ def _rows(conn):
     clients, src, digital = _sources(conn)
     job = _kv_get(conn)
     verified = job.get('verified') or {}
+    contacts = _contacts(conn)
     rows = []
     for c in clients:
         rn = (c.get('registration_number') or '').strip()
@@ -147,6 +185,7 @@ def _rows(conn):
             'has_contract': bool(s), 'where': ', '.join(dict.fromkeys(x['where'] for x in s)),
             'digital': rn.upper() in digital,
             'verified': verified.get(str(c['id'])),       # True/False after a zip build, else None
+            'phones': contacts.get(c['id'], ([], []))[0], 'emails': contacts.get(c['id'], ([], []))[1],
         })
     return rows, job
 
@@ -190,18 +229,27 @@ def contracts_download():
         conn.close()
     xs = lambda v: ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
     wb = Workbook(); ws = wb.active; ws.title = 'UK PGCP Contracts'
-    hdr = ['Client Name', 'Registration Number', 'Status', 'Current Stage', 'Contract Available',
-           'Contract Location', 'Digitally Agreed in Portal', 'File Checked in Storage']
+    hdr = ['Client Name', 'Registration Number', 'Mobile 1', 'Mobile 2', 'Email 1', 'Email 2', 'Status',
+           'Current Stage', 'Contract Available', 'Contract Location', 'Digitally Agreed in Portal',
+           'File Checked in Storage', 'Other Contacts']
     ws.append(hdr)
     for r in rows:
         chk = '' if r['verified'] is None else ('Yes' if r['verified'] else 'MISSING')
-        ws.append([xs(r['name']), xs(r['registration_number']), xs(r['status']), xs(r['stage']),
-                   'Yes' if r['has_contract'] else 'No', xs(r['where']), 'Yes' if r['digital'] else 'No', chk])
+        ph, em = r['phones'], r['emails']
+        extra = ', '.join(ph[2:] + em[2:])
+        ws.append([xs(r['name']), xs(r['registration_number']),
+                   xs(ph[0] if ph else ''), xs(ph[1] if len(ph) > 1 else ''),
+                   xs(em[0] if em else ''), xs(em[1] if len(em) > 1 else ''),
+                   xs(r['status']), xs(r['stage']), 'Yes' if r['has_contract'] else 'No', xs(r['where']),
+                   'Yes' if r['digital'] else 'No', chk, xs(extra)])
+    for row in ws.iter_rows(min_row=2, min_col=3, max_col=4):
+        for cell in row:
+            cell.number_format = '@'
     for cell in ws[1]:
         cell.font = Font(bold=True, color='FFFFFF'); cell.fill = PatternFill('solid', fgColor='0F1B33')
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     ws.freeze_panes = 'C2'; ws.auto_filter.ref = ws.dimensions
-    for i, w in enumerate([28, 22, 14, 22, 12, 34, 14, 14], 1):
+    for i, w in enumerate([28, 22, 16, 16, 30, 30, 14, 22, 12, 34, 14, 14, 30], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     out = io.BytesIO(); wb.save(out); out.seek(0)
     return send_file(out, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -224,7 +272,9 @@ def _build_zip(who):
         fd, tmp = tempfile.mkstemp(suffix='.zip'); os.close(fd)
         verified, missing, added = {}, [], 0
         manifest = io.StringIO()
-        manifest.write('Client Name,Registration Number,Status,Current Stage,Contract Available,File in zip,Location,Note\n')
+        contacts = _contacts(conn)
+        manifest.write('Client Name,Registration Number,Mobile 1,Mobile 2,Email 1,Email 2,Status,Current Stage,'
+                       'Contract Available,File in zip,Location,Note\n')
         with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as z:
             for i, c in enumerate(clients, 1):
                 rn = (c.get('registration_number') or '').strip()
@@ -257,7 +307,9 @@ def _build_zip(who):
                 elif src.get(c['id']):
                     note = note or 'on record but the file was not found in storage'
                     missing.append(rn or str(c['id']))
-                row = [_name(c), rn, c.get('account_status') or '', c.get('current_stage') or '',
+                ph, em = contacts.get(c['id'], ([], []))
+                row = [_name(c), rn, ph[0] if ph else '', ph[1] if len(ph) > 1 else '', em[0] if em else '',
+                       em[1] if len(em) > 1 else '', c.get('account_status') or '', c.get('current_stage') or '',
                        'Yes' if src.get(c['id']) else 'No', fname, where, note]
                 manifest.write(','.join('"' + str(x).replace('"', "'") + '"' for x in row) + '\n')
                 if i % 25 == 0:
