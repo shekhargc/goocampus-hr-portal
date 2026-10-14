@@ -5,11 +5,11 @@
 {% block ops_content %}
 <div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;">
-        <a href="/operations/payments" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">← Back to All Payments</a>
+        <a href="{{ back_url or '/operations/payments' }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">← Back to {{ (pathway_name ~ ' ') if pathway_name else 'All ' }}Payments</a>
     </div>
 
     <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
-        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit Payment{% else %}Add Payment{% endif %}</h1>
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit Payment{% else %}Add Payment{% if pathway_name and not record %} — {{ pathway_name }}{% endif %}{% endif %}</h1>
         <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
             {% if record %}
             Update the payment details.
@@ -178,7 +178,7 @@
     });
 
     function fetchSuggestions(q) {
-        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q) + '&pathway=' + encodeURIComponent('{{ pay_pathway or 'plab' }}'))
             .then(r => r.json())
             .then(data => {
                 items = data; highlightIdx = -1;

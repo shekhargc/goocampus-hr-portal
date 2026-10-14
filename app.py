@@ -34282,10 +34282,30 @@ def ops_payments_list():
         active_ops_page='payments')
 
 
+# Add Payment serves EVERY pathway (founder 2026-10-14: the AMC/Consulting/… "Add Payment" opened the UK
+# form whose client search only found UK clients). ?pathway= scopes the search, sidebar, back link + redirect.
+_PAY_PATHWAYS = {'plab': ('UK / PLAB Pathway', 'payments', '/operations/payments'),
+                 'australia': ('AMC Pathway', 'australia-payments', '/operations/australia/payments'),
+                 'consulting': ('Standard Consulting', 'consulting-payments', '/operations/consulting/payments'),
+                 'portfolio': ('Portfolio Pathway', 'portfolio-payments', '/operations/portfolio/payments'),
+                 'training': ('Training Pathway', 'training-payments', '/operations/training/payments'),
+                 'uae': ('UAE Pathway', 'uae-payments', '/operations/uae/payments')}
+
+
+_PAYMENT_LIST_URL = {k: v[2] for k, v in _PAY_PATHWAYS.items()}
+
+
+def _pay_pathway():
+    pw = (request.args.get('pathway') or 'plab').strip().lower()
+    return pw if pw in _PAY_PATHWAYS else 'plab'
+
+
 @app.route('/operations/payments/add', methods=['GET', 'POST'])
 @admin_required
 def ops_payments_add():
     conn = get_db()
+    _pay_pw = _pay_pathway()
+    _pay_name, _pay_page, _pay_list = _PAY_PATHWAYS[_pay_pw]
     if request.method == 'POST':
         registration_number = request.form.get('registration_number')
         payment_date = request.form.get('payment_date')
@@ -34317,9 +34337,9 @@ def ops_payments_add():
             conn.commit()
             flash('Payment added successfully', 'success')
             next_url = request.args.get('next')
-            if next_url:
+            if next_url and next_url.startswith('/'):
                 return redirect(next_url)
-            return redirect(url_for('ops_payments_list'))
+            return redirect(_PAYMENT_LIST_URL.get(_pw, _pay_list))
         except Exception as e:
             logging.error(f"ops_payments_add: {e}")
             flash('Error adding payment', 'error')
@@ -34332,7 +34352,8 @@ def ops_payments_add():
     return render_template('ops_payments_form.html',
         clients=clients, record=None, pre_reg=pre_reg,
         payment_methods=get_lookup_options('payment_method'), instalment_options=get_lookup_options('instalment'),
-        active_ops_page='payments')
+        pay_pathway=_pay_pw, pathway_name=_pay_name, back_url=_pay_list,
+        active_ops_page=_pay_page, active_pathway=_pay_pw)
 
 
 @app.route('/operations/payments/<int:record_id>/edit', methods=['GET', 'POST'])
