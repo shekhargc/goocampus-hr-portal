@@ -1001,6 +1001,12 @@
                 <span class="ops-nav-text">Contracts</span>
             </a>
             {% endif %}
+            {% if session.get('is_admin') %}
+            <a href="/operations/plab/expenses" class="ops-nav-item {% if active_ops_page == 'plab-expenses' %}active{% endif %}" data-tooltip="Expenses">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                <span class="ops-nav-text">Expenses</span>
+            </a>
+            {% endif %}
 
             <!-- Client Management -->
             <div class="ops-nav-group-label">Client Management</div>

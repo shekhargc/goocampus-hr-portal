@@ -201,3 +201,7 @@ def register_operations_modules(app):
     # UK PGCP contracts register + bulk zip (admins only; founder 2026-10-14)
     from . import uk_contracts
     uk_contracts.register_routes(app)
+
+    # UK PGCP service price list + per-client expenses (admins only; founder 2026-10-14)
+    from . import uk_expenses
+    uk_expenses.register_routes(app)
