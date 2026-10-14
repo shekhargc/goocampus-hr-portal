@@ -103,6 +103,14 @@ DATE SELF-CHECK — before writing the draft, go through EVERY date in the notic
      its "Last date of joining" as `reporting` with that round. Never add the AIQ/MCC columns to a state.
   5. Re-read your `events` against the quotes: every event's round + type must match its quote.
 
+RE-UPLOADS / NEW VERSIONS (founder 2026-10-14 — Gujarat): authorities often re-upload a notice with small
+changes (a new phone number, an added document, changed board members). NEVER call such a file a
+"duplicate". Compare it with the earlier version (text of both PDFs): if anything differs, it is an UPDATE —
+headline says what changed ("Updated eligibility list adds NOC for in-service candidates"), the article
+names the change, and the EARLIER version is the one that gets `"document": {"category": "none", "news": false}`
+with summary "Superseded by the <date> version — <what changed>". Only a byte-identical / text-identical
+re-upload is a duplicate.
+
 HOW THE CALENDAR USES `events` (it MERGES — read this):
 - Each step is identified by authority + `round` + `event` (+ `label` when event is "other").
   The same step from a later notice with the SAME dates changes nothing; with DIFFERENT dates it
