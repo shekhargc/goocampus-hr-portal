@@ -1,0 +1,94 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}UK PGCP Expenses &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .page-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;}
+  .page-head h1{margin:0;font-size:1.5rem;color:var(--navy);font-weight:700;}
+  .page-head .sub{font-size:.85rem;color:var(--gray-500);margin-top:.25rem;max-width:760px;}
+  .btns{display:flex;gap:.5rem;flex-wrap:wrap;}
+  .dl-btn{display:inline-flex;align-items:center;gap:7px;background:#0F1B33;color:#fff;border:0;border-radius:.55rem;padding:.6rem 1.1rem;font-size:.86rem;font-weight:600;text-decoration:none;cursor:pointer;}
+  .dl-btn.orange{background:var(--orange);}
+  .note{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.7rem 1rem;margin-bottom:1rem;font-size:.84rem;color:var(--gray-600);}
+  .stats{display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem;}
+  .stat{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.7rem 1rem;min-width:150px;font-size:.8rem;color:var(--gray-500);}
+  .stat b{display:block;font-size:1.25rem;color:var(--navy);}
+  .filter-bar{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.7rem 1rem;display:flex;flex-wrap:wrap;gap:.7rem;align-items:center;margin-bottom:1rem;font-size:.85rem;}
+  .filter-bar input[type=text]{padding:.45rem .6rem;border:1px solid var(--gray-300);border-radius:.4rem;min-width:220px;}
+  .filter-bar .btn{padding:.45rem .9rem;font-weight:600;border:0;border-radius:.4rem;cursor:pointer;background:var(--orange);color:#fff;}
+  .ops-main{overflow-x:hidden;}
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
+  table.t{border-collapse:collapse;width:100%;font-size:13px;}
+  table.t th{background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:9px 11px;text-align:left;white-space:nowrap;}
+  table.t td{padding:8px 11px;border-bottom:1px solid var(--gray-100);color:var(--navy);white-space:nowrap;}
+  td.num,th.num{text-align:right;}
+  .neg{color:#b91c1c;font-weight:700;} .muted{color:var(--gray-500);font-size:12px;} .warn{color:#b45309;font-weight:600;}
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+  <div>
+    <h1>UK PGCP — Client Expenses</h1>
+    <div class="sub">What GooCampus has spent on each client's services, against what the client has paid (ex-GST).
+      Amounts use the actual ₹ where recorded, otherwise your price list. Admins only.</div>
+  </div>
+  <div class="btns">
+    <a class="dl-btn orange" href="{{ url_for('ops_plab_service_prices') }}">🏷 Price list / upload prices</a>
+    <a class="dl-btn" href="{{ url_for('ops_plab_expenses_download') }}?q={{ q|urlencode }}{{ status_qs }}">⬇ Download (Excel)</a>
+  </div>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, m in msgs %}<div class="note" style="border-color:{{ '#86efac' if cat == 'success' else '#fca5a5' }};">{{ m }}</div>{% endfor %}
+{% endwith %}
+
+{% if not n_prices %}
+<div class="note" style="border-color:#fdba74;background:#fff7ed;">⚠️ <b>No prices yet.</b> Upload the Unique Services Excel with your prices
+  (<a href="{{ url_for('ops_plab_service_prices') }}">Price list</a>) — until then only actual recorded amounts count.</div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat"><b>{{ clients|length }}</b>clients</div>
+  <div class="stat"><b>₹{{ '{:,.0f}'.format(tot.received) }}</b>received (ex-GST)</div>
+  <div class="stat"><b>₹{{ '{:,.0f}'.format(tot.spent) }}</b>spent by GooCampus</div>
+  <div class="stat"><b class="{{ 'neg' if tot.balance < 0 }}">₹{{ '{:,.0f}'.format(tot.balance) }}</b>balance</div>
+  <div class="stat"><b class="warn">₹{{ '{:,.0f}'.format(tot.estimate) }}</b>estimate — "paid by" not set</div>
+  <div class="stat"><b class="warn">{{ tot.unpriced }}</b>service lines not priced</div>
+</div>
+
+<form class="filter-bar" method="GET">
+  <input type="hidden" name="status_set" value="1">
+  <span class="muted">Status:</span>
+  {% for s in statuses_all %}<label><input type="checkbox" name="status" value="{{ s }}" {{ 'checked' if s in picked }}> {{ s }}</label>{% endfor %}
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name / reg no.">
+  <button class="btn">Apply</button>
+  <span class="muted">(none ticked = all statuses)</span>
+</form>
+
+<div class="table-wrap">
+  <table class="t">
+    <thead><tr><th>Client Name</th><th>Registration No.</th><th>Status</th><th>Stage</th>
+      <th class="num">Received (ex-GST)</th><th class="num">Spent</th><th class="num">Balance</th>
+      <th class="num">Estimate</th><th class="num">Lines</th><th class="num">Not priced</th></tr></thead>
+    <tbody>
+    {% for c in clients %}
+      <tr>
+        <td><a href="{{ url_for('ops_plab_expense_client', client_id=c.client_id) }}" style="color:#2952a3;font-weight:600;text-decoration:none;">{{ c.name }}</a></td>
+        <td>{{ c.registration_number }}</td><td>{{ c.status or '—' }}</td><td>{{ c.stage or '—' }}</td>
+        <td class="num">₹{{ '{:,.0f}'.format(c.received) }}</td>
+        <td class="num">₹{{ '{:,.0f}'.format(c.spent) }}</td>
+        <td class="num {{ 'neg' if c.balance < 0 }}">₹{{ '{:,.0f}'.format(c.balance) }}</td>
+        <td class="num {{ 'warn' if c.estimate }}">{{ '₹{:,.0f}'.format(c.estimate) if c.estimate else '—' }}</td>
+        <td class="num">{{ c.lines }}</td>
+        <td class="num {{ 'warn' if c.unpriced }}">{{ c.unpriced or '—' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="10" class="muted" style="text-align:center;padding:20px;">No clients match.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted" style="margin-top:.8rem;">Balance = received (ex-GST) − spent. The consulting fee and welcome kit are not deducted yet.
+  "Estimate" = services with a price but no "Paid by" set — set it on the Services Detail page to move them into Spent (GooCampus) or ₹0 (client).</p>
+{% endblock %}

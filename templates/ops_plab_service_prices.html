@@ -1,0 +1,85 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}UK PGCP Service Price List &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .page-head h1{margin:0 0 .3rem;font-size:1.5rem;color:var(--navy);font-weight:700;}
+  .card{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:1rem 1.2rem;margin-bottom:1rem;font-size:.86rem;color:var(--gray-600);}
+  .dl-btn{display:inline-flex;align-items:center;gap:7px;background:#0F1B33;color:#fff;border:0;border-radius:.55rem;padding:.55rem 1rem;font-size:.85rem;font-weight:600;text-decoration:none;cursor:pointer;}
+  .dl-btn.orange{background:var(--orange);} .dl-btn.green{background:#166534;}
+  .ops-main{overflow-x:hidden;}
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;max-height:70vh;}
+  table.t{border-collapse:collapse;width:100%;font-size:13px;}
+  table.t th{position:sticky;top:0;background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:9px 11px;text-align:left;white-space:nowrap;}
+  table.t td{padding:7px 11px;border-bottom:1px solid var(--gray-100);color:var(--navy);vertical-align:top;}
+  td.num{text-align:right;white-space:nowrap;}
+  .new{color:#166534;font-weight:700;} .changed{color:#b45309;font-weight:700;} .same{color:var(--gray-500);}
+  .muted{color:var(--gray-500);font-size:12px;}
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+  <a href="{{ url_for('ops_plab_expenses') }}" class="muted" style="text-decoration:none;">← Client expenses</a>
+  <h1>UK PGCP — Service Price List</h1>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, m in msgs %}<div class="card" style="border-color:{{ '#86efac' if cat == 'success' else '#fca5a5' }};">{{ m }}</div>{% endfor %}
+{% endwith %}
+
+{% if preview %}
+<div class="card" style="border:2px solid #fdba74;">
+  <b style="color:#9a3412;font-size:1rem;">Preview of “{{ preview.file }}” — nothing is saved yet</b><br>
+  <span class="new">{{ preview.new }} new</span> · <span class="changed">{{ preview.changed }} changed</span> ·
+  <span class="same">{{ preview.same }} unchanged</span>
+  {% if preview.unmatched %} · <span class="changed">{{ preview.unmatched }} priced row(s) match no delivered service right now</span>{% endif %}
+  {% if preview.problems %}<div style="margin-top:.5rem;color:#b91c1c;">{{ preview.problems|length }} row(s) skipped:
+    <ul style="margin:.3rem 0 0 1rem;">{% for p in preview.problems[:20] %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
+  <form method="POST" action="{{ url_for('ops_plab_service_prices_apply', upload_id=preview.id) }}" style="margin-top:.7rem;display:flex;gap:.5rem;">
+    <button class="dl-btn green" {{ 'disabled' if not (preview.new or preview.changed) }}>✓ Apply {{ preview.new + preview.changed }} price(s)</button>
+    <a class="dl-btn" style="background:#94a3b8;" href="{{ url_for('ops_plab_service_prices') }}">Cancel</a>
+  </form>
+  <div class="table-wrap" style="margin-top:.8rem;max-height:45vh;">
+    <table class="t"><thead><tr><th>Section</th><th>Service</th><th>Provider</th><th style="text-align:right;">Old ₹</th><th style="text-align:right;">New ₹</th><th>Change</th><th style="text-align:right;">Lines it covers</th></tr></thead>
+    <tbody>{% for it in preview.items if it.change != 'same' %}
+      <tr><td>{{ it.section }}</td><td>{{ it.service }}</td><td class="muted">{{ it.provider or 'any provider' }}</td>
+        <td class="num muted">{{ '₹{:,.0f}'.format(it.old) if it.old is not none else '—' }}</td>
+        <td class="num"><b>₹{{ '{:,.0f}'.format(it.price) }}</b></td><td class="{{ it.change }}">{{ it.change }}</td>
+        <td class="num {{ 'changed' if not it.lines }}">{{ it.lines }}</td></tr>
+    {% endfor %}</tbody></table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <b style="color:var(--navy);">How to set prices</b>
+  <ol style="margin:.4rem 0 .6rem 1.1rem;padding:0;">
+    <li>Download the <a href="/operations/plab/services-unique/download">Unique Services Excel</a> (one row per service + provider; prices already set are pre-filled)
+      — or <a href="/operations/plab/services-unique/download?by=service">by service</a> for one price per service whatever the provider.</li>
+    <li>Fill the <b>“Your price (₹)”</b> column with what GooCampus pays for that service. Leave blank to skip a row.</li>
+    <li>Upload it below, check the preview, then <b>Apply</b>.</li>
+  </ol>
+  <form method="POST" action="{{ url_for('ops_plab_service_prices_upload') }}" enctype="multipart/form-data" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
+    <input type="file" name="file" accept=".xlsx,.xlsm" required>
+    <button class="dl-btn orange">⬆ Upload &amp; preview</button>
+  </form>
+  <p class="muted" style="margin:.5rem 0 0;">A price for a specific provider beats the service's general price. Re-uploading updates prices (history is kept).</p>
+</div>
+
+<div class="card" style="padding:.6rem 1rem;"><b style="color:var(--navy);">Current price list</b> — {{ prices|length }} price(s)</div>
+<div class="table-wrap">
+  <table class="t">
+    <thead><tr><th>Section</th><th>Service</th><th>Provider</th><th style="text-align:right;">Price</th><th>Updated</th></tr></thead>
+    <tbody>
+    {% for p in prices %}
+      <tr><td>{{ p.section }}</td><td>{{ p.service_label or p.service_key }}</td><td class="muted">{{ p.provider_label or 'any provider' }}</td>
+        <td class="num"><b>₹{{ '{:,.0f}'.format(p.price|float) }}</b></td>
+        <td class="muted">{{ p.updated_by }} · {{ (p.updated_at|string)[:16] }}</td></tr>
+    {% else %}
+      <tr><td colspan="5" class="muted" style="text-align:center;padding:18px;">No prices yet — upload the Excel above.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -30808,9 +30808,18 @@ def ops_plab_services_unique_download():
     wb = Workbook(write_only=True)
     ws = _svc_xl_sheet(wb, 'Unique services', headers, [22, 40, 36, 12, 10, 14, 12, 14, 12, 12, 14],
                        freeze='D2')
+    # pre-fill prices already set (UK price list) so the Excel round-trips — founder 2026-10-14
+    try:
+        from routes.operations.uk_expenses import current_price_lookup
+        _pc = get_db(); _prices = current_price_lookup(_pc); _pc.close()
+    except Exception:
+        _prices = {}
     for g in items:
+        _sk, _sv = g['section_key'], _svc_norm_key(g['service'])
+        _pp = _svc_norm_key(g['provider']) if by == 'provider' else ''
+        _price = _prices.get((_sk, _sv, _pp), _prices.get((_sk, _sv, ''), ''))
         ws.append([_svc_xl_value(g['section']), _svc_xl_value(g['service']), _svc_xl_value(g['provider']),
-                   g['lines'], g['clients'], g['gc'], g['cl'], g['ns'], g['first'], g['last'], ''])
+                   g['lines'], g['clients'], g['gc'], g['cl'], g['ns'], g['first'], g['last'], _price])
     _svc_xl_filter(ws, len(headers), len(items))
     return _svc_xl_send(wb, 'PLAB_UK_Unique_Services' + ('_by_service' if by == 'service' else ''))
 

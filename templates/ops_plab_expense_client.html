@@ -1,0 +1,72 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}{{ name }} — Expenses &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .page-head h1{margin:0;font-size:1.4rem;color:var(--navy);font-weight:700;}
+  .note{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.7rem 1rem;margin:1rem 0;font-size:.84rem;color:var(--gray-600);}
+  .stats{display:flex;gap:.8rem;flex-wrap:wrap;margin:1rem 0;}
+  .stat{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;padding:.7rem 1rem;min-width:150px;font-size:.8rem;color:var(--gray-500);}
+  .stat b{display:block;font-size:1.25rem;color:var(--navy);}
+  .ops-main{overflow-x:hidden;}
+  .table-wrap{overflow-x:auto;border:1px solid var(--gray-200);border-radius:.75rem;background:#fff;}
+  table.t{border-collapse:collapse;width:100%;font-size:13px;}
+  table.t th{background:#0F1B33;color:#fff;font-weight:600;font-size:12px;padding:9px 11px;text-align:left;white-space:nowrap;}
+  table.t td{padding:8px 11px;border-bottom:1px solid var(--gray-100);color:var(--navy);vertical-align:top;}
+  td.num{text-align:right;white-space:nowrap;}
+  .b-actual{color:#166534;font-weight:700;} .b-price{color:#0f1b33;} .b-estimate,.b-unpriced{color:#b45309;font-weight:600;} .b-client{color:var(--gray-500);}
+  .muted{color:var(--gray-500);font-size:12px;} .neg{color:#b91c1c;font-weight:700;}
+  form.amt{display:inline-flex;gap:4px;align-items:center;}
+  form.amt input{width:90px;padding:3px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;}
+  form.amt button{border:0;background:#0F1B33;color:#fff;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;}
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+  <a href="{{ url_for('ops_plab_expenses') }}" class="muted" style="text-decoration:none;">← All client expenses</a>
+  <h1>{{ name }} <span class="muted">· {{ cl.registration_number }} · {{ cl.account_status or '—' }} · {{ cl.current_stage or '—' }}</span></h1>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, m in msgs %}<div class="note" style="border-color:{{ '#86efac' if cat == 'success' else '#fca5a5' }};">{{ m }}</div>{% endfor %}
+{% endwith %}
+
+<div class="stats">
+  <div class="stat"><b>₹{{ '{:,.0f}'.format(received) }}</b>received (ex-GST)</div>
+  <div class="stat"><b>₹{{ '{:,.0f}'.format(spent) }}</b>spent by GooCampus</div>
+  <div class="stat"><b class="{{ 'neg' if balance < 0 }}">₹{{ '{:,.0f}'.format(balance) }}</b>balance</div>
+  <div class="stat"><b style="color:#b45309;">₹{{ '{:,.0f}'.format(estimate) }}</b>estimate (paid by not set)</div>
+  <div class="stat"><b style="color:#b45309;">{{ unpriced }}</b>lines not priced</div>
+</div>
+
+<div class="table-wrap">
+  <table class="t">
+    <thead><tr><th>Section</th><th>Service</th><th>Provider</th><th>Date</th><th>Paid by</th>
+      <th style="text-align:right;">Amount</th><th>How it's counted</th><th>Actual ₹ (optional)</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.section }}</td><td>{{ r.service or '—' }}</td><td class="muted">{{ r.provider or '' }}</td>
+        <td class="muted" style="white-space:nowrap;">{{ (r.date or '')[:10] }}</td>
+        <td>{{ r.paid_by or '—' }}</td>
+        <td class="num">₹{{ '{:,.0f}'.format(r.amt) }}</td>
+        <td class="b-{{ r.basis }}">{{ r.basis_label }}</td>
+        <td>
+          <form class="amt" method="POST" action="{{ url_for('ops_plab_expense_amount') }}">
+            <input type="hidden" name="source_table" value="{{ r.source_table }}"><input type="hidden" name="record_id" value="{{ r.record_id }}">
+            <input type="hidden" name="client_id" value="{{ cl.id }}">
+            <input name="amount" value="{{ '%.0f'|format(r.team_amount) if r.team_amount is not none else '' }}" placeholder="₹">
+            <button title="Save the actual amount spent (leave empty to use the price list)">Save</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="muted" style="text-align:center;padding:20px;">No services recorded for this client yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted" style="margin-top:.8rem;">An actual ₹ entered here (or recorded on the service, e.g. mentorship amount paid) always wins over the price list.
+  Clear the box and Save to go back to the price list. "Paid by" is set on the Services Detail page.</p>
+{% endblock %}
