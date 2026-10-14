@@ -75,35 +75,33 @@
         <button style="background:#166534;color:#fff;border:0;border-radius:8px;padding:7px 14px;font-weight:700;cursor:pointer;">Publish all</button>
       </form>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:0.86rem;"><tbody>
     {% for d in waiting %}
-      <tr style="border-top:1px solid var(--gray-100);">
-        <td style="padding:8px 6px;">
+      <div style="border-top:1px solid var(--gray-100);padding:10px 4px;font-size:0.86rem;">
+        <div>
           {% if d.file_name %}<a href="{{ url_for('pg_authority_doc_file_admin', doc_id=d.id) }}" target="_blank" style="color:#2952a3;text-decoration:none;font-weight:600;">{{ d.title }}</a>
           {% else %}<span style="font-weight:600;color:var(--navy);">{{ d.title }}</span>
             <span style="font-size:0.7rem;color:#0e7490;background:#ecfeff;padding:1px 7px;border-radius:10px;margin-left:6px;">list read from the notice</span>{% endif %}
           {% if d.body_text %}<div style="font-size:0.78rem;color:var(--gray-600);white-space:pre-wrap;margin-top:4px;background:var(--gray-50);border-radius:6px;padding:6px 9px;max-height:180px;overflow:auto;">{{ d.body_text }}</div>{% endif %}
-          <div style="font-size:0.74rem;color:var(--gray-400);">{{ d.file_name }}{% if d.doc_date %} · {{ d.doc_date }}{% endif %}
+          <div style="font-size:0.74rem;color:var(--gray-400);overflow-wrap:anywhere;">{{ d.file_name }}{% if d.doc_date %} · {{ d.doc_date }}{% endif %}
             {% if d.source_url %} · <a href="{{ d.source_url }}" target="_blank" rel="noopener" style="color:var(--gray-500);">official link ↗</a>{% endif %}</div>
-        </td>
-        <td style="padding:8px 6px;text-align:right;white-space:nowrap;">
-          <form method="POST" action="{{ url_for('pg_authority_doc_publish') }}" style="display:inline-flex;gap:6px;align-items:center;">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:7px;">
+          <form method="POST" action="{{ url_for('pg_authority_doc_publish') }}" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
             <input type="hidden" name="authority_code" value="{{ authority.code }}"><input type="hidden" name="doc_id" value="{{ d.id }}">
-            <select name="category" style="padding:5px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;">
+            <select name="category" style="width:210px;padding:5px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;">
               {% for c, label in categories %}<option value="{{ c }}" {{ 'selected' if c == d.category }}>{{ label }}</option>{% endfor %}
             </select>
-            {% if d.file_name %}<label style="font-size:0.74rem;color:var(--gray-600);" title="A main bulletin gets its own button on the dashboard (max 3 per authority) — only for a Brochure / Bulletin document"><input type="checkbox" name="make_main" value="1" {{ 'checked' if d.category == 'brochure' and main_n < 3 }}> main bulletin as</label>
+            {% if d.file_name %}<label style="font-size:0.74rem;color:var(--gray-600);white-space:nowrap;" title="A main bulletin gets its own button on the dashboard (max 3 per authority) — only for a Brochure / Bulletin document"><input type="checkbox" name="make_main" value="1" {{ 'checked' if d.category == 'brochure' and main_n < 3 }}> main bulletin as</label>
             <input name="main_label" list="mainLabels" placeholder="label" value="{{ guess(d.title) }}" style="width:150px;padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.76rem;">{% endif %}
             <button style="background:#166534;color:#fff;border:0;border-radius:6px;padding:5px 12px;font-weight:700;cursor:pointer;font-size:0.8rem;">Publish</button>
           </form>
           <form method="POST" action="{{ url_for('pg_authority_doc_delete') }}" onsubmit="return confirm('Remove this document? It will not be filed again.');" style="display:inline;">
             <input type="hidden" name="doc_id" value="{{ d.id }}"><input type="hidden" name="authority_code" value="{{ authority.code }}">
-            <button type="submit" style="background:none;border:0;color:#dc2626;font-size:0.8rem;cursor:pointer;margin-left:6px;">Remove</button>
+            <button type="submit" style="background:none;border:0;color:#dc2626;font-size:0.8rem;cursor:pointer;">Remove</button>
           </form>
-        </td>
-      </tr>
+        </div>
+      </div>
     {% endfor %}
-    </tbody></table>
   </div>
   {% endif %}
 
