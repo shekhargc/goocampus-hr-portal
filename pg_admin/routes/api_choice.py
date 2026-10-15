@@ -425,7 +425,7 @@ def api_pg_choice_entitlement():
 _ROUND_CAP = 200   # max colleges auto-seeded per round sheet
 
 
-def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, rank):
+def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, rank, floor=True):
     """Fill one round sheet from the cut-offs, honouring specialties[] + quota_categories[].
     Reach is filtered IN SQL (HAVING) so the cap keeps reachable colleges, not the most
     competitive unreachable ones. Ordered by specialty preference, then closing rank."""
@@ -458,7 +458,7 @@ def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, r
             where.append("(" + " OR ".join(qors) + ")")
     # reach floor IN SQL: keep seats the candidate can plausibly enter (down to a try-luck stretch)
     having = ""
-    if rank:
+    if rank and floor:      # floor=False → full list: every college, even ones above the doctor's rank
         having = f" HAVING MIN(c.{col}) >= ?"
         floor_val = int(rank * 0.7)
     rows = conn.execute(
@@ -468,7 +468,7 @@ def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, r
         f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} "
         "WHERE " + " AND ".join(where) +
         " GROUP BY c.institute, c.course, c.quota, c.category" + having,
-        params + ([floor_val] if rank else [])).fetchall()
+        params + ([floor_val] if (rank and floor) else [])).fetchall()
     # specialty preference index for ordering
     cores = [(_spec_core(sp).lower(), i) for i, sp in enumerate(specialties or [])]
 
@@ -481,7 +481,7 @@ def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, r
     ordered = sorted([dict(r) for r in rows],
                      key=lambda r: (_spec_idx(r['course']), r['cr'] if r['cr'] is not None else 10**9))
     items = []
-    for pos, r in enumerate(ordered[:_ROUND_CAP], start=1):
+    for pos, r in enumerate(ordered[:(_ROUND_CAP if floor else 1000)], start=1):
         items.append([set_id, rnd, pos, r['master_id'], r['institute'], r['course'],
                       r['quota'], r['category'], r['cr'], _chance(rank, r['cr']),
                       r['fee'], 'INR', 'predicted'])

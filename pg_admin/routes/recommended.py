@@ -120,13 +120,22 @@ def tiers_payload(conn, combo):
     tiers = {r['college_code']: dict(r) for r in conn.execute(
         "SELECT college_code, tier, basis_rank, updated_by, updated_at FROM pg_college_tiers "
         "WHERE list_key=?", [combo]).fetchall()}
+    # NRI seats behave oddly (small pool, scattered ranks) — a deemed college's NRI tier FOLLOWS its
+    # Deemed Paid tier (same college). Only colleges absent from Deemed Paid keep their own NRI tier.
+    followed = {}
+    if combo == 'nri_deemed':
+        followed = {r['college_code']: dict(r) for r in conn.execute(
+            "SELECT college_code, tier, basis_rank, updated_by, updated_at FROM pg_college_tiers "
+            "WHERE list_key='deemed_paid_open'").fetchall()}
     out = []
     for r in rows:
-        t = tiers.get(r['college_code']) or {}
+        t = followed.get(r['college_code']) or tiers.get(r['college_code']) or {}
         new = r['college_code'] in newc
         out.append({'college_code': r['college_code'], 'college': _short_name(r['name']), 'state': r['state'],
                     'institute_type': r['itype'] or '',
-                    'seats': int(r['seats'] or 0), 'new_college': new, 'editable': not new,
+                    'seats': int(r['seats'] or 0), 'new_college': new,
+                    'editable': (not new) and r['college_code'] not in followed,
+                    'follows': 'deemed_paid_open' if r['college_code'] in followed else '',
                     'tier': NEW_TIER if new else (t.get('tier') or 'Average'), 'basis_rank': t.get('basis_rank'),
                     'updated_by': t.get('updated_by') or '',
                     'updated_at': str(t['updated_at'])[:16] if t.get('updated_at') else ''})
@@ -152,6 +161,9 @@ def set_tier(conn, combo, code, tier, who, name='', basis=None):
         return False
     if code in _new_codes(conn, combo):      # new colleges stay 'New' — never tiered
         return False
+    if combo == 'nri_deemed' and conn.execute(
+            "SELECT 1 FROM pg_college_tiers WHERE list_key='deemed_paid_open' AND college_code=?", [code]).fetchone():
+        return False                         # NRI follows the college's Deemed Paid tier — edit it there
     row = conn.execute("SELECT id FROM pg_college_tiers WHERE list_key=? AND college_code=?",
                        [combo, code]).fetchone()
     if row:
@@ -184,7 +196,19 @@ def _upsert_set(conn, user_id, kind, label, rank, specialties, qcs):
     return sid, False
 
 
-def _matrix_items(conn, combo, specialties, rank):
+def _r1(r):
+    """Last year's Round-1 closing rank for the seat (Round 2 / final as fallbacks)."""
+    for k in ('cr_r1', 'cr_r2', 'cr_closing'):
+        if r.get(k):
+            return r[k]
+    return None
+
+
+def _matrix_items(conn, combo, specialties, rank, order='rank'):
+    """Every 2026 seat in the doctor's specialities for this combo — nothing filtered by rank.
+    order='rank'       → one combined list by last year's Round-1 closing rank (seat that went first, first)
+    order='speciality' → grouped by the doctor's speciality order, each group by Round-1 rank
+    Seats new in 2026 (no previous cut-off) go last (per group when grouped), tagged 'new'."""
     c = COMBOS[combo]
     bodies = _bodies(conn, c['section'])
     if not bodies:
@@ -200,10 +224,8 @@ def _matrix_items(conn, combo, specialties, rank):
         where.append("(" + " OR ".join(ors) + ")")
     rows = [dict(r) for r in conn.execute(
         "SELECT s.college_code, s.college_name, s.cutoff_institute, s.cutoff_course, s.course_name, "
-        "s.cutoff_quota, s.category, s.cr_closing, s.cutoff_fee, s.has_cutoff, s.seats "
+        "s.cutoff_quota, s.category, s.cr_r1, s.cr_r2, s.cr_closing, s.cutoff_fee, s.has_cutoff, s.seats "
         "FROM pg_seat_matrix s WHERE " + " AND ".join(where), params).fetchall()]
-    tiers = _tiers(conn, combo)
-    newc = _new_codes(conn, combo)
     cores = [(_spec_core(sp).lower(), i) for i, sp in enumerate(specialties or [])]
 
     def spec_idx(course):
@@ -213,32 +235,36 @@ def _matrix_items(conn, combo, specialties, rank):
                 return i
         return len(cores)
     for r in rows:
-        r['tier'] = NEW_TIER if r['college_code'] in newc else tiers.get(r['college_code'], 'Average')
-    rows.sort(key=lambda r: (_TIER_IDX.get(r['tier'], 2), spec_idx(r['cutoff_course'] or r['course_name']),
-                             r['cr_closing'] if r['cr_closing'] is not None else 10**9,
-                             r['college_name']))
+        r['r1'] = _r1(r) if r['has_cutoff'] else None
+        r['is_new'] = not r['r1']
+        r['spec'] = spec_idx(r['cutoff_course'] or r['course_name'])
+    big = 10 ** 9
+    if order == 'speciality':
+        rows.sort(key=lambda r: (r['spec'], r['is_new'], r['r1'] or big, r['college_name']))
+    else:
+        rows.sort(key=lambda r: (r['is_new'], r['r1'] or big, r['spec'], r['college_name']))
     return rows
 
 
-def build_recommended(conn, user_id, combo, specialties, rank, actor):
-    """(Re)build rec_matrix:<combo> + rec_cutoff:<combo> for this doctor. Returns {matrix, cutoff}."""
+def build_recommended(conn, user_id, combo, specialties, rank, actor, order='rank'):
+    """(Re)build the GooCampus Recommended Round-1 list rec_matrix:<combo> for this doctor.
+    (The older rank-filtered 'rec_cutoff' list is no longer built — founder 2026-10-15.)"""
     from pg_admin.routes.choice_admin import _self_heal, _stamp_team
     _self_heal(conn)
     ensure_rec_tables(conn)
     c = COMBOS[combo]
+    order = 'speciality' if order == 'speciality' else 'rank'
     qcs = [{'quota': c['cut_quota'], 'categories': [c['category']]}]
-    out = {}
-    # 1) 2026 seat-matrix order (tiered)
     kind = 'rec_matrix:' + combo
+    how = 'grouped by speciality' if order == 'speciality' else "in last year's Round 1 cut-off order"
     sid, rebuilt = _upsert_set(conn, user_id, kind,
-                               f"GooCampus Recommended — {c['label']} (2026 seat matrix, by college tier)",
+                               f"GooCampus Recommended — {c['label']} — Round 1 ({how})",
                                rank, specialties, qcs)
     items = []
-    for pos, r in enumerate(_matrix_items(conn, combo, specialties, rank), start=1):
-        new = not r['has_cutoff']
+    for pos, r in enumerate(_matrix_items(conn, combo, specialties, rank, order), start=1):
         items.append([sid, 1, pos, None, r['cutoff_institute'] or _short_name(r['college_name']),
                       r['cutoff_course'] or r['course_name'], c['cut_quota'], r['category'],
-                      r['cr_closing'], 'new' if new else _chance(rank, r['cr_closing']),
+                      r['r1'], 'new' if r['is_new'] else _chance(rank, r['r1']),
                       float(r['cutoff_fee']) if r['cutoff_fee'] is not None else None, 'INR',
                       'seatmatrix', 'team', actor])
     if items:
@@ -248,22 +274,10 @@ def build_recommended(conn, user_id, combo, specialties, rank, actor):
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", items, page_size=500)
     _stamp_team(conn, sid, actor)
     _clog.log(conn, sid, 'rebuild' if rebuilt else 'build', 'team', actor, user_id=user_id,
-              detail={'kind': kind, 'colleges': len(items), 'rank': rank, 'specialties': specialties})
-    out['matrix'] = {'set_id': sid, 'items': len(items)}
-    # 2) last-year cut-off order (3 rounds, by rank)
-    kind = 'rec_cutoff:' + combo
-    sid, rebuilt = _upsert_set(conn, user_id, kind,
-                               f"GooCampus Recommended — {c['label']} (last year's cut-offs, by your rank)",
-                               rank, specialties, qcs)
-    for rnd in (1, 2, 3):
-        _generate_round(conn, sid, rnd, 'MCC', 'mdms', specialties, qcs, rank)
-    conn.execute("UPDATE pg_choice_items SET added_by='team', added_by_name=? WHERE set_id=?", [actor, sid])
-    n = conn.execute("SELECT COUNT(*) AS n FROM pg_choice_items WHERE set_id=?", [sid]).fetchone()['n']
-    _stamp_team(conn, sid, actor)
-    _clog.log(conn, sid, 'rebuild' if rebuilt else 'build', 'team', actor, user_id=user_id,
-              detail={'kind': kind, 'colleges': n, 'rank': rank, 'specialties': specialties})
-    out['cutoff'] = {'set_id': sid, 'items': n}
-    return out
+              detail={'kind': kind, 'order': order, 'colleges': len(items), 'rank': rank,
+                      'specialties': specialties})
+    n_new = sum(1 for it in items if it[9] == 'new')
+    return {'matrix': {'set_id': sid, 'items': len(items), 'new': n_new, 'order': order}}
 
 
 # ── "New in 2026" seats for a choice list ─────────────────────────────────────
@@ -368,7 +382,8 @@ def _build_from_request(user_id, actor):
         if not _plan_has(conn, user_id, 'dash_choice_list'):
             return jsonify({'ok': False, 'error': 'not_entitled',
                             'message': 'Recommended MCC lists are for Internal and paid doctors.'}), 403
-        res = build_recommended(conn, user_id, combo, [x for x in sp if _s(x)], rank, actor)
+        res = build_recommended(conn, user_id, combo, [x for x in sp if _s(x)], rank, actor,
+                                order=_s(body.get('order')) or 'rank')
         conn.commit()
         return jsonify({'ok': True, 'combo': combo, **res})
     except Exception as e:
