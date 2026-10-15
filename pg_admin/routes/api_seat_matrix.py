@@ -103,6 +103,11 @@ def api_pg_seat_matrix():
                 r['cutoff_fee'] = float(r['cutoff_fee'])
             # has_cutoff: 1 = bridged to the 2025 cut-off; 0 = new in 2026; None = not analysed
             r['is_new'] = (r.get('has_cutoff') == 0)
+            # Simple type for "seats by college type" splits (MCC's institute_type is only
+            # All-India / Central University / Deemed University).
+            it = (r.get('institute_type') or '').lower()
+            r['college_type'] = ('Deemed' if 'deemed' in it else 'Central University' if it.startswith('central')
+                                 else 'Government' if it else '')
             out.append(r)
         return jsonify({
             'ok': True,
