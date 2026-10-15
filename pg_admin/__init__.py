@@ -32,7 +32,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
-                             calendar_admin, desk_api)
+                             calendar_admin, desk_api, seat_matrix_ingest)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -143,6 +143,8 @@ def register_pg_admin(app):
                      college_master_admin.college_fees, methods=['GET'])
 
     # ── Seat Matrix admin (raw announced authority matrix; not matched to master) ──
+    app.add_url_rule('/api/pg/seat-matrix/ingest', 'api_seat_matrix_ingest',
+                     seat_matrix_ingest.api_seat_matrix_ingest, methods=['POST'])
     app.add_url_rule('/admin/pg/seat-matrix', 'pg_seat_matrix_admin',
                      seat_matrix_admin.seat_matrix_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/seat-matrix/upload', 'pg_seat_matrix_upload',
