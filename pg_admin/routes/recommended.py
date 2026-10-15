@@ -91,7 +91,7 @@ def _short_name(name):
 
 def _bodies(conn, section=None):
     q = ("SELECT counselling_body, section FROM pg_seat_matrix_source WHERE COALESCE(superseded,0)=0 "
-         "AND COALESCE(authority_code,'')='mcc' AND COALESCE(section,'')<>''")
+         "AND COALESCE(authority_code,'')='mcc' AND COALESCE(section,'') NOT IN ('', 'nmc_initial')")
     p = []
     if section:
         q += " AND section=?"; p.append(section)
