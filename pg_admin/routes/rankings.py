@@ -34,6 +34,12 @@ _QUOTA_LABEL = {'All India': 'All India Quota', 'Self-Financed Merit Seat': 'Dee
                 'Jain Minority Quota': 'Jain Minority'}
 
 
+def _type_label(it):
+    it = (it or '').lower()
+    return 'Deemed University' if 'deemed' in it else 'Central University' if it.startswith('central') \
+        else 'Government' if it else ''
+
+
 def rankings_data(conn):
     """{lists:[{key,label,tiers:{Top:[..],Good:[..],Average:[..]},counts}], new_colleges:[..]}"""
     rec.ensure_rec_tables(conn)
@@ -42,7 +48,7 @@ def rankings_data(conn):
         rows = rec.tiers_payload(conn, key)
         tiers = {t: [] for t in _TIER_ORDER}
         for r in rows:
-            item = {'college': r['college'], 'state': r['state'], 'institute_type': r.get('institute_type') or '',
+            item = {'college': r['college'], 'state': r['state'], 'institute_type': _type_label(r.get('institute_type')),
                     'seats': r['seats'], 'college_code': r['college_code']}
             if r['tier'] == rec.NEW_TIER:
                 continue                     # listed in the separate New colleges document
@@ -61,7 +67,7 @@ def rankings_data(conn):
                 f"GROUP BY college_code, quota HAVING MAX(CASE WHEN COALESCE(cutoff_institute,'')<>'' THEN 1 ELSE 0 END)=0",
                 bodies).fetchall():
             n = new_by_code.setdefault(r['college_code'], {
-                'college': rec._short_name(r['name']), 'state': r['state'], 'institute_type': r['itype'] or '',
+                'college': rec._short_name(r['name']), 'state': r['state'], 'institute_type': _type_label(r['itype']),
                 'college_code': r['college_code'], 'lists': [], 'seats_by_list': {}})
             q = _QUOTA_LABEL.get(r['quota'], r['quota'])
             if q not in n['seats_by_list']:
@@ -142,7 +148,7 @@ def build_rankings_pdf(conn):
             pdf.cell(0, 6.5, f'{tier} colleges ({len(rows)})', new_x='LMARGIN', new_y='NEXT')
             _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], str(r['seats'])]
                          for i, r in enumerate(rows, start=1)],
-                   ('#', 'College', 'State', 'Institute type', '2026 seats'), (9, 90, 32, 40, 15),
+                   ('#', 'College', 'State', 'Type', '2026 seats'), (9, 102, 34, 26, 15),
                    ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
     return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026.pdf'
 
@@ -161,7 +167,7 @@ def build_new_colleges_pdf(conn):
     if rows:
         _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], ', '.join(r['lists']), str(r['seats'])]
                      for i, r in enumerate(rows, start=1)],
-               ('#', 'College', 'State', 'Institute type', 'Seat lists', '2026 seats'), (8, 66, 26, 30, 42, 14),
+               ('#', 'College', 'State', 'Type', 'Seat lists', '2026 seats'), (8, 66, 26, 30, 42, 14),
                ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
     else:
         pdf.set_font('Helvetica', 'I', 10)
