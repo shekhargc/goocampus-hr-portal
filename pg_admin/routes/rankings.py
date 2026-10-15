@@ -60,8 +60,11 @@ def _speciality_lists(conn, speciality):
         for r in rows:
             d = by.setdefault(r['college_code'], {'college': rec._short_name(r['college_name']), 'state': r['state'],
                                                    'institute_type': _type_label(r['institute_type']),
-                                                   'seats': 0, 'college_code': r['college_code'], 'r1': None})
+                                                   'seats': 0, 'college_code': r['college_code'], 'r1': None,
+                                                   'hist': False})
             d['seats'] += int(r['seats'] or 0)
+            if r['has_cutoff']:
+                d['hist'] = True
             if r['category'] == 'OPEN' and r['has_cutoff']:
                 v = rec._r1(r)
                 if v and (d['r1'] is None or v < d['r1']):
@@ -71,7 +74,10 @@ def _speciality_lists(conn, speciality):
         tiers = {t: [] for t in _TIER_ORDER}
         for i, d in enumerate(known):
             tiers['Top' if i < n * 0.2 else 'Good' if i < n * 0.55 else 'Average'].append(d)
-        new = sorted([d for d in by.values() if not d['r1']], key=lambda d: (d['state'], d['college']))
+        # had this course last year but no Open-category Round 1/2 allotment → end of Average (not 'new')
+        tiers['Average'].extend(sorted([d for d in by.values() if not d['r1'] and d['hist']],
+                                       key=lambda d: (d['state'], d['college'])))
+        new = sorted([d for d in by.values() if not d['r1'] and not d['hist']], key=lambda d: (d['state'], d['college']))
         lists.append({'key': key, 'label': meta['label'], 'tiers': tiers, 'new': new,
                       'counts': {**{t: len(v) for t, v in tiers.items()}, 'New': len(new)}})
     return lists
