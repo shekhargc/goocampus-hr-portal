@@ -49,6 +49,7 @@ def ensure_desk_columns(conn, force=False):
     try:
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS desk_access INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS is_team_member INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_at TIMESTAMP")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_by TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_to TEXT DEFAULT ''")

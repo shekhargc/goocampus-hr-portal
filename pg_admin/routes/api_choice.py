@@ -320,15 +320,17 @@ def _plan_label(conn, user_id):
         return 'Free'
 
 
-def _choice_gate(conn, uid, scope, state=''):
+def _choice_gate(conn, uid, scope, state='', owner='client'):
     """Return an error message if this doctor can't create this set, else None.
     FREE tier: ONE home-state list only — self-build (predictor + manual), no auto-generate,
     no All-India/MCC, and the GooCampus team can't edit it.
     PAID (dash_choice_list): MCC + any LOCKED state (home / plan-allowed other), auto-built."""
     paid = _plan_has(conn, uid, 'dash_choice_list')
+    # Only count lists of the same owner — a GooCampus-team list never uses up the
+    # doctor's own MCC / home-state slot (and vice versa).
     counts = {r['scope']: r['n'] for r in conn.execute(
-        "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? GROUP BY scope",
-        [uid]).fetchall()}
+        "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? "
+        "AND COALESCE(owner,'client') = ? GROUP BY scope", [uid, owner]).fetchall()}
     states = _doctor_states(conn, uid)
     home = next((s['state'] for s in states if s['role'] == 'home'), None)
     locked = {s['state'].strip().lower() for s in states}
@@ -377,6 +379,7 @@ def _set_out_of_plan(conn, uid, s, ctx=None):
         # standard etc.: the earliest N non-home state sets stay in-plan, the rest lock
         others = [r['id'] for r in conn.execute(
             "SELECT id FROM pg_choice_sets WHERE user_id = ? AND LOWER(scope) = 'state' "
+            "AND COALESCE(owner,'client') = 'client' "
             "AND LOWER(COALESCE(state,'')) <> ? ORDER BY id", [uid, ctx['home_l']]).fetchall()]
         try:
             rank = others.index(s['id'])
@@ -562,6 +565,8 @@ def api_pg_choice_set(set_id):
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         if request.method == 'DELETE':
+            if (dict(s).get('owner') or 'client') == 'team':
+                return jsonify({'ok': False, 'error': 'team_list', 'message': 'This list was prepared by the GooCampus team and is view-only. Ask your counsellor for changes.'}), 403
             conn.execute("DELETE FROM pg_choice_items WHERE set_id = ?", [set_id])
             conn.execute("DELETE FROM pg_choice_sets WHERE id = ?", [set_id])
             conn.commit()
@@ -636,10 +641,13 @@ def api_pg_choice_items(set_id):
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        s = conn.execute("SELECT id, rank, scope, state FROM pg_choice_sets WHERE id = ? AND user_id = ?",
+        s = conn.execute("SELECT id, rank, scope, state, COALESCE(owner,'client') AS owner "
+                         "FROM pg_choice_sets WHERE id = ? AND user_id = ?",
                          [set_id, user['id']]).fetchone()
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if s['owner'] == 'team':
+            return jsonify({'ok': False, 'error': 'team_list', 'message': 'This list was prepared by the GooCampus team and is view-only. Ask your counsellor for changes.'}), 403
         if _set_out_of_plan(conn, user['id'], dict(s)):
             return jsonify({'ok': False, 'error': 'not_entitled',
                             'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403
@@ -682,11 +690,13 @@ def api_pg_choice_item_delete(item_id):
             return jsonify({'ok': False, 'error': 'no_token'}), 401
         # Find the owning set (must be the doctor's) and block edits on a view-only set.
         srow = conn.execute(
-            "SELECT s.id, s.scope, s.state FROM pg_choice_sets s "
+            "SELECT s.id, s.scope, s.state, COALESCE(s.owner,'client') AS owner FROM pg_choice_sets s "
             "JOIN pg_choice_items i ON i.set_id = s.id "
             "WHERE i.id = ? AND s.user_id = ?", [item_id, user['id']]).fetchone()
         if not srow:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if srow['owner'] == 'team':
+            return jsonify({'ok': False, 'error': 'team_list', 'message': 'This list was prepared by the GooCampus team and is view-only. Ask your counsellor for changes.'}), 403
         if _set_out_of_plan(conn, user['id'], dict(srow)):
             return jsonify({'ok': False, 'error': 'not_entitled',
                             'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403
@@ -712,10 +722,13 @@ def api_pg_choice_reorder(set_id):
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        s = conn.execute("SELECT id, scope, state FROM pg_choice_sets WHERE id=? AND user_id=?",
+        s = conn.execute("SELECT id, scope, state, COALESCE(owner,'client') AS owner "
+                         "FROM pg_choice_sets WHERE id=? AND user_id=?",
                          [set_id, user['id']]).fetchone()
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if s['owner'] == 'team':
+            return jsonify({'ok': False, 'error': 'team_list', 'message': 'This list was prepared by the GooCampus team and is view-only. Ask your counsellor for changes.'}), 403
         if _set_out_of_plan(conn, user['id'], dict(s)):
             return jsonify({'ok': False, 'error': 'not_entitled',
                             'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403

@@ -606,6 +606,7 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
     var s = window.CHOICE.find(function(x){ return x.id===setId; });
     var rnd = active[setId] || 1;
     var items = (s.rounds[String(rnd)]||[]);
+    var RO = window.CHOICE_RO === true || s.owner !== 'team';   // doctor's own list = view only
     var body = document.getElementById('csbody_'+setId);
     var html = '';
     if(!items.length){ html += '<div class="cs-empty">No colleges in Round '+rnd+' yet.'+(RO?'':' Add one below.')+'</div>'; }
@@ -631,6 +632,8 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
   }
 
   function renderSet(s, parent){
+    var FREE_RO = window.CHOICE_RO === true;
+    var RO = FREE_RO || s.owner !== 'team';   // the team edits only its OWN (team) lists
     var el = document.createElement('div'); el.className = 'cs-set';
     var meta = [];
     if(s.rank) meta.push('Rank '+nfmt(s.rank));
@@ -639,11 +642,13 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
     meta.push(s.total+' colleges');
     var scopeChip = s.scope==='state' ? '<span class="chip chip-blue">'+esc(s.state||'State')+'</span>' : '<span class="chip chip-gray">MCC / All-India</span>';
     var teamLine = s.team_edited_at ? '<div class="cs-team"><i class="fa-solid fa-pen"></i> Last edited by GooCampus team ('+esc(s.team_edited_by||'team')+') · '+esc(s.team_edited_at)+'</div>' : '';
-    var roLine = RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-eye"></i> Free plan — the client builds this themselves. Team is view only (no add / edit).</div>' : '';
+    var roLine = FREE_RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-eye"></i> Free plan — the client builds this themselves. Team is view only (no add / edit).</div>'
+      : (RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-user"></i> Doctor\'s own list — view only. Use “Build a new choice list” for a separate GooCampus team list.</div>' : '');
+    var ownerChip = s.owner === 'team' ? ' <span class="chip" style="background:#fff7ed;color:#9a3412;">Prepared by GooCampus team</span>' : ' <span class="chip chip-gray">Doctor\'s own</span>';
     var addBox = RO ? '' : ('<div class="cs-add"><input id="csq_'+s.id+'" placeholder="Add a college to this round — type a name…" autocomplete="off" oninput="CS.search('+s.id+')">'
         + '<div class="cs-sug" id="cssug_'+s.id+'"></div></div>');
     el.innerHTML =
-      '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip
+      '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip+ownerChip
         + (RO ? '' : '<button onclick="CS.delSet('+s.id+')" style="float:right;background:none;border:0;color:#dc2626;font-size:0.74rem;cursor:pointer;">Delete list</button>')
         + '<a href="/admin/pg/choice-sets/'+s.id+'/pdf" style="float:right;margin-right:12px;color:#2952a3;font-size:0.74rem;font-weight:700;text-decoration:none;"><i class="fa-solid fa-file-pdf"></i> Download PDF</a>'
         + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+roLine+'</div>'

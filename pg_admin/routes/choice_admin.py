@@ -45,6 +45,7 @@ def _self_heal(conn):
         conn.execute("ALTER TABLE pg_choice_items ADD COLUMN IF NOT EXISTS added_by_name TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_at TIMESTAMP")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_by TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
         conn.commit()
     except Exception:
         try: conn.rollback()
@@ -66,9 +67,22 @@ def _round_items(conn, set_id, rnd):
 
 
 def _set_owner(conn, set_id):
-    r = conn.execute("SELECT id, user_id, rank, degree_group, authority FROM pg_choice_sets WHERE id = ?",
+    r = conn.execute("SELECT id, user_id, rank, degree_group, authority, "
+                     "COALESCE(owner,'client') AS owner FROM pg_choice_sets WHERE id = ?",
                      [set_id]).fetchone()
     return dict(r) if r else None
+
+
+# The doctor's OWN lists are theirs — the team builds a SEPARATE "Prepared by GooCampus
+# team" list (owner='team') and never edits or deletes the doctor's. (founder 2026-10-15)
+_CLIENT_LIST_MSG = ("This is the doctor's own list — the team can view it but not change it. "
+                    "Build a GooCampus team list for this counselling body instead.")
+
+
+def _client_list_block(s):
+    if s and (s.get('owner') or 'client') != 'team':
+        return jsonify({'ok': False, 'error': 'client_list', 'message': _CLIENT_LIST_MSG}), 403
+    return None
 
 
 # Free-tier clients own their home-state list — the GooCampus team is VIEW-ONLY on it
@@ -119,6 +133,7 @@ def choice_create(user_id):
         # Only check the plan entitlement when starting a NEW body's list.
         existing = conn.execute(
             "SELECT id FROM pg_choice_sets WHERE user_id = ? AND scope = ? "
+            "AND COALESCE(owner,'client') = 'team' "
             "AND LOWER(COALESCE(state,'')) = LOWER(?) ORDER BY id LIMIT 1",
             [user_id, scope, state or '']).fetchone()
         if existing:
@@ -131,13 +146,13 @@ def choice_create(user_id):
                  _json.dumps(specialties), _json.dumps(qcs), sid])
             conn.execute("DELETE FROM pg_choice_items WHERE set_id = ?", [sid])
         else:
-            gate = _choice_gate(conn, user_id, scope, state)
+            gate = _choice_gate(conn, user_id, scope, state, owner='team')
             if gate:
                 return jsonify({'ok': False, 'error': 'not_entitled', 'message': gate}), 403
             sid = conn.execute(
                 "INSERT INTO pg_choice_sets (user_id, label, scope, authority, degree_group, state, "
-                "quota, category, rank, specialties, quota_categories) VALUES (?,?,?,?,?,?,?,?,?,?,?) "
-                "RETURNING id",
+                "quota, category, rank, specialties, quota_categories, owner) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,'team') RETURNING id",
                 [user_id, _s(body.get('label')), scope, authority, dg, state, quota, category, rank,
                  _json.dumps(specialties), _json.dumps(qcs)]).fetchone()['id']
         if auto and _plan_has(conn, user_id, 'dash_choice_list'):
@@ -274,8 +289,12 @@ def choice_delete_set(set_id):
         return jsonify({'ok': False, 'error': 'forbidden'}), 403
     conn = get_db()
     try:
-        if not conn.execute("SELECT 1 FROM pg_choice_sets WHERE id = ?", [set_id]).fetchone():
+        _s0 = _set_owner(conn, set_id)
+        if not _s0:
             return jsonify({'ok': True, 'deleted': True})   # already gone — idempotent
+        blk = _client_list_block(_s0)
+        if blk:
+            return blk
         conn.execute("DELETE FROM pg_choice_items WHERE set_id = ?", [set_id])
         conn.execute("DELETE FROM pg_choice_sets WHERE id = ?", [set_id])
         conn.commit()
@@ -382,6 +401,9 @@ def choice_add(set_id):
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         if not _team_can_edit(conn, s['user_id']):
             return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
+        blk = _client_list_block(s)
+        if blk:
+            return blk
         body = request.get_json(silent=True) or {}
         try:
             rnd = int(body.get('round')); assert rnd in (1, 2, 3)
@@ -433,6 +455,9 @@ def choice_move(item_id):
         _o = _set_owner(conn, it['set_id'])
         if _o and not _team_can_edit(conn, _o['user_id']):
             return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
+        blk = _client_list_block(_o)
+        if blk:
+            return blk
         direction = _s((request.get_json(silent=True) or {}).get('dir')) or 'up'
         # normalise positions 1..n first (guards against gaps/dupes), then swap.
         ordered = conn.execute("SELECT id FROM pg_choice_items WHERE set_id=? AND round=? "
@@ -471,6 +496,9 @@ def choice_reorder(set_id):
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         if not _team_can_edit(conn, _o['user_id']):
             return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
+        blk = _client_list_block(_o)
+        if blk:
+            return blk
         body = request.get_json(silent=True) or {}
         try:
             rnd = int(body.get('round')); assert rnd in (1, 2, 3)
@@ -509,6 +537,9 @@ def choice_delete(item_id):
         _o = _set_owner(conn, it['set_id'])
         if _o and not _team_can_edit(conn, _o['user_id']):
             return jsonify({'ok': False, 'error': 'free_tier', 'message': _FREE_LIST_MSG}), 403
+        blk = _client_list_block(_o)
+        if blk:
+            return blk
         conn.execute("DELETE FROM pg_choice_items WHERE id = ?", [item_id])
         # re-pack positions so the round stays 1..n
         ordered = conn.execute("SELECT id FROM pg_choice_items WHERE set_id=? AND round=? "

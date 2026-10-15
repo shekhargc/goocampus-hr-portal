@@ -551,6 +551,7 @@ def user_detail(user_id):
         for s in choice_sets:
             choice_json.append({
                 'id': s['id'], 'label': s.get('label') or '', 'scope': s.get('scope') or 'mcc',
+                'owner': s.get('owner') or 'client',
                 'state': s.get('state') or '', 'authority': s.get('authority') or '',
                 'rank': s.get('rank'), 'degree_group': s.get('degree_group') or 'mdms',
                 'specialties': s.get('specialties') or [], 'total': s.get('total') or 0,
