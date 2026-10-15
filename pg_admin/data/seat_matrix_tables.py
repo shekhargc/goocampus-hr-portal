@@ -65,6 +65,22 @@ def ensure_pg_seat_matrix():
         _mcc_where = ("WHERE COALESCE(authority_code,'')='' AND "
                       "(strpos(upper(COALESCE(counselling_body,'')),'MCC')>0 "
                       "OR strpos(upper(COALESCE(counselling_body,'')),'ALL INDIA')>0)")
+        # Final MCC 2026 matrix comes as 3 files (AIQ / CIQ / Deemed) with quota + category per
+        # row, and each seat is bridged to last year's cut-off (or flagged "new in 2026").
+        # A later upload can supersede an older (provisional) one without deleting it.
+        # (founder 2026-10-15)
+        for col, typ in (('section', "TEXT DEFAULT ''"), ('institute_type', "TEXT DEFAULT ''"),
+                         ('quota', "TEXT DEFAULT ''"), ('category_code', "TEXT DEFAULT ''"),
+                         ('course_code', "TEXT DEFAULT ''"), ('cutoff_institute', "TEXT DEFAULT ''"),
+                         ('cutoff_course', "TEXT DEFAULT ''"), ('cutoff_quota', "TEXT DEFAULT ''"),
+                         ('cutoff_category', "TEXT DEFAULT ''"), ('has_cutoff', 'INTEGER'),
+                         ('new_reason', "TEXT DEFAULT ''"), ('cr_r1', 'INTEGER'), ('cr_r2', 'INTEGER'),
+                         ('cr_r3', 'INTEGER'), ('cr_closing', 'INTEGER'), ('cutoff_fee', 'NUMERIC(14,2)')):
+            conn.execute(f"ALTER TABLE pg_seat_matrix ADD COLUMN IF NOT EXISTS {col} {typ}")
+        for col, typ in (('superseded', 'INTEGER DEFAULT 0'), ('section', "TEXT DEFAULT ''"),
+                         ('sort_order', 'INTEGER DEFAULT 0')):
+            conn.execute(f"ALTER TABLE pg_seat_matrix_source ADD COLUMN IF NOT EXISTS {col} {typ}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_seat_matrix_quota ON pg_seat_matrix (quota)")
         conn.execute("UPDATE pg_seat_matrix SET authority_code='mcc' " + _mcc_where)
         conn.execute("UPDATE pg_seat_matrix_source SET authority_code='mcc' " + _mcc_where)
         conn.commit()

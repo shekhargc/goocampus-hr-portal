@@ -136,8 +136,10 @@ def seat_matrix_admin():
     try:
         sources = conn.execute(
             "SELECT counselling_body, academic_year, source_file_name, pdf_name, "
-            "row_count, college_count, total_seats, uploaded_by, uploaded_at "
-            "FROM pg_seat_matrix_source ORDER BY academic_year DESC, counselling_body ASC"
+            "row_count, college_count, total_seats, uploaded_by, uploaded_at, "
+            "COALESCE(superseded,0) AS superseded, COALESCE(sort_order,0) AS sort_order "
+            "FROM pg_seat_matrix_source ORDER BY academic_year DESC, COALESCE(superseded,0), "
+            "COALESCE(sort_order,0), counselling_body ASC"
         ).fetchall()
         # Default the browse target to the first loaded matrix.
         if not (b_body and b_year) and sources:
@@ -170,7 +172,8 @@ def seat_matrix_admin():
                                  params).fetchone()['s']
             offset = (page - 1) * page_size
             rows = conn.execute(
-                f"SELECT sl_no, college_code, state, college_name, category, course_name, seats "
+                f"SELECT sl_no, college_code, state, college_name, category, course_name, seats, "
+                f"institute_type, quota, category_code, has_cutoff, new_reason, cr_closing "
                 f"FROM pg_seat_matrix WHERE {where} "
                 f"ORDER BY state ASC, college_name ASC, course_name ASC "
                 f"LIMIT {page_size} OFFSET {offset}", params).fetchall()

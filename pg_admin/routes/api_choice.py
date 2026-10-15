@@ -330,7 +330,8 @@ def _choice_gate(conn, uid, scope, state='', owner='client'):
     # doctor's own MCC / home-state slot (and vice versa).
     counts = {r['scope']: r['n'] for r in conn.execute(
         "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? "
-        "AND COALESCE(owner,'client') = ? GROUP BY scope", [uid, owner]).fetchall()}
+        "AND COALESCE(owner,'client') = ? AND COALESCE(list_kind,'') = '' GROUP BY scope",
+        [uid, owner]).fetchall()}
     states = _doctor_states(conn, uid)
     home = next((s['state'] for s in states if s['role'] == 'home'), None)
     locked = {s['state'].strip().lower() for s in states}
@@ -675,10 +676,12 @@ def api_pg_choice_items(set_id):
                                 "WHERE set_id=? AND round=?", [set_id, rnd]).fetchone()['p'])
         conn.execute(
             "INSERT INTO pg_choice_items (set_id, round, position, master_id, institute, course, "
-            "quota, category, closing_rank, chance, source) VALUES (?,?,?,?,?,?,?,?,?,?, 'manual')",
+            "quota, category, closing_rank, chance, source) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             [set_id, rnd, nextpos, body.get('master_id'), (body.get('institute') or '').strip(),
              (body.get('course') or '').strip(), (body.get('quota') or '').strip(),
-             (body.get('category') or '').strip(), cr, _chance(s['rank'], cr)])
+             (body.get('category') or '').strip(), cr,
+             'new' if body.get('is_new') else _chance(s['rank'], cr),
+             'seatmatrix' if body.get('is_new') else 'manual'])
         if s['owner'] == 'team':   # doctor changed a GooCampus-team list → record exactly what
             _team_list_edit(conn, set_id, user, 'add', rnd=rnd, to_pos=nextpos, item={
                 'institute': (body.get('institute') or '').strip(), 'course': (body.get('course') or '').strip(),

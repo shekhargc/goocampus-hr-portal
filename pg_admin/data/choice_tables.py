@@ -41,6 +41,8 @@ def ensure_choice_tables():
         # Who owns the list: 'client' (the doctor's own) or 'team' (a separate list the
         # GooCampus team prepared — view-only for the doctor). Existing lists stay 'client'.
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
+        # '' = a normal list; 'rec_matrix:<combo>' / 'rec_cutoff:<combo>' = GooCampus Recommended MCC lists
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS list_kind TEXT DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_choice_sets_user ON pg_choice_sets (user_id)")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_choice_items (
