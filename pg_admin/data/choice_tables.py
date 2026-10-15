@@ -38,6 +38,9 @@ def ensure_choice_tables():
         # so the goocampus.in dashboard can flag "Updated by the GooCampus team".
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_at TIMESTAMP")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_by TEXT DEFAULT ''")
+        # Who owns the list: 'client' (the doctor's own) or 'team' (a separate list the
+        # GooCampus team prepared — view-only for the doctor). Existing lists stay 'client'.
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_choice_sets_user ON pg_choice_sets (user_id)")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_choice_items (

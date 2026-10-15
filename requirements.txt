@@ -13,3 +13,4 @@ botocore==1.42.97
 pywebpush==1.14.1
 segno
 Pillow==10.4.0
+fpdf2==2.7.9

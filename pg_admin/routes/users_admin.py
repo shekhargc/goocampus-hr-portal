@@ -492,6 +492,15 @@ def user_detail(user_id):
         except Exception:
             conn.rollback(); states = []
 
+        # How many EXTRA (non-home) states this doctor's plan allows — for the team
+        # "Add state" control on the build panel.
+        try:
+            from pg_admin.routes.api_choice import _state_limits
+            _home_ok, _max_other = _state_limits(conn, user_id)
+            state_max_other = ('any' if _max_other is None else _max_other)
+        except Exception:
+            conn.rollback(); state_max_other = 0
+
         # News state subscriptions (dashboard news feed) — saved to the profile.
         try:
             news_follows = [r['state'] for r in conn.execute(
@@ -542,6 +551,9 @@ def user_detail(user_id):
         for s in choice_sets:
             choice_json.append({
                 'id': s['id'], 'label': s.get('label') or '', 'scope': s.get('scope') or 'mcc',
+                'owner': s.get('owner') or 'client',
+                'client_ack_at': str(s['client_ack_at'])[:16] if s.get('client_ack_at') else '',
+                'client_edited_at': str(s['client_edited_at'])[:16] if s.get('client_edited_at') else '',
                 'state': s.get('state') or '', 'authority': s.get('authority') or '',
                 'rank': s.get('rank'), 'degree_group': s.get('degree_group') or 'mdms',
                 'specialties': s.get('specialties') or [], 'total': s.get('total') or 0,
@@ -636,14 +648,22 @@ def user_detail(user_id):
         choice_team_editable = bool((ent.get('features') or {}).get('dash_choice_list', {}).get('allowed'))
     except Exception:
         choice_team_editable = False
+    try:
+        from college.data.neetpg_lists import NEETPG_COURSES as _MDMS, DNB_COURSES as _DNB
+        specialty_mdms, specialty_dnb = list(_MDMS), list(_DNB)
+    except Exception:
+        specialty_mdms, specialty_dnb = [], []
     return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
                            subs=subs, plans=plans, ent=ent, recent=recent,
                            favorites=favorites, states=states, news_follows=news_follows,
                            choice_sets=choice_sets,
                            choice_json=_json2.dumps(choice_json), pgcp_inv=pgcp_inv,
                            choice_team_editable=choice_team_editable, activity=activity,
-                           back_url=back_url,
                            enquiry=enquiry, state_options=_canonical_states(),
+                           state_max_other=state_max_other,
+                           specialty_mdms=_json2.dumps(specialty_mdms),
+                           specialty_dnb=_json2.dumps(specialty_dnb),
+                           back_url=back_url,
                            fu_thread=fu_thread, fu_state=fu_state, fu_statuses=fu_statuses,
                            fu_time_slots=fu_time_slots,
                            active_section='goocampus_in')
@@ -908,12 +928,50 @@ def user_set_team(user_id):
         _ensure_team_col(conn)
         conn.execute("UPDATE pg_users SET is_team_member = ?, updated_at = CURRENT_TIMESTAMP "
                      "WHERE id = ?", (val, user_id))
+        if not val:   # no longer staff → no Counselling Desk either
+            try:
+                conn.execute("UPDATE pg_users SET desk_access = 0 WHERE id = ?", (user_id,))
+            except Exception as _e:
+                logging.warning("user_set_team desk reset: %s", _e)
         conn.commit()
         flash('Marked as a team member (staff) — shown without “Dr.”' if val
               else 'Unmarked — back to a regular doctor account (shows “Dr.”).', 'success')
     except Exception as e:
         conn.rollback(); logging.error("user_set_team: %s", e)
         flash('Could not update the team flag.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_user_detail', user_id=user_id))
+
+
+@login_required
+def user_set_desk(user_id):
+    """Switch Counselling Desk access on/off for a TEAM MEMBER account. With it on, she
+    sees the Desk on goocampus.in (Internal + Paid doctors, build choice lists, PDF +
+    email). Founder/admins only. (founder 2026-10-15)"""
+    admin = get_user()
+    if not (admin and admin.get('is_admin')):
+        flash('Only an admin can change Counselling Desk access.', 'error')
+        return redirect(url_for('pg_user_detail', user_id=user_id))
+    val = 1 if (request.form.get('desk') or '').strip() in ('1', 'on', 'true') else 0
+    conn = get_db()
+    try:
+        from pg_admin.routes.desk_api import ensure_desk_columns
+        ensure_desk_columns(conn, force=True)
+        row = conn.execute("SELECT COALESCE(is_team_member,0) AS t FROM pg_users WHERE id = ?",
+                           (user_id,)).fetchone()
+        if val and not (row and row['t']):
+            flash('Mark this account as a team member first — the Desk is for GooCampus staff only.', 'error')
+        else:
+            conn.execute("UPDATE pg_users SET desk_access = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                         (val, user_id))
+            conn.commit()
+            flash('Counselling Desk switched ON — they will see it on goocampus.in after their next page load.'
+                  if val else 'Counselling Desk access removed.', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("user_set_desk: %s", e)
+        flash('Could not update Counselling Desk access.', 'error')
     finally:
         try: conn.close()
         except Exception: pass

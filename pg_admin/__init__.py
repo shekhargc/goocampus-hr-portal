@@ -17,6 +17,7 @@ from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.data import college_master_tables as _college_master
 from pg_admin.data import pgcp_tables as _pgcp_tables
 from pg_admin.data import choice_tables as _choice_tables
+from pg_admin.data import choice_log as _choice_log
 from pg_admin.data import events_tables as _events_tables
 from pg_admin.data import analytics_tables as _analytics_tables
 from pg_admin.data import seat_matrix_tables as _seat_matrix
@@ -31,7 +32,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
-                             calendar_admin)
+                             calendar_admin, desk_api)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -58,6 +59,7 @@ def register_pg_admin(app):
                _college_master.ensure_college_master_tables,
                _pgcp_tables.ensure_pgcp_tables,
                _choice_tables.ensure_choice_tables,
+               _choice_log.ensure_choice_log_boot,
                _events_tables.ensure_event_tables,
                _analytics_tables.ensure_analytics_tables,
                _seat_matrix.ensure_pg_seat_matrix,
@@ -193,6 +195,8 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_known, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/ingest', 'api_news_inbox_ingest',
                      api_news_ingest.api_news_inbox_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/news-inbox/cutoffs-dump', 'api_cutoffs_dump',
+                     api_news_ingest.api_cutoffs_dump, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/status', 'api_news_inbox_status',
                      api_news_ingest.api_news_inbox_status, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/heartbeat', 'api_news_inbox_heartbeat',
@@ -326,6 +330,14 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/choice-items/<int:item_id>', 'api_pg_choice_item_delete',
                      api_choice.api_pg_choice_item_delete, methods=['DELETE'])
     # Team-side choice-sheet editing (goocampus.org admin, on the client's behalf)
+    app.add_url_rule('/admin/pg/users/<int:user_id>/choice-sets/create', 'pg_choice_create',
+                     choice_admin.choice_create, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/states', 'pg_choice_states',
+                     choice_admin.choice_states, methods=['GET', 'POST', 'DELETE'])
+    app.add_url_rule('/admin/pg/choice-facets', 'pg_choice_facets',
+                     choice_admin.choice_facets, methods=['GET'])
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/delete', 'pg_choice_delete_set',
+                     choice_admin.choice_delete_set, methods=['POST'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/cutoff-search', 'pg_choice_cutoff_search',
                      choice_admin.choice_cutoff_search, methods=['GET'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/add', 'pg_choice_add',
@@ -336,6 +348,41 @@ def register_pg_admin(app):
                      choice_admin.choice_move, methods=['POST'])
     app.add_url_rule('/admin/pg/choice-items/<int:item_id>/delete', 'pg_choice_delete',
                      choice_admin.choice_delete, methods=['POST'])
+    # ── Counselling Desk (goocampus.in team login → build internal/paid doctors'
+    #    choice lists, PDF + email). Token + desk_access gated in desk_api. ──
+    _d = desk_api
+    for rule, ep, fn, methods in (
+        ('/api/pg/desk/me', 'api_pg_desk_me', _d.desk_me, ['GET']),
+        ('/api/pg/desk/selftest', 'api_pg_desk_selftest', _d.desk_selftest, ['GET']),
+        ('/api/pg/desk/doctors', 'api_pg_desk_doctors', _d.desk_doctors, ['GET']),
+        ('/api/pg/desk/doctors/<int:doctor_id>', 'api_pg_desk_doctor', _d.desk_doctor, ['GET']),
+        ('/api/pg/desk/doctors/<int:doctor_id>/states', 'api_pg_desk_states', _d.desk_states,
+         ['GET', 'POST', 'DELETE']),
+        ('/api/pg/desk/doctors/<int:doctor_id>/choice-sets', 'api_pg_desk_create_list',
+         _d.desk_create_list, ['POST']),
+        ('/api/pg/desk/facets', 'api_pg_desk_facets', _d.desk_facets, ['GET']),
+        ('/api/pg/desk/choice-sets/<int:set_id>', 'api_pg_desk_delete_list', _d.desk_delete_list,
+         ['DELETE', 'POST']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/search', 'api_pg_desk_search', _d.desk_search, ['GET']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/add', 'api_pg_desk_add', _d.desk_add, ['POST']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/reorder', 'api_pg_desk_reorder', _d.desk_reorder, ['POST']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/pdf', 'api_pg_desk_pdf', _d.desk_pdf, ['GET']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/email', 'api_pg_desk_email', _d.desk_email, ['POST']),
+        ('/api/pg/desk/choice-items/<int:item_id>/move', 'api_pg_desk_move', _d.desk_move, ['POST']),
+        ('/api/pg/desk/choice-items/<int:item_id>', 'api_pg_desk_remove', _d.desk_remove,
+         ['DELETE', 'POST']),
+        ('/api/pg/choice-sets/<int:set_id>/pdf', 'api_pg_choice_pdf', _d.doctor_choice_pdf, ['GET']),
+        ('/api/pg/choice-sets/<int:set_id>/acknowledge', 'api_pg_choice_acknowledge',
+         api_choice.api_pg_choice_acknowledge, ['POST']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/history', 'api_pg_desk_history', _d.desk_history, ['GET']),
+    ):
+        app.add_url_rule(rule, ep, fn, methods=methods)
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/history', 'pg_choice_history',
+                     choice_admin.choice_history, methods=['GET'])
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/pdf', 'pg_choice_pdf',
+                     choice_admin.choice_pdf, methods=['GET'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/set-desk', 'pg_user_set_desk',
+                     users_admin.user_set_desk, methods=['POST'])
     # ── Events: public API (goocampus.in) + admin ──
     app.add_url_rule('/api/pg/events', 'api_pg_events', api_events.api_pg_events, methods=['GET'])
     app.add_url_rule('/api/pg/events/ticket/<ticket_code>', 'api_pg_event_ticket',

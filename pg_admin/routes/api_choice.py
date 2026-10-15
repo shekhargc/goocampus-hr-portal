@@ -320,15 +320,17 @@ def _plan_label(conn, user_id):
         return 'Free'
 
 
-def _choice_gate(conn, uid, scope, state=''):
+def _choice_gate(conn, uid, scope, state='', owner='client'):
     """Return an error message if this doctor can't create this set, else None.
     FREE tier: ONE home-state list only — self-build (predictor + manual), no auto-generate,
     no All-India/MCC, and the GooCampus team can't edit it.
     PAID (dash_choice_list): MCC + any LOCKED state (home / plan-allowed other), auto-built."""
     paid = _plan_has(conn, uid, 'dash_choice_list')
+    # Only count lists of the same owner — a GooCampus-team list never uses up the
+    # doctor's own MCC / home-state slot (and vice versa).
     counts = {r['scope']: r['n'] for r in conn.execute(
-        "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? GROUP BY scope",
-        [uid]).fetchall()}
+        "SELECT scope, COUNT(*) AS n FROM pg_choice_sets WHERE user_id = ? "
+        "AND COALESCE(owner,'client') = ? GROUP BY scope", [uid, owner]).fetchall()}
     states = _doctor_states(conn, uid)
     home = next((s['state'] for s in states if s['role'] == 'home'), None)
     locked = {s['state'].strip().lower() for s in states}
@@ -377,6 +379,7 @@ def _set_out_of_plan(conn, uid, s, ctx=None):
         # standard etc.: the earliest N non-home state sets stay in-plan, the rest lock
         others = [r['id'] for r in conn.execute(
             "SELECT id FROM pg_choice_sets WHERE user_id = ? AND LOWER(scope) = 'state' "
+            "AND COALESCE(owner,'client') = 'client' "
             "AND LOWER(COALESCE(state,'')) <> ? ORDER BY id", [uid, ctx['home_l']]).fetchall()]
         try:
             rank = others.index(s['id'])
@@ -505,8 +508,12 @@ def api_pg_choice_sets():
                 "FROM pg_choice_sets s WHERE s.user_id = ? ORDER BY s.id DESC", [uid]).fetchall()]
             # Downgrade lock: mark sets the CURRENT plan no longer covers as view-only.
             ctx = _entitlement_ctx(conn, uid)
+            from pg_admin.data import choice_log as _clog
             for s in sets:
                 s['out_of_plan'] = _set_out_of_plan(conn, uid, s, ctx)
+                if (s.get('owner') or 'client') == 'team':
+                    s['needs_ack'] = _clog.ack_state(s)
+                    s['disclaimer'] = _clog.DISCLAIMER
             return jsonify({'ok': True, 'sets': sets})
         body = request.get_json(silent=True) or {}
         scope = (body.get('scope') or 'mcc').strip()
@@ -562,6 +569,10 @@ def api_pg_choice_set(set_id):
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         if request.method == 'DELETE':
+            if (dict(s).get('owner') or 'client') == 'team':
+                return jsonify({'ok': False, 'error': 'team_list',
+                                'message': 'A list prepared by the GooCampus team cannot be deleted — '
+                                           'you can still edit it, or build your own list.'}), 403
             conn.execute("DELETE FROM pg_choice_items WHERE set_id = ?", [set_id])
             conn.execute("DELETE FROM pg_choice_sets WHERE id = ?", [set_id])
             conn.commit()
@@ -579,6 +590,13 @@ def api_pg_choice_set(set_id):
                 sset[k] = json.loads(sset.get(k) or '[]')
             except Exception:
                 sset[k] = default
+        if (sset.get('owner') or 'client') == 'team':
+            from pg_admin.data import choice_log as _clog
+            sset['needs_ack'] = _clog.ack_state(sset)
+            sset['disclaimer'] = _clog.DISCLAIMER
+            for k in ('client_ack_at', 'team_edited_at', 'client_edited_at'):
+                if sset.get(k):
+                    sset[k] = str(sset[k])[:16]
         return jsonify({'ok': True, 'set': sset, 'rounds': rounds})
     except Exception as e:
         try: conn.rollback()
@@ -636,7 +654,8 @@ def api_pg_choice_items(set_id):
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        s = conn.execute("SELECT id, rank, scope, state FROM pg_choice_sets WHERE id = ? AND user_id = ?",
+        s = conn.execute("SELECT id, rank, scope, state, COALESCE(owner,'client') AS owner "
+                         "FROM pg_choice_sets WHERE id = ? AND user_id = ?",
                          [set_id, user['id']]).fetchone()
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
@@ -660,6 +679,10 @@ def api_pg_choice_items(set_id):
             [set_id, rnd, nextpos, body.get('master_id'), (body.get('institute') or '').strip(),
              (body.get('course') or '').strip(), (body.get('quota') or '').strip(),
              (body.get('category') or '').strip(), cr, _chance(s['rank'], cr)])
+        if s['owner'] == 'team':   # doctor changed a GooCampus-team list → record exactly what
+            _team_list_edit(conn, set_id, user, 'add', rnd=rnd, to_pos=nextpos, item={
+                'institute': (body.get('institute') or '').strip(), 'course': (body.get('course') or '').strip(),
+                'quota': (body.get('quota') or '').strip(), 'category': (body.get('category') or '').strip()})
         conn.commit()
         return jsonify({'ok': True})
     except Exception as e:
@@ -682,7 +705,8 @@ def api_pg_choice_item_delete(item_id):
             return jsonify({'ok': False, 'error': 'no_token'}), 401
         # Find the owning set (must be the doctor's) and block edits on a view-only set.
         srow = conn.execute(
-            "SELECT s.id, s.scope, s.state FROM pg_choice_sets s "
+            "SELECT s.id, s.scope, s.state, COALESCE(s.owner,'client') AS owner, i.round, i.position, "
+            "i.institute, i.course, i.quota, i.category FROM pg_choice_sets s "
             "JOIN pg_choice_items i ON i.set_id = s.id "
             "WHERE i.id = ? AND s.user_id = ?", [item_id, user['id']]).fetchone()
         if not srow:
@@ -690,6 +714,8 @@ def api_pg_choice_item_delete(item_id):
         if _set_out_of_plan(conn, user['id'], dict(srow)):
             return jsonify({'ok': False, 'error': 'not_entitled',
                             'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403
+        if srow['owner'] == 'team':
+            _team_list_edit(conn, srow['id'], user, 'remove', item=dict(srow), from_pos=srow['position'])
         conn.execute("DELETE FROM pg_choice_items WHERE id = ? AND set_id = ?",
                      [item_id, srow['id']])
         conn.commit()
@@ -712,7 +738,8 @@ def api_pg_choice_reorder(set_id):
         user = _user(conn)
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
-        s = conn.execute("SELECT id, scope, state FROM pg_choice_sets WHERE id=? AND user_id=?",
+        s = conn.execute("SELECT id, scope, state, COALESCE(owner,'client') AS owner "
+                         "FROM pg_choice_sets WHERE id=? AND user_id=?",
                          [set_id, user['id']]).fetchone()
         if not s:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
@@ -721,11 +748,25 @@ def api_pg_choice_reorder(set_id):
                             'message': 'This choice list is view-only on your current plan. Upgrade to edit it.'}), 403
         body = request.get_json(silent=True) or {}
         ids = body.get('ordered_item_ids') or []
+        _rounds_before = {}
+        if s['owner'] == 'team':
+            from pg_admin.data import choice_log as _clog
+            _ids = [int(i) for i in ids if str(i).isdigit()]
+            if _ids:
+                _ph = ','.join(['?'] * len(_ids))
+                for r in conn.execute(f"SELECT DISTINCT round FROM pg_choice_items WHERE set_id = ? "
+                                      f"AND id IN ({_ph})", [set_id] + _ids).fetchall():
+                    _rounds_before[r['round']] = _clog.round_order(conn, set_id, r['round'])
         pos = 0
         for iid in ids:
             pos += 1
             conn.execute("UPDATE pg_choice_items SET position = ? WHERE id = ? AND set_id = ?",
                          [pos, iid, set_id])
+        for rnd, before in _rounds_before.items():
+            from pg_admin.data import choice_log as _clog
+            after = _clog.round_order(conn, set_id, rnd)
+            if [r['id'] for r in before] != [r['id'] for r in after]:
+                _team_list_edit(conn, set_id, user, 'reorder', rnd=rnd, detail=_clog.order_detail(before, after))
         conn.commit()
         return jsonify({'ok': True})
     except Exception as e:
@@ -834,6 +875,47 @@ def api_pg_my_states():
         try: conn.rollback()
         except Exception: pass
         logging.error("api_pg_my_states: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def _team_list_edit(conn, set_id, user, action, **kw):
+    """The doctor changed a GooCampus-team list: log exactly what + stamp client_edited_at."""
+    from pg_admin.data import choice_log as _clog
+    _clog.ensure_choice_log(conn)
+    _clog.log(conn, set_id, action, 'client', (user.get('name') or '').strip(), user_id=user['id'], **kw)
+    conn.execute("UPDATE pg_choice_sets SET client_edited_at = CURRENT_TIMESTAMP WHERE id = ?", [set_id])
+
+
+def api_pg_choice_acknowledge(set_id):
+    """POST /api/pg/choice-sets/<id>/acknowledge — the doctor confirms they have read the
+    'suggestion only — final decision is yours' note on a GooCampus-team list."""
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import choice_log as _clog
+    conn = get_db()
+    try:
+        user = _user(conn)
+        if not user:
+            return jsonify({'ok': False, 'error': 'no_token'}), 401
+        _clog.ensure_choice_log(conn)
+        s = conn.execute("SELECT id, COALESCE(owner,'client') AS owner FROM pg_choice_sets "
+                         "WHERE id = ? AND user_id = ?", [set_id, user['id']]).fetchone()
+        if not s:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if s['owner'] != 'team':
+            return jsonify({'ok': True, 'not_needed': True})
+        conn.execute("UPDATE pg_choice_sets SET client_ack_at = CURRENT_TIMESTAMP, client_ack_version = ? "
+                     "WHERE id = ?", [_clog.DISCLAIMER_VERSION, set_id])
+        _clog.log(conn, set_id, 'acknowledge', 'client', (user.get('name') or '').strip(),
+                  user_id=user['id'], detail=_clog.DISCLAIMER)
+        conn.commit()
+        return jsonify({'ok': True, 'acknowledged': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_pg_choice_acknowledge: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()

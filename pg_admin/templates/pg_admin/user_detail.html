@@ -88,7 +88,7 @@
           <h1 class="hero-name">{% if d.is_team_member %}{{ d.name or 'Team member' }}{% else %}{{ (d.name|dr_name) or 'Unnamed doctor' }}{% endif %}
             {% if pgcp_inv %}<span class="pill pill-orange">PGCP · {{ 'Internal' if pgcp_inv.client_type=='internal' else 'Paying' }}</span>{% endif %}
             {% if d.is_blocked %}<span class="pill pill-red">Blocked</span>{% endif %}
-            {% if d.is_team_member %}<span class="pill" style="background:#f3e8ff;color:#6b21a8;">Team member (staff)</span>{% endif %}
+            {% if d.is_team_member %}<span class="pill" style="background:#f3e8ff;color:#6b21a8;">Team member (staff)</span>{% if d.desk_access %}<span class="pill" style="background:#dcfce7;color:#166534;">Counselling Desk</span>{% endif %}{% endif %}
           </h1>
           <div style="font-size:0.85rem;color:var(--gray-500);">{{ d.mobile }}</div>
           <div style="margin-top:0.5rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
@@ -105,6 +105,13 @@
           <button class="btn {{ 'btn-ghost' if d.is_team_member else 'btn-navy' }}" type="submit">
             <i class="fa-solid fa-user-tie"></i> {{ 'Unmark team member' if d.is_team_member else 'Mark as team member' }}</button>
         </form>
+        {% if d.is_team_member and user and user.is_admin %}
+        <form method="POST" action="/admin/pg/users/{{ d.id }}/set-desk" onsubmit="return confirm({{ ('Remove Counselling Desk access? They will no longer see Internal/Paid doctors or build choice lists on goocampus.in.' if d.desk_access else 'Give this team member the Counselling Desk on goocampus.in? They will see all Internal + Paid doctors, build their choice lists and email PDFs.')|tojson }})">
+          <input type="hidden" name="desk" value="{{ 0 if d.desk_access else 1 }}">
+          <button class="btn {{ 'btn-ghost' if d.desk_access else 'btn-navy' }}" type="submit">
+            <i class="fa-solid fa-list-check"></i> {{ 'Remove Counselling Desk' if d.desk_access else 'Give Counselling Desk' }}</button>
+        </form>
+        {% endif %}
         <form method="POST" action="/admin/pg/users/{{ d.id }}/block" onsubmit="return confirm('{{ 'Unblock' if d.is_blocked else 'Block' }} this doctor?')">
           <button class="btn {{ 'btn-ghost' if d.is_blocked else 'btn-danger' }}" type="submit">
             <i class="fa-solid fa-{{ 'unlock' if d.is_blocked else 'ban' }}"></i> {{ 'Unblock' if d.is_blocked else 'Block' }}</button>
@@ -394,12 +401,184 @@
     <p style="font-size:0.8rem;color:var(--gray-500);margin:-0.3rem 0 0.9rem;">
       Edit on the doctor's behalf — reorder, add or remove colleges. Every change you make is
       tagged <span class="team-badge">Team</span> so the doctor sees it came from GooCampus.</p>
+
+    {% if choice_team_editable %}
+    {% set _inp = 'display:block;width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;' %}
+    {% set _lbl = 'font-size:0.74rem;font-weight:600;color:var(--gray-600);' %}
+    <details class="cs-new" style="margin:0 0 1rem;border:1px solid var(--gray-200);border-radius:10px;padding:0.7rem 0.9rem;background:var(--gray-50);">
+      <summary style="cursor:pointer;font-weight:700;color:var(--navy);font-size:0.9rem;"><i class="fa-solid fa-plus"></i> Build a new choice list (per counselling body)</summary>
+
+      {% if state_max_other == 'any' or (state_max_other is number and state_max_other > 0) %}
+      <div style="margin-top:0.7rem;padding:0.5rem 0.7rem;background:#fff;border:1px dashed var(--gray-300);border-radius:8px;">
+        <b style="color:var(--gray-700);font-size:0.78rem;">Add a state this doctor is counselling in</b>
+        <span style="color:var(--gray-400);font-size:0.72rem;">— premium; syncs to their dashboard</span>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap;">
+          <select id="nc_addstate" style="padding:5px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.82rem;min-width:160px;">
+            <option value="">— pick a state —</option>
+            {% for s in state_options %}<option>{{ s }}</option>{% endfor %}
+          </select>
+          <button type="button" onclick="ncAddState({{ d.id }})" style="background:#fff;border:1px solid var(--navy,#1e3a5f);color:var(--navy,#1e3a5f);border-radius:6px;padding:5px 12px;font-size:0.8rem;font-weight:600;cursor:pointer;">Add state</button>
+          <span id="nc_addmsg" style="font-size:0.78rem;color:var(--gray-600);"></span>
+        </div>
+      </div>
+      {% endif %}
+
+      <div style="margin-top:0.8rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.7rem;">
+        <label style="{{ _lbl }}">Counselling body
+          <select id="nc_body" onchange="ncBodyChanged()" style="{{ _inp }}">
+            <option value="mcc">All India MCC</option>
+            {% for st in states %}<option value="state::{{ st.state }}">{{ st.state }}{% if st.role == 'home' %} — Home{% endif %}</option>{% endfor %}
+          </select></label>
+        <label style="{{ _lbl }}">Degree
+          <select id="nc_dg" onchange="ncFacets()" style="{{ _inp }}">
+            <option value="mdms">MD / MS</option><option value="dnb">DNB</option></select></label>
+        <label style="{{ _lbl }}">NEET-PG rank
+          <input id="nc_rank" type="number" min="1" placeholder="e.g. 12000" style="{{ _inp }}"></label>
+        <label style="{{ _lbl }}">Quota
+          <select id="nc_quota" onchange="ncQuotaChanged()" style="{{ _inp }}"><option value="">Any quota</option></select></label>
+        <label style="{{ _lbl }}">Category
+          <select id="nc_cat" style="{{ _inp }}"><option value="">Any category</option></select></label>
+      </div>
+
+      <div style="margin-top:0.7rem;">
+        <label style="{{ _lbl }};display:block;">Specialties <span style="font-weight:400;color:var(--gray-400);">(search &amp; add — pick up to 10)</span></label>
+        <div style="position:relative;">
+          <input id="nc_specsearch" oninput="ncSpecSearch()" onfocus="ncSpecSearch()" autocomplete="off" placeholder="Type a specialty…" style="{{ _inp }}">
+          <div id="nc_specsug" style="display:none;position:absolute;z-index:30;left:0;right:0;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.1);max-height:220px;overflow:auto;margin-top:2px;"></div>
+        </div>
+        <div id="nc_specchips" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;"></div>
+      </div>
+
+      <label style="display:block;font-size:0.78rem;color:var(--gray-600);margin-top:0.7rem;"><input type="checkbox" id="nc_auto" checked> Auto-build Rounds 1–3 from the rank (uncheck for an empty list to fill manually)</label>
+      <div id="nc_rebuildhint" style="display:none;margin-top:0.6rem;font-size:0.78rem;color:#b45309;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:6px 9px;"></div>
+      <div style="margin-top:0.7rem;">
+        <button type="button" id="nc_createbtn" onclick="ncCreate({{ d.id }})" style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:7px 16px;font-size:0.85rem;font-weight:600;cursor:pointer;">Create list</button>
+        <span id="nc_msg" style="font-size:0.8rem;margin-left:0.6rem;color:var(--gray-600);"></span>
+      </div>
+    </details>
+    {% endif %}
+
     {% if not choice_sets %}
-    <p class="cs-empty">This doctor hasn't built any choice lists yet. They build them from their dashboard (a Starter+ feature).</p>
+    <p class="cs-empty">No choice lists yet. {% if choice_team_editable %}Use "Build a new choice list" above to start one for MCC or a state on the doctor's behalf, or they can build it from their dashboard.{% else %}They build them from their dashboard (a Starter+ feature).{% endif %}</p>
     {% else %}
     <div id="choiceRoot"></div>
     {% endif %}
   </div>
+
+  {% if choice_team_editable %}
+  <script>
+  var NC_MDMS = {{ specialty_mdms|safe }};
+  var NC_DNB = {{ specialty_dnb|safe }};
+  var ncSpecSel = [], ncCatsByQuota = {}, ncAllCats = [], ncLastDg = null;
+  function ncV(id){ return document.getElementById(id); }
+  function ncSpecList(){ return ncV('nc_dg').value==='dnb' ? NC_DNB : NC_MDMS; }
+  function ncRenderChips(){
+    var el=ncV('nc_specchips'); el.innerHTML='';
+    ncSpecSel.forEach(function(name,i){
+      var c=document.createElement('span');
+      c.style.cssText='display:inline-flex;align-items:center;gap:4px;background:#e8f0fa;color:#1e3a5f;border-radius:999px;padding:3px 9px;font-size:0.78rem;';
+      c.innerHTML=(i+1)+'. '+name.replace(/</g,'&lt;')+' <span style="cursor:pointer;font-weight:700;" onclick="ncSpecRemove('+i+')">×</span>';
+      el.appendChild(c);
+    });
+  }
+  function ncSpecRemove(i){ ncSpecSel.splice(i,1); ncRenderChips(); }
+  function ncSpecAdd(name){
+    if(ncSpecSel.length>=10 || ncSpecSel.indexOf(name)>=0) return;
+    ncSpecSel.push(name); ncRenderChips();
+    ncV('nc_specsearch').value=''; ncV('nc_specsug').style.display='none';
+  }
+  function ncSpecSearch(){
+    var q=ncV('nc_specsearch').value.trim().toLowerCase(), sug=ncV('nc_specsug');
+    var list=ncSpecList().filter(function(s){ return ncSpecSel.indexOf(s)<0 && (!q || s.toLowerCase().indexOf(q)>=0); }).slice(0,40);
+    if(!list.length){ sug.style.display='none'; return; }
+    sug.innerHTML='';
+    list.forEach(function(s){
+      var d=document.createElement('div');
+      d.style.cssText='padding:7px 10px;cursor:pointer;font-size:0.84rem;border-bottom:1px solid #f1f5f9;';
+      d.textContent=s;
+      d.onmousedown=function(e){ e.preventDefault(); ncSpecAdd(s); };
+      sug.appendChild(d);
+    });
+    sug.style.display='block';
+  }
+  document.addEventListener('click',function(e){
+    var sug=ncV('nc_specsug');
+    if(sug && !(e.target.closest && (e.target.closest('#nc_specsearch')||e.target.closest('#nc_specsug')))) sug.style.display='none';
+  });
+  async function ncBodyChanged(){
+    var bodyVal=ncV('nc_body').value, scope='mcc', state='';
+    if(bodyVal.indexOf('state::')===0){ scope='state'; state=bodyVal.slice(7); }
+    var existing=(window.CHOICE||[]).find(function(x){
+      return (x.scope||'mcc')===scope && String(x.state||'').toLowerCase()===state.toLowerCase();
+    });
+    var btn=ncV('nc_createbtn'), hint=ncV('nc_rebuildhint');
+    if(existing){
+      ncV('nc_dg').value = (existing.degree_group==='dnb') ? 'dnb' : 'mdms';
+      ncLastDg = ncV('nc_dg').value;            // keep prefilled specialties (don't reset)
+      ncSpecSel = (existing.specialties||[]).slice(0,10); ncRenderChips();
+      ncV('nc_rank').value = existing.rank || '';
+      if(btn) btn.textContent='Rebuild this list';
+      if(hint){ hint.style.display='block'; hint.innerHTML='⚠ This body already has a list ('+(existing.total||0)+' colleges). Building will <b>rebuild / replace</b> it with the settings below — no duplicate is created.'; }
+    } else {
+      if(btn) btn.textContent='Create list';
+      if(hint) hint.style.display='none';
+    }
+    await ncFacets();
+    if(existing && existing.quota){ ncV('nc_quota').value=existing.quota; ncQuotaChanged(); if(existing.category) ncV('nc_cat').value=existing.category; }
+  }
+  async function ncFacets(){
+    var dg=ncV('nc_dg').value;
+    if(ncLastDg!==null && dg!==ncLastDg){ ncSpecSel=[]; ncRenderChips(); }  // specialties are degree-specific
+    ncLastDg=dg;
+    var bodyVal=ncV('nc_body').value, scope='mcc', state='';
+    if(bodyVal.indexOf('state::')===0){ scope='state'; state=bodyVal.slice(7); }
+    try{
+      var r=await fetch('/admin/pg/choice-facets?scope='+scope+'&state='+encodeURIComponent(state)+'&degree_group='+dg,{credentials:'same-origin'});
+      var j=await r.json(); if(!j.ok) return;
+      ncCatsByQuota=j.categories_by_quota||{}; ncAllCats=j.categories||[];
+      var q=ncV('nc_quota'); q.innerHTML='<option value="">Any quota</option>';
+      (j.quotas||[]).forEach(function(x){ var o=document.createElement('option'); o.value=x; o.textContent=x; q.appendChild(o); });
+      var c=ncV('nc_cat'); c.innerHTML='<option value="">Any category</option>';
+      ncAllCats.forEach(function(x){ var o=document.createElement('option'); o.value=x; o.textContent=x; c.appendChild(o); });
+    }catch(e){}
+  }
+  function ncQuotaChanged(){
+    var quota=ncV('nc_quota').value, c=ncV('nc_cat');
+    var cats = (quota && ncCatsByQuota[quota]) ? ncCatsByQuota[quota] : ncAllCats;
+    c.innerHTML='<option value="">Any category</option>';
+    cats.forEach(function(x){ var o=document.createElement('option'); o.value=x; o.textContent=x; c.appendChild(o); });
+  }
+  async function ncAddState(uid){
+    var st=ncV('nc_addstate').value, msg=ncV('nc_addmsg');
+    if(!st) return;
+    msg.style.color='var(--gray-600)'; msg.textContent='Adding…';
+    try{
+      var r=await fetch('/admin/pg/users/'+uid+'/states',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:st})});
+      var j=await r.json();
+      if(j.ok){ msg.style.color='#166534'; msg.textContent='✓ Added — reloading'; setTimeout(function(){location.reload();},500); }
+      else { msg.style.color='#b91c1c'; msg.textContent='✗ '+(j.message||j.error||'Could not add'); }
+    }catch(e){ msg.style.color='#b91c1c'; msg.textContent='✗ Error'; }
+  }
+  async function ncCreate(uid){
+    var bodyVal=ncV('nc_body').value, scope='mcc', state='';
+    if(bodyVal.indexOf('state::')===0){ scope='state'; state=bodyVal.slice(7); }
+    var payload={scope:scope, state:state, degree_group:ncV('nc_dg').value,
+      rank:ncV('nc_rank').value, specialties:ncSpecSel,
+      quota:ncV('nc_quota').value, category:ncV('nc_cat').value,
+      auto: ncV('nc_auto').checked ? '1' : '0'};
+    var msg=ncV('nc_msg'); msg.style.color='var(--gray-600)'; msg.textContent='Creating…';
+    try{
+      var r=await fetch('/admin/pg/users/'+uid+'/choice-sets/create',
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      var j=await r.json();
+      if(j.ok){ msg.style.color='#166534'; msg.textContent='✓ List created'; setTimeout(function(){location.reload();},500); }
+      else { msg.style.color='#b91c1c'; msg.textContent='✗ '+(j.message||j.error||'Could not create'); }
+    }catch(e){ msg.style.color='#b91c1c'; msg.textContent='✗ Error, try again'; }
+  }
+  // Run after window.CHOICE (defined in a later script block) is available.
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', ncBodyChanged); } else { ncBodyChanged(); }
+  </script>
+  {% endif %}
 </div>
 
 {% if choice_sets %}
@@ -427,6 +606,7 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
     var s = window.CHOICE.find(function(x){ return x.id===setId; });
     var rnd = active[setId] || 1;
     var items = (s.rounds[String(rnd)]||[]);
+    var RO = window.CHOICE_RO === true || s.owner !== 'team';   // doctor's own list = view only
     var body = document.getElementById('csbody_'+setId);
     var html = '';
     if(!items.length){ html += '<div class="cs-empty">No colleges in Round '+rnd+' yet.'+(RO?'':' Add one below.')+'</div>'; }
@@ -451,7 +631,9 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
     });
   }
 
-  function renderSet(s){
+  function renderSet(s, parent){
+    var FREE_RO = window.CHOICE_RO === true;
+    var RO = FREE_RO || s.owner !== 'team';   // the team edits only its OWN (team) lists
     var el = document.createElement('div'); el.className = 'cs-set';
     var meta = [];
     if(s.rank) meta.push('Rank '+nfmt(s.rank));
@@ -460,24 +642,53 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
     meta.push(s.total+' colleges');
     var scopeChip = s.scope==='state' ? '<span class="chip chip-blue">'+esc(s.state||'State')+'</span>' : '<span class="chip chip-gray">MCC / All-India</span>';
     var teamLine = s.team_edited_at ? '<div class="cs-team"><i class="fa-solid fa-pen"></i> Last edited by GooCampus team ('+esc(s.team_edited_by||'team')+') · '+esc(s.team_edited_at)+'</div>' : '';
-    var roLine = RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-eye"></i> Free plan — the client builds this themselves. Team is view only (no add / edit).</div>' : '';
+    var roLine = FREE_RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-eye"></i> Free plan — the client builds this themselves. Team is view only (no add / edit).</div>'
+      : (RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-user"></i> Doctor\'s own list — view only. Use “Build a new choice list” for a separate GooCampus team list.</div>' : '');
+    var ackLine = s.owner !== 'team' ? '' : (s.client_ack_at
+        ? '<div class="cs-team" style="background:#f0fdf4;color:#166534;border-color:#bbf7d0;"><i class="fa-solid fa-circle-check"></i> Doctor confirmed the “suggestion only” note · '+esc(s.client_ack_at)+' UTC</div>'
+        : '<div class="cs-team" style="background:#fefce8;color:#854d0e;border-color:#fde68a;"><i class="fa-solid fa-hourglass-half"></i> Doctor has not yet confirmed the “suggestion only” note</div>')
+      + (s.client_edited_at ? '<div class="cs-team" style="background:#fff1f2;color:#9f1239;border-color:#fecdd3;"><i class="fa-solid fa-user-pen"></i> Doctor edited this list · last '+esc(s.client_edited_at)+' UTC — see change history</div>' : '');
+    var ownerChip = s.owner === 'team' ? ' <span class="chip" style="background:#fff7ed;color:#9a3412;">Prepared by GooCampus team</span>' : ' <span class="chip chip-gray">Doctor\'s own</span>';
     var addBox = RO ? '' : ('<div class="cs-add"><input id="csq_'+s.id+'" placeholder="Add a college to this round — type a name…" autocomplete="off" oninput="CS.search('+s.id+')">'
         + '<div class="cs-sug" id="cssug_'+s.id+'"></div></div>');
     el.innerHTML =
-      '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip
-        + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+roLine+'</div>'
+      '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip+ownerChip
+        + (RO ? '' : '<button onclick="CS.delSet('+s.id+')" style="float:right;background:none;border:0;color:#dc2626;font-size:0.74rem;cursor:pointer;">Delete list</button>')
+        + '<a href="/admin/pg/choice-sets/'+s.id+'/pdf" style="float:right;margin-right:12px;color:#2952a3;font-size:0.74rem;font-weight:700;text-decoration:none;"><i class="fa-solid fa-file-pdf"></i> Download PDF</a>'
+        + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+roLine+ackLine
+        + (s.owner==='team' ? '<div style="margin-top:6px;"><a href="#" onclick="CS.history('+s.id+');return false;" style="font-size:0.76rem;font-weight:700;color:#2952a3;text-decoration:none;"><i class="fa-solid fa-clock-rotate-left"></i> Change history (team + doctor)</a><div id="cshist_'+s.id+'" style="display:none;margin-top:6px;max-height:260px;overflow:auto;font-size:0.76rem;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:6px 9px;"></div></div>' : '')
+        + '</div>'
       + '<div class="cs-tabs">'
         + [1,2,3].map(function(r){ return '<button class="cs-tab" id="cstab_'+s.id+'_'+r+'" onclick="CS.tab('+s.id+','+r+')">Round '+r+' <span class="cnt" style="color:var(--gray-400);">0</span></button>'; }).join('')
       + '</div>'
       + '<div class="cs-body"><div id="csbody_'+s.id+'"></div>' + addBox
       + '</div>';
-    root.appendChild(el);
+    (parent || root).appendChild(el);
     active[s.id] = 1;
     renderRound(s.id);
   }
 
+  function csBodyLabel(s){ return s.scope==='state' ? (s.state||'State') : 'All India MCC'; }
+  function csShowBody(setId){
+    window.CHOICE.forEach(function(x){
+      var w=document.getElementById('cswrap_'+x.id); if(w) w.style.display=(x.id===setId?'block':'none');
+      var t=document.getElementById('csbt_'+x.id);
+      if(t){ var on=(x.id===setId);
+        t.style.background=on?'var(--navy,#1e3a5f)':'#fff';
+        t.style.color=on?'#fff':'var(--navy,#1e3a5f)';
+        t.style.borderColor=on?'var(--navy,#1e3a5f)':'var(--gray-300)'; }
+    });
+  }
+
   var CS = {
     tab: function(setId, rnd){ active[setId]=rnd; renderRound(setId); var q=document.getElementById('csq_'+setId); if(q){q.value='';} var sg=document.getElementById('cssug_'+setId); if(sg){sg.style.display='none';} },
+    delSet: function(setId){
+      if(!confirm('Delete this whole choice list (all rounds) for this doctor? This cannot be undone.')) return;
+      fetch('/admin/pg/choice-sets/'+setId+'/delete',{method:'POST',headers:{'Content-Type':'application/json'}})
+        .then(function(r){ return r.json(); })
+        .then(function(j){ if(j.ok){ location.reload(); } else { alert('Could not delete: '+(j.error||'error')); } })
+        .catch(function(){ alert('Network error — not deleted.'); });
+    },
     _post: function(url, body, setId){
       return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
         .then(function(r){ return r.json(); })
@@ -487,8 +698,24 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
           if(j.items){ s.rounds[String(j.round)] = j.items; }
           s.total = (s.rounds['1']||[]).length + (s.rounds['2']||[]).length + (s.rounds['3']||[]).length;
           s.team_edited_at = 'just now'; renderRound(setId);
-          var head = document.querySelectorAll('.cs-set')[window.CHOICE.indexOf(s)];
+          var bt=document.getElementById('csbt_'+setId), cnt=bt&&bt.querySelector('.csbtn'); if(cnt) cnt.textContent=s.total;
         }).catch(function(){ alert('Network error — not saved.'); });
+    },
+    history: function(setId){
+      var box = document.getElementById('cshist_'+setId);
+      if(box.style.display==='block'){ box.style.display='none'; return; }
+      box.style.display='block'; box.innerHTML='Loading…';
+      fetch('/admin/pg/choice-sets/'+setId+'/history',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+        var h = (j && j.history) || [];
+        if(!h.length){ box.innerHTML='<i>No changes recorded yet.</i>'; return; }
+        box.innerHTML = h.map(function(e){
+          var what = esc(e.action_label||e.action);
+          if(e.institute) what += ': <b>'+esc(e.institute)+'</b>'+(e.course?' — '+esc(e.course):'');
+          if(e.round) what += ' (Round '+e.round+(e.from_pos||e.to_pos ? ', '+(e.from_pos?('#'+e.from_pos):'')+(e.from_pos&&e.to_pos?' → ':'')+(e.to_pos?('#'+e.to_pos):'') : '')+')';
+          var who = e.actor==='client' ? '<span style="color:#9f1239;font-weight:700;">'+esc(e.who)+'</span>' : esc(e.who);
+          return '<div style="padding:3px 0;border-bottom:1px solid #f1f5f9;"><span style="color:#94a3b8;">'+esc(e.created_at)+' UTC</span> · '+who+' · '+what+'</div>';
+        }).join('');
+      }).catch(function(){ box.innerHTML='Could not load history.'; });
     },
     move: function(setId, itemId, dir){ this._post('/admin/pg/choice-items/'+itemId+'/move', {dir:dir}, setId); },
     del: function(setId, itemId){ if(confirm('Remove this college from the round?')) this._post('/admin/pg/choice-items/'+itemId+'/delete', {}, setId); },
@@ -522,8 +749,24 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
       }, 220);
     }
   };
-  window.CS = CS;
-  window.CHOICE.forEach(renderSet);
+  window.CS = CS; CS.showBody = csShowBody;
+  // Per-body tabs (one tab per counselling body) — show one list at a time.
+  var tabbar = document.createElement('div');
+  tabbar.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:0.85rem;';
+  window.CHOICE.forEach(function(s){
+    var b=document.createElement('button'); b.id='csbt_'+s.id; b.type='button';
+    b.style.cssText='border:1px solid var(--gray-300);background:#fff;border-radius:999px;padding:6px 14px;font-size:0.82rem;font-weight:600;cursor:pointer;color:var(--navy,#1e3a5f);';
+    b.innerHTML=esc(csBodyLabel(s))+' <span class="csbtn" style="color:var(--gray-400);font-weight:500;">'+(s.total||0)+'</span>';
+    b.onclick=function(){ csShowBody(s.id); };
+    tabbar.appendChild(b);
+  });
+  root.appendChild(tabbar);
+  window.CHOICE.forEach(function(s){
+    var wrap=document.createElement('div'); wrap.id='cswrap_'+s.id; wrap.style.display='none';
+    root.appendChild(wrap);
+    renderSet(s, wrap);
+  });
+  if(window.CHOICE.length) csShowBody(window.CHOICE[0].id);
   document.addEventListener('click', function(e){
     document.querySelectorAll('.cs-sug').forEach(function(b){
       if(!b.parentElement.contains(e.target)) b.style.display='none';
