@@ -100,3 +100,39 @@ def api_seat_matrix_ingest():
         return jsonify({'ok': False, 'error': 'server_error', 'detail': str(e)[:300]}), 500
     finally:
         conn.close()
+
+
+def api_seat_matrix_source_update():
+    """POST /api/pg/seat-matrix/source (X-News-Key) {body, year, superseded?, section?, sort_order?, notes?}
+    — change how an already-loaded matrix is listed (e.g. bring back the initial NMC matrix as
+    its own card next to the official MCC sections). Rows are never touched. (founder 2026-10-15)"""
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    body = (d.get('body') or '').strip()
+    year = (d.get('year') or '2026-27').strip()
+    sets, vals = [], []
+    if 'superseded' in d:
+        sets.append("superseded=?"); vals.append(1 if d.get('superseded') else 0)
+    if 'section' in d:
+        sets.append("section=?"); vals.append((d.get('section') or '').strip())
+    if 'sort_order' in d:
+        sets.append("sort_order=?"); vals.append(int(d.get('sort_order') or 0))
+    if 'notes' in d:
+        sets.append("notes=?"); vals.append((d.get('notes') or '').strip())
+    if not body or not sets:
+        return jsonify({'ok': False, 'error': 'body and at least one field required'}), 400
+    conn = get_db()
+    try:
+        n = conn.execute(f"UPDATE pg_seat_matrix_source SET {', '.join(sets)} WHERE counselling_body=? "
+                         "AND academic_year=?", vals + [body, year]).rowcount
+        conn.commit()
+        return jsonify({'ok': True, 'updated': n})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_seat_matrix_source_update: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
