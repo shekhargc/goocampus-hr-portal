@@ -20,6 +20,7 @@ are never reachable from the Desk. The list/edit work reuses the admin choice vi
 in choice_admin (g.desk_actor tells them who is acting). (founder 2026-10-15)
 """
 import base64
+import json
 import logging
 
 from flask import request, jsonify, g, Response
@@ -246,6 +247,24 @@ def desk_doctor(doctor_id):
             d['speciality_prefs'] = json.loads(d.get('speciality_prefs') or '[]')
         except Exception:
             d['speciality_prefs'] = []
+        d['speciality_prefs_source'] = 'profile' if d['speciality_prefs'] else ''
+        # Not set by the team yet → use the doctor's OWN choices from their onboarding form (up to 3),
+        # mapped to our course names. Read-only: nothing is written to the doctor's record.
+        if not d['speciality_prefs']:
+            try:
+                onb = conn.execute("SELECT specialities FROM pg_pgcp_onboarding WHERE user_id = ? "
+                                   "ORDER BY id DESC LIMIT 1", [doctor_id]).fetchone()
+                raw = json.loads((onb or {}).get('specialities') or '[]') if onb else []
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+                raw = []
+            if not raw and d.get('target_speciality'):
+                raw = [x.strip() for x in str(d['target_speciality']).split(',') if x.strip()]
+            if raw:
+                d['onboarding_specialities'] = raw
+                d['speciality_prefs'] = _map_specialities(conn, raw)
+                d['speciality_prefs_source'] = 'onboarding'
         d['created_at'] = str(d['created_at'])[:16] if d.get('created_at') else ''
         d['doc_type'] = _doctor_type(conn, doctor_id)
         d['type_label'] = _TYPE_LABEL.get(d['doc_type'], '')
@@ -566,6 +585,21 @@ def desk_selftest():
             conn.close()
     except Exception as e:
         out['spec_error'] = str(e)[:200]
+    # Onboarding speciality names → our course names (read-only mapping check).
+    try:
+        conn = get_db()
+        try:
+            out['spec_map'] = _map_specialities(conn, ['Radiology', 'General Medicine', 'Dermatology',
+                                                       'Orthopaedics', 'Paediatrics', 'OBG'])
+            raw = [r['s'] for r in conn.execute(
+                "SELECT specialities AS s FROM pg_pgcp_onboarding WHERE COALESCE(specialities,'[]') <> '[]' "
+                "ORDER BY id DESC LIMIT 40").fetchall()]
+            names = sorted({x for t in raw for x in (json.loads(t) if t else [])})
+            out['onboarding_spec_names'] = names[:40]
+        finally:
+            conn.close()
+    except Exception as e:
+        out['spec_map_error'] = str(e)[:200]
     # MCC authority header summary (official sections combined, NMC excluded).
     try:
         from pg_admin.routes.api_authorities import _seat_matrix_for
@@ -595,6 +629,36 @@ def desk_selftest():
         out['rec_error'] = str(e)[:200]
     return jsonify(out)
 
+
+
+def _map_specialities(conn, names):
+    """Doctor-typed speciality names ('Radiology', 'General Medicine') → our MD/MS course names
+    ('MD - Radio-diagnosis'). Exact match first, then the course whose core matches; unmatched
+    names are kept as typed so nothing the doctor chose is lost."""
+    from pg_admin.routes.api_choice import _spec_core
+    try:
+        courses = [r['course'] for r in conn.execute(
+            "SELECT DISTINCT course FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 AND COALESCE(course,'')<>'' "
+            "AND UPPER(LEFT(course, 2)) IN ('MD', 'MS')").fetchall()]
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        courses = []
+    norm = lambda x: ''.join(ch for ch in (x or '').lower() if ch.isalnum())
+    out = []
+    for n in names:
+        n = _s(n)
+        if not n:
+            continue
+        hit = next((c for c in courses if norm(c) == norm(n) or norm(_spec_core(c)) == norm(n)), None)
+        if not hit:
+            core = norm(_spec_core(n))[:8]
+            cands = [c for c in courses if core and core in norm(c)]
+            hit = sorted(cands, key=len)[0] if cands else None
+        v = hit or n
+        if v not in out:
+            out.append(v)
+    return out
 
 
 # ── Team edits a doctor's profile (internal / paid only) ─────────────────────

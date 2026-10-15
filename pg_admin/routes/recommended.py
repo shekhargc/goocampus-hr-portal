@@ -283,6 +283,18 @@ def new_seats(conn, set_id, args):
                 params.append(qv); params.extend(cats)
         if ors:
             where.append("(" + " OR ".join(ors) + ")")
+    # Hide seats already in the list (this round if ?round= is given, else any round).
+    if _s(args.get('include_added')) not in ('1', 'true'):
+        try:
+            rnd = int(args.get('round')) if args.get('round') else None
+        except (TypeError, ValueError):
+            rnd = None
+        have = conn.execute("SELECT LOWER(TRIM(institute)) AS i, LOWER(TRIM(course)) AS c FROM pg_choice_items "
+                            "WHERE set_id = ?" + (" AND round = ?" if rnd else ""),
+                            [set_id] + ([rnd] if rnd else [])).fetchall()
+        added = {(r['i'], r['c']) for r in have}
+    else:
+        added = set()
     if q:
         from pg_admin.routes.api import smart_name_clause
         fn, pn = smart_name_clause("college_name", q)
@@ -303,6 +315,9 @@ def new_seats(conn, set_id, args):
     out = []
     for r in rows:
         r = dict(r)
+        inst = r['cutoff_institute'] or _short_name(r['college_name'])
+        if (inst.strip().lower(), (r['cutoff_course'] or r['course_name']).strip().lower()) in added:
+            continue
         out.append({'institute': r['cutoff_institute'] or _short_name(r['college_name']),
                     'course': r['cutoff_course'] or r['course_name'], 'quota': r['cutoff_quota'],
                     'category': r['category'], 'state': r['state'], 'seats': r['seats'],

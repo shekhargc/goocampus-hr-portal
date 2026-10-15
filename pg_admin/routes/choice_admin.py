@@ -369,6 +369,14 @@ def choice_cutoff_search(set_id):
             where.append(dgc); params.append(dgp)
         if s.get('authority'):
             where.append("c.authority ILIKE ?"); params.append('%' + s['authority'] + '%')
+        # Only colleges NOT already in this round of the list (founder 2026-10-15); ?include_added=1 shows all.
+        if _s(request.args.get('include_added')) not in ('1', 'true'):
+            where.append("NOT EXISTS (SELECT 1 FROM pg_choice_items i WHERE i.set_id = ? AND i.round = ? "
+                         "AND LOWER(TRIM(i.institute)) = LOWER(TRIM(c.institute)) "
+                         "AND LOWER(TRIM(i.course)) = LOWER(TRIM(c.course)) "
+                         "AND LOWER(TRIM(COALESCE(i.quota,''))) = LOWER(TRIM(COALESCE(c.quota,''))) "
+                         "AND LOWER(TRIM(COALESCE(i.category,''))) = LOWER(TRIM(COALESCE(c.category,''))))")
+            params.extend([set_id, rnd])
         if q:
             from pg_admin.routes.api import smart_name_clause
             fi, pi = smart_name_clause("c.institute", q)
