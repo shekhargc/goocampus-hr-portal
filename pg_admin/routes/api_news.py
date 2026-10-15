@@ -641,6 +641,10 @@ def api_pg_news_follows():
 
 def api_pg_news_pdf(news_id):
     """GET /api/pg/news/<id>/pdf — stream a news attachment. Public (no key)."""
+    from pg_admin.routes.api import file_key_block
+    blk = file_key_block()
+    if blk:
+        return blk
     conn = get_db()
     try:
         row = conn.execute(

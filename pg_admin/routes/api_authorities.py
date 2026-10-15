@@ -281,6 +281,10 @@ def api_pg_authority(code):
 def api_pg_authority_doc_file(doc_id):
     """GET /api/pg/authority-docs/<id>/file — stream a published document. Public (no key),
     so the doctor's browser can open/download it directly (same as the news PDF stream)."""
+    from pg_admin.routes.api import file_key_block
+    blk = file_key_block()
+    if blk:
+        return blk
     conn = get_db()
     try:
         row = conn.execute(
