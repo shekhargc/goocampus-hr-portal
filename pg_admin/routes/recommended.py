@@ -30,7 +30,10 @@ COMBOS = {
                          'cut_quota': 'Management/Paid Seats Quota', 'category': 'OPEN'},
 }
 TIERS = ('Top', 'Good', 'Average')
-_TIER_IDX = {t: i for i, t in enumerate(TIERS)}
+# Colleges with no 2025 history are never tiered — they're tagged 'New' and listed after the
+# tiered ones (founder 2026-10-15: "we're not sure what it could be, just say new college").
+NEW_TIER = 'New'
+_TIER_IDX = {'Top': 0, 'Good': 1, 'Average': 2, NEW_TIER: 3}
 _READY = False
 
 
@@ -106,17 +109,33 @@ def tiers_payload(conn, combo):
     out = []
     for r in rows:
         t = tiers.get(r['college_code']) or {}
+        new = not r['has_history']
         out.append({'college_code': r['college_code'], 'college': _short_name(r['name']), 'state': r['state'],
-                    'seats': int(r['seats'] or 0), 'new_college': not r['has_history'],
-                    'tier': t.get('tier') or 'Average', 'basis_rank': t.get('basis_rank'),
+                    'seats': int(r['seats'] or 0), 'new_college': new, 'editable': not new,
+                    'tier': NEW_TIER if new else (t.get('tier') or 'Average'), 'basis_rank': t.get('basis_rank'),
                     'updated_by': t.get('updated_by') or '',
                     'updated_at': str(t['updated_at'])[:16] if t.get('updated_at') else ''})
     out.sort(key=lambda x: (_TIER_IDX.get(x['tier'], 2), x['basis_rank'] or 10**9, x['college']))
     return out
 
 
+def _new_codes(conn, combo):
+    """MCC codes of colleges with no 2025 cut-off history at all for this combo's section."""
+    c = COMBOS[combo]
+    bodies = _bodies(conn, c['section'])
+    if not bodies:
+        return set()
+    ph = ','.join(['?'] * len(bodies))
+    return {r['college_code'] for r in conn.execute(
+        f"SELECT college_code FROM pg_seat_matrix WHERE counselling_body IN ({ph}) "
+        f"GROUP BY college_code HAVING MAX(CASE WHEN COALESCE(cutoff_institute,'')<>'' THEN 1 ELSE 0 END)=0",
+        bodies).fetchall()}
+
+
 def set_tier(conn, combo, code, tier, who, name='', basis=None):
     if combo not in COMBOS or tier not in TIERS or not code:
+        return False
+    if code in _new_codes(conn, combo):      # new colleges stay 'New' — never tiered
         return False
     row = conn.execute("SELECT id FROM pg_college_tiers WHERE list_key=? AND college_code=?",
                        [combo, code]).fetchone()
@@ -169,6 +188,7 @@ def _matrix_items(conn, combo, specialties, rank):
         "s.cutoff_quota, s.category, s.cr_closing, s.cutoff_fee, s.has_cutoff, s.seats "
         "FROM pg_seat_matrix s WHERE " + " AND ".join(where), params).fetchall()]
     tiers = _tiers(conn, combo)
+    newc = _new_codes(conn, combo)
     cores = [(_spec_core(sp).lower(), i) for i, sp in enumerate(specialties or [])]
 
     def spec_idx(course):
@@ -178,7 +198,7 @@ def _matrix_items(conn, combo, specialties, rank):
                 return i
         return len(cores)
     for r in rows:
-        r['tier'] = tiers.get(r['college_code'], 'Average')
+        r['tier'] = NEW_TIER if r['college_code'] in newc else tiers.get(r['college_code'], 'Average')
     rows.sort(key=lambda r: (_TIER_IDX.get(r['tier'], 2), spec_idx(r['cutoff_course'] or r['course_name']),
                              r['cr_closing'] if r['cr_closing'] is not None else 10**9,
                              r['college_name']))
