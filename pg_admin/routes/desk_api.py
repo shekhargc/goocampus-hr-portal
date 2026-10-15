@@ -51,6 +51,7 @@ def ensure_desk_columns(conn, force=False):
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS desk_access INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS is_team_member INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS list_kind TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_at TIMESTAMP")
         _clog.ensure_choice_log(conn, force=True)
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_by TEXT DEFAULT ''")
@@ -529,4 +530,19 @@ def desk_selftest():
             out['facets_quotas'] = len(body.get('quotas') or [])
     except Exception as e:
         out['facets_error'] = str(e)[:200]
+    # Recommended MCC lists — read-only dry run (counts + first 3 tiers), no writes.
+    try:
+        from pg_admin.routes import recommended as _rec
+        conn = get_db()
+        try:
+            _rec.ensure_rec_tables(conn)
+            for combo in _rec.COMBOS:
+                items = _rec._matrix_items(conn, combo, ['MD - Radio-diagnosis', 'MD - General Medicine'], 5000)
+                out['rec_' + combo] = {'items': len(items), 'new': sum(1 for i in items if not i['has_cutoff']),
+                                       'first': [i['tier'] for i in items[:3]],
+                                       'tiers_set': len(_rec._tiers(conn, combo))}
+        finally:
+            conn.close()
+    except Exception as e:
+        out['rec_error'] = str(e)[:200]
     return jsonify(out)

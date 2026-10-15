@@ -32,7 +32,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
-                             calendar_admin, desk_api, seat_matrix_ingest)
+                             calendar_admin, desk_api, seat_matrix_ingest, recommended)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -356,6 +356,14 @@ def register_pg_admin(app):
     for rule, ep, fn, methods in (
         ('/api/pg/desk/me', 'api_pg_desk_me', _d.desk_me, ['GET']),
         ('/api/pg/desk/selftest', 'api_pg_desk_selftest', _d.desk_selftest, ['GET']),
+        ('/api/pg/desk/tiers', 'api_pg_desk_tiers', recommended.desk_tiers, ['GET', 'POST']),
+        ('/api/pg/desk/doctors/<int:doctor_id>/recommended', 'api_pg_desk_recommended',
+         recommended.desk_recommended, ['POST']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/new-seats', 'api_pg_desk_new_seats',
+         recommended.desk_new_seats, ['GET']),
+        ('/api/pg/choice-sets/<int:set_id>/new-seats', 'api_pg_choice_new_seats',
+         recommended.doctor_new_seats, ['GET']),
+        ('/api/pg/tiers/ingest', 'api_pg_tiers_ingest', recommended.tiers_ingest, ['POST']),
         ('/api/pg/desk/doctors', 'api_pg_desk_doctors', _d.desk_doctors, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>', 'api_pg_desk_doctor', _d.desk_doctor, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>/states', 'api_pg_desk_states', _d.desk_states,
@@ -379,6 +387,12 @@ def register_pg_admin(app):
         ('/api/pg/desk/choice-sets/<int:set_id>/history', 'api_pg_desk_history', _d.desk_history, ['GET']),
     ):
         app.add_url_rule(rule, ep, fn, methods=methods)
+    app.add_url_rule('/admin/pg/users/<int:user_id>/recommended', 'pg_choice_recommended',
+                     recommended.admin_recommended, methods=['POST'])
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/new-seats', 'pg_choice_new_seats',
+                     recommended.admin_new_seats, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-tiers', 'pg_college_tiers',
+                     recommended.admin_tiers, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/history', 'pg_choice_history',
                      choice_admin.choice_history, methods=['GET'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/pdf', 'pg_choice_pdf',

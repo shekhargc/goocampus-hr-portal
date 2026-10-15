@@ -47,6 +47,7 @@ def _self_heal(conn):
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_at TIMESTAMP")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_by TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS list_kind TEXT DEFAULT ''")
         conn.commit()
         _clog.ensure_choice_log(conn)   # before any edit, so its commit never splits an edit
     except Exception:
@@ -135,7 +136,7 @@ def choice_create(user_id):
         # Only check the plan entitlement when starting a NEW body's list.
         existing = conn.execute(
             "SELECT id FROM pg_choice_sets WHERE user_id = ? AND scope = ? "
-            "AND COALESCE(owner,'client') = 'team' "
+            "AND COALESCE(owner,'client') = 'team' AND COALESCE(list_kind,'') = '' "
             "AND LOWER(COALESCE(state,'')) = LOWER(?) ORDER BY id LIMIT 1",
             [user_id, scope, state or '']).fetchone()
         if existing:
@@ -430,10 +431,11 @@ def choice_add(set_id):
         conn.execute(
             "INSERT INTO pg_choice_items (set_id, round, position, master_id, institute, course, "
             "quota, category, closing_rank, chance, source, added_by, added_by_name) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?, 'manual', 'team', ?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?, 'team', ?)",
             [set_id, rnd, nextpos, master_id, institute, _s(body.get('course')),
-             _s(body.get('quota')), _s(body.get('category')), cr, _chance(s.get('rank'), cr),
-             _admin_name(u)])
+             _s(body.get('quota')), _s(body.get('category')), cr,
+             'new' if body.get('is_new') else _chance(s.get('rank'), cr),
+             'seatmatrix' if body.get('is_new') else 'manual', _admin_name(u)])
         _stamp_team(conn, set_id, _admin_name(u))
         _clog.log(conn, set_id, 'add', 'team', _admin_name(u), user_id=s['user_id'], rnd=rnd, to_pos=nextpos,
                   item={'institute': institute, 'course': _s(body.get('course')),

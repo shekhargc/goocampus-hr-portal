@@ -1,0 +1,491 @@
+"""GooCampus Recommended choice lists for MCC + the "New in 2026" seat picker.
+
+Founder 2026-10-15. MCC only, two combos:
+  aiq_open          — All India Quota, OPEN
+  deemed_paid_open  — Deemed University paid (Self-Financed Merit / Management-Paid), OPEN
+For each combo the team builds TWO lists for a doctor (both owner='team', so the doctor
+sees them under "GooCampus Team Choice List", can edit, and every change is logged):
+  rec_matrix:<combo>  — every 2026 seat-matrix seat in the doctor's specialities, ordered
+                        by college tier (Top → Good → Average, the team-curated
+                        pg_college_tiers), then speciality preference, then last year's
+                        closing rank. Includes colleges/courses NEW in 2026.
+  rec_cutoff:<combo>  — the classic last-year cut-off list (3 rounds, by the doctor's rank).
+
+New-2026 picker: seat-matrix seats with no 2025 cut-off (has_cutoff=0) offered to the team
+and paid doctors to add deliberately; added items carry chance='new', source='seatmatrix'.
+"""
+import json
+import logging
+from flask import request, jsonify
+
+from db import get_db
+from pg_admin.routes.api_choice import _chance, _spec_core, _generate_round, _plan_has
+from pg_admin.data import choice_log as _clog
+
+COMBOS = {
+    'aiq_open': {'label': 'All India Quota · Open', 'section': 'aiq', 'seat_quota': 'All India',
+                 'cut_quota': 'All India Quota', 'category': 'OPEN'},
+    'deemed_paid_open': {'label': 'Deemed Paid · Open', 'section': 'deemed',
+                         'seat_quota': 'Self-Financed Merit Seat',
+                         'cut_quota': 'Management/Paid Seats Quota', 'category': 'OPEN'},
+}
+TIERS = ('Top', 'Good', 'Average')
+_TIER_IDX = {t: i for i, t in enumerate(TIERS)}
+_READY = False
+
+
+def ensure_rec_tables(conn, force=False):
+    global _READY
+    if _READY and not force:
+        return
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_college_tiers (
+            id SERIAL PRIMARY KEY,
+            list_key TEXT NOT NULL,            -- aiq_open | deemed_paid_open
+            college_code TEXT NOT NULL,        -- MCC 6-digit institute code
+            college_name TEXT DEFAULT '',
+            tier TEXT DEFAULT 'Average',       -- Top | Good | Average
+            basis_rank INTEGER,                -- 2025 median clinical closing rank (draft basis)
+            updated_by TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_college_tiers ON pg_college_tiers (list_key, college_code)")
+        conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS list_kind TEXT DEFAULT ''")
+        conn.commit()
+        _READY = True
+    except Exception as e:
+        logging.warning("ensure_rec_tables: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+
+
+def _s(v):
+    return (str(v).strip() if v is not None else '')
+
+
+def _short_name(name):
+    """'Govt Medical College, Satna, Near Kendriya Vidyalaya…' → 'Govt Medical College, Satna'."""
+    segs = [x.strip() for x in (name or '').split(',') if x.strip()]
+    if not segs:
+        return ''
+    out = segs[0]
+    if len(segs) > 1 and len(segs[1]) <= 40 and not any(ch.isdigit() for ch in segs[1]):
+        out += ', ' + segs[1]
+    return out
+
+
+def _bodies(conn, section=None):
+    q = ("SELECT counselling_body, section FROM pg_seat_matrix_source WHERE COALESCE(superseded,0)=0 "
+         "AND COALESCE(authority_code,'')='mcc' AND COALESCE(section,'')<>''")
+    p = []
+    if section:
+        q += " AND section=?"; p.append(section)
+    return [r['counselling_body'] for r in conn.execute(q, p).fetchall()]
+
+
+def _tiers(conn, combo):
+    return {r['college_code']: r['tier'] for r in conn.execute(
+        "SELECT college_code, tier FROM pg_college_tiers WHERE list_key=?", [combo]).fetchall()}
+
+
+# ── Tiers (team-curated Top / Good / Average) ────────────────────────────────
+def tiers_payload(conn, combo):
+    c = COMBOS[combo]
+    bodies = _bodies(conn, c['section'])
+    if not bodies:
+        return []
+    ph = ','.join(['?'] * len(bodies))
+    rows = conn.execute(
+        f"SELECT college_code, MAX(college_name) AS name, MAX(state) AS state, SUM(seats) AS seats, "
+        f"MAX(CASE WHEN has_cutoff=1 THEN 1 ELSE 0 END) AS has_history "
+        f"FROM pg_seat_matrix WHERE counselling_body IN ({ph}) AND quota=? AND category=? "
+        f"GROUP BY college_code", bodies + [c['seat_quota'], c['category']]).fetchall()
+    tiers = {r['college_code']: dict(r) for r in conn.execute(
+        "SELECT college_code, tier, basis_rank, updated_by, updated_at FROM pg_college_tiers "
+        "WHERE list_key=?", [combo]).fetchall()}
+    out = []
+    for r in rows:
+        t = tiers.get(r['college_code']) or {}
+        out.append({'college_code': r['college_code'], 'college': _short_name(r['name']), 'state': r['state'],
+                    'seats': int(r['seats'] or 0), 'new_college': not r['has_history'],
+                    'tier': t.get('tier') or 'Average', 'basis_rank': t.get('basis_rank'),
+                    'updated_by': t.get('updated_by') or '',
+                    'updated_at': str(t['updated_at'])[:16] if t.get('updated_at') else ''})
+    out.sort(key=lambda x: (_TIER_IDX.get(x['tier'], 2), x['basis_rank'] or 10**9, x['college']))
+    return out
+
+
+def set_tier(conn, combo, code, tier, who, name='', basis=None):
+    if combo not in COMBOS or tier not in TIERS or not code:
+        return False
+    row = conn.execute("SELECT id FROM pg_college_tiers WHERE list_key=? AND college_code=?",
+                       [combo, code]).fetchone()
+    if row:
+        conn.execute("UPDATE pg_college_tiers SET tier=?, updated_by=?, updated_at=CURRENT_TIMESTAMP "
+                     + (", college_name=?" if name else "") + (", basis_rank=?" if basis is not None else "")
+                     + " WHERE id=?",
+                     [tier, who] + ([name] if name else []) + ([basis] if basis is not None else []) + [row['id']])
+    else:
+        conn.execute("INSERT INTO pg_college_tiers (list_key, college_code, college_name, tier, basis_rank, "
+                     "updated_by) VALUES (?,?,?,?,?,?)", [combo, code, name, tier, basis, who])
+    return True
+
+
+# ── Build the two recommended lists for a doctor ─────────────────────────────
+def _upsert_set(conn, user_id, kind, label, rank, specialties, qcs):
+    ex = conn.execute("SELECT id FROM pg_choice_sets WHERE user_id=? AND COALESCE(list_kind,'')=? "
+                      "AND COALESCE(owner,'client')='team' ORDER BY id LIMIT 1", [user_id, kind]).fetchone()
+    if ex:
+        sid = ex['id']
+        conn.execute("UPDATE pg_choice_sets SET label=?, rank=?, specialties=?, quota_categories=?, "
+                     "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                     [label, rank, json.dumps(specialties), json.dumps(qcs), sid])
+        conn.execute("DELETE FROM pg_choice_items WHERE set_id=?", [sid])
+        return sid, True
+    sid = conn.execute(
+        "INSERT INTO pg_choice_sets (user_id, label, scope, authority, degree_group, state, quota, category, rank, "
+        "specialties, quota_categories, owner, list_kind) VALUES (?,?,'mcc','MCC','mdms','',?,?,?,?,?,'team',?) "
+        "RETURNING id", [user_id, label, qcs[0]['quota'], 'OPEN', rank, json.dumps(specialties),
+                         json.dumps(qcs), kind]).fetchone()['id']
+    return sid, False
+
+
+def _matrix_items(conn, combo, specialties, rank):
+    c = COMBOS[combo]
+    bodies = _bodies(conn, c['section'])
+    if not bodies:
+        return []
+    ph = ','.join(['?'] * len(bodies))
+    where = [f"s.counselling_body IN ({ph})", "s.quota=?", "s.category=?"]
+    params = bodies + [c['seat_quota'], c['category']]
+    if specialties:
+        ors = []
+        for sp in specialties:
+            ors.append("(LOWER(TRIM(s.cutoff_course))=LOWER(TRIM(?)) OR s.cutoff_course ILIKE ?)")
+            params.extend([sp, '%' + _spec_core(sp) + '%'])
+        where.append("(" + " OR ".join(ors) + ")")
+    rows = [dict(r) for r in conn.execute(
+        "SELECT s.college_code, s.college_name, s.cutoff_institute, s.cutoff_course, s.course_name, "
+        "s.cutoff_quota, s.category, s.cr_closing, s.cutoff_fee, s.has_cutoff, s.seats "
+        "FROM pg_seat_matrix s WHERE " + " AND ".join(where), params).fetchall()]
+    tiers = _tiers(conn, combo)
+    cores = [(_spec_core(sp).lower(), i) for i, sp in enumerate(specialties or [])]
+
+    def spec_idx(course):
+        cl = (course or '').lower()
+        for core, i in cores:
+            if core and core in cl:
+                return i
+        return len(cores)
+    for r in rows:
+        r['tier'] = tiers.get(r['college_code'], 'Average')
+    rows.sort(key=lambda r: (_TIER_IDX.get(r['tier'], 2), spec_idx(r['cutoff_course'] or r['course_name']),
+                             r['cr_closing'] if r['cr_closing'] is not None else 10**9,
+                             r['college_name']))
+    return rows
+
+
+def build_recommended(conn, user_id, combo, specialties, rank, actor):
+    """(Re)build rec_matrix:<combo> + rec_cutoff:<combo> for this doctor. Returns {matrix, cutoff}."""
+    from pg_admin.routes.choice_admin import _self_heal, _stamp_team
+    _self_heal(conn)
+    ensure_rec_tables(conn)
+    c = COMBOS[combo]
+    qcs = [{'quota': c['cut_quota'], 'categories': [c['category']]}]
+    out = {}
+    # 1) 2026 seat-matrix order (tiered)
+    kind = 'rec_matrix:' + combo
+    sid, rebuilt = _upsert_set(conn, user_id, kind,
+                               f"GooCampus Recommended — {c['label']} (2026 seat matrix, by college tier)",
+                               rank, specialties, qcs)
+    items = []
+    for pos, r in enumerate(_matrix_items(conn, combo, specialties, rank), start=1):
+        new = not r['has_cutoff']
+        items.append([sid, 1, pos, None, r['cutoff_institute'] or _short_name(r['college_name']),
+                      r['cutoff_course'] or r['course_name'], c['cut_quota'], r['category'],
+                      r['cr_closing'], 'new' if new else _chance(rank, r['cr_closing']),
+                      float(r['cutoff_fee']) if r['cutoff_fee'] is not None else None, 'INR',
+                      'seatmatrix', 'team', actor])
+    if items:
+        conn.execute_batch(
+            "INSERT INTO pg_choice_items (set_id, round, position, master_id, institute, course, quota, "
+            "category, closing_rank, chance, fee, currency, source, added_by, added_by_name) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", items, page_size=500)
+    _stamp_team(conn, sid, actor)
+    _clog.log(conn, sid, 'rebuild' if rebuilt else 'build', 'team', actor, user_id=user_id,
+              detail={'kind': kind, 'colleges': len(items), 'rank': rank, 'specialties': specialties})
+    out['matrix'] = {'set_id': sid, 'items': len(items)}
+    # 2) last-year cut-off order (3 rounds, by rank)
+    kind = 'rec_cutoff:' + combo
+    sid, rebuilt = _upsert_set(conn, user_id, kind,
+                               f"GooCampus Recommended — {c['label']} (last year's cut-offs, by your rank)",
+                               rank, specialties, qcs)
+    for rnd in (1, 2, 3):
+        _generate_round(conn, sid, rnd, 'MCC', 'mdms', specialties, qcs, rank)
+    conn.execute("UPDATE pg_choice_items SET added_by='team', added_by_name=? WHERE set_id=?", [actor, sid])
+    n = conn.execute("SELECT COUNT(*) AS n FROM pg_choice_items WHERE set_id=?", [sid]).fetchone()['n']
+    _stamp_team(conn, sid, actor)
+    _clog.log(conn, sid, 'rebuild' if rebuilt else 'build', 'team', actor, user_id=user_id,
+              detail={'kind': kind, 'colleges': n, 'rank': rank, 'specialties': specialties})
+    out['cutoff'] = {'set_id': sid, 'items': n}
+    return out
+
+
+# ── "New in 2026" seats for a choice list ─────────────────────────────────────
+def new_seats(conn, set_id, args):
+    s = conn.execute("SELECT * FROM pg_choice_sets WHERE id=?", [set_id]).fetchone()
+    if not s:
+        return None
+    s = dict(s)
+    if (s.get('scope') or '') != 'mcc':
+        return {'rows': [], 'note': 'New-2026 seats are available for MCC lists only.'}
+    bodies = _bodies(conn)
+    if not bodies:
+        return {'rows': []}
+    ph = ','.join(['?'] * len(bodies))
+    where = [f"counselling_body IN ({ph})", "has_cutoff=0"]
+    params = list(bodies)
+    quota, cat, q = _s(args.get('quota')), _s(args.get('category')), _s(args.get('q'))
+    if quota:
+        where.append("cutoff_quota=?"); params.append(quota)
+    if cat:
+        where.append("category=?"); params.append(cat)
+    if not quota and not cat:
+        try:
+            qcs = json.loads(s.get('quota_categories') or '[]')
+        except Exception:
+            qcs = []
+        ors = []
+        for pair in qcs:
+            qv = _s(pair.get('quota')); cats = [x for x in (pair.get('categories') or []) if _s(x)]
+            if qv and cats:
+                ors.append("(cutoff_quota=? AND category IN (" + ','.join(['?'] * len(cats)) + "))")
+                params.append(qv); params.extend(cats)
+        if ors:
+            where.append("(" + " OR ".join(ors) + ")")
+    if q:
+        from pg_admin.routes.api import smart_name_clause
+        fn, pn = smart_name_clause("college_name", q)
+        fc, pc = smart_name_clause("course_name", q)
+        where.append(f"({fn} OR {fc})"); params.extend(pn + pc)
+    try:
+        limit = max(1, min(int(args.get('limit') or 100), 500))
+    except (TypeError, ValueError):
+        limit = 100
+    try:
+        offset = max(0, int(args.get('offset') or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    rows = conn.execute(
+        "SELECT college_code, college_name, state, course_name, cutoff_course, cutoff_institute, cutoff_quota, "
+        "category, seats, new_reason, section FROM pg_seat_matrix WHERE " + " AND ".join(where) +
+        f" ORDER BY state, college_name, course_name LIMIT {limit} OFFSET {offset}", params).fetchall()
+    out = []
+    for r in rows:
+        r = dict(r)
+        out.append({'institute': r['cutoff_institute'] or _short_name(r['college_name']),
+                    'course': r['cutoff_course'] or r['course_name'], 'quota': r['cutoff_quota'],
+                    'category': r['category'], 'state': r['state'], 'seats': r['seats'],
+                    'college_code': r['college_code'], 'new_reason': r['new_reason'],
+                    'section': r['section'], 'is_new': True})
+    return {'rows': out, 'limit': limit, 'offset': offset, 'more': len(out) == limit}
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
+def _combo_or_400(combo):
+    if combo not in COMBOS:
+        return jsonify({'ok': False, 'error': 'combo must be aiq_open or deemed_paid_open'}), 400
+    return None
+
+
+def _build_from_request(user_id, actor):
+    body = request.get_json(silent=True) or {}
+    combo = _s(body.get('combo'))
+    err = _combo_or_400(combo)
+    if err:
+        return err
+    sp = body.get('specialties') or []
+    if isinstance(sp, str):
+        sp = [x.strip() for x in sp.split(',') if x.strip()]
+    try:
+        rank = int(body.get('rank'))
+    except (TypeError, ValueError):
+        rank = None
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM pg_users WHERE id=?", [user_id]).fetchone():
+            return jsonify({'ok': False, 'error': 'doctor_not_found'}), 404
+        if not _plan_has(conn, user_id, 'dash_choice_list'):
+            return jsonify({'ok': False, 'error': 'not_entitled',
+                            'message': 'Recommended MCC lists are for Internal and paid doctors.'}), 403
+        res = build_recommended(conn, user_id, combo, [x for x in sp if _s(x)], rank, actor)
+        conn.commit()
+        return jsonify({'ok': True, 'combo': combo, **res})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("build_recommended: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def _tiers_get(combo):
+    err = _combo_or_400(combo)
+    if err:
+        return err
+    conn = get_db()
+    try:
+        ensure_rec_tables(conn)
+        rows = tiers_payload(conn, combo)
+        return jsonify({'ok': True, 'combo': combo, 'label': COMBOS[combo]['label'], 'tiers': list(TIERS),
+                        'colleges': rows})
+    finally:
+        conn.close()
+
+
+def _tiers_post(actor):
+    body = request.get_json(silent=True) or {}
+    combo = _s(body.get('combo'))
+    err = _combo_or_400(combo)
+    if err:
+        return err
+    changes = body.get('changes') or ([{'code': body.get('code'), 'tier': body.get('tier')}]
+                                      if body.get('code') else [])
+    conn = get_db()
+    try:
+        ensure_rec_tables(conn)
+        n = 0
+        for ch in changes:
+            if set_tier(conn, combo, _s(ch.get('code')), _s(ch.get('tier')), actor):
+                n += 1
+        conn.commit()
+        return jsonify({'ok': True, 'updated': n})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("tiers_post: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def _new_seats_get(set_id):
+    conn = get_db()
+    try:
+        res = new_seats(conn, set_id, request.args)
+        if res is None:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        return jsonify({'ok': True, **res})
+    except Exception as e:
+        logging.error("new_seats: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+# Desk (goocampus.in team login)
+def desk_tiers():
+    from pg_admin.routes.desk_api import _guard, _actor_name
+    m, _, err = _guard()
+    if err:
+        return err
+    if request.method == 'POST':
+        return _tiers_post(_actor_name(m))
+    return _tiers_get(_s(request.args.get('combo')) or 'aiq_open')
+
+
+def desk_recommended(doctor_id):
+    from pg_admin.routes.desk_api import _guard, _actor_name
+    m, _, err = _guard(doctor_id=doctor_id)
+    return err or _build_from_request(doctor_id, _actor_name(m))
+
+
+def desk_new_seats(set_id):
+    from pg_admin.routes.desk_api import _guard
+    m, _, err = _guard(set_id=set_id)
+    return err or _new_seats_get(set_id)
+
+
+# Admin (goocampus.org)
+def _admin_user():
+    from core.users import get_user
+    u = get_user()
+    return u if (u and u.get('is_admin')) else None
+
+
+def admin_recommended(user_id):
+    u = _admin_user()
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    return _build_from_request(user_id, (u.get('name') or u.get('username') or 'GooCampus team').strip())
+
+
+def admin_new_seats(set_id):
+    if not _admin_user():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    return _new_seats_get(set_id)
+
+
+def admin_tiers():
+    u = _admin_user()
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    if request.method == 'POST':
+        return _tiers_post((u.get('name') or 'admin').strip())
+    return _tiers_get(_s(request.args.get('combo')) or 'aiq_open')
+
+
+# Doctor's own picker (paid / internal)
+def doctor_new_seats(set_id):
+    from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        tok = _bearer_token()
+        u = _pg_user_by_token(conn, tok) if tok else None
+        if not u:
+            return jsonify({'ok': False, 'error': 'no_token'}), 401
+        if not conn.execute("SELECT 1 FROM pg_choice_sets WHERE id=? AND user_id=?", [set_id, u['id']]).fetchone():
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        if not _plan_has(conn, u['id'], 'dash_choice_list'):
+            return jsonify({'ok': False, 'error': 'not_entitled',
+                            'message': 'New 2026 seats are part of the paid plans.'}), 403
+    finally:
+        conn.close()
+    return _new_seats_get(set_id)
+
+
+# Bulk tier import (Mac, X-News-Key) — seeds the draft and applies the founder's reviewed Excel
+def tiers_ingest():
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    body = request.get_json(silent=True) or {}
+    combo = _s(body.get('combo'))
+    err = _combo_or_400(combo)
+    if err:
+        return err
+    only_new = bool(body.get('only_missing'))
+    conn = get_db()
+    try:
+        ensure_rec_tables(conn)
+        have = set(_tiers(conn, combo)) if only_new else set()
+        n = 0
+        for r in body.get('rows') or []:
+            code = _s(r.get('code'))
+            if not code or code in have:
+                continue
+            if set_tier(conn, combo, code, _s(r.get('tier')), _s(body.get('who')) or 'import',
+                        name=_s(r.get('college')), basis=r.get('basis_rank')):
+                n += 1
+        conn.commit()
+        return jsonify({'ok': True, 'combo': combo, 'updated': n})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("tiers_ingest: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
