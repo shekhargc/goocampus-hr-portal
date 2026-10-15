@@ -28,6 +28,7 @@ from db import get_db
 from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
 from pg_admin.routes import choice_admin
 from pg_admin.routes.api_choice import live_fees, _plan_has, _plan_label, _state_limits, _doctor_states
+from pg_admin.data import choice_log as _clog
 
 DESK_TYPES = ('internal', 'paid')
 _TYPE_LABEL = {'internal': 'Internal', 'paid': 'Paid'}
@@ -51,6 +52,7 @@ def ensure_desk_columns(conn, force=False):
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS is_team_member INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_at TIMESTAMP")
+        _clog.ensure_choice_log(conn, force=True)
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_by TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_to TEXT DEFAULT ''")
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_choice_email_log (
@@ -245,7 +247,9 @@ def desk_doctor(doctor_id):
                     s[k] = _json.loads(s.get(k) or '[]')
                 except Exception:
                     s[k] = []
-            for k in ('created_at', 'updated_at', 'team_edited_at', 'last_emailed_at'):
+            s['needs_ack'] = _clog.ack_state(s)
+            for k in ('created_at', 'updated_at', 'team_edited_at', 'last_emailed_at',
+                      'client_ack_at', 'client_edited_at'):
                 s[k] = str(s[k])[:16] if s.get(k) else ''
             s['rounds'] = {'1': [], '2': [], '3': []}
         for it in items:
@@ -325,6 +329,22 @@ def desk_remove(item_id):
     return err or _as_desk(m, choice_admin.choice_delete, item_id)
 
 
+def desk_history(set_id):
+    """GET → every change to this list, newest first: who (team member or the doctor),
+    what (build/add/move/reorder/remove/email/acknowledge), which college + round, when (UTC)."""
+    m, _, err = _guard(set_id=set_id)
+    if err:
+        return err
+    conn = get_db()
+    try:
+        return jsonify({'ok': True, 'history': _clog.history(conn, set_id)})
+    except Exception as e:
+        logging.error("desk_history: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 # ── PDF + email ──────────────────────────────────────────────────────────────
 def _pdf_response(pdf, fname):
     return Response(pdf, mimetype='application/pdf',
@@ -380,9 +400,12 @@ def desk_email(set_id):
             inner += (f"<p style='margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;"
                       f"white-space:pre-wrap;'>{escape(note)}</p>")
         inner += ("<p style='margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;'>"
-                  "You can also see and download it any time from your dashboard on "
-                  "<a href='https://goocampus.in' style='color:#EA6C1E;'>goocampus.in</a>. "
-                  "Please check the official seat matrix before you lock your choices.</p>"
+                  "Please open it on your dashboard at "
+                  "<a href='https://goocampus.in/dashboard' style='color:#EA6C1E;font-weight:bold;'>goocampus.in</a>, "
+                  "review it and confirm. You can edit it there too.</p>"
+                  "<p style='margin:0 0 16px;font-size:12px;color:#6b7280;line-height:1.55;"
+                  "border-left:3px solid #fdba74;padding:6px 10px;background:#fff7ed;'>"
+                  + escape(_clog.DISCLAIMER) + "</p>"
                   "<p style='margin:0;font-size:14px;color:#374151;'>Warm regards,<br>Team GooCampus</p>")
         html = render_branded_email('Your NEET-PG choice list', inner,
                                     preheader=f'Your choice list for {set_title(s)} is attached')
@@ -396,6 +419,7 @@ def desk_email(set_id):
         conn.execute("INSERT INTO pg_choice_email_log (set_id, user_id, sent_to, sent_by, ok) "
                      "VALUES (?,?,?,?,?)", [set_id, doctor_id, to, _actor_name(m), 1 if ok else 0])
         if ok:
+            _clog.log(conn, set_id, 'email', 'team', _actor_name(m), user_id=doctor_id, detail={'to': to})
             conn.execute("UPDATE pg_choice_sets SET last_emailed_at = CURRENT_TIMESTAMP, "
                          "last_emailed_by = ?, last_emailed_to = ? WHERE id = ?",
                          [_actor_name(m), to, set_id])

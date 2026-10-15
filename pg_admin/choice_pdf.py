@@ -171,6 +171,16 @@ def build_pdf(conn, set_id, prepared_by=''):
         pdf.set_font('Helvetica', 'B', 9.5)
         pdf.multi_cell(0, 5.6, _t(val), new_x='LMARGIN', new_y='NEXT')
     pdf.ln(2)
+    if (s.get('owner') or 'client') == 'team':
+        from pg_admin.data.choice_log import DISCLAIMER
+        pdf.set_fill_color(255, 247, 237)
+        pdf.set_draw_color(253, 186, 116)
+        pdf.set_text_color(124, 45, 18)
+        pdf.set_font('Helvetica', '', 8.6)
+        pdf.multi_cell(0, 4.6, _t('Please note: ' + DISCLAIMER), border='L', fill=True,
+                       new_x='LMARGIN', new_y='NEXT')
+        pdf.set_fill_color(255, 255, 255)
+        pdf.ln(1)
 
     # ── Rounds ──
     widths = (10, 88, 62, 30, 24, 22, 22, 19)

@@ -644,6 +644,10 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
     var teamLine = s.team_edited_at ? '<div class="cs-team"><i class="fa-solid fa-pen"></i> Last edited by GooCampus team ('+esc(s.team_edited_by||'team')+') · '+esc(s.team_edited_at)+'</div>' : '';
     var roLine = FREE_RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-eye"></i> Free plan — the client builds this themselves. Team is view only (no add / edit).</div>'
       : (RO ? '<div class="cs-team" style="background:#f1f5f9;color:#475569;border-color:#e2e8f0;"><i class="fa-solid fa-user"></i> Doctor\'s own list — view only. Use “Build a new choice list” for a separate GooCampus team list.</div>' : '');
+    var ackLine = s.owner !== 'team' ? '' : (s.client_ack_at
+        ? '<div class="cs-team" style="background:#f0fdf4;color:#166534;border-color:#bbf7d0;"><i class="fa-solid fa-circle-check"></i> Doctor confirmed the “suggestion only” note · '+esc(s.client_ack_at)+' UTC</div>'
+        : '<div class="cs-team" style="background:#fefce8;color:#854d0e;border-color:#fde68a;"><i class="fa-solid fa-hourglass-half"></i> Doctor has not yet confirmed the “suggestion only” note</div>')
+      + (s.client_edited_at ? '<div class="cs-team" style="background:#fff1f2;color:#9f1239;border-color:#fecdd3;"><i class="fa-solid fa-user-pen"></i> Doctor edited this list · last '+esc(s.client_edited_at)+' UTC — see change history</div>' : '');
     var ownerChip = s.owner === 'team' ? ' <span class="chip" style="background:#fff7ed;color:#9a3412;">Prepared by GooCampus team</span>' : ' <span class="chip chip-gray">Doctor\'s own</span>';
     var addBox = RO ? '' : ('<div class="cs-add"><input id="csq_'+s.id+'" placeholder="Add a college to this round — type a name…" autocomplete="off" oninput="CS.search('+s.id+')">'
         + '<div class="cs-sug" id="cssug_'+s.id+'"></div></div>');
@@ -651,7 +655,9 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
       '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip+ownerChip
         + (RO ? '' : '<button onclick="CS.delSet('+s.id+')" style="float:right;background:none;border:0;color:#dc2626;font-size:0.74rem;cursor:pointer;">Delete list</button>')
         + '<a href="/admin/pg/choice-sets/'+s.id+'/pdf" style="float:right;margin-right:12px;color:#2952a3;font-size:0.74rem;font-weight:700;text-decoration:none;"><i class="fa-solid fa-file-pdf"></i> Download PDF</a>'
-        + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+roLine+'</div>'
+        + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+roLine+ackLine
+        + (s.owner==='team' ? '<div style="margin-top:6px;"><a href="#" onclick="CS.history('+s.id+');return false;" style="font-size:0.76rem;font-weight:700;color:#2952a3;text-decoration:none;"><i class="fa-solid fa-clock-rotate-left"></i> Change history (team + doctor)</a><div id="cshist_'+s.id+'" style="display:none;margin-top:6px;max-height:260px;overflow:auto;font-size:0.76rem;background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:6px 9px;"></div></div>' : '')
+        + '</div>'
       + '<div class="cs-tabs">'
         + [1,2,3].map(function(r){ return '<button class="cs-tab" id="cstab_'+s.id+'_'+r+'" onclick="CS.tab('+s.id+','+r+')">Round '+r+' <span class="cnt" style="color:var(--gray-400);">0</span></button>'; }).join('')
       + '</div>'
@@ -694,6 +700,22 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
           s.team_edited_at = 'just now'; renderRound(setId);
           var bt=document.getElementById('csbt_'+setId), cnt=bt&&bt.querySelector('.csbtn'); if(cnt) cnt.textContent=s.total;
         }).catch(function(){ alert('Network error — not saved.'); });
+    },
+    history: function(setId){
+      var box = document.getElementById('cshist_'+setId);
+      if(box.style.display==='block'){ box.style.display='none'; return; }
+      box.style.display='block'; box.innerHTML='Loading…';
+      fetch('/admin/pg/choice-sets/'+setId+'/history',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+        var h = (j && j.history) || [];
+        if(!h.length){ box.innerHTML='<i>No changes recorded yet.</i>'; return; }
+        box.innerHTML = h.map(function(e){
+          var what = esc(e.action_label||e.action);
+          if(e.institute) what += ': <b>'+esc(e.institute)+'</b>'+(e.course?' — '+esc(e.course):'');
+          if(e.round) what += ' (Round '+e.round+(e.from_pos||e.to_pos ? ', '+(e.from_pos?('#'+e.from_pos):'')+(e.from_pos&&e.to_pos?' → ':'')+(e.to_pos?('#'+e.to_pos):'') : '')+')';
+          var who = e.actor==='client' ? '<span style="color:#9f1239;font-weight:700;">'+esc(e.who)+'</span>' : esc(e.who);
+          return '<div style="padding:3px 0;border-bottom:1px solid #f1f5f9;"><span style="color:#94a3b8;">'+esc(e.created_at)+' UTC</span> · '+who+' · '+what+'</div>';
+        }).join('');
+      }).catch(function(){ box.innerHTML='Could not load history.'; });
     },
     move: function(setId, itemId, dir){ this._post('/admin/pg/choice-items/'+itemId+'/move', {dir:dir}, setId); },
     del: function(setId, itemId){ if(confirm('Remove this college from the round?')) this._post('/admin/pg/choice-items/'+itemId+'/delete', {}, setId); },

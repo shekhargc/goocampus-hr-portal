@@ -17,6 +17,7 @@ from pg_admin.data import plans_tables as _plans_tables
 from pg_admin.data import college_master_tables as _college_master
 from pg_admin.data import pgcp_tables as _pgcp_tables
 from pg_admin.data import choice_tables as _choice_tables
+from pg_admin.data import choice_log as _choice_log
 from pg_admin.data import events_tables as _events_tables
 from pg_admin.data import analytics_tables as _analytics_tables
 from pg_admin.data import seat_matrix_tables as _seat_matrix
@@ -58,6 +59,7 @@ def register_pg_admin(app):
                _college_master.ensure_college_master_tables,
                _pgcp_tables.ensure_pgcp_tables,
                _choice_tables.ensure_choice_tables,
+               _choice_log.ensure_choice_log_boot,
                _events_tables.ensure_event_tables,
                _analytics_tables.ensure_analytics_tables,
                _seat_matrix.ensure_pg_seat_matrix,
@@ -370,8 +372,13 @@ def register_pg_admin(app):
         ('/api/pg/desk/choice-items/<int:item_id>', 'api_pg_desk_remove', _d.desk_remove,
          ['DELETE', 'POST']),
         ('/api/pg/choice-sets/<int:set_id>/pdf', 'api_pg_choice_pdf', _d.doctor_choice_pdf, ['GET']),
+        ('/api/pg/choice-sets/<int:set_id>/acknowledge', 'api_pg_choice_acknowledge',
+         api_choice.api_pg_choice_acknowledge, ['POST']),
+        ('/api/pg/desk/choice-sets/<int:set_id>/history', 'api_pg_desk_history', _d.desk_history, ['GET']),
     ):
         app.add_url_rule(rule, ep, fn, methods=methods)
+    app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/history', 'pg_choice_history',
+                     choice_admin.choice_history, methods=['GET'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/pdf', 'pg_choice_pdf',
                      choice_admin.choice_pdf, methods=['GET'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/set-desk', 'pg_user_set_desk',

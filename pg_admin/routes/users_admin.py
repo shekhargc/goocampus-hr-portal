@@ -552,6 +552,8 @@ def user_detail(user_id):
             choice_json.append({
                 'id': s['id'], 'label': s.get('label') or '', 'scope': s.get('scope') or 'mcc',
                 'owner': s.get('owner') or 'client',
+                'client_ack_at': str(s['client_ack_at'])[:16] if s.get('client_ack_at') else '',
+                'client_edited_at': str(s['client_edited_at'])[:16] if s.get('client_edited_at') else '',
                 'state': s.get('state') or '', 'authority': s.get('authority') or '',
                 'rank': s.get('rank'), 'degree_group': s.get('degree_group') or 'mdms',
                 'specialties': s.get('specialties') or [], 'total': s.get('total') or 0,

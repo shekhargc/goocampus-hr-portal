@@ -17,6 +17,7 @@ from core.auth import login_required
 from pg_admin.routes.api_choice import (_chance, _NORMSQL, _deg_clause, _spec_core,
                                         _plan_has, _choice_gate, _generate_round,
                                         _state_limits, _doctor_states)
+from pg_admin.data import choice_log as _clog
 
 
 def _admin():
@@ -47,6 +48,7 @@ def _self_heal(conn):
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS team_edited_by TEXT DEFAULT ''")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
         conn.commit()
+        _clog.ensure_choice_log(conn)   # before any edit, so its commit never splits an edit
     except Exception:
         try: conn.rollback()
         except Exception: pass
@@ -159,6 +161,11 @@ def choice_create(user_id):
             for rnd in (1, 2, 3):
                 _generate_round(conn, sid, rnd, authority, dg, specialties, qcs, rank)
         _stamp_team(conn, sid, _admin_name(u))
+        n_items = conn.execute("SELECT COUNT(*) AS n FROM pg_choice_items WHERE set_id = ?",
+                               [sid]).fetchone()['n']
+        _clog.log(conn, sid, 'rebuild' if existing else 'build', 'team', _admin_name(u), user_id=user_id,
+                  detail={'colleges': n_items, 'rank': rank, 'specialties': specialties,
+                          'quota_categories': qcs})
         conn.commit()
         return jsonify({'ok': True, 'set_id': sid, 'rebuilt': bool(existing)})
     except Exception as e:
@@ -295,6 +302,8 @@ def choice_delete_set(set_id):
         blk = _client_list_block(_s0)
         if blk:
             return blk
+        u = _admin()
+        _clog.log(conn, set_id, 'delete_list', 'team', _admin_name(u) if u else '', user_id=_s0['user_id'])
         conn.execute("DELETE FROM pg_choice_items WHERE set_id = ?", [set_id])
         conn.execute("DELETE FROM pg_choice_sets WHERE id = ?", [set_id])
         conn.commit()
@@ -426,6 +435,9 @@ def choice_add(set_id):
              _s(body.get('quota')), _s(body.get('category')), cr, _chance(s.get('rank'), cr),
              _admin_name(u)])
         _stamp_team(conn, set_id, _admin_name(u))
+        _clog.log(conn, set_id, 'add', 'team', _admin_name(u), user_id=s['user_id'], rnd=rnd, to_pos=nextpos,
+                  item={'institute': institute, 'course': _s(body.get('course')),
+                        'quota': _s(body.get('quota')), 'category': _s(body.get('category'))})
         conn.commit()
         return jsonify({'ok': True, 'round': rnd, 'items': _round_items(conn, set_id, rnd)})
     except Exception as e:
@@ -447,8 +459,8 @@ def choice_move(item_id):
     conn = get_db()
     try:
         _self_heal(conn)
-        it = conn.execute("SELECT id, set_id, round, position FROM pg_choice_items WHERE id = ?",
-                          [item_id]).fetchone()
+        it = conn.execute("SELECT id, set_id, round, position, institute, course, quota, category "
+                          "FROM pg_choice_items WHERE id = ?", [item_id]).fetchone()
         if not it:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         it = dict(it)
@@ -470,6 +482,9 @@ def choice_move(item_id):
         for pos, iid in enumerate(ids, start=1):
             conn.execute("UPDATE pg_choice_items SET position=? WHERE id=?", [pos, iid])
         _stamp_team(conn, it['set_id'], _admin_name(u))
+        if 0 <= swap < len(ids):
+            _clog.log(conn, it['set_id'], 'move', 'team', _admin_name(u), item=it,
+                      from_pos=idx + 1, to_pos=swap + 1)
         conn.commit()
         return jsonify({'ok': True, 'round': it['round'], 'items': _round_items(conn, it['set_id'], it['round'])})
     except Exception as e:
@@ -504,10 +519,15 @@ def choice_reorder(set_id):
             rnd = int(body.get('round')); assert rnd in (1, 2, 3)
         except Exception:
             return jsonify({'ok': False, 'error': 'round 1|2|3 required'}), 400
+        before = _clog.round_order(conn, set_id, rnd)
         for pos, iid in enumerate(body.get('ordered_item_ids') or [], start=1):
             conn.execute("UPDATE pg_choice_items SET position=? WHERE id=? AND set_id=? AND round=?",
                          [pos, iid, set_id, rnd])
         _stamp_team(conn, set_id, _admin_name(u))
+        after = _clog.round_order(conn, set_id, rnd)
+        if [r['id'] for r in before] != [r['id'] for r in after]:
+            _clog.log(conn, set_id, 'reorder', 'team', _admin_name(u), user_id=_o['user_id'], rnd=rnd,
+                      detail=_clog.order_detail(before, after))
         conn.commit()
         return jsonify({'ok': True, 'round': rnd, 'items': _round_items(conn, set_id, rnd)})
     except Exception as e:
@@ -529,8 +549,8 @@ def choice_delete(item_id):
     conn = get_db()
     try:
         _self_heal(conn)
-        it = conn.execute("SELECT id, set_id, round FROM pg_choice_items WHERE id = ?",
-                          [item_id]).fetchone()
+        it = conn.execute("SELECT id, set_id, round, position, institute, course, quota, category "
+                          "FROM pg_choice_items WHERE id = ?", [item_id]).fetchone()
         if not it:
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         it = dict(it)
@@ -540,6 +560,7 @@ def choice_delete(item_id):
         blk = _client_list_block(_o)
         if blk:
             return blk
+        _clog.log(conn, it['set_id'], 'remove', 'team', _admin_name(u), item=it, from_pos=it.get('position'))
         conn.execute("DELETE FROM pg_choice_items WHERE id = ?", [item_id])
         # re-pack positions so the round stays 1..n
         ordered = conn.execute("SELECT id FROM pg_choice_items WHERE set_id=? AND round=? "
@@ -576,6 +597,22 @@ def choice_pdf(set_id):
                         headers={'Content-Disposition': f'attachment; filename="{fname}"'})
     except Exception as e:
         logging.error("choice_pdf: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+# ── Change history of a team list (admin) ────────────────────────────────────
+@login_required
+def choice_history(set_id):
+    """GET /admin/pg/choice-sets/<set_id>/history → every change by the team AND the doctor."""
+    if not _admin():
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    conn = get_db()
+    try:
+        return jsonify({'ok': True, 'history': _clog.history(conn, set_id)})
+    except Exception as e:
+        logging.error("choice_history: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
