@@ -566,6 +566,18 @@ def desk_selftest():
             conn.close()
     except Exception as e:
         out['spec_error'] = str(e)[:200]
+    # MCC authority header summary (official sections combined, NMC excluded).
+    try:
+        from pg_admin.routes.api_authorities import _seat_matrix_for
+        from pg_admin.authorities import get_authority
+        conn = get_db()
+        try:
+            sm = _seat_matrix_for(conn, get_authority('mcc'))
+            out['mcc_header'] = {k: sm.get(k) for k in ('total_seats', 'college_count', 'counselling_body')} if sm else None
+        finally:
+            conn.close()
+    except Exception as e:
+        out['mcc_header_error'] = str(e)[:200]
     # Recommended MCC lists — read-only dry run (counts + first 3 tiers), no writes.
     try:
         from pg_admin.routes import recommended as _rec
