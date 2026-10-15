@@ -140,3 +140,48 @@ def api_seat_matrix_source_update():
         return jsonify({'ok': False, 'error': 'server_error', 'detail': str(e)[:200]}), 500
     finally:
         conn.close()
+
+
+def api_seat_matrix_file_to_authority():
+    """POST /api/pg/seat-matrix/file-to-authority (X-News-Key)
+    {items:[{body, title}], authority_code:'mcc', year?} — copy each loaded matrix's OFFICIAL PDF into that
+    authority's Documents → Seat Matrix, HIDDEN and waiting for the founder's Publish (same box as the
+    auto-filed notices). Exact-same files are skipped (sha256). (founder 2026-10-15)"""
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data.auto_docs import find_same_file, sha256
+    from pg_admin.authorities import get_authority
+    d = request.get_json(silent=True) or {}
+    code = (d.get('authority_code') or 'mcc').strip()
+    year = (d.get('year') or '2026-27').strip()
+    auth = get_authority(code) or {}
+    conn = get_db()
+    out = []
+    try:
+        for it in d.get('items') or []:
+            body = (it.get('body') or '').strip()
+            title = (it.get('title') or body).strip()[:300]
+            src = conn.execute("SELECT pdf_name, pdf_data FROM pg_seat_matrix_source WHERE counselling_body=? "
+                               "AND academic_year=?", [body, year]).fetchone()
+            if not src or not src['pdf_data']:
+                out.append({'body': body, 'result': 'no_pdf'}); continue
+            data = bytes(src['pdf_data'])
+            if find_same_file(conn, code, data):
+                out.append({'body': body, 'result': 'duplicate'}); continue
+            conn.execute(
+                "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, note, "
+                "file_name, file_data, file_content_type, is_published, uploaded_by, file_sha256, review_pending, "
+                "auto_kind) VALUES (?,?,?,?,?,?,?,?,'application/pdf',FALSE,'Seat matrix import',?,TRUE,'pdf')",
+                [code, auth.get('name', ''), 'seat_matrix', title, '', '', (src['pdf_name'] or 'seat-matrix.pdf')[:200],
+                 data, sha256(data)])
+            out.append({'body': body, 'result': 'filed', 'title': title})
+        conn.commit()
+        return jsonify({'ok': True, 'results': out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("seat matrix → authority docs: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error', 'detail': str(e)[:200]}), 500
+    finally:
+        conn.close()
