@@ -514,6 +514,21 @@ def desk_selftest():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     from flask import current_app
     out = {'ok': True}
+    only = (request.args.get('only') or '').strip()
+    if only == 'team':          # light check: the team college-list seed only
+        from pg_admin.routes import team_college_lists as _tcl
+        conn = get_db()
+        try:
+            _tcl.ensure_tables(conn)
+            dc = _tcl._deemed_colleges(conn)
+            out['team_list_seed'] = {'colleges': len(dc), 'states': len({d['state'] for d in dc}),
+                                     'new': sum(1 for d in dc if d['is_new'])}
+            out['tables'] = bool(conn.execute("SELECT to_regclass('pg_team_college_lists') AS t").fetchone()['t'])
+        except Exception as e:
+            out['team_list_error'] = str(e)[:200]
+        finally:
+            conn.close()
+        return jsonify(out)
     conn = get_db()
     try:
         ensure_desk_columns(conn)
