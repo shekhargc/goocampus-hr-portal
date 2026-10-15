@@ -458,6 +458,14 @@ def desk_selftest():
             "(SELECT 1 FROM pg_choice_items i WHERE i.set_id = s.id) ORDER BY s.id DESC LIMIT 1").fetchone()
         sid = r['id'] if r else None
         out['sample_set'] = bool(sid)
+        # Internal/paid doctors whose plan does NOT include the choice-list feature
+        # (the Desk could not auto-build MCC / extra states for them).
+        missing = {'internal': 0, 'paid': 0}
+        for row in conn.execute(f"SELECT id, doc_type FROM ({base}) x "
+                                "WHERE doc_type IN ('internal','paid')").fetchall():
+            if not _plan_has(conn, row['id'], 'dash_choice_list'):
+                missing[row['doc_type']] += 1
+        out['without_choice_feature'] = missing
     finally:
         conn.close()
     if sid:
