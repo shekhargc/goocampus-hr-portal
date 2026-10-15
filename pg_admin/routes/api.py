@@ -197,6 +197,18 @@ def _authorized():
     return bool(expected) and got == expected
 
 
+def file_key_block():
+    """Document files (news PDFs, authority docs, seat-matrix PDFs, the PDF library) open ONLY through
+    goocampus.in, which checks the doctor is logged in and fetches with X-PG-Key - so a forwarded
+    goocampus.org file link no longer opens for someone who isn't registered (founder 2026-10-15).
+    Returns a 401 response, or None when allowed. Emergency switch: env PG_FILES_PUBLIC=1."""
+    if (os.environ.get('PG_FILES_PUBLIC') or '').strip() == '1' or _authorized():
+        return None
+    from flask import jsonify as _j
+    return _j({'ok': False, 'error': 'login_required',
+               'message': 'Please open this document from goocampus.in after logging in.'}), 401
+
+
 def _photo_base():
     """Absolute origin for building stable photo URLs (e.g. https://goocampus.org)."""
     return request.url_root.rstrip('/')
@@ -1015,6 +1027,9 @@ def api_pg_neetpg_pdf_file(pdf_id):
 
     Public (no key): it's the file itself, and only published+active rows with real
     bytes are ever served — the same content the goocampus.org library hands out."""
+    blk = file_key_block()
+    if blk:
+        return blk
     conn = get_db()
     try:
         row = conn.execute(

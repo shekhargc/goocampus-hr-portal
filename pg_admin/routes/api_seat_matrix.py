@@ -195,6 +195,10 @@ def api_pg_seat_matrix_facets():
 def api_pg_seat_matrix_pdf():
     """GET /api/pg/seat-matrix/pdf?body=&year= — stream the official authority PDF.
     Public (no key): it is a published government document."""
+    from pg_admin.routes.api import file_key_block
+    blk = file_key_block()
+    if blk:
+        return blk
     year = _s(request.args.get('year')) or DEFAULT_YEAR
     conn = get_db()
     try:
