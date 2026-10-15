@@ -175,7 +175,7 @@ def seat_matrix_admin():
                 f"SELECT sl_no, college_code, state, college_name, category, course_name, seats, "
                 f"institute_type, quota, category_code, has_cutoff, new_reason, cr_closing "
                 f"FROM pg_seat_matrix WHERE {where} "
-                f"ORDER BY state ASC, college_name ASC, course_name ASC "
+                f"ORDER BY state ASC, college_name ASC, course_name ASC, id ASC "
                 f"LIMIT {page_size} OFFSET {offset}", params).fetchall()
             browse = {
                 'body': b_body, 'year': b_year,
