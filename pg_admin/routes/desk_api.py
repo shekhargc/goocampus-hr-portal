@@ -402,7 +402,7 @@ def desk_email(set_id):
                       f"white-space:pre-wrap;'>{escape(note)}</p>")
         inner += ("<p style='margin:0 0 14px;font-size:14px;color:#374151;line-height:1.6;'>"
                   "Please open it on your dashboard at "
-                  "<a href='https://goocampus.in/dashboard' style='color:#EA6C1E;font-weight:bold;'>goocampus.in</a>, "
+                  "<a href='https://goocampus.in/dashboard/team-choice-list' style='color:#EA6C1E;font-weight:bold;'>goocampus.in</a> (GooCampus Team Choice List), "
                   "review it and confirm. You can edit it there too.</p>"
                   "<p style='margin:0 0 16px;font-size:12px;color:#6b7280;line-height:1.55;"
                   "border-left:3px solid #fdba74;padding:6px 10px;background:#fff7ed;'>"
