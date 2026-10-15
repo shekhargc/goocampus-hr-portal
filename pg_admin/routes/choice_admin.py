@@ -110,6 +110,8 @@ def choice_create(user_id):
     state = _s(body.get('state'))
     dg = _s(body.get('degree_group')) or 'mdms'
     authority = _s(body.get('authority'))
+    if scope == 'state' and state and not authority:
+        authority = state          # a state list is built from that state's own counselling cut-offs
     try:
         rank = int(body.get('rank'))
     except (TypeError, ValueError):
@@ -260,7 +262,10 @@ def choice_facets():
     if dgc:
         where.append(dgc); params.append(dgp)
     if scope == 'state' and state:
-        where.append("c.state ILIKE ?"); params.append('%' + state + '%')
+        # The STATE's own counselling (its quotas: State / In-service / Institutional / NRI…), not the
+        # MCC seats that happen to sit in colleges located in that state. (founder 2026-10-15)
+        where.append("c.authority ILIKE ? AND c.authority NOT ILIKE ?")
+        params.extend(['%' + state + '%', '%MCC%'])
     else:  # MCC / All-India
         where.append("(c.authority ILIKE ? OR c.authority ILIKE ? OR c.authority ILIKE ?)")
         params.extend(['%MCC%', '%All India%', '%AIQ%'])
