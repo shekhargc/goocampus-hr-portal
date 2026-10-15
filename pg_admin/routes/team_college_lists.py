@@ -215,6 +215,7 @@ def build_pdf(conn, lid, states=None):
     if not data:
         return None, None
     pdf = _pdf_base('GooCampus Recommended Colleges', 'Deemed universities · MCC PG 2026 · state by state')
+    pdf.footer_note = 'GooCampus Recommended Colleges - a suggestion only; the final decision is yours.'
     pdf.set_font('Helvetica', '', 8.8); pdf.set_text_color(*_GREY)
     pdf.multi_cell(0, 4.6, _t(
         "Deemed university colleges in MCC's 2026 seat matrix, in the order GooCampus recommends within each "
