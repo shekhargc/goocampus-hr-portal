@@ -611,6 +611,10 @@ def desk_selftest():
             out['rankings_pdf_bytes'] = len(_rk.build_rankings_pdf(conn)[0])
             out['new_colleges_pdf_bytes'] = len(_rk.build_new_colleges_pdf(conn)[0])
             out['rankings_recipients'] = len(_rk._recipients(conn))
+            sp = _rk.rankings_data(conn, 'MD - Radio-Diagnosis')
+            out['rankings_radiology'] = {l['key']: l['counts'] for l in sp['lists']}
+            out['rankings_radiology_pdf'] = len(_rk.build_rankings_pdf(conn, 'MD - Radio-Diagnosis')[0])
+            out['rankings_spec_options'] = {k: len(v) for k, v in _rk.speciality_options(conn).items()}
         finally:
             conn.close()
     except Exception as e:
@@ -635,8 +639,12 @@ def desk_selftest():
             _rec.ensure_rec_tables(conn)
             for combo in _rec.COMBOS:
                 items = _rec._matrix_items(conn, combo, ['MD - Radio-diagnosis', 'MD - General Medicine'], 5000)
-                out['rec_' + combo] = {'items': len(items), 'new': sum(1 for i in items if not i['has_cutoff']),
-                                       'first': [i['tier'] for i in items[:3]],
+                grp = _rec._matrix_items(conn, combo, ['MD - Radio-diagnosis', 'MD - General Medicine'], 5000,
+                                         'speciality')
+                out['rec_' + combo] = {'items': len(items), 'new': sum(1 for i in items if i['is_new']),
+                                       'first': [(i['r1'], (i['cutoff_course'] or '')[-12:]) for i in items[:4]],
+                                       'grouped_first': [(i['r1'], (i['cutoff_course'] or '')[-12:]) for i in grp[:3]],
+                                       'last_is_new': bool(items and items[-1]['is_new']),
                                        'tiers_set': len(_rec._tiers(conn, combo))}
         finally:
             conn.close()

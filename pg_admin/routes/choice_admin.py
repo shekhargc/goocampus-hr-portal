@@ -127,6 +127,8 @@ def choice_create(user_id):
     if not qcs and quota:
         qcs = [{'quota': quota, 'categories': [category] if category else []}]
     auto = str(body.get('auto', '1')).lower() not in ('0', 'false', 'no', 'off')
+    # full_list: include colleges ABOVE the doctor's rank too (aspirational) — no reach filter
+    full = str(body.get('full_list', '')).lower() in ('1', 'true', 'yes', 'on')
 
     conn = get_db()
     try:
@@ -162,7 +164,7 @@ def choice_create(user_id):
                  _json.dumps(specialties), _json.dumps(qcs)]).fetchone()['id']
         if auto and _plan_has(conn, user_id, 'dash_choice_list'):
             for rnd in (1, 2, 3):
-                _generate_round(conn, sid, rnd, authority, dg, specialties, qcs, rank)
+                _generate_round(conn, sid, rnd, authority, dg, specialties, qcs, rank, floor=not full)
         _stamp_team(conn, sid, _admin_name(u))
         n_items = conn.execute("SELECT COUNT(*) AS n FROM pg_choice_items WHERE set_id = ?",
                                [sid]).fetchone()['n']
