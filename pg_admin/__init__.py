@@ -32,7 +32,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
-                             calendar_admin, desk_api, seat_matrix_ingest, recommended)
+                             calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -364,6 +364,9 @@ def register_pg_admin(app):
         ('/api/pg/choice-sets/<int:set_id>/new-seats', 'api_pg_choice_new_seats',
          recommended.doctor_new_seats, ['GET']),
         ('/api/pg/tiers/ingest', 'api_pg_tiers_ingest', recommended.tiers_ingest, ['POST']),
+        ('/api/pg/rankings', 'api_pg_rankings', rankings.api_rankings, ['GET']),
+        ('/api/pg/rankings/pdf', 'api_pg_rankings_pdf', rankings.api_rankings_pdf, ['GET']),
+        ('/api/pg/desk/rankings/email', 'api_pg_desk_rankings_email', rankings.desk_rankings_email, ['GET', 'POST']),
         ('/api/pg/desk/doctors', 'api_pg_desk_doctors', _d.desk_doctors, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>', 'api_pg_desk_doctor', _d.desk_doctor, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>/states', 'api_pg_desk_states', _d.desk_states,
@@ -393,6 +396,8 @@ def register_pg_admin(app):
                      recommended.admin_recommended, methods=['POST'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/new-seats', 'pg_choice_new_seats',
                      recommended.admin_new_seats, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-rankings/pdf', 'pg_college_rankings_pdf',
+                     rankings.admin_rankings_pdf, methods=['GET'])
     app.add_url_rule('/admin/pg/college-tiers', 'pg_college_tiers',
                      recommended.admin_tiers, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/choice-sets/<int:set_id>/history', 'pg_choice_history',
