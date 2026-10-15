@@ -576,9 +576,9 @@ def desk_selftest():
             cs = [r['course'] for r in conn.execute(
                 "SELECT DISTINCT course FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 AND COALESCE(course,'')<>''").fetchall()]
             ctx = sg.context(conn)
-            g = [sg.group_source(c, ctx)[0] for c in cs]
-            out['specialities'] = {'clinical': sum(1 for x in g if x == 'clinical'),
-                                   'non_clinical': sum(1 for x in g if x != 'clinical')}
+            grp = [sg.group_source(c, ctx)[0] for c in cs]
+            out['specialities'] = {'clinical': sum(1 for x in grp if x == 'clinical'),
+                                   'non_clinical': sum(1 for x in grp if x != 'clinical')}
             out['profile_log_table'] = bool(conn.execute(
                 "SELECT to_regclass('pg_profile_edit_log') AS t").fetchone()['t'])
         finally:
@@ -644,12 +644,33 @@ def _map_specialities(conn, names):
         try: conn.rollback()
         except Exception: pass
         courses = []
-    norm = lambda x: ''.join(ch for ch in (x or '').lower() if ch.isalnum())
+    norm = lambda x: ''.join(ch for ch in (x or '').lower().replace('&', ' and ') if ch.isalnum())
+    # Common short / everyday names → a word that appears in our course name
+    alias = {'radiology': 'radio', 'radiodiagnosis': 'radio', 'obg': 'obstetrics', 'obgy': 'obstetrics',
+             'og': 'obstetrics', 'gynaecology': 'obstetrics', 'gynecology': 'obstetrics', 'ent': 'ent',
+             'ortho': 'orthopaedics', 'orthopedics': 'orthopaedics', 'peds': 'paediatrics',
+             'pediatrics': 'paediatrics', 'medicine': 'generalmedicine', 'surgery': 'generalsurgery',
+             'anesthesia': 'anaesthesiology', 'anaesthesia': 'anaesthesiology', 'derma': 'dermatology',
+             'psych': 'psychiatry', 'pulmonology': 'respiratory', 'chestmedicine': 'respiratory',
+             'tbchest': 'respiratory', 'ophthal': 'ophthalmology', 'eye': 'ophthalmology',
+             'communitymedicine': 'community', 'psm': 'community', 'forensic': 'forensic', 'fmt': 'forensic',
+             'emergency': 'emergency', 'radiotherapy': 'radiation', 'familymedicine': 'family'}
+    flat = []
+    for n in names:                     # a doctor may type several in one box: "Surgery, Psychiatry, ..."
+        flat.extend([x.strip() for x in str(n or '').split(',') if x.strip()])
     out = []
-    for n in names:
+    for n in flat:
         n = _s(n)
         if not n:
             continue
+        key = alias.get(norm(n))
+        if key:
+            cands = [c for c in courses if key in norm(c)]
+            if cands:
+                v = sorted(cands, key=len)[0]
+                if v not in out:
+                    out.append(v)
+                continue
         hit = next((c for c in courses if norm(c) == norm(n) or norm(_spec_core(c)) == norm(n)), None)
         if not hit:
             core = norm(_spec_core(n))[:8]
