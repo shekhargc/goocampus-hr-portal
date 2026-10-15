@@ -37,8 +37,15 @@ def _s(v):
     return (str(v).strip() if v is not None else '')
 
 
-def ensure_desk_columns(conn):
-    """Cold-start safe: the desk flag + emailed stamps + the email log."""
+_COLS_READY = False
+
+
+def ensure_desk_columns(conn, force=False):
+    """Cold-start safe: the desk flag + emailed stamps + the email log. Runs the DDL once
+    per process (desk/me is called on every dashboard page) — force=True re-runs it."""
+    global _COLS_READY
+    if _COLS_READY and not force:
+        return
     try:
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS desk_access INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS is_team_member INTEGER DEFAULT 0")
@@ -55,6 +62,7 @@ def ensure_desk_columns(conn):
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.commit()
+        _COLS_READY = True
     except Exception as e:
         logging.warning("ensure_desk_columns: %s", e)
         try: conn.rollback()

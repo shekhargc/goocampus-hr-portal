@@ -955,7 +955,7 @@ def user_set_desk(user_id):
     conn = get_db()
     try:
         from pg_admin.routes.desk_api import ensure_desk_columns
-        ensure_desk_columns(conn)
+        ensure_desk_columns(conn, force=True)
         row = conn.execute("SELECT COALESCE(is_team_member,0) AS t FROM pg_users WHERE id = ?",
                            (user_id,)).fetchone()
         if val and not (row and row['t']):
