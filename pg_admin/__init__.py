@@ -32,7 +32,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
-                             calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings)
+                             calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -367,6 +367,11 @@ def register_pg_admin(app):
         ('/api/pg/rankings', 'api_pg_rankings', rankings.api_rankings, ['GET']),
         ('/api/pg/rankings/pdf', 'api_pg_rankings_pdf', rankings.api_rankings_pdf, ['GET']),
         ('/api/pg/desk/rankings/email', 'api_pg_desk_rankings_email', rankings.desk_rankings_email, ['GET', 'POST']),
+        ('/api/pg/desk/college-lists', 'api_pg_desk_college_lists', team_college_lists.lists_index, ['GET', 'POST']),
+        ('/api/pg/desk/college-lists/<int:lid>', 'api_pg_desk_college_list', team_college_lists.list_detail,
+         ['GET', 'POST', 'DELETE']),
+        ('/api/pg/desk/college-lists/<int:lid>/pdf', 'api_pg_desk_college_list_pdf', team_college_lists.list_pdf,
+         ['GET']),
         ('/api/pg/desk/doctors', 'api_pg_desk_doctors', _d.desk_doctors, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>', 'api_pg_desk_doctor', _d.desk_doctor, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>/states', 'api_pg_desk_states', _d.desk_states,
