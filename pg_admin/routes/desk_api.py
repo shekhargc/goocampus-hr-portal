@@ -619,6 +619,18 @@ def desk_selftest():
             conn.close()
     except Exception as e:
         out['rankings_error'] = str(e)[:300]
+    # Team college lists (Ashwini's deemed order) — the starting set only, nothing created.
+    try:
+        from pg_admin.routes import team_college_lists as _tcl
+        conn = get_db()
+        try:
+            dc = _tcl._deemed_colleges(conn)
+            out['team_list_seed'] = {'colleges': len(dc), 'states': len({d['state'] for d in dc}),
+                                     'new': sum(1 for d in dc if d['is_new'])}
+        finally:
+            conn.close()
+    except Exception as e:
+        out['team_list_error'] = str(e)[:200]
     # MCC authority header summary (official sections combined, NMC excluded).
     try:
         from pg_admin.routes.api_authorities import _seat_matrix_for
