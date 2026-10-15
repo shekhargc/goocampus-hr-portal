@@ -125,14 +125,18 @@ def api_seat_matrix_source_update():
         return jsonify({'ok': False, 'error': 'body and at least one field required'}), 400
     conn = get_db()
     try:
-        n = conn.execute(f"UPDATE pg_seat_matrix_source SET {', '.join(sets)} WHERE counselling_body=? "
-                         "AND academic_year=?", vals + [body, year]).rowcount
+        conn.execute(f"UPDATE pg_seat_matrix_source SET {', '.join(sets)} WHERE counselling_body=? "
+                     "AND academic_year=?", vals + [body, year])
         conn.commit()
-        return jsonify({'ok': True, 'updated': n})
+        row = conn.execute("SELECT counselling_body, COALESCE(superseded,0) AS superseded, "
+                           "COALESCE(section,'') AS section, COALESCE(sort_order,0) AS sort_order "
+                           "FROM pg_seat_matrix_source WHERE counselling_body=? AND academic_year=?",
+                           [body, year]).fetchone()
+        return jsonify({'ok': bool(row), 'source': dict(row) if row else None})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
         logging.error("api_seat_matrix_source_update: %s", e)
-        return jsonify({'ok': False, 'error': 'server_error'}), 500
+        return jsonify({'ok': False, 'error': 'server_error', 'detail': str(e)[:200]}), 500
     finally:
         conn.close()
