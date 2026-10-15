@@ -145,6 +145,8 @@ def register_pg_admin(app):
     # ── Seat Matrix admin (raw announced authority matrix; not matched to master) ──
     app.add_url_rule('/api/pg/seat-matrix/ingest', 'api_seat_matrix_ingest',
                      seat_matrix_ingest.api_seat_matrix_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/seat-matrix/source', 'api_seat_matrix_source_update',
+                     seat_matrix_ingest.api_seat_matrix_source_update, methods=['POST'])
     app.add_url_rule('/admin/pg/seat-matrix', 'pg_seat_matrix_admin',
                      seat_matrix_admin.seat_matrix_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/seat-matrix/upload', 'pg_seat_matrix_upload',
