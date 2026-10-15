@@ -10,7 +10,7 @@ Reuses the cut-off data + chance banding from api_choice so team-added colleges 
 the same closing rank / chance / master link as auto-generated ones. (founder 2026-09-23)
 """
 import logging
-from flask import request, jsonify, redirect, url_for, flash
+from flask import request, jsonify, redirect, url_for, flash, g
 from db import get_db
 from core.users import get_user
 from core.auth import login_required
@@ -20,6 +20,12 @@ from pg_admin.routes.api_choice import (_chance, _NORMSQL, _deg_clause, _spec_co
 
 
 def _admin():
+    # A goocampus.in Counselling Desk team member (e.g. Ashwini) acting through
+    # /api/pg/desk/* — desk_api has already checked her token + desk access and the
+    # doctor's scope, then set g.desk_actor before calling these same views.
+    actor = getattr(g, 'desk_actor', None)
+    if actor:
+        return actor
     u = get_user()
     return u if (u and u.get('is_admin')) else None
 
@@ -309,6 +315,21 @@ def choice_cutoff_search(set_id):
         q = _s(request.args.get('q'))
         where = [f"c.{col} IS NOT NULL", "COALESCE(c.is_reference,0)=0"]
         params = []
+        # Optional quota / category filters + a bigger page, so the team can browse
+        # EVERY college of the authority for one quota+category, not just a name search.
+        f_quota, f_cat = _s(request.args.get('quota')), _s(request.args.get('category'))
+        if f_quota:
+            where.append("c.quota = ?"); params.append(f_quota)
+        if f_cat:
+            where.append("c.category = ?"); params.append(f_cat)
+        try:
+            limit = max(1, min(int(request.args.get('limit') or 40), 500))
+        except (TypeError, ValueError):
+            limit = 40
+        try:
+            offset = max(0, int(request.args.get('offset') or 0))
+        except (TypeError, ValueError):
+            offset = 0
         dgc, dgp = _deg_clause(s.get('degree_group') or 'mdms')
         if dgc:
             where.append(dgc); params.append(dgp)
@@ -326,7 +347,7 @@ def choice_cutoff_search(set_id):
             f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} "
             "WHERE " + " AND ".join(where) +
             " GROUP BY c.institute, c.course, c.quota, c.category "
-            f"ORDER BY MIN(c.{col}) ASC NULLS LAST, c.institute ASC LIMIT 40",
+            f"ORDER BY MIN(c.{col}) ASC NULLS LAST, c.institute ASC LIMIT {limit} OFFSET {offset}",
             params).fetchall()
         rank = s.get('rank')
         out = []
@@ -334,7 +355,8 @@ def choice_cutoff_search(set_id):
             r = dict(r)
             r['chance'] = _chance(rank, r['cr'])
             out.append(r)
-        return jsonify({'ok': True, 'rows': out})
+        return jsonify({'ok': True, 'rows': out, 'limit': limit, 'offset': offset,
+                        'more': len(out) == limit})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -500,6 +522,29 @@ def choice_delete(item_id):
         try: conn.rollback()
         except Exception: pass
         logging.error("choice_delete: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+# ── Download a list as the GooCampus PDF (admin) ─────────────────────────────
+@login_required
+def choice_pdf(set_id):
+    """GET /admin/pg/choice-sets/<set_id>/pdf — same PDF the Counselling Desk sends."""
+    from flask import Response
+    u = _admin()
+    if not u:
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
+    from pg_admin.choice_pdf import build_pdf
+    conn = get_db()
+    try:
+        pdf, fname = build_pdf(conn, set_id, prepared_by=_admin_name(u))
+        if not pdf:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
+        return Response(pdf, mimetype='application/pdf',
+                        headers={'Content-Disposition': f'attachment; filename="{fname}"'})
+    except Exception as e:
+        logging.error("choice_pdf: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()

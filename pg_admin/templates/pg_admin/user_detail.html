@@ -88,7 +88,7 @@
           <h1 class="hero-name">{% if d.is_team_member %}{{ d.name or 'Team member' }}{% else %}{{ (d.name|dr_name) or 'Unnamed doctor' }}{% endif %}
             {% if pgcp_inv %}<span class="pill pill-orange">PGCP · {{ 'Internal' if pgcp_inv.client_type=='internal' else 'Paying' }}</span>{% endif %}
             {% if d.is_blocked %}<span class="pill pill-red">Blocked</span>{% endif %}
-            {% if d.is_team_member %}<span class="pill" style="background:#f3e8ff;color:#6b21a8;">Team member (staff)</span>{% endif %}
+            {% if d.is_team_member %}<span class="pill" style="background:#f3e8ff;color:#6b21a8;">Team member (staff)</span>{% if d.desk_access %}<span class="pill" style="background:#dcfce7;color:#166534;">Counselling Desk</span>{% endif %}{% endif %}
           </h1>
           <div style="font-size:0.85rem;color:var(--gray-500);">{{ d.mobile }}</div>
           <div style="margin-top:0.5rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
@@ -105,6 +105,13 @@
           <button class="btn {{ 'btn-ghost' if d.is_team_member else 'btn-navy' }}" type="submit">
             <i class="fa-solid fa-user-tie"></i> {{ 'Unmark team member' if d.is_team_member else 'Mark as team member' }}</button>
         </form>
+        {% if d.is_team_member and user and user.is_admin %}
+        <form method="POST" action="/admin/pg/users/{{ d.id }}/set-desk" onsubmit="return confirm({{ ('Remove Counselling Desk access? They will no longer see Internal/Paid doctors or build choice lists on goocampus.in.' if d.desk_access else 'Give this team member the Counselling Desk on goocampus.in? They will see all Internal + Paid doctors, build their choice lists and email PDFs.')|tojson }})">
+          <input type="hidden" name="desk" value="{{ 0 if d.desk_access else 1 }}">
+          <button class="btn {{ 'btn-ghost' if d.desk_access else 'btn-navy' }}" type="submit">
+            <i class="fa-solid fa-list-check"></i> {{ 'Remove Counselling Desk' if d.desk_access else 'Give Counselling Desk' }}</button>
+        </form>
+        {% endif %}
         <form method="POST" action="/admin/pg/users/{{ d.id }}/block" onsubmit="return confirm('{{ 'Unblock' if d.is_blocked else 'Block' }} this doctor?')">
           <button class="btn {{ 'btn-ghost' if d.is_blocked else 'btn-danger' }}" type="submit">
             <i class="fa-solid fa-{{ 'unlock' if d.is_blocked else 'ban' }}"></i> {{ 'Unblock' if d.is_blocked else 'Block' }}</button>
@@ -638,6 +645,7 @@ window.CHOICE_RO = {{ (not choice_team_editable)|tojson }};   // Free-tier list 
     el.innerHTML =
       '<div class="cs-head"><span class="lbl">'+esc(s.label||s.authority||'Choice list')+'</span> '+scopeChip
         + (RO ? '' : '<button onclick="CS.delSet('+s.id+')" style="float:right;background:none;border:0;color:#dc2626;font-size:0.74rem;cursor:pointer;">Delete list</button>')
+        + '<a href="/admin/pg/choice-sets/'+s.id+'/pdf" style="float:right;margin-right:12px;color:#2952a3;font-size:0.74rem;font-weight:700;text-decoration:none;"><i class="fa-solid fa-file-pdf"></i> Download PDF</a>'
         + '<div class="cs-meta">'+meta.join(' · ')+'</div>'+teamLine+roLine+'</div>'
       + '<div class="cs-tabs">'
         + [1,2,3].map(function(r){ return '<button class="cs-tab" id="cstab_'+s.id+'_'+r+'" onclick="CS.tab('+s.id+','+r+')">Round '+r+' <span class="cnt" style="color:var(--gray-400);">0</span></button>'; }).join('')

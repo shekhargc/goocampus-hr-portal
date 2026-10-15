@@ -925,12 +925,50 @@ def user_set_team(user_id):
         _ensure_team_col(conn)
         conn.execute("UPDATE pg_users SET is_team_member = ?, updated_at = CURRENT_TIMESTAMP "
                      "WHERE id = ?", (val, user_id))
+        if not val:   # no longer staff → no Counselling Desk either
+            try:
+                conn.execute("UPDATE pg_users SET desk_access = 0 WHERE id = ?", (user_id,))
+            except Exception as _e:
+                logging.warning("user_set_team desk reset: %s", _e)
         conn.commit()
         flash('Marked as a team member (staff) — shown without “Dr.”' if val
               else 'Unmarked — back to a regular doctor account (shows “Dr.”).', 'success')
     except Exception as e:
         conn.rollback(); logging.error("user_set_team: %s", e)
         flash('Could not update the team flag.', 'error')
+    finally:
+        try: conn.close()
+        except Exception: pass
+    return redirect(url_for('pg_user_detail', user_id=user_id))
+
+
+@login_required
+def user_set_desk(user_id):
+    """Switch Counselling Desk access on/off for a TEAM MEMBER account. With it on, she
+    sees the Desk on goocampus.in (Internal + Paid doctors, build choice lists, PDF +
+    email). Founder/admins only. (founder 2026-10-15)"""
+    admin = get_user()
+    if not (admin and admin.get('is_admin')):
+        flash('Only an admin can change Counselling Desk access.', 'error')
+        return redirect(url_for('pg_user_detail', user_id=user_id))
+    val = 1 if (request.form.get('desk') or '').strip() in ('1', 'on', 'true') else 0
+    conn = get_db()
+    try:
+        from pg_admin.routes.desk_api import ensure_desk_columns
+        ensure_desk_columns(conn)
+        row = conn.execute("SELECT COALESCE(is_team_member,0) AS t FROM pg_users WHERE id = ?",
+                           (user_id,)).fetchone()
+        if val and not (row and row['t']):
+            flash('Mark this account as a team member first — the Desk is for GooCampus staff only.', 'error')
+        else:
+            conn.execute("UPDATE pg_users SET desk_access = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                         (val, user_id))
+            conn.commit()
+            flash('Counselling Desk switched ON — they will see it on goocampus.in after their next page load.'
+                  if val else 'Counselling Desk access removed.', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("user_set_desk: %s", e)
+        flash('Could not update Counselling Desk access.', 'error')
     finally:
         try: conn.close()
         except Exception: pass
