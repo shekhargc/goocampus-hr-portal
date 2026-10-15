@@ -52,6 +52,19 @@ def ensure_desk_columns(conn, force=False):
         conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS is_team_member INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS owner TEXT DEFAULT 'client'")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS list_kind TEXT DEFAULT ''")
+        # Ordered speciality preferences recorded by the team (any length; default 3 in the UI)
+        conn.execute("ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS speciality_prefs TEXT DEFAULT '[]'")
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_profile_edit_log (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,          -- the doctor
+            field TEXT NOT NULL,
+            old_value TEXT DEFAULT '',
+            new_value TEXT DEFAULT '',
+            changed_by TEXT DEFAULT '',
+            source TEXT DEFAULT 'desk',
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_profile_edit_log_user ON pg_profile_edit_log (user_id, id)")
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_at TIMESTAMP")
         _clog.ensure_choice_log(conn, force=True)
         conn.execute("ALTER TABLE pg_choice_sets ADD COLUMN IF NOT EXISTS last_emailed_by TEXT DEFAULT ''")
@@ -221,12 +234,18 @@ def desk_doctor(doctor_id):
     if err:
         return err
     import json as _json
+    json = _json
     conn = get_db()
     try:
         d = dict(conn.execute(
             "SELECT id, name, mobile, email, state, city, college, neet_pg_year, neet_pg_score, "
-            "neet_pg_rank, target_speciality, photo_url, created_at FROM pg_users WHERE id = ?",
+            "neet_pg_rank, target_speciality, photo_url, created_at, "
+            "COALESCE(speciality_prefs,'[]') AS speciality_prefs FROM pg_users WHERE id = ?",
             [doctor_id]).fetchone())
+        try:
+            d['speciality_prefs'] = json.loads(d.get('speciality_prefs') or '[]')
+        except Exception:
+            d['speciality_prefs'] = []
         d['created_at'] = str(d['created_at'])[:16] if d.get('created_at') else ''
         d['doc_type'] = _doctor_type(conn, doctor_id)
         d['type_label'] = _TYPE_LABEL.get(d['doc_type'], '')
@@ -530,6 +549,23 @@ def desk_selftest():
             out['facets_quotas'] = len(body.get('quotas') or [])
     except Exception as e:
         out['facets_error'] = str(e)[:200]
+    # Speciality grouping (clinical / non-clinical) — counts only.
+    try:
+        from pg_admin.data import specialty_groups as sg
+        conn = get_db()
+        try:
+            cs = [r['course'] for r in conn.execute(
+                "SELECT DISTINCT course FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 AND COALESCE(course,'')<>''").fetchall()]
+            ctx = sg.context(conn)
+            g = [sg.group_source(c, ctx)[0] for c in cs]
+            out['specialities'] = {'clinical': sum(1 for x in g if x == 'clinical'),
+                                   'non_clinical': sum(1 for x in g if x != 'clinical')}
+            out['profile_log_table'] = bool(conn.execute(
+                "SELECT to_regclass('pg_profile_edit_log') AS t").fetchone()['t'])
+        finally:
+            conn.close()
+    except Exception as e:
+        out['spec_error'] = str(e)[:200]
     # Recommended MCC lists — read-only dry run (counts + first 3 tiers), no writes.
     try:
         from pg_admin.routes import recommended as _rec
@@ -546,3 +582,135 @@ def desk_selftest():
     except Exception as e:
         out['rec_error'] = str(e)[:200]
     return jsonify(out)
+
+
+
+# ── Team edits a doctor's profile (internal / paid only) ─────────────────────
+_EDITABLE = ('name', 'email', 'neet_pg_year', 'neet_pg_rank', 'neet_pg_score', 'target_speciality',
+             'college', 'city', 'state')
+_INTS = {'neet_pg_rank', 'neet_pg_score'}
+
+
+def desk_profile(doctor_id):
+    """POST /api/pg/desk/doctors/<id>/profile  {name?, email?, neet_pg_year?, neet_pg_rank?,
+    neet_pg_score?, target_speciality?, college?, city?, state?, speciality_prefs?:[ordered courses]}
+    Only the keys sent are changed (blank never wipes). The mobile is never editable (login id).
+    'state' is the Home/Domicile state — must be a canonical state; it also updates the doctor's
+    counselling home state. Every change is logged (pg_profile_edit_log). GET → the change log."""
+    import json as _json
+    m, _, err = _guard(doctor_id=doctor_id)
+    if err:
+        return err
+    conn = get_db()
+    try:
+        if request.method == 'GET':
+            rows = [dict(r) for r in conn.execute(
+                "SELECT field, old_value, new_value, changed_by, source, changed_at FROM pg_profile_edit_log "
+                "WHERE user_id = ? ORDER BY id DESC LIMIT 200", [doctor_id]).fetchall()]
+            for r in rows:
+                r['changed_at'] = str(r['changed_at'])[:19] if r.get('changed_at') else ''
+            return jsonify({'ok': True, 'log': rows})
+        body = request.get_json(silent=True) or {}
+        cur = dict(conn.execute("SELECT * FROM pg_users WHERE id = ?", [doctor_id]).fetchone())
+        who = _actor_name(m)
+        changes = {}
+        for k in _EDITABLE:
+            if k not in body:
+                continue
+            v = body.get(k)
+            if k in _INTS:
+                try:
+                    v = int(float(v)) if v not in (None, '') else None
+                except (TypeError, ValueError):
+                    return jsonify({'ok': False, 'error': 'bad_value', 'field': k}), 400
+                if v is None:
+                    continue
+            else:
+                v = _s(v)
+                if not v:
+                    continue
+            if k == 'state':
+                from pg_admin.routes.users_admin import _canonical_states
+                canon = {x.lower(): x for x in _canonical_states()}
+                if v.lower() not in canon:
+                    return jsonify({'ok': False, 'error': 'bad_state', 'message': 'Pick a state from the list.'}), 400
+                v = canon[v.lower()]
+            if (cur.get(k) if cur.get(k) is not None else '') != v:
+                changes[k] = v
+        prefs = None
+        if 'speciality_prefs' in body:
+            prefs = [_s(x) for x in (body.get('speciality_prefs') or []) if _s(x)]
+            seen = set(); prefs = [x for x in prefs if not (x.lower() in seen or seen.add(x.lower()))]
+        if not changes and prefs is None:
+            return jsonify({'ok': True, 'changed': []})
+        if changes:
+            sets = ', '.join(f"{k} = ?" for k in changes)
+            conn.execute(f"UPDATE pg_users SET {sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                         list(changes.values()) + [doctor_id])
+            for k, v in changes.items():
+                conn.execute("INSERT INTO pg_profile_edit_log (user_id, field, old_value, new_value, changed_by) "
+                             "VALUES (?,?,?,?,?)", [doctor_id, k, '' if cur.get(k) is None else str(cur.get(k)),
+                                                     str(v), who])
+            if 'state' in changes:       # keep the counselling home state in step (same as the admin edit)
+                home = conn.execute("SELECT id FROM pg_doctor_states WHERE user_id = ? AND role = 'home'",
+                                    [doctor_id]).fetchone()
+                if home:
+                    conn.execute("UPDATE pg_doctor_states SET state = ? WHERE id = ?", [changes['state'], home['id']])
+                else:
+                    conn.execute("INSERT INTO pg_doctor_states (user_id, state, role, locked) VALUES (?,?,'home',1)",
+                                 [doctor_id, changes['state']])
+        if prefs is not None:
+            old = cur.get('speciality_prefs') or '[]'
+            new = _json.dumps(prefs)
+            if old != new:
+                conn.execute("UPDATE pg_users SET speciality_prefs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                             [new, doctor_id])
+                conn.execute("INSERT INTO pg_profile_edit_log (user_id, field, old_value, new_value, changed_by) "
+                             "VALUES (?,?,?,?,?)", [doctor_id, 'speciality_prefs', old, new, who])
+                changes['speciality_prefs'] = prefs
+        conn.commit()
+        return jsonify({'ok': True, 'changed': list(changes.keys())})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("desk_profile: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def desk_specialities():
+    """GET /api/pg/desk/specialities?degree_group=mdms&authority=
+    → {clinical:[course...], non_clinical:[course...]} — every course in the cut-off data, grouped
+    the same way doctors see it (para/pre-clinical fold into non-clinical)."""
+    m, _, err = _guard()
+    if err:
+        return err
+    from pg_admin.data import specialty_groups as sg
+    from pg_admin.routes.api_choice import _deg_clause
+    dg = _s(request.args.get('degree_group')) or 'mdms'
+    auth = _s(request.args.get('authority'))
+    conn = get_db()
+    try:
+        where, params = ["COALESCE(c.is_reference,0)=0"], []
+        dgc, dgp = _deg_clause(dg)
+        if dgc:
+            where.append(dgc); params.append(dgp)
+        if auth:
+            where.append("c.authority ILIKE ?"); params.append('%' + auth + '%')
+        courses = [r['course'] for r in conn.execute(
+            "SELECT DISTINCT c.course AS course FROM pg_cutoffs c WHERE " + " AND ".join(where) +
+            " AND COALESCE(c.course,'')<>'' ORDER BY c.course", params).fetchall()]
+        ctx = sg.context(conn)
+        out = {'clinical': [], 'non_clinical': []}
+        for c in courses:
+            g, _src = sg.group_source(c, ctx)
+            out['clinical' if g == 'clinical' else 'non_clinical'].append(c)
+        return jsonify({'ok': True, **out})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("desk_specialities: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()

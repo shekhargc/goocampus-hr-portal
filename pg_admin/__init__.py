@@ -373,6 +373,8 @@ def register_pg_admin(app):
         ('/api/pg/desk/doctors/<int:doctor_id>/choice-sets', 'api_pg_desk_create_list',
          _d.desk_create_list, ['POST']),
         ('/api/pg/desk/facets', 'api_pg_desk_facets', _d.desk_facets, ['GET']),
+        ('/api/pg/desk/doctors/<int:doctor_id>/profile', 'api_pg_desk_profile', _d.desk_profile, ['GET', 'POST']),
+        ('/api/pg/desk/specialities', 'api_pg_desk_specialities', _d.desk_specialities, ['GET']),
         ('/api/pg/desk/choice-sets/<int:set_id>', 'api_pg_desk_delete_list', _d.desk_delete_list,
          ['DELETE', 'POST']),
         ('/api/pg/desk/choice-sets/<int:set_id>/search', 'api_pg_desk_search', _d.desk_search, ['GET']),
