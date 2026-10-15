@@ -16,6 +16,7 @@ from db import get_db
 from pg_admin.routes import recommended as rec
 
 _LABELS = ('', 'Top', 'Good', 'Average')
+ALL_INDIA = 'All India'
 _READY = False
 
 
@@ -51,6 +52,9 @@ def ensure_tables(conn):
             is_new INTEGER DEFAULT 0
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_team_cl_items ON pg_team_college_list_items (list_id, state, position)")
+        # mode: 'by_state' (ordered within each state) | 'all_india' (one order across the country)
+        conn.execute("ALTER TABLE pg_team_college_lists ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'by_state'")
+        conn.execute("ALTER TABLE pg_team_college_lists ADD COLUMN IF NOT EXISTS states_filter TEXT DEFAULT '[]'")
         conn.commit()
         _READY = True
     except Exception as e:
@@ -91,15 +95,22 @@ def _payload(conn, lid):
         sorder = json.loads(l.get('state_order') or '[]')
     except Exception:
         sorder = []
+    all_india = (l.get('mode') or 'by_state') == 'all_india'
     items = [dict(r) for r in conn.execute(
         "SELECT id, college_code, college_name, state, position, label, note, seats, is_new "
-        "FROM pg_team_college_list_items WHERE list_id=? ORDER BY state, position, id", [lid]).fetchall()]
+        "FROM pg_team_college_list_items WHERE list_id=? ORDER BY " + ("position, id" if all_india else "state, position, id"),
+        [lid]).fetchall()]
     by = {}
     for it in items:
         it['college'] = rec._short_name(it.pop('college_name'))
         it['is_new'] = bool(it['is_new'])
-        by.setdefault(it['state'], []).append(it)
+        by.setdefault(ALL_INDIA if all_india else it['state'], []).append(it)
     states = [s for s in sorder if s in by] + sorted(s for s in by if s not in sorder)
+    try:
+        l['states_filter'] = json.loads(l.get('states_filter') or '[]')
+    except Exception:
+        l['states_filter'] = []
+    l['mode'] = 'all_india' if all_india else 'by_state'
     for k in ('created_at', 'updated_at'):
         l[k] = str(l[k])[:16] if l.get(k) else ''
     l.pop('state_order', None)
@@ -131,10 +142,24 @@ def lists_index():
                 r['updated_at'] = str(r['updated_at'])[:16] if r.get('updated_at') else ''
             return jsonify({'ok': True, 'lists': rows})
         body = request.get_json(silent=True) or {}
-        name = _s(body.get('name')) or 'GooCampus Recommended Colleges — Deemed Universities 2026'
         src = body.get('copy_from')
-        lid = conn.execute("INSERT INTO pg_team_college_lists (name, kind, created_by, updated_by) "
-                           "VALUES (?, 'deemed', ?, ?) RETURNING id", [name, who, who]).fetchone()['id']
+        mode = 'all_india' if _s(body.get('mode')) == 'all_india' else 'by_state'
+        only = [_s(x) for x in (body.get('states') or []) if _s(x)]
+        if src:
+            sr = conn.execute("SELECT mode, states_filter FROM pg_team_college_lists WHERE id=?", [src]).fetchone()
+            if sr:
+                mode = sr['mode'] or 'by_state'
+                try:
+                    only = json.loads(sr['states_filter'] or '[]')
+                except Exception:
+                    only = []
+        default = ('GooCampus Recommended Colleges — Deemed Universities 2026'
+                   + (' — All India' if mode == 'all_india' else '')
+                   + ((' — ' + ', '.join(only)) if only else ''))
+        name = _s(body.get('name')) or default
+        lid = conn.execute("INSERT INTO pg_team_college_lists (name, kind, created_by, updated_by, mode, states_filter) "
+                           "VALUES (?, 'deemed', ?, ?, ?, ?) RETURNING id",
+                           [name, who, who, mode, json.dumps(only)]).fetchone()['id']
         if src:
             s = conn.execute("SELECT state_order FROM pg_team_college_lists WHERE id=?", [src]).fetchone()
             if s:
@@ -144,8 +169,18 @@ def lists_index():
                          "seats, is_new FROM pg_team_college_list_items WHERE list_id=?", [lid, src])
         else:
             pos = {}
-            for r in _deemed_colleges(conn):
-                p = pos[r['state']] = pos.get(r['state'], 0) + 1
+            want = {x.lower() for x in only}
+            seed = [r for r in _deemed_colleges(conn) if not want or (r['state'] or '').lower() in want]
+            if mode == 'all_india':      # one country-wide starting order: tier, then demand
+                order = {'Top': 0, 'Good': 1, 'Average': 2}
+                tiers = {r['college_code']: dict(r) for r in conn.execute(
+                    "SELECT college_code, tier, basis_rank FROM pg_college_tiers WHERE list_key='deemed_paid_open'").fetchall()}
+                seed.sort(key=lambda r: (1 if r['is_new'] else 0,
+                                         order.get((tiers.get(r['college_code']) or {}).get('tier'), 2),
+                                         (tiers.get(r['college_code']) or {}).get('basis_rank') or 10 ** 9, r['name'] or ''))
+            for r in seed:
+                key = ALL_INDIA if mode == 'all_india' else r['state']
+                p = pos[key] = pos.get(key, 0) + 1
                 conn.execute("INSERT INTO pg_team_college_list_items (list_id, college_code, college_name, state, "
                              "position, seats, is_new) VALUES (?,?,?,?,?,?,?)",
                              [lid, r['college_code'], r['name'] or '', r['state'] or '', p, int(r['seats'] or 0),
@@ -186,6 +221,7 @@ def list_detail(lid):
                 conn.execute("UPDATE pg_team_college_lists SET state_order=? WHERE id=?",
                              [json.dumps([_s(x) for x in body['state_order'] if _s(x)]), lid])
             for state, arr in (body.get('states') or {}).items():
+                # in an All-India list the single group key is 'All India' — positions are country-wide
                 for pos, it in enumerate(arr or [], start=1):
                     code = _s(it.get('college_code'))
                     if not code:
@@ -214,12 +250,13 @@ def build_pdf(conn, lid, states=None):
     data = _payload(conn, lid)
     if not data:
         return None, None
-    pdf = _pdf_base('GooCampus Recommended Colleges', 'Deemed universities · MCC PG 2026 · state by state')
+    pdf = _pdf_base('GooCampus Recommended Colleges', 'Deemed universities · MCC PG 2026 · ' +
+                    ('all India' if data['list'].get('mode') == 'all_india' else 'state by state'))
     pdf.footer_note = 'GooCampus Recommended Colleges - a suggestion only; the final decision is yours.'
     pdf.set_font('Helvetica', '', 8.8); pdf.set_text_color(*_GREY)
     pdf.multi_cell(0, 4.6, _t(
-        "Deemed university colleges in MCC's 2026 seat matrix, in the order GooCampus recommends within each "
-        "state - based on each college's clinical exposure, faculty and standing, not on last year's cut-offs or "
+        "Deemed university colleges in MCC's 2026 seat matrix, in the order GooCampus recommends "
+        + ("across India" if data['list'].get('mode') == 'all_india' else "within each state") + " - based on each college's clinical exposure, faculty and standing, not on last year's cut-offs or "
         "fees. Colleges marked 'New' are new in 2026."), new_x='LMARGIN', new_y='NEXT')
     pdf.ln(1); pdf.set_fill_color(255, 247, 237); pdf.set_draw_color(253, 186, 116); pdf.set_text_color(124, 45, 18)
     pdf.set_font('Helvetica', '', 8.6)
@@ -228,6 +265,16 @@ def build_pdf(conn, lid, states=None):
                               'for it, is yours.'), border='L', fill=True, new_x='LMARGIN', new_y='NEXT')
     pdf.set_fill_color(255, 255, 255)
     want = {x.strip().lower() for x in (states or []) if x.strip()}
+    if data['list'].get('mode') == 'all_india':
+        rows = [it for grp in data['states'] for it in grp['items']
+                if not want or (it['state'] or '').lower() in want]
+        pdf.ln(4); pdf.set_font('Helvetica', 'B', 12); pdf.set_text_color(*_NAVY)
+        pdf.cell(0, 7, _t(f"All India ({len(rows)})"), new_x='LMARGIN', new_y='NEXT')
+        _table(pdf, [[str(i), it['college'] + ('  [New]' if it['is_new'] else ''), it['state'], it['label'] or '',
+                      str(it['seats']), it['note'] or ''] for i, it in enumerate(rows, start=1)],
+               ('#', 'College', 'State', 'Grade', '2026 seats', 'Remarks'), (9, 68, 26, 18, 15, 50),
+               ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'RIGHT', 'LEFT'))
+        return bytes(pdf.output()), 'GooCampus_Recommended_Colleges_Deemed_2026_All_India.pdf'
     for grp in data['states']:
         if want and grp['state'].lower() not in want:
             continue
@@ -239,7 +286,8 @@ def build_pdf(conn, lid, states=None):
                       str(it['seats']), it['note'] or ''] for i, it in enumerate(grp['items'], start=1)],
                ('#', 'College', 'Grade', '2026 seats', 'Remarks'), (9, 86, 22, 17, 52),
                ('CENTER', 'LEFT', 'LEFT', 'RIGHT', 'LEFT'))
-    return bytes(pdf.output()), 'GooCampus_Recommended_Colleges_Deemed_2026.pdf'
+    tail = ('_' + '_'.join(''.join(c for c in x if c.isalnum()) for x in sorted(want))[:60]) if want else ''
+    return bytes(pdf.output()), f'GooCampus_Recommended_Colleges_Deemed_2026{tail}.pdf'
 
 
 def list_pdf(lid):
