@@ -600,6 +600,21 @@ def desk_selftest():
             conn.close()
     except Exception as e:
         out['spec_map_error'] = str(e)[:200]
+    # MCC College Rankings — counts per list/tier + both PDFs build (sizes only).
+    try:
+        from pg_admin.routes import rankings as _rk
+        conn = get_db()
+        try:
+            d = _rk.rankings_data(conn)
+            out['rankings'] = {l['key']: l['counts'] for l in d['lists']}
+            out['rankings_new_colleges'] = [n['college'] for n in d['new_colleges']]
+            out['rankings_pdf_bytes'] = len(_rk.build_rankings_pdf(conn)[0])
+            out['new_colleges_pdf_bytes'] = len(_rk.build_new_colleges_pdf(conn)[0])
+            out['rankings_recipients'] = len(_rk._recipients(conn))
+        finally:
+            conn.close()
+    except Exception as e:
+        out['rankings_error'] = str(e)[:300]
     # MCC authority header summary (official sections combined, NMC excluded).
     try:
         from pg_admin.routes.api_authorities import _seat_matrix_for

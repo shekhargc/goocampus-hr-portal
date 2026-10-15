@@ -29,6 +29,18 @@ COMBOS = {
                          'seat_quota': 'Self-Financed Merit Seat',
                          'cut_quota': 'Management/Paid Seats Quota', 'category': 'OPEN'},
 }
+# Every list that carries team-curated tiers: the 2 recommended combos above + the extra
+# MCC College Rankings lists (CIQ, NRI). (founder 2026-10-15)
+TIER_LISTS = {
+    'aiq_open': {'label': 'All India Quota (Government)', 'section': 'aiq', 'seat_quotas': ['All India']},
+    'deemed_paid_open': {'label': 'Deemed University — Paid seats', 'section': 'deemed',
+                         'seat_quotas': ['Self-Financed Merit Seat']},
+    'ciq_open': {'label': 'Central Universities (DU · IP · BHU · AMU)', 'section': 'ciq',
+                 'seat_quotas': ['Delhi University Quota', 'IP University Quota', 'Banaras Hindu University',
+                                 'Aligarh Muslim University']},
+    'nri_deemed': {'label': 'Deemed University — NRI seats', 'section': 'deemed',
+                   'seat_quotas': ['Non-Resident Indian']},
+}
 TIERS = ('Top', 'Good', 'Average')
 # Colleges with no 2025 history are never tiered — they're tagged 'New' and listed after the
 # tiered ones (founder 2026-10-15: "we're not sure what it could be, just say new college").
@@ -93,24 +105,27 @@ def _tiers(conn, combo):
 
 # ── Tiers (team-curated Top / Good / Average) ────────────────────────────────
 def tiers_payload(conn, combo):
-    c = COMBOS[combo]
+    c = TIER_LISTS[combo]
     bodies = _bodies(conn, c['section'])
     if not bodies:
         return []
     ph = ','.join(['?'] * len(bodies))
+    qph = ','.join(['?'] * len(c['seat_quotas']))
+    newc = _new_codes(conn, combo)
     rows = conn.execute(
-        f"SELECT college_code, MAX(college_name) AS name, MAX(state) AS state, SUM(seats) AS seats, "
-        f"MAX(CASE WHEN has_cutoff=1 THEN 1 ELSE 0 END) AS has_history "
-        f"FROM pg_seat_matrix WHERE counselling_body IN ({ph}) AND quota=? AND category=? "
-        f"GROUP BY college_code", bodies + [c['seat_quota'], c['category']]).fetchall()
+        f"SELECT college_code, MAX(college_name) AS name, MAX(state) AS state, MAX(institute_type) AS itype, "
+        f"SUM(seats) AS seats, MAX(CASE WHEN has_cutoff=1 THEN 1 ELSE 0 END) AS has_history "
+        f"FROM pg_seat_matrix WHERE counselling_body IN ({ph}) AND quota IN ({qph}) "
+        f"GROUP BY college_code", bodies + list(c['seat_quotas'])).fetchall()
     tiers = {r['college_code']: dict(r) for r in conn.execute(
         "SELECT college_code, tier, basis_rank, updated_by, updated_at FROM pg_college_tiers "
         "WHERE list_key=?", [combo]).fetchall()}
     out = []
     for r in rows:
         t = tiers.get(r['college_code']) or {}
-        new = not r['has_history']
+        new = r['college_code'] in newc
         out.append({'college_code': r['college_code'], 'college': _short_name(r['name']), 'state': r['state'],
+                    'institute_type': r['itype'] or '',
                     'seats': int(r['seats'] or 0), 'new_college': new, 'editable': not new,
                     'tier': NEW_TIER if new else (t.get('tier') or 'Average'), 'basis_rank': t.get('basis_rank'),
                     'updated_by': t.get('updated_by') or '',
@@ -121,7 +136,7 @@ def tiers_payload(conn, combo):
 
 def _new_codes(conn, combo):
     """MCC codes of colleges with no 2025 cut-off history at all for this combo's section."""
-    c = COMBOS[combo]
+    c = TIER_LISTS[combo]
     bodies = _bodies(conn, c['section'])
     if not bodies:
         return set()
@@ -133,7 +148,7 @@ def _new_codes(conn, combo):
 
 
 def set_tier(conn, combo, code, tier, who, name='', basis=None):
-    if combo not in COMBOS or tier not in TIERS or not code:
+    if combo not in TIER_LISTS or tier not in TIERS or not code:
         return False
     if code in _new_codes(conn, combo):      # new colleges stay 'New' — never tiered
         return False
@@ -327,9 +342,9 @@ def new_seats(conn, set_id, args):
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
-def _combo_or_400(combo):
-    if combo not in COMBOS:
-        return jsonify({'ok': False, 'error': 'combo must be aiq_open or deemed_paid_open'}), 400
+def _combo_or_400(combo, lists=None):
+    if combo not in (lists or COMBOS):
+        return jsonify({'ok': False, 'error': 'unknown list', 'allowed': list(lists or COMBOS)}), 400
     return None
 
 
@@ -366,14 +381,15 @@ def _build_from_request(user_id, actor):
 
 
 def _tiers_get(combo):
-    err = _combo_or_400(combo)
+    err = _combo_or_400(combo, TIER_LISTS)
     if err:
         return err
     conn = get_db()
     try:
         ensure_rec_tables(conn)
         rows = tiers_payload(conn, combo)
-        return jsonify({'ok': True, 'combo': combo, 'label': COMBOS[combo]['label'], 'tiers': list(TIERS),
+        return jsonify({'ok': True, 'combo': combo, 'label': TIER_LISTS[combo]['label'], 'tiers': list(TIERS),
+                        'lists': [{'key': k, 'label': v['label']} for k, v in TIER_LISTS.items()],
                         'colleges': rows})
     finally:
         conn.close()
@@ -382,7 +398,7 @@ def _tiers_get(combo):
 def _tiers_post(actor):
     body = request.get_json(silent=True) or {}
     combo = _s(body.get('combo'))
-    err = _combo_or_400(combo)
+    err = _combo_or_400(combo, TIER_LISTS)
     if err:
         return err
     changes = body.get('changes') or ([{'code': body.get('code'), 'tier': body.get('tier')}]
@@ -499,14 +515,20 @@ def tiers_ingest():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     body = request.get_json(silent=True) or {}
     combo = _s(body.get('combo'))
-    err = _combo_or_400(combo)
+    err = _combo_or_400(combo, TIER_LISTS)
     if err:
         return err
     only_new = bool(body.get('only_missing'))
+    # replace_drafts: overwrite rows still holding a machine draft, never a team member's edit
+    replace_drafts = bool(body.get('replace_drafts'))
     conn = get_db()
     try:
         ensure_rec_tables(conn)
         have = set(_tiers(conn, combo)) if only_new else set()
+        if replace_drafts:
+            have = {r['college_code'] for r in conn.execute(
+                "SELECT college_code FROM pg_college_tiers WHERE list_key=? AND COALESCE(updated_by,'') NOT ILIKE ? "
+                "AND COALESCE(updated_by,'') <> 'import'", [combo, 'Draft%']).fetchall()}
         n = 0
         for r in body.get('rows') or []:
             code = _s(r.get('code'))
