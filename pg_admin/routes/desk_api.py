@@ -515,6 +515,29 @@ def desk_selftest():
     from flask import current_app
     out = {'ok': True}
     only = (request.args.get('only') or '').strip()
+    if only == 'plans':         # read-only: which plans unlock the choice-list feature (rankings/team lists gate)
+        from pg_admin.data import entitlements as _ent
+        conn = get_db()
+        try:
+            plans = [dict(r) for r in conn.execute(
+                "SELECT id, code, name, plan_kind, COALESCE(is_active,1) AS active, COALESCE(is_public,1) AS public "
+                "FROM pg_plans ORDER BY sort_order, id").fetchall()]
+            for pl in plans:
+                fm = _ent.plan_feature_map(conn, pl['id'])
+                pl['dash_choice_list'] = (fm.get('dash_choice_list') or {}).get('value_type')
+            out['plans'] = plans
+            out['features'] = [r['code'] for r in conn.execute(
+                "SELECT code FROM pg_features WHERE COALESCE(is_active,1)=1 ORDER BY sort_order, id").fetchall()]
+            from pg_admin.routes.users_admin import _category_case
+            out['paid_by_plan'] = [dict(r) for r in conn.execute(
+                f"SELECT p.code, COUNT(*) AS n FROM pg_users u JOIN pg_subscriptions s ON s.user_id=u.id "
+                f"AND s.status='active' JOIN pg_plans p ON p.id=s.plan_id WHERE {_category_case('u')}='paid' "
+                f"GROUP BY p.code").fetchall()]
+        except Exception as e:
+            out['plans_error'] = str(e)[:200]
+        finally:
+            conn.close()
+        return jsonify(out)
     if only == 'team':          # light check: the team college-list seed only
         from pg_admin.routes import team_college_lists as _tcl
         conn = get_db()
