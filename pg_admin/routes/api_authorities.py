@@ -73,7 +73,29 @@ def _seat_matrix_for(conn, authority):
     sel = ("SELECT counselling_body, academic_year, row_count, college_count, total_seats, "
            "(pdf_data IS NOT NULL) AS has_pdf FROM pg_seat_matrix_source ")
     try:
-        row = conn.execute(sel + "WHERE authority_code = ? ORDER BY academic_year DESC LIMIT 1",
+        # Official sectioned matrices (MCC final: AIQ / CIQ / Deemed) → one combined summary.
+        # The initial NMC file (section 'nmc_initial') is a separate thing and never counted here.
+        secs = [dict(r) for r in conn.execute(
+            "SELECT counselling_body, academic_year, row_count, total_seats, section, "
+            "(pdf_data IS NOT NULL) AS has_pdf FROM pg_seat_matrix_source WHERE authority_code = ? "
+            "AND COALESCE(superseded,0)=0 AND COALESCE(section,'') NOT IN ('', 'nmc_initial') "
+            "ORDER BY academic_year DESC, COALESCE(sort_order,0)", (authority['code'],)).fetchall()]
+        if secs:
+            yr = secs[0]['academic_year']
+            secs = [x for x in secs if x['academic_year'] == yr]
+            bodies = [x['counselling_body'] for x in secs]
+            ph = ','.join(['?'] * len(bodies))
+            colleges = conn.execute(
+                f"SELECT COUNT(DISTINCT college_code) AS n FROM pg_seat_matrix WHERE counselling_body IN ({ph}) "
+                "AND academic_year=?", bodies + [yr]).fetchone()['n']
+            return {'counselling_body': bodies[0], 'academic_year': yr,
+                    'row_count': sum(x['row_count'] or 0 for x in secs),
+                    'college_count': colleges, 'total_seats': sum(x['total_seats'] or 0 for x in secs),
+                    'has_pdf': any(x['has_pdf'] for x in secs),
+                    'sections': [{'counselling_body': x['counselling_body'], 'section': x['section'],
+                                  'total_seats': x['total_seats'], 'has_pdf': bool(x['has_pdf'])} for x in secs]}
+        row = conn.execute(sel + "WHERE authority_code = ? AND COALESCE(superseded,0)=0 "
+                           "AND COALESCE(section,'') <> 'nmc_initial' ORDER BY academic_year DESC LIMIT 1",
                            (authority['code'],)).fetchone()
         if not row:
             like = f"%{authority['state']}%"
