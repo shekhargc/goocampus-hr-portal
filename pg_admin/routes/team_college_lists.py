@@ -1,4 +1,4 @@
-"""Team college lists — Ashwini's own, judgement-based order of colleges (founder 2026-10-15).
+"""Team college lists — the counselling team's own, judgement-based order of colleges (founder 2026-10-15).
 
 Data (last year's ranks) can't judge deemed colleges well: their demand follows FEES, so a cheaper
 average college "fills fast" while a better, costlier one looks slow. So the counsellor makes her
@@ -131,7 +131,7 @@ def lists_index():
                 r['updated_at'] = str(r['updated_at'])[:16] if r.get('updated_at') else ''
             return jsonify({'ok': True, 'lists': rows})
         body = request.get_json(silent=True) or {}
-        name = _s(body.get('name')) or 'Deemed colleges — GooCampus 2026'
+        name = _s(body.get('name')) or 'GooCampus Recommended Colleges — Deemed Universities 2026'
         src = body.get('copy_from')
         lid = conn.execute("INSERT INTO pg_team_college_lists (name, kind, created_by, updated_by) "
                            "VALUES (?, 'deemed', ?, ?) RETURNING id", [name, who, who]).fetchone()['id']
@@ -214,13 +214,18 @@ def build_pdf(conn, lid, states=None):
     data = _payload(conn, lid)
     if not data:
         return None, None
-    pdf = _pdf_base(data['list']['name'], 'GooCampus counsellor\'s recommended order · state by state')
+    pdf = _pdf_base('GooCampus Recommended Colleges', 'Deemed universities · MCC PG 2026 · state by state')
     pdf.set_font('Helvetica', '', 8.8); pdf.set_text_color(*_GREY)
     pdf.multi_cell(0, 4.6, _t(
-        "Deemed university colleges in MCC's 2026 seat matrix, in the order our counselling team recommends "
-        "within each state - based on our experience of each college's clinical exposure, faculty and standing, "
-        "not on last year's cut-offs or fees. Colleges marked 'New' are new in 2026. This is GooCampus guidance - a "
-        "suggestion only; please verify before you lock your choices."), new_x='LMARGIN', new_y='NEXT')
+        "Deemed university colleges in MCC's 2026 seat matrix, in the order GooCampus recommends within each "
+        "state - based on each college's clinical exposure, faculty and standing, not on last year's cut-offs or "
+        "fees. Colleges marked 'New' are new in 2026."), new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(1); pdf.set_fill_color(255, 247, 237); pdf.set_draw_color(253, 186, 116); pdf.set_text_color(124, 45, 18)
+    pdf.set_font('Helvetica', '', 8.6)
+    pdf.multi_cell(0, 4.6, _t('Please note: this is a suggestion from GooCampus to help you decide. Please verify '
+                              'every college before you lock your choices - the final decision, and responsibility '
+                              'for it, is yours.'), border='L', fill=True, new_x='LMARGIN', new_y='NEXT')
+    pdf.set_fill_color(255, 255, 255)
     want = {x.strip().lower() for x in (states or []) if x.strip()}
     for grp in data['states']:
         if want and grp['state'].lower() not in want:
@@ -231,10 +236,9 @@ def build_pdf(conn, lid, states=None):
         pdf.cell(0, 7, _t(f"{grp['state']} ({len(grp['items'])})"), new_x='LMARGIN', new_y='NEXT')
         _table(pdf, [[str(i), it['college'] + ('  [New]' if it['is_new'] else ''), it['label'] or '',
                       str(it['seats']), it['note'] or ''] for i, it in enumerate(grp['items'], start=1)],
-               ('#', 'College', 'GooCampus view', '2026 seats', 'Note'), (9, 86, 26, 17, 48),
+               ('#', 'College', 'Grade', '2026 seats', 'Remarks'), (9, 86, 22, 17, 52),
                ('CENTER', 'LEFT', 'LEFT', 'RIGHT', 'LEFT'))
-    slug = ''.join(ch if ch.isalnum() else '_' for ch in data['list']['name'])[:50]
-    return bytes(pdf.output()), f'{slug}.pdf'
+    return bytes(pdf.output()), 'GooCampus_Recommended_Colleges_Deemed_2026.pdf'
 
 
 def list_pdf(lid):
