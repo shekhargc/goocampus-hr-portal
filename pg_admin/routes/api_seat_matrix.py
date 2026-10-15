@@ -91,7 +91,7 @@ def api_pg_seat_matrix():
         offset = (page - 1) * page_size
         rows = conn.execute(
             f"SELECT sl_no, college_code, state, college_name, category, course_name, seats, "
-            f"institute_type, quota, has_cutoff, new_reason, cutoff_institute, cutoff_course, "
+            f"institute_type, quota, category_code, course_code, has_cutoff, new_reason, cutoff_institute, cutoff_course, "
             f"cr_r1, cr_r2, cr_r3, cr_closing, cutoff_fee "
             f"FROM pg_seat_matrix WHERE {where} "
             f"ORDER BY state ASC, college_name ASC, course_name ASC "
