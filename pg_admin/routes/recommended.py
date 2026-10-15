@@ -80,7 +80,7 @@ def _s(v):
 
 def _short_name(name):
     """'Govt Medical College, Satna, Near Kendriya Vidyalaya…' → 'Govt Medical College, Satna'."""
-    segs = [x.strip() for x in (name or '').split(',') if x.strip()]
+    segs = [x.strip() for x in (name or '').split(',') if x.strip() and x.strip().upper() not in ('NA', 'N A', 'N.A.', '-')]
     if not segs:
         return ''
     out = segs[0]

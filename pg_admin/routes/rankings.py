@@ -29,6 +29,11 @@ def _ist_now():
     return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
 
+_QUOTA_LABEL = {'All India': 'All India Quota', 'Self-Financed Merit Seat': 'Deemed Paid',
+                'Non-Resident Indian': 'Deemed NRI', 'Muslim Minority Quota': 'Muslim Minority',
+                'Jain Minority Quota': 'Jain Minority'}
+
+
 def rankings_data(conn):
     """{lists:[{key,label,tiers:{Top:[..],Good:[..],Average:[..]},counts}], new_colleges:[..]}"""
     rec.ensure_rec_tables(conn)
@@ -40,13 +45,28 @@ def rankings_data(conn):
             item = {'college': r['college'], 'state': r['state'], 'institute_type': r.get('institute_type') or '',
                     'seats': r['seats'], 'college_code': r['college_code']}
             if r['tier'] == rec.NEW_TIER:
-                n = new_by_code.setdefault(r['college_code'], {**item, 'lists': [], 'seats_by_list': {}})
-                n['lists'].append(meta['label']); n['seats_by_list'][meta['label']] = r['seats']
-                continue
+                continue                     # listed in the separate New colleges document
             tiers.setdefault(r['tier'], []).append(item)
         # within a tier: keep the curated order (tiers_payload sorts by tier then basis rank)
         lists.append({'key': key, 'label': meta['label'], 'tiers': tiers,
                       'counts': {t: len(v) for t, v in tiers.items()}})
+    # New colleges come from EVERY official MCC seat list (incl. Deemed 'All India' + minority quotas,
+    # which a brand-new deemed college may have alone), not only the 4 ranked lists.
+    bodies = rec._bodies(conn)
+    if bodies:
+        ph = ','.join(['?'] * len(bodies))
+        for r in conn.execute(
+                f"SELECT college_code, MAX(college_name) AS name, MAX(state) AS state, MAX(institute_type) AS itype, "
+                f"quota, SUM(seats) AS seats FROM pg_seat_matrix WHERE counselling_body IN ({ph}) "
+                f"GROUP BY college_code, quota HAVING MAX(CASE WHEN COALESCE(cutoff_institute,'')<>'' THEN 1 ELSE 0 END)=0",
+                bodies).fetchall():
+            n = new_by_code.setdefault(r['college_code'], {
+                'college': rec._short_name(r['name']), 'state': r['state'], 'institute_type': r['itype'] or '',
+                'college_code': r['college_code'], 'lists': [], 'seats_by_list': {}})
+            q = _QUOTA_LABEL.get(r['quota'], r['quota'])
+            if q not in n['seats_by_list']:
+                n['lists'].append(q)
+            n['seats_by_list'][q] = int(r['seats'] or 0)
     news = sorted(new_by_code.values(), key=lambda x: (x['state'], x['college']))
     for n in news:
         n['seats'] = sum(n['seats_by_list'].values())
