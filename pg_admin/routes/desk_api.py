@@ -520,8 +520,20 @@ def desk_selftest():
         conn = get_db()
         try:
             plans = [dict(r) for r in conn.execute(
-                "SELECT id, code, name, plan_kind, COALESCE(is_active,1) AS active, COALESCE(is_public,1) AS public "
-                "FROM pg_plans ORDER BY sort_order, id").fetchall()]
+                "SELECT id, code, name, plan_kind, COALESCE(is_active,1) AS active, COALESCE(is_public,1) AS public, "
+                "price, COALESCE(gst_percent,0) AS gst_percent, tagline FROM pg_plans ORDER BY sort_order, id").fetchall()]
+            for pl in plans:
+                for k in ('price', 'gst_percent'):
+                    pl[k] = float(pl[k]) if pl.get(k) is not None else None
+            out['coupons'] = [dict(r) for r in conn.execute(
+                "SELECT code, discount_type, discount_value, applies_to, is_active, used_count, valid_until "
+                "FROM pg_coupons ORDER BY id DESC LIMIT 20").fetchall()]
+            for c in out['coupons']:
+                c['discount_value'] = float(c['discount_value']) if c.get('discount_value') is not None else None
+                c['valid_until'] = str(c['valid_until'])[:10] if c.get('valid_until') else ''
+            out['pgcp_invites'] = [dict(r) for r in conn.execute(
+                "SELECT client_type, payment_status, COUNT(*) AS n FROM pg_pgcp_invitations "
+                "WHERE status <> 'cancelled' GROUP BY client_type, payment_status").fetchall()]
             for pl in plans:
                 fm = _ent.plan_feature_map(conn, pl['id'])
                 pl['dash_choice_list'] = (fm.get('dash_choice_list') or {}).get('value_type')
