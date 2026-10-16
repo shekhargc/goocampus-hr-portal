@@ -515,6 +515,27 @@ def desk_selftest():
     from flask import current_app
     out = {'ok': True}
     only = (request.args.get('only') or '').strip()
+    if only == 'pgcp':          # read-only: package/payment schema + every invite's computed summary
+        from pg_admin.data import pgcp_package as _pk
+        conn = get_db()
+        try:
+            _pk.ensure_schema(conn)
+            invs = [dict(r) for r in conn.execute(
+                "SELECT * FROM pg_pgcp_invitations WHERE status <> 'cancelled'").fetchall()]
+            st = {}
+            for inv in invs:
+                sm = _pk.summary(conn, inv)
+                key = f"{inv.get('client_type')}:{sm['status']}:{'legacy' if sm.get('legacy') else 'package'}"
+                st[key] = st.get(key, 0) + 1
+            out['pgcp_summary'] = st
+            out['tables'] = {t: bool(conn.execute(f"SELECT to_regclass('{t}') AS t").fetchone()['t'])
+                             for t in ('pg_pgcp_payments', 'pg_pgcp_payment_log')}
+            out['sample_math'] = _pk.compute_package(99999, 10000, 'plus', 18)
+        except Exception as e:
+            out['pgcp_error'] = str(e)[:300]
+        finally:
+            conn.close()
+        return jsonify(out)
     if only == 'plans':         # read-only: which plans unlock the choice-list feature (rankings/team lists gate)
         from pg_admin.data import entitlements as _ent
         conn = get_db()
