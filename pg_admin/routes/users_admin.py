@@ -873,9 +873,11 @@ def user_grant_plan(user_id):
                 # the dashboard to counsel — they get Premium access but NO onboarding
                 # form and NO PGCP invitation. (founder 2026-09-29)
                 if _du and not (_du.get('is_team_member') or 0):
-                    ensure_paid_invitation(conn, dict(_du), plan, plan.get('price'),
-                                           'admin grant (comp)', source='admin-grant',
-                                           client_type='internal')
+                    # comp=True: open the onboarding form but record NO payment (was
+                    # mislabelled paid_online=1 / paid_amount=list price). (2026-10-16)
+                    ensure_paid_invitation(conn, dict(_du), plan, None,
+                                           '', source='admin-grant',
+                                           client_type='internal', comp=True)
                     _onb = ' — they will now see the Premium onboarding form on their dashboard'
                 elif _du and (_du.get('is_team_member') or 0):
                     _onb = ' — team member: Premium access granted, no onboarding form'

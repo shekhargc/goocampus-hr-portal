@@ -1,0 +1,201 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Payments · {{ inv.client_name or 'Invite' }} · Indian PGCP{% endblock %}
+
+{% block section_content %}
+{% set lb = 'display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;' %}
+{% set ip = 'width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;' %}
+{% set card = 'background:white;border:1px solid var(--gray-200);border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1.2rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);' %}
+{% set st = summ.status %}
+<div style="max-width:1100px;margin:0 auto;padding:2rem 1.5rem;">
+  <a href="{{ url_for('pg_pgcp_admin') }}" style="color:var(--gray-500);text-decoration:none;font-size:0.85rem;">← Indian PGCP</a>
+  <span style="color:var(--gray-300);margin:0 6px;">|</span>
+  <a href="{{ url_for('pg_payments_admin') }}" style="color:var(--gray-500);text-decoration:none;font-size:0.85rem;">All PG payments</a>
+  <h1 style="font-size:1.45rem;font-weight:800;color:var(--navy);margin:0.4rem 0 0.2rem;">
+    {{ inv.client_name|dr_name if inv.client_name else 'Client' }}
+    <span style="font-size:0.78rem;font-weight:700;padding:2px 10px;border-radius:20px;vertical-align:middle;
+      background:{{ '#dcfce7' if st=='paid' else ('#fef3c7' if st=='part_paid' else '#fee2e2') }};
+      color:{{ '#166534' if st=='paid' else ('#92400e' if st=='part_paid' else '#991b1b') }};">{{ summ.status_label }}</span>
+  </h1>
+  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.88rem;">
+    {{ inv.mobile|local_mobile }}{% if inv.email %} · {{ inv.email }}{% endif %} ·
+    Plan: <b>{{ plan.name if plan else (inv.plan_code or '—') }}</b> · Invite #{{ inv.id }} ({{ inv.status }})
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+    <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                background:{{ '#DCFCE7' if cat=='success' else ('#E0F2FE' if cat=='info' else '#FEE2E2') }};
+                color:{{ '#166534' if cat=='success' else ('#075985' if cat=='info' else '#991B1B') }};">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if inv.client_type == 'internal' %}
+  <div style="{{ card }}color:var(--gray-600);">This is an <b>internal (complimentary)</b> invite — there is no package or payment to track.</div>
+  {% else %}
+
+  {% if summ.legacy %}
+  <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.84rem;background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;">
+    This invite was created before package tracking. Figures below are read from the old fields
+    (invited amount − discount{% if inv.payment_status == 'paid' %}, marked paid{% endif %}). Nothing is changed until you
+    <b>record a payment</b> or <b>edit the package</b> — then it moves to package tracking{% if inv.payment_status == 'paid' and inv.paid_amount %} and the old ₹{{ '{:,.0f}'.format(inv.paid_amount) }} becomes an opening payment{% endif %}.
+  </div>
+  {% endif %}
+
+  <!-- Summary tiles -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0.9rem;margin-bottom:1.2rem;">
+    {% for lbl, val, col in [('Final package', summ.final, 'var(--navy)'), ('Paid so far', summ.paid, '#166534'), ('Balance', summ.balance, '#b45309' if (summ.balance or 0) > 0 else '#166534')] %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:0.85rem 1rem;">
+      <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">{{ lbl }}</div>
+      <div style="font-size:1.45rem;font-weight:800;color:{{ col }};font-variant-numeric:tabular-nums;">{% if val is not none %}₹{{ '{:,.0f}'.format(val) }}{% else %}—{% endif %}</div>
+    </div>
+    {% endfor %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:0.85rem 1rem;">
+      <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">Balance due</div>
+      <div style="font-size:0.95rem;font-weight:700;color:var(--navy);margin-top:4px;">
+        {% if inv.balance_due_date %}{{ inv.balance_due_date|format_date }}{% endif %}
+        {% if inv.balance_due_note %}<div style="font-weight:500;font-size:0.84rem;color:var(--gray-600);">{{ inv.balance_due_note }}</div>{% endif %}
+        {% if not inv.balance_due_date and not inv.balance_due_note %}—{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Package breakdown -->
+  <div style="{{ card }}">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;">
+      <div style="font-weight:800;color:var(--navy);">Package breakdown</div>
+      <div style="font-size:0.76rem;color:var(--gray-400);">{% if inv.package_updated_by %}Last edited by {{ inv.package_updated_by }} · {{ inv.package_updated_at|format_datetime }}{% endif %}</div>
+    </div>
+    <table style="width:100%;max-width:520px;border-collapse:collapse;font-size:0.88rem;margin-top:0.6rem;font-variant-numeric:tabular-nums;">
+      <tr><td style="padding:4px 0;color:var(--gray-600);">Plan list price</td><td style="text-align:right;">₹{{ '{:,.2f}'.format(pkg.list_price) }}</td></tr>
+      <tr><td style="padding:4px 0;color:var(--gray-600);">Discount{% if inv.coupon_code %} <span style="font-family:ui-monospace,monospace;background:var(--gray-100);padding:0 5px;border-radius:4px;">{{ inv.coupon_code }}</span>{% if inv.discount_mode != 'coupon' %} <span style="font-size:0.74rem;color:var(--gray-400);">(edited by hand)</span>{% endif %}{% endif %}</td><td style="text-align:right;color:#16a34a;">− ₹{{ '{:,.2f}'.format(pkg.discount) }}</td></tr>
+      <tr><td style="padding:4px 0;color:var(--gray-600);">Taxable value</td><td style="text-align:right;">₹{{ '{:,.2f}'.format(pkg.taxable) }}</td></tr>
+      <tr><td style="padding:4px 0;color:var(--gray-600);">GST {{ pkg.gst_percent|round(2) }}% {{ '(on top)' if pkg.gst_mode == 'plus' else '(inclusive)' }}</td><td style="text-align:right;">₹{{ '{:,.2f}'.format(pkg.gst) }}</td></tr>
+      <tr style="border-top:2px solid var(--gray-200);"><td style="padding:6px 0;font-weight:800;color:var(--navy);">Final package{% if pkg.overridden %} <span style="font-size:0.72rem;color:#b45309;font-weight:600;">(negotiated; calculated ₹{{ '{:,.2f}'.format(pkg.computed_final) }})</span>{% endif %}</td><td style="text-align:right;font-weight:800;color:var(--navy);">{% if summ.final is not none %}₹{{ '{:,.2f}'.format(summ.final) }}{% else %}—{% endif %}</td></tr>
+    </table>
+
+    <details style="margin-top:0.9rem;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--orange);font-size:0.86rem;">✎ Edit package</summary>
+      <form method="POST" id="pkEditForm" style="margin-top:0.8rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:0.9rem;">
+        <input type="hidden" name="action" value="edit_package">
+        <div><label style="{{ lb }}">List price ₹</label><input type="number" step="any" min="0" name="list_price" id="pe_list" value="{{ pkg.list_price }}" style="{{ ip }}"></div>
+        <div><label style="{{ lb }}">Discount ₹</label><input type="number" step="any" min="0" name="discount" id="pe_disc" value="{{ pkg.discount }}" style="{{ ip }}"></div>
+        <div><label style="{{ lb }}">GST treatment</label>
+          <label style="display:block;font-size:0.85rem;"><input type="radio" name="gst_mode" value="plus" id="pe_plus" {{ 'checked' if pkg.gst_mode == 'plus' }}> + GST on top</label>
+          <label style="display:block;font-size:0.85rem;"><input type="radio" name="gst_mode" value="inclusive" id="pe_incl" {{ 'checked' if pkg.gst_mode == 'inclusive' }}> GST inclusive</label></div>
+        <div><label style="{{ lb }}">GST %</label><input type="number" step="any" min="0" max="100" name="gst_percent" id="pe_pct" value="{{ pkg.gst_percent }}" style="{{ ip }}"></div>
+        <div><label style="{{ lb }}">Final package ₹</label>
+          <input type="number" step="any" min="0" name="final_amount" id="pe_final" value="{{ summ.final if summ.final is not none else '' }}" style="{{ ip }}font-weight:800;">
+          <input type="hidden" name="final_overridden" id="pe_ov" value="{{ '1' if pkg.overridden else '0' }}">
+          <div style="font-size:0.72rem;margin-top:3px;color:var(--gray-500);">Calculated: <b id="pe_calc">—</b> · <a href="#" id="pe_reset" style="color:var(--orange);">use calculated</a></div></div>
+        <div><label style="{{ lb }}">Balance due date</label><input type="date" name="balance_due_date" value="{{ inv.balance_due_date or '' }}" style="{{ ip }}"></div>
+        <div><label style="{{ lb }}">&nbsp;</label><label style="font-size:0.85rem;"><input type="checkbox" name="after_allotment" value="1" {{ 'checked' if (inv.balance_due_note or '').startswith('After allotment') }}> After allotment</label></div>
+        <div><label style="{{ lb }}">Due note</label><input type="text" name="balance_due_note" value="{{ (inv.balance_due_note or '')|replace('After allotment — ', '')|replace('After allotment', '') }}" style="{{ ip }}"></div>
+        <div style="grid-column:1/-1;"><button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:0.55rem 1.3rem;font-weight:700;cursor:pointer;">Save package</button></div>
+      </form>
+    </details>
+  </div>
+
+  <!-- Payments -->
+  <div style="{{ card }}">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:0.6rem;">
+      <div style="font-weight:800;color:var(--navy);">Payments</div>
+      <form method="POST" style="display:flex;align-items:center;gap:8px;">
+        <input type="hidden" name="action" value="toggle_balance_requested">
+        <span style="font-size:0.8rem;color:var(--gray-600);">Ask the doctor to pay the balance online:
+          <b style="color:{{ '#166534' if inv.balance_requested else 'var(--gray-500)' }};">{{ 'ON' if inv.balance_requested else 'off' }}</b></span>
+        <button type="submit" style="background:{{ '#fff' if inv.balance_requested else 'var(--orange)' }};color:{{ 'var(--navy)' if inv.balance_requested else '#fff' }};border:1px solid {{ 'var(--gray-300)' if inv.balance_requested else 'var(--orange)' }};border-radius:6px;padding:0.35rem 0.8rem;font-weight:700;font-size:0.78rem;cursor:pointer;">
+          {{ 'Withdraw request' if inv.balance_requested else 'Request balance' }}</button>
+      </form>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      {% set hs = 'padding:0.55rem 0.7rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
+      <thead><tr><th style="{{ hs }}">Date</th><th style="{{ hs }}text-align:right;">Amount</th><th style="{{ hs }}">Mode</th>
+        <th style="{{ hs }}">Reference</th><th style="{{ hs }}">Note</th><th style="{{ hs }}">Recorded</th><th style="{{ hs }}"></th></tr></thead>
+      <tbody>
+        {% if summ.legacy and inv.payment_status == 'paid' %}
+        <tr style="border-top:1px solid var(--gray-100);background:#FFFBEB;">
+          <td style="padding:0.55rem 0.7rem;">{{ inv.created_at|format_date }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;font-weight:700;">{% if inv.paid_amount is not none %}₹{{ '{:,.2f}'.format(inv.paid_amount) }}{% else %}—{% endif %}</td>
+          <td style="padding:0.55rem 0.7rem;">{{ 'Online' if inv.paid_online else 'Offline' }}</td>
+          <td style="padding:0.55rem 0.7rem;">{{ inv.payment_ref or '—' }}</td>
+          <td style="padding:0.55rem 0.7rem;color:var(--gray-500);">Recorded on the old invite (before instalments)</td>
+          <td></td><td></td></tr>
+        {% endif %}
+        {% for p in summ.payments %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:0.55rem 0.7rem;white-space:nowrap;">{{ p.paid_on|format_date }}</td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;">₹{{ '{:,.2f}'.format(p.amount) }}</td>
+          <td style="padding:0.55rem 0.7rem;">{{ mode_labels.get(p.mode, p.mode) }}</td>
+          <td style="padding:0.55rem 0.7rem;">{{ p.ref or p.razorpay_payment_id or '—' }}</td>
+          <td style="padding:0.55rem 0.7rem;color:var(--gray-600);">{{ p.note or '' }}</td>
+          <td style="padding:0.55rem 0.7rem;font-size:0.76rem;color:var(--gray-500);white-space:nowrap;">{{ p.recorded_by or '' }}<div>{{ p.created_at|format_datetime }}</div></td>
+          <td style="padding:0.55rem 0.7rem;text-align:right;">
+            <form method="POST" style="display:inline;" onsubmit="var r = prompt('Delete this payment of ₹{{ '{:,.0f}'.format(p.amount) }}? This is logged.\nReason (optional):', ''); if (r === null) return false; this.reason.value = r; return true;">
+              <input type="hidden" name="action" value="delete_payment">
+              <input type="hidden" name="payment_id" value="{{ p.id }}">
+              <input type="hidden" name="reason" value="">
+              <button type="submit" style="background:none;border:none;color:#dc2626;font-weight:600;font-size:0.78rem;cursor:pointer;">Delete</button>
+            </form></td>
+        </tr>
+        {% else %}
+        {% if not (summ.legacy and inv.payment_status == 'paid') %}
+        <tr><td colspan="7" style="padding:1.2rem;text-align:center;color:var(--gray-400);">No payments recorded yet.</td></tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <form method="POST" style="margin-top:1rem;padding-top:0.9rem;border-top:1px dashed var(--gray-200);display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:0.8rem;align-items:end;">
+      <input type="hidden" name="action" value="add_payment">
+      <div style="grid-column:1/-1;font-weight:700;color:#166534;font-size:0.84rem;">+ Record a payment</div>
+      <div><label style="{{ lb }}">Amount ₹</label><input type="number" step="any" min="0.01" name="amount" required style="{{ ip }}"
+             placeholder="{{ '{:,.0f}'.format(summ.balance) if summ.balance and summ.balance > 0 else '' }}"></div>
+      <div><label style="{{ lb }}">Date</label><input type="date" name="paid_on" value="{{ today }}" style="{{ ip }}"></div>
+      <div><label style="{{ lb }}">Mode</label><select name="mode" style="{{ ip }}">
+        {% for v, l in pay_modes %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+      <div><label style="{{ lb }}">Reference</label><input type="text" name="ref" placeholder="UTR / txn ref" style="{{ ip }}"></div>
+      <div><label style="{{ lb }}">Note</label><input type="text" name="note" placeholder="e.g. 2nd instalment" style="{{ ip }}"></div>
+      <div><button type="submit" style="background:#166534;color:#fff;border:none;border-radius:8px;padding:0.55rem 1.2rem;font-weight:700;cursor:pointer;">Save payment</button></div>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- Change log -->
+  <div style="{{ card }}">
+    <div style="font-weight:800;color:var(--navy);margin-bottom:0.5rem;">Change log</div>
+    {% for l in logs %}
+    <div style="padding:0.45rem 0;border-top:1px solid var(--gray-100);font-size:0.84rem;">
+      <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:var(--gray-500);background:var(--gray-100);padding:1px 7px;border-radius:10px;">{{ l.action|replace('_', ' ') }}</span>
+      <span style="color:var(--navy);">{{ l.detail }}</span>
+      <div style="font-size:0.74rem;color:var(--gray-400);">{{ l.done_by or '—' }} · {{ l.done_at|format_datetime }}</div>
+    </div>
+    {% else %}
+    <div style="font-size:0.84rem;color:var(--gray-400);">No changes logged yet.</div>
+    {% endfor %}
+    <div style="font-size:0.74rem;color:var(--gray-400);margin-top:0.6rem;">Invite created by {{ inv.created_by or '—' }} · {{ inv.created_at|format_datetime }}</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  if (!$('pkEditForm')) return;
+  function num(v){ v = parseFloat(String(v||'').replace(/,/g,'')); return isNaN(v) ? 0 : v; }
+  function r2(x){ return Math.round(x*100)/100; }
+  function calc(){
+    var price = Math.max(0, num($('pe_list').value)), d = Math.max(0, Math.min(num($('pe_disc').value), price));
+    var p = Math.max(0, Math.min(100, $('pe_pct').value === '' ? 18 : num($('pe_pct').value))), rate = p/100;
+    var computed = $('pe_incl').checked ? r2(price - d) : r2((price - d) + r2((price - d)*rate));
+    $('pe_calc').textContent = '₹' + computed.toLocaleString('en-IN');
+    if ($('pe_ov').value !== '1') $('pe_final').value = computed;
+  }
+  ['pe_list','pe_disc','pe_pct'].forEach(function(id){ $(id).addEventListener('input', calc); });
+  ['pe_plus','pe_incl'].forEach(function(id){ $(id).addEventListener('change', calc); });
+  $('pe_final').addEventListener('input', function(){ $('pe_ov').value = '1'; });
+  $('pe_reset').addEventListener('click', function(e){ e.preventDefault(); $('pe_ov').value = '0'; calc(); });
+  var keep = $('pe_final').value; calc(); if ($('pe_ov').value === '1') $('pe_final').value = keep;
+})();
+</script>
+{% endblock %}

@@ -309,6 +309,14 @@ def register_pg_admin(app):
                      pgcp_admin.pgcp_submission, methods=['GET'])
     app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/cancel', 'pg_pgcp_invite_cancel',
                      pgcp_admin.pgcp_invite_cancel, methods=['POST'])
+    # Negotiated package + instalment payments per invite, and the PG payments overview
+    # (team packages + online self-purchases). Admin-only (in-view gate). (2026-10-16)
+    app.add_url_rule('/admin/pg/pgcp/<int:invite_id>/payments', 'pg_pgcp_payments',
+                     pgcp_admin.pgcp_payments, methods=['GET', 'POST'])
+    app.add_url_rule('/admin/pg/payments', 'pg_payments_admin',
+                     pgcp_admin.pg_payments_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/payments/export', 'pg_payments_export',
+                     pgcp_admin.pg_payments_export, methods=['GET'])
     app.add_url_rule('/api/pg/pgcp/onboarding', 'api_pgcp_onboarding',
                      api_pgcp.api_pgcp_onboarding, methods=['GET', 'POST'])
     app.add_url_rule('/api/pg/pgcp/onboarding/submit', 'api_pgcp_submit',

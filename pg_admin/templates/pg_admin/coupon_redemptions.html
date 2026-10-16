@@ -26,7 +26,7 @@
   <tbody>
     {% for r in rows %}
     <tr>
-      <td>{{ r.user_name or 'Doctor #' ~ (r.user_id or '?') }}<div style="font-size:0.76rem; color:var(--gray-500)">{{ r.mobile or '' }}</div></td>
+      <td>{% if r.user_id %}{{ r.user_name or 'Doctor #' ~ r.user_id }}{% elif r.invitation_id %}<a href="/admin/pg/pgcp/{{ r.invitation_id }}/payments" style="color:var(--orange);">PGCP invite #{{ r.invitation_id }}</a>{% else %}Doctor #?{% endif %}<div style="font-size:0.76rem; color:var(--gray-500)">{{ r.mobile or r.note or '' }}</div></td>
       <td>{{ r.plan_name or '—' }}</td>
       <td>₹{{ '{:,.0f}'.format(r.order_amount or 0) }}</td>
       <td style="color:#16a34a; font-weight:600;">− ₹{{ '{:,.0f}'.format(r.discount_amount or 0) }}</td>

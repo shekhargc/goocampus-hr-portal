@@ -1,8 +1,9 @@
 """Coupon admin — create discount codes and watch how they're used.
 
-Built before Razorpay exists (founder 2026-07-28) so the codes, rules and reporting
-are ready and tested the day the keys arrive. The discount maths lives in
-pg_admin/data/coupons.py; this file is the screen around it.
+Codes apply at the live goocampus.in Razorpay checkout and on team PGCP invites.
+The discount maths lives in pg_admin/data/coupons.py; this file is the screen
+around it. (founder 2026-07-28; plan picker = paid counselling plans only and real
+price/GST preview, 2026-10-16)
 """
 import logging
 import random
@@ -74,9 +75,14 @@ def coupons_admin():
     rows, plans, coupon_plans = [], [], {}
     stats = {'total': 0, 'live': 0, 'redemptions': 0, 'discount_given': 0.0}
     try:
+        # Only the purchasable counselling plans (not the free anchor / retired ones).
         plans = [dict(r) for r in conn.execute(
-            "SELECT id, code, name, price FROM pg_plans WHERE COALESCE(is_active,1)=1 "
-            "ORDER BY sort_order, id").fetchall()]
+            "SELECT id, code, name, price, COALESCE(gst_percent,0) AS gst_percent "
+            "FROM pg_plans WHERE COALESCE(is_active,1)=1 AND plan_kind = 'counselling' "
+            "ORDER BY price, id").fetchall()]
+        for p in plans:
+            p['price'] = float(p.get('price') or 0)
+            p['gst_percent'] = float(p.get('gst_percent') or 0)
         rows = [dict(r) for r in conn.execute(
             "SELECT * FROM pg_coupons ORDER BY id DESC").fetchall()]
         for r in conn.execute("SELECT coupon_id, plan_id FROM pg_coupon_plans").fetchall():
