@@ -515,6 +515,23 @@ def desk_selftest():
     from flask import current_app
     out = {'ok': True}
     only = (request.args.get('only') or '').strip()
+    if only == 'mypay':         # read-only: what each Internal/Paid doctor's profile card would show
+        from pg_admin.routes import my_payments as _mp
+        conn = get_db()
+        try:
+            rows = conn.execute(f"SELECT x.* FROM (SELECT u.*, {_type_sql('u')} AS t FROM pg_users u) x "
+                                "WHERE x.t IN ('internal','paid')").fetchall()
+            kinds, pay = {}, 0
+            for r in rows:
+                c = _mp._card(conn, dict(r))
+                kinds[c.get('kind')] = kinds.get(c.get('kind'), 0) + 1
+                pay += 1 if c.get('can_pay_balance') else 0
+            out['cards'] = kinds; out['with_pay_button'] = pay
+        except Exception as e:
+            out['mypay_error'] = str(e)[:300]
+        finally:
+            conn.close()
+        return jsonify(out)
     if only == 'pgcp':          # read-only: package/payment schema + every invite's computed summary
         from pg_admin.data import pgcp_package as _pk
         conn = get_db()
