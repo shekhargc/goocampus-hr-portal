@@ -172,24 +172,33 @@ def news_inbox_redraft():
 
 @login_required
 def news_inbox_status():
-    """Dismiss / restore a notice. (Posting happens via the newsroom form.)"""
+    """Dismiss / restore a notice — or several ticked ones at once ("Dismiss selected" /
+    "Restore selected", founder 2026-10-16). (Posting happens via the newsroom form.)"""
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
-    try:
-        iid = int(request.form.get('id') or 0)
-    except ValueError:
-        iid = 0
+    ids = [int(x) for x in request.form.getlist('ids') if str(x).isdigit()]
+    if not ids:
+        try:
+            ids = [int(request.form.get('id') or 0)]
+        except ValueError:
+            ids = []
+    ids = [i for i in ids if i][:300]
     to = (request.form.get('to') or '').strip()
     back = request.form.get('tab') or 'new'
     back_src = request.form.get('src') or None
-    if not iid or to not in ('new', 'dismissed'):
-        flash('Nothing to update.', 'error'); return redirect(url_for('pg_news_inbox', tab=back, src=back_src))
+    if not ids or to not in ('new', 'dismissed'):
+        flash('Nothing selected.', 'error'); return redirect(url_for('pg_news_inbox', tab=back, src=back_src))
     conn = get_db()
     try:
         conn.execute("UPDATE pg_news_inbox SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP "
-                     "WHERE id = ? AND status <> 'posted'", (to, _who(), iid))
+                     "WHERE id IN (" + ','.join(['?'] * len(ids)) + ") AND status <> 'posted'",
+                     [to, _who()] + ids)
         conn.commit()
-        flash('Dismissed.' if to == 'dismissed' else 'Moved back to New.', 'success')
+        n = len(ids)
+        if n == 1:
+            flash('Dismissed.' if to == 'dismissed' else 'Moved back to New.', 'success')
+        else:
+            flash(f'{n} notices dismissed.' if to == 'dismissed' else f'{n} notices moved back to New.', 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

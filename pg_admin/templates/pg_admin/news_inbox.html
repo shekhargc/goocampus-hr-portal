@@ -84,14 +84,39 @@
   </div>
 
   {% if items %}
+  {% set bulk = tab in ('new', 'dismissed') %}
+  {% if bulk %}
+  <!-- Bulk: tick notices (or Select all) → Dismiss / Restore selected (founder 2026-10-16) -->
+  <form id="nbBulk" method="POST" action="{{ url_for('pg_news_inbox_status') }}"
+        onsubmit="var n=document.querySelectorAll('.nb-pick:checked').length; if(!n){alert('Tick at least one notice first.');return false;} return confirm('{{ 'Dismiss' if tab == 'new' else 'Restore' }} ' + n + ' notice' + (n>1?'s':'') + '?');"
+        style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:1100px;margin:0 0 10px;">
+    <input type="hidden" name="to" value="{{ 'dismissed' if tab == 'new' else 'new' }}">
+    <input type="hidden" name="tab" value="{{ tab }}"><input type="hidden" name="src" value="{{ src }}">
+    <label style="font-size:0.84rem;font-weight:600;color:var(--gray-600);cursor:pointer;">
+      <input type="checkbox" id="nbAll" onclick="document.querySelectorAll('.nb-pick').forEach(function(c){c.checked=this.checked}.bind(this)); nbCount();"> Select all</label>
+    <button class="nb-btn" id="nbBulkBtn" disabled
+            style="background:{{ '#b91c1c' if tab == 'new' else '#2952a3' }};color:#fff;opacity:.45;">
+      {{ 'Dismiss selected' if tab == 'new' else 'Restore selected' }} (<span id="nbN">0</span>)</button>
+  </form>
+  <script>
+    function nbCount(){
+      var n=document.querySelectorAll('.nb-pick:checked').length, all=document.querySelectorAll('.nb-pick').length;
+      document.getElementById('nbN').textContent=n;
+      var b=document.getElementById('nbBulkBtn'); b.disabled=!n; b.style.opacity=n?1:.45;
+      var a=document.getElementById('nbAll'); a.checked=n&&n===all; a.indeterminate=n>0&&n<all;
+    }
+  </script>
+  {% endif %}
   <div class="nb-card" style="overflow-x:auto;">
     <table class="nb-table">
       <thead><tr>
+        {% if bulk %}<th style="width:28px;"></th>{% endif %}
         <th>Date</th><th>Notice</th><th class="nb-hide-sm">Source</th><th class="nb-hide-sm">Found</th><th></th>
       </tr></thead>
       <tbody>
       {% for it in items %}
         <tr>
+          {% if bulk %}<td><input type="checkbox" class="nb-pick" name="ids" value="{{ it.id }}" form="nbBulk" onchange="nbCount()" aria-label="Select this notice"></td>{% endif %}
           <td style="white-space:nowrap;">{{ it.notice_date|format_date }}</td>
           <td>
             {% if it.draft and it.draft.headline %}
