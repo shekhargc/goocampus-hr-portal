@@ -1,8 +1,9 @@
 """Coupon validation + redemption.
 
-Built complete and testable NOW, before Razorpay exists (founder 2026-07-28). The
-whole discount calculation lives here, so when the Razorpay keys arrive the only
-new code is "take the money" — pricing is already decided and already correct.
+The whole discount calculation lives here (founder 2026-07-28). Used by the live
+Razorpay checkout on goocampus.in (/api/pg/checkout/create-order + verify), by the
+admin editor's preview, and by team PGCP invites (a coupon as the package discount —
+see pg_admin/data/pgcp_package.py, which burns the use with the invite noted).
 
     ok, result = validate(conn, 'LAUNCH50', plan_id=3, user_id=17)
     -> result['discount'], result['payable'], or result['error'] in plain English
@@ -96,11 +97,23 @@ def validate(conn, code, plan_id=None, user_id=None, amount=None, gst_percent=No
             except Exception:
                 conn.rollback()
         if coupon.get('first_time_only'):
+            # Only a real PAID purchase counts as "bought before" — a comp / internal
+            # auto-grant / free plan / ₹0 coupon order does not. (2026-10-16)
             try:
                 row = conn.execute(
                     "SELECT COUNT(*) AS n FROM pg_subscriptions WHERE user_id = ? "
-                    "AND source <> 'admin_grant'", (user_id,)).fetchone()
-                if int(row['n'] or 0) > 0:
+                    "AND COALESCE(price_paid,0) > 0 AND source IN ('razorpay','prepaid_grant')",
+                    (user_id,)).fetchone()
+                bought = int(row['n'] or 0) > 0
+                if not bought:
+                    try:
+                        row = conn.execute(
+                            "SELECT COUNT(*) AS n FROM pg_orders WHERE user_id = ? "
+                            "AND status = 'paid' AND COALESCE(payable,0) > 0", (user_id,)).fetchone()
+                        bought = int(row['n'] or 0) > 0
+                    except Exception:
+                        conn.rollback()   # pg_orders may not exist yet
+                if bought:
                     return False, {'error': 'This coupon is for first-time purchases only.'}
             except Exception:
                 conn.rollback()

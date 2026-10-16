@@ -27,15 +27,30 @@ def _ensure_pay_cols(conn):
             conn.execute(ddl)
         except Exception:
             pass
+    try:   # package + instalment columns/tables (2026-10-16)
+        from pg_admin.data.pgcp_package import ensure_schema
+        ensure_schema(conn)
+    except Exception:
+        pass
 
 
-def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-upgrade', client_type='paying'):
+def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-upgrade',
+                           client_type='paying', comp=False):
     """Bridge: a website self-upgrade to a counselling plan enters the SAME PGCP
     onboarding pathway as a team invite. Upsert the doctor's invitation (matched by
     mobile) and mark the counselling fee as paid online, so the one onboarding form
     opens with its payment step pre-filled + locked. Idempotent — never duplicates.
     Returns the invitation id (or None if the doctor has no usable mobile).
-    (founder 2026-09-25 — unify self-upgrade + invite into one path)"""
+    (founder 2026-09-25 — unify self-upgrade + invite into one path)
+
+    comp=True (admin grant / complimentary): open the onboarding form WITHOUT recording
+    any payment — an existing invite only gets its plan_code updated (client_type and
+    every payment field untouched); a new one is created as an unpaid 'internal' invite.
+    Fixes comps being mislabelled paid_online=1 with paid_amount = list price. (2026-10-16)
+
+    When the doctor's invite is a team-negotiated PACKAGE (final_amount set), the online
+    payment is also added to its instalment ledger and the status recomputed, so the
+    package's paid/balance stay right."""
     _ensure_pay_cols(conn)
     mob10 = _digits(user.get('mobile'))[-10:]
     if not mob10:
@@ -49,6 +64,22 @@ def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-u
         "SELECT * FROM pg_pgcp_invitations WHERE status <> 'cancelled' AND "
         "RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? ORDER BY id DESC LIMIT 1",
         [mob10]).fetchone()
+    if comp:
+        if existing:
+            existing = dict(existing)
+            conn.execute("UPDATE pg_pgcp_invitations SET plan_code = ? WHERE id = ?",
+                         [plan_code or existing.get('plan_code') or '', existing['id']])
+            conn.commit()
+            return existing['id']
+        iid = conn.execute(
+            "INSERT INTO pg_pgcp_invitations (token, client_name, mobile, email, client_type, "
+            "plan_code, status, payment_status, paid_online, created_by, notes) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+            [secrets.token_urlsafe(12), user.get('name') or '', user.get('mobile') or '',
+             user.get('email') or '', 'internal', plan_code, 'invited', 'due', 0,
+             f'website ({source})', 'Complimentary — admin plan grant']).fetchone()['id']
+        conn.commit()
+        return iid
     if existing:
         existing = dict(existing)
         conn.execute(
@@ -57,7 +88,26 @@ def ensure_paid_invitation(conn, user, plan, amount, payment_ref, source='self-u
             "payment_status = 'paid', paid_online = 1, payment_ref = ?, paid_amount = ? "
             "WHERE id = ?",
             [plan_code or existing.get('plan_code') or '', amt, payment_ref or '', amt, existing['id']])
-        conn.commit()
+        conn.commit()   # the paid mark is saved first — the ledger below can never undo it
+        if existing.get('final_amount') is not None and amt:
+            # Team package: put the online payment into the instalment ledger too.
+            try:
+                from pg_admin.data import pgcp_package as _pk
+                dup = conn.execute("SELECT 1 FROM pg_pgcp_payments WHERE invitation_id = ? "
+                                   "AND razorpay_payment_id = ? AND razorpay_payment_id <> ''",
+                                   [existing['id'], payment_ref or '']).fetchone()
+                if not dup:
+                    from datetime import datetime as _dt, timedelta as _td
+                    _pk.add_payment(conn, existing['id'], amt,
+                                    (_dt.utcnow() + _td(hours=5, minutes=30)).strftime('%Y-%m-%d'),
+                                    'online', payment_ref or '', 'Paid online on goocampus.in',
+                                    f'website ({source})', razorpay_payment_id=payment_ref or '')
+                _pk.refresh_status(conn, existing['id'])
+                conn.commit()
+            except Exception as _e:
+                try: conn.rollback()
+                except Exception: pass
+                logging.error("ensure_paid_invitation package ledger: %s", _e)
         return existing['id']
     iid = conn.execute(
         "INSERT INTO pg_pgcp_invitations (token, client_name, mobile, email, client_type, "
@@ -205,6 +255,23 @@ def _sync_onboarding_to_user(conn, user_id, onb):
         logging.error("_sync_onboarding_to_user: %s", e)
 
 
+def _package_fields(conn, inv):
+    try:
+        from pg_admin.data import pgcp_package as _pk
+        sm = _pk.summary(conn, inv)
+        return {'package_final': sm['final'], 'package_paid': sm['paid'],
+                'package_balance': sm['balance'], 'package_status': sm['status'],
+                'gst_mode': inv.get('gst_mode') or '',
+                'balance_due_date': inv.get('balance_due_date') or '',
+                'balance_due_note': inv.get('balance_due_note') or '',
+                'balance_requested': bool(inv.get('balance_requested') or 0)}
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("pgcp _package_fields: %s", e)
+        return {}
+
+
 def api_pgcp_onboarding():
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
@@ -272,7 +339,10 @@ def api_pgcp_onboarding():
                            'paid': (inv.get('payment_status') == 'paid'),
                            'paid_online': bool(inv.get('paid_online')),
                            'payment_ref': inv.get('payment_ref') or '',
-                           'paid_amount': float(inv['paid_amount']) if inv.get('paid_amount') is not None else None},
+                           'paid_amount': float(inv['paid_amount']) if inv.get('paid_amount') is not None else None,
+                           # Negotiated package (additive, 2026-10-16) — final incl. GST,
+                           # paid so far, balance, due info; a part-paid client has full access.
+                           **_package_fields(conn, inv)},
             'onboarding': _serialize(onb)})
     except Exception as e:
         try: conn.rollback()
@@ -327,12 +397,13 @@ def auto_grant_internal_premium(conn, user_id, mobile):
         mob = re.sub(r'\D', '', str(mobile or ''))[-10:]
         if not mob:
             return
-        # Internal (free Premium) OR pre-paid (payment_status='paid') — either upgrades.
+        # Internal (free Premium) OR pre-paid (payment_status 'paid', or 'part_paid' —
+        # a part-paid client gets FULL access, founder 2026-10-16) — either upgrades.
         inv = conn.execute(
             "SELECT id, client_type, plan_code, paid_amount, client_name, email, "
             "COALESCE(payment_status,'due') AS payment_status "
             "FROM pg_pgcp_invitations WHERE status <> 'cancelled' "
-            "AND (client_type = 'internal' OR COALESCE(payment_status,'due') = 'paid') "
+            "AND (client_type = 'internal' OR COALESCE(payment_status,'due') IN ('paid','part_paid')) "
             "AND RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? "
             "ORDER BY id DESC LIMIT 1", [mob]).fetchone()
         if not inv:

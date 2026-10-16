@@ -515,6 +515,62 @@ def desk_selftest():
     from flask import current_app
     out = {'ok': True}
     only = (request.args.get('only') or '').strip()
+    if only == 'pgcp':          # read-only: package/payment schema + every invite's computed summary
+        from pg_admin.data import pgcp_package as _pk
+        conn = get_db()
+        try:
+            _pk.ensure_schema(conn)
+            invs = [dict(r) for r in conn.execute(
+                "SELECT * FROM pg_pgcp_invitations WHERE status <> 'cancelled'").fetchall()]
+            st = {}
+            for inv in invs:
+                sm = _pk.summary(conn, inv)
+                key = f"{inv.get('client_type')}:{sm['status']}:{'legacy' if sm.get('legacy') else 'package'}"
+                st[key] = st.get(key, 0) + 1
+            out['pgcp_summary'] = st
+            out['tables'] = {t: bool(conn.execute(f"SELECT to_regclass('{t}') AS t").fetchone()['t'])
+                             for t in ('pg_pgcp_payments', 'pg_pgcp_payment_log')}
+            out['sample_math'] = _pk.compute_package(99999, 10000, 'plus', 18)
+        except Exception as e:
+            out['pgcp_error'] = str(e)[:300]
+        finally:
+            conn.close()
+        return jsonify(out)
+    if only == 'plans':         # read-only: which plans unlock the choice-list feature (rankings/team lists gate)
+        from pg_admin.data import entitlements as _ent
+        conn = get_db()
+        try:
+            plans = [dict(r) for r in conn.execute(
+                "SELECT id, code, name, plan_kind, COALESCE(is_active,1) AS active, COALESCE(is_public,1) AS public, "
+                "price, COALESCE(gst_percent,0) AS gst_percent, tagline FROM pg_plans ORDER BY sort_order, id").fetchall()]
+            for pl in plans:
+                for k in ('price', 'gst_percent'):
+                    pl[k] = float(pl[k]) if pl.get(k) is not None else None
+            out['coupons'] = [dict(r) for r in conn.execute(
+                "SELECT code, discount_type, discount_value, applies_to, is_active, used_count, valid_until "
+                "FROM pg_coupons ORDER BY id DESC LIMIT 20").fetchall()]
+            for c in out['coupons']:
+                c['discount_value'] = float(c['discount_value']) if c.get('discount_value') is not None else None
+                c['valid_until'] = str(c['valid_until'])[:10] if c.get('valid_until') else ''
+            out['pgcp_invites'] = [dict(r) for r in conn.execute(
+                "SELECT client_type, payment_status, COUNT(*) AS n FROM pg_pgcp_invitations "
+                "WHERE status <> 'cancelled' GROUP BY client_type, payment_status").fetchall()]
+            for pl in plans:
+                fm = _ent.plan_feature_map(conn, pl['id'])
+                pl['dash_choice_list'] = (fm.get('dash_choice_list') or {}).get('value_type')
+            out['plans'] = plans
+            out['features'] = [r['code'] for r in conn.execute(
+                "SELECT code FROM pg_features WHERE COALESCE(is_active,1)=1 ORDER BY sort_order, id").fetchall()]
+            from pg_admin.routes.users_admin import _category_case
+            out['paid_by_plan'] = [dict(r) for r in conn.execute(
+                f"SELECT p.code, COUNT(*) AS n FROM pg_users u JOIN pg_subscriptions s ON s.user_id=u.id "
+                f"AND s.status='active' JOIN pg_plans p ON p.id=s.plan_id WHERE {_category_case('u')}='paid' "
+                f"GROUP BY p.code").fetchall()]
+        except Exception as e:
+            out['plans_error'] = str(e)[:200]
+        finally:
+            conn.close()
+        return jsonify(out)
     if only == 'team':          # light check: the team college-list seed only
         from pg_admin.routes import team_college_lists as _tcl
         conn = get_db()

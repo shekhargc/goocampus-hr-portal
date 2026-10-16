@@ -49,6 +49,7 @@ Use this to jump straight to the code for any area **without scanning `app.py`**
 | goocampus.in service APIs | `/api/pg/*` | `pg_admin/routes/api.py` | pg_users, pg_plans, pg_subscriptions | [goocampus-in](sections/goocampus-in.md) |
 | goocampus.in — profile sync | `/api/pg/profile` (GET/POST) | `pg_admin/routes/api.py` (`PG_PROFILE_BLUEPRINT`, `api_pg_profile`) | pg_users | [goocampus-in](sections/goocampus-in.md) |
 | goocampus.in — Razorpay checkout | `/api/pg/checkout/create-order` `/api/pg/checkout/verify` | `pg_admin/routes/api.py` (`_razorpay_creds`, `_ensure_pg_orders`) | pg_orders, pg_subscriptions, pg_coupons | [goocampus-in](sections/goocampus-in.md) |
+| goocampus.in — PGCP packages + instalments | `/admin/pg/pgcp/<id>/payments` `/admin/pg/payments` (+`/export`) | `pg_admin/data/pgcp_package.py` (math, summary, legacy rule), `pg_admin/routes/pgcp_admin.py`, `pgcp_payments.html`, `pg_payments.html` | pg_pgcp_invitations (package cols), pg_pgcp_payments, pg_pgcp_payment_log, pg_orders | [goocampus-in](sections/goocampus-in.md) |
 | Storage (R2) | — | `core/storage.py` | (files) | [deploy](DEPLOY.md) |
 | Email | — | `email_utils.py` | email_templates | [feedback](sections/feedback.md) |
 | Reg-number generator | — | `core/registration.py` | plab_clients, client_registrations | [operations](sections/operations.md) |

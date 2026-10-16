@@ -43,25 +43,61 @@
           <option value="paying">Paying (new client)</option>
           <option value="internal">Internal (Consulting/UAE — free Premium)</option>
         </select></div>
-      {{ fld('invited_amount', 'Invited amount ₹', '', 'number') }}
-      {{ fld('discount', 'Discount ₹', '0', 'number') }}
       <div><label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Plan</label>
         <select name="plan_code" id="pgcp_f_plan_code" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
-          <option value="">— Select plan —</option>
-          {% for p in plans %}<option value="{{ p.code }}">{{ p.name }}{% if p.price %} — ₹{{ '{:,.0f}'.format(p.price) }}{% endif %}</option>{% endfor %}
+          <option value="" data-price="" data-gst="" data-mode="">— Select plan —</option>
+          {% for p in plans %}<option value="{{ p.code }}" data-price="{{ ('%.2f'|format(p.price)).rstrip('0').rstrip('.') }}" data-gstpct="{{ p.default_gst_pct }}" data-mode="{{ p.default_gst_mode }}" data-plangst="{{ p.gst_percent }}">{{ p.name }} — ₹{{ '{:,.0f}'.format(p.price) }}{% if p.gst_percent > 0 %} + {{ p.gst_percent|round|int }}% GST{% else %} (incl. all taxes){% endif %}</option>{% endfor %}
         </select></div>
       {{ fld('notes', 'Notes') }}
-      <div id="pgcp_pay_block" style="grid-column:1/-1;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:0.8rem 1rem;">
-        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:0.86rem;color:#166534;">
-          <input type="checkbox" name="payment_received" id="pgcp_pay_recv" value="1" style="margin-top:3px;"
-                 onchange="document.getElementById('pgcp_pay_ref_wrap').style.display=this.checked?'block':'none';">
-          <span><b>Payment already received</b> (e.g. bank transfer / paid you directly) — marks the counselling fee as settled, so this client <b>skips online payment</b> and their onboarding opens with the payment step locked. Leave unticked for the normal "pay online" flow.</span>
-        </label>
-        <div id="pgcp_pay_ref_wrap" style="display:none;margin-top:0.6rem;">
-          <label style="display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;">Payment reference (optional)</label>
-          <input type="text" name="payment_ref" placeholder="Bank UTR / transaction ref"
-                 style="width:100%;max-width:340px;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
-          <div style="font-size:0.72rem;color:var(--gray-400);margin-top:4px;">Recorded paid amount = Invited amount − Discount.</div>
+
+      {# ── Negotiated package (PAYING clients only; hidden for Internal) ── #}
+      {% set lb = 'display:block;font-size:0.72rem;font-weight:700;color:var(--gray-500);margin-bottom:4px;text-transform:uppercase;' %}
+      {% set ip = 'width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;' %}
+      <div id="pgcp_pkg_block" style="grid-column:1/-1;background:#F8FAFC;border:1px solid var(--gray-200);border-radius:10px;padding:1rem 1.1rem;">
+        <div style="font-weight:800;color:var(--navy);font-size:0.92rem;margin-bottom:0.7rem;">Package (negotiated)</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.9rem;">
+          <div><label style="{{ lb }}">Plan list price ₹</label>
+            <input type="number" step="any" min="0" name="list_price" id="pk_list" style="{{ ip }}" placeholder="pick a plan">
+            <div id="pk_plan_hint" style="font-size:0.72rem;color:var(--gray-400);margin-top:3px;"></div></div>
+          <div><label style="{{ lb }}">GST treatment</label>
+            <label style="display:block;font-size:0.85rem;cursor:pointer;"><input type="radio" name="gst_mode" value="plus" id="pk_gst_plus" checked> + GST on top</label>
+            <label style="display:block;font-size:0.85rem;cursor:pointer;"><input type="radio" name="gst_mode" value="inclusive" id="pk_gst_incl"> GST inclusive</label></div>
+          <div><label style="{{ lb }}">GST %</label>
+            <input type="number" step="any" min="0" max="100" name="gst_percent" id="pk_gst_pct" value="18" style="{{ ip }}"></div>
+          <div><label style="{{ lb }}">Discount</label>
+            <label style="display:inline-block;font-size:0.85rem;cursor:pointer;margin-right:10px;"><input type="radio" name="discount_mode" value="flat" id="pk_dm_flat" checked> Flat ₹</label>
+            <label style="display:inline-block;font-size:0.85rem;cursor:pointer;"><input type="radio" name="discount_mode" value="coupon" id="pk_dm_coupon"> Coupon</label>
+            <input type="number" step="any" min="0" name="discount" id="pk_disc" value="0" style="{{ ip }}margin-top:4px;">
+            <select name="coupon_code" id="pk_coupon" style="{{ ip }}margin-top:4px;display:none;">
+              <option value="">— choose a coupon —</option>
+            </select>
+            <div id="pk_coupon_hint" style="font-size:0.72rem;color:var(--gray-400);margin-top:3px;"></div></div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:1.2rem;align-items:flex-end;margin-top:0.9rem;padding:0.8rem 1rem;background:#fff;border:1px solid var(--gray-200);border-radius:8px;">
+          <div style="font-size:0.82rem;color:var(--gray-600);line-height:1.6;">
+            <div>Taxable value: <b id="pk_taxable">—</b></div>
+            <div>GST: <b id="pk_gst">—</b></div>
+            <div>Calculated final: <b id="pk_calc">—</b></div>
+          </div>
+          <div><label style="{{ lb }}">Final package ₹ <span style="text-transform:none;font-weight:500;">(edit to the negotiated figure)</span></label>
+            <input type="number" step="any" min="0" name="final_amount" id="pk_final" style="{{ ip }}max-width:200px;font-weight:800;font-size:1rem;">
+            <input type="hidden" name="final_overridden" id="pk_final_ov" value="0">
+            <div style="font-size:0.72rem;margin-top:3px;"><span id="pk_ov_note" style="color:#b45309;display:none;">Negotiated figure kept · </span><a href="#" id="pk_reset" style="color:var(--orange);display:none;">use calculated</a></div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.9rem;margin-top:0.9rem;">
+          <div style="grid-column:1/-1;font-weight:700;color:#166534;font-size:0.82rem;">Payment received now (optional)</div>
+          <div><label style="{{ lb }}">Amount ₹</label><input type="number" step="any" min="0" name="pay_amount" id="pk_pay_amt" style="{{ ip }}" placeholder="0"></div>
+          <div><label style="{{ lb }}">Date</label><input type="date" name="pay_date" value="{{ today }}" style="{{ ip }}"></div>
+          <div><label style="{{ lb }}">Mode</label><select name="pay_mode" style="{{ ip }}">
+            {% for v, l in pay_modes %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+          <div><label style="{{ lb }}">Reference</label><input type="text" name="pay_ref" placeholder="UTR / txn ref" style="{{ ip }}"></div>
+          <div style="grid-column:1/-1;font-size:0.84rem;color:var(--navy);">Balance after this: <b id="pk_balance">—</b></div>
+          <div style="grid-column:1/-1;font-weight:700;color:var(--navy);font-size:0.82rem;">Balance due</div>
+          <div><label style="{{ lb }}">Due date</label><input type="date" name="balance_due_date" id="pk_due_date" style="{{ ip }}"></div>
+          <div><label style="{{ lb }}">&nbsp;</label><label style="font-size:0.85rem;cursor:pointer;"><input type="checkbox" name="after_allotment" value="1"> After allotment</label></div>
+          <div><label style="{{ lb }}">Note</label><input type="text" name="balance_due_note" placeholder="e.g. 50% after round 1" style="{{ ip }}"></div>
         </div>
       </div>
       <div style="grid-column:1/-1;"><button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:0.6rem 1.4rem;font-weight:700;cursor:pointer;">Create invitation</button></div>
@@ -74,7 +110,7 @@
       {% set hs = 'padding:0.65rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
       <thead><tr>
         <th style="{{ hs }}">Client</th><th style="{{ hs }}">Mobile</th><th style="{{ hs }}">Type</th>
-        <th style="{{ hs }}text-align:right;">Amount</th><th style="{{ hs }}">Progress</th>
+        <th style="{{ hs }}text-align:right;">Package</th><th style="{{ hs }}text-align:right;">Paid / Balance</th><th style="{{ hs }}">Progress</th>
         <th style="{{ hs }}">Status</th><th style="{{ hs }}"></th>
       </tr></thead>
       <tbody>
@@ -84,8 +120,17 @@
           <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{{ r.mobile|local_mobile }}</td>
           <td style="padding:0.6rem 0.9rem;">{{ 'Internal' if r.client_type=='internal' else 'Paying' }}</td>
           <td style="padding:0.6rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;">
-            {% if r.invited_amount is not none %}₹{{ '{:,.0f}'.format(r.invited_amount) }}{% if r.discount %} <span style="color:var(--gray-400);font-size:0.78rem;">− ₹{{ '{:,.0f}'.format(r.discount) }}</span>{% endif %}{% else %}—{% endif %}
-            {% if r.payment_status == 'paid' %}<div><span title="{{ 'Paid online' if r.paid_online else 'Payment received offline' }}" style="font-size:0.66rem;font-weight:700;color:#166534;background:#dcfce7;padding:1px 7px;border-radius:20px;white-space:nowrap;">✓ Paid{{ ' (online)' if r.paid_online else ' (offline)' }}</span></div>{% endif %}</td>
+            {% if r.pkg and r.pkg.final is not none %}₹{{ '{:,.0f}'.format(r.pkg.final) }}{% if r.discount %}<div style="color:var(--gray-400);font-size:0.74rem;">list ₹{{ '{:,.0f}'.format(r.list_price if r.list_price is not none else (r.invited_amount or 0)) }} − ₹{{ '{:,.0f}'.format(r.discount) }}{% if r.coupon_code %} ({{ r.coupon_code }}){% endif %}</div>{% endif %}
+            {% elif r.client_type == 'internal' %}<span style="color:var(--gray-400);">Complimentary</span>{% else %}—{% endif %}</td>
+          <td style="padding:0.6rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;">
+            {% if r.pkg %}
+              {% set st = r.pkg.status %}
+              <div>₹{{ '{:,.0f}'.format(r.pkg.paid) }}{% if r.pkg.balance is not none and r.pkg.balance > 0 %} <span style="color:#b45309;font-size:0.78rem;">· bal ₹{{ '{:,.0f}'.format(r.pkg.balance) }}</span>{% endif %}</div>
+              <span style="font-size:0.66rem;font-weight:700;padding:1px 7px;border-radius:20px;
+                background:{{ '#dcfce7' if st=='paid' else ('#fef3c7' if st=='part_paid' else '#fee2e2') }};
+                color:{{ '#166534' if st=='paid' else ('#92400e' if st=='part_paid' else '#991b1b') }};">{{ r.pkg.status_label }}{% if st=='paid' and r.paid_online and r.pkg.legacy %} (online){% endif %}</span>
+              <a href="{{ url_for('pg_pgcp_payments', invite_id=r.id) }}" style="margin-left:4px;color:var(--orange);font-weight:600;font-size:0.76rem;text-decoration:none;">Payments →</a>
+            {% else %}<span style="color:var(--gray-300);">—</span>{% endif %}</td>
           <td style="padding:0.6rem 0.9rem;color:var(--gray-600);">{% if r.onb_step %}Step {{ r.onb_step }} / 4{% else %}Not started{% endif %}</td>
           <td style="padding:0.6rem 0.9rem;">
             <span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:20px;
@@ -106,7 +151,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--gray-400);">No invitations yet — create one above.</td></tr>
+        <tr><td colspan="8" style="padding:2rem;text-align:center;color:var(--gray-400);">No invitations yet — create one above.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -159,25 +204,100 @@
   });
   input.addEventListener('blur', function(){ setTimeout(function(){ box.style.display='none'; }, 200); });
 
-  // Internal clients are free — hide the money fields (invited amount, discount,
-  // "payment already received") when client type is Internal. (founder 2026-09-25)
+  // Internal clients are free — hide the whole package block when type is Internal.
   var ctSel = document.getElementById('pgcp_f_client_type');
   window.syncPgcpClientType = function(){
     var internal = ctSel && ctSel.value === 'internal';
-    var amt = document.getElementById('pgcp_f_invited_amount');
-    var disc = document.getElementById('pgcp_f_discount');
-    var payBlock = document.getElementById('pgcp_pay_block');
-    var payChk = document.getElementById('pgcp_pay_recv');
-    if (amt && amt.closest('div')) amt.closest('div').style.display = internal ? 'none' : '';
-    if (disc && disc.closest('div')) disc.closest('div').style.display = internal ? 'none' : '';
-    if (payBlock) payBlock.style.display = internal ? 'none' : '';
-    if (internal && payChk) {
-      payChk.checked = false;
-      var w = document.getElementById('pgcp_pay_ref_wrap'); if (w) w.style.display = 'none';
-    }
+    var blk = document.getElementById('pgcp_pkg_block');
+    if (blk) blk.style.display = internal ? 'none' : '';
   };
   if (ctSel) ctSel.addEventListener('change', window.syncPgcpClientType);
   window.syncPgcpClientType();
+})();
+
+// ── Package calculator (mirrors pg_admin/data/pgcp_package.compute_package) ──
+(function(){
+  var COUPONS = {{ coupons|tojson }};
+  function $(id){ return document.getElementById(id); }
+  function num(v){ v = parseFloat(String(v||'').replace(/,/g,'')); return isNaN(v) ? 0 : v; }
+  function r2(x){ return Math.round(x*100)/100; }
+  function inr(x){ return '₹' + (Math.round(x*100)/100).toLocaleString('en-IN', {minimumFractionDigits:0, maximumFractionDigits:2}); }
+  var plan = $('pgcp_f_plan_code'), list = $('pk_list'), pct = $('pk_gst_pct'),
+      disc = $('pk_disc'), csel = $('pk_coupon'), fin = $('pk_final'), ov = $('pk_final_ov');
+  if (!plan || !list) return;
+  function mode(){ return $('pk_gst_incl').checked ? 'inclusive' : 'plus'; }
+  function dmode(){ return $('pk_dm_coupon').checked ? 'coupon' : 'flat'; }
+  function couponDisc(c, amount){
+    if (!c) return 0;
+    if (c.min && amount < c.min) return 0;
+    var d = (c.type === 'percent') ? r2(amount * c.value / 100) : c.value;
+    if (c.type === 'percent' && c.cap !== null && c.cap !== undefined) d = Math.min(d, c.cap);
+    return Math.max(0, Math.min(d, amount));
+  }
+  function fillCoupons(){
+    var code = plan.value, keep = csel.value;
+    csel.innerHTML = '<option value="">— choose a coupon —</option>';
+    COUPONS.forEach(function(c){
+      if (c.plans && code && c.plans.indexOf(code) < 0) return;
+      if (c.plans && !code) return;
+      var o = document.createElement('option');
+      o.value = c.code;
+      o.textContent = c.code + ' — ' + (c.type === 'percent' ? (c.value + '% off' + (c.cap ? ' (max ₹' + c.cap.toLocaleString('en-IN') + ')' : '')) : ('₹' + c.value.toLocaleString('en-IN') + ' off'))
+                      + (c.description ? ' · ' + c.description : '');
+      csel.appendChild(o);
+    });
+    csel.value = keep;
+    if (csel.value !== keep) csel.value = '';
+  }
+  function calc(){
+    var price = Math.max(0, num(list.value)), p = Math.max(0, Math.min(100, pct.value === '' ? 18 : num(pct.value)));
+    var d = 0, hint = '';
+    if (dmode() === 'coupon'){
+      var c = COUPONS.find(function(x){ return x.code === csel.value; });
+      d = couponDisc(c, price);
+      if (c && c.min && price < c.min) hint = 'Needs a minimum order of ₹' + c.min.toLocaleString('en-IN');
+      else if (c) hint = 'Coupon takes off ' + inr(d);
+      disc.value = d ? r2(d) : 0;
+    } else { d = Math.max(0, Math.min(num(disc.value), price)); }
+    $('pk_coupon_hint').textContent = hint;
+    var base = price - d, rate = p/100, taxable, gst, computed;
+    if (mode() === 'plus'){ taxable = base; gst = r2(taxable*rate); computed = r2(taxable + gst); }
+    else { computed = r2(base); taxable = rate ? r2(computed/(1+rate)) : computed; gst = r2(computed - taxable); }
+    if (ov.value !== '1') fin.value = price ? computed : '';
+    var final = (fin.value === '') ? computed : num(fin.value);
+    if (ov.value === '1'){ taxable = rate ? r2(final/(1+rate)) : final; gst = r2(final - taxable); }
+    $('pk_taxable').textContent = price ? inr(taxable) : '—';
+    $('pk_gst').textContent = price ? inr(gst) + ' (' + p + '%' + (mode()==='inclusive' ? ', inside' : ', on top') + ')' : '—';
+    $('pk_calc').textContent = price ? inr(computed) : '—';
+    $('pk_ov_note').style.display = (ov.value === '1') ? 'inline' : 'none';
+    $('pk_reset').style.display = (ov.value === '1') ? 'inline' : 'none';
+    var paid = num($('pk_pay_amt').value);
+    $('pk_balance').textContent = price ? inr(final - paid) + (paid >= final && final > 0 ? ' (fully paid)' : (paid > 0 ? ' (part-paid)' : '')) : '—';
+  }
+  plan.addEventListener('change', function(){
+    var o = plan.options[plan.selectedIndex];
+    if (o && o.dataset.price){
+      list.value = o.dataset.price;
+      pct.value = o.dataset.gstpct || 18;
+      if (o.dataset.mode === 'inclusive') $('pk_gst_incl').checked = true; else $('pk_gst_plus').checked = true;
+      $('pk_plan_hint').textContent = parseFloat(o.dataset.plangst||'0') > 0
+        ? 'Plan is priced + ' + o.dataset.plangst + '% GST' : 'Plan price includes all taxes';
+    } else { $('pk_plan_hint').textContent = ''; }
+    ov.value = '0';
+    fillCoupons(); calc();
+  });
+  [list, pct, disc, $('pk_pay_amt')].forEach(function(el){ el.addEventListener('input', calc); });
+  [$('pk_gst_plus'), $('pk_gst_incl')].forEach(function(el){ el.addEventListener('change', calc); });
+  [$('pk_dm_flat'), $('pk_dm_coupon')].forEach(function(el){ el.addEventListener('change', function(){
+    var c = dmode() === 'coupon';
+    csel.style.display = c ? '' : 'none';
+    disc.readOnly = c; disc.style.background = c ? '#f1f5f9' : '';
+    if (!c){ csel.value = ''; } calc();
+  }); });
+  csel.addEventListener('change', calc);
+  fin.addEventListener('input', function(){ ov.value = '1'; calc(); });
+  $('pk_reset').addEventListener('click', function(e){ e.preventDefault(); ov.value = '0'; calc(); });
+  fillCoupons(); calc();
 })();
 </script>
 {% endblock %}

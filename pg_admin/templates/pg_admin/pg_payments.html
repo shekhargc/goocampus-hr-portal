@@ -1,0 +1,81 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}PG Payments · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="max-width:1300px;margin:0 auto;padding:2rem 1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem 0;">PG payments</h1>
+  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.88rem;">
+    Every NEET-PG counselling payment: team-negotiated packages (paid in instalments) and
+    online self-purchases on goocampus.in (paid in full).
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+    <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                background:{{ '#DCFCE7' if cat=='success' else '#FEE2E2' }};color:{{ '#166534' if cat=='success' else '#991B1B' }};">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:0.9rem;margin-bottom:1.2rem;">
+    {% for lbl, val, col in [('Packages / sales', totals.packages, 'var(--navy)'), ('Collected', totals.collected, '#166534'), ('Outstanding', totals.outstanding, '#b45309')] %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:0.85rem 1rem;">
+      <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">{{ lbl }}</div>
+      <div style="font-size:1.45rem;font-weight:800;color:{{ col }};font-variant-numeric:tabular-nums;">₹{{ '{:,.0f}'.format(val) }}</div>
+    </div>
+    {% endfor %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:0.85rem 1rem;">
+      <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">Clients shown</div>
+      <div style="font-size:1.45rem;font-weight:800;color:var(--navy);">{{ totals.count }}</div>
+    </div>
+  </div>
+
+  <form method="GET" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search name or mobile…"
+           style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.87rem;min-width:220px;">
+    <select name="status" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.87rem;background:#fff;">
+      {% for v, l in [('', 'All statuses'), ('due', 'Due'), ('part_paid', 'Part-paid'), ('paid', 'Paid')] %}
+      <option value="{{ v }}" {{ 'selected' if f_status == v }}>{{ l }}</option>{% endfor %}
+    </select>
+    <label style="font-size:0.86rem;color:var(--navy);cursor:pointer;"><input type="checkbox" name="balance_due" value="1" {{ 'checked' if f_due }} onchange="this.form.submit()"> Balance due only</label>
+    <button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:0.5rem 1rem;font-weight:600;cursor:pointer;">Filter</button>
+    <a href="{{ url_for('pg_payments_export', q=q, status=f_status, balance_due=('1' if f_due else '')) }}"
+       style="margin-left:auto;background:#166534;color:#fff;border-radius:8px;padding:0.5rem 1rem;font-weight:600;text-decoration:none;font-size:0.87rem;">⬇ Excel</a>
+  </form>
+
+  <div style="background:white;border:1px solid var(--gray-200);border-radius:12px;overflow-x:auto;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      {% set hs = 'padding:0.6rem 0.8rem;font-weight:700;color:var(--navy);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;white-space:nowrap;' %}
+      {% set td = 'padding:0.55rem 0.8rem;' %}
+      <thead><tr>
+        <th style="{{ hs }}">Client</th><th style="{{ hs }}">Mobile</th><th style="{{ hs }}">Plan</th><th style="{{ hs }}">Source</th>
+        <th style="{{ hs }}text-align:right;">Final package</th><th style="{{ hs }}text-align:right;">Paid</th><th style="{{ hs }}text-align:right;">Balance</th>
+        <th style="{{ hs }}">Status</th><th style="{{ hs }}">Balance due</th><th style="{{ hs }}">Last payment</th><th style="{{ hs }}"></th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        {% set st = r.status %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="{{ td }}font-weight:600;color:var(--navy);">{{ r.name|dr_name if r.name else '—' }}</td>
+          <td style="{{ td }}color:var(--gray-600);white-space:nowrap;">{{ r.mobile|local_mobile }}</td>
+          <td style="{{ td }}">{{ r.plan or '—' }}</td>
+          <td style="{{ td }}font-size:0.8rem;color:var(--gray-600);">{{ r.source }}{% if r.coupon %}<div style="font-size:0.72rem;color:var(--gray-400);">coupon {{ r.coupon }}</div>{% endif %}</td>
+          <td style="{{ td }}text-align:right;font-variant-numeric:tabular-nums;">{% if r.final is not none %}₹{{ '{:,.0f}'.format(r.final) }}{% else %}—{% endif %}</td>
+          <td style="{{ td }}text-align:right;font-variant-numeric:tabular-nums;color:#166534;">₹{{ '{:,.0f}'.format(r.paid or 0) }}</td>
+          <td style="{{ td }}text-align:right;font-variant-numeric:tabular-nums;color:{{ '#b45309' if (r.balance or 0) > 0 else 'var(--gray-400)' }};">{% if r.balance is not none %}₹{{ '{:,.0f}'.format(r.balance) }}{% else %}—{% endif %}</td>
+          <td style="{{ td }}"><span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;
+              background:{{ '#dcfce7' if st=='paid' else ('#fef3c7' if st=='part_paid' else '#fee2e2') }};
+              color:{{ '#166534' if st=='paid' else ('#92400e' if st=='part_paid' else '#991b1b') }};">{{ r.status_label }}</span>
+              {% if r.balance_requested %}<div style="font-size:0.68rem;color:#0369a1;margin-top:2px;">balance requested</div>{% endif %}</td>
+          <td style="{{ td }}font-size:0.8rem;">{% if r.due %}{{ r.due }}{% else %}—{% endif %}</td>
+          <td style="{{ td }}white-space:nowrap;">{{ r.last_paid|format_date if r.last_paid else '—' }}</td>
+          <td style="{{ td }}text-align:right;white-space:nowrap;">
+            {% if r.kind == 'invite' %}<a href="{{ url_for('pg_pgcp_payments', invite_id=r.id) }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.82rem;">Open →</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" style="padding:2rem;text-align:center;color:var(--gray-400);">No payments match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

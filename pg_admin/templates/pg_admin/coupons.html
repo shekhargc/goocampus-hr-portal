@@ -121,7 +121,12 @@
       <div class="pc-modal-body pc-f">
         <input type="hidden" name="edit_id" id="cf_edit_id">
         <div class="pc-grid2">
-          <div><label>Code</label><input name="code" id="cf_code" placeholder="LAUNCH50 — blank = auto" style="text-transform:uppercase; font-family:ui-monospace,monospace;"></div>
+          <div><label>Code</label>
+            <div style="display:flex; gap:0.4rem;">
+              <input name="code" id="cf_code" placeholder="LAUNCH50 — blank = auto" style="text-transform:uppercase; font-family:ui-monospace,monospace;">
+              <button type="button" class="pc-btn pc-btn-ghost" id="cf_gen" onclick="pcGen()" style="white-space:nowrap; padding:0.45rem 0.7rem;"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate code</button>
+            </div>
+            <div class="hint">Leave blank and one is made for you on save (GC + 6 characters).</div></div>
           <div><label>Description (internal)</label><input name="description" id="cf_desc" placeholder="Launch offer"></div>
           <div><label>Discount type</label><select name="discount_type" id="cf_type" onchange="pcPrev()">
             <option value="percent">Percentage (%)</option><option value="fixed">Fixed amount (₹)</option></select></div>
@@ -132,7 +137,7 @@
           <div><label>Valid until</label><input type="datetime-local" name="valid_until" id="cf_until"></div>
           <div><label>Total uses allowed</label><input type="number" step="1" min="1" name="usage_limit_total" id="cf_total" placeholder="unlimited"></div>
           <div><label>Uses per doctor</label><input type="number" step="1" min="1" name="usage_limit_per_user" id="cf_peruser" value="1"></div>
-          <div><label>Applies to</label><select name="applies_to" id="cf_applies" onchange="pcApplies()">
+          <div><label>Applies to</label><select name="applies_to" id="cf_applies" onchange="pcApplies(); pcPrev();">
             <option value="all">All plans</option><option value="plans">Selected plans</option></select></div>
           <div><label>&nbsp;</label>
             <label class="pc-check"><input type="checkbox" name="first_time_only" id="cf_first"> First-time buyers only</label>
@@ -141,12 +146,12 @@
             <label>Which plans</label>
             <div style="display:flex; flex-wrap:wrap; gap:0.6rem; padding:0.5rem 0.7rem; border:1px solid var(--gray-300); border-radius:0.45rem;">
               {% for p in plans %}<label class="pc-check" style="font-weight:500;">
-                <input type="checkbox" name="plan_ids" value="{{ p.id }}" class="cf-plan"> {{ p.name }}
-                {% if p.price %}<span style="color:var(--gray-400)">(₹{{ '{:,.0f}'.format(p.price) }})</span>{% endif %}</label>{% endfor %}
+                <input type="checkbox" name="plan_ids" value="{{ p.id }}" class="cf-plan" onchange="pcPrev()"> {{ p.name }}
+                {% if p.price %}<span style="color:var(--gray-400)">(₹{{ '{:,.0f}'.format(p.price) }}{% if p.gst_percent > 0 %} + {{ p.gst_percent|round|int }}% GST{% endif %})</span>{% endif %}</label>{% endfor %}
             </div>
           </div>
         </div>
-        <div class="pc-preview" id="cf_preview">Example: on a ₹4,999 plan…</div>
+        <div class="pc-preview" id="cf_preview">Preview appears here…</div>
       </div>
       <div class="pc-modal-foot">
         <button type="button" class="pc-btn pc-btn-ghost" onclick="pcClose()">Cancel</button>
@@ -185,16 +190,41 @@
   function pcClose(){ pcV('pcOverlay').classList.remove('open'); }
   function pcPost(url){ const f=document.createElement('form'); f.method='POST'; f.action=url; document.body.appendChild(f); f.submit(); }
 
+  // Live preview on the REAL plan prices + each plan's own GST (discount on the base
+  // price, GST added on the discounted amount — same maths as the checkout).
+  const PC_PLANS = {{ plans | tojson }};
+  function pcInr(x){ return '₹' + (Math.round(x*100)/100).toLocaleString('en-IN', {maximumFractionDigits:2}); }
+  function pcGen(){
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let c = 'GC'; for (let i = 0; i < 6; i++) c += chars[Math.floor(Math.random()*chars.length)];
+    pcSet('cf_code', c);
+  }
   function pcPrev(){
-    const base = 4999, type = pcV('cf_type').value, val = parseFloat(pcV('cf_value').value||'0');
+    const type = pcV('cf_type').value, val = parseFloat(pcV('cf_value').value||'0');
     const cap = parseFloat(pcV('cf_cap').value||'0'), min = parseFloat(pcV('cf_min').value||'0');
-    let disc = type==='percent' ? base*val/100 : val;
-    if(type==='percent' && cap>0) disc = Math.min(disc, cap);
-    disc = Math.max(0, Math.min(disc, base));
-    let msg = 'On a ₹'+base.toLocaleString('en-IN')+' plan, this takes off ₹'+Math.round(disc).toLocaleString('en-IN')+
-              ' → doctor pays ₹'+Math.round(base-disc).toLocaleString('en-IN')+'.';
-    if(min>0 && base<min) msg = 'Needs a minimum order of ₹'+min.toLocaleString('en-IN')+'.';
-    pcV('cf_preview').textContent = msg;
+    let plans = PC_PLANS;
+    if (pcV('cf_applies').value === 'plans'){
+      const ids = Array.from(document.querySelectorAll('.cf-plan:checked')).map(b => parseInt(b.value));
+      plans = PC_PLANS.filter(p => ids.indexOf(p.id) >= 0);
+    }
+    if (!plans.length){ pcV('cf_preview').innerHTML = 'Tick at least one plan to see the preview.'; return; }
+    let h = '<table style="width:100%; border-collapse:collapse; font-size:0.8rem;"><tr style="text-align:right; color:var(--gray-500);">'
+          + '<th style="text-align:left;">Plan</th><th>Price</th><th>Discount</th><th>Taxable</th><th>GST</th><th>Doctor pays</th></tr>';
+    plans.forEach(p => {
+      const base = p.price || 0;
+      if (min > 0 && base < min){
+        h += '<tr><td>'+p.name+'</td><td colspan="5" style="text-align:right; color:#b45309;">needs a minimum order of '+pcInr(min)+'</td></tr>';
+        return;
+      }
+      let disc = type === 'percent' ? Math.round(base*val)/100 : val;
+      if (type === 'percent' && cap > 0) disc = Math.min(disc, cap);
+      disc = Math.max(0, Math.min(disc, base));
+      const taxable = base - disc, gst = Math.round(taxable * (p.gst_percent||0)) / 100, pay = taxable + gst;
+      h += '<tr style="text-align:right; border-top:1px solid #cfe0f7;"><td style="text-align:left;">'+p.name+'</td><td>'+pcInr(base)+'</td>'
+         + '<td style="color:#16a34a;">− '+pcInr(disc)+'</td><td>'+pcInr(taxable)+'</td>'
+         + '<td>'+(p.gst_percent ? pcInr(gst)+' ('+p.gst_percent+'%)' : 'incl.')+'</td><td style="font-weight:700;">'+pcInr(pay)+'</td></tr>';
+    });
+    pcV('cf_preview').innerHTML = h + '</table>';
   }
   document.getElementById('pcOverlay').addEventListener('click', e=>{ if(e.target.id==='pcOverlay') pcClose(); });
 </script>

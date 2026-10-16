@@ -93,6 +93,18 @@ def ensure_pgcp_tables():
         conn.execute("ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS payment_ref TEXT DEFAULT ''")       # razorpay_payment_id / bank ref
         conn.execute("ALTER TABLE pg_pgcp_invitations ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(14,2)")
         conn.commit()
+        # Negotiated package + instalment payments (founder 2026-10-16). New columns all
+        # default so old invites read exactly as before (gst_mode '' = legacy). The DDL
+        # list lives in pgcp_package so the request-time guard runs the same statements.
+        from pg_admin.data.pgcp_package import SCHEMA_DDL
+        for ddl in SCHEMA_DDL:
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception as _e:
+                try: conn.rollback()
+                except Exception: pass
+                logging.error(f"ensure_pgcp_tables package ddl: {_e}")
         logging.info("pg_pgcp tables ensured")
     except Exception as e:
         try: conn.rollback()
