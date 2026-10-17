@@ -87,9 +87,21 @@ def _clean_draft(dr):
                 regs.append({'title': str(g.get('title') or '').strip()[:200], 'items': its})
     if regs:
         out['registration_documents'] = regs
+    # the date printed ON the notice — used when the website lists it without a date (2026-10-17)
+    iss = dr.get('issued_on')
+    if isinstance(iss, dict) and _d(iss.get('date')):
+        out['issued_on'] = {'date': _d(iss.get('date')).isoformat(), 'quote': str(iss.get('quote') or '').strip()[:300]}
     if not out['headline'] and not out['article']:
         return None
     return out
+
+
+def _issued(draft):
+    """The notice's own printed date from a cleaned draft (or None) — only a plausible one."""
+    v = _d(((draft or {}).get('issued_on') or {}).get('date'))
+    if v and date(2024, 1, 1) <= v <= date.today():
+        return v
+    return None
 
 
 def _auto_calendar(conn, inbox_id):
@@ -153,7 +165,7 @@ def api_news_inbox_ingest():
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
-        row = conn.execute("SELECT id, status, draft_json, COALESCE(redraft_requested, FALSE) AS redraft "
+        row = conn.execute("SELECT id, status, draft_json, notice_date, COALESCE(redraft_requested, FALSE) AS redraft "
                            "FROM pg_news_inbox WHERE source_code = ? AND item_key = ?", (code, key)).fetchone()
         if row:
             # Known notice — only fill in what's missing (a draft / PDF from a later run), or
@@ -199,6 +211,9 @@ def api_news_inbox_ingest():
                 if "draft_json = ?" not in sets:
                     sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP"]; vals.append(json.dumps(draft))
                 row = dict(row); row['status'] = 'new'
+            if not row['notice_date'] and row['status'] != 'posted' and _issued(draft):
+                # the website listed it without a date → use the date printed on the notice (2026-10-17)
+                sets += ["notice_date = ?", "notice_date_source = 'notice'"]; vals.append(_issued(draft))
             if sets:
                 conn.execute(f"UPDATE pg_news_inbox SET {', '.join(sets)} WHERE id = ?", vals + [row['id']])
                 conn.commit()
@@ -211,6 +226,9 @@ def api_news_inbox_ingest():
         it = {'item_key': key, 'title': title, 'url': url, 'kind': kind, 'notice_date': nd}
         if status == 'new' and NS.is_repeat(conn, code, it):
             status = 'seen'                                       # site re-posted an earlier notice
+        nd_src = ''
+        if not nd and _issued(draft):
+            nd, nd_src = _issued(draft), 'notice'                 # undated on the site → date on the notice
         new_id = conn.execute(
             "INSERT INTO pg_news_inbox (source_code, authority_code, item_key, title, raw_title, url, kind, "
             "notice_date, status, draft_json, drafted_at, pdf_data, pdf_name) "
@@ -219,6 +237,8 @@ def api_news_inbox_ingest():
              status, json.dumps(draft) if draft else None, None, pdf, pdf_name)).fetchone()['id']
         if draft:
             conn.execute("UPDATE pg_news_inbox SET drafted_at = CURRENT_TIMESTAMP WHERE id = ?", (new_id,))
+        if nd_src:
+            conn.execute("UPDATE pg_news_inbox SET notice_date_source = ? WHERE id = ?", (nd_src, new_id))
         conn.commit()
         if status == 'new' and draft and draft.get('events'):
             _auto_calendar(conn, new_id)
@@ -259,6 +279,74 @@ def api_news_inbox_heartbeat():
         except Exception: pass
         logging.error("news heartbeat: %s", e)
         return jsonify({'ok': False}), 500
+    finally:
+        conn.close()
+
+
+def api_news_inbox_undated():
+    """GET /api/pg/news-inbox/undated (X-News-Key) — unpublished notices the website listed without
+    a date (New / Documents only), so the Mac can read the date printed on each PDF. (2026-10-17)"""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        NS.ensure_news_inbox_tables(conn)
+        rows = [{'id': r['id'], 'source_code': r['source_code'], 'item_key': r['item_key'], 'title': r['title'],
+                 'url': r['url'], 'kind': r['kind'], 'status': r['status'], 'pdf': bool(r['has_pdf']),
+                 'found': str(r['first_seen_at'] or '')[:10]}
+                for r in conn.execute("SELECT id, source_code, item_key, title, url, kind, status, first_seen_at, "
+                                      "(pdf_data IS NOT NULL) AS has_pdf FROM pg_news_inbox "
+                                      "WHERE notice_date IS NULL AND status IN ('new','document') "
+                                      "ORDER BY id").fetchall()]
+        return jsonify({'ok': True, 'count': len(rows), 'items': rows})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("news undated: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_news_inbox_set_date():
+    """POST /api/pg/news-inbox/set-date {id, date: YYYY-MM-DD, quote} (X-News-Key) — fill in the date
+    printed on the notice for an UNPUBLISHED, UNDATED inbox notice. Never overwrites a date the
+    website gave, never touches a posted notice. (founder 2026-10-17)"""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    b = request.get_json(silent=True) or {}
+    try:
+        iid = int(b.get('id') or 0)
+    except (TypeError, ValueError):
+        iid = 0
+    v = _issued({'issued_on': {'date': b.get('date')}})
+    if not iid or not v:
+        return jsonify({'ok': False, 'error': 'need id + a valid past date'}), 400
+    quote = str(b.get('quote') or '').strip()[:300]
+    conn = get_db()
+    try:
+        NS.ensure_news_inbox_tables(conn)
+        row = conn.execute("SELECT id, status, notice_date, draft_json FROM pg_news_inbox WHERE id = ?", (iid,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'not found'}), 404
+        if row['notice_date'] or row['status'] not in ('new', 'document'):
+            return jsonify({'ok': True, 'result': 'unchanged'})
+        try:
+            dr = json.loads(row['draft_json'] or '{}') or {}
+        except Exception:
+            dr = {}
+        if isinstance(dr, dict) and dr:
+            dr['issued_on'] = {'date': v.isoformat(), 'quote': quote}
+            conn.execute("UPDATE pg_news_inbox SET draft_json = ? WHERE id = ?", (json.dumps(dr), iid))
+        conn.execute("UPDATE pg_news_inbox SET notice_date = ?, notice_date_source = 'notice' "
+                     "WHERE id = ? AND notice_date IS NULL", (v, iid))
+        conn.commit()
+        return jsonify({'ok': True, 'result': 'dated', 'date': v.isoformat()})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("news set-date: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
 

@@ -467,7 +467,9 @@ def ensure_news_inbox_tables(conn=None):
         # AI draft + the official PDF (fetched on the Mac — the server can't reach the sites).
         for col, typ in (('draft_json', 'TEXT'), ('drafted_at', 'TIMESTAMP'), ('pdf_data', 'BYTEA'),
                          ('pdf_name', "TEXT DEFAULT ''"), ('redraft_requested', 'BOOLEAN DEFAULT FALSE'),
-                         ('history_note', "TEXT DEFAULT ''")):
+                         ('history_note', "TEXT DEFAULT ''"),
+                         # '' = date from the website listing, 'notice' = printed on the notice (2026-10-17)
+                         ('notice_date_source', "TEXT DEFAULT ''")):
             conn.execute(f"ALTER TABLE pg_news_inbox ADD COLUMN IF NOT EXISTS {col} {typ}")
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_news_scrape_runs (
             id SERIAL PRIMARY KEY,

@@ -33,6 +33,7 @@ Never edit any other file, never publish anything, never run other commands.
   "category": "one of: bulletin | registration | verification | choice_filling | seat_allotment | fee_payment | reporting | notification | other",
   "applies_to": "e.g. All NEET PG 2026 candidates for AIQ seats / Karnataka in-service candidates / NRI candidates",
   "action": "the one thing a doctor should do now, e.g. Register on mcc.nic.in before 18 Oct 2026, 12 noon.",
+  "issued_on": {"date": "YYYY-MM-DD", "quote": "exact line, e.g. \"Date: 16.10.2026\""},   // the date the notice itself is DATED/ISSUED, as printed on it (letterhead date, \"Dated …\", date under the signature). NOT a deadline or schedule date. Leave out if no such date is printed. Used when the website lists the notice without a date.
   "dates": {
     "registration_start":   {"date": "YYYY-MM-DD", "time": "e.g. 11:00 AM", "round": "Round 1", "quote": "exact line from the notice"},
     "registration_end":     {"date": "...", "time": "...", "quote": "..."},
