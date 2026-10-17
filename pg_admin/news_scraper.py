@@ -113,8 +113,10 @@ SOURCES = {
         'authority_code': 'knruhs',
         'news_authority': 'state:Telangana',
         'url': 'https://www.knruhs.telangana.gov.in/admission-notification/',
-        'pages': ['https://www.knruhs.telangana.gov.in/admission-notification/?results_page=1',
-                  'https://www.knruhs.telangana.gov.in/admission-notification/?results_page=2'],
+        # KNRUHS posts 10+ MBBS/BDS/AYUSH/nursing notices a day — 2 pages is only ~2 days, so a few
+        # missed Mac runs could push a PG notice out of reach. Read 8 pages (founder 2026-10-17).
+        'pages': [f'https://www.knruhs.telangana.gov.in/admission-notification/?results_page={_p}'
+                  for _p in range(1, 9)],
         'reader': 'date_table',
         'include': r'MEDICAL\s+PG|PG\s+MEDICAL|P\.\s*G\.?\s+MEDICAL|POST\s*GRADUATE\s+MEDICAL|NEET[\s-]*PG|MD\s*/\s*MS',
         'exclude': r'\bMDS\b|DENTAL|AYUSH|NURSING|HOMOEO|AYURVED',
