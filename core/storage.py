@@ -147,6 +147,35 @@ def presigned_get_url(key: str, ttl_seconds: int = PRESIGNED_TTL_SECONDS,
         return None
 
 
+def presigned_put_url(key: str, content_type: str = 'application/pdf',
+                      ttl_seconds: int = 3600) -> Optional[str]:
+    """A short-lived signed URL a trusted uploader (the office Mac's news fetcher) can PUT a
+    large file to directly — too big to send through the portal. (2026-10-17)"""
+    c = get_client()
+    if c is None:
+        return None
+    try:
+        return c.generate_presigned_url(
+            'put_object',
+            Params={'Bucket': get_bucket_name(), 'Key': key, 'ContentType': content_type},
+            ExpiresIn=ttl_seconds,
+        )
+    except Exception as e:
+        logging.error(f"storage.presigned_put_url({key}): {e}")
+        return None
+
+
+def object_size(key: str) -> Optional[int]:
+    """Size in bytes of a stored object, or None if it isn't there."""
+    c = get_client()
+    if c is None:
+        return None
+    try:
+        return int(c.head_object(Bucket=get_bucket_name(), Key=key).get('ContentLength') or 0)
+    except Exception:
+        return None
+
+
 def download_bytes(key: str) -> Optional[bytes]:
     """Download an R2 object's raw bytes (server-side). Used to stream a file
     same-origin through the portal so the browser (e.g. PDF.js) can read it

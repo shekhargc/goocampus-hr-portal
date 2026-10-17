@@ -203,12 +203,19 @@ def authority_doc_file_admin(doc_id):
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
     try:
-        row = conn.execute("SELECT file_name, file_data, file_content_type "
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
+        row = conn.execute("SELECT file_name, file_data, file_content_type, file_r2_key "
                            "FROM pg_authority_docs WHERE id=?", (doc_id,)).fetchone()
     except Exception as e:
         logging.error("authority_doc_file_admin: %s", e); row = None
     finally:
         conn.close()
+    if row and not row['file_data'] and row.get('file_r2_key'):     # big file kept in R2 (2026-10-17)
+        from pg_admin.data.big_files import r2_redirect
+        rr = r2_redirect(row['file_r2_key'])
+        if rr:
+            return rr
     if not row or not row['file_data']:
         flash('File not found.', 'error'); return redirect(url_for('pg_authorities_admin'))
     return Response(bytes(row['file_data']),

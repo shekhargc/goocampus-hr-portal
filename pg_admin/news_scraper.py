@@ -973,7 +973,9 @@ def start_scheduler():
 
 
 # ── "Add to News" helper ─────────────────────────────────────────────────────
-MAX_PDF_BYTES = 25 * 1024 * 1024
+# Founder 2026-10-17: every authority PDF must be archived, whatever its size (Maharashtra's 2026
+# brochure is 128 MB) — big ones go to R2. This cap only guards against a runaway download.
+MAX_PDF_BYTES = 600 * 1024 * 1024
 
 
 def fetch_pdf(url):
@@ -986,7 +988,7 @@ def fetch_pdf(url):
         for chunk in r.iter_content(64 * 1024):
             buf.extend(chunk)
             if len(buf) > MAX_PDF_BYTES:
-                return None, 'PDF is larger than 25 MB'
+                return None, 'PDF is larger than 600 MB'
         data = bytes(buf)
         if not data.startswith(b'%PDF'):
             return None, 'the link did not return a PDF'
@@ -1001,8 +1003,8 @@ def fetch_pdf(url):
 def _fetch_pdf_curl(url):
     import subprocess
     try:
-        out = subprocess.run(['curl', '-sL', '-A', UA, '-m', '90', '--max-filesize', str(MAX_PDF_BYTES), url],
-                             capture_output=True, timeout=120)
+        out = subprocess.run(['curl', '-sL', '-A', UA, '-m', '900', '--max-filesize', str(MAX_PDF_BYTES), url],
+                             capture_output=True, timeout=960)
         data = out.stdout
         if not data.startswith(b'%PDF'):
             return None, 'the link did not return a PDF'

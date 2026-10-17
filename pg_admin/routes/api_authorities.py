@@ -246,7 +246,7 @@ def api_pg_authority(code):
                 "SELECT id, heading, body_text, source_url, published_at, "
                 "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
                 "COALESCE(key_dates,'') AS key_dates, COALESCE(schedule,'') AS schedule, "
-                "(pdf_data IS NOT NULL) AS has_pdf FROM pg_news "
+                "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf FROM pg_news "
                 f"WHERE COALESCE(is_published,TRUE) AND deleted_at IS NULL AND {nwhere} "
                 "ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 20", nparams).fetchall()]
             import json as _json
@@ -287,14 +287,21 @@ def api_pg_authority_doc_file(doc_id):
         return blk
     conn = get_db()
     try:
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
         row = conn.execute(
-            "SELECT file_name, file_data, file_content_type FROM pg_authority_docs "
+            "SELECT file_name, file_data, file_content_type, file_r2_key FROM pg_authority_docs "
             "WHERE id=? AND COALESCE(is_published,TRUE)", (doc_id,)).fetchone()
     except Exception as e:
         logging.error("api_pg_authority_doc_file: %s", e); row = None
     finally:
         try: conn.close()
         except Exception: pass
+    if row and not row['file_data'] and row.get('file_r2_key'):     # big file kept in R2 (2026-10-17)
+        from pg_admin.data.big_files import r2_redirect
+        rr = r2_redirect(row['file_r2_key'])
+        if rr:
+            return rr
     if not row or not row['file_data']:
         return jsonify({'ok': False, 'error': 'not_found'}), 404
     return Response(bytes(row['file_data']),

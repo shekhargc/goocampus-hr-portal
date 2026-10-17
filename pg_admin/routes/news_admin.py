@@ -105,7 +105,7 @@ def news_admin():
                                'authority': src.get('news_authority') or '__all__',
                                'source_label': src.get('label') or r['source_code'],
                                'news_date': r['notice_date'].strftime('%Y-%m-%d') if r.get('notice_date') else '',
-                               'has_pdf': bool(r.get('pdf_data')), 'drafted': bool(dr),
+                               'has_pdf': bool(r.get('pdf_data') or r.get('pdf_r2_key')), 'drafted': bool(dr),
                                'body_text': dr.get('article') or '', 'summary': dr.get('summary') or '',
                                'category': dr.get('category') or '',
                                'dates': {k: (v or {}).get('date', '') for k, v in (dr.get('dates') or {}).items()},
@@ -132,7 +132,7 @@ def news_admin():
             "SELECT id, scope, state, body_label, heading, body_text, source_url, "
             "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, COALESCE(key_dates,'') AS key_dates, "
             "COALESCE(schedule,'') AS schedule, "
-            "(pdf_data IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by, created_at, "
+            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf, pdf_name, is_published, published_at, created_by, created_at, "
             "COALESCE(source,'manual') AS source, deleted_at, COALESCE(deleted_by,'') AS deleted_by "
             "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()]
     except Exception as e:
@@ -236,6 +236,7 @@ def news_save():
             return redirect(url_for('pg_news_admin'))
 
     pdf_bytes = None; pdf_name = ''; pdf_ctype = 'application/pdf'
+    pdf_r2 = None                 # big inbox PDF archived in R2 → only its key is attached (2026-10-17)
     pf = request.files.get('pdf_file')
     if pf and pf.filename:
         if not pf.filename.lower().endswith('.pdf'):
@@ -248,17 +249,31 @@ def news_save():
         data, name_or_err = None, 'no PDF on this notice'
         try:
             _c = get_db()
-            _r = _c.execute("SELECT pdf_data, pdf_name FROM pg_news_inbox WHERE id = ?", (inbox_id,)).fetchone()
+            from pg_admin.data.big_files import ensure_cols as _bf_cols
+            _bf_cols(_c)
+            _r = _c.execute("SELECT pdf_data, pdf_name, pdf_r2_key FROM pg_news_inbox WHERE id = ?", (inbox_id,)).fetchone()
             _c.close()
             if _r and _r['pdf_data']:
                 data, name_or_err = bytes(_r['pdf_data']), (_r['pdf_name'] or 'notice.pdf')
+            elif _r and _r.get('pdf_r2_key'):            # big PDF archived in R2 (2026-10-17)
+                pdf_r2, pdf_name = _r['pdf_r2_key'], (_r['pdf_name'] or 'notice.pdf')
         except Exception as _pe:
             logging.warning("news_save inbox pdf: %s", _pe)
-        if not data and source_url.lower().split('?')[0].endswith('.pdf'):
+        if not data and not pdf_r2 and source_url.lower().split('?')[0].endswith('.pdf'):
             from pg_admin.news_scraper import fetch_pdf
             data, name_or_err = fetch_pdf(source_url)
+        if data and len(data) > __import__('pg_admin.data.big_files', fromlist=['x']).INLINE_MAX:
+            # too big for the database → archive in R2 (2026-10-17)
+            import hashlib as _hl
+            from core import storage as _st
+            from pg_admin.data.big_files import make_key as _mk
+            _k = _mk(_authority_code_for(scope, state) or 'news', _hl.sha256(data).hexdigest(), name_or_err)
+            if _st.upload_bytes(_k, data, 'application/pdf'):
+                pdf_r2, pdf_name, data = _k, name_or_err, None
         if data:
             pdf_bytes, pdf_name = data, name_or_err
+        elif pdf_r2:
+            pass
         elif source_url.lower().split('?')[0].endswith('.pdf'):
             flash(f"Posted without the PDF — couldn't download it ({name_or_err}). "
                   "The official link is still on the update; you can attach the PDF via Edit.", 'info')
@@ -322,16 +337,19 @@ def news_save():
                                    f"{_st['unchanged']} unchanged.")
             except Exception as _ce:
                 logging.warning("news_save calendar: %s", _ce)
+        if pdf_r2 and news_id:
+            conn.execute("UPDATE pg_news SET pdf_r2_key = ?, pdf_name = ?, pdf_content_type = 'application/pdf', "
+                         "pdf_data = NULL WHERE id = ?", (pdf_r2, pdf_name or 'notice.pdf', news_id))
         # Information bulletin / brochure → also the authority's MAIN brochure document, so
         # registered doctors can download it from the dashboard. (founder 2026-10-09)
         brochure_msg = ''
         if save_brochure:
             code = _authority_code_for(scope, state)
-            pdf_row = conn.execute("SELECT pdf_name, pdf_data, pdf_content_type FROM pg_news WHERE id = ?",
+            pdf_row = conn.execute("SELECT pdf_name, pdf_data, pdf_content_type, pdf_r2_key FROM pg_news WHERE id = ?",
                                    (news_id,)).fetchone()
             if not code:
                 brochure_msg = 'Not saved as a brochure — no counselling authority matches this state yet.'
-            elif not (pdf_row and pdf_row['pdf_data']):
+            elif not (pdf_row and (pdf_row['pdf_data'] or pdf_row.get('pdf_r2_key'))):
                 brochure_msg = 'Not saved as a brochure — attach the bulletin PDF first.'
             else:
                 from pg_admin.authorities import get_authority
@@ -342,7 +360,11 @@ def news_save():
                 ensure_pg_authority_docs(conn)
                 if not existing:     # the same PDF already auto-filed from the inbox (any category) → use it
                     from pg_admin.data.auto_docs import find_same_file
-                    _sid = find_same_file(conn, code, pdf_row['pdf_data'])
+                    _sid = find_same_file(conn, code, pdf_row['pdf_data']) if pdf_row['pdf_data'] else None
+                    if not _sid and pdf_row.get('pdf_r2_key'):
+                        _x = conn.execute("SELECT id FROM pg_authority_docs WHERE authority_code = ? AND file_r2_key = ? "
+                                          "LIMIT 1", (code, pdf_row['pdf_r2_key'])).fetchone()
+                        _sid = _x['id'] if _x else None
                     if _sid:
                         conn.execute("UPDATE pg_authority_docs SET category = 'brochure', review_pending = FALSE WHERE id = ?", (_sid,))
                         existing = {'id': _sid}
@@ -355,11 +377,12 @@ def news_save():
                 else:
                     conn.execute(
                         "INSERT INTO pg_authority_docs (authority_code, authority_name, category, title, doc_date, note, "
-                        "file_name, file_data, file_content_type, is_published, uploaded_by, is_main) "
-                        "VALUES (?,?,'brochure',?,?,?,?,?,?,TRUE,?,FALSE) RETURNING id",
+                        "file_name, file_data, file_content_type, is_published, uploaded_by, is_main, file_r2_key) "
+                        "VALUES (?,?,'brochure',?,?,?,?,?,?,TRUE,?,FALSE,?) RETURNING id",
                         (code, (get_authority(code) or {}).get('name', ''), heading, _ddate, summary,
                          pdf_row['pdf_name'] or 'brochure.pdf', pdf_row['pdf_data'],
-                         pdf_row['pdf_content_type'] or 'application/pdf', who))
+                         pdf_row['pdf_content_type'] or 'application/pdf', who,
+                         pdf_row.get('pdf_r2_key') if not pdf_row['pdf_data'] else None))
                     _doc_id = conn.execute("SELECT id FROM pg_authority_docs WHERE authority_code = ? AND category = 'brochure' "
                                            "ORDER BY id DESC LIMIT 1", (code,)).fetchone()['id']
                 from pg_admin.data.main_brochures import set_main
@@ -641,10 +664,17 @@ def news_pdf_admin():
     nid = _s(request.args.get('id'))
     conn = get_db()
     try:
-        row = conn.execute("SELECT pdf_name, pdf_data, pdf_content_type FROM pg_news WHERE id=?",
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
+        row = conn.execute("SELECT pdf_name, pdf_data, pdf_content_type, pdf_r2_key FROM pg_news WHERE id=?",
                            (nid,)).fetchone()
     finally:
         conn.close()
+    if row and not row['pdf_data'] and row.get('pdf_r2_key'):       # big file kept in R2 (2026-10-17)
+        from pg_admin.data.big_files import r2_redirect
+        rr = r2_redirect(row['pdf_r2_key'])
+        if rr:
+            return rr
     if not row or not row['pdf_data']:
         flash('No PDF on that item.', 'error')
         return redirect(url_for('pg_news_admin'))

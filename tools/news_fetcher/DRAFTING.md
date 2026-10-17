@@ -17,6 +17,11 @@ date can cost a doctor their seat. A human reviews every draft before it is publ
      the PDF itself with the Read tool instead.
    - If there's no PDF (a link to an application/payment/slot-booking page): use only the
      title. Do NOT open the link.
+   - If it IS a PDF notice but `pdf_path` is empty (the authority's link has no file yet, or it
+     failed to download): write a SHORT draft from the title only, start the summary with
+     "PDF not yet online on the authority site —", and NEVER state that a list/result/merit list
+     "is out" or give any numbers or dates. The fetcher re-checks the link every run and archives
+     the PDF the day it appears. (Kerala 2026-10-17: last year's list links were posted as news.)
    - Write the draft JSON (schema below) to `draft_path` with the Write tool.
 4. Run: `cd "/Users/Santosh/Desktop/Claude Code/goocampus-portal" && ./venv/bin/python tools/news_fetcher/newsfetch.py push`
 5. Report one line per item: the headline you wrote, or why you couldn't.
