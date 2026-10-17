@@ -117,7 +117,11 @@
       {% for it in items %}
         <tr>
           {% if bulk %}<td><input type="checkbox" class="nb-pick" name="ids" value="{{ it.id }}" form="nbBulk" onchange="nbCount()" aria-label="Select this notice"></td>{% endif %}
-          <td style="white-space:nowrap;">{{ it.notice_date|format_date }}</td>
+          <td style="white-space:nowrap;">
+            {% if it.notice_date %}{{ it.notice_date|format_date }}
+              {% if it.notice_date_source == 'notice' %}<div style="font-size:0.7rem;color:var(--gray-500);" title="The website listed this without a date — this is the date printed on the notice">from notice</div>{% endif %}
+            {% elif it.first_seen_at %}<span style="color:var(--gray-400,#9ca3af);font-size:0.8rem;" title="No date on the website or the notice — this is when we found it">found {{ (it.first_seen_at|format_datetime).split(',')[0] }}</span>{% endif %}
+          </td>
           <td>
             {% if it.draft and it.draft.headline %}
             <div style="font-weight:700;color:var(--navy);">{{ it.draft.headline }}</div>
