@@ -45,6 +45,46 @@ def _api(method, path, **kw):
     return r.json()
 
 
+INLINE_MAX = 20 * 1024 * 1024       # bigger PDFs go straight to R2 storage (founder 2026-10-17)
+
+
+def _pdf_fields(code, item_key, data, name):
+    """The ingest-body fields that carry a PDF: inline (base64) when small, else upload it to R2
+    via a signed link and send only the key. Every authority PDF is archived, whatever its size."""
+    import requests
+    name = (name or 'notice.pdf')[:200]
+    if len(data) <= INLINE_MAX:
+        return {'pdf_b64': base64.b64encode(data).decode(), 'pdf_name': name}
+    sha = hashlib.sha256(data).hexdigest()
+    u = _api('POST', '/api/pg/news-inbox/upload-url',
+             json={'source_code': code, 'item_key': item_key, 'sha256': sha, 'name': name, 'size': len(data)})
+    if not u.get('already'):
+        r = requests.put(u['put_url'], data=data, headers={'Content-Type': 'application/pdf'}, timeout=900)
+        r.raise_for_status()
+    print(f"  big PDF ({len(data) // (1024 * 1024)} MB) archived in storage: {u['key']}")
+    return {'pdf_r2_key': u['key'], 'pdf_sha256': sha, 'pdf_size': len(data), 'pdf_name': name}
+
+
+def _fetch_missing_pdfs(code, need):
+    """PDF notices the portal still has no copy of (not online yet / failed before) — try again;
+    when the file is there now, send it (it is attached to the inbox notice, any posted news and the
+    authority's Documents). Returns how many arrived."""
+    got = 0
+    for n in need or []:
+        data, name = NS.fetch_pdf(n['url'])
+        if not data:
+            continue
+        try:
+            body = {'source_code': code, 'item_key': n['item_key']}
+            body.update(_pdf_fields(code, n['item_key'], data, name))
+            _api('POST', '/api/pg/news-inbox/ingest', json=body)
+            got += 1
+            print(f"  PDF now online and archived: {n['title'][:80]}")
+        except Exception as e:
+            print(f"  PDF for {n['title'][:60]} could not be sent ({e}) — will retry next run")
+    return got
+
+
 def _load_pending():
     try:
         with open(PENDING) as f:
@@ -79,6 +119,7 @@ def scan():
             known = set(kinfo.get('known') or [])
             first_run = not known
             res['found'] = len(items)
+            res['pdfs_late'] = _fetch_missing_pdfs(code, kinfo.get('need_pdf'))
             # Notices the founder asked to re-draft ("↻ Re-draft with AI" in the News Inbox)
             for rd in (kinfo.get('redraft') or []):
                 iid = _id(code, rd['item_key'])
@@ -142,7 +183,8 @@ def scan():
     except Exception as e:
         print('heartbeat failed:', e)
     for b in beat:
-        print(f"{b['source']}: {'ok' if b['ok'] else 'ERROR ' + b['error']} · {b['found']} on page · {b['new']} new")
+        print(f"{b['source']}: {'ok' if b['ok'] else 'ERROR ' + b['error']} · {b['found']} on page · {b['new']} new"
+              + (f" · {b['pdfs_late']} missing PDF(s) now archived" if b.get('pdfs_late') else ''))
     print(f'PENDING {len(pending)}')
     for p in pending:
         print(json.dumps({k: p[k] for k in ('id', 'source_label', 'title', 'kind', 'notice_date',
@@ -162,11 +204,11 @@ def push():
                     body['draft'] = json.load(f)
             except Exception as e:
                 print(f"{p['id']}: draft unreadable ({e}) — sending without it")
-        if p.get('pdf_path') and os.path.exists(p['pdf_path']):
-            with open(p['pdf_path'], 'rb') as f:
-                body['pdf_b64'] = base64.b64encode(f.read()).decode()
-            body['pdf_name'] = p['url'].split('?')[0].rsplit('/', 1)[-1][:200]
         try:
+            if p.get('pdf_path') and os.path.exists(p['pdf_path']):
+                with open(p['pdf_path'], 'rb') as f:
+                    body.update(_pdf_fields(p['source_code'], p['item_key'], f.read(),
+                                            p['url'].split('?')[0].rsplit('/', 1)[-1][:200]))
             r = _api('POST', '/api/pg/news-inbox/ingest', json=body)
             print(f"{p['id']}: {r.get('result')} · {p['title'][:80]}")
         except Exception as e:

@@ -36,6 +36,8 @@ def news_inbox():
     new_by_src, auth_tabs = {}, []
     try:
         NS.ensure_news_inbox_tables(conn)
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
         for r in conn.execute("SELECT source_code, status, COUNT(*) AS n FROM pg_news_inbox "
                               "WHERE status IN ('new','posted','document','dismissed') GROUP BY source_code, status").fetchall():
             if not src or r['source_code'] == src:
@@ -47,7 +49,7 @@ def news_inbox():
             where += " AND source_code = ?"; params.append(src)
         items = [dict(r) for r in conn.execute(
             "SELECT id, source_code, authority_code, item_key, title, url, kind, notice_date, status, news_id, "
-            "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL) AS has_pdf, "
+            "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf, "
             "COALESCE(redraft_requested, FALSE) AS redraft_requested, COALESCE(history_note,'') AS history_note, "
             "COALESCE(notice_date_source,'') AS notice_date_source "
             "FROM pg_news_inbox WHERE " + where + " "

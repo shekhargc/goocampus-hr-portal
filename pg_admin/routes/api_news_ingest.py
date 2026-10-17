@@ -96,6 +96,90 @@ def _clean_draft(dr):
     return out
 
 
+HOLD_BY = 'AI (waiting for PDF)'
+
+
+def api_news_inbox_review():
+    """GET /api/pg/news-inbox/review (X-News-Key) — READ-ONLY: every notice in New / Documents-only
+    with its link, kind, whether we hold the PDF and the AI headline, for an inbox audit. (2026-10-17)"""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        NS.ensure_news_inbox_tables(conn)
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
+        out = []
+        for r in conn.execute("SELECT id, source_code, status, title, url, kind, notice_date, draft_json, "
+                              "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf "
+                              "FROM pg_news_inbox WHERE status IN ('new','document') ORDER BY source_code, id").fetchall():
+            try: d = json.loads(r['draft_json'] or '{}') or {}
+            except Exception: d = {}
+            out.append({'id': r['id'], 'source_code': r['source_code'], 'status': r['status'], 'title': r['title'],
+                        'url': r['url'], 'kind': r['kind'], 'has_pdf': bool(r['has_pdf']),
+                        'date': str(r['notice_date'] or ''), 'headline': d.get('headline') or '',
+                        'summary': d.get('summary') or ''})
+        return jsonify({'ok': True, 'count': len(out), 'items': out})
+    finally:
+        conn.close()
+
+
+def api_news_inbox_hold():
+    """POST /api/pg/news-inbox/hold {ids:[...], note} (X-News-Key) — move New notices whose PDF link has
+    no file yet out of New (Dismissed, by 'AI (waiting for PDF)'). They stay watched: the day the
+    PDF appears it is archived and the notice returns to New by itself. Only touches New notices
+    that have no PDF; never a posted one. (founder 2026-10-17)"""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    b = request.get_json(silent=True) or {}
+    ids = [int(x) for x in (b.get('ids') or []) if str(x).isdigit()][:300]
+    note = str(b.get('note') or 'The authority link has no file yet — held until the PDF is online.').strip()[:300]
+    if not ids:
+        return jsonify({'ok': False, 'error': 'no ids'}), 400
+    conn = get_db()
+    try:
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
+        n = 0
+        for i in ids:
+            cur = conn.execute("UPDATE pg_news_inbox SET status = 'dismissed', reviewed_by = ?, "
+                               "reviewed_at = CURRENT_TIMESTAMP, history_note = ? WHERE id = ? AND status = 'new' "
+                               "AND kind = 'pdf' AND pdf_data IS NULL AND COALESCE(pdf_r2_key,'') = '' RETURNING id",
+                               (HOLD_BY, note, i)).fetchone()
+            n += 1 if cur else 0
+        conn.commit()
+        return jsonify({'ok': True, 'held': n})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("news hold: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def _attach_to_news(conn, news_id, pdf, r2_key, pdf_name):
+    """A notice was posted before its PDF was online; the PDF has now arrived → attach it to the
+    posted news too (only when that news has no PDF yet — a hand-attached file is never replaced).
+    The PDF is also filed into the authority's Documents by the usual auto-filing. (2026-10-17)"""
+    try:
+        from pg_admin.routes.api_news import ensure_news_seo_cols
+        ensure_news_seo_cols(conn)
+        if pdf:
+            conn.execute("UPDATE pg_news SET pdf_data = ?, pdf_name = ?, pdf_content_type = 'application/pdf', "
+                         "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND pdf_data IS NULL "
+                         "AND COALESCE(pdf_r2_key,'') = ''", (pdf, pdf_name or 'notice.pdf', news_id))
+        elif r2_key:
+            conn.execute("UPDATE pg_news SET pdf_r2_key = ?, pdf_name = ?, pdf_content_type = 'application/pdf', "
+                         "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND pdf_data IS NULL "
+                         "AND COALESCE(pdf_r2_key,'') = ''", (r2_key, pdf_name or 'notice.pdf', news_id))
+        conn.commit()
+    except Exception as e:
+        logging.warning("attach late pdf to news %s: %s", news_id, e)
+        try: conn.rollback()
+        except Exception: pass
+
+
 def _issued(draft):
     """The notice's own printed date from a cleaned draft (or None) — only a plausible one."""
     v = _d(((draft or {}).get('issued_on') or {}).get('date'))
@@ -124,16 +208,26 @@ def api_news_inbox_known():
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
-        rows = conn.execute("SELECT item_key, url, title, kind, notice_date, (draft_json IS NOT NULL) AS drafted, "
-                            "COALESCE(redraft_requested, FALSE) AS redraft FROM pg_news_inbox "
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
+        rows = conn.execute("SELECT item_key, url, title, kind, notice_date, status, (draft_json IS NOT NULL) AS drafted, "
+                            "COALESCE(redraft_requested, FALSE) AS redraft, "
+                            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf FROM pg_news_inbox "
                             "WHERE source_code = ?", (code,)).fetchall()
         return jsonify({'ok': True, 'source': code, 'known': [r['item_key'] for r in rows],
                         'drafted': [r['item_key'] for r in rows if r['drafted']],
-                        # notices the founder asked to re-draft ("↻ Re-draft with AI")
+                        # notices the founder asked to re-draft ("↻ Re-draft with AI") — and New
+                        # notices that never got a draft (a run cut short), 2026-10-17
                         'redraft': [{'item_key': r['item_key'], 'url': r['url'], 'title': r['title'],
                                      'kind': r['kind'],
                                      'notice_date': r['notice_date'].isoformat() if r['notice_date'] else None}
-                                    for r in rows if r['redraft']]})
+                                    for r in rows if r['redraft'] or (r['status'] == 'new' and not r['drafted'])],
+                        # PDF notices we still don't hold a copy of (link not online yet, too big before,
+                        # download failed) — the Mac retries every run and sends the file when it
+                        # appears; every authority PDF must be archived (founder 2026-10-17)
+                        'need_pdf': [{'item_key': r['item_key'], 'url': r['url'], 'title': r['title']}
+                                     for r in rows if r['kind'] == 'pdf' and r['status'] != 'seen'
+                                     and not r['has_pdf'] and r['url']]})
     finally:
         conn.close()
 
@@ -162,10 +256,20 @@ def api_news_inbox_ingest():
         except Exception:
             pdf = None
     pdf_name = str(b.get('pdf_name') or '').strip()[:200]
+    # a big PDF the Mac already uploaded to R2 (see api_news_inbox_upload_url) — 2026-10-17
+    r2_key = str(b.get('pdf_r2_key') or '').strip()[:400]
+    r2_sha = str(b.get('pdf_sha256') or '').strip()[:64]
+    if r2_key:
+        from core import storage
+        if not r2_key.startswith('authority-pdfs/') or not storage.object_size(r2_key):
+            r2_key = ''                                           # not uploaded / not ours → ignore
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
-        row = conn.execute("SELECT id, status, draft_json, notice_date, COALESCE(redraft_requested, FALSE) AS redraft "
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
+        row = conn.execute("SELECT id, status, draft_json, notice_date, news_id, reviewed_by, COALESCE(redraft_requested, FALSE) AS redraft, "
+                           "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf "
                            "FROM pg_news_inbox WHERE source_code = ? AND item_key = ?", (code, key)).fetchone()
         if row:
             # Known notice — only fill in what's missing (a draft / PDF from a later run), or
@@ -194,6 +298,15 @@ def api_news_inbox_ingest():
             if pdf:
                 sets += ["pdf_data = COALESCE(pdf_data, ?)", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
                 vals += [pdf, pdf_name]
+            elif r2_key and not row['has_pdf']:
+                sets += ["pdf_r2_key = ?", "pdf_sha256 = ?", "pdf_size = ?", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
+                vals += [r2_key, r2_sha, int(b.get('pdf_size') or 0), pdf_name]
+            if (pdf or r2_key) and not row['has_pdf'] and row['status'] == 'dismissed' \
+                    and (row['reviewed_by'] or '') == HOLD_BY:
+                # held because its file wasn't online — the PDF is here now → back to New, re-drafted
+                # from the real PDF at the next run (founder 2026-10-17)
+                sets += ["status = 'new'", "history_note = ?", "redraft_requested = TRUE"]
+                vals.append('The PDF is now online on the authority site — brought back to New automatically.')
             if b.get('force_events') and draft and draft.get('events') and row['draft_json'] and not sets:
                 # corrected calendar dates for an already-received notice (operator back-check, 2026-10-14):
                 # replace ONLY the draft's events; the calendar merge then updates the entries in place
@@ -217,6 +330,8 @@ def api_news_inbox_ingest():
             if sets:
                 conn.execute(f"UPDATE pg_news_inbox SET {', '.join(sets)} WHERE id = ?", vals + [row['id']])
                 conn.commit()
+                if (pdf or r2_key) and row['news_id']:
+                    _attach_to_news(conn, row['news_id'], pdf, r2_key, pdf_name)
                 if draft and draft.get('events'):
                     _auto_calendar(conn, row['id'])
                 if row['status'] != 'seen':
@@ -239,6 +354,9 @@ def api_news_inbox_ingest():
             conn.execute("UPDATE pg_news_inbox SET drafted_at = CURRENT_TIMESTAMP WHERE id = ?", (new_id,))
         if nd_src:
             conn.execute("UPDATE pg_news_inbox SET notice_date_source = ? WHERE id = ?", (nd_src, new_id))
+        if r2_key and not pdf:
+            conn.execute("UPDATE pg_news_inbox SET pdf_r2_key = ?, pdf_sha256 = ?, pdf_size = ? WHERE id = ?",
+                         (r2_key, r2_sha, int(b.get('pdf_size') or 0), new_id))
         conn.commit()
         if status == 'new' and draft and draft.get('events'):
             _auto_calendar(conn, new_id)
@@ -281,6 +399,30 @@ def api_news_inbox_heartbeat():
         return jsonify({'ok': False}), 500
     finally:
         conn.close()
+
+
+def api_news_inbox_upload_url():
+    """POST /api/pg/news-inbox/upload-url {source_code, item_key, sha256, name, size} (X-News-Key) →
+    {put_url, key}: a signed link the Mac PUTs a big PDF to (straight into R2 — too big to send
+    through the portal), then it calls /ingest with pdf_r2_key. (founder 2026-10-17: archive every
+    authority PDF whatever its size)"""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from core import storage
+    from pg_admin.data.big_files import make_key
+    b = request.get_json(silent=True) or {}
+    code = (b.get('source_code') or '').strip()
+    sha = ''.join(ch for ch in str(b.get('sha256') or '').lower() if ch in '0123456789abcdef')[:64]
+    if code not in NS.SOURCES or len(sha) != 64:
+        return jsonify({'ok': False, 'error': 'need source_code + sha256'}), 400
+    if not storage.is_configured():
+        return jsonify({'ok': False, 'error': 'storage_not_configured'}), 503
+    key = make_key(NS.SOURCES[code].get('authority_code') or code, sha, str(b.get('name') or 'notice.pdf'))
+    have = storage.object_size(key)
+    url = None if have else storage.presigned_put_url(key, 'application/pdf', 3600)
+    if not have and not url:
+        return jsonify({'ok': False, 'error': 'could_not_sign'}), 502
+    return jsonify({'ok': True, 'key': key, 'put_url': url, 'already': bool(have)})
 
 
 def api_news_inbox_undated():
