@@ -301,10 +301,16 @@ def api_news_inbox_ingest():
             elif r2_key and not row['has_pdf']:
                 sets += ["pdf_r2_key = ?", "pdf_sha256 = ?", "pdf_size = ?", "pdf_name = COALESCE(NULLIF(pdf_name,''), ?)"]
                 vals += [r2_key, r2_sha, int(b.get('pdf_size') or 0), pdf_name]
+            if (pdf or r2_key) and not row['has_pdf'] and row['status'] != 'seen' and not draft \
+                    and "redraft_requested = TRUE" not in sets:
+                # the PDF arrived AFTER the notice was drafted (from its title only) → re-read it:
+                # the next run re-drafts from the real PDF before anything is final (founder 2026-10-18)
+                sets.append("redraft_requested = TRUE")
             if (pdf or r2_key) and not row['has_pdf'] and row['status'] == 'dismissed' \
                     and (row['reviewed_by'] or '') == HOLD_BY:
                 # held because its file wasn't online — the PDF is here now → back to New, re-drafted
                 # from the real PDF at the next run (founder 2026-10-17)
+                sets = [x for x in sets if x != "redraft_requested = TRUE"]
                 sets += ["status = 'new'", "history_note = ?", "redraft_requested = TRUE"]
                 vals.append('The PDF is now online on the authority site — brought back to New automatically.')
             if b.get('force_events') and draft and draft.get('events') and row['draft_json'] and not sets:

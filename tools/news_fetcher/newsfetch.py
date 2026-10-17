@@ -228,9 +228,33 @@ def text(iid, first=None, last=None):
     n = len(r.pages)
     a = max(1, int(first or 1)); b = min(n, int(last or n))
     print(f'[{n} pages — showing {a}-{b}]')
+    empty = []
     for i in range(a - 1, b):
+        t = (r.pages[i].extract_text() or '').strip()
         print(f'\n--- page {i + 1} ---')
-        print((r.pages[i].extract_text() or '').strip())
+        print(t)
+        if len(t) < 40:
+            empty.append(i)
+    if empty:
+        # a SCANNED notice (image only, no text) — save the page images so they can be READ
+        # (founder 2026-10-18: never draft a notice from its title when the PDF is there)
+        out = os.path.join(WORK, 'img')
+        os.makedirs(out, exist_ok=True)
+        saved = []
+        for i in empty:
+            try:
+                for j, im in enumerate(r.pages[i].images):
+                    ext = os.path.splitext(im.name)[1] or '.png'
+                    fp = os.path.join(out, f'{iid}_p{i + 1}_{j}{ext}')
+                    with open(fp, 'wb') as f:
+                        f.write(im.data)
+                    saved.append(fp)
+            except Exception as e:
+                print(f'(could not extract images from page {i + 1}: {e})')
+        if saved:
+            print('\nSCANNED PAGES (no text layer) — READ these images with the Read tool before drafting:')
+            for fp in saved:
+                print('  ' + fp)
 
 
 if __name__ == '__main__':
