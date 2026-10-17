@@ -13,8 +13,12 @@ date can cost a doctor their seat. A human reviews every draft before it is publ
    - If `pdf_path` is set: get its text with
      `./venv/bin/python tools/news_fetcher/newsfetch.py text <id> 1 12` (pages 1-12; it prints
      the total page count). Read more pages (e.g. `text <id> 13 40`) only if the schedule /
-     dates aren't found yet. If the text comes out empty or garbled (a scanned image), read
-     the PDF itself with the Read tool instead.
+     dates aren't found yet. If the text comes out empty or garbled (a scanned image), the
+     `text` command saves the page images and prints "SCANNED PAGES … READ these images" with
+     their paths under ~/goocampus-news/img/ — READ every listed image with the Read tool and
+     draft from what they show. Never draft a notice from its title when its PDF is there.
+   - A RE-DRAFT (the notice came back because its PDF arrived late, or the founder asked) must be
+     written fresh from the PDF — never copy the old title-only draft. (founder 2026-10-18)
    - If there's no PDF (a link to an application/payment/slot-booking page): use only the
      title. Do NOT open the link.
    - If it IS a PDF notice but `pdf_path` is empty (the authority's link has no file yet, or it
