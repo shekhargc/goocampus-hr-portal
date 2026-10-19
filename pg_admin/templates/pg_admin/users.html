@@ -111,8 +111,17 @@
     <option value="">All states</option>
     {% for s in states %}<option value="{{ s }}" {{ 'selected' if f_state==s }}>{{ s }}</option>{% endfor %}
   </select>
+  <select name="reg" onchange="this.form.submit()" title="When the doctor registered (IST)">
+    <option value="">Registered: any time</option>
+    {% for k, lbl in reg_options %}<option value="{{ k }}" {{ 'selected' if f_reg==k }}>Registered: {{ lbl }}</option>{% endfor %}
+  </select>
+  <select name="prof" onchange="this.form.submit()" title="Name, state and NEET-PG rank are mandatory">
+    <option value="">Any profile</option>
+    {% for k, lbl in prof_options %}<option value="{{ k }}" {{ 'selected' if f_prof==k }}>{{ lbl }}</option>{% endfor %}
+  </select>
   <button class="pu-btn pu-btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
-  {% if q or f_plan or f_status or f_type or f_state or f_lead %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>{% endif %}
+  {% if q or f_plan or f_status or f_type or f_state or f_lead or f_reg or f_prof %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>
+  <span style="font-size:0.82rem;color:var(--gray-500);align-self:center;">{{ '{:,}'.format(total_found or 0) }} doctor{{ '' if total_found == 1 else 's' }}</span>{% endif %}
   {% if session.get('is_admin') %}<a class="pu-btn pu-btn-ghost" href="/admin/diag/pg-states" title="Fix misspelt / duplicate states">🧹 Clean up states</a>{% endif %}
 </form>
 
@@ -120,7 +129,7 @@
 <div style="overflow-x:auto;">
 <table class="pu-table">
   <thead><tr>
-    <th style="width:46px;">#</th><th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Status</th><th>State</th><th></th>
+    <th style="width:46px;">#</th><th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Plan</th><th>Status</th><th>State</th><th>Registered</th><th></th>
   </tr></thead>
   <tbody>
     {% for u in users %}
@@ -148,6 +157,7 @@
         {% set st = u.fu_status or 'New' %}
         <span class="chip" style="background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span></td>
       <td style="white-space:nowrap;">{{ u.state or '—' }}</td>
+      <td style="white-space:nowrap;color:var(--gray-500);font-size:0.8rem;" title="Registration date (IST)">{{ (u.created_at|format_datetime).split(',')[0] if u.created_at else '—' }}</td>
       <td><a class="pu-btn pu-btn-ghost pu-btn-sm" href="/admin/pg/users/{{ u.id }}"
              style="padding:0.35rem 0.6rem;">Open <i class="fa-solid fa-arrow-right"></i></a></td>
     </tr>
@@ -158,7 +168,7 @@
 
 {% if total_pages > 1 %}
 <div class="pu-pager">
-  {% set qs = '&q=' ~ (q|urlencode) ~ '&plan=' ~ (f_plan|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&type=' ~ (f_type|urlencode) ~ '&state=' ~ (f_state|urlencode) ~ '&lead=' ~ (f_lead|urlencode) %}
+  {% set qs = '&q=' ~ (q|urlencode) ~ '&plan=' ~ (f_plan|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&type=' ~ (f_type|urlencode) ~ '&state=' ~ (f_state|urlencode) ~ '&lead=' ~ (f_lead|urlencode) ~ '&reg=' ~ (f_reg|urlencode) ~ '&prof=' ~ (f_prof|urlencode) %}
   {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
   <span class="cur">{{ page }} / {{ total_pages }}</span>
   {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}

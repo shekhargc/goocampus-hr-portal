@@ -119,6 +119,28 @@ def _category_case(ualias='u'):
             f"WHEN {is_paid} THEN 'paid' ELSE 'free' END")
 
 
+_IST_DAY = "(u.created_at + INTERVAL '330 minutes')::date"
+_IST_TODAY = "(NOW() AT TIME ZONE 'Asia/Kolkata')::date"
+_REG_WINDOWS = {        # key → (label, SQL on the doctor's IST registration date)
+    'this_week': ('This week', f"{_IST_DAY} >= date_trunc('week', {_IST_TODAY})::date"),
+    'last_week': ('Last week', f"{_IST_DAY} >= date_trunc('week', {_IST_TODAY})::date - 7 "
+                               f"AND {_IST_DAY} < date_trunc('week', {_IST_TODAY})::date"),
+    'last_10': ('Last 10 days', f"{_IST_DAY} >= {_IST_TODAY} - 9"),
+    'last_30': ('Last 30 days', f"{_IST_DAY} >= {_IST_TODAY} - 29"),
+    'last_month': ('Last month', f"{_IST_DAY} >= (date_trunc('month', {_IST_TODAY}) - INTERVAL '1 month')::date "
+                                 f"AND {_IST_DAY} < date_trunc('month', {_IST_TODAY})::date"),
+}
+_PROF_FILTERS = {       # key → (label, SQL) — name / state / rank are mandatory (2026-10-19)
+    'incomplete': ('Profile incomplete', "(COALESCE(TRIM(u.name),'') = '' OR COALESCE(TRIM(u.state),'') = '' "
+                                         "OR COALESCE(u.neet_pg_rank,0) <= 0)"),
+    'no_name': ('Name missing', "COALESCE(TRIM(u.name),'') = ''"),
+    'no_state': ('State missing', "COALESCE(TRIM(u.state),'') = ''"),
+    'no_rank': ('Rank missing', "COALESCE(u.neet_pg_rank,0) <= 0"),
+    'complete': ('Profile complete', "(COALESCE(TRIM(u.name),'') <> '' AND COALESCE(TRIM(u.state),'') <> '' "
+                                     "AND COALESCE(u.neet_pg_rank,0) > 0)"),
+}
+
+
 @login_required
 def users_admin():
     user = _require_users_section("view")
@@ -132,6 +154,8 @@ def users_admin():
     f_type = (request.args.get('type') or '').strip()      # 'team'|'internal'|'paid'|'free'
     f_state = (request.args.get('state') or '').strip()    # home state filter (founder 2026-10-06)
     f_lead = (request.args.get('lead') or '').strip()      # lead/follow-up status filter (founder 2026-10-07)
+    f_reg = (request.args.get('reg') or '').strip()        # registered-date window (founder 2026-10-19)
+    f_prof = (request.args.get('prof') or '').strip()      # incomplete profile filter (founder 2026-10-19)
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
     session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
@@ -140,6 +164,7 @@ def users_admin():
     stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
              'blocked': 0, 'new_30d': 0}
     total_pages = 1
+    total = 0
     try:
         plans = [dict(r) for r in conn.execute(
             "SELECT id, code, name, plan_kind, price, billing_period, duration_days "
@@ -189,6 +214,13 @@ def users_admin():
         if f_state:
             conds.append("u.state = ?")
             params.append(f_state)
+        # Registered-date window, in IST calendar days (created_at is stored UTC). (2026-10-19)
+        if f_reg in _REG_WINDOWS:
+            conds.append(_REG_WINDOWS[f_reg][1])
+        # Profile completeness on the doctor's OWN record (the list may show a name borrowed
+        # from a matching lead for display — this filter ignores that). (2026-10-19)
+        if f_prof in _PROF_FILTERS:
+            conds.append(_PROF_FILTERS[f_prof][1])
         where = (' WHERE ' + ' AND '.join(conds)) if conds else ''
 
         # Lead-status filter: the Status column is derived (latest shared follow-up, else
@@ -324,6 +356,9 @@ def users_admin():
                            cat_labels=_CATEGORY_LABELS, counts=tab_counts,
                            states=states, f_state=f_state,
                            f_lead=f_lead, lead_options=lead_options,
+                           total_found=total,
+                           f_reg=f_reg, reg_options=[(k, v[0]) for k, v in _REG_WINDOWS.items()],
+                           f_prof=f_prof, prof_options=[(k, v[0]) for k, v in _PROF_FILTERS.items()],
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
 

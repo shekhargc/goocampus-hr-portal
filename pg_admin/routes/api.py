@@ -144,13 +144,14 @@ def api_pg_otp_verify():
         # Match by the LAST 10 DIGITS (tolerant of a stored +91/country code) and reuse
         # the OLDEST account, so an existing record isn't missed → no duplicate signup.
         user = conn.execute(
-            "SELECT id, name, COALESCE(state,'') AS state FROM pg_users "
+            "SELECT id, name, COALESCE(state,'') AS state, neet_pg_rank FROM pg_users "
             "WHERE RIGHT(regexp_replace(COALESCE(mobile,''), '\\D', '', 'g'), 10) = ? "
             "ORDER BY id ASC LIMIT 1", (mobile,)).fetchone()
         is_new = not bool(user)          # account created this call
-        ustate = ''
+        ustate, urank = '', None
         if user:
             uid, uname, ustate = user['id'], (user['name'] or ''), user['state']
+            urank = user['neet_pg_rank']
             # If the site now sends a name and we don't have one, capture it.
             if sname and not uname:
                 conn.execute("UPDATE pg_users SET name = ?, session_token = ?, token_expires_at = ?, "
@@ -180,9 +181,12 @@ def api_pg_otp_verify():
         logging.error("api_pg_otp_verify: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     conn.close()
-    # onboarded = profile complete (name + home/domicile state) → frontend can skip onboarding
-    onboarded = bool((uname or '').strip()) and bool((ustate or '').strip())
+    # onboarded = profile complete (name + home/domicile state + NEET-PG rank, all mandatory —
+    # founder 2026-10-19) → the frontend shows the profile step until it is
+    missing = profile_missing({'name': uname, 'state': ustate, 'neet_pg_rank': urank})
+    onboarded = not missing
     return jsonify({'ok': True, 'token': token, 'is_new': is_new, 'onboarded': onboarded,
+                    'profile_complete': onboarded, 'missing': missing,
                     'user': {'id': uid, 'name': uname, 'mobile': mobile}})
 
 
@@ -1188,11 +1192,17 @@ def api_pg_entitlements():
     try:
         uid = _resolve_pg_user(conn)
         ent = entitlements.summary(conn, uid)
+        missing = []
+        if uid:
+            _pr = conn.execute("SELECT name, state, neet_pg_rank FROM pg_users WHERE id = ?", (uid,)).fetchone()
+            missing = profile_missing(dict(_pr) if _pr else {})
         # Surface plan/features at the TOP LEVEL too (flat contract), in addition to the
         # nested `entitlements` — so both { plan } and { entitlements: { plan } } work.
+        # profile_complete/missing: name + state + rank are mandatory before the tools (2026-10-19).
         return jsonify({'ok': True, 'logged_in': bool(uid),
                         'entitlements': ent,
-                        'plan': ent.get('plan'), 'features': ent.get('features')})
+                        'plan': ent.get('plan'), 'features': ent.get('features'),
+                        'profile_complete': bool(uid) and not missing, 'missing': missing})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -1287,7 +1297,7 @@ PG_PROFILE_BLUEPRINT = [
     {'key': 'state',             'label': 'Home / Domicile State',     'type': 'text',   'editable': True,  'required': True},
     {'key': 'neet_pg_year',      'label': 'NEET-PG Year',              'type': 'text',   'editable': True},
     {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True},
-    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True},
+    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True,  'required': True},
     {'key': 'target_speciality', 'label': 'Target Speciality',         'type': 'text',   'editable': True},
     {'key': 'college',           'label': 'MBBS College',              'type': 'text',   'editable': True},
     {'key': 'city',              'label': 'City',                      'type': 'text',   'editable': True},
@@ -1296,6 +1306,28 @@ PG_PROFILE_BLUEPRINT = [
     {'key': 'photo_url',         'label': 'Profile Photo',             'type': 'image',  'editable': True},
 ]
 _PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score'}
+
+# Name, home state and NEET-PG rank are MANDATORY before the predictor/tools (founder 2026-10-19:
+# many OTP sign-ups never completed the profile → "(name pending)" in Registered Doctors).
+PROFILE_REQUIRED = ('name', 'state', 'neet_pg_rank')
+
+
+def profile_missing(row):
+    """Which mandatory profile fields a pg_users row still lacks ([] = complete)."""
+    row = row or {}
+    out = []
+    for k in PROFILE_REQUIRED:
+        v = row.get(k)
+        if k == 'neet_pg_rank':
+            try:
+                ok = int(v or 0) > 0
+            except (TypeError, ValueError):
+                ok = False
+        else:
+            ok = bool(str(v or '').strip())
+        if not ok:
+            out.append(k)
+    return out
 
 
 def _pg_user_by_token(conn, token):
@@ -1337,7 +1369,9 @@ def api_pg_profile():
             for f in PG_PROFILE_BLUEPRINT:
                 v = row.get(f['key'])
                 values[f['key']] = '' if v is None else v
-            return jsonify({'ok': True, 'fields': PG_PROFILE_BLUEPRINT, 'values': values})
+            _miss = profile_missing(row)
+            return jsonify({'ok': True, 'fields': PG_PROFILE_BLUEPRINT, 'values': values,
+                            'profile_complete': not _miss, 'missing': _miss})
 
         # POST — save the doctor's edits.
         data = request.get_json(silent=True) or {}
@@ -1368,7 +1402,8 @@ def api_pg_profile():
             sets.append(f"{k} = ?")
             params.append(val)
         if not sets:
-            return jsonify({'ok': True, 'updated': 0})
+            _miss = profile_missing(row)
+            return jsonify({'ok': True, 'updated': 0, 'profile_complete': not _miss, 'missing': _miss})
         params.append(row['id'])
         conn.execute(
             f"UPDATE pg_users SET {', '.join(sets)}, updated_by = 'goocampus.in', "
@@ -1388,7 +1423,9 @@ def api_pg_profile():
                     conn.commit()
             except Exception:
                 conn.rollback()
-        return jsonify({'ok': True, 'updated': len(sets)})
+        _after = conn.execute("SELECT name, state, neet_pg_rank FROM pg_users WHERE id = ?", (row['id'],)).fetchone()
+        _miss = profile_missing(dict(_after) if _after else {})
+        return jsonify({'ok': True, 'updated': len(sets), 'profile_complete': not _miss, 'missing': _miss})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
