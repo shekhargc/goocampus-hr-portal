@@ -130,14 +130,17 @@ _REG_WINDOWS = {        # key → (label, SQL on the doctor's IST registration d
     'last_month': ('Last month', f"{_IST_DAY} >= (date_trunc('month', {_IST_TODAY}) - INTERVAL '1 month')::date "
                                  f"AND {_IST_DAY} < date_trunc('month', {_IST_TODAY})::date"),
 }
-_PROF_FILTERS = {       # key → (label, SQL) — name / state / rank are mandatory (2026-10-19)
-    'incomplete': ('Profile incomplete', "(COALESCE(TRIM(u.name),'') = '' OR COALESCE(TRIM(u.state),'') = '' "
-                                         "OR COALESCE(u.neet_pg_rank,0) <= 0)"),
+_PROF_FILTERS = {       # key → (label, SQL). 'Incomplete' = what the College Predictor needs:
+                        # domicile state + NEET-PG rank + score (name is never mandatory). 2026-10-19
+    'incomplete': ('Profile incomplete (state/rank/score)',
+                   "(COALESCE(TRIM(u.state),'') = '' OR COALESCE(u.neet_pg_rank,0) <= 0 "
+                   "OR COALESCE(u.neet_pg_score,0) <= 0)"),
     'no_name': ('Name missing', "COALESCE(TRIM(u.name),'') = ''"),
     'no_state': ('State missing', "COALESCE(TRIM(u.state),'') = ''"),
     'no_rank': ('Rank missing', "COALESCE(u.neet_pg_rank,0) <= 0"),
-    'complete': ('Profile complete', "(COALESCE(TRIM(u.name),'') <> '' AND COALESCE(TRIM(u.state),'') <> '' "
-                                     "AND COALESCE(u.neet_pg_rank,0) > 0)"),
+    'no_score': ('Score missing', "COALESCE(u.neet_pg_score,0) <= 0"),
+    'complete': ('Profile complete', "(COALESCE(TRIM(u.state),'') <> '' AND COALESCE(u.neet_pg_rank,0) > 0 "
+                                     "AND COALESCE(u.neet_pg_score,0) > 0)"),
 }
 
 
