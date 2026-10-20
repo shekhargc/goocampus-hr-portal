@@ -115,7 +115,7 @@
     <option value="">Registered: any time</option>
     {% for k, lbl in reg_options %}<option value="{{ k }}" {{ 'selected' if f_reg==k }}>Registered: {{ lbl }}</option>{% endfor %}
   </select>
-  <select name="prof" onchange="this.form.submit()" title="Domicile state, NEET-PG rank and score are needed for the College Predictor">
+  <select name="prof" onchange="this.form.submit()" title="Domicile state is needed for the dashboard; NEET-PG rank for the College Predictor">
     <option value="">Any profile</option>
     {% for k, lbl in prof_options %}<option value="{{ k }}" {{ 'selected' if f_prof==k }}>{{ lbl }}</option>{% endfor %}
   </select>
