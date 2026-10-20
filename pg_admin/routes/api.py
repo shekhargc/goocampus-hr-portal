@@ -144,13 +144,14 @@ def api_pg_otp_verify():
         # Match by the LAST 10 DIGITS (tolerant of a stored +91/country code) and reuse
         # the OLDEST account, so an existing record isn't missed → no duplicate signup.
         user = conn.execute(
-            "SELECT id, name, COALESCE(state,'') AS state FROM pg_users "
+            "SELECT id, name, COALESCE(state,'') AS state, neet_pg_rank, neet_pg_score FROM pg_users "
             "WHERE RIGHT(regexp_replace(COALESCE(mobile,''), '\\D', '', 'g'), 10) = ? "
             "ORDER BY id ASC LIMIT 1", (mobile,)).fetchone()
         is_new = not bool(user)          # account created this call
-        ustate = ''
+        ustate, urank, uscore = '', None, None
         if user:
             uid, uname, ustate = user['id'], (user['name'] or ''), user['state']
+            urank, uscore = user['neet_pg_rank'], user['neet_pg_score']
             # If the site now sends a name and we don't have one, capture it.
             if sname and not uname:
                 conn.execute("UPDATE pg_users SET name = ?, session_token = ?, token_expires_at = ?, "
@@ -180,9 +181,13 @@ def api_pg_otp_verify():
         logging.error("api_pg_otp_verify: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     conn.close()
-    # onboarded = profile complete (name + home/domicile state) → frontend can skip onboarding
+    # onboarded = name + home/domicile state (unchanged meaning). profile_complete/missing = what the
+    # College Predictor needs (state + rank + score); name_missing = gentle nudge only. (2026-10-19)
     onboarded = bool((uname or '').strip()) and bool((ustate or '').strip())
+    missing = profile_missing({'state': ustate, 'neet_pg_rank': urank, 'neet_pg_score': uscore})
     return jsonify({'ok': True, 'token': token, 'is_new': is_new, 'onboarded': onboarded,
+                    'profile_complete': not missing, 'missing': missing,
+                    'name_missing': not (uname or '').strip(),
                     'user': {'id': uid, 'name': uname, 'mobile': mobile}})
 
 
@@ -1188,11 +1193,21 @@ def api_pg_entitlements():
     try:
         uid = _resolve_pg_user(conn)
         ent = entitlements.summary(conn, uid)
+        missing, name_missing = [], False
+        if uid:
+            _pr = conn.execute("SELECT name, state, neet_pg_rank, neet_pg_score FROM pg_users WHERE id = ?", (uid,)).fetchone()
+            _pr = dict(_pr) if _pr else {}
+            missing = profile_missing(_pr)
+            name_missing = not (_pr.get('name') or '').strip()
         # Surface plan/features at the TOP LEVEL too (flat contract), in addition to the
         # nested `entitlements` — so both { plan } and { entitlements: { plan } } work.
+        # profile_complete/missing: state + rank + score are mandatory before the College Predictor;
+        # name_missing only drives a gentle "name your account" nudge (2026-10-19).
         return jsonify({'ok': True, 'logged_in': bool(uid),
                         'entitlements': ent,
-                        'plan': ent.get('plan'), 'features': ent.get('features')})
+                        'plan': ent.get('plan'), 'features': ent.get('features'),
+                        'profile_complete': bool(uid) and not missing, 'missing': missing,
+                        'name_missing': name_missing})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -1283,11 +1298,11 @@ def _bearer_token():
 # dynamically — add a field here (and its pg_users column) and it auto-appears on
 # goocampus.in with no change on their side. 'editable': False = show read-only.
 PG_PROFILE_BLUEPRINT = [
-    {'key': 'name',              'label': 'Full Name',                 'type': 'text',   'editable': True,  'required': True},
+    {'key': 'name',              'label': 'Full Name',                 'type': 'text',   'editable': True},
     {'key': 'state',             'label': 'Home / Domicile State',     'type': 'text',   'editable': True,  'required': True},
     {'key': 'neet_pg_year',      'label': 'NEET-PG Year',              'type': 'text',   'editable': True},
-    {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True},
-    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True},
+    {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True,  'required': True},
+    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True,  'required': True},
     {'key': 'target_speciality', 'label': 'Target Speciality',         'type': 'text',   'editable': True},
     {'key': 'college',           'label': 'MBBS College',              'type': 'text',   'editable': True},
     {'key': 'city',              'label': 'City',                      'type': 'text',   'editable': True},
@@ -1296,6 +1311,29 @@ PG_PROFILE_BLUEPRINT = [
     {'key': 'photo_url',         'label': 'Profile Photo',             'type': 'image',  'editable': True},
 ]
 _PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score'}
+
+# Founder 2026-10-19: sign-up stays mobile + OTP only (never block registration). Domicile state +
+# NEET-PG rank + score are MANDATORY before the College Predictor (asked at that point, not at
+# sign-up). Name is never mandatory — the site only nudges now and then ("name_missing").
+PROFILE_REQUIRED = ('state', 'neet_pg_rank', 'neet_pg_score')
+
+
+def profile_missing(row):
+    """Which predictor-required profile fields a pg_users row still lacks ([] = complete)."""
+    row = row or {}
+    out = []
+    for k in PROFILE_REQUIRED:
+        v = row.get(k)
+        if k in ('neet_pg_rank', 'neet_pg_score'):
+            try:
+                ok = int(v or 0) > 0
+            except (TypeError, ValueError):
+                ok = False
+        else:
+            ok = bool(str(v or '').strip())
+        if not ok:
+            out.append(k)
+    return out
 
 
 def _pg_user_by_token(conn, token):
@@ -1337,7 +1375,10 @@ def api_pg_profile():
             for f in PG_PROFILE_BLUEPRINT:
                 v = row.get(f['key'])
                 values[f['key']] = '' if v is None else v
-            return jsonify({'ok': True, 'fields': PG_PROFILE_BLUEPRINT, 'values': values})
+            _miss = profile_missing(row)
+            return jsonify({'ok': True, 'fields': PG_PROFILE_BLUEPRINT, 'values': values,
+                            'profile_complete': not _miss, 'missing': _miss,
+                            'name_missing': not (row.get('name') or '').strip()})
 
         # POST — save the doctor's edits.
         data = request.get_json(silent=True) or {}
@@ -1368,7 +1409,9 @@ def api_pg_profile():
             sets.append(f"{k} = ?")
             params.append(val)
         if not sets:
-            return jsonify({'ok': True, 'updated': 0})
+            _miss = profile_missing(row)
+            return jsonify({'ok': True, 'updated': 0, 'profile_complete': not _miss, 'missing': _miss,
+                            'name_missing': not (row.get('name') or '').strip()})
         params.append(row['id'])
         conn.execute(
             f"UPDATE pg_users SET {', '.join(sets)}, updated_by = 'goocampus.in', "
@@ -1388,7 +1431,11 @@ def api_pg_profile():
                     conn.commit()
             except Exception:
                 conn.rollback()
-        return jsonify({'ok': True, 'updated': len(sets)})
+        _after = conn.execute("SELECT name, state, neet_pg_rank, neet_pg_score FROM pg_users WHERE id = ?", (row['id'],)).fetchone()
+        _after = dict(_after) if _after else {}
+        _miss = profile_missing(_after)
+        return jsonify({'ok': True, 'updated': len(sets), 'profile_complete': not _miss, 'missing': _miss,
+                        'name_missing': not (_after.get('name') or '').strip()})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
