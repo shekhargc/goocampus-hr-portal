@@ -32,7 +32,8 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
-                             calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments)
+                             calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments,
+                             mgmt_inquiries)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -530,6 +531,11 @@ def register_pg_admin(app):
     app.add_url_rule('/admin/pg/plans/compare.json', 'pg_plan_compare',
                      plans_admin.plan_compare, methods=['GET'])
 
+    # ── Management / NRI Inquiries (goocampus.in's Management/NRI pages; NOT Sales) — 2026-10-20 ──
+    app.add_url_rule('/admin/pg/mgmt-inquiries', 'pg_mgmt_inquiries',
+                     mgmt_inquiries.mgmt_inquiries, methods=['GET'])
+    app.add_url_rule('/admin/pg/mgmt-inquiries/<int:inq_id>/followup', 'pg_mgmt_inquiry_followup',
+                     mgmt_inquiries.mgmt_inquiry_followup, methods=['POST'])
     # ── Registered Doctors admin ───────────────────────────────────────────
     app.add_url_rule('/admin/pg/users', 'pg_users_admin',
                      users_admin.users_admin, methods=['GET'])

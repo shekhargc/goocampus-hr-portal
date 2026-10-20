@@ -41815,6 +41815,21 @@ def api_pg_lead():
     src_page = (data.get('source_page') or '').strip()
     if not name or not phone:
         return jsonify({'ok': False, 'error': 'name and phone are required'}), 400
+    # Management / NRI / deemed-quota call-backs go to their OWN goocampus.in section — never to
+    # Sales → Leads/Inquiries, which is for UK/PLAB and consulting. (founder 2026-10-20)
+    try:
+        from pg_admin.routes import mgmt_inquiries as _mgmt
+        if _mgmt.is_mgmt_lead(data):
+            _mc = get_db()
+            try:
+                _mgmt.record_lead(_mc, data)
+                _mgmt.notify(_mc, name, phone, (data.get('budget_range') or '').strip(), create_notification)
+            finally:
+                _mc.close()
+            return jsonify({'ok': True}), 200
+    except Exception as _me:
+        logging.error("api_pg_lead mgmt: %s", _me)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
     note_bits = []
     if year:
         note_bits.append(f"NEET PG {year}")
@@ -47897,6 +47912,7 @@ ACCESS_SECTION_CATALOG = [
         'sub_sections': [
             ('users',  'Registered Doctors', 'View doctors, activate/edit profiles, grant plans, add team members'),
             ('events', 'Events',             'See event sign-ups + who registered for each event'),
+            ('mgmt_inquiries', 'Management / NRI Inquiries', 'Call-back requests from the Management / NRI / deemed-quota pages, with budget; Edit = add follow-ups'),
         ],
     },
 ]
@@ -51147,6 +51163,8 @@ ACCESS_ROUTE_MAP = {
     'pg_event_create':       _ap('goocampus_in', 'events', 'edit'),
     'pg_event_toggle':       _ap('goocampus_in', 'events', 'edit'),
     'pg_event_export':       _ap('goocampus_in', 'events', 'view'),
+    'pg_mgmt_inquiries':     _ap('goocampus_in', 'mgmt_inquiries', 'view'),
+    'pg_mgmt_inquiry_followup': _ap('goocampus_in', 'mgmt_inquiries', 'edit'),
     # ── College (directory + Medical Predictor + NEET PG PDFs) ──
     # VIEW = the page; a granted team member can look up + download. The
     # management actions (add/edit/import/upload/publish/delete/blast) require
