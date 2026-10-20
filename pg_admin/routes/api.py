@@ -1301,8 +1301,8 @@ PG_PROFILE_BLUEPRINT = [
     {'key': 'name',              'label': 'Full Name',                 'type': 'text',   'editable': True},
     {'key': 'state',             'label': 'Home / Domicile State',     'type': 'text',   'editable': True,  'required': True},
     {'key': 'neet_pg_year',      'label': 'NEET-PG Year',              'type': 'text',   'editable': True},
-    {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True,  'required': True},
-    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True,  'required': True},
+    {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True},
+    {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True},
     {'key': 'target_speciality', 'label': 'Target Speciality',         'type': 'text',   'editable': True},
     {'key': 'college',           'label': 'MBBS College',              'type': 'text',   'editable': True},
     {'key': 'city',              'label': 'City',                      'type': 'text',   'editable': True},
@@ -1312,10 +1312,11 @@ PG_PROFILE_BLUEPRINT = [
 ]
 _PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score'}
 
-# Founder 2026-10-19: sign-up stays mobile + OTP only (never block registration). Domicile state +
-# NEET-PG rank + score are MANDATORY before the College Predictor (asked at that point, not at
-# sign-up). Name is never mandatory — the site only nudges now and then ("name_missing").
-PROFILE_REQUIRED = ('state', 'neet_pg_rank', 'neet_pg_score')
+# Founder 2026-10-20: sign-up stays mobile + OTP only. DOMICILE STATE is mandatory right after the
+# first login — no dashboard without it (news, access, choice entry depend on it). NEET-PG RANK is
+# mandatory only when the doctor opens the College Predictor. Score and name are optional (name gets
+# a gentle nudge via "name_missing").
+PROFILE_REQUIRED = ('state', 'neet_pg_rank')
 
 
 def profile_missing(row):
