@@ -1,0 +1,187 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Management / NRI Inquiries{% endblock %}
+
+{% block section_extra_css %}
+<style>
+  .mi-header h1 { font-size:1.5rem; font-weight:700; color:var(--navy); margin:0; }
+  .mi-header p { color:var(--gray-500); font-size:0.9rem; margin:0.15rem 0 1.1rem; }
+  .mi-controls { display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
+  .mi-controls input[type=text], .mi-controls select { padding:0.5rem 0.7rem; border:1px solid var(--gray-300);
+      border-radius:0.45rem; font-size:0.87rem; background:#fff; }
+  .mi-controls input[type=text]{ min-width:240px; }
+  .mi-btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.9rem; border-radius:0.45rem;
+      border:none; font-size:0.87rem; font-weight:600; cursor:pointer; text-decoration:none; }
+  .mi-btn-primary { background:var(--orange); color:#fff; }
+  .mi-btn-ghost { background:var(--gray-100); color:var(--navy); border:1px solid var(--gray-300); }
+  .mi-table { width:100%; border-collapse:collapse; background:#fff; border-radius:0.6rem; overflow:hidden; border:1px solid var(--gray-200); }
+  .mi-table th { background:var(--navy); color:#fff; text-align:left; padding:0.65rem 0.8rem; font-size:0.76rem;
+      text-transform:uppercase; letter-spacing:0.4px; }
+  .mi-table td { padding:0.6rem 0.8rem; border-top:1px solid var(--gray-100); font-size:0.86rem; vertical-align:top; }
+  .mi-table tr.mi-row { cursor:pointer; } .mi-table tr.mi-row:hover td { background:#f8fafc; }
+  .mi-name { font-weight:600; color:var(--navy); } .mi-sub { color:var(--gray-500); font-size:0.78rem; }
+  .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
+  .b4 { background:#dcfce7; color:#166534; } .b3 { background:#e0f2fe; color:#075985; }
+  .b2 { background:#fef9c3; color:#854d0e; } .b1 { background:#f3f4f6; color:#374151; } .b0, .bn { background:#f3f4f6; color:#9ca3af; }
+  .mi-pager { display:flex; gap:0.4rem; justify-content:center; margin-top:1.2rem; align-items:center; }
+  .mi-pager a, .mi-pager span { padding:0.4rem 0.75rem; border:1px solid var(--gray-300); border-radius:0.4rem;
+      font-size:0.85rem; text-decoration:none; color:var(--navy); }
+  .mi-pager .cur { background:var(--navy); color:#fff; border-color:var(--navy); }
+  /* slide-in drawer */
+  .mi-drawer-bg { position:fixed; inset:0; background:rgba(15,23,42,0.35); z-index:900; display:none; }
+  .mi-drawer { position:fixed; top:0; right:0; height:100vh; width:min(520px,100vw); background:#fff; z-index:901;
+      box-shadow:-8px 0 24px rgba(0,0,0,0.15); overflow-y:auto; padding:1.2rem 1.3rem 2rem; display:none; }
+  .mi-drawer.open, .mi-drawer-bg.open { display:block; }
+  .mi-drawer h2 { font-size:1.15rem; color:var(--navy); margin:0 0 0.2rem; }
+  .mi-kv { display:grid; grid-template-columns:130px 1fr; gap:0.35rem 0.7rem; font-size:0.86rem; margin:0.8rem 0; }
+  .mi-kv div:nth-child(odd) { color:var(--gray-500); }
+  .mi-box { border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.8rem; margin-top:0.9rem; }
+  .mi-box label { display:block; font-size:0.72rem; font-weight:700; color:var(--gray-500); text-transform:uppercase; margin:0.5rem 0 0.2rem; }
+  .mi-box select, .mi-box input, .mi-box textarea { width:100%; padding:0.45rem 0.6rem; border:1px solid var(--gray-300); border-radius:0.4rem; font-size:0.86rem; box-sizing:border-box; }
+  .mi-hist { border-top:1px solid var(--gray-100); padding:0.55rem 0; font-size:0.84rem; }
+  .mi-hist .who { color:var(--gray-500); font-size:0.75rem; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+{% set fc = {'New':['#eef2ff','#3730a3'],'Did not pick up':['#fff1f2','#9f1239'],'Contacted':['#e0f2fe','#075985'],'Follow-up':['#fef9c3','#854d0e'],'Interested':['#dcfce7','#166534'],'Not Interested':['#fee2e2','#991b1b'],'Converted':['#f3e8ff','#6b21a8']} %}
+<div class="mi-header">
+  <h1>Management / NRI Inquiries</h1>
+  <p>Call-back requests from goocampus.in's Management, NRI &amp; deemed-quota pages — with each doctor's budget. Click a row to see details and add a follow-up.</p>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, m in msgs %}
+  <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+              background:{{ '#DCFCE7' if cat == 'success' else '#FEE2E2' }};color:{{ '#166534' if cat == 'success' else '#991B1B' }};">{{ m }}</div>
+  {% endfor %}
+{% endwith %}
+
+<form method="GET" class="mi-controls">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name, mobile, email, state">
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All statuses</option>
+    {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if f_status==s }}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="budget" onchange="this.form.submit()">
+    <option value="">All budgets</option>
+    {% for k, lbl, o in budgets %}<option value="{{ k }}" {{ 'selected' if f_budget==k }}>{{ lbl }}</option>{% endfor %}
+    <option value="none" {{ 'selected' if f_budget=='none' }}>Budget not given</option>
+  </select>
+  <select name="reg" onchange="this.form.submit()">
+    <option value="">Received: any time</option>
+    {% for k, lbl in reg_options %}<option value="{{ k }}" {{ 'selected' if f_reg==k }}>Received: {{ lbl }}</option>{% endfor %}
+  </select>
+  <select name="sort" onchange="this.form.submit()">
+    <option value="newest" {{ 'selected' if sort!='budget' }}>Newest first</option>
+    <option value="budget" {{ 'selected' if sort=='budget' }}>Highest budget first</option>
+  </select>
+  <button class="mi-btn mi-btn-primary" type="submit">Search</button>
+  {% if q or f_status or f_budget or f_reg or sort=='budget' %}<a class="mi-btn mi-btn-ghost" href="/admin/pg/mgmt-inquiries">Clear</a>{% endif %}
+  <span style="font-size:0.82rem;color:var(--gray-500);">{{ total }} enquir{{ 'y' if total == 1 else 'ies' }}</span>
+</form>
+
+{% if items %}
+<div style="overflow-x:auto;">
+<table class="mi-table">
+  <thead><tr><th>Doctor</th><th>Budget</th><th>NEET-PG</th><th>State</th><th>Status</th><th>Next follow-up</th><th>Received</th></tr></thead>
+  <tbody>
+  {% for r in items %}
+    {% set st = r.fu_status or 'New' %}
+    <tr class="mi-row" onclick="miOpen({{ r.id }})">
+      <td><div class="mi-name">{{ (r.name|dr_name) or '(no name)' }}{% if r.enquiry_count and r.enquiry_count > 1 %} <span class="chip b1" title="Enquired {{ r.enquiry_count }} times">×{{ r.enquiry_count }}</span>{% endif %}
+            {% if r.reg_doctor_id %}<span class="chip" style="background:#ede9fe;color:#5b21b6;" title="Also a registered goocampus.in doctor">Registered</span>{% endif %}</div>
+          <div class="mi-sub">{{ r.phone }}{% if r.email %} · {{ r.email }}{% endif %}</div></td>
+      <td>{% if r.budget_range %}<span class="chip b{{ r.budget_order if r.budget_order is not none and r.budget_order >= 0 else 'n' }}">{{ r.budget_range }}</span>{% else %}<span class="mi-sub">—</span>{% endif %}</td>
+      <td>{% if r.neet_pg_rank %}Rank {{ r.neet_pg_rank }}{% elif r.neet_pg_year %}{{ r.neet_pg_year }}{% else %}<span class="mi-sub">—</span>{% endif %}</td>
+      <td>{{ r.state or '—' }}</td>
+      <td><span class="chip" style="background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span></td>
+      <td style="white-space:nowrap;font-size:0.8rem;color:#b45309;">{{ (r.state_now or {}).get('next_followup_date') or '' }}</td>
+      <td style="white-space:nowrap;color:var(--gray-500);font-size:0.8rem;" title="Last enquiry (IST)">{{ (r.last_enquiry_at|format_datetime).split(',')[0] if r.last_enquiry_at else '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="mi-pager">
+  {% set qs = '&q=' ~ (q|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&budget=' ~ (f_budget|urlencode) ~ '&reg=' ~ (f_reg|urlencode) ~ '&sort=' ~ (sort|urlencode) %}
+  {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
+  <span class="cur">{{ page }} / {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}
+</div>
+{% endif %}
+
+<div class="mi-drawer-bg" id="miBg" onclick="miClose()"></div>
+{% for r in items %}
+<div class="mi-drawer" id="mi{{ r.id }}">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+    <div><h2>{{ (r.name|dr_name) or '(no name)' }}</h2>
+      <div class="mi-sub">First enquiry {{ (r.created_at|format_datetime) if r.created_at else '' }}{% if r.enquiry_count and r.enquiry_count > 1 %} · enquired {{ r.enquiry_count }} times{% endif %}</div></div>
+    <button type="button" class="mi-btn mi-btn-ghost" onclick="miClose()">✕</button>
+  </div>
+  <div class="mi-kv">
+    <div>Mobile</div><div><a href="tel:{{ r.phone }}">{{ r.phone }}</a> · <a href="https://wa.me/{{ r.mobile10 and ('91' ~ r.mobile10) or '' }}" target="_blank" rel="noopener">WhatsApp</a></div>
+    <div>Email</div><div>{{ r.email or '—' }}</div>
+    <div>Budget</div><div>{{ r.budget_range or '—' }}</div>
+    <div>Interest</div><div>{{ r.interest or '—' }}</div>
+    <div>NEET-PG</div><div>{% if r.neet_pg_year %}{{ r.neet_pg_year }}{% endif %}{% if r.neet_pg_rank %} · Rank {{ r.neet_pg_rank }}{% endif %}{% if not r.neet_pg_year and not r.neet_pg_rank %}—{% endif %}</div>
+    <div>State</div><div>{{ r.state or '—' }}</div>
+    {% if r.target_speciality %}<div>Speciality</div><div>{{ r.target_speciality }}</div>{% endif %}
+    <div>From page</div><div style="word-break:break-all;">{{ r.source_page or '—' }}</div>
+    {% if r.reg_doctor_id %}<div>goocampus.in</div><div>Registered doctor{% if can_access('goocampus_in','users','view') %} — <a href="/admin/pg/users/{{ r.reg_doctor_id }}">open profile</a>{% endif %}</div>{% endif %}
+  </div>
+  {% if r.message %}<div class="mi-box" style="white-space:pre-wrap;font-size:0.86rem;"><b style="font-size:0.72rem;color:var(--gray-500);text-transform:uppercase;">Message</b><br>{{ r.message }}</div>{% endif %}
+
+  {% if can_edit %}
+  <form class="mi-box" method="POST" action="/admin/pg/mgmt-inquiries/{{ r.id }}/followup">
+    {% for k in ['q','status','budget','reg','sort','page'] %}{% if request.args.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.args.get(k) }}">{% endif %}{% endfor %}
+    <b style="font-size:0.8rem;color:var(--navy);">Add follow-up</b>
+    <label>Status</label>
+    <select name="status" onchange="miDate(this)">
+      <option value="">— keep current ({{ r.fu_status or 'New' }}) —</option>
+      {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+    <div class="mi-next" style="display:none;">
+      <label>Next follow-up</label>
+      <div style="display:flex;gap:0.5rem;"><input type="date" name="next_followup_date">
+        <select name="next_followup_time"><option value="">Time</option>{% for t in time_slots %}<option>{{ t }}</option>{% endfor %}</select></div>
+    </div>
+    <label>Note</label>
+    <textarea name="note" rows="3" placeholder="What was discussed…"></textarea>
+    <div style="margin-top:0.7rem;"><button class="mi-btn mi-btn-primary" type="submit">Save</button></div>
+  </form>
+  {% endif %}
+
+  <div class="mi-box">
+    <b style="font-size:0.8rem;color:var(--navy);">History</b>
+    {% for t in r.thread %}
+      <div class="mi-hist">
+        {% if t.status %}<span class="chip" style="background:{{ fc.get(t.status,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(t.status,['#f3f4f6','#6b7280'])[1] }};">{{ t.status }}</span>{% endif %}
+        {% if t.next_followup_date %}<span style="font-size:0.75rem;color:#b45309;font-weight:600;">Next: {{ t.next_followup_date }}</span>{% endif %}
+        {% if t.note %}<div>{{ t.note }}</div>{% endif %}
+        <div class="who">{{ t.created_by_name or '—' }} · {{ (t.created_at|format_datetime) if t.created_at else '' }}</div>
+      </div>
+    {% else %}
+      <div class="mi-sub" style="padding-top:0.4rem;">No follow-ups yet.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div style="text-align:center;padding:2.5rem;color:var(--gray-500);background:#fff;border:1px solid var(--gray-200);border-radius:0.6rem;">
+  No Management / NRI enquiries{% if q or f_status or f_budget or f_reg %} match these filters{% else %} yet — they appear here as soon as doctors request a call-back on the Management / NRI pages{% endif %}.
+</div>
+{% endif %}
+
+<script>
+  var DATE_STATUSES = {{ date_statuses|list|tojson }};
+  function miOpen(id){ document.querySelectorAll('.mi-drawer.open').forEach(function(d){d.classList.remove('open')});
+    var d=document.getElementById('mi'+id); if(!d) return; d.classList.add('open'); document.getElementById('miBg').classList.add('open'); }
+  function miClose(){ document.querySelectorAll('.mi-drawer.open').forEach(function(d){d.classList.remove('open')});
+    var b=document.getElementById('miBg'); if(b) b.classList.remove('open'); }
+  function miDate(sel){ var box=sel.closest('form').querySelector('.mi-next'); box.style.display = DATE_STATUSES.indexOf(sel.value) >= 0 ? 'block' : 'none'; }
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') miClose(); });
+  {% if open_id %}miOpen({{ open_id|int }});{% endif %}
+</script>
+{% endblock %}
