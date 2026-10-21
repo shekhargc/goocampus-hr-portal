@@ -460,9 +460,24 @@ def api_maint_course_rename():
                 counts[t] = int(conn.execute(f"SELECT COUNT(*) AS n FROM {t} WHERE {col} = ?", (old,)).fetchone()['n'])
             except Exception:
                 conn.rollback(); counts[t] = None
+        # a college whose course catalogue ALREADY lists the target course keeps that line; its old
+        # mis-named line is left for review (never a duplicate on the college page)
+        try:
+            dup = int(conn.execute(
+                "SELECT COUNT(*) AS n FROM pg_college_course c WHERE c.course = ? AND EXISTS ("
+                "SELECT 1 FROM pg_college_course x WHERE x.master_id = c.master_id AND x.course = ?)",
+                (old, new)).fetchone()['n'])
+        except Exception:
+            conn.rollback(); dup = None
         if apply:
             for t, col in _COURSE_TABLES:
-                if counts.get(t):
+                if not counts.get(t):
+                    continue
+                if t == 'pg_college_course':
+                    conn.execute("UPDATE pg_college_course SET course = ? WHERE course = ? AND NOT EXISTS ("
+                                 "SELECT 1 FROM pg_college_course x WHERE x.master_id = pg_college_course.master_id "
+                                 "AND x.course = ?)", (new, old, new))
+                else:
                     conn.execute(f"UPDATE {t} SET {col} = ? WHERE {col} = ?", (new, old))
             conn.execute("CREATE TABLE IF NOT EXISTS pg_course_rename_log (id SERIAL PRIMARY KEY, old_name TEXT, "
                          "new_name TEXT, counts TEXT, done_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
@@ -474,7 +489,8 @@ def api_maint_course_rename():
                 perf._VER.update(at=0, v=None)          # course lists rebuild on the next request
             except Exception:
                 pass
-        return jsonify({'ok': True, 'applied': apply, 'from': old, 'to': new, 'rows': counts})
+        return jsonify({'ok': True, 'applied': apply, 'from': old, 'to': new, 'rows': counts,
+                        'college_course_already_listed': dup})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
