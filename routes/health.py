@@ -383,12 +383,15 @@ def _check_data_quality():
         out['matrix_courses'] = (_warn(f'{n} seat-matrix line(s) across {c} course name(s) are not linked to a '
                                        f'cut-off course (predictor/rankings can\'t use them)') if n else
                                  _ok('Every official seat-matrix course is linked to a cut-off course'))
-        # 5. duplicate lines in a college's course catalogue
+        # 5. EXACT duplicate lines in a college's course catalogue (same course AND same level / stream /
+        # seat intake / category — the same course listed twice with different seat details is legitimate)
         r = conn.execute("SELECT COUNT(*) AS n FROM (SELECT master_id, course FROM pg_college_course "
-                         "WHERE COALESCE(course,'')<>'' GROUP BY master_id, course HAVING COUNT(*) > 1) d").fetchone()
+                         "WHERE COALESCE(course,'')<>'' GROUP BY master_id, course, COALESCE(course_level,''), "
+                         "COALESCE(course_stream,''), COALESCE(seat_intake,''), COALESCE(course_category,'') "
+                         "HAVING COUNT(*) > 1) d").fetchone()
         n = int((r or {}).get('n') or 0)
-        out['catalogue_dupes'] = (_warn(f'{n} college course list(s) show the same course twice') if n else
-                                  _ok('No duplicate courses in college course lists'))
+        out['catalogue_dupes'] = (_warn(f'{n} college course line(s) are listed twice with identical details') if n else
+                                  _ok('No exact duplicate courses in college course lists'))
         conn.close()
     except Exception as e:
         try:
