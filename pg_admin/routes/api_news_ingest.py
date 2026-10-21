@@ -677,11 +677,11 @@ def api_seatmatrix_dump():
                 "FROM pg_seat_matrix WHERE COALESCE(section,'') NOT IN ('', 'nmc_initial') "
                 "AND COALESCE(cutoff_course,'')='' LIMIT 20").fetchall()]
             dupes = [dict(r) for r in conn.execute(
-                "SELECT c.master_id, m.name AS college, c.course, COUNT(*) AS n, "
+                "SELECT c.master_id, m.college_name AS college, c.course, COUNT(*) AS n, "
                 "COUNT(DISTINCT COALESCE(c.course_level,'')||'|'||COALESCE(c.course_stream,'')||'|'||"
                 "COALESCE(c.seat_intake,'')||'|'||COALESCE(c.course_category,'')) AS variants "
                 "FROM pg_college_course c LEFT JOIN pg_college_master m ON m.id = c.master_id "
-                "WHERE COALESCE(c.course,'')<>'' GROUP BY c.master_id, m.name, c.course HAVING COUNT(*) > 1 "
+                "WHERE COALESCE(c.course,'')<>'' GROUP BY c.master_id, m.college_name, c.course HAVING COUNT(*) > 1 "
                 "ORDER BY n DESC LIMIT 25").fetchall()]
             tot = conn.execute("SELECT COUNT(*) AS groups, COALESCE(SUM(n-1),0) AS extra, "
                                "COALESCE(SUM(CASE WHEN variants=1 THEN n-1 ELSE 0 END),0) AS identical_extra FROM ("
