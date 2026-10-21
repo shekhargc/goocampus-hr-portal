@@ -661,6 +661,28 @@ def api_news_inbox_status():
     return jsonify(out)
 
 
+def api_seatmatrix_dump():
+    """GET /api/pg/news-inbox/seatmatrix-dump?body=<counselling_body> (X-News-Key) — READ-ONLY export of
+    stored seat-matrix rows, to compare a newer official PDF against what is online. Staging tool
+    (2026-10-21), like cutoffs-dump."""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    body = (request.args.get('body') or '').strip()
+    conn = get_db()
+    try:
+        bodies = [dict(r) for r in conn.execute(
+            "SELECT counselling_body, COUNT(*) AS n, COALESCE(SUM(seats),0) AS seats FROM pg_seat_matrix "
+            "GROUP BY counselling_body ORDER BY counselling_body").fetchall()]
+        rows = []
+        if body:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT college_code, state, college_name, category, course_name, seats FROM pg_seat_matrix "
+                "WHERE counselling_body = ? ORDER BY id", (body,)).fetchall()]
+        return jsonify({'ok': True, 'bodies': bodies, 'rows': rows})
+    finally:
+        conn.close()
+
+
 def api_cutoffs_dump():
     """GET /api/pg/news-inbox/cutoffs-dump?year=2025 (X-News-Key) — READ-ONLY export of the stored
     cut-off rows (the same public data the predictor serves) so an updated Excel can be checked

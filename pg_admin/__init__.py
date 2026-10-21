@@ -202,6 +202,8 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_known, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/ingest', 'api_news_inbox_ingest',
                      api_news_ingest.api_news_inbox_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/news-inbox/seatmatrix-dump', 'api_seatmatrix_dump',
+                     api_news_ingest.api_seatmatrix_dump, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/cutoffs-dump', 'api_cutoffs_dump',
                      api_news_ingest.api_cutoffs_dump, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/status', 'api_news_inbox_status',
