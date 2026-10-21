@@ -671,6 +671,25 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('dq') == '1':      # data-quality drill-down (staging tool, read-only)
+            unlinked = [dict(r) for r in conn.execute(
+                "SELECT counselling_body, college_code, college_name, course_name, quota, category_code, seats "
+                "FROM pg_seat_matrix WHERE COALESCE(section,'') NOT IN ('', 'nmc_initial') "
+                "AND COALESCE(cutoff_course,'')='' LIMIT 20").fetchall()]
+            dupes = [dict(r) for r in conn.execute(
+                "SELECT c.master_id, m.name AS college, c.course, COUNT(*) AS n, "
+                "COUNT(DISTINCT COALESCE(c.course_level,'')||'|'||COALESCE(c.course_stream,'')||'|'||"
+                "COALESCE(c.seat_intake,'')||'|'||COALESCE(c.course_category,'')) AS variants "
+                "FROM pg_college_course c LEFT JOIN pg_college_master m ON m.id = c.master_id "
+                "WHERE COALESCE(c.course,'')<>'' GROUP BY c.master_id, m.name, c.course HAVING COUNT(*) > 1 "
+                "ORDER BY n DESC LIMIT 25").fetchall()]
+            tot = conn.execute("SELECT COUNT(*) AS groups, COALESCE(SUM(n-1),0) AS extra, "
+                               "COALESCE(SUM(CASE WHEN variants=1 THEN n-1 ELSE 0 END),0) AS identical_extra FROM ("
+                               "SELECT COUNT(*) AS n, COUNT(DISTINCT COALESCE(course_level,'')||'|'||COALESCE(course_stream,'')"
+                               "||'|'||COALESCE(seat_intake,'')||'|'||COALESCE(course_category,'')) AS variants "
+                               "FROM pg_college_course WHERE COALESCE(course,'')<>'' GROUP BY master_id, course "
+                               "HAVING COUNT(*) > 1) d").fetchone()
+            return jsonify({'ok': True, 'unlinked': unlinked, 'dupes': dupes, 'dupe_totals': dict(tot)})
         bodies = [dict(r) for r in conn.execute(
             "SELECT counselling_body, COUNT(*) AS n, COALESCE(SUM(seats),0) AS seats FROM pg_seat_matrix "
             "GROUP BY counselling_body ORDER BY counselling_body").fetchall()]
