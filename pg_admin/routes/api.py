@@ -698,6 +698,9 @@ def api_pg_predictor_courses():
         limit = min(int(request.args.get('limit') or 20), 50)
     except (TypeError, ValueError):
         limit = 20
+    # all=1 → the COMPLETE course list A–Z, uncapped — for dropdowns (Management/NRI enquiry form's
+    # speciality 1/2/3), so no course is ever cut off. (2026-10-21)
+    want_all = (request.args.get('all') or '').strip() in ('1', 'true', 'yes')
     conn = get_db()
     courses = []
     try:
@@ -739,7 +742,10 @@ def api_pg_predictor_courses():
                     f" WHERE {' AND '.join(where)} "
                     f" GROUP BY course ORDER BY n DESC, course ASC", params).fetchall()]
                 perf.cache_set(ck, scope, ttl=1800)
-            courses = [c for c, _n in scope if smart_name_match(c, q)][:limit]
+            if want_all:
+                courses = sorted({c for c, _n in scope if smart_name_match(c, q)}, key=lambda x: x.lower())
+            else:
+                courses = [c for c, _n in scope if smart_name_match(c, q)][:limit]
     except Exception as e:
         logging.error("api_pg_predictor_courses: %s", e)
     finally:
