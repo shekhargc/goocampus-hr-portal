@@ -40,6 +40,8 @@ from pg_admin import news_scraper as _news_scraper
 def register_pg_admin(app):
     from pg_admin import perf as _perf
     _perf.register(app)          # gzip + Cache-Control on public /api/pg/* GETs (2026-10-09)
+    from pg_admin import site_refresh as _site_refresh
+    _site_refresh.register(app)  # tell goocampus.in to rebuild pages after data changes (2026-10-21)
     # Make pg_admin/templates/ resolvable as 'pg_admin/<name>.html'
     tpl_dir = os.path.join(os.path.dirname(__file__), 'templates')
     app.jinja_loader = ChoiceLoader([app.jinja_loader, FileSystemLoader(tpl_dir)])
