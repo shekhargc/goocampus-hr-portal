@@ -675,9 +675,14 @@ def api_seatmatrix_dump():
             "GROUP BY counselling_body ORDER BY counselling_body").fetchall()]
         rows = []
         if body:
+            from pg_admin.routes.seat_matrix_ingest import _ROW_COLS
             rows = [dict(r) for r in conn.execute(
-                "SELECT college_code, state, college_name, category, course_name, seats FROM pg_seat_matrix "
+                "SELECT " + ', '.join(_ROW_COLS) + " FROM pg_seat_matrix "
                 "WHERE counselling_body = ? ORDER BY id", (body,)).fetchall()]
+            for r in rows:
+                for k, v in list(r.items()):
+                    if v is not None and not isinstance(v, (int, float, str)):
+                        r[k] = float(v) if type(v).__name__ == 'Decimal' else str(v)
         return jsonify({'ok': True, 'bodies': bodies, 'rows': rows})
     finally:
         conn.close()
