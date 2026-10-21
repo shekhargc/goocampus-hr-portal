@@ -649,7 +649,8 @@ def api_news_inbox_status():
                             'document_groups': [{'category': g.get('category'), 'n': len(g.get('documents') or []),
                                                  'titles': [x.get('title') for x in (g.get('documents') or [])][:6]}
                                                 for g in (body.get('document_groups') or [])],
-                            'news': len(body.get('news') or []), 'keys': sorted(body.keys())}
+                            'news': len(body.get('news') or []), 'keys': sorted(body.keys()),
+                            'seat_matrix': body.get('seat_matrix')}
                 out['api:' + path] = {'status': r.status_code, 'body': body}
             r = c.get('/api/pg/authorities', query_string={'all': '1'}, environ_overrides={'pg.internal_check': True})
             out['api:/api/pg/authorities?all=1'] = {'status': r.status_code, 'authorities': [
