@@ -431,6 +431,59 @@ def api_news_inbox_upload_url():
     return jsonify({'ok': True, 'key': key, 'put_url': url, 'already': bool(have)})
 
 
+# Course-name tables a rename must keep in step (the cut-off rows, the college master's course list,
+# and doctors' saved choice items that point at those rows).
+_COURSE_TABLES = (('pg_cutoffs', 'course'), ('pg_college_course', 'course'), ('pg_choice_items', 'course'))
+
+
+def api_maint_course_rename():
+    """POST /api/pg/maint/course-rename {from, to, apply} (X-News-Key) — fix a wrongly-named course in the
+    cut-off data (e.g. 'M.D. Fecal Microbiota Transplantation' = MD (FMT) Forensic Medicine, founder
+    2026-10-21). Without apply=true it only COUNTS the matching rows (preview); with apply=true it renames
+    exactly those rows in every course table above and logs it. `to` must already be an existing course
+    name, so a typo can't invent a new speciality. (2026-10-21)"""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    b = request.get_json(silent=True) or {}
+    old = str(b.get('from') or '').strip()
+    new = str(b.get('to') or '').strip()
+    apply = b.get('apply') is True
+    if not old or not new or old == new:
+        return jsonify({'ok': False, 'error': 'need from + to (different)'}), 400
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM pg_cutoffs WHERE course = ? LIMIT 1", (new,)).fetchone():
+            return jsonify({'ok': False, 'error': f'"{new}" is not an existing course name'}), 400
+        counts = {}
+        for t, col in _COURSE_TABLES:
+            try:
+                counts[t] = int(conn.execute(f"SELECT COUNT(*) AS n FROM {t} WHERE {col} = ?", (old,)).fetchone()['n'])
+            except Exception:
+                conn.rollback(); counts[t] = None
+        if apply:
+            for t, col in _COURSE_TABLES:
+                if counts.get(t):
+                    conn.execute(f"UPDATE {t} SET {col} = ? WHERE {col} = ?", (new, old))
+            conn.execute("CREATE TABLE IF NOT EXISTS pg_course_rename_log (id SERIAL PRIMARY KEY, old_name TEXT, "
+                         "new_name TEXT, counts TEXT, done_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            conn.execute("INSERT INTO pg_course_rename_log (old_name, new_name, counts) VALUES (?,?,?)",
+                         (old, new, json.dumps(counts)))
+            conn.commit()
+            try:
+                from pg_admin import perf
+                perf._VER.update(at=0, v=None)          # course lists rebuild on the next request
+            except Exception:
+                pass
+        return jsonify({'ok': True, 'applied': apply, 'from': old, 'to': new, 'rows': counts})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("course rename: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 def api_news_inbox_undated():
     """GET /api/pg/news-inbox/undated (X-News-Key) — unpublished notices the website listed without
     a date (New / Documents only), so the Mac can read the date printed on each PDF. (2026-10-17)"""

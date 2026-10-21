@@ -208,6 +208,8 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_status, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/heartbeat', 'api_news_inbox_heartbeat',
                      api_news_ingest.api_news_inbox_heartbeat, methods=['POST'])
+    app.add_url_rule('/api/pg/maint/course-rename', 'api_maint_course_rename',
+                     api_news_ingest.api_maint_course_rename, methods=['POST'])
     app.add_url_rule('/api/pg/news-inbox/review', 'api_news_inbox_review',
                      api_news_ingest.api_news_inbox_review, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/hold', 'api_news_inbox_hold',
