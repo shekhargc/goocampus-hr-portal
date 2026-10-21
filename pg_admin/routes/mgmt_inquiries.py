@@ -76,6 +76,10 @@ def ensure_table(conn):
         last_enquiry_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_mgmt_inq_m10 ON pg_mgmt_inquiries (mobile10)")
+    # up to 3 speciality interests (website dropdowns) + the matching registered doctor (2026-10-21)
+    for col in ("speciality_1 TEXT DEFAULT ''", "speciality_2 TEXT DEFAULT ''", "speciality_3 TEXT DEFAULT ''",
+                "pg_user_id INTEGER"):
+        conn.execute(f"ALTER TABLE pg_mgmt_inquiries ADD COLUMN IF NOT EXISTS {col}")
     conn.commit()
     _READY = True
 
@@ -105,6 +109,36 @@ def record_lead(conn, data):
         'message': _s(data.get('message'), 2000),
         'source_page': _s(data.get('source_page'), 300),
     }
+    # up to three speciality interests — a list `specialities` or speciality_1..3 (dropdown values)
+    specs = data.get('specialities') if isinstance(data.get('specialities'), list) else \
+        [data.get('speciality_1'), data.get('speciality_2'), data.get('speciality_3')]
+    specs = [x for x in (_s(v, 200) for v in specs) if x]
+    if not specs and fields['target_speciality']:
+        specs = [fields['target_speciality']]
+    for n in (1, 2, 3):
+        fields[f'speciality_{n}'] = specs[n - 1] if len(specs) >= n else ''
+    # a registered goocampus.in doctor (same mobile)? → link them, and take rank / state from their
+    # profile when the form didn't send them (founder 2026-10-21)
+    uid = None
+    if m10:
+        try:
+            u = conn.execute("SELECT id, state, neet_pg_rank, name, email FROM pg_users "
+                             "WHERE RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) = ? "
+                             "ORDER BY id ASC LIMIT 1", (m10,)).fetchone()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            u = None
+        if u:
+            uid = u['id']
+            if not fields['state'] and (u['state'] or '').strip():
+                fields['state'] = u['state'].strip()
+            if not fields['neet_pg_rank'] and u['neet_pg_rank']:
+                fields['neet_pg_rank'] = str(u['neet_pg_rank'])
+            if not name and (u['name'] or '').strip():
+                name = u['name'].strip()
+            if not email and (u['email'] or '').strip():
+                email = u['email'].strip().lower()
     row = conn.execute("SELECT id FROM pg_mgmt_inquiries WHERE (mobile10 <> '' AND mobile10 = ?) "
                        "OR (? <> '' AND LOWER(email) = ?) ORDER BY id ASC LIMIT 1", (m10, email, email)).fetchone()
     if row:
@@ -117,6 +151,8 @@ def record_lead(conn, data):
             sets.append("budget_order = ?"); vals.append(budget_order(fields['budget_range']))
         if name:
             sets.append("name = CASE WHEN COALESCE(name,'') = '' THEN ? ELSE name END"); vals.append(name)
+        if uid:
+            sets.append("pg_user_id = ?"); vals.append(uid)
         conn.execute(f"UPDATE pg_mgmt_inquiries SET {', '.join(sets)} WHERE id = ?", vals + [iid])
         conn.commit()
         try:
@@ -133,11 +169,13 @@ def record_lead(conn, data):
         return iid
     iid = conn.execute(
         "INSERT INTO pg_mgmt_inquiries (name, phone, mobile10, email, neet_pg_year, neet_pg_rank, state, "
-        "target_speciality, interest, budget_range, budget_order, message, source_page) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+        "target_speciality, interest, budget_range, budget_order, message, source_page, "
+        "speciality_1, speciality_2, speciality_3, pg_user_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
         (name, phone, m10, email, fields['neet_pg_year'], fields['neet_pg_rank'], fields['state'],
          fields['target_speciality'], fields['interest'], fields['budget_range'],
-         budget_order(fields['budget_range']), fields['message'], fields['source_page'])).fetchone()['id']
+         budget_order(fields['budget_range']), fields['message'], fields['source_page'],
+         fields['speciality_1'], fields['speciality_2'], fields['speciality_3'], uid)).fetchone()['id']
     conn.commit()
     return iid
 
@@ -194,7 +232,7 @@ _REG_WINDOWS = {
 
 
 def _back_args():
-    return {k: (request.values.get(k) or '') for k in ('q', 'status', 'budget', 'reg', 'sort', 'page')
+    return {k: (request.values.get(k) or '') for k in ('q', 'status', 'budget', 'reg', 'user', 'sort', 'page')
             if request.values.get(k)}
 
 
@@ -207,6 +245,7 @@ def mgmt_inquiries():
     f_status = (request.args.get('status') or '').strip()
     f_budget = (request.args.get('budget') or '').strip()
     f_reg = (request.args.get('reg') or '').strip()
+    f_user = (request.args.get('user') or '').strip()      # 'yes' registered doctor | 'no' not registered
     sort = (request.args.get('sort') or 'newest').strip()
     try:
         page = max(1, int(request.args.get('page') or 1))
@@ -230,6 +269,12 @@ def mgmt_inquiries():
             conds.append("COALESCE(i.budget_order,-1) < 0")
         if f_reg in _REG_WINDOWS:
             conds.append(_REG_WINDOWS[f_reg][1])
+        _isreg = ("EXISTS (SELECT 1 FROM pg_users pu WHERE i.mobile10 <> '' AND "
+                  "RIGHT(regexp_replace(COALESCE(pu.mobile,''),'\\D','','g'),10) = i.mobile10)")
+        if f_user == 'yes':
+            conds.append(_isreg)
+        elif f_user == 'no':
+            conds.append("NOT " + _isreg)
         where = (' WHERE ' + ' AND '.join(conds)) if conds else ''
         order = ("COALESCE(i.budget_order,-1) DESC, i.last_enquiry_at DESC, i.id DESC" if sort == 'budget'
                  else "i.last_enquiry_at DESC, i.id DESC")
@@ -245,17 +290,25 @@ def mgmt_inquiries():
         total = len(rows)
         page = min(page, max(1, (total + _PER_PAGE - 1) // _PER_PAGE))
         items = rows[(page - 1) * _PER_PAGE: page * _PER_PAGE]
-        # registered goocampus.in doctor? (match by last-10 mobile) + full thread for the drawer
+        # registered goocampus.in doctor? (match by last-10 mobile) — with their category
+        # (Free / Paid / Internal / Team) and profile rank/state — + full thread for the drawer
         m10s = [r['mobile10'] for r in items if r.get('mobile10')]
         reg = {}
         if m10s:
+            from pg_admin.routes.users_admin import _category_case, _CATEGORY_LABELS
             for u in conn.execute(
-                    "SELECT id, RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) AS m10 FROM pg_users "
-                    "WHERE RIGHT(regexp_replace(COALESCE(mobile,''),'\\D','','g'),10) IN (" + ','.join(['?'] * len(m10s)) + ")",
-                    tuple(m10s)).fetchall():
-                reg.setdefault(u['m10'], u['id'])
+                    f"SELECT u.id, u.state, u.neet_pg_rank, u.created_at, ({_category_case('u')}) AS cat, "
+                    "RIGHT(regexp_replace(COALESCE(u.mobile,''),'\\D','','g'),10) AS m10 FROM pg_users u "
+                    "WHERE RIGHT(regexp_replace(COALESCE(u.mobile,''),'\\D','','g'),10) IN (" + ','.join(['?'] * len(m10s)) + ") "
+                    "ORDER BY u.id ASC", tuple(m10s)).fetchall():
+                if u['m10'] not in reg:
+                    u = dict(u)
+                    u['cat_label'] = _CATEGORY_LABELS.get(u['cat'], u['cat'])
+                    reg[u['m10']] = u
         for r in items:
-            r['reg_doctor_id'] = reg.get(r.get('mobile10'))
+            ru = reg.get(r.get('mobile10'))
+            r['reg_user'] = ru
+            r['reg_doctor_id'] = ru['id'] if ru else None
             r['thread'] = [dict(t) for t in _fu.get_thread(conn, r['phone'], r['email'])]
             r['state_now'] = _fu.current_state(conn, r['phone'], r['email'])
         can_edit = bool(_require('edit'))
@@ -269,7 +322,7 @@ def mgmt_inquiries():
     from pg_admin import followups as _fu2
     return render_template('pg_admin/mgmt_inquiries.html', items=items, total=total, page=page,
                            total_pages=max(1, (total + _PER_PAGE - 1) // _PER_PAGE),
-                           q=q, f_status=f_status, f_budget=f_budget, f_reg=f_reg, sort=sort,
+                           q=q, f_status=f_status, f_budget=f_budget, f_reg=f_reg, sort=sort, f_user=f_user,
                            statuses=statuses, budgets=BUDGETS,
                            reg_options=[(k, v[0]) for k, v in _REG_WINDOWS.items()],
                            time_slots=_fu2.TIME_SLOTS, date_statuses=_fu2.DATE_STATUSES,

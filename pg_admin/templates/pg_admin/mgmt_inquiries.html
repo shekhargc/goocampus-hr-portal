@@ -71,27 +71,35 @@
     <option value="">Received: any time</option>
     {% for k, lbl in reg_options %}<option value="{{ k }}" {{ 'selected' if f_reg==k }}>Received: {{ lbl }}</option>{% endfor %}
   </select>
+  <select name="user" onchange="this.form.submit()" title="Matched with goocampus.in by mobile number">
+    <option value="">Registered or not</option>
+    <option value="yes" {{ 'selected' if f_user=='yes' }}>Registered on goocampus.in</option>
+    <option value="no" {{ 'selected' if f_user=='no' }}>Not registered</option>
+  </select>
   <select name="sort" onchange="this.form.submit()">
     <option value="newest" {{ 'selected' if sort!='budget' }}>Newest first</option>
     <option value="budget" {{ 'selected' if sort=='budget' }}>Highest budget first</option>
   </select>
   <button class="mi-btn mi-btn-primary" type="submit">Search</button>
-  {% if q or f_status or f_budget or f_reg or sort=='budget' %}<a class="mi-btn mi-btn-ghost" href="/admin/pg/mgmt-inquiries">Clear</a>{% endif %}
+  {% if q or f_status or f_budget or f_reg or f_user or sort=='budget' %}<a class="mi-btn mi-btn-ghost" href="/admin/pg/mgmt-inquiries">Clear</a>{% endif %}
   <span style="font-size:0.82rem;color:var(--gray-500);">{{ total }} enquir{{ 'y' if total == 1 else 'ies' }}</span>
 </form>
 
 {% if items %}
 <div style="overflow-x:auto;">
 <table class="mi-table">
-  <thead><tr><th>Doctor</th><th>Budget</th><th>NEET-PG</th><th>State</th><th>Status</th><th>Next follow-up</th><th>Received</th></tr></thead>
+  <thead><tr><th>Doctor</th><th>goocampus.in</th><th>Budget</th><th>Specialities</th><th>NEET-PG</th><th>State</th><th>Status</th><th>Next follow-up</th><th>Received</th></tr></thead>
   <tbody>
   {% for r in items %}
     {% set st = r.fu_status or 'New' %}
     <tr class="mi-row" onclick="miOpen({{ r.id }})">
       <td><div class="mi-name">{{ (r.name|dr_name) or '(no name)' }}{% if r.enquiry_count and r.enquiry_count > 1 %} <span class="chip b1" title="Enquired {{ r.enquiry_count }} times">×{{ r.enquiry_count }}</span>{% endif %}
-            {% if r.reg_doctor_id %}<span class="chip" style="background:#ede9fe;color:#5b21b6;" title="Also a registered goocampus.in doctor">Registered</span>{% endif %}</div>
+            </div>
           <div class="mi-sub">{{ r.phone }}{% if r.email %} · {{ r.email }}{% endif %}</div></td>
+      {% set catc = {'team':['#f3e8ff','#6b21a8'],'internal':['#fde9d6','#c2410c'],'paid':['#dcfce7','#166534'],'free':['#e0f2fe','#075985']} %}
+      <td style="white-space:nowrap;">{% if r.reg_user %}<span class="chip" style="background:{{ catc.get(r.reg_user.cat,['#f3f4f6','#374151'])[0] }};color:{{ catc.get(r.reg_user.cat,['#f3f4f6','#374151'])[1] }};" title="Registered on goocampus.in (matched by mobile)">Registered · {{ r.reg_user.cat_label }}</span>{% else %}<span class="chip b0">Not registered</span>{% endif %}</td>
       <td>{% if r.budget_range %}<span class="chip b{{ r.budget_order if r.budget_order is not none and r.budget_order >= 0 else 'n' }}">{{ r.budget_range }}</span>{% else %}<span class="mi-sub">—</span>{% endif %}</td>
+      <td style="font-size:0.8rem;">{% set sp = [r.speciality_1, r.speciality_2, r.speciality_3]|select|list %}{% if sp %}{% for x in sp %}<div>{{ loop.index }}. {{ x }}</div>{% endfor %}{% else %}<span class="mi-sub">—</span>{% endif %}</td>
       <td>{% if r.neet_pg_rank %}Rank {{ r.neet_pg_rank }}{% elif r.neet_pg_year %}{{ r.neet_pg_year }}{% else %}<span class="mi-sub">—</span>{% endif %}</td>
       <td>{{ r.state or '—' }}</td>
       <td><span class="chip" style="background:{{ fc.get(st,['#f3f4f6','#6b7280'])[0] }};color:{{ fc.get(st,['#f3f4f6','#6b7280'])[1] }};">{{ st }}</span></td>
@@ -105,7 +113,7 @@
 
 {% if total_pages > 1 %}
 <div class="mi-pager">
-  {% set qs = '&q=' ~ (q|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&budget=' ~ (f_budget|urlencode) ~ '&reg=' ~ (f_reg|urlencode) ~ '&sort=' ~ (sort|urlencode) %}
+  {% set qs = '&q=' ~ (q|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&budget=' ~ (f_budget|urlencode) ~ '&reg=' ~ (f_reg|urlencode) ~ '&user=' ~ (f_user|urlencode) ~ '&sort=' ~ (sort|urlencode) %}
   {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
   <span class="cur">{{ page }} / {{ total_pages }}</span>
   {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}
@@ -125,17 +133,21 @@
     <div>Email</div><div>{{ r.email or '—' }}</div>
     <div>Budget</div><div>{{ r.budget_range or '—' }}</div>
     <div>Interest</div><div>{{ r.interest or '—' }}</div>
+    {% set sp = [r.speciality_1, r.speciality_2, r.speciality_3]|select|list %}
+    <div>Specialities</div><div>{% if sp %}{% for x in sp %}{{ loop.index }}. {{ x }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% else %}—{% endif %}</div>
     <div>NEET-PG</div><div>{% if r.neet_pg_year %}{{ r.neet_pg_year }}{% endif %}{% if r.neet_pg_rank %} · Rank {{ r.neet_pg_rank }}{% endif %}{% if not r.neet_pg_year and not r.neet_pg_rank %}—{% endif %}</div>
     <div>State</div><div>{{ r.state or '—' }}</div>
     {% if r.target_speciality %}<div>Speciality</div><div>{{ r.target_speciality }}</div>{% endif %}
     <div>From page</div><div style="word-break:break-all;">{{ r.source_page or '—' }}</div>
-    {% if r.reg_doctor_id %}<div>goocampus.in</div><div>Registered doctor{% if can_access('goocampus_in','users','view') %} — <a href="/admin/pg/users/{{ r.reg_doctor_id }}">open profile</a>{% endif %}</div>{% endif %}
+    <div>goocampus.in</div><div>{% if r.reg_user %}Registered · <b>{{ r.reg_user.cat_label }}</b> plan{% if r.reg_user.created_at %} · since {{ (r.reg_user.created_at|format_datetime).split(',')[0] }}{% endif %}{% if can_access('goocampus_in','users','view') %} — <a href="/admin/pg/users/{{ r.reg_user.id }}">open profile</a>{% endif %}
+      {% if r.reg_user.neet_pg_rank or r.reg_user.state %}<div class="mi-sub">Profile: {% if r.reg_user.neet_pg_rank %}Rank {{ r.reg_user.neet_pg_rank }}{% endif %}{% if r.reg_user.state %} · {{ r.reg_user.state }}{% endif %}</div>{% endif %}
+      {% else %}Not registered (no goocampus.in account with this mobile){% endif %}</div>
   </div>
   {% if r.message %}<div class="mi-box" style="white-space:pre-wrap;font-size:0.86rem;"><b style="font-size:0.72rem;color:var(--gray-500);text-transform:uppercase;">Message</b><br>{{ r.message }}</div>{% endif %}
 
   {% if can_edit %}
   <form class="mi-box" method="POST" action="/admin/pg/mgmt-inquiries/{{ r.id }}/followup">
-    {% for k in ['q','status','budget','reg','sort','page'] %}{% if request.args.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.args.get(k) }}">{% endif %}{% endfor %}
+    {% for k in ['q','status','budget','reg','user','sort','page'] %}{% if request.args.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.args.get(k) }}">{% endif %}{% endfor %}
     <b style="font-size:0.8rem;color:var(--navy);">Add follow-up</b>
     <label>Status</label>
     <select name="status" onchange="miDate(this)">
@@ -170,7 +182,7 @@
 {% endfor %}
 {% else %}
 <div style="text-align:center;padding:2.5rem;color:var(--gray-500);background:#fff;border:1px solid var(--gray-200);border-radius:0.6rem;">
-  No Management / NRI enquiries{% if q or f_status or f_budget or f_reg %} match these filters{% else %} yet — they appear here as soon as doctors request a call-back on the Management / NRI pages{% endif %}.
+  No Management / NRI enquiries{% if q or f_status or f_budget or f_reg or f_user %} match these filters{% else %} yet — they appear here as soon as doctors request a call-back on the Management / NRI pages{% endif %}.
 </div>
 {% endif %}
 
