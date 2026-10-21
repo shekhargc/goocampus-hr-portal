@@ -180,8 +180,15 @@ def lists_index():
     try:
         ensure_tables(conn)
         if request.method == 'GET':
-            if not conn.execute("SELECT 1 FROM pg_team_college_lists LIMIT 1").fetchone():
-                _generate_all(conn, who)          # first visit: All-India + one per state, ready to edit
+            # All-India + one list per state are created automatically ONCE (founder 2026-10-21: a
+            # hand-made Karnataka list existed, so the old "only when there are no lists at all" rule never
+            # fired). Idempotent — only missing lists are added, existing ones are never touched; the
+            # marker stops a list the team deliberately deleted from coming back.
+            conn.execute("CREATE TABLE IF NOT EXISTS pg_team_college_lists_meta (k TEXT PRIMARY KEY, v TEXT)")
+            if not conn.execute("SELECT 1 FROM pg_team_college_lists_meta WHERE k='auto_generated_v2'").fetchone():
+                _generate_all(conn, who)
+                conn.execute("INSERT INTO pg_team_college_lists_meta (k, v) VALUES ('auto_generated_v2', ?) "
+                             "ON CONFLICT (k) DO NOTHING", [who])
                 conn.commit()
             rows = [dict(r) for r in conn.execute(
                 "SELECT l.id, l.name, l.kind, COALESCE(l.mode,'by_state') AS mode, l.states_filter, "
