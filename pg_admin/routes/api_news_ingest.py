@@ -479,6 +479,13 @@ def api_maint_course_rename():
                                  "AND x.course = ?)", (new, old, new))
                 else:
                     conn.execute(f"UPDATE {t} SET {col} = ? WHERE {col} = ?", (new, old))
+            if b.get('drop_duplicates') is True and dup:
+                # founder-approved (2026-10-21): the mis-named line of a college that ALREADY lists the
+                # target course is a duplicate → remove it (the correct line stays)
+                conn.execute("DELETE FROM pg_college_course WHERE course = ? AND EXISTS ("
+                             "SELECT 1 FROM pg_college_course x WHERE x.master_id = pg_college_course.master_id "
+                             "AND x.course = ?)", (old, new))
+                counts['pg_college_course_duplicates_removed'] = dup
             conn.execute("CREATE TABLE IF NOT EXISTS pg_course_rename_log (id SERIAL PRIMARY KEY, old_name TEXT, "
                          "new_name TEXT, counts TEXT, done_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
             conn.execute("INSERT INTO pg_course_rename_log (old_name, new_name, counts) VALUES (?,?,?)",
