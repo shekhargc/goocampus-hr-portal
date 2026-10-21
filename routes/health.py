@@ -316,6 +316,91 @@ def _check_stats_data():
         return _warn(f'Could not read statistics data: {e}')
 
 
+# ---------------------------------------------------------------- data quality (goocampus.in data)
+def _approved_courses():
+    """The founder's approved speciality list (pg_admin/data/specialty_sheet.json)."""
+    import json as _json
+    try:
+        p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pg_admin', 'data',
+                         'specialty_sheet.json')
+        return {x['course'] for x in _json.load(open(p))['courses']}
+    except Exception:
+        return set()
+
+
+def _check_data_quality():
+    """Automatic sanity checks on the NEET-PG data doctors see (founder 2026-10-21, after a mis-expanded
+    course name — 'M.D. Fecal Microbiota Transplantation' for MD (FMT) Forensic Medicine — slipped in
+    with a cut-off file). Read-only. Returns {key: result}."""
+    from db import get_db
+    out = {}
+    conn = None
+    try:
+        conn = get_db()
+        # 1. cut-off course names must be on the approved speciality list
+        approved = _approved_courses()
+        yr = (conn.execute("SELECT COALESCE(MAX(year),0) AS y FROM pg_cutoffs").fetchone() or {}).get('y') or 0
+        names = [(r['course'], r['n']) for r in conn.execute(
+            "SELECT course, COUNT(*) AS n FROM pg_cutoffs WHERE year = ? AND COALESCE(is_reference,0)=0 "
+            "AND COALESCE(course,'') <> '' GROUP BY course ORDER BY course", (yr,)).fetchall()]
+        odd = [f'"{c}" ({n})' for c, n in names if approved and c not in approved]
+        if not approved:
+            out['courses'] = _warn('Approved speciality list not found — course names not checked')
+        elif odd:
+            out['courses'] = _warn(f'{len(odd)} cut-off course name(s) not on the approved speciality list — '
+                                   f'check for typos / wrong expansions: ' + ', '.join(odd[:6]) +
+                                   (' …' if len(odd) > 6 else ''))
+        else:
+            out['courses'] = _ok(f'All {len(names)} course names in the {yr} cut-offs are on the approved list')
+        # 2. every published seat matrix: stored totals == its rows (what doctors see adds up)
+        bad, n_src = [], 0
+        for r in conn.execute(
+                "SELECT s.counselling_body, s.academic_year, s.row_count, s.total_seats, "
+                "(SELECT COUNT(*) FROM pg_seat_matrix m WHERE m.counselling_body=s.counselling_body "
+                " AND m.academic_year=s.academic_year) AS rows_now, "
+                "(SELECT COALESCE(SUM(seats),0) FROM pg_seat_matrix m WHERE m.counselling_body=s.counselling_body "
+                " AND m.academic_year=s.academic_year) AS seats_now "
+                "FROM pg_seat_matrix_source s WHERE COALESCE(s.superseded,0)=0").fetchall():
+            n_src += 1
+            if int(r['row_count'] or 0) != int(r['rows_now'] or 0) or int(r['total_seats'] or 0) != int(r['seats_now'] or 0):
+                bad.append(f"{r['counselling_body']} (file {r['total_seats']} seats / stored {r['seats_now']})")
+        out['matrix_totals'] = (_down('Seat-matrix totals don\'t add up: ' + '; '.join(bad[:4])) if bad else
+                                _ok(f'All {n_src} published seat matrices add up to their file totals'))
+        # 3. seat-matrix lines with no college code or no seats
+        r = conn.execute("SELECT COUNT(*) AS n FROM pg_seat_matrix m JOIN pg_seat_matrix_source s "
+                         "ON s.counselling_body=m.counselling_body AND s.academic_year=m.academic_year "
+                         "WHERE COALESCE(s.superseded,0)=0 AND COALESCE(s.section,'') NOT IN ('', 'nmc_initial') "
+                         "AND (COALESCE(m.college_code,'')='' OR COALESCE(m.seats,0) <= 0)").fetchone()
+        n = int((r or {}).get('n') or 0)
+        out['matrix_rows'] = (_warn(f'{n} official seat-matrix line(s) have no college code or 0 seats') if n else
+                              _ok('Every official seat-matrix line has a college code and seats'))
+        # 4. official seat-matrix courses that couldn't be linked to a cut-off course name
+        r = conn.execute("SELECT COUNT(*) AS n, COUNT(DISTINCT m.course_name) AS c FROM pg_seat_matrix m "
+                         "JOIN pg_seat_matrix_source s ON s.counselling_body=m.counselling_body "
+                         "AND s.academic_year=m.academic_year WHERE COALESCE(s.superseded,0)=0 "
+                         "AND COALESCE(s.section,'') NOT IN ('', 'nmc_initial') AND COALESCE(m.cutoff_course,'')=''").fetchone()
+        n, c = int((r or {}).get('n') or 0), int((r or {}).get('c') or 0)
+        out['matrix_courses'] = (_warn(f'{n} seat-matrix line(s) across {c} course name(s) are not linked to a '
+                                       f'cut-off course (predictor/rankings can\'t use them)') if n else
+                                 _ok('Every official seat-matrix course is linked to a cut-off course'))
+        # 5. duplicate lines in a college's course catalogue
+        r = conn.execute("SELECT COUNT(*) AS n FROM (SELECT master_id, course FROM pg_college_course "
+                         "WHERE COALESCE(course,'')<>'' GROUP BY master_id, course HAVING COUNT(*) > 1) d").fetchone()
+        n = int((r or {}).get('n') or 0)
+        out['catalogue_dupes'] = (_warn(f'{n} college course list(s) show the same course twice') if n else
+                                  _ok('No duplicate courses in college course lists'))
+        conn.close()
+    except Exception as e:
+        try:
+            if conn:
+                conn.rollback(); conn.close()
+        except Exception:
+            pass
+        for k in ('courses', 'matrix_totals', 'matrix_rows', 'matrix_courses', 'catalogue_dupes'):
+            out.setdefault(k, _warn(f'Could not run the data check: {e}'))
+    return out
+
+
 # ---------------------------------------------------------------- network checks (run in threads)
 def _check_storage():
     try:
@@ -430,6 +515,7 @@ def health_dashboard():
     j_sales = _check_sales_verification()
     j_ops = _check_ops_verification()
     j_onb = _check_onboarding_completion()
+    dq = _check_data_quality()
 
     # Slow, outbound (network) checks — run in parallel to keep the page snappy.
     net = {}
@@ -491,6 +577,18 @@ def health_dashboard():
                 dict(label='Doctor sign-ups flowing in', **signups),
                 dict(label='Doctor profiles complete (onboarding sync)', **sync),
                 dict(label='Predictor / cut-off / mentor data', **stats),
+            ],
+        },
+        {
+            'title': 'GooCampus.in — Data quality (seat matrix & cut-offs)',
+            'icon': '🔎',
+            'note': 'Automatic checks on the NEET-PG data doctors see: course names against your approved speciality list, seat-matrix totals vs the official files, unlinked or blank lines, duplicate course lines.',
+            'checks': [
+                dict(label='Cut-off course names (approved list)', **dq['courses']),
+                dict(label='Seat-matrix totals match the official files', **dq['matrix_totals']),
+                dict(label='Seat-matrix lines complete', **dq['matrix_rows']),
+                dict(label='Seat-matrix courses linked to cut-offs', **dq['matrix_courses']),
+                dict(label='College course lists (no duplicates)', **dq['catalogue_dupes']),
             ],
         },
         {

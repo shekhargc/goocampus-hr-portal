@@ -75,8 +75,12 @@ def _seat_matrix_for(conn, authority):
     try:
         # Official sectioned matrices (MCC final: AIQ / CIQ / Deemed) → one combined summary.
         # The initial NMC file (section 'nmc_initial') is a separate thing and never counted here.
+        from pg_admin.routes.seat_matrix_ingest import ensure_prev_cols, change_payload
+        ensure_prev_cols(conn)
         secs = [dict(r) for r in conn.execute(
-            "SELECT counselling_body, academic_year, row_count, total_seats, section, "
+            "SELECT counselling_body, academic_year, row_count, total_seats, section, college_count, "
+            "prev_row_count, prev_college_count, prev_total_seats, prev_replaced_at, prev_source_file_name, "
+            "colleges_added, colleges_removed, "
             "(pdf_data IS NOT NULL) AS has_pdf FROM pg_seat_matrix_source WHERE authority_code = ? "
             "AND COALESCE(superseded,0)=0 AND COALESCE(section,'') NOT IN ('', 'nmc_initial') "
             "ORDER BY academic_year DESC, COALESCE(sort_order,0)", (authority['code'],)).fetchall()]
@@ -93,7 +97,8 @@ def _seat_matrix_for(conn, authority):
                     'college_count': colleges, 'total_seats': sum(x['total_seats'] or 0 for x in secs),
                     'has_pdf': any(x['has_pdf'] for x in secs),
                     'sections': [{'counselling_body': x['counselling_body'], 'section': x['section'],
-                                  'total_seats': x['total_seats'], 'has_pdf': bool(x['has_pdf'])} for x in secs]}
+                                  'total_seats': x['total_seats'], 'has_pdf': bool(x['has_pdf']),
+                                  **change_payload(x)} for x in secs]}
         row = conn.execute(sel + "WHERE authority_code = ? AND COALESCE(superseded,0)=0 "
                            "AND COALESCE(section,'') <> 'nmc_initial' ORDER BY academic_year DESC LIMIT 1",
                            (authority['code'],)).fetchone()

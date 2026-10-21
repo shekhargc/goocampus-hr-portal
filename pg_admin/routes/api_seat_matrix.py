@@ -155,17 +155,25 @@ def api_pg_seat_matrix_facets():
             f"COALESCE(SUM(CASE WHEN has_cutoff=0 THEN seats ELSE 0 END),0) AS new_seats, "
             f"COUNT(DISTINCT CASE WHEN new_reason='new_college' THEN college_code END) AS new_colleges {base}",
             p).fetchone()
+        from pg_admin.routes.seat_matrix_ingest import ensure_prev_cols, change_payload
+        ensure_prev_cols(conn)
         src = conn.execute(
             "SELECT source_file_name, pdf_name, uploaded_at, "
-            "(pdf_data IS NOT NULL) AS has_pdf, row_count, college_count, total_seats "
+            "(pdf_data IS NOT NULL) AS has_pdf, row_count, college_count, total_seats, "
+            "prev_row_count, prev_college_count, prev_total_seats, prev_replaced_at, prev_source_file_name, "
+            "colleges_added, colleges_removed "
             "FROM pg_seat_matrix_source WHERE counselling_body=? AND academic_year=?",
             (body, year)).fetchone()
+        src = dict(src) if src else None
+        chg = change_payload(src)
         # All bodies/years available (for a top-level switcher)
         # Current matrices only (an older provisional one that was superseded is hidden).
         available = [dict(r) for r in conn.execute(
             "SELECT counselling_body, academic_year, row_count, college_count, total_seats, "
             "(pdf_data IS NOT NULL) AS has_pdf, uploaded_at, COALESCE(section,'') AS section, "
-            "COALESCE(authority_code,'') AS authority_code, COALESCE(sort_order,0) AS sort_order "
+            "COALESCE(authority_code,'') AS authority_code, COALESCE(sort_order,0) AS sort_order, "
+            "prev_row_count, prev_college_count, prev_total_seats, prev_replaced_at, prev_source_file_name, "
+            "colleges_added, colleges_removed "
             "FROM pg_seat_matrix_source WHERE COALESCE(superseded,0)=0 "
             "ORDER BY academic_year DESC, (COALESCE(authority_code,'')<>'mcc'), "
             "COALESCE(sort_order,0), counselling_body ASC").fetchall()]
@@ -178,8 +186,12 @@ def api_pg_seat_matrix_facets():
                        'seats': int(agg['seats'] or 0),
                        'new_seats': int(agg['new_seats'] or 0),
                        'new_colleges': int(agg['new_colleges'] or 0)},
-            'source': (dict(src) if src else None),
-            'available': available,
+            'source': ({k: v for k, v in src.items() if not k.startswith('prev_') and k not in
+                        ('colleges_added', 'colleges_removed')} if src else None),
+            # "what changed" vs the version this file replaced (null when there was none) — 2026-10-21
+            'previous': chg['previous'], 'change': chg['change'],
+            'available': [{**{k: v for k, v in a.items() if not k.startswith('prev_') and k not in
+                              ('colleges_added', 'colleges_removed')}, **change_payload(a)} for a in available],
             'has_pdf': bool(src and src['has_pdf']),
         }), 200
     except Exception as e:

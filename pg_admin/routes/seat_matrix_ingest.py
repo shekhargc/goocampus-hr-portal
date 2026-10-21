@@ -19,6 +19,33 @@ _ROW_COLS = ('sl_no', 'college_code', 'state', 'college_name', 'category', 'cour
 _INT_COLS = {'sl_no', 'seats', 'has_cutoff', 'cr_r1', 'cr_r2', 'cr_r3', 'cr_closing'}
 
 
+# What the replaced version looked like — so the site can say "what changed" from DATA, never typed
+# text (founder 2026-10-21, after MCC's FINAL matrix replaced the earlier one).
+_PREV_COLS = (('prev_row_count', 'INTEGER'), ('prev_college_count', 'INTEGER'), ('prev_total_seats', 'INTEGER'),
+              ('prev_replaced_at', 'TIMESTAMP'), ('prev_source_file_name', "TEXT DEFAULT ''"),
+              ('colleges_added', 'INTEGER'), ('colleges_removed', 'INTEGER'))
+
+
+def ensure_prev_cols(conn):
+    for c, t in _PREV_COLS:
+        conn.execute(f"ALTER TABLE pg_seat_matrix_source ADD COLUMN IF NOT EXISTS {c} {t}")
+
+
+def change_payload(r):
+    """{previous, change} for a pg_seat_matrix_source row dict (None when there is no earlier version)."""
+    r = r or {}
+    if r.get('prev_total_seats') is None:
+        return {'previous': None, 'change': None}
+    prev = {'rows': r.get('prev_row_count'), 'colleges': r.get('prev_college_count'),
+            'seats': r.get('prev_total_seats'), 'source_file_name': r.get('prev_source_file_name') or '',
+            'replaced_at': str(r['prev_replaced_at'])[:16] if r.get('prev_replaced_at') else ''}
+    cur = {'rows': r.get('row_count') or 0, 'colleges': r.get('college_count') or 0, 'seats': r.get('total_seats') or 0}
+    return {'previous': prev,
+            'change': {'rows': cur['rows'] - (prev['rows'] or 0), 'colleges': cur['colleges'] - (prev['colleges'] or 0),
+                       'seats': cur['seats'] - (prev['seats'] or 0),
+                       'colleges_added': r.get('colleges_added'), 'colleges_removed': r.get('colleges_removed')}}
+
+
 def _v(r, c):
     v = r.get(c)
     if c in _INT_COLS:
@@ -58,6 +85,15 @@ def api_seat_matrix_ingest():
     auth = (d.get('authority_code') or 'mcc').strip()
     conn = get_db()
     try:
+        ensure_prev_cols(conn)
+        # the version being replaced (for "what changed")
+        old = conn.execute("SELECT COUNT(*) AS n, COUNT(DISTINCT college_code) AS c, COALESCE(SUM(seats),0) AS s "
+                           "FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?", [body, year]).fetchone()
+        old_codes = {r['college_code'] for r in conn.execute(
+            "SELECT DISTINCT college_code FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?",
+            [body, year]).fetchall()}
+        old_src = conn.execute("SELECT source_file_name FROM pg_seat_matrix_source WHERE counselling_body=? "
+                               "AND academic_year=?", [body, year]).fetchone()
         conn.execute("DELETE FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?", [body, year])
         cols = ('counselling_body', 'academic_year', 'authority_code') + _ROW_COLS
         ph = ','.join(['?'] * len(cols))
@@ -83,6 +119,17 @@ def api_seat_matrix_ingest():
         if pdf:
             conn.execute("UPDATE pg_seat_matrix_source SET pdf_data=?, pdf_content_type='application/pdf' "
                          "WHERE id=?", [pdf, sid])
+        new_codes = {(r.get('college_code') or '') for r in rows}
+        if old and int(old['n'] or 0) and (int(old['n']) != len(rows) or int(old['s'] or 0) != seats
+                                           or old_codes != new_codes):
+            # a real revision → remember what it replaced (a re-import of the same file keeps the
+            # earlier "what changed")
+            conn.execute("UPDATE pg_seat_matrix_source SET prev_row_count=?, prev_college_count=?, prev_total_seats=?, "
+                         "prev_replaced_at=CURRENT_TIMESTAMP, prev_source_file_name=?, colleges_added=?, "
+                         "colleges_removed=? WHERE id=?",
+                         [int(old['n']), int(old['c'] or 0), int(old['s'] or 0),
+                          (old_src['source_file_name'] if old_src else '') or '',
+                          len(new_codes - old_codes), len(old_codes - new_codes), sid])
         sup = []
         for b in d.get('supersede') or []:
             b = (b or '').strip()
@@ -121,10 +168,21 @@ def api_seat_matrix_source_update():
         sets.append("sort_order=?"); vals.append(int(d.get('sort_order') or 0))
     if 'notes' in d:
         sets.append("notes=?"); vals.append((d.get('notes') or '').strip())
+    prev = d.get('previous') if isinstance(d.get('previous'), dict) else None
+    if prev:      # record what an already-replaced version looked like (one-time backfill)
+        for k, col in (('rows', 'prev_row_count'), ('colleges', 'prev_college_count'), ('seats', 'prev_total_seats'),
+                       ('colleges_added', 'colleges_added'), ('colleges_removed', 'colleges_removed')):
+            if k in prev:
+                sets.append(f"{col}=?"); vals.append(int(prev[k]) if prev[k] is not None else None)
+        if 'source_file_name' in prev:
+            sets.append("prev_source_file_name=?"); vals.append(str(prev['source_file_name'] or '')[:300])
+        if prev.get('replaced_at'):
+            sets.append("prev_replaced_at=?"); vals.append(str(prev['replaced_at'])[:19])
     if not body or not sets:
         return jsonify({'ok': False, 'error': 'body and at least one field required'}), 400
     conn = get_db()
     try:
+        ensure_prev_cols(conn)
         conn.execute(f"UPDATE pg_seat_matrix_source SET {', '.join(sets)} WHERE counselling_body=? "
                      "AND academic_year=?", vals + [body, year])
         conn.commit()
