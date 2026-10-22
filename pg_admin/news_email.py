@@ -246,7 +246,16 @@ def build_news_email_html(news, is_free, name=""):
     return render_branded_email(f"📢 {heading}", inner, preheader=preheader)
 
 
-def _recipients(conn):
+def _state_filter_sql(state):
+    """Doctors linked to a state: home state on the profile, a state chip (home/other), or a followed
+    state in news. Case-insensitive. (founder 2026-10-22: state documents → that state's doctors)"""
+    return ("(LOWER(TRIM(COALESCE(u.state,''))) = LOWER(TRIM(?)) "
+            "OR EXISTS (SELECT 1 FROM pg_doctor_states ds WHERE ds.user_id = u.id AND LOWER(TRIM(ds.state)) = LOWER(TRIM(?))) "
+            "OR EXISTS (SELECT 1 FROM pg_news_follows nf WHERE nf.user_id = u.id AND LOWER(TRIM(nf.state)) = LOWER(TRIM(?))))",
+            [state, state, state])
+
+
+def _recipients(conn, only_state=None):
     """Everyone who should get a news alert, de-duplicated by email:
     - Registered doctors (pg_users) — incl. team members now (founder 2026-10-06).
       'free' (gets the upgrade banner) = a NON-team doctor with NO active paid/counselling plan.
@@ -263,6 +272,8 @@ def _recipients(conn):
             "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
             "FROM pg_users u "
             "WHERE COALESCE(u.email,'') <> '' AND strpos(u.email, '@') > 0"
+            + (" AND " + _state_filter_sql(only_state)[0] if only_state else ""),
+            _state_filter_sql(only_state)[1] if only_state else []
         ).fetchall()
         for r in rows:
             r = dict(r)
@@ -308,6 +319,7 @@ def send_news_blast(news_id):
             "SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
             "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
             "COALESCE(key_dates,'') AS key_dates, COALESCE(schedule,'') AS schedule, "
+            "COALESCE(to_jsonb(pg_news)->>'email_audience', 'all') AS email_audience, "
             "is_published, published_at FROM pg_news WHERE id = ?", (news_id,)).fetchone()
         if not row:
             logger.error("news blast: news %s not found", news_id)
@@ -316,7 +328,7 @@ def send_news_blast(news_id):
         if not news.get("is_published", True):
             logger.info("news blast: news %s is not published — skipping", news_id)
             return
-        recips = _recipients(conn)
+        recips = _recipients(conn, _audience_state(news))
     except Exception as e:
         logger.error("news blast: load failed: %s", e)
         try: conn.rollback()
@@ -353,11 +365,26 @@ def trigger_news_blast(news_id):
         logger.error("news blast: could not start thread: %s", e)
 
 
-def recipient_count():
+def _audience_state(news):
+    """The state to restrict a blast to, or None for everyone: a state-scoped news item whose
+    email_audience is 'state'."""
+    news = news or {}
+    if (news.get('scope') == 'state' and (news.get('state') or '').strip()
+            and (news.get('email_audience') or 'all') == 'state'):
+        return news['state'].strip()
+    return None
+
+
+def recipient_count(news_id=None):
     """Quick count of who a blast would reach (for the admin confirmation flash)."""
     conn = get_db()
     try:
-        return len(_recipients(conn))
+        st = None
+        if news_id:
+            r = conn.execute("SELECT scope, state, COALESCE(to_jsonb(pg_news)->>'email_audience','all') AS email_audience "
+                             "FROM pg_news WHERE id = ?", (news_id,)).fetchone()
+            st = _audience_state(dict(r)) if r else None
+        return len(_recipients(conn, st))
     except Exception:
         try: conn.rollback()
         except Exception: pass

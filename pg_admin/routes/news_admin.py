@@ -88,6 +88,46 @@ def news_admin():
             conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''")
         except Exception:
             conn.rollback()
+        # "📰 Post as news & email" from an authority DOCUMENT → same news form, pre-filled; the news will
+        # LINK to the stored file (no copy). (founder 2026-10-22)
+        doc_q = _s(request.args.get('doc'))
+        if doc_q.isdigit():
+            try:
+                _ensure_doc_link_cols(conn); conn.commit()
+                from pg_admin.authorities import get_authority
+                d = conn.execute("SELECT id, authority_code, category, title, doc_date, note, source_url, file_name, "
+                                 "is_published, posted_news_id FROM pg_authority_docs WHERE id = ?",
+                                 (int(doc_q),)).fetchone()
+                if d:
+                    d = dict(d)
+                    a = get_authority(d['authority_code']) or {}
+                    is_mcc = (d['authority_code'] or '') == 'mcc' or not a.get('state')
+                    title = (d['title'] or '').strip() or 'Official document'
+                    aname = a.get('name') or d['authority_code']
+                    live_news = None
+                    if d.get('posted_news_id'):
+                        live_news = conn.execute("SELECT id FROM pg_news WHERE id = ? AND deleted_at IS NULL",
+                                                 (d['posted_news_id'],)).fetchone()
+                    prefill = {'doc_id': d['id'], 'inbox_id': '', 'kind': 'doc', 'status': '',
+                               'heading': title, 'source_url': d.get('source_url') or '',
+                               'authority': '__all__' if is_mcc else f"state:{a.get('state')}",
+                               'source_label': aname, 'is_state': not is_mcc, 'state_name': a.get('state') or '',
+                               'news_date': (d.get('doc_date') or '')[:10],
+                               'has_pdf': bool(d.get('file_name')), 'drafted': False,
+                               'summary': f"{aname} has published: {title}."[:300],
+                               'body_text': (d.get('note') or '').strip() or
+                                            f"{aname} has published the official document “{title}”. "
+                                            f"Log in to goocampus.in to view or download it.",
+                               'category': {'brochure': 'bulletin', 'results': 'seat_allotment',
+                                            'registration': 'registration', 'fee_structure': 'fee_payment'}.get(
+                                                d.get('category') or '', 'notification'),
+                               'dates': {}, 'times': {}, 'round': '', 'quotes': {},
+                               'applies_to': '', 'action': '', 'schedule_text': '', 'events': [],
+                               'news_id': live_news['id'] if live_news else '',
+                               'doc_published': bool(d.get('is_published'))}
+            except Exception as e:
+                logging.warning("news_admin doc prefill: %s", e)
+                conn.rollback()
         # "Add to News" from the News Inbox → pre-fill the form (founder 2026-10-08)
         inbox_id = _s(request.args.get('inbox'))
         if inbox_id.isdigit():
@@ -132,7 +172,7 @@ def news_admin():
             "SELECT id, scope, state, body_label, heading, body_text, source_url, "
             "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, COALESCE(key_dates,'') AS key_dates, "
             "COALESCE(schedule,'') AS schedule, "
-            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf, pdf_name, is_published, published_at, created_by, created_at, "
+            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR authority_doc_id IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by, created_at, "
             "COALESCE(source,'manual') AS source, deleted_at, COALESCE(deleted_by,'') AS deleted_by "
             "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()]
     except Exception as e:
@@ -165,6 +205,31 @@ def news_admin():
 
 
 @login_required
+def _ensure_doc_link_cols(conn):
+    """pg_news.authority_doc_id (news → the ONE stored document file) + email_audience; the document
+    remembers the news it was posted as. Request-time, idempotent (founder 2026-10-22)."""
+    conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS authority_doc_id INTEGER")
+    conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS email_audience TEXT DEFAULT 'all'")
+    conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS posted_news_id INTEGER")
+    conn.execute("ALTER TABLE pg_authority_docs ADD COLUMN IF NOT EXISTS posted_at TIMESTAMP")
+
+
+def _filed_doc_for_inbox(inbox_id):
+    """The authority document this inbox notice's PDF was filed as (with a stored file), else None."""
+    c = get_db()
+    try:
+        r = c.execute("SELECT id FROM pg_authority_docs WHERE auto_inbox_id = ? AND COALESCE(auto_kind,'pdf') = 'pdf' "
+                      "AND (file_data IS NOT NULL OR COALESCE(to_jsonb(pg_authority_docs)->>'file_r2_key','') <> '') "
+                      "ORDER BY id LIMIT 1", (inbox_id,)).fetchone()
+        return r['id'] if r else None
+    except Exception:
+        try: c.rollback()
+        except Exception: pass
+        return None
+    finally:
+        c.close()
+
+
 def news_save():
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('dashboard'))
@@ -201,6 +266,13 @@ def news_save():
     send_alert = request.form.get('send_alert') in ('1', 'on', 'true', 'yes')
     inbox_id = _s(request.form.get('inbox_id'))
     inbox_id = int(inbox_id) if inbox_id.isdigit() else None
+    # Posted from an authority DOCUMENT ("📰 Post as news & email", founder 2026-10-22): the news links
+    # to that stored file — never a second copy. Email audience for state news: 'state' = only doctors
+    # linked to that state, 'all' = everyone.
+    doc_id = _s(request.form.get('doc_id'))
+    doc_id = int(doc_id) if doc_id.isdigit() else None
+    email_audience = 'state' if _s(request.form.get('email_audience')) == 'state' else 'all'
+    link_doc = None
     add_events = request.form.get('add_events') in ('1', 'on')
     category = _s(request.form.get('category'))
     category = category if category in dict(NEWS_CATEGORIES) else ''
@@ -231,7 +303,7 @@ def news_save():
         return redirect(url_for('pg_news_admin'))
     if not body_text and not (request.files.get('pdf_file') and request.files.get('pdf_file').filename):
         # allow text-less if an existing item already has a PDF/text and we're editing
-        if not news_id and not (inbox_id and source_url):     # an inbox notice: heading + official link is enough
+        if not news_id and not (inbox_id and source_url) and not doc_id:  # inbox notice / linked document is enough
             flash('Add some news text or attach a PDF.', 'error')
             return redirect(url_for('pg_news_admin'))
 
@@ -243,6 +315,10 @@ def news_save():
             flash('The attachment must be a .pdf file.', 'error')
             return redirect(url_for('pg_news_admin'))
         pdf_bytes = pf.read(); pdf_name = pf.filename; pdf_ctype = pf.mimetype or 'application/pdf'
+    elif doc_id:
+        link_doc = doc_id                 # the document's own stored file (no copy)
+    elif inbox_id and request.form.get('attach_pdf', '1') in ('1', 'on') and _filed_doc_for_inbox(inbox_id):
+        link_doc = _filed_doc_for_inbox(inbox_id)   # already filed in the authority's Documents → link it
     elif inbox_id and request.form.get('attach_pdf', '1') in ('1', 'on'):
         # Inbox notice that IS a PDF → attach the copy the Mac fetched (the server can't
         # reach the govt sites), else try downloading it.
@@ -340,6 +416,19 @@ def news_save():
         if pdf_r2 and news_id:
             conn.execute("UPDATE pg_news SET pdf_r2_key = ?, pdf_name = ?, pdf_content_type = 'application/pdf', "
                          "pdf_data = NULL WHERE id = ?", (pdf_r2, pdf_name or 'notice.pdf', news_id))
+        _ensure_doc_link_cols(conn)
+        if link_doc and news_id:
+            # one stored file: the news points at the authority document (no bytes copied)
+            _d = conn.execute("SELECT file_name FROM pg_authority_docs WHERE id = ?", (link_doc,)).fetchone()
+            conn.execute("UPDATE pg_news SET authority_doc_id = ?, pdf_data = NULL, pdf_r2_key = NULL, "
+                         "pdf_name = ?, pdf_content_type = 'application/pdf' WHERE id = ?",
+                         (link_doc, (_d['file_name'] if _d else '') or 'document.pdf', news_id))
+        if news_id:
+            conn.execute("UPDATE pg_news SET email_audience = ? WHERE id = ?", (email_audience, news_id))
+        if doc_id and news_id:
+            # posting a document as news also publishes the document itself (same file, one place)
+            conn.execute("UPDATE pg_authority_docs SET posted_news_id = ?, posted_at = CURRENT_TIMESTAMP, "
+                         "is_published = TRUE, review_pending = FALSE WHERE id = ?", (news_id, doc_id))
         # Information bulletin / brochure → also the authority's MAIN brochure document, so
         # registered doctors can download it from the dashboard. (founder 2026-10-09)
         brochure_msg = ''
@@ -349,6 +438,15 @@ def news_save():
                                    (news_id,)).fetchone()
             if not code:
                 brochure_msg = 'Not saved as a brochure — no counselling authority matches this state yet.'
+            elif link_doc:
+                # the linked document IS the bulletin — make it the authority's published main brochure
+                from pg_admin.authorities import get_authority
+                conn.execute("UPDATE pg_authority_docs SET category = 'brochure', is_published = TRUE, "
+                             "review_pending = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (link_doc,))
+                from pg_admin.data.main_brochures import set_main
+                _ok_main, _main_msg = set_main(conn, link_doc, True, None)
+                brochure_msg = (f"Also set as a main bulletin for {(get_authority(code) or {}).get('name', code)}. {_main_msg}"
+                                if _ok_main else f"Kept under Brochure, but not as a main bulletin: {_main_msg}")
             elif not (pdf_row and (pdf_row['pdf_data'] or pdf_row.get('pdf_r2_key'))):
                 brochure_msg = 'Not saved as a brochure — attach the bulletin PDF first.'
             else:
@@ -410,7 +508,7 @@ def news_save():
     if saved_ok and send_alert and is_published and _blast_id:
         try:
             from pg_admin.news_email import trigger_news_blast, recipient_count
-            n = recipient_count()
+            n = recipient_count(_blast_id)
             trigger_news_blast(_blast_id)
             flash(f'Emailing this update to {n} registered users in the background…'
                   if n is not None else 'Emailing this update to all registered users in the background…',
@@ -666,10 +764,16 @@ def news_pdf_admin():
     try:
         from pg_admin.data.big_files import ensure_cols as _bf_cols
         _bf_cols(conn)
-        row = conn.execute("SELECT pdf_name, pdf_data, pdf_content_type, pdf_r2_key FROM pg_news WHERE id=?",
-                           (nid,)).fetchone()
+        _ensure_doc_link_cols(conn); conn.commit()
+        row = conn.execute("SELECT pdf_name, pdf_data, pdf_content_type, pdf_r2_key, authority_doc_id FROM pg_news "
+                           "WHERE id=?", (nid,)).fetchone()
     finally:
         conn.close()
+    if row and not row['pdf_data'] and not row.get('pdf_r2_key') and row.get('authority_doc_id'):
+        from pg_admin.data.big_files import serve_authority_doc      # news links to the one stored document
+        rr = serve_authority_doc(row['authority_doc_id'])
+        if rr:
+            return rr
     if row and not row['pdf_data'] and row.get('pdf_r2_key'):       # big file kept in R2 (2026-10-17)
         from pg_admin.data.big_files import r2_redirect
         rr = r2_redirect(row['pdf_r2_key'])

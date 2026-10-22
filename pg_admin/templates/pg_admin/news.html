@@ -29,7 +29,15 @@
     <form id="newsForm" method="POST" action="{{ url_for('pg_news_save') }}" enctype="multipart/form-data">
       <input type="hidden" name="news_id" value="{{ prefill.news_id if prefill and prefill.news_id else '' }}">
       <input type="hidden" name="inbox_id" value="{{ prefill.inbox_id if prefill else '' }}">
-      {% if prefill %}
+      <input type="hidden" name="doc_id" value="{{ prefill.doc_id if prefill and prefill.doc_id else '' }}">
+      {% if prefill and prefill.kind == 'doc' %}
+      <div style="background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.84rem;">
+        <b>From Authority Documents</b> · {{ prefill.source_label }}{% if prefill.news_id %} · <b>already posted as news #{{ prefill.news_id }}</b> — saving updates that post (no duplicate){% endif %}<br>
+        Same news format as always: check the heading and the short description, then post.
+        <div style="margin-top:4px;">📎 The document's stored PDF is <b>linked</b> to this news (one file in our database — no copy).{% if not prefill.doc_published %} Posting also publishes the document on the Authorities page.{% endif %}</div>
+        <a href="{{ url_for('pg_authorities_admin') }}" style="display:inline-block;margin-top:6px;color:#2952a3;">← Back to Authorities</a>
+      </div>
+      {% elif prefill %}
       <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.84rem;">
         <b>From the News Inbox</b> · {{ prefill.source_label }}{% if prefill.news_id %} · <b>updating the posted news #{{ prefill.news_id }}</b> (no duplicate){% elif prefill.status == 'posted' %} · <b>already posted once</b>{% endif %}<br>
         {% if prefill.drafted %}<b>AI draft filled in below</b> — check the heading, article and every date against the official notice, then post.
@@ -144,6 +152,12 @@ Result | 24 Oct | 14 Nov | 4 Dec"
         <input type="checkbox" name="send_alert" id="send_alert" value="1" {% if not (prefill and prefill.news_id) %}checked{% endif %} style="margin-top:2px;">
         <span><strong>📧 Email this update to all registered users</strong> (free + paid). They get a glimpse + a link to log in and read/download. Free users also see a gentle upgrade note. Leave unticked when just fixing a typo.</span>
       </label>
+      <div id="audienceBox" style="display:none;font-size:0.84rem;color:var(--gray-700);background:#f8fafc;border:1px solid var(--gray-200);border-radius:8px;padding:9px 12px;margin:-8px 0 16px;">
+        <b>Email goes to</b> (state update):
+        <label style="margin-left:10px;cursor:pointer;"><input type="radio" name="email_audience" value="state" {% if prefill and prefill.kind == 'doc' and prefill.is_state %}checked{% endif %}> only doctors linked to <span id="audState">this state</span> (home or followed state)</label>
+        <label style="margin-left:10px;cursor:pointer;"><input type="radio" name="email_audience" value="all" {% if not (prefill and prefill.kind == 'doc' and prefill.is_state) %}checked{% endif %}> all registered doctors</label>
+        <div style="color:var(--gray-500);font-size:0.76rem;margin-top:3px;">Team members always get every update.</div>
+      </div>
       <button type="submit"
               style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;">
         Post update
@@ -268,8 +282,15 @@ function newsTest(id){
   function set(n,v){ var el=f.querySelector('[name="'+n+'"]'); if(el) el.value=v; }
   function submitLabel(t){ var b=f.querySelector('button[type="submit"]'); if(b) b.textContent=t; }
   function setAlert(on){ var a=document.getElementById('send_alert'); if(a) a.checked=on; }
+  // state updates can be emailed to that state's doctors only (founder 2026-10-22)
+  var authSel=f.querySelector('[name="authority"]');
+  function syncAudience(){ var v=(authSel&&authSel.value)||''; var box=document.getElementById('audienceBox');
+    if(!box) return; var st=v.indexOf('state:')===0; box.style.display=st?'block':'none';
+    if(st) document.getElementById('audState').textContent=v.slice(6); }
+  if(authSel) authSel.addEventListener('change', syncAudience);
+  setTimeout(syncAudience, 0);
   window.newsClearEdit=function(){
-    set('news_id',''); set('inbox_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
+    set('news_id',''); set('inbox_id',''); set('doc_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
     set('body_text',''); set('source_url',''); set('category',''); set('summary',''); set('schedule_text','');
     var sb=document.getElementById('save_brochure'); if(sb) sb.checked=false;
     document.querySelectorAll('[name^="kd_"]').forEach(function(el){ el.value=''; });

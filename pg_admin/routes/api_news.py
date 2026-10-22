@@ -35,6 +35,9 @@ def ensure_news_seo_cols(conn):
         conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS deleted_by TEXT DEFAULT ''")
         # big attachment archived in R2 instead of pdf_data (2026-10-17)
         conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS pdf_r2_key TEXT")
+        # news that LINKS to an authority document's stored file + email audience (2026-10-22)
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS authority_doc_id INTEGER")
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS email_audience TEXT DEFAULT 'all'")
         conn.commit()
         _NEWS_COLS_OK = True
         try:   # label news that was posted from the News Inbox (metadata only)
@@ -157,7 +160,7 @@ def api_pg_news():
             f"SELECT id, scope, state, body_label, heading, body_text, source_url, pdf_name, "
             f"COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
             f"COALESCE(key_dates,'') AS key_dates, COALESCE(schedule,'') AS schedule, "
-            f"(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf, published_at "
+            f"(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR authority_doc_id IS NOT NULL) AS has_pdf, published_at "
             f"FROM pg_news WHERE {where} ORDER BY published_at DESC, id DESC "
             f"LIMIT {page_size} OFFSET {offset}", params).fetchall()
         items = []
@@ -651,8 +654,9 @@ def api_pg_news_pdf(news_id):
     try:
         from pg_admin.data.big_files import ensure_cols as _bf_cols
         _bf_cols(conn)
+        ensure_news_seo_cols(conn)
         row = conn.execute(
-            "SELECT pdf_name, pdf_data, pdf_content_type, pdf_r2_key FROM pg_news "
+            "SELECT pdf_name, pdf_data, pdf_content_type, pdf_r2_key, authority_doc_id FROM pg_news "
             "WHERE id=? AND is_published", (news_id,)).fetchone()
     except Exception as e:
         logging.error("api_pg_news_pdf: %s", e)
@@ -660,6 +664,11 @@ def api_pg_news_pdf(news_id):
     finally:
         try: conn.close()
         except Exception: pass
+    if row and not row['pdf_data'] and not row.get('pdf_r2_key') and row.get('authority_doc_id'):
+        from pg_admin.data.big_files import serve_authority_doc      # news links to the one stored document
+        rr = serve_authority_doc(row['authority_doc_id'])
+        if rr:
+            return rr
     if row and not row['pdf_data'] and row.get('pdf_r2_key'):       # big file kept in R2 (2026-10-17)
         from pg_admin.data.big_files import r2_redirect
         rr = r2_redirect(row['pdf_r2_key'])

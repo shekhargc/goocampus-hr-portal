@@ -251,7 +251,7 @@ def api_pg_authority(code):
                 "SELECT id, heading, body_text, source_url, published_at, "
                 "COALESCE(category,'') AS category, COALESCE(summary,'') AS summary, "
                 "COALESCE(key_dates,'') AS key_dates, COALESCE(schedule,'') AS schedule, "
-                "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf FROM pg_news "
+                "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR authority_doc_id IS NOT NULL) AS has_pdf FROM pg_news "
                 f"WHERE COALESCE(is_published,TRUE) AND deleted_at IS NULL AND {nwhere} "
                 "ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 20", nparams).fetchall()]
             import json as _json
