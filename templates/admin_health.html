@@ -50,6 +50,7 @@
       <h1>System Health</h1>
       <p>A live check of everything GooCampus runs on. Opening this page re-tests each part — it never sends a real email, WhatsApp or OTP.</p>
     </div>
+    <a href="{{ url_for('bandwidth_dashboard') }}" class="hz-refresh" style="background:#1B2A4A;margin-right:0.5rem;">📶 Bandwidth</a>
     <button class="hz-refresh" onclick="window.location.reload()">↻ Re-run checks</button>
   </div>
 

@@ -55787,6 +55787,10 @@ register_verification_queues(app)
 from routes.health import register_health
 register_health(app)
 
+# Bandwidth meter — counts outbound bytes per path/caller, /admin/bandwidth (2026-10-22)
+from routes.bandwidth import register_bandwidth
+register_bandwidth(app)
+
 # Client Feedback — anonymous stage-wise forms (public /feedback/<token>) +
 # centralised admin under Clients (Access Master 'clients'/'feedback').
 from routes.feedback import register_routes as register_feedback
