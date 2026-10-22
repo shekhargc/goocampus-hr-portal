@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Bandwidth — GooCampus{% endblock %}
+
+{% block extra_css %}
+<style>
+  .bw-wrap { max-width: 1080px; margin: 0 auto; padding: 0.5rem 0 3rem; }
+  .bw-head h1 { font-size:1.6rem; font-weight:800; color:var(--navy,#1B2A4A); margin:0; }
+  .bw-head p { color:#64748b; font-size:0.9rem; margin:0.3rem 0 1rem; max-width:80ch; }
+  .bw-filter { display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-bottom:1.2rem; font-size:0.88rem; }
+  .bw-filter select { padding:0.45rem 0.6rem; border:1px solid #cbd5e1; border-radius:0.45rem; }
+  .bw-filter button { padding:0.45rem 0.9rem; border:none; border-radius:0.45rem; background:var(--navy,#1B2A4A); color:#fff; font-weight:600; cursor:pointer; }
+  .bw-tiles { display:flex; gap:0.8rem; flex-wrap:wrap; margin-bottom:1.3rem; }
+  .bw-tile { background:#fff; border:1px solid #e2e8f0; border-radius:0.7rem; padding:0.75rem 1rem; min-width:150px; }
+  .bw-tile .k { font-size:0.72rem; text-transform:uppercase; letter-spacing:.5px; color:#64748b; }
+  .bw-tile .v { font-size:1.2rem; font-weight:800; color:var(--navy,#1B2A4A); }
+  .bw-card { background:#fff; border:1px solid #e2e8f0; border-radius:0.85rem; margin-bottom:1.3rem; overflow-x:auto; }
+  .bw-card h2 { font-size:1rem; font-weight:800; color:var(--navy,#1B2A4A); margin:0; padding:0.9rem 1.1rem 0.3rem; }
+  .bw-card .note { font-size:0.8rem; color:#94a3b8; margin:0; padding:0 1.1rem 0.7rem; }
+  .bw-card table { width:100%; border-collapse:collapse; font-size:0.84rem; }
+  .bw-card th { text-align:left; color:#64748b; font-weight:600; background:#f8fafc; padding:0.55rem 0.8rem; white-space:nowrap; }
+  .bw-card td { padding:0.5rem 0.8rem; border-top:1px solid #f1f5f9; }
+  .bw-card td.n { text-align:right; white-space:nowrap; }
+  .bw-path { font-family:ui-monospace,Menlo,monospace; font-size:0.8rem; word-break:break-all; }
+  .bw-bar { height:6px; background:#F58220; border-radius:3px; min-width:2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bw-wrap">
+  <div class="bw-head">
+    <h1>Bandwidth</h1>
+    <p>How much data the portal sends out, by page / data feed / file and by who asked for it. Render's
+      Pro plan includes 25 GB a month for all services together. This counts the portal only (live +
+      staging) — goocampus.in's own pages are a separate service, and big files served from file storage
+      (R2) don't count. Counting started {{ first or 'just now' }}.</p>
+  </div>
+
+  <form class="bw-filter" method="GET" action="{{ url_for('bandwidth_dashboard') }}">
+    <label>Period
+      <select name="days">{% for d in (1, 7, 30, 90) %}<option value="{{ d }}" {{ 'selected' if days == d }}>{{ 'Today' if d == 1 else 'Last ' ~ d ~ ' days' }}</option>{% endfor %}</select></label>
+    <label>Service
+      <select name="service"><option value="">All</option>{% for s in services %}<option value="{{ s }}" {{ 'selected' if svc == s }}>{{ s }}</option>{% endfor %}</select></label>
+    <button type="submit">Show</button>
+    <a href="{{ url_for('health_dashboard') }}" style="margin-left:auto;color:#64748b;">← System Health</a>
+  </form>
+
+  <div class="bw-tiles">
+    <div class="bw-tile"><div class="k">Total sent</div><div class="v">{{ total|human_bytes }}</div></div>
+    {% for c in by_caller %}
+    <div class="bw-tile"><div class="k">{{ {'website':'goocampus.in fetching data','bot':'Bots / crawlers','signed_in':'Signed-in users','public':'Public visitors'}.get(c.caller, c.caller) }}</div>
+      <div class="v">{{ c.bytes|human_bytes }}</div><div style="font-size:0.75rem;color:#94a3b8;">{{ '{:,}'.format(c.hits|int) }} requests</div></div>
+    {% endfor %}
+  </div>
+
+  <div class="bw-card">
+    <h2>Top pages, data feeds and files</h2>
+    <p class="note">Numbers in a path are replaced by &lt;id&gt; so the same page is counted together.</p>
+    <table>
+      <thead><tr><th>Path</th><th class="n">Data sent</th><th class="n">Requests</th><th class="n">Per request</th>
+        <th class="n">Website</th><th class="n">Bots</th><th class="n">Signed in</th><th class="n">Public</th></tr></thead>
+      <tbody>
+      {% set mx = (top[0].bytes if top else 1) or 1 %}
+      {% for r in top %}
+        <tr>
+          <td><div class="bw-path">{{ r.path }}</div><div class="bw-bar" style="width:{{ (100 * (r.bytes or 0) / mx)|round(1) }}%;"></div></td>
+          <td class="n"><b>{{ r.bytes|human_bytes }}</b></td>
+          <td class="n">{{ '{:,}'.format(r.hits|int) }}</td>
+          <td class="n">{{ ((r.bytes or 0) / (r.hits or 1))|human_bytes }}</td>
+          <td class="n">{{ r.website|human_bytes }}</td><td class="n">{{ r.bot|human_bytes }}</td>
+          <td class="n">{{ r.signed_in|human_bytes }}</td><td class="n">{{ r.public|human_bytes }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" style="padding:1.2rem;color:#94a3b8;text-align:center;">No data yet — counting starts with the first requests after this was switched on.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.3rem;">
+    <div class="bw-card">
+      <h2>Per day</h2>
+      <table><thead><tr><th>Day</th><th class="n">Data sent</th><th class="n">Requests</th></tr></thead><tbody>
+      {% for d in by_day %}<tr><td>{{ d.day }}</td><td class="n">{{ d.bytes|human_bytes }}</td><td class="n">{{ '{:,}'.format(d.hits|int) }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+    <div class="bw-card">
+      <h2>Per service</h2>
+      <table><thead><tr><th>Service</th><th class="n">Data sent</th><th class="n">Requests</th></tr></thead><tbody>
+      {% for s in by_service %}<tr><td>{{ s.service }}</td><td class="n">{{ s.bytes|human_bytes }}</td><td class="n">{{ '{:,}'.format(s.hits|int) }}</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+  </div>
+</div>
+{% endblock %}
