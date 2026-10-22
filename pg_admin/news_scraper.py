@@ -322,12 +322,17 @@ SOURCES = {
     },
     # Rajasthan: no_pg_2026_yet — RUHS (ruhsraj.org, admissions.ruhsraj.org 2026-27) does NOT run NEET-PG MD/MS state counselling — its admissions portal lists only CUET/PGET (nursing/pharmacy/MSc), PhD etc.; no MD
     'ruhs_pg': {
-        'label': 'Rajasthan NEET PG Counselling Board (SMS Medical College) — via Medical Education Dept order portal',
+        'label': 'Rajasthan NEET PG Counselling Board — pg.neetrajasthan.com (+ Medical Education Dept orders)',
         'short': 'Rajasthan',
         'authority_code': 'ruhs',
         'news_authority': 'state:Rajasthan',
-        'url': 'https://medicaleducation.rajasthan.gov.in/smsjaipur/#/department-order/102',
-        'reader': 'raj_orderportal',
+        # the Board's own PG portal (founder 2026-10-22) + the Govt order portal as a second source
+        'url': 'https://pg.neetrajasthan.com/home',
+        'reader': 'raj_pg_portal',
+        'fixed_docs': [{'url': 'https://pg.neetrajasthan.com/notifications/1792302615499.pdf',
+                        'title': 'Rajasthan NEET PG 2026 — Information Booklet'},
+                       {'url': 'https://pg.neetrajasthan.com/notifications/1792303047771.pdf',
+                        'title': 'Rajasthan NEET PG 2026 — Application Guidelines'}],
         'include': 'NEET[\\s-]*PG|PG\\s*Medical|Medical\\s*PG|M\\.?D\\.?\\s*/\\s*M\\.?S|post[\\s-]*graduate|स्नातकोत्तर|DNB',
         'exclude': '\\bMDS\\b|dental|nursing|pharm|ayush|ayurved|homoeo|bond|सेवा बन्ध|super\\s*speciality|सुपर',
         'dept_codes': [102, 357],
@@ -636,6 +641,25 @@ def _session():
     return s
 
 
+def _get_pages(s, pages):
+    """Fetch each page; a page that fails (403 / 404 / timeout) is SKIPPED and reported, so one
+    broken or retired page never hides an authority's other pages (Kerala 2026-10-22). Raises only
+    when NO page could be read — the run then shows the source as an error."""
+    out, errs = [], []
+    for pg in pages:
+        try:
+            r = s.get(pg, timeout=TIMEOUT)
+            r.raise_for_status()
+            out.append(r)
+        except Exception as e:
+            errs.append(f"{pg}: {str(e)[:120]}")
+    if errs and out:
+        print('  (skipped page) ' + ' | '.join(errs))
+    if not out:
+        raise ValueError('; '.join(errs) or 'no pages')
+    return out
+
+
 def read_pdf_links(url, pages=None, include=None, exclude=None):
     """Generic: every <a href="...pdf">TITLE</a> on the given pages (MCC style). The date
     comes from the title if present, else from a yyyymmdd stamp in the file name.
@@ -647,9 +671,7 @@ def read_pdf_links(url, pages=None, include=None, exclude=None):
     s.headers['User-Agent'] = UA
     if _proxies():
         s.proxies.update(_proxies())
-    for pg in (pages or [url]):
-        r = s.get(pg, timeout=TIMEOUT)
-        r.raise_for_status()
+    for r in _get_pages(s, pages or [url]):
         for href, inner in re.findall(r'<a\b[^>]*href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>', r.text, re.S | re.I):
             href = urljoin(r.url, _html.unescape(href).strip())
             raw = _text(inner)
@@ -822,9 +844,7 @@ def read_tn_tagged(url, tag):
 def read_date_table(pages, include=None, exclude=None):
     """Telangana KNRUHS style: table rows <td class="date-cell">dd-mm-yyyy</td><td>TITLE</td><td><a href=PDF>."""
     s, items, seen, rows = _session(), [], set(), 0
-    for pg in pages:
-        r = s.get(pg, timeout=TIMEOUT)
-        r.raise_for_status()
+    for r in _get_pages(s, pages):
         for dtxt, inner, href in re.findall(
                 r'<td class="date-cell">\s*([\d./-]+)\s*</td>\s*<td>(.*?)</td>\s*<td>.*?href="([^"]+)"', r.text, re.S):
             rows += 1
