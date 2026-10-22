@@ -210,9 +210,13 @@ def api_news_inbox_known():
         NS.ensure_news_inbox_tables(conn)
         from pg_admin.data.big_files import ensure_cols as _bf_cols
         _bf_cols(conn)
+        from pg_admin.data.archive import ensure_cols as _ar_cols
+        _ar_cols(conn)
         rows = conn.execute("SELECT item_key, url, title, kind, notice_date, status, (draft_json IS NOT NULL) AS drafted, "
                             "COALESCE(redraft_requested, FALSE) AS redraft, "
-                            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf FROM pg_news_inbox "
+                            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf, "
+                            "EXISTS (SELECT 1 FROM pg_authority_docs d WHERE d.auto_inbox_id = i.id AND "
+                            "d.auto_kind = 'snapshot') AS has_snap FROM pg_news_inbox i "
                             "WHERE source_code = ?", (code,)).fetchall()
         return jsonify({'ok': True, 'source': code, 'known': [r['item_key'] for r in rows],
                         'drafted': [r['item_key'] for r in rows if r['drafted']],
@@ -227,7 +231,12 @@ def api_news_inbox_known():
                         # appears; every authority PDF must be archived (founder 2026-10-17)
                         'need_pdf': [{'item_key': r['item_key'], 'url': r['url'], 'title': r['title']}
                                      for r in rows if r['kind'] == 'pdf' and r['status'] != 'seen'
-                                     and not r['has_pdf'] and r['url']]})
+                                     and not r['has_pdf'] and r['url']],
+                        # web-page notices (no PDF of their own) not yet saved as a PDF snapshot —
+                        # the Mac prints the page and sends it (archive-only, founder 2026-10-22)
+                        'need_snapshot': [{'item_key': r['item_key'], 'url': r['url'], 'title': r['title']}
+                                          for r in rows if r['kind'] == 'link' and r['status'] != 'seen'
+                                          and not r['has_pdf'] and not r['has_snap'] and r['url']]})
     finally:
         conn.close()
 
@@ -367,7 +376,7 @@ def api_news_inbox_ingest():
         if status == 'new' and draft and draft.get('events'):
             _auto_calendar(conn, new_id)
         doc_res = None
-        if status == 'new' and draft:
+        if status == 'new' and (draft or pdf or r2_key):      # no draft → still archived (2026-10-22)
             from pg_admin.data.auto_docs import file_safely
             doc_res = file_safely(conn, new_id)                  # PDF → authority Documents (hidden)
         return jsonify({'ok': True, 'id': new_id, 'result': status, 'document': doc_res})
@@ -660,3 +669,38 @@ def api_news_inbox_status():
     except Exception as e:
         out['api_error'] = str(e)[:300]
     return jsonify(out)
+
+
+def api_news_inbox_snapshot():
+    """POST /api/pg/news-inbox/snapshot {source_code, item_key, pdf_b64, name} (X-News-Key) — the Mac's
+    PDF print of a web-page notice → kept as a hidden archive-only document of the authority
+    (founder 2026-10-22: every notice must stay in our control after the site changes)."""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    b = request.get_json(silent=True) or {}
+    code = (b.get('source_code') or '').strip()
+    key = (b.get('item_key') or '').strip()
+    try:
+        data = base64.b64decode(b.get('pdf_b64') or '')
+    except Exception:
+        data = b''
+    if code not in NS.SOURCES or not key or not data.startswith(b'%PDF') or len(data) > MAX_PDF:
+        return jsonify({'ok': False, 'error': 'bad request'}), 400
+    conn = get_db()
+    try:
+        r = conn.execute("SELECT id FROM pg_news_inbox WHERE source_code = ? AND item_key = ?", (code, key)).fetchone()
+        if not r:
+            return jsonify({'ok': False, 'error': 'unknown notice'}), 404
+        from pg_admin.data.archive import archive_snapshot, kick_sync
+        res = archive_snapshot(conn, r['id'], data, str(b.get('name') or '')[:200])
+        conn.commit()
+        if res == 'archived':
+            kick_sync()
+        return jsonify({'ok': True, 'result': res})
+    except Exception as e:
+        logging.warning("news snapshot %s/%s: %s", code, key, e)
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'ok': False, 'error': str(e)[:200]}), 500
+    finally:
+        conn.close()

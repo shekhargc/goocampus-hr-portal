@@ -43,20 +43,23 @@ def authorities_admin():
         for r in conn.execute(
                 "SELECT authority_code, COUNT(*) AS n, "
                 "SUM(CASE WHEN COALESCE(review_pending, FALSE) THEN 1 ELSE 0 END) AS w "
-                "FROM pg_authority_docs GROUP BY authority_code").fetchall():
+                "FROM pg_authority_docs WHERE COALESCE((to_jsonb(pg_authority_docs)->>'archive_only')::boolean, FALSE) = FALSE "
+                "GROUP BY authority_code").fetchall():
             counts[r['authority_code']] = r['n']
             if r['w']:
                 waiting_by_auth[r['authority_code']] = int(r['w'])
         if authority:
             from pg_admin.routes.news_admin import _ensure_doc_link_cols
             _ensure_doc_link_cols(conn); conn.commit()
+            from pg_admin.data.archive import ensure_cols as _arch_cols
+            _arch_cols(conn)
             for r in conn.execute(
                     "SELECT id, category, title, doc_date, note, body_text, file_name, is_published, "
                     "uploaded_by, uploaded_at, COALESCE(review_pending, FALSE) AS review_pending, "
                     "auto_inbox_id, COALESCE(source_url,'') AS source_url, COALESCE(is_main, FALSE) AS is_main, "
                     "COALESCE(main_label,'') AS main_label, posted_news_id, posted_at, "
                     "(SELECT n.id FROM pg_news n WHERE n.id = pg_authority_docs.posted_news_id AND n.deleted_at IS NULL) AS live_news_id "
-                    "FROM pg_authority_docs WHERE authority_code=? "
+                    "FROM pg_authority_docs WHERE authority_code=? AND COALESCE(archive_only, FALSE) = FALSE "
                     "ORDER BY category, sort_order, id DESC", (authority['code'],)).fetchall():
                 r = dict(r)
                 if r['review_pending']:

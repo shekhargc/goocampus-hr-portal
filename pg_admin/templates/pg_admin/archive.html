@@ -1,0 +1,131 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Document Archive · goocampus.in{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="margin-bottom:16px;">
+    <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Document Archive</h1>
+    <p style="margin:0;font-size:0.88rem;color:var(--gray-500);max-width:920px;">
+      Every official PDF we have fetched or uploaded, for every counselling authority — kept in our own
+      storage even after the authority removes it from their website. Organised by
+      <b>season → authority → category</b>. "Archive only" files are kept but never shown to doctors.
+    </p>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}{% for cat, m in msgs %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;
+                  background:{{ '#DCFCE7' if cat=='success' else ('#FEF9C3' if cat=='info' else '#FEE2E2') }};
+                  color:{{ '#166534' if cat=='success' else ('#854D0E' if cat=='info' else '#991B1B') }};">{{ m }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <!-- ── Totals ── -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+    {% for label, val in [('Files', stats.files), ('Size', stats.mb ~ ' MB'), ('Backed up', stats.backed_up ~ ' / ' ~ stats.files), ('Archive only', stats.archive_only)] %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:10px 16px;min-width:130px;">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);">{{ label }}</div>
+      <div style="font-size:1.15rem;font-weight:700;color:var(--navy);">{{ val }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ── Filters ── -->
+  <form method="GET" action="{{ url_for('pg_archive') }}"
+        style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px 18px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <select name="season" style="padding:8px 10px;border:1px solid var(--gray-300);border-radius:8px;">
+      <option value="">All seasons</option>
+      {% for s in seasons %}<option value="{{ s }}" {{ 'selected' if f.season==s }}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="authority" style="padding:8px 10px;border:1px solid var(--gray-300);border-radius:8px;max-width:280px;">
+      <option value="">All authorities</option>
+      {% for c, n in authorities %}<option value="{{ c }}" {{ 'selected' if f.authority==c }}>{{ n }}</option>{% endfor %}
+    </select>
+    <select name="category" style="padding:8px 10px;border:1px solid var(--gray-300);border-radius:8px;">
+      <option value="">All categories</option>
+      {% for c, l in categories %}<option value="{{ c }}" {{ 'selected' if f.category==c }}>{{ l }}</option>{% endfor %}
+    </select>
+    <select name="show" style="padding:8px 10px;border:1px solid var(--gray-300);border-radius:8px;">
+      <option value="">Everything</option>
+      <option value="published" {{ 'selected' if f.show=='published' }}>Library documents only</option>
+      <option value="archive_only" {{ 'selected' if f.show=='archive_only' }}>Archive only</option>
+    </select>
+    <input type="text" name="q" value="{{ f.q }}" placeholder="Search title / file name"
+           style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--gray-300);border-radius:8px;">
+    <button type="submit" style="padding:8px 16px;border:none;border-radius:8px;background:var(--navy);color:#fff;font-weight:600;cursor:pointer;">Filter</button>
+    {% if f.values()|select|list %}<a href="{{ url_for('pg_archive') }}" style="font-size:0.85rem;color:var(--gray-500);">Clear</a>{% endif %}
+  </form>
+
+  <!-- ── Download + backup ── -->
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:0.88rem;">
+    <form method="POST" action="{{ url_for('pg_archive_zip') }}" style="margin:0;">
+      {% for k, v in f.items() if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <button type="submit" style="padding:9px 16px;border:none;border-radius:8px;background:var(--orange);color:#fff;font-weight:600;cursor:pointer;">
+        ⬇ Download ZIP ({{ total }} file{{ '' if total==1 else 's' }})
+      </button>
+    </form>
+    {% if job.status == 'building' %}
+      <span style="color:#854D0E;">⏳ Building a zip… {{ job.progress or 0 }} / {{ job.total or '?' }} — refresh in a minute.</span>
+    {% elif job.status == 'ready' %}
+      <a href="{{ url_for('pg_archive_zip_download') }}" style="padding:8px 14px;border-radius:8px;background:#DCFCE7;color:#166534;font-weight:600;text-decoration:none;">
+        ✅ Get last zip ({{ job.files }} files · {{ job.mb }} MB)</a>
+      <span style="color:var(--gray-500);font-size:0.8rem;">
+        built {{ (job.built_at or '')[:16]|replace('T',' ') }} UTC{% if job.filters %} ·
+        {{ job.filters.season or 'all seasons' }} / {{ job.filters.authority or 'all authorities' }} / {{ category_label(job.filters.category) if job.filters.category else 'all categories' }}{% endif %}</span>
+    {% elif job.status == 'failed' %}
+      <span style="color:#991B1B;">Last zip failed: {{ job.error }}</span>
+    {% endif %}
+    <form method="POST" action="{{ url_for('pg_archive_backup') }}" style="margin:0 0 0 auto;">
+      <button type="submit" style="padding:8px 14px;border:1px solid var(--gray-300);border-radius:8px;background:#fff;cursor:pointer;">↻ Back up now</button>
+    </form>
+  </div>
+
+  <!-- ── List ── -->
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+      <thead>
+        <tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+          <th style="padding:10px 12px;">Season</th>
+          <th style="padding:10px 12px;">Authority</th>
+          <th style="padding:10px 12px;">Category</th>
+          <th style="padding:10px 12px;">Title</th>
+          <th style="padding:10px 12px;">Date</th>
+          <th style="padding:10px 12px;">Status</th>
+          <th style="padding:10px 12px;text-align:right;">Size</th>
+          <th style="padding:10px 12px;">Backup</th>
+          <th style="padding:10px 12px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:8px 12px;white-space:nowrap;">{{ r.season }}</td>
+          <td style="padding:8px 12px;">{{ r.authority_name or r.authority_code }}</td>
+          <td style="padding:8px 12px;white-space:nowrap;">{{ category_label(r.category) }}</td>
+          <td style="padding:8px 12px;max-width:420px;">{{ r.title }}</td>
+          <td style="padding:8px 12px;white-space:nowrap;">{{ r.doc_date or '' }}</td>
+          <td style="padding:8px 12px;white-space:nowrap;">
+            {% if r.archive_only %}<span style="background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:999px;">Archive only</span>
+            {% elif r.is_published %}<span style="background:#DCFCE7;color:#166534;padding:2px 8px;border-radius:999px;">Published</span>
+            {% else %}<span style="background:#FEF9C3;color:#854D0E;padding:2px 8px;border-radius:999px;">Hidden</span>{% endif %}
+          </td>
+          <td style="padding:8px 12px;text-align:right;white-space:nowrap;">{{ '%.1f'|format((r.size or 0) / 1048576) }} MB</td>
+          <td style="padding:8px 12px;">{{ '✓' if r.backup_r2_key else '…' }}</td>
+          <td style="padding:8px 12px;white-space:nowrap;">
+            <a href="{{ url_for('pg_authority_doc_file_admin', doc_id=r.id) }}" target="_blank" style="color:var(--orange);text-decoration:none;">Open</a>
+            {% if r.source_url %} · <a href="{{ r.source_url }}" target="_blank" rel="noopener" style="color:var(--gray-500);text-decoration:none;">Official ↗</a>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" style="padding:24px;text-align:center;color:var(--gray-500);">No files match these filters.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if total > rows|length %}
+      <div style="padding:10px 14px;font-size:0.82rem;color:var(--gray-500);">Showing the first {{ rows|length }} of {{ total }} — narrow the filters to see the rest (the ZIP includes all {{ total }}).</div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
