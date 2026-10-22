@@ -543,14 +543,15 @@ def in_season(it, season_from=None):
     yrs = [int(x) for x in re.findall(r'\b(20\d{2})\b', t)]
     if yrs and max(yrs) < y:          # names only past years (e.g. "PGMAC-2024", "Session 2023")
         return False
-    # two-digit season folders in the file link, e.g. Maharashtra's ".../PGM-25/Notice+No.16.pdf"
-    # — its "2026" page still lists the whole NEET-PG 2025 round, mostly undated (2026-10-16)
+    d = it.get('notice_date')
+    if d:
+        return d >= cur               # a dated notice: its date decides
+    # UNDATED only: two-digit season folders in the file link, e.g. Maharashtra's ".../PGM-25/Notice+No.16.pdf"
+    # — its "2026" page still lists the whole NEET-PG 2025 round, mostly undated (2026-10-16). Not for dated
+    # notices: Odisha's fixed folder "DOWNLOADSPGM_22" read as 2022 hid its Oct 2026 notices (2026-10-22).
     yy = [int(x) for x in re.findall(r'(?i)(?:PGM?|NEET[-_]?PG)[-_]?(\d{2})(?=[/_.+-])', it.get('url') or '')]
     if yy and max(yy) < y % 100:
         return False
-    d = it.get('notice_date')
-    if d:
-        return d >= cur
     return True                       # undated on a current-season page → keep
 
 
