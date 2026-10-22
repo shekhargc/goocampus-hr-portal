@@ -172,11 +172,15 @@ def news_inbox_redraft():
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
-        conn.execute("UPDATE pg_news_inbox SET redraft_requested = TRUE WHERE id = ?", (iid,))
+        ai_redraft.ensure_cols(conn)
+        # queued for the Mac: its watcher checks every 2 minutes and re-drafts with the founder's
+        # Claude account (founder 2026-10-22, option B — no API key)
+        conn.execute("UPDATE pg_news_inbox SET redraft_requested = TRUE, redraft_status = 'queued', redraft_error = '', "
+                     "redraft_note = ?, redraft_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     ((request.form.get('note') or '').strip()[:500], iid))
         conn.commit()
-        flash('Re-draft requested — your Mac will send a fresh AI draft at its next check '
-              '(every 3 hours, 7 AM–10 PM), or straight away if you click "Run now" on the '
-              'scheduled task in the Claude app.', 'success')
+        flash('Re-draft queued — your Mac re-reads the notice within about 5 minutes (while it is on). '
+              'Refresh this page to see the new draft.', 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

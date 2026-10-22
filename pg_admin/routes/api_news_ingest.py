@@ -233,8 +233,10 @@ def api_news_inbox_known():
         _bf_cols(conn)
         from pg_admin.data.archive import ensure_cols as _ar_cols
         _ar_cols(conn)
-        rows = conn.execute("SELECT item_key, url, title, kind, notice_date, status, (draft_json IS NOT NULL) AS drafted, "
-                            "COALESCE(redraft_requested, FALSE) AS redraft, "
+        from pg_admin.ai_redraft import ensure_cols as _ai_cols, _schedule
+        _ai_cols(conn)
+        rows = conn.execute("SELECT i.id, item_key, url, title, kind, notice_date, status, (draft_json IS NOT NULL) AS drafted, "
+                            "COALESCE(redraft_requested, FALSE) AS redraft, COALESCE(redraft_note,'') AS redraft_note, "
                             "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR pdf_doc_id IS NOT NULL) AS has_pdf, "
                             "EXISTS (SELECT 1 FROM pg_authority_docs d WHERE d.auto_inbox_id = i.id AND "
                             "d.auto_kind = 'snapshot') AS has_snap FROM pg_news_inbox i "
@@ -244,9 +246,12 @@ def api_news_inbox_known():
                         # notices the founder asked to re-draft ("↻ Re-draft with AI") — and New
                         # notices that never got a draft (a run cut short), 2026-10-17
                         'redraft': [{'item_key': r['item_key'], 'url': r['url'], 'title': r['title'],
-                                     'kind': r['kind'],
+                                     'kind': r['kind'], 'inbox_id': r['id'], 'has_stored_pdf': bool(r['has_pdf']),
+                                     'note': r['redraft_note'] if r['redraft'] else '',
                                      'notice_date': r['notice_date'].isoformat() if r['notice_date'] else None}
                                     for r in rows if r['redraft'] or (r['status'] == 'new' and not r['drafted'])],
+                        # the authority's calendar steps — a re-draft reuses the same round/event/label (2026-10-22)
+                        'schedule': _schedule(conn, (NS.SOURCES.get(code) or {}).get('authority_code') or ''),
                         # PDF notices we still don't hold a copy of (link not online yet, too big before,
                         # download failed) — the Mac retries every run and sends the file when it
                         # appears; every authority PDF must be archived (founder 2026-10-17)
@@ -298,6 +303,8 @@ def api_news_inbox_ingest():
         NS.ensure_news_inbox_tables(conn)
         from pg_admin.data.big_files import ensure_cols as _bf_cols
         _bf_cols(conn)
+        from pg_admin.ai_redraft import ensure_cols as _ai_cols
+        _ai_cols(conn)
         row = conn.execute("SELECT id, status, draft_json, notice_date, news_id, reviewed_by, COALESCE(redraft_requested, FALSE) AS redraft, "
                            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR pdf_doc_id IS NOT NULL) AS has_pdf "
                            "FROM pg_news_inbox WHERE source_code = ? AND item_key = ?", (code, key)).fetchone()
@@ -307,6 +314,8 @@ def api_news_inbox_ingest():
             sets, vals = [], []
             if draft and (not row['draft_json'] or row['redraft']):
                 sets += ["draft_json = ?", "drafted_at = CURRENT_TIMESTAMP", "redraft_requested = FALSE"]
+                if row['redraft']:
+                    sets += ["redraft_status = 'done'", "redraft_error = ''", "redraft_at = CURRENT_TIMESTAMP"]
                 vals.append(json.dumps(draft))
             elif draft and (draft.get('document') or draft.get('events')) and row['draft_json']:
                 # a draft from before documents were filed: add ONLY the missing document
@@ -843,3 +852,46 @@ def api_news_inbox_snapshot():
         return jsonify({'ok': False, 'error': str(e)[:200]}), 500
     finally:
         conn.close()
+
+
+def api_news_inbox_redraft_queue():
+    """GET /api/pg/news-inbox/redraft-queue (X-News-Key) — how many notices the team asked to re-draft.
+    The Mac's watcher polls this every 2 minutes (cheap, no AI) and starts a run only when it is > 0."""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        from pg_admin.ai_redraft import ensure_cols as _ai_cols
+        _ai_cols(conn)
+        rows = conn.execute("SELECT id, source_code, title FROM pg_news_inbox WHERE COALESCE(redraft_requested, FALSE) "
+                            "ORDER BY id").fetchall()
+        return jsonify({'ok': True, 'count': len(rows),
+                        'items': [{'id': r['id'], 'source_code': r['source_code'], 'title': r['title']} for r in rows]})
+    finally:
+        conn.close()
+
+
+def api_news_inbox_stored_pdf():
+    """GET /api/pg/news-inbox/stored-pdf?id=<inbox id> (X-News-Key) — the PDF we hold for a notice (inbox copy,
+    its Documents file, R2, or the page snapshot), for a re-draft when the authority has removed the file."""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    try:
+        iid = int(request.args.get('id') or 0)
+    except ValueError:
+        iid = 0
+    conn = get_db()
+    try:
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        _bf_cols(conn)
+        row = conn.execute("SELECT * FROM pg_news_inbox WHERE id = ?", (iid,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'not found'}), 404
+        from pg_admin.ai_redraft import _pdf_bytes
+        data = _pdf_bytes(conn, dict(row))
+    finally:
+        conn.close()
+    if not data:
+        return jsonify({'ok': False, 'error': 'no stored file'}), 404
+    from flask import Response
+    return Response(data, mimetype='application/pdf')

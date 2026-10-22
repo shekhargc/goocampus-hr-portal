@@ -32,11 +32,17 @@ def available():
     return bool((os.environ.get('ANTHROPIC_API_KEY') or '').strip())
 
 
+_READY = [False]
+
+
 def ensure_cols(conn):
+    if _READY[0]:
+        return
     for c, t in (('redraft_status', "TEXT DEFAULT ''"), ('redraft_error', "TEXT DEFAULT ''"),
                  ('redraft_note', "TEXT DEFAULT ''"), ('redraft_at', 'TIMESTAMP')):
         conn.execute(f"ALTER TABLE pg_news_inbox ADD COLUMN IF NOT EXISTS {c} {t}")
     conn.commit()
+    _READY[0] = True
 
 
 def _pdf_bytes(conn, row):

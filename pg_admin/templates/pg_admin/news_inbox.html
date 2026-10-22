@@ -144,7 +144,8 @@
               {% if it.status == 'posted' and it.news_id %}<span style="font-size:0.8rem;color:#166534;margin-left:8px;">✓ posted{% if it.reviewed_by %} by {{ it.reviewed_by }}{% endif %}</span>{% endif %}
               {% if it.status == 'dismissed' and it.reviewed_by %}<span style="font-size:0.8rem;color:var(--gray-500);margin-left:8px;">dismissed by {{ it.reviewed_by }}</span>{% endif %}
             </div>
-            {% if it.redraft_status == 'running' %}<div style="font-size:0.78rem;color:#5b21b6;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:4px 8px;margin-top:5px;">⏳ The AI is re-reading this notice{% if it.redraft_note %} (“{{ it.redraft_note }}”){% endif %} — refresh in a minute.</div>
+            {% if it.redraft_status == 'queued' %}<div style="font-size:0.78rem;color:#5b21b6;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:4px 8px;margin-top:5px;">⏳ Re-draft queued{% if it.redraft_note %} (“{{ it.redraft_note }}”){% endif %} — your Mac re-reads it within about 5 minutes while it is on. Refresh to check.</div>
+            {% elif it.redraft_status == 'running' %}<div style="font-size:0.78rem;color:#5b21b6;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:4px 8px;margin-top:5px;">⏳ The AI is re-reading this notice{% if it.redraft_note %} (“{{ it.redraft_note }}”){% endif %} — refresh in a minute.</div>
             {% elif it.redraft_status == 'failed' %}<div style="font-size:0.78rem;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:4px 8px;margin-top:5px;">Re-draft failed: {{ it.redraft_error }}</div>
             {% elif it.redraft_status == 'done' and it.redraft_at %}<div style="font-size:0.74rem;color:#5b21b6;margin-top:4px;">✓ Re-drafted by AI {{ it.redraft_at|format_datetime }}{% if it.redraft_note %} — checked: “{{ it.redraft_note }}”{% endif %}</div>{% endif %}
             {% if it.draft and it.draft.review_note %}<div style="font-size:0.78rem;color:#92400e;background:#fffbeb;border:1px dashed #f59e0b;border-radius:6px;padding:4px 8px;margin-top:5px;" title="A note from the AI for the team — never published">📝 Note for reviewer (not published): {{ it.draft.review_note }}</div>{% endif %}
@@ -172,10 +173,14 @@
               </form>
             </details>
             {% else %}
-            <form method="POST" action="{{ url_for('pg_news_inbox_redraft') }}" style="display:inline;">
-              <input type="hidden" name="id" value="{{ it.id }}"><input type="hidden" name="tab" value="{{ tab }}"><input type="hidden" name="src" value="{{ src }}">
-              <button class="nb-btn nb-dis" style="color:#5b21b6;" title="Your Mac re-reads the notice and sends a fresh AI draft at its next run">↻ Re-draft</button>
-            </form>
+            <details style="display:inline-block;vertical-align:top;">
+              <summary class="nb-btn nb-dis" style="color:#5b21b6;list-style:none;cursor:pointer;" title="Your Mac re-reads the PDF and writes a fresh draft (within about 5 minutes, while the Mac is on)">↻ Re-draft</summary>
+              <form method="POST" action="{{ url_for('pg_news_inbox_redraft') }}" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;max-width:320px;">
+                <input type="hidden" name="id" value="{{ it.id }}"><input type="hidden" name="tab" value="{{ tab }}"><input type="hidden" name="src" value="{{ src }}">
+                <input name="note" placeholder="What looks off? (optional) e.g. closing date missing" style="flex:1;min-width:200px;padding:5px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.78rem;">
+                <button class="nb-btn" style="background:#5b21b6;color:#fff;">Re-draft</button>
+              </form>
+            </details>
             {% endif %}
             {% if it.status == 'document' %}
               <a class="nb-btn nb-add" href="{{ url_for('pg_authorities_admin', code=it.authority_code) }}">Open Documents</a>

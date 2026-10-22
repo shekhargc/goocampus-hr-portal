@@ -169,6 +169,28 @@ def _catch_up_snapshots(code, need):
     return got
 
 
+def _stored_pdf(inbox_id):
+    """The PDF the portal holds for a notice (when the authority site no longer serves it)."""
+    import requests
+    portal, key = _conf()
+    try:
+        r = requests.get(portal + '/api/pg/news-inbox/stored-pdf', params={'id': inbox_id},
+                         headers={'X-News-Key': key}, timeout=120)
+        return r.content if r.ok and r.content.startswith(b'%PDF') else None
+    except Exception:
+        return None
+
+
+def queue():
+    """Prints QUEUED <n> — re-drafts the team asked for (the watcher starts a run only when n > 0)."""
+    try:
+        n = int(_api('GET', '/api/pg/news-inbox/redraft-queue').get('count') or 0)
+    except Exception as e:
+        print('QUEUE-ERROR', str(e)[:200])
+        return
+    print(f'QUEUED {n}')
+
+
 def _load_pending():
     try:
         with open(PENDING) as f:
@@ -211,12 +233,15 @@ def scan():
                 if iid in have:
                     continue
                 pdf_path = ''
+                data = None
                 if rd.get('kind') == 'pdf' and rd.get('url'):
                     data, _n = NS.fetch_pdf(rd['url'])
-                    if data:
-                        pdf_path = os.path.join(PDFS, iid + '.pdf')
-                        with open(pdf_path, 'wb') as f:
-                            f.write(data)
+                if not data and rd.get('has_stored_pdf') and rd.get('inbox_id'):
+                    data = _stored_pdf(rd['inbox_id'])      # the authority removed it — use our stored copy
+                if data:
+                    pdf_path = os.path.join(PDFS, iid + '.pdf')
+                    with open(pdf_path, 'wb') as f:
+                        f.write(data)
                 dp = os.path.join(DRAFTS, iid + '.json')
                 if os.path.exists(dp):
                     os.remove(dp)                       # force a fresh draft
@@ -224,7 +249,9 @@ def scan():
                                 'item_key': rd['item_key'], 'title': rd.get('title') or '',
                                 'raw_title': rd.get('title') or '', 'url': rd.get('url') or '',
                                 'kind': rd.get('kind') or 'link', 'notice_date': rd.get('notice_date'),
-                                'pdf_path': pdf_path, 'draft_path': dp, 'redraft': True})
+                                'pdf_path': pdf_path, 'draft_path': dp, 'redraft': True,
+                                # the team's "what looks off" note + the authority's calendar steps (2026-10-22)
+                                'note': rd.get('note') or '', 'schedule': kinfo.get('schedule') or ''})
                 have.add(iid)
                 res['new'] += 1
             for it in items:
@@ -281,8 +308,10 @@ def scan():
               + (f" · {b['snapshots']} web page(s) saved as PDF" if b.get('snapshots') else ''))
     print(f'PENDING {len(pending)}')
     for p in pending:
-        print(json.dumps({k: p[k] for k in ('id', 'source_label', 'title', 'kind', 'notice_date',
-                                            'url', 'pdf_path', 'draft_path')}))
+        print(json.dumps({**{k: p[k] for k in ('id', 'source_label', 'title', 'kind', 'notice_date',
+                                               'url', 'pdf_path', 'draft_path')},
+                          **({'team_note': p['note']} if p.get('note') else {}),
+                          **({'schedule': p['schedule']} if p.get('redraft') and p.get('schedule') else {})}))
 
 
 def push():
@@ -365,6 +394,8 @@ if __name__ == '__main__':
         scan()
     elif cmd == 'push':
         push()
+    elif cmd == 'queue':
+        queue()
     elif cmd == 'text' and len(sys.argv) > 2:
         text(sys.argv[2], *(sys.argv[3:5]))
     else:
