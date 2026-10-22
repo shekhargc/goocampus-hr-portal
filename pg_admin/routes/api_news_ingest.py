@@ -671,6 +671,31 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('dupes') == '1':   # PDF copies stored more than once (read-only, 2026-10-22)
+            q = lambda sql: dict(conn.execute(sql).fetchone())
+            out = {
+                'docs': q("SELECT COUNT(*) AS n, COALESCE(SUM(octet_length(file_data)),0) AS bytes "
+                          "FROM pg_authority_docs WHERE file_data IS NOT NULL"),
+                'news_with_own_pdf': q("SELECT COUNT(*) AS n, COALESCE(SUM(octet_length(pdf_data)),0) AS bytes "
+                                       "FROM pg_news WHERE pdf_data IS NOT NULL"),
+                'news_pdf_same_as_a_doc': q("SELECT COUNT(*) AS n, COALESCE(SUM(octet_length(n.pdf_data)),0) AS bytes "
+                                            "FROM pg_news n WHERE n.pdf_data IS NOT NULL AND EXISTS (SELECT 1 FROM "
+                                            "pg_authority_docs d WHERE d.file_data IS NOT NULL AND "
+                                            "md5(d.file_data) = md5(n.pdf_data))"),
+                'inbox_with_pdf': q("SELECT COUNT(*) AS n, COALESCE(SUM(octet_length(pdf_data)),0) AS bytes "
+                                    "FROM pg_news_inbox WHERE pdf_data IS NOT NULL"),
+                'inbox_pdf_same_as_its_doc': q("SELECT COUNT(*) AS n, COALESCE(SUM(octet_length(i.pdf_data)),0) AS bytes "
+                                               "FROM pg_news_inbox i WHERE i.pdf_data IS NOT NULL AND EXISTS (SELECT 1 "
+                                               "FROM pg_authority_docs d WHERE d.file_data IS NOT NULL AND "
+                                               "md5(d.file_data) = md5(i.pdf_data))"),
+                'docs_duplicated_within_docs': q("SELECT COUNT(*) AS n, COALESCE(SUM(b),0) AS bytes FROM (SELECT "
+                                                 "md5(file_data) AS h, COUNT(*) - 1 AS n, (COUNT(*) - 1) * "
+                                                 "MAX(octet_length(file_data)) AS b FROM pg_authority_docs WHERE "
+                                                 "file_data IS NOT NULL GROUP BY md5(file_data) HAVING COUNT(*) > 1) x"),
+            }
+            for v in out.values():
+                v['mb'] = round(int(v['bytes'] or 0) / 1048576, 1); v['bytes'] = int(v['bytes'] or 0)
+            return jsonify({'ok': True, **out})
         if request.args.get('dq') == '1':      # data-quality drill-down (staging tool, read-only)
             unlinked = [dict(r) for r in conn.execute(
                 "SELECT counselling_body, college_code, college_name, course_name, quota, category_code, seats "
