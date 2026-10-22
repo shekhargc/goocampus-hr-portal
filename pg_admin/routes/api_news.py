@@ -516,7 +516,8 @@ def counselling_status(conn, code, today=None, headings=None):
         if status == 'completed':
             headline = 'All scheduled rounds completed'
         elif not alloc:
-            headline = 'Registration closed — Round 1 dates awaited'
+            headline = ('Registration closed — Round 1 dates awaited' if any(i['step'] == 'registration' for i in flat)
+                        else 'Round 1 dates awaited')
         else:
             last = max((i['round'] for i in alloc), key=lambda r: rorder.get(r, 50))
             headline = f'{last} completed — next round dates awaited'
