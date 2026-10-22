@@ -49,7 +49,7 @@ def news_inbox():
             where += " AND source_code = ?"; params.append(src)
         items = [dict(r) for r in conn.execute(
             "SELECT id, source_code, authority_code, item_key, title, url, kind, notice_date, status, news_id, "
-            "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '') AS has_pdf, "
+            "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR pdf_doc_id IS NOT NULL) AS has_pdf, "
             "COALESCE(redraft_requested, FALSE) AS redraft_requested, COALESCE(history_note,'') AS history_note, "
             "COALESCE(notice_date_source,'') AS notice_date_source "
             "FROM pg_news_inbox WHERE " + where + " "

@@ -189,9 +189,24 @@ def authority_doc_delete():
             from pg_admin.data.auto_docs import ensure_cols
             ensure_cols(conn)
             conn.execute("UPDATE pg_news_inbox SET doc_rejected = TRUE WHERE id = ?", (r['auto_inbox_id'],))
-        conn.execute("DELETE FROM pg_authority_docs WHERE id=?", (did,))
-        conn.commit()
-        flash('Document deleted.', 'success')
+        from pg_admin.data.big_files import ensure_cols as _bf_cols
+        from pg_admin.data.archive import ensure_cols as _ar_cols
+        _bf_cols(conn); _ar_cols(conn)
+        conn.execute("ALTER TABLE pg_news ADD COLUMN IF NOT EXISTS authority_doc_id INTEGER")
+        used = conn.execute(
+            "SELECT (SELECT COUNT(*) FROM pg_news_inbox WHERE pdf_doc_id = ?) + "
+            "(SELECT COUNT(*) FROM pg_news WHERE authority_doc_id = ?) AS n", (did, did)).fetchone()['n']
+        if (r and r['auto_inbox_id']) or used:
+            # an official fetched file, or the one copy a notice / news item uses → off the list, kept
+            # in the Archive (founder 2026-10-22: every fetched PDF stays in our control)
+            conn.execute("UPDATE pg_authority_docs SET archive_only = TRUE, is_published = FALSE, "
+                         "review_pending = FALSE, is_main = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (did,))
+            conn.commit()
+            flash('Removed from Documents — the file is kept in the Document Archive.', 'success')
+        else:
+            conn.execute("DELETE FROM pg_authority_docs WHERE id=?", (did,))
+            conn.commit()
+            flash('Document deleted.', 'success')
     except Exception as e:
         logging.error("authority_doc_delete: %s", e)
         try: conn.rollback()

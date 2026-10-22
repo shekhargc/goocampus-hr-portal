@@ -23,7 +23,7 @@ def ensure_cols(conn):
     if _READY:
         return
     try:
-        for table, cols in (('pg_news_inbox', ('pdf_r2_key TEXT', 'pdf_size BIGINT', 'pdf_sha256 TEXT')),
+        for table, cols in (('pg_news_inbox', ('pdf_r2_key TEXT', 'pdf_size BIGINT', 'pdf_sha256 TEXT', 'pdf_doc_id INTEGER')),
                             ('pg_news', ('pdf_r2_key TEXT',)),
                             ('pg_authority_docs', ('file_r2_key TEXT',))):
             for c in cols:
