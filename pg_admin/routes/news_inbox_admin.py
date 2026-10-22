@@ -79,6 +79,7 @@ def news_inbox():
         try: it['draft'] = _json.loads(it.get('draft_json') or '{}') or None
         except Exception: it['draft'] = None
     _flag_similar(items)
+    _flag_date_gaps(items)
     labels = {c: s['label'] for c, s in NS.SOURCES.items()}
     return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab,
                            sources=sources, labels=labels, src=src, auth_tabs=auth_tabs,
@@ -210,3 +211,28 @@ def news_inbox_status():
     finally:
         conn.close()
     return redirect(url_for('pg_news_inbox', tab=back, src=back_src))
+
+
+
+def _flag_date_gaps(items):
+    """Dates written in a draft's text that aren't in its date fields (founder 2026-10-22). 'missing' =
+    not in the authority's schedule either (doctors can't see that date anywhere) → red; otherwise amber."""
+    from pg_admin.data.date_check import gaps, calendar_dates
+    todo = [it for it in items if it.get('draft') and it.get('status') in ('new', 'document', 'posted')]
+    if not todo:
+        return
+    conn = get_db()
+    try:
+        cal = {}
+        for it in todo:
+            code = it.get('authority_code') or ''
+            if code not in cal:
+                cal[code] = calendar_dates(conn, code)
+            g = gaps(it['draft'], it.get('notice_date'), cal[code])
+            if g:
+                it['date_gaps'] = [{'date': d.strftime('%d %b'), 'snippet': sn, 'in_calendar': c} for d, sn, c in g]
+                it['date_gaps_missing'] = sum(1 for _d, _s, c in g if not c)
+    except Exception as e:
+        logging.warning("inbox date gaps: %s", e)
+    finally:
+        conn.close()
