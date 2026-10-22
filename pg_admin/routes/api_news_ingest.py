@@ -692,6 +692,14 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('cal'):            # one authority's calendar rows (read-only, 2026-10-22)
+            rows = []
+            for r in conn.execute("SELECT id, round, event, label, start_date, end_date, is_active, news_id, inbox_id "
+                                  "FROM pg_counselling_events WHERE authority_code = ? ORDER BY start_date, id",
+                                  (request.args.get('cal'),)).fetchall():
+                rows.append({k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v)
+                             for k, v in dict(r).items()})
+            return jsonify({'ok': True, 'rows': rows})
         if request.args.get('dupes') == '1':   # PDF copies stored more than once (read-only, 2026-10-22)
             q = lambda sql: dict(conn.execute(sql).fetchone())
             out = {
