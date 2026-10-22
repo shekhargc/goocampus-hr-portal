@@ -33,7 +33,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
                              calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments,
-                             mgmt_inquiries)
+                             mgmt_inquiries, archive_admin)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -218,6 +218,8 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_review, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/hold', 'api_news_inbox_hold',
                      api_news_ingest.api_news_inbox_hold, methods=['POST'])
+    app.add_url_rule('/api/pg/news-inbox/snapshot', 'api_news_inbox_snapshot',
+                     api_news_ingest.api_news_inbox_snapshot, methods=['POST'])
     app.add_url_rule('/api/pg/news-inbox/upload-url', 'api_news_inbox_upload_url',
                      api_news_ingest.api_news_inbox_upload_url, methods=['POST'])
     app.add_url_rule('/api/pg/news-inbox/undated', 'api_news_inbox_undated',
@@ -275,6 +277,19 @@ def register_pg_admin(app):
                      authority_admin.authority_doc_main, methods=['POST'])
     app.add_url_rule('/admin/pg/authority-docs/<int:doc_id>/file', 'pg_authority_doc_file_admin',
                      authority_admin.authority_doc_file_admin, methods=['GET'])
+    # ── Document Archive: every authority PDF by season → authority → category + ZIP + R2 backup ──
+    app.add_url_rule('/admin/pg/archive', 'pg_archive',
+                     archive_admin.archive_page, methods=['GET'])
+    app.add_url_rule('/admin/pg/archive/zip', 'pg_archive_zip',
+                     archive_admin.archive_zip_build, methods=['POST'])
+    app.add_url_rule('/admin/pg/archive/zip/download', 'pg_archive_zip_download',
+                     archive_admin.archive_zip_download, methods=['GET'])
+    app.add_url_rule('/admin/pg/archive/backup', 'pg_archive_backup',
+                     archive_admin.archive_backup_now, methods=['POST'])
+    app.add_url_rule('/api/pg/archive/backfill', 'api_pg_archive_backfill',
+                     archive_admin.api_archive_backfill, methods=['POST'])
+    app.add_url_rule('/api/pg/archive/status', 'api_pg_archive_status',
+                     archive_admin.api_archive_status, methods=['GET'])
     # ── Public API for goocampus.in: per-authority sections (X-PG-Key; file is public) ──
     app.add_url_rule('/api/pg/authorities', 'api_pg_authorities',
                      api_authorities.api_pg_authorities, methods=['GET'])

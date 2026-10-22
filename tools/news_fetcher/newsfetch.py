@@ -29,6 +29,10 @@ CONF = os.path.expanduser('~/.goocampus/news_ingest.json')
 PENDING = os.path.join(WORK, 'pending.json')
 DRAFTS = os.path.join(WORK, 'drafts')
 PDFS = os.path.join(WORK, 'pdf')
+SNAPS = os.path.join(WORK, 'snap')
+SNAP_FAILS = os.path.join(WORK, 'snap_failed.json')
+CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+SNAP_MAX = 25                      # older web pages snapshotted per source per run (catch-up)
 
 
 def _conf():
@@ -85,6 +89,86 @@ def _fetch_missing_pdfs(code, need):
     return got
 
 
+def _snapshot(url):
+    """Print a web-page notice to PDF with headless Chrome (its own throwaway profile — never the
+    founder's browser). Returns the PDF bytes, or None (not a web page / timed out / no Chrome).
+    Every notice must stay in our control after the authority edits or removes the page (2026-10-22)."""
+    import subprocess
+    import tempfile
+    path = url.split('?')[0].lower()
+    if not url.startswith('http') or path.endswith(('.xls', '.xlsx', '.doc', '.docx', '.zip', '.rar', '.csv',
+                                                     '.ppt', '.pptx', '.pdf')):
+        return None
+    if not os.path.exists(CHROME):
+        return None
+    fd, out = tempfile.mkstemp(suffix='.pdf'); os.close(fd)
+    try:
+        subprocess.run([CHROME, '--headless=new', '--disable-gpu', '--no-first-run', '--no-pdf-header-footer',
+                        '--user-data-dir=' + os.path.join(WORK, 'chrome-snap'), '--timeout=45000',
+                        '--user-agent=' + NS.UA, '--print-to-pdf=' + out, url],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90)
+        with open(out, 'rb') as f:
+            data = f.read()
+        if not data.startswith(b'%PDF') or len(data) < 1500 or len(data) > INLINE_MAX:
+            return None                                  # blank page (site down / load timed out)
+        try:                                             # never keep a block / error page
+            import io
+            from pypdf import PdfReader
+            txt = ' '.join((pg.extract_text() or '') for pg in PdfReader(io.BytesIO(data)).pages[:2]).lower()
+            if len(txt) < 1500 and any(w in txt for w in ('access denied', "don't have permission", '403 forbidden',
+                                                           '404 not found', 'page not found', 'bad gateway',
+                                                           'service unavailable', 'request rejected')):
+                return None
+        except Exception:
+            pass
+        return data
+    except Exception:
+        return None
+    finally:
+        try: os.remove(out)
+        except OSError: pass
+
+
+def _send_snapshot(code, item_key, data, title):
+    name = (''.join(c for c in (title or 'web-page') if c.isalnum() or c in ' -_')[:80].strip() or 'web-page') + '.pdf'
+    r = _api('POST', '/api/pg/news-inbox/snapshot',
+             json={'source_code': code, 'item_key': item_key, 'name': name,
+                   'pdf_b64': base64.b64encode(data).decode()})
+    return r.get('result')
+
+
+def _snap_fails():
+    try:
+        with open(SNAP_FAILS) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _catch_up_snapshots(code, need):
+    """Web-page notices the portal holds no snapshot of yet → print + send (a few per run; a page that
+    fails 3 times is skipped so a broken link never slows every run)."""
+    fails = _snap_fails()
+    got = 0
+    for n in (need or [])[:SNAP_MAX]:
+        k = f"{code}|{n['item_key']}"
+        if fails.get(k, 0) >= 3:
+            continue
+        data = _snapshot(n['url'])
+        if not data:
+            fails[k] = fails.get(k, 0) + 1
+            continue
+        try:
+            if _send_snapshot(code, n['item_key'], data, n.get('title')) in ('archived', 'duplicate', 'already'):
+                got += 1
+        except Exception as e:
+            print(f"  snapshot of {n['title'][:60]} could not be sent ({e}) — will retry next run")
+    os.makedirs(WORK, exist_ok=True)
+    with open(SNAP_FAILS, 'w') as f:
+        json.dump(fails, f)
+    return got
+
+
 def _load_pending():
     try:
         with open(PENDING) as f:
@@ -120,6 +204,7 @@ def scan():
             first_run = not known
             res['found'] = len(items)
             res['pdfs_late'] = _fetch_missing_pdfs(code, kinfo.get('need_pdf'))
+            res['snapshots'] = _catch_up_snapshots(code, kinfo.get('need_snapshot'))
             # Notices the founder asked to re-draft ("↻ Re-draft with AI" in the News Inbox)
             for rd in (kinfo.get('redraft') or []):
                 iid = _id(code, rd['item_key'])
@@ -159,18 +244,26 @@ def scan():
                         'raw_title': it['raw_title'], 'url': it['url'], 'kind': it['kind'],
                         'notice_date': d.isoformat() if d else None, 'status': 'seen'})
                     continue
-                pdf_path = ''
+                pdf_path = snap_path = ''
                 if it['kind'] == 'pdf':
                     data, name = NS.fetch_pdf(it['url'])
                     if data:
                         pdf_path = os.path.join(PDFS, iid + '.pdf')
                         with open(pdf_path, 'wb') as f:
                             f.write(data)
+                elif it.get('url'):
+                    snap = _snapshot(it['url'])         # web-page notice → PDF snapshot, sent at push
+                    if snap:
+                        os.makedirs(SNAPS, exist_ok=True)
+                        snap_path = os.path.join(SNAPS, iid + '.pdf')
+                        with open(snap_path, 'wb') as f:
+                            f.write(snap)
                 pending.append({'id': iid, 'source_code': code, 'source_label': src['label'],
                                 'item_key': it['item_key'], 'title': it['title'], 'raw_title': it['raw_title'],
                                 'url': it['url'], 'kind': it['kind'],
                                 'notice_date': d.isoformat() if d else None,
-                                'pdf_path': pdf_path, 'draft_path': os.path.join(DRAFTS, iid + '.json')})
+                                'pdf_path': pdf_path, 'snapshot_path': snap_path,
+                                'draft_path': os.path.join(DRAFTS, iid + '.json')})
                 have.add(iid)
                 res['new'] += 1
             res['ok'] = True
@@ -184,7 +277,8 @@ def scan():
         print('heartbeat failed:', e)
     for b in beat:
         print(f"{b['source']}: {'ok' if b['ok'] else 'ERROR ' + b['error']} · {b['found']} on page · {b['new']} new"
-              + (f" · {b['pdfs_late']} missing PDF(s) now archived" if b.get('pdfs_late') else ''))
+              + (f" · {b['pdfs_late']} missing PDF(s) now archived" if b.get('pdfs_late') else '')
+              + (f" · {b['snapshots']} web page(s) saved as PDF" if b.get('snapshots') else ''))
     print(f'PENDING {len(pending)}')
     for p in pending:
         print(json.dumps({k: p[k] for k in ('id', 'source_label', 'title', 'kind', 'notice_date',
@@ -211,6 +305,14 @@ def push():
                                             p['url'].split('?')[0].rsplit('/', 1)[-1][:200]))
             r = _api('POST', '/api/pg/news-inbox/ingest', json=body)
             print(f"{p['id']}: {r.get('result')} · {p['title'][:80]}")
+            sp = p.get('snapshot_path')
+            if sp and os.path.exists(sp):
+                try:                                     # the page's PDF snapshot → archive (not fatal)
+                    with open(sp, 'rb') as f:
+                        _send_snapshot(p['source_code'], p['item_key'], f.read(), p.get('title'))
+                    os.remove(sp)
+                except Exception as e:
+                    print(f"{p['id']}: snapshot not sent ({e}) — the next run retries it")
         except Exception as e:
             print(f"{p['id']}: FAILED ({e}) — will retry next run")
             left.append(p)

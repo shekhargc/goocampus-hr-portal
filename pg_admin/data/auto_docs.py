@@ -38,6 +38,25 @@ def ensure_cols(conn):
 
 
 def file_from_inbox(conn, inbox_id):
+    """File one inbox notice's PDF; anything the rules below don't file as a publishable document (no
+    category, not news, dismissed, a web-page snapshot) is kept as a hidden ARCHIVE-ONLY document so the
+    season's library is complete (founder 2026-10-22). A document the team removed is never re-filed.
+    Returns 'filed' | 'archived' | 'duplicate' | 'already' | 'dismissed' | 'skip'. Caller commits."""
+    res = _file_from_inbox_core(conn, inbox_id)
+    if res in ('skip', 'dismissed'):
+        try:
+            rej = conn.execute("SELECT COALESCE(doc_rejected, FALSE) AS r FROM pg_news_inbox WHERE id = ?",
+                               (inbox_id,)).fetchone()
+            if rej and not rej['r']:
+                from pg_admin.data.archive import archive_inbox_pdf
+                if archive_inbox_pdf(conn, inbox_id) == 'archived':
+                    res = 'archived' if res == 'skip' else 'dismissed+archived'
+        except Exception as e:
+            logging.warning("archive inbox %s: %s", inbox_id, e)
+    return res
+
+
+def _file_from_inbox_core(conn, inbox_id):
     """File one inbox notice's PDF. Returns 'filed' | 'duplicate' | 'already' | 'skip'. Caller commits."""
     import json
     from pg_admin import news_scraper as NS
@@ -78,8 +97,18 @@ def file_from_inbox(conn, inbox_id):
     if not code or not valid_category(cat):
         return 'skip'
     news_only_doc = doc.get('news') is False
-    if conn.execute("SELECT 1 FROM pg_authority_docs WHERE auto_inbox_id = ? AND COALESCE(auto_kind,'') <> 'reg_list' "
-                    "LIMIT 1", (inbox_id,)).fetchone():
+    prev = conn.execute("SELECT id, COALESCE(to_jsonb(pg_authority_docs)->>'archive_only','false') AS ao "
+                        "FROM pg_authority_docs WHERE auto_inbox_id = ? AND COALESCE(auto_kind,'') NOT IN "
+                        "('reg_list','snapshot') ORDER BY id LIMIT 1", (inbox_id,)).fetchone()
+    if prev and prev['ao'] == 'true':
+        # kept earlier as archive-only (no category then) — the re-read found its category: move it
+        # into the library, waiting to publish (same stored file, no second copy) (2026-10-22)
+        title = (str(doc.get('title') or '').strip() or r['title'] or 'Document')[:300]
+        conn.execute("UPDATE pg_authority_docs SET archive_only = FALSE, category = ?, title = ?, note = '', "
+                     "review_pending = TRUE, uploaded_by = 'AI (auto)', backup_r2_key = '' WHERE id = ?",
+                     (cat, title, prev['id']))
+        res = 'filed'
+    elif prev:
         res = 'already'
     elif r['pdf_data'] and find_same_file(conn, code, r['pdf_data']):
         res = 'duplicate'
@@ -138,6 +167,9 @@ def file_safely(conn, inbox_id):
     try:
         res = file_from_inbox(conn, inbox_id)
         conn.commit()
+        if res in ('filed', 'archived', 'dismissed+archived'):
+            from pg_admin.data.archive import kick_sync
+            kick_sync()                        # backup copy to R2 archive/… in the background
         return res
     except Exception as e:
         logging.warning("auto-file inbox %s: %s", inbox_id, e)
