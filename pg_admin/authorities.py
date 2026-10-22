@@ -41,7 +41,7 @@ AUTHORITIES = [
     ("ojee",       "DMET Odisha (PG Medical counselling)",  "Odisha",             "https://dmetodisha.in",                       "state"),
     ("centac",     "CENTAC",                                "Puducherry",         "https://centacpuducherry.in",                 "state"),
     ("bfuhs",      "BFUHS",                                 "Punjab",             "https://bfuhs.ac.in",                         "state"),
-    ("ruhs",       "RUHS",                                  "Rajasthan",          "https://ruhsraj.org",                         "state"),
+    ("ruhs",       "Rajasthan NEET PG Counselling Board",   "Rajasthan",          "https://pg.neetrajasthan.com",                "state"),
     ("smu_sikkim", "Sikkim Manipal University",             "Sikkim",             "https://smu.edu.in",                          "state"),
     ("dmer_tn",    "DMER Tamil Nadu",                       "Tamil Nadu",         "https://tnmedicalselection.net",              "state"),
     ("knruhs",     "KNRUHS",                                "Telangana",          "https://knruhs.telangana.gov.in",             "state"),

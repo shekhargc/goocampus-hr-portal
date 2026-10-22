@@ -508,6 +508,51 @@ def read_raj_orderportal(dept_codes, include=None, exclude=None, page_size=300):
     return items      # empty is normal until the PG board posts
 
 
+
+def read_raj_pg_portal(src):
+    """Rajasthan NEET PG Counselling Board's own portal pg.neetrajasthan.com (founder 2026-10-22: the
+    state PG counselling runs here; the Govt order portal had nothing). An Angular app — its notices
+    come from a JSON API: {id, title, attachment (file under /notifications/), createdAt, updatedAt}.
+    A notice with a file → item keyed by the file URL. A text-only notice (e.g. the ticker "registration
+    extended till …") → keyed by id + updatedAt, so an edited notice comes in as new. The Govt order
+    portal is still read too (if it answers) for orders that appear only there."""
+    base = 'https://pg.neetrajasthan.com'
+    s, items, seen = NS._session(), [], set()
+    r = s.get(base + '/api/v1/user/getAllNotifications', timeout=(10, 60),
+              headers={'Referer': base + '/home', 'Accept': 'application/json'})
+    r.raise_for_status()
+    for x in ((r.json() or {}).get('data') or []):
+        title = re.sub(r'\s+', ' ', x.get('title') or '').strip()
+        if not title:
+            continue
+        att = (x.get('attachment') or '').strip()
+        stamp = (x.get('updatedAt') or x.get('createdAt') or '')
+        d = None
+        try:
+            d = date.fromisoformat(((x.get('createdAt') if att else stamp) or '')[:10])
+        except ValueError:
+            pass
+        if att:
+            url = f"{base}/notifications/{att}"
+            key = url
+        else:
+            url = base + '/home'
+            key = f"rajpg:{x.get('id')}:{stamp}"
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append({'item_key': key, 'raw_title': title, 'title': title, 'url': url,
+                      'kind': 'pdf' if att else 'link', 'notice_date': d})
+    if src.get('dept_codes'):
+        try:
+            for it in read_raj_orderportal(src['dept_codes'], src.get('include'), src.get('exclude')):
+                if it['item_key'] not in seen:
+                    seen.add(it['item_key'])
+                    items.append(it)
+        except Exception as e:
+            print(f'  (skipped Govt order portal) {str(e)[:120]}')
+    return items
+
 # ── East & North-East batch ──
 # ===== ojee =====
 def read_dmet_odisha(pages, include=None, exclude=None):
@@ -721,6 +766,7 @@ DISPATCH = {
     'jceceb_grid': lambda s: read_jceceb_grid(s.get('pages') or [s['url']], s.get('include'), s.get('exclude')),
     'jk_bopee': lambda s: read_jk_bopee(s['url']),
     'raj_orderportal': lambda s: read_raj_orderportal(s['dept_codes'], s.get('include'), s.get('exclude')),
+    'raj_pg_portal': read_raj_pg_portal,
     'dmet_odisha': lambda s: read_dmet_odisha(s.get('pages') or [s['url']], s.get('include'), s.get('exclude')),
     'pdf_links_lastmod': lambda s: read_pdf_links_lastmod(s['url'], s.get('pages'), s.get('include'), s.get('exclude')),
     'badge_list': lambda s: read_badge_list(s['url'], s.get('include'), s.get('exclude')),

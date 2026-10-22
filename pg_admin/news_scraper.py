@@ -74,13 +74,14 @@ SOURCES = {
         'label': 'Kerala CEE — PG Medical 2026',
         'authority_code': 'cee_kerala',
         'news_authority': 'state:Kerala',
-        # application-phase page now; the candidate portal (pgm2026) opens later — both read, a
-        # missing page is skipped. Next year: bump the year here.
-        'url': 'https://cee.kerala.gov.in/pgmonline2026/notification',
-        'pages': ['https://cee.kerala.gov.in/pgmonline2026/notification',
-                  'https://cee.kerala.gov.in/pgm2026/notification'],
+        # pgm2026 = the main PG Medical 2026 section (founder 2026-10-22); the application-phase page
+        # (pgmonline2026) now answers 403 — still tried, a page that fails is skipped.
+        # Next year: bump the year here.
+        'url': 'https://cee.kerala.gov.in/pgm2026/notification',
+        'pages': ['https://cee.kerala.gov.in/pgm2026/notification',
+                  'https://cee.kerala.gov.in/pgmonline2026/notification'],
         # course home pages: prospectus + menu PDFs + the "Important Dates" box (founder 2026-10-13)
-        'home': ['https://cee.kerala.gov.in/pgmonline2026/', 'https://cee.kerala.gov.in/pgm2026/'],
+        'home': ['https://cee.kerala.gov.in/pgm2026/', 'https://cee.kerala.gov.in/pgmonline2026/'],
         'reader': 'cee_kerala',
         'enabled': True,
     },
@@ -321,12 +322,17 @@ SOURCES = {
     },
     # Rajasthan: no_pg_2026_yet — RUHS (ruhsraj.org, admissions.ruhsraj.org 2026-27) does NOT run NEET-PG MD/MS state counselling — its admissions portal lists only CUET/PGET (nursing/pharmacy/MSc), PhD etc.; no MD
     'ruhs_pg': {
-        'label': 'Rajasthan NEET PG Counselling Board (SMS Medical College) — via Medical Education Dept order portal',
+        'label': 'Rajasthan NEET PG Counselling Board — pg.neetrajasthan.com (+ Medical Education Dept orders)',
         'short': 'Rajasthan',
         'authority_code': 'ruhs',
         'news_authority': 'state:Rajasthan',
-        'url': 'https://medicaleducation.rajasthan.gov.in/smsjaipur/#/department-order/102',
-        'reader': 'raj_orderportal',
+        # the Board's own PG portal (founder 2026-10-22) + the Govt order portal as a second source
+        'url': 'https://pg.neetrajasthan.com/home',
+        'reader': 'raj_pg_portal',
+        'fixed_docs': [{'url': 'https://pg.neetrajasthan.com/notifications/1792302615499.pdf',
+                        'title': 'Rajasthan NEET PG 2026 — Information Booklet'},
+                       {'url': 'https://pg.neetrajasthan.com/notifications/1792303047771.pdf',
+                        'title': 'Rajasthan NEET PG 2026 — Application Guidelines'}],
         'include': 'NEET[\\s-]*PG|PG\\s*Medical|Medical\\s*PG|M\\.?D\\.?\\s*/\\s*M\\.?S|post[\\s-]*graduate|स्नातकोत्तर|DNB',
         'exclude': '\\bMDS\\b|dental|nursing|pharm|ayush|ayurved|homoeo|bond|सेवा बन्ध|super\\s*speciality|सुपर',
         'dept_codes': [102, 357],
@@ -537,14 +543,15 @@ def in_season(it, season_from=None):
     yrs = [int(x) for x in re.findall(r'\b(20\d{2})\b', t)]
     if yrs and max(yrs) < y:          # names only past years (e.g. "PGMAC-2024", "Session 2023")
         return False
-    # two-digit season folders in the file link, e.g. Maharashtra's ".../PGM-25/Notice+No.16.pdf"
-    # — its "2026" page still lists the whole NEET-PG 2025 round, mostly undated (2026-10-16)
+    d = it.get('notice_date')
+    if d:
+        return d >= cur               # a dated notice: its date decides
+    # UNDATED only: two-digit season folders in the file link, e.g. Maharashtra's ".../PGM-25/Notice+No.16.pdf"
+    # — its "2026" page still lists the whole NEET-PG 2025 round, mostly undated (2026-10-16). Not for dated
+    # notices: Odisha's fixed folder "DOWNLOADSPGM_22" read as 2022 hid its Oct 2026 notices (2026-10-22).
     yy = [int(x) for x in re.findall(r'(?i)(?:PGM?|NEET[-_]?PG)[-_]?(\d{2})(?=[/_.+-])', it.get('url') or '')]
     if yy and max(yy) < y % 100:
         return False
-    d = it.get('notice_date')
-    if d:
-        return d >= cur
     return True                       # undated on a current-season page → keep
 
 
@@ -635,6 +642,25 @@ def _session():
     return s
 
 
+def _get_pages(s, pages):
+    """Fetch each page; a page that fails (403 / 404 / timeout) is SKIPPED and reported, so one
+    broken or retired page never hides an authority's other pages (Kerala 2026-10-22). Raises only
+    when NO page could be read — the run then shows the source as an error."""
+    out, errs = [], []
+    for pg in pages:
+        try:
+            r = s.get(pg, timeout=TIMEOUT)
+            r.raise_for_status()
+            out.append(r)
+        except Exception as e:
+            errs.append(f"{pg}: {str(e)[:120]}")
+    if errs and out:
+        print('  (skipped page) ' + ' | '.join(errs))
+    if not out:
+        raise ValueError('; '.join(errs) or 'no pages')
+    return out
+
+
 def read_pdf_links(url, pages=None, include=None, exclude=None):
     """Generic: every <a href="...pdf">TITLE</a> on the given pages (MCC style). The date
     comes from the title if present, else from a yyyymmdd stamp in the file name.
@@ -646,9 +672,7 @@ def read_pdf_links(url, pages=None, include=None, exclude=None):
     s.headers['User-Agent'] = UA
     if _proxies():
         s.proxies.update(_proxies())
-    for pg in (pages or [url]):
-        r = s.get(pg, timeout=TIMEOUT)
-        r.raise_for_status()
+    for r in _get_pages(s, pages or [url]):
         for href, inner in re.findall(r'<a\b[^>]*href=["\']([^"\']+\.pdf)["\'][^>]*>(.*?)</a>', r.text, re.S | re.I):
             href = urljoin(r.url, _html.unescape(href).strip())
             raw = _text(inner)
@@ -742,14 +766,17 @@ def read_aspnet_filter(url, form, include=None, exclude=None):
 def read_cee_kerala(pages, home=None):
     """Kerala CEE (cee.kerala.gov.in/<course><year>/notification) — rows of
     TITLE · [Notification] [Press Release] [Vacancy] links (noti_view/<id>/UploadN, serve PDFs) · dd-mm-yyyy.
-    A page that doesn't exist yet (404, e.g. the candidate portal before it opens) is skipped."""
+    A page that doesn't exist or refuses us (404 / 403 — an old phase's page, 2026-10-22) is skipped;
+    the source fails only when NO page could be read."""
     from urllib.parse import urljoin
     s, items, seen, ok = _session(), [], set(), False
     for pg in pages:
-        r = s.get(pg, timeout=TIMEOUT)
-        if r.status_code == 404:
+        try:
+            r = s.get(pg, timeout=TIMEOUT)
+        except Exception:
             continue
-        r.raise_for_status()
+        if r.status_code >= 400:
+            continue
         ok = True
         for chunk in re.split(r'<div class="row">', r.text):
             links = re.findall(r"<a\s+href=['\"]([^'\"]*noti_view[^'\"]*)['\"][^>]*>(.*?)</a>", chunk, re.S | re.I)
@@ -768,7 +795,10 @@ def read_cee_kerala(pages, home=None):
                 items.append({'item_key': href, 'raw_title': title, 'title': title or lt, 'url': href,
                               'kind': 'pdf', 'notice_date': d})
     for hp in (home or []):
-        got = _kerala_home(s, hp)
+        try:
+            got = _kerala_home(s, hp)
+        except Exception:
+            got = None                      # a home page that refuses us / times out → skipped
         if got is None:
             continue
         ok = True
@@ -815,9 +845,7 @@ def read_tn_tagged(url, tag):
 def read_date_table(pages, include=None, exclude=None):
     """Telangana KNRUHS style: table rows <td class="date-cell">dd-mm-yyyy</td><td>TITLE</td><td><a href=PDF>."""
     s, items, seen, rows = _session(), [], set(), 0
-    for pg in pages:
-        r = s.get(pg, timeout=TIMEOUT)
-        r.raise_for_status()
+    for r in _get_pages(s, pages):
         for dtxt, inner, href in re.findall(
                 r'<td class="date-cell">\s*([\d./-]+)\s*</td>\s*<td>(.*?)</td>\s*<td>.*?href="([^"]+)"', r.text, re.S):
             rows += 1
