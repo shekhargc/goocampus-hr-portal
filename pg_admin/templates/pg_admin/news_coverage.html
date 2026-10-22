@@ -1,0 +1,95 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Coverage · goocampus.in{% endblock %}
+
+{% block section_content %}
+<style>
+  .cv-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  .cv-tiles { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 16px; }
+  .cv-tile { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:9px 14px; min-width:140px; }
+  .cv-tile .k { font-size:0.7rem; text-transform:uppercase; letter-spacing:.5px; color:var(--gray-500); }
+  .cv-tile .v { font-size:1.15rem; font-weight:800; color:var(--navy); }
+  .cv-row { background:#fff; border:1px solid var(--gray-200); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+  .cv-row summary { list-style:none; cursor:pointer; display:grid; grid-template-columns:14px minmax(150px,1.3fr) 1.2fr 1fr repeat(4, minmax(70px,.6fr)); gap:10px; align-items:center; padding:11px 14px; font-size:0.85rem; }
+  .cv-row summary::-webkit-details-marker { display:none; }
+  .cv-dot { width:11px; height:11px; border-radius:50%; }
+  .cv-dot.ok{background:#22c55e} .cv-dot.warn{background:#f59e0b} .cv-dot.down{background:#ef4444}
+  .cv-n { text-align:center; font-weight:700; }
+  .cv-n.z { color:var(--gray-300,#cbd5e1); font-weight:400; }
+  .cv-n.red { color:#b91c1c; } .cv-n.amb { color:#b45309; }
+  .cv-sub { color:var(--gray-500); font-size:0.76rem; }
+  .cv-body { border-top:1px solid var(--gray-100); padding:10px 16px 14px; font-size:0.83rem; }
+  .cv-body h4 { margin:10px 0 4px; font-size:0.82rem; color:var(--navy); }
+  .cv-body ul { margin:0; padding-left:18px; }
+  .cv-body li { margin:3px 0; }
+  .cv-btn { border:1px solid var(--gray-300); background:#fff; border-radius:6px; padding:2px 8px; font-size:0.74rem; cursor:pointer; color:#2952a3; }
+  .cv-head { display:grid; grid-template-columns:14px minmax(150px,1.3fr) 1.2fr 1fr repeat(4, minmax(70px,.6fr)); gap:10px; padding:0 14px 6px; font-size:0.7rem; text-transform:uppercase; letter-spacing:.4px; color:var(--gray-500); }
+  @media (max-width: 900px) { .cv-row summary, .cv-head { grid-template-columns:14px 1fr 1fr; } .cv-hide { display:none; } }
+</style>
+<div class="cv-wrap">
+  <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Coverage</h1>
+  <p style="margin:0 0 14px;font-size:0.88rem;color:var(--gray-500);max-width:920px;">
+    Is every counselling authority being read correctly? One row per official source. <b>Red</b> = its website
+    couldn't be read (blocked, down or moved) or wasn't checked in the last day. <b>Amber</b> = something needs a
+    look: notices not read yet, a draft whose text has a date that is not in the schedule, or no new notice for
+    over 10 days. Click a row for details. Last news run: <b>{{ last_run|format_datetime if last_run else 'never' }}</b>.
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}{% for cat, m in msgs %}
+      <div style="padding:9px 13px;border-radius:8px;margin-bottom:10px;font-size:0.86rem;background:{{ '#DCFCE7' if cat=='success' else '#FEE2E2' }};color:{{ '#166534' if cat=='success' else '#991B1B' }};">{{ m }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <div class="cv-tiles">
+    <div class="cv-tile"><div class="k">Sources not read</div><div class="v" style="color:{{ '#b91c1c' if totals.errors else 'inherit' }}">{{ totals.errors }}</div></div>
+    <div class="cv-tile"><div class="k">Not read yet</div><div class="v">{{ totals.unread }}</div></div>
+    <div class="cv-tile"><div class="k">🔴 Date not in schedule</div><div class="v" style="color:{{ '#b91c1c' if totals.date_red else 'inherit' }}">{{ totals.date_red }}</div></div>
+    <div class="cv-tile"><div class="k">🟡 Date missing in draft</div><div class="v">{{ totals.date_amber }}</div></div>
+    <div class="cv-tile"><div class="k">Set aside (21 days)</div><div class="v">{{ totals.set_aside }}</div></div>
+    <div class="cv-tile"><div class="k">Waiting to publish</div><div class="v">{{ totals.waiting }}</div></div>
+  </div>
+
+  <div class="cv-head"><span></span><span>Authority</span><span class="cv-hide">Website check</span><span class="cv-hide">Last notice</span>
+    <span class="cv-hide" style="text-align:center;">Not read yet</span><span class="cv-hide" style="text-align:center;">Date warnings</span>
+    <span class="cv-hide" style="text-align:center;">Set aside</span><span class="cv-hide" style="text-align:center;">To publish</span></div>
+
+  {% for r in rows %}
+  <details class="cv-row" {{ 'open' if r.status == 'down' }}>
+    <summary>
+      <span class="cv-dot {{ r.status }}"></span>
+      <span><b>{{ r.label }}</b><div class="cv-sub">{{ r.authority }}</div></span>
+      <span>{% if r.ok %}✓ read {{ r.last_ok|format_datetime if r.last_ok else '' }}<div class="cv-sub">{{ r.found }} on the page</div>
+            {% else %}<b style="color:#b91c1c;">✗ not read</b><div class="cv-sub" style="color:#b91c1c;">{{ r.error[:90] }}</div>{% endif %}</span>
+      <span class="cv-hide">{% if r.last_notice %}{{ r.last_notice|format_date }}<div class="cv-sub" style="{{ 'color:#b45309;' if r.quiet_days and r.quiet_days > 10 }}">{{ r.quiet_days }} day{{ '' if r.quiet_days == 1 else 's' }} ago</div>{% else %}<span class="cv-sub">none this season</span>{% endif %}</span>
+      <span class="cv-n cv-hide {{ 'z' if not r.unread else 'amb' }}">{{ r.unread|length }}</span>
+      <span class="cv-n cv-hide {{ 'z' if not (r.red or r.amber) else ('red' if r.red else 'amb') }}">{{ (r.red|length) + (r.amber|length) }}</span>
+      <span class="cv-n cv-hide {{ 'z' if not r.set_aside }}">{{ r.set_aside|length }}</span>
+      <span class="cv-n cv-hide {{ 'z' if not r.waiting }}">{{ r.waiting }}</span>
+    </summary>
+    <div class="cv-body">
+      <div class="cv-sub">Source: <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.source_label }} ↗</a>
+        · <a href="{{ url_for('pg_news_inbox', src=r.code) }}">Open in News Inbox</a></div>
+      {% if not r.ok %}<h4 style="color:#b91c1c;">Website could not be read</h4><div>{{ r.error }}</div>
+        <div class="cv-sub">If this stays red, the authority may have moved its page — tell Claude the new link.</div>{% endif %}
+
+      {% if r.red or r.amber %}<h4>Drafts with dates to check</h4><ul>
+        {% for d in r.red %}<li>🔴 {{ d.headline }} — <b>{{ d.dates }}</b>{% if d.news_id %} · <a href="{{ url_for('pg_news_admin', inbox=d.id) }}">News #{{ d.news_id }}</a>{% endif %}</li>{% endfor %}
+        {% for d in r.amber %}<li>🟡 {{ d.headline }} — <b>{{ d.dates }}</b>{% if d.news_id %} · <a href="{{ url_for('pg_news_admin', inbox=d.id) }}">News #{{ d.news_id }}</a>{% endif %}</li>{% endfor %}
+      </ul><div class="cv-sub">🔴 = that date is not in the authority's schedule anywhere. 🟡 = the schedule has it (from another notice); only this draft's date fields lack it. Use ↻ Re-draft in the Inbox, or fix by hand.</div>{% endif %}
+
+      {% if r.unread %}<h4>Not read yet (drafted at the next news run)</h4><ul>
+        {% for i in r.unread %}<li>{{ i.title[:140] }} <span class="cv-sub">· found {{ i.first_seen_at|format_datetime }}</span></li>{% endfor %}</ul>{% endif %}
+
+      {% if r.set_aside %}<h4>Set aside in the last 21 days (last season, or a re-post of an earlier notice)</h4><ul>
+        {% for i in r.set_aside %}<li>{{ i.title[:140] }} <span class="cv-sub">· {{ i.notice_date|format_date if i.notice_date else 'undated' }}</span>
+          <form method="POST" action="{{ url_for('pg_news_inbox_status') }}" style="display:inline;margin-left:6px;">
+            <input type="hidden" name="id" value="{{ i.id }}"><input type="hidden" name="to" value="new"><input type="hidden" name="next" value="coverage">
+            <button class="cv-btn" title="Bring it back to New — it is read and drafted at the next news run">Restore</button></form></li>{% endfor %}</ul>
+        <div class="cv-sub">Check these: anything from this season that was set aside by mistake should be restored.</div>{% endif %}
+
+      {% if r.ok and not (r.red or r.amber or r.unread or r.set_aside) %}<div class="cv-sub" style="margin-top:6px;">✓ Nothing to check.</div>{% endif %}
+    </div>
+  </details>
+  {% endfor %}
+</div>
+{% endblock %}

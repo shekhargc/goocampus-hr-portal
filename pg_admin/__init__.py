@@ -193,6 +193,8 @@ def register_pg_admin(app):
     # News Inbox — notices the scraper finds on authority sites, for review (2026-10-08)
     app.add_url_rule('/admin/pg/news-inbox', 'pg_news_inbox',
                      news_inbox_admin.news_inbox, methods=['GET'])
+    app.add_url_rule('/admin/pg/news-coverage', 'pg_news_coverage',
+                     news_inbox_admin.news_coverage, methods=['GET'])
     app.add_url_rule('/admin/pg/news-inbox/check', 'pg_news_inbox_check',
                      news_inbox_admin.news_inbox_check, methods=['POST'])
     app.add_url_rule('/admin/pg/news-inbox/redraft', 'pg_news_inbox_redraft',
