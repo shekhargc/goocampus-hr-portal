@@ -429,6 +429,8 @@ def api_pg_calendar():
 
 STEP_ORDER = ['round_window', 'registration', 'verification', 'choice_filling', 'choice_locking', 'payment',
               'seat_processing', 'result', 'reporting']
+ROUND_STEPS = {'round_window', 'choice_filling', 'choice_locking', 'seat_processing', 'result', 'reporting'}
+FINAL_ROUNDS = {'Mop-up', 'Stray', 'Special Stray'}
 BAR_STEPS = {'round_window': 'Counselling round', 'registration': 'Registration', 'verification': 'Document verification',
              'choice_filling': 'Choice filling', 'result': 'Result', 'reporting': 'Reporting / joining'}
 
@@ -503,10 +505,21 @@ def counselling_status(conn, code, today=None, headings=None):
     elif nxt:
         headline = (f"Next: {nxt['round'] + ' ' if nxt['round'] else ''}{nxt['label'].lower()}"
                     f" from {_fmt_d(_date.fromisoformat(nxt['start']))}")
-    else:
-        headline = 'All scheduled rounds completed'
     done = sum(1 for i in flat if i['status'] == 'done')
-    status = 'completed' if done == len(flat) else 'in_progress'
+    # 'completed' only once a FINAL round (Mop-up / Stray) is published and every step is done — dates
+    # all passed with just registration / verification, or only Round 1-2 out, is NOT the end of
+    # counselling (2026-10-22: AP/Goa/KEA/Kerala/TN showed "Counselling completed" before Round 1)
+    alloc = [i for i in flat if i['step'] in ROUND_STEPS and i['round']]
+    final = any(i['round'] in FINAL_ROUNDS for i in alloc)
+    status = 'completed' if done == len(flat) and final else 'in_progress'
+    if not (current or nxt):
+        if status == 'completed':
+            headline = 'All scheduled rounds completed'
+        elif not alloc:
+            headline = 'Registration closed — Round 1 dates awaited'
+        else:
+            last = max((i['round'] for i in alloc), key=lambda r: rorder.get(r, 50))
+            headline = f'{last} completed — next round dates awaited'
     return {'status': status, 'stage': current or nxt, 'headline': headline[:90], 'next_deadline': next_deadline,
             'progress': round(100 * done / len(flat)) if flat else 0, 'rounds': out_rounds}
 
