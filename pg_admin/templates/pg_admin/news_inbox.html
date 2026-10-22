@@ -144,6 +144,12 @@
               {% if it.status == 'posted' and it.news_id %}<span style="font-size:0.8rem;color:#166534;margin-left:8px;">✓ posted{% if it.reviewed_by %} by {{ it.reviewed_by }}{% endif %}</span>{% endif %}
               {% if it.status == 'dismissed' and it.reviewed_by %}<span style="font-size:0.8rem;color:var(--gray-500);margin-left:8px;">dismissed by {{ it.reviewed_by }}</span>{% endif %}
             </div>
+            {% if it.draft and it.draft.review_note %}<div style="font-size:0.78rem;color:#92400e;background:#fffbeb;border:1px dashed #f59e0b;border-radius:6px;padding:4px 8px;margin-top:5px;" title="A note from the AI for the team — never published">📝 Note for reviewer (not published): {{ it.draft.review_note }}</div>{% endif %}
+            {% if it.date_gaps %}<div style="font-size:0.78rem;margin-top:5px;border-radius:6px;padding:4px 8px;{{ 'color:#991b1b;background:#fef2f2;border:1px solid #fecaca;' if it.date_gaps_missing else 'color:#92400e;background:#fffbeb;border:1px solid #fde68a;' }}"
+                 title="{% for g in it.date_gaps %}{{ g.date }}: …{{ g.snippet }}…{{ ' (already in the schedule from another notice)' if g.in_calendar else ' (NOT in the schedule)' }}&#10;{% endfor %}">
+              {{ '🔴' if it.date_gaps_missing else '🟡' }} Date{{ 's' if it.date_gaps|length > 1 }} in the text but not in the date fields:
+              <b>{% for g in it.date_gaps %}{{ g.date }}{{ '' if g.in_calendar else ' (not in schedule)' }}{{ ', ' if not loop.last }}{% endfor %}</b>
+              — ↻ Re-draft, or check the PDF before posting.</div>{% endif %}
             {% if it.similar %}<div style="font-size:0.78rem;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:4px 8px;margin-top:5px;">⚠️ Looks similar to already-published news #{{ it.similar.id }}: “{{ it.similar.heading }}” — check before posting (Dismiss if it's the same).</div>{% endif %}
             {% if it.history_note %}<div style="font-size:0.76rem;color:#b45309;margin-top:3px;">↩ {{ it.history_note }}</div>{% endif %}
           </td>

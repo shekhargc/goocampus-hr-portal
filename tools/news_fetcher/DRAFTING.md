@@ -112,6 +112,21 @@ DATE SELF-CHECK — before writing the draft, go through EVERY date in the notic
      ONLY the "State Counselling" column into the state's calendar — each round as `round_window` +
      its "Last date of joining" as `reporting` with that round. Never add the AIQ/MCC columns to a state.
   5. Re-read your `events` against the quotes: every event's round + type must match its quote.
+  6. TEXT = FIELDS (founder 2026-10-22): every date a doctor could act on that you WRITE in the headline,
+     summary, article or action — an opening, closing, deadline, verification day, result, reporting
+     window, printout day, session start — MUST also be in THIS draft's `dates` and `events`, even when
+     another notice already gave it (an extension notice that mentions the unchanged merit-list date,
+     a brochure that repeats the registration window, a batch-wise verification table). The portal
+     warns on every draft whose text has a date its fields don't (🔴 / 🟡 in the News Inbox) — aim for
+     none. Only these may stay text-only: the notice's own issue date (`issued_on`), references to
+     other notices ("notification dated 12.10.2026"), and eligibility cut-offs ("internship completed
+     by 30 September 2026", "valid as on …").
+  8. NOTES FOR THE REVIEWER never go in `headline`, `summary`, `article` or `action` — those are published to
+     doctors as written. Put them in `"review_note"` (e.g. "Website box says 10 AM, the 22 Oct notification
+     says 11 AM — notification used"). The News Inbox shows it to the team; it is never published.
+  7. LAST CHECK before writing the file: list every date printed in the PDF (or page images) and make
+     sure each is either in `events`/`dates`, or one of the text-only kinds in 6. A schedule date you
+     leave out is a deadline a doctor never sees.
 
 RE-UPLOADS / NEW VERSIONS (founder 2026-10-14 — Gujarat): authorities often re-upload a notice with small
 changes (a new phone number, an added document, changed board members). NEVER call such a file a

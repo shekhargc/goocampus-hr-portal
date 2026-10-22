@@ -79,6 +79,7 @@ def news_inbox():
         try: it['draft'] = _json.loads(it.get('draft_json') or '{}') or None
         except Exception: it['draft'] = None
     _flag_similar(items)
+    _flag_date_gaps(items)
     labels = {c: s['label'] for c, s in NS.SOURCES.items()}
     return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab,
                            sources=sources, labels=labels, src=src, auth_tabs=auth_tabs,
@@ -209,4 +210,114 @@ def news_inbox_status():
         flash('Could not update.', 'error')
     finally:
         conn.close()
+    if request.form.get('next') == 'coverage':
+        return redirect(url_for('pg_news_coverage'))
     return redirect(url_for('pg_news_inbox', tab=back, src=back_src))
+
+
+
+def _flag_date_gaps(items):
+    """Dates written in a draft's text that aren't in its date fields (founder 2026-10-22). 'missing' =
+    not in the authority's schedule either (doctors can't see that date anywhere) → red; otherwise amber."""
+    from pg_admin.data.date_check import gaps, calendar_dates
+    todo = [it for it in items if it.get('draft') and it.get('status') in ('new', 'document', 'posted')]
+    if not todo:
+        return
+    conn = get_db()
+    try:
+        cal = {}
+        for it in todo:
+            code = it.get('authority_code') or ''
+            if code not in cal:
+                cal[code] = calendar_dates(conn, code)
+            g = gaps(it['draft'], it.get('notice_date'), cal[code])
+            if g:
+                it['date_gaps'] = [{'date': d.strftime('%d %b'), 'snippet': sn, 'in_calendar': c} for d, sn, c in g]
+                it['date_gaps_missing'] = sum(1 for _d, _s, c in g if not c)
+    except Exception as e:
+        logging.warning("inbox date gaps: %s", e)
+    finally:
+        conn.close()
+
+
+@login_required
+def news_coverage():
+    """Coverage (founder 2026-10-22: "a cleaner way of monitoring" — Kerala was blocked for 3 days,
+    Rajasthan was read from the wrong site, an Odisha notice was set aside, a notice was posted
+    unread). One row per source: is its website being read, when was its last notice, what was set
+    aside as last season (with Restore), what is still unread, and drafts whose dates need a look."""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    import json as _json
+    from datetime import datetime, timedelta
+    from pg_admin.authorities import get_authority
+    from pg_admin.data.date_check import gaps, calendar_dates
+    conn = get_db()
+    rows, totals = [], {'errors': 0, 'quiet': 0, 'set_aside': 0, 'unread': 0, 'date_red': 0, 'date_amber': 0, 'waiting': 0}
+    last_run = None
+    try:
+        NS.ensure_news_inbox_tables(conn)
+        lr = conn.execute("SELECT MAX(ran_at) AS t FROM pg_news_scrape_runs WHERE trigger = 'mac'").fetchone()
+        last_run = lr['t'] if lr else None
+        since = datetime.utcnow() - timedelta(days=21)
+        for code, s in NS.SOURCES.items():
+            if not s.get('enabled'):
+                continue
+            auth = get_authority(s.get('authority_code') or '') or {}
+            last = conn.execute("SELECT ran_at, ok, found, error FROM pg_news_scrape_runs WHERE source_code = ? "
+                                "ORDER BY ran_at DESC LIMIT 1", (code,)).fetchone()
+            last_ok = conn.execute("SELECT MAX(ran_at) AS t FROM pg_news_scrape_runs WHERE source_code = ? AND ok",
+                                   (code,)).fetchone()['t']
+            inbox = [dict(r) for r in conn.execute(
+                "SELECT id, status, title, url, notice_date, first_seen_at, draft_json, news_id "
+                "FROM pg_news_inbox WHERE source_code = ? ORDER BY id DESC", (code,)).fetchall()]
+            current = [i for i in inbox if i['status'] != 'seen']
+            last_notice = max((i['notice_date'] for i in current if i['notice_date']), default=None)
+            set_aside = [i for i in inbox if i['status'] == 'seen' and i['first_seen_at'] and i['first_seen_at'] >= since]
+            unread = [i for i in inbox if i['status'] in ('new', 'document') and not i['draft_json']]
+            waiting = [i for i in inbox if i['status'] == 'new' and i['draft_json']]
+            cal = calendar_dates(conn, s.get('authority_code') or '')
+            red, amber = [], []
+            for i in inbox:
+                if i['status'] not in ('new', 'document', 'posted') or not i['draft_json']:
+                    continue
+                try:
+                    d = _json.loads(i['draft_json']) or {}
+                except Exception:
+                    continue
+                g = gaps(d, i['notice_date'], cal)
+                if not g:
+                    continue
+                entry = {'id': i['id'], 'status': i['status'], 'news_id': i['news_id'],
+                         'headline': (d.get('headline') or i['title'] or '')[:140],
+                         'dates': ', '.join(x.strftime('%d %b') + ('' if c else ' (not in schedule)') for x, _s, c in g)}
+                (red if any(not c for _x, _s, c in g) else amber).append(entry)
+            ok = bool(last and last['ok'])
+            stale = (not last_ok) or (datetime.utcnow() - last_ok > timedelta(hours=26))
+            quiet_days = (datetime.utcnow().date() - last_notice).days if last_notice else None
+            status = 'down' if (not ok or stale) else ('warn' if (red or unread or (quiet_days is not None and quiet_days > 10)) else 'ok')
+            rows.append({'code': code, 'label': s.get('short') or auth.get('state') or code, 'source_label': s['label'],
+                         'url': s['url'], 'authority': auth.get('name') or s.get('authority_code'),
+                         'state': auth.get('state') or '', 'status': status, 'ok': ok,
+                         'error': (last['error'] if last and not last['ok'] else '') or '',
+                         'last_run': last['ran_at'] if last else None, 'last_ok': last_ok,
+                         'found': last['found'] if last else 0, 'last_notice': last_notice, 'quiet_days': quiet_days,
+                         'set_aside': set_aside[:30], 'unread': unread[:30], 'waiting': len(waiting),
+                         'red': red, 'amber': amber})
+            totals['errors'] += 0 if ok and not stale else 1
+            totals['quiet'] += 1 if (quiet_days is not None and quiet_days > 10) else 0
+            totals['set_aside'] += len(set_aside)
+            totals['unread'] += len(unread)
+            totals['date_red'] += len(red)
+            totals['date_amber'] += len(amber)
+            totals['waiting'] += len(waiting)
+    except Exception as e:
+        logging.error("news_coverage: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    order = {'down': 0, 'warn': 1, 'ok': 2}
+    rows.sort(key=lambda r: (order[r['status']], r['label']))
+    return render_template('pg_admin/news_coverage.html', rows=rows, totals=totals, last_run=last_run,
+                           active_section='goocampus_in')
