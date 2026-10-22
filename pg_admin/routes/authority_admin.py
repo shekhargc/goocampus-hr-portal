@@ -48,11 +48,14 @@ def authorities_admin():
             if r['w']:
                 waiting_by_auth[r['authority_code']] = int(r['w'])
         if authority:
+            from pg_admin.routes.news_admin import _ensure_doc_link_cols
+            _ensure_doc_link_cols(conn); conn.commit()
             for r in conn.execute(
                     "SELECT id, category, title, doc_date, note, body_text, file_name, is_published, "
                     "uploaded_by, uploaded_at, COALESCE(review_pending, FALSE) AS review_pending, "
                     "auto_inbox_id, COALESCE(source_url,'') AS source_url, COALESCE(is_main, FALSE) AS is_main, "
-                    "COALESCE(main_label,'') AS main_label "
+                    "COALESCE(main_label,'') AS main_label, posted_news_id, posted_at, "
+                    "(SELECT n.id FROM pg_news n WHERE n.id = pg_authority_docs.posted_news_id AND n.deleted_at IS NULL) AS live_news_id "
                     "FROM pg_authority_docs WHERE authority_code=? "
                     "ORDER BY category, sort_order, id DESC", (authority['code'],)).fetchall():
                 r = dict(r)
