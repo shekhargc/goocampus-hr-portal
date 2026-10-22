@@ -158,10 +158,11 @@
             </form>
             {% if it.status == 'document' %}
               <a class="nb-btn nb-add" href="{{ url_for('pg_authorities_admin', code=it.authority_code) }}">Open Documents</a>
-              <a class="nb-btn nb-dis" style="color:#166534;" href="{{ url_for('pg_news_admin', inbox=it.id) }}" title="Post it as news anyway">Add to News</a>
+              {% if it.draft %}<a class="nb-btn nb-dis" style="color:#166534;" href="{{ url_for('pg_news_admin', inbox=it.id) }}" title="Post it as news anyway">Add to News</a>{% endif %}
             {% endif %}
             {% if it.status == 'new' %}
-              <a class="nb-btn nb-add" href="{{ url_for('pg_news_admin', inbox=it.id) }}">Add to News</a>
+              {% if it.draft %}<a class="nb-btn nb-add" href="{{ url_for('pg_news_admin', inbox=it.id) }}">Add to News</a>
+              {% else %}<span class="nb-btn nb-dis" style="color:#92400e;background:#fef3c7;cursor:not-allowed;" title="Its PDF is read and the draft written at the next news run (every 3 hours) — post it after that">⏳ Not read yet</span>{% endif %}
               <form method="POST" action="{{ url_for('pg_news_inbox_status') }}" style="display:inline;">
                 <input type="hidden" name="id" value="{{ it.id }}"><input type="hidden" name="to" value="dismissed"><input type="hidden" name="tab" value="{{ tab }}"><input type="hidden" name="src" value="{{ src }}">
                 <button class="nb-btn nb-dis">Dismiss</button>

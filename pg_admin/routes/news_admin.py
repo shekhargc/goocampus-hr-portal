@@ -134,6 +134,12 @@ def news_admin():
             try:
                 from pg_admin import news_scraper as _NS
                 r = conn.execute("SELECT * FROM pg_news_inbox WHERE id = ?", (int(inbox_id),)).fetchone()
+                if r and not r['draft_json']:
+                    # not read yet (founder 2026-10-22: a notice was published with only its website
+                    # title) — it can be posted once the next run has read the PDF and drafted it
+                    flash('This notice has not been read yet — its PDF is read and drafted at the next '
+                          'news run. Post it after that.', 'error')
+                    return redirect(url_for('pg_news_inbox'))
                 if r:
                     r = dict(r)
                     src = _NS.SOURCES.get(r['source_code']) or {}
@@ -264,6 +270,15 @@ def news_save():
     send_alert = request.form.get('send_alert') in ('1', 'on', 'true', 'yes')
     inbox_id = _s(request.form.get('inbox_id'))
     inbox_id = int(inbox_id) if inbox_id.isdigit() else None
+    if inbox_id:
+        _c = get_db()
+        try:
+            _r = _c.execute("SELECT (draft_json IS NOT NULL) AS d FROM pg_news_inbox WHERE id = ?", (inbox_id,)).fetchone()
+        finally:
+            _c.close()
+        if _r and not _r['d']:
+            flash('Not posted — this notice has not been read yet. Post it after the next news run drafts it.', 'error')
+            return redirect(url_for('pg_news_inbox'))
     # Posted from an authority DOCUMENT ("📰 Post as news & email", founder 2026-10-22): the news links
     # to that stored file — never a second copy. Email audience for state news: 'state' = only doctors
     # linked to that state, 'all' = everyone.
