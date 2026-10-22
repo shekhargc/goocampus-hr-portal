@@ -19,6 +19,11 @@ date can cost a doctor their seat. A human reviews every draft before it is publ
      draft from what they show. Never draft a notice from its title when its PDF is there.
    - A RE-DRAFT (the notice came back because its PDF arrived late, or the founder asked) must be
      written fresh from the PDF — never copy the old title-only draft. (founder 2026-10-18)
+   - If the pending item has `team_note`, the GooCampus team pressed Re-draft because something looked
+     off (e.g. "closing date missing") — check exactly that against the PDF and fix it. If it has
+     `schedule`, those are the authority's calendar steps already on the website: when this notice
+     changes or repeats one of them, use the SAME `round` / `event` / `label` so the step is updated,
+     not added a second time. (founder 2026-10-22)
    - If there's no PDF (a link to an application/payment/slot-booking page): use only the
      title. Do NOT open the link.
    - If it IS a PDF notice but `pdf_path` is empty (the authority's link has no file yet, or it

@@ -38,6 +38,8 @@ def news_inbox():
         NS.ensure_news_inbox_tables(conn)
         from pg_admin.data.big_files import ensure_cols as _bf_cols
         _bf_cols(conn)
+        from pg_admin.ai_redraft import ensure_cols as _ai_cols
+        _ai_cols(conn)
         for r in conn.execute("SELECT source_code, status, COUNT(*) AS n FROM pg_news_inbox "
                               "WHERE status IN ('new','posted','document','dismissed') GROUP BY source_code, status").fetchall():
             if not src or r['source_code'] == src:
@@ -51,7 +53,8 @@ def news_inbox():
             "SELECT id, source_code, authority_code, item_key, title, url, kind, notice_date, status, news_id, "
             "reviewed_by, reviewed_at, first_seen_at, draft_json, (pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR pdf_doc_id IS NOT NULL) AS has_pdf, "
             "COALESCE(redraft_requested, FALSE) AS redraft_requested, COALESCE(history_note,'') AS history_note, "
-            "COALESCE(notice_date_source,'') AS notice_date_source "
+            "COALESCE(notice_date_source,'') AS notice_date_source, COALESCE(redraft_status,'') AS redraft_status, "
+            "COALESCE(redraft_error,'') AS redraft_error, redraft_at, COALESCE(redraft_note,'') AS redraft_note "
             "FROM pg_news_inbox WHERE " + where + " "
             "ORDER BY notice_date DESC NULLS LAST, first_seen_at DESC, id DESC LIMIT 300", params).fetchall()]
         auth_tabs = [{'code': c, 'name': s.get('short') or s['label'], 'new': new_by_src.get(c, 0)}
@@ -81,7 +84,8 @@ def news_inbox():
     _flag_similar(items)
     _flag_date_gaps(items)
     labels = {c: s['label'] for c, s in NS.SOURCES.items()}
-    return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab,
+    from pg_admin import ai_redraft as _ai
+    return render_template('pg_admin/news_inbox.html', items=items, counts=counts, tab=tab, ai_ready=_ai.available(),
                            sources=sources, labels=labels, src=src, auth_tabs=auth_tabs,
                            doc_labels=dict(__import__('pg_admin.authorities', fromlist=['x']).DOC_CATEGORIES),
                            new_total=sum(new_by_src.values()), active_section='goocampus_in')
@@ -156,14 +160,27 @@ def news_inbox_redraft():
         iid = 0
     back = request.form.get('tab') or 'new'
     back_src = request.form.get('src') or None
+    from pg_admin import ai_redraft
+    if ai_redraft.available():
+        # instant: the portal sends the stored PDF to Claude now (founder 2026-10-22)
+        why = ai_redraft.start(iid, (request.form.get('note') or '').strip(), _who())
+        if why:
+            flash(why, 'error')
+        else:
+            flash('Re-drafting now — the AI is re-reading the notice. Refresh this page in a minute to see the new draft.', 'success')
+        return redirect(url_for('pg_news_inbox', tab=back, src=back_src))
     conn = get_db()
     try:
         NS.ensure_news_inbox_tables(conn)
-        conn.execute("UPDATE pg_news_inbox SET redraft_requested = TRUE WHERE id = ?", (iid,))
+        ai_redraft.ensure_cols(conn)
+        # queued for the Mac: its watcher checks every 2 minutes and re-drafts with the founder's
+        # Claude account (founder 2026-10-22, option B — no API key)
+        conn.execute("UPDATE pg_news_inbox SET redraft_requested = TRUE, redraft_status = 'queued', redraft_error = '', "
+                     "redraft_note = ?, redraft_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     ((request.form.get('note') or '').strip()[:500], iid))
         conn.commit()
-        flash('Re-draft requested — your Mac will send a fresh AI draft at its next check '
-              '(10 AM / 1 PM / 6:30 PM / 11 PM), or straight away if you click "Run now" on the '
-              'scheduled task in the Claude app.', 'success')
+        flash('Re-draft queued — your Mac re-reads the notice within about 5 minutes (while it is on). '
+              'Refresh this page to see the new draft.', 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

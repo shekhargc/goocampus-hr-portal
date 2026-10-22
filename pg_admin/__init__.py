@@ -216,6 +216,10 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_review, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/hold', 'api_news_inbox_hold',
                      api_news_ingest.api_news_inbox_hold, methods=['POST'])
+    app.add_url_rule('/api/pg/news-inbox/redraft-queue', 'api_news_inbox_redraft_queue',
+                     api_news_ingest.api_news_inbox_redraft_queue, methods=['GET'])
+    app.add_url_rule('/api/pg/news-inbox/stored-pdf', 'api_news_inbox_stored_pdf',
+                     api_news_ingest.api_news_inbox_stored_pdf, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/snapshot', 'api_news_inbox_snapshot',
                      api_news_ingest.api_news_inbox_snapshot, methods=['POST'])
     app.add_url_rule('/api/pg/news-inbox/upload-url', 'api_news_inbox_upload_url',
