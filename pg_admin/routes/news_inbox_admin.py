@@ -273,7 +273,10 @@ def news_coverage():
                 "FROM pg_news_inbox WHERE source_code = ? ORDER BY id DESC", (code,)).fetchall()]
             current = [i for i in inbox if i['status'] != 'seen']
             last_notice = max((i['notice_date'] for i in current if i['notice_date']), default=None)
-            set_aside = [i for i in inbox if i['status'] == 'seen' and i['first_seen_at'] and i['first_seen_at'] >= since]
+            # only set-asides that LOOK like this season (dated in season, or undated without an old year) —
+            # a new source's first run sets aside years of old notices correctly; those are just noise here
+            set_aside = [i for i in inbox if i['status'] == 'seen' and i['first_seen_at'] and i['first_seen_at'] >= since
+                         and NS.in_season({'title': i['title'], 'url': i['url'], 'notice_date': i['notice_date']})]
             unread = [i for i in inbox if i['status'] in ('new', 'document') and not i['draft_json']]
             waiting = [i for i in inbox if i['status'] == 'new' and i['draft_json']]
             cal = calendar_dates(conn, s.get('authority_code') or '')

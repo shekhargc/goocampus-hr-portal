@@ -45,7 +45,7 @@
     <div class="cv-tile"><div class="k">Not read yet</div><div class="v">{{ totals.unread }}</div></div>
     <div class="cv-tile"><div class="k">🔴 Date not in schedule</div><div class="v" style="color:{{ '#b91c1c' if totals.date_red else 'inherit' }}">{{ totals.date_red }}</div></div>
     <div class="cv-tile"><div class="k">🟡 Date missing in draft</div><div class="v">{{ totals.date_amber }}</div></div>
-    <div class="cv-tile"><div class="k">Set aside (21 days)</div><div class="v">{{ totals.set_aside }}</div></div>
+    <div class="cv-tile"><div class="k">Set aside — check (21 days)</div><div class="v">{{ totals.set_aside }}</div></div>
     <div class="cv-tile"><div class="k">Waiting to publish</div><div class="v">{{ totals.waiting }}</div></div>
   </div>
 
@@ -80,7 +80,7 @@
       {% if r.unread %}<h4>Not read yet (drafted at the next news run)</h4><ul>
         {% for i in r.unread %}<li>{{ i.title[:140] }} <span class="cv-sub">· found {{ i.first_seen_at|format_datetime }}</span></li>{% endfor %}</ul>{% endif %}
 
-      {% if r.set_aside %}<h4>Set aside in the last 21 days (last season, or a re-post of an earlier notice)</h4><ul>
+      {% if r.set_aside %}<h4>Set aside in the last 21 days although they look like THIS season (a re-post of an earlier notice, or set aside by mistake)</h4><ul>
         {% for i in r.set_aside %}<li>{{ i.title[:140] }} <span class="cv-sub">· {{ i.notice_date|format_date if i.notice_date else 'undated' }}</span>
           <form method="POST" action="{{ url_for('pg_news_inbox_status') }}" style="display:inline;margin-left:6px;">
             <input type="hidden" name="id" value="{{ i.id }}"><input type="hidden" name="to" value="new"><input type="hidden" name="next" value="coverage">
