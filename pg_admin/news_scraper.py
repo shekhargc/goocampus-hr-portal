@@ -74,13 +74,14 @@ SOURCES = {
         'label': 'Kerala CEE — PG Medical 2026',
         'authority_code': 'cee_kerala',
         'news_authority': 'state:Kerala',
-        # application-phase page now; the candidate portal (pgm2026) opens later — both read, a
-        # missing page is skipped. Next year: bump the year here.
-        'url': 'https://cee.kerala.gov.in/pgmonline2026/notification',
-        'pages': ['https://cee.kerala.gov.in/pgmonline2026/notification',
-                  'https://cee.kerala.gov.in/pgm2026/notification'],
+        # pgm2026 = the main PG Medical 2026 section (founder 2026-10-22); the application-phase page
+        # (pgmonline2026) now answers 403 — still tried, a page that fails is skipped.
+        # Next year: bump the year here.
+        'url': 'https://cee.kerala.gov.in/pgm2026/notification',
+        'pages': ['https://cee.kerala.gov.in/pgm2026/notification',
+                  'https://cee.kerala.gov.in/pgmonline2026/notification'],
         # course home pages: prospectus + menu PDFs + the "Important Dates" box (founder 2026-10-13)
-        'home': ['https://cee.kerala.gov.in/pgmonline2026/', 'https://cee.kerala.gov.in/pgm2026/'],
+        'home': ['https://cee.kerala.gov.in/pgm2026/', 'https://cee.kerala.gov.in/pgmonline2026/'],
         'reader': 'cee_kerala',
         'enabled': True,
     },
@@ -742,14 +743,17 @@ def read_aspnet_filter(url, form, include=None, exclude=None):
 def read_cee_kerala(pages, home=None):
     """Kerala CEE (cee.kerala.gov.in/<course><year>/notification) — rows of
     TITLE · [Notification] [Press Release] [Vacancy] links (noti_view/<id>/UploadN, serve PDFs) · dd-mm-yyyy.
-    A page that doesn't exist yet (404, e.g. the candidate portal before it opens) is skipped."""
+    A page that doesn't exist or refuses us (404 / 403 — an old phase's page, 2026-10-22) is skipped;
+    the source fails only when NO page could be read."""
     from urllib.parse import urljoin
     s, items, seen, ok = _session(), [], set(), False
     for pg in pages:
-        r = s.get(pg, timeout=TIMEOUT)
-        if r.status_code == 404:
+        try:
+            r = s.get(pg, timeout=TIMEOUT)
+        except Exception:
             continue
-        r.raise_for_status()
+        if r.status_code >= 400:
+            continue
         ok = True
         for chunk in re.split(r'<div class="row">', r.text):
             links = re.findall(r"<a\s+href=['\"]([^'\"]*noti_view[^'\"]*)['\"][^>]*>(.*?)</a>", chunk, re.S | re.I)
@@ -768,7 +772,10 @@ def read_cee_kerala(pages, home=None):
                 items.append({'item_key': href, 'raw_title': title, 'title': title or lt, 'url': href,
                               'kind': 'pdf', 'notice_date': d})
     for hp in (home or []):
-        got = _kerala_home(s, hp)
+        try:
+            got = _kerala_home(s, hp)
+        except Exception:
+            got = None                      # a home page that refuses us / times out → skipped
         if got is None:
             continue
         ok = True
