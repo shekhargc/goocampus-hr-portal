@@ -14,3 +14,4 @@ pywebpush==1.14.1
 segno
 Pillow==10.4.0
 fpdf2==2.7.9
+anthropic==2.1.0
