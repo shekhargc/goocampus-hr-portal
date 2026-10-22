@@ -121,6 +121,7 @@
             {% if it.notice_date %}{{ it.notice_date|format_date }}
               {% if it.notice_date_source == 'notice' %}<div style="font-size:0.7rem;color:var(--gray-500);" title="The website listed this without a date — this is the date printed on the notice">from notice</div>{% endif %}
             {% elif it.first_seen_at %}<span style="color:var(--gray-400,#9ca3af);font-size:0.8rem;" title="No date on the website or the notice — this is when we found it">found {{ (it.first_seen_at|format_datetime).split(',')[0] }}</span>{% endif %}
+            {% if it.news_id %}<div style="margin-top:3px;"><a href="{{ url_for('pg_news_admin', inbox=it.id) }}" title="The published news item for this notice — click to open it" style="display:inline-block;font-size:0.72rem;font-weight:700;color:#166534;background:#dcfce7;border-radius:999px;padding:1px 8px;text-decoration:none;">News #{{ it.news_id }}</a></div>{% endif %}
           </td>
           <td>
             {% if it.draft and it.draft.headline %}
