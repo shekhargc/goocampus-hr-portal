@@ -692,6 +692,17 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('inbox_since'):    # inbox rows first seen since a date + their news (read-only)
+            rows = []
+            for r in conn.execute(
+                    "SELECT i.id, i.source_code, i.status, i.title, i.news_id, (i.draft_json IS NOT NULL) AS drafted, "
+                    "i.reviewed_by, i.reviewed_at, i.first_seen_at, n.heading AS news_heading, n.is_published AS news_published, "
+                    "n.published_at AS news_published_at FROM pg_news_inbox i LEFT JOIN pg_news n ON n.id = i.news_id "
+                    "WHERE i.first_seen_at >= ? OR i.reviewed_at >= ? ORDER BY i.id",
+                    (request.args.get('inbox_since'), request.args.get('inbox_since'))).fetchall():
+                rows.append({k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v)
+                             for k, v in dict(r).items()})
+            return jsonify({'ok': True, 'rows': rows})
         if request.args.get('cal'):            # one authority's calendar rows (read-only, 2026-10-22)
             rows = []
             for r in conn.execute("SELECT id, round, event, label, start_date, end_date, is_active, news_id, inbox_id "
