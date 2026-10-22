@@ -14,16 +14,20 @@ _MON = {m: i for i, m in enumerate(['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'j
                                     'nov', 'dec'], 1)}
 _MONTH = r'(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
 # "24 October 2026", "24 Oct", "24th October", "22–26 October" (both days), "October 24, 2026"
-_DMY_WORD = re.compile(rf'\b(\d{{1,2}})(?:st|nd|rd|th)?(?:\s*(?:[-–]|to|and|&)\s*(\d{{1,2}})(?:st|nd|rd|th)?)?\s+{_MONTH}\b\.?(?:,?\s+(20\d\d))?', re.I)
-_MDY_WORD = re.compile(rf'\b{_MONTH}\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s+(20\d\d))?\b', re.I)
+_DMY_WORD = re.compile(rf'(?<![\d\-–/])\b(\d{{1,2}})(?:st|nd|rd|th)?(?:\s*(?:[-–]|to|and|&)\s*(\d{{1,2}})(?:st|nd|rd|th)?)?\s+{_MONTH}\b\.?(?:,?\s+(20\d\d))?', re.I)
+_MDY_WORD = re.compile(rf'(?<!\d\s)(?<!\d)\b{_MONTH}\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s+(20\d\d))?\b(?!\s*(?:a\.?m|p\.?m|noon|:\d|hrs))', re.I)
 _NUMERIC = re.compile(r'\b(\d{1,2})[./-](\d{1,2})[./-](20\d\d|\d\d)\b')
 # a date that names ANOTHER notice ("the 16 October notice", "22 Oct 2026 extension")
-_REF_AFTER = re.compile(r'^\W{0,3}(?:20\d\d\W{1,3})?(?:notice|notification|press\s+release|extension|order|letter|circular|corrigendum)', re.I)
+_REF_AFTER = re.compile(r'^\W{0,3}(?:20\d\d\W{1,3})?(?:notice|notification|press\s+release|extension|order|letter|circular|corrigendum|'
+                        r'guidelines?|internship|service|cut-?off\s+date|eligibility)', re.I)
 # eligibility / document cut-offs, not counselling steps ("internship completed by 30 September 2026")
-_ELIGIBILITY = re.compile(r'internship|as\s+on|born|date\s+of\s+birth|valid(?:ity)?\s+(?:till|up\s*to|on)|certificate\s+(?:issued|dated)|'
+_ELIGIBILITY = re.compile(r'internship|service\s+(?:up\s*to|is\s+counted|till)|under\s+\d+\s+on|as\s+on|born|date\s+of\s+birth|valid(?:ity)?\s+(?:till|up\s*to|on)|certificate\s+(?:issued|dated)|'
                           r'header|printed\s+date|academic\s+year', re.I)
 _REFERENCE = re.compile(r'(dated|notifications?\s+(?:of|dated)|earlier\s+(?:notice|notification)s?|issued\s+on|'
-                        r'letter\s+(?:no|dated)|order\s+dated|vide)\W*(?:\w+\W+){0,4}$', re.I)
+                        r'letter\s+(?:no|dated)|order\s+dated|vide)\W*(?:\w+\W+){0,4}$|'
+                        r'(?:guidelines?|notice|notification|order|circular|advt\.?|advertisement|addendum|letter|'
+                        r'press\s+release|list|result\s+notice|corrigendum)\s*(?:of|dated|on|no\.?\s*\S+)?\s*[(,]?\s*$|'
+                        r'\b(?:posted|issued|released|published|announced|reposted|re-posted)(?:\s+\w+){0,4}\s+(?:on\s+)?$', re.I)
 
 
 def _mk(y, m, d):
@@ -50,7 +54,10 @@ def mentioned(text, year=2026):
 
     for m in _DMY_WORD.finditer(t):
         mon = _MON[m.group(3)[:3].lower()]
-        y = m.group(4) or year
+        y = m.group(4)
+        if not y:
+            nxt = re.match(rf'\s*(?:[-–]|to|till|until)\s*\d{{1,2}}(?:st|nd|rd|th)?\s+{_MONTH}\.?,?\s+(20\d\d)', t[m.end():m.end() + 40], re.I)
+            y = nxt.group(2) if nxt else year
         add(_mk(y, mon, m.group(1)), m.start(), m.end())
         if m.group(2):
             add(_mk(y, mon, m.group(2)), m.start(), m.end())
@@ -118,7 +125,8 @@ def calendar_dates(conn, authority_code):
     """Every date an authority's active calendar steps cover (start, end and the days between)."""
     s = set()
     try:
-        for r in conn.execute("SELECT start_date, end_date FROM pg_counselling_events WHERE authority_code = ? "
+        # + MCC's national schedule: state notices quote MCC rounds / PwD board dates, and doctors see them on MCC's card
+        for r in conn.execute("SELECT start_date, end_date FROM pg_counselling_events WHERE authority_code IN (?, 'mcc') "
                               "AND COALESCE(is_active, TRUE)", (authority_code,)).fetchall():
             a, b = r['start_date'], r['end_date'] or r['start_date']
             if a:
