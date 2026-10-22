@@ -145,7 +145,7 @@ def news_admin():
                                'authority': src.get('news_authority') or '__all__',
                                'source_label': src.get('label') or r['source_code'],
                                'news_date': r['notice_date'].strftime('%Y-%m-%d') if r.get('notice_date') else '',
-                               'has_pdf': bool(r.get('pdf_data') or r.get('pdf_r2_key')), 'drafted': bool(dr),
+                               'has_pdf': bool(r.get('pdf_data') or r.get('pdf_r2_key') or r.get('pdf_doc_id')), 'drafted': bool(dr),
                                'body_text': dr.get('article') or '', 'summary': dr.get('summary') or '',
                                'category': dr.get('category') or '',
                                'dates': {k: (v or {}).get('date', '') for k, v in (dr.get('dates') or {}).items()},
@@ -218,10 +218,8 @@ def _filed_doc_for_inbox(inbox_id):
     """The authority document this inbox notice's PDF was filed as (with a stored file), else None."""
     c = get_db()
     try:
-        r = c.execute("SELECT id FROM pg_authority_docs WHERE auto_inbox_id = ? AND COALESCE(auto_kind,'pdf') = 'pdf' "
-                      "AND (file_data IS NOT NULL OR COALESCE(to_jsonb(pg_authority_docs)->>'file_r2_key','') <> '') "
-                      "ORDER BY id LIMIT 1", (inbox_id,)).fetchone()
-        return r['id'] if r else None
+        from pg_admin.data.auto_docs import doc_for_inbox
+        return doc_for_inbox(c, inbox_id)
     except Exception:
         try: c.rollback()
         except Exception: pass

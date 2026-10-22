@@ -66,13 +66,13 @@ def _file_from_inbox_core(conn, inbox_id):
     from pg_admin.data.big_files import ensure_cols as _bf_cols
     _bf_cols(conn)
     r = conn.execute("SELECT id, source_code, status, title, url, notice_date, draft_json, pdf_data, pdf_name, "
-                     "pdf_r2_key, pdf_sha256, "
+                     "pdf_r2_key, pdf_sha256, pdf_doc_id, "
                      "COALESCE(doc_rejected, FALSE) AS doc_rejected FROM pg_news_inbox WHERE id = ?",
                      (inbox_id,)).fetchone()
     if not r or not r['draft_json'] or r['doc_rejected']:
         return 'skip'
     r2_key = r.get('pdf_r2_key') or ''            # big PDF archived in R2 instead of the database (2026-10-17)
-    if not r['pdf_data'] and not r2_key:        # no PDF (a link) — only typed lists can be filed
+    if not r['pdf_data'] and not r2_key and not r.get('pdf_doc_id'):   # no PDF (a link) — only typed lists
         try:
             file_reg_lists(conn, r, json.loads(r['draft_json']) or {})
         except Exception:
@@ -112,6 +112,8 @@ def _file_from_inbox_core(conn, inbox_id):
         res = 'already'
     elif r['pdf_data'] and find_same_file(conn, code, r['pdf_data']):
         res = 'duplicate'
+    elif not r['pdf_data'] and not r2_key and r.get('pdf_doc_id'):
+        res = 'duplicate'                       # its one copy already lives in Documents (the pointer)
     elif not r['pdf_data'] and conn.execute(
             "SELECT 1 FROM pg_authority_docs WHERE authority_code = ? AND (file_r2_key = ? OR "
             "(file_sha256 = ? AND COALESCE(file_sha256,'') <> '')) LIMIT 1",
@@ -163,10 +165,66 @@ def file_reg_lists(conn, r, dj):
     return n
 
 
-def file_safely(conn, inbox_id):
+def doc_for_inbox(conn, inbox_id):
+    """The authority document holding this inbox notice's PDF: its auto-filed document, else the
+    document the inbox points to (pdf_doc_id). None when not filed. Read-only."""
+    try:
+        r = conn.execute("SELECT id FROM pg_authority_docs WHERE auto_inbox_id = ? AND COALESCE(auto_kind,'pdf') = 'pdf' "
+                         "AND (file_data IS NOT NULL OR COALESCE(to_jsonb(pg_authority_docs)->>'file_r2_key','') <> '') "
+                         "ORDER BY id LIMIT 1", (inbox_id,)).fetchone()
+        if r:
+            return r['id']
+        p = conn.execute("SELECT to_jsonb(pg_news_inbox)->>'pdf_doc_id' AS d FROM pg_news_inbox WHERE id = ?",
+                         (inbox_id,)).fetchone()
+        return int(p['d']) if p and p['d'] else None
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return None
+
+
+def release_inbox_copy(conn, inbox_id):
+    """Store each PDF ONCE (founder 2026-10-22): once the notice's PDF is safely in the authority's
+    Documents with byte-for-byte the same file, the inbox keeps a pointer (pdf_doc_id) instead of its
+    own copy. Only called for a PDF that just arrived — older inbox copies wait for the approved
+    clean-up. Never clears anything unless the document's copy is verified identical. Caller commits."""
+    from pg_admin import news_scraper as NS
+    from pg_admin.data.big_files import ensure_cols as _bf_cols
+    _bf_cols(conn)
+    r = conn.execute("SELECT id, source_code, pdf_data, pdf_r2_key FROM pg_news_inbox WHERE id = ?",
+                     (inbox_id,)).fetchone()
+    if not r or not r['pdf_data']:
+        return False                  # nothing held in the database (an R2 file is already shared by key)
+    code = (NS.SOURCES.get(r['source_code']) or {}).get('authority_code')
+    h, n = sha256(r['pdf_data']), len(r['pdf_data'])
+    doc_id = None
+    a = doc_for_inbox(conn, inbox_id)
+    for cand in ([a] if a else []) + ([find_same_file(conn, code, r['pdf_data'])] if code else []):
+        if not cand:
+            continue
+        d = conn.execute("SELECT file_data FROM pg_authority_docs WHERE id = ?", (cand,)).fetchone()
+        if d and d['file_data'] and len(d['file_data']) == n and sha256(d['file_data']) == h:
+            doc_id = cand
+            break
+    if not doc_id:
+        return False
+    conn.execute("UPDATE pg_news_inbox SET pdf_doc_id = ?, pdf_sha256 = ?, pdf_size = ?, pdf_data = NULL "
+                 "WHERE id = ? AND pdf_data IS NOT NULL", (doc_id, h, n, inbox_id))
+    return True
+
+
+def file_safely(conn, inbox_id, release=False):
     try:
         res = file_from_inbox(conn, inbox_id)
         conn.commit()
+        if release and res in ('filed', 'archived', 'dismissed+archived', 'duplicate', 'already'):
+            try:
+                if release_inbox_copy(conn, inbox_id):
+                    conn.commit()
+            except Exception as e:
+                logging.warning("release inbox copy %s: %s", inbox_id, e)
+                try: conn.rollback()
+                except Exception: pass
         if res in ('filed', 'archived', 'dismissed+archived'):
             from pg_admin.data.archive import kick_sync
             kick_sync()                        # backup copy to R2 archive/… in the background
