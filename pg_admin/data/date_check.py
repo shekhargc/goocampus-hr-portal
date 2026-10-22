@@ -73,9 +73,15 @@ def _d(v):
 def field_dates(draft):
     """Every date the draft carries in structured fields (dates, events start..end, issued_on)."""
     s = set()
-    for v in (draft.get('dates') or {}).values():
+    dd = draft.get('dates') or {}
+    for v in dd.values():
         if isinstance(v, dict) and _d(v.get('date')):
             s.add(_d(v.get('date')))
+    for k, v in dd.items():                       # "<step>_start" .. "<step>_end" covers the days between
+        if k.endswith('_start') and isinstance(v, dict):
+            a, b = _d(v.get('date')), _d((dd.get(k[:-6] + '_end') or {}).get('date'))
+            if a and b and 0 < (b - a).days <= 62:
+                s.update(date.fromordinal(a.toordinal() + i) for i in range(1, (b - a).days))
     for e in draft.get('events') or []:
         a, b = _d(e.get('start')), _d(e.get('end'))
         if a:
