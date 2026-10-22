@@ -121,6 +121,9 @@ DATE SELF-CHECK — before writing the draft, go through EVERY date in the notic
      none. Only these may stay text-only: the notice's own issue date (`issued_on`), references to
      other notices ("notification dated 12.10.2026"), and eligibility cut-offs ("internship completed
      by 30 September 2026", "valid as on …").
+  8. NOTES FOR THE REVIEWER never go in `headline`, `summary`, `article` or `action` — those are published to
+     doctors as written. Put them in `"review_note"` (e.g. "Website box says 10 AM, the 22 Oct notification
+     says 11 AM — notification used"). The News Inbox shows it to the team; it is never published.
   7. LAST CHECK before writing the file: list every date printed in the PDF (or page images) and make
      sure each is either in `events`/`dates`, or one of the text-only kinds in 6. A schedule date you
      leave out is a deadline a doctor never sees.

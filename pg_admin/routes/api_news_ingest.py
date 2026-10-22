@@ -91,6 +91,18 @@ def _clean_draft(dr):
     iss = dr.get('issued_on')
     if isinstance(iss, dict) and _d(iss.get('date')):
         out['issued_on'] = {'date': _d(iss.get('date')).isoformat(), 'quote': str(iss.get('quote') or '').strip()[:300]}
+    # notes meant for the team never stay in doctor-facing text (founder 2026-10-22: a Kerala summary
+    # read "Reviewer: check the time…") — kept separately, shown in the Inbox, never published
+    import re as _re
+    notes = [str(dr.get('review_note') or '').strip()]
+    for k in ('summary', 'article', 'action'):
+        found = _re.findall(r'(?:^|(?<=[.!?\n]))\s*((?:Note to |Note for )?(?:the )?reviewer\b[^.!?\n]*[.!?]?)', out[k], _re.I)
+        for f in found:
+            notes.append(f.strip())
+            out[k] = out[k].replace(f, '').replace('  ', ' ').strip()
+    note = ' '.join(n for n in notes if n)[:600]
+    if note:
+        out['review_note'] = note
     if not out['headline'] and not out['article']:
         return None
     return out
