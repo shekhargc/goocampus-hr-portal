@@ -713,6 +713,17 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('docs'):           # one authority's documents (read-only, no file bytes)
+            rows = []
+            for r in conn.execute(
+                    "SELECT id, category, title, doc_date, COALESCE(is_published, TRUE) AS is_published, "
+                    "COALESCE(review_pending, FALSE) AS review_pending, COALESCE(to_jsonb(d)->>'archive_only','false') AS archive_only, "
+                    "auto_inbox_id, auto_kind, (file_data IS NOT NULL OR COALESCE(to_jsonb(d)->>'file_r2_key','') <> '') AS has_file, "
+                    "uploaded_at FROM pg_authority_docs d WHERE authority_code = ? ORDER BY id",
+                    (request.args.get('docs'),)).fetchall():
+                rows.append({k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v)
+                             for k, v in dict(r).items()})
+            return jsonify({'ok': True, 'rows': rows})
         if request.args.get('inbox_since'):    # inbox rows first seen since a date + their news (read-only)
             rows = []
             for r in conn.execute(
