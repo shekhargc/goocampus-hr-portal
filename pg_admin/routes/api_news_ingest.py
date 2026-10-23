@@ -713,6 +713,24 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('access') == '1':  # full_news_access for team / desk / internal accounts (read-only)
+            from pg_admin.data import entitlements as _ent
+            out = []
+            for r in conn.execute(
+                    "SELECT u.id, COALESCE((to_jsonb(u)->>'is_team_member')::int,0) AS team, "
+                    "COALESCE((to_jsonb(u)->>'desk_access')::int,0) AS desk, "
+                    "EXISTS (SELECT 1 FROM pg_pgcp_invitations i WHERE i.status <> 'cancelled' AND i.client_type='internal' "
+                    "AND RIGHT(regexp_replace(COALESCE(i.mobile,''),'[^0-9]','','g'),10) = "
+                    "RIGHT(regexp_replace(COALESCE(u.mobile,''),'[^0-9]','','g'),10) "
+                    "AND RIGHT(regexp_replace(COALESCE(u.mobile,''),'[^0-9]','','g'),10) <> '') AS internal "
+                    "FROM pg_users u").fetchall():
+                r = dict(r)
+                if not (r['team'] or r['desk'] or r['internal']):
+                    continue
+                plan, _s = _ent.effective_plan(conn, r['id'])
+                out.append({'user_id': r['id'], 'team': r['team'], 'desk': r['desk'], 'internal': r['internal'],
+                            'plan': (plan or {}).get('code'), 'full_news_access': _ent.full_news_access(conn, r['id'])})
+            return jsonify({'ok': True, 'rows': out})
         if request.args.get('plans') == '1':   # plans + how many active subscribers, by category (read-only)
             rows = [dict(r) for r in conn.execute(
                 "SELECT p.code, p.name, p.plan_kind, COALESCE(p.is_active,1) AS active, "
