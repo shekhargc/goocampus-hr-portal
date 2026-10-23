@@ -8,7 +8,17 @@ government document (so the user's browser can open it directly).
 import logging
 from flask import request, jsonify, Response
 from db import get_db
-from pg_admin.routes.api import _authorized, smart_name_clause
+from pg_admin.routes.api import _authorized, smart_name_clause, HIDE_DNB
+
+# DNB COURSES (e.g. Rajasthan's Post-MBBS DNB) are hidden from doctors like everywhere else (HIDE_DNB).
+# Only the course decides: MCC's "DNB (Govt.) PG" institute type is MD/MS courses at DNB-accredited
+# government hospitals — those stay. Param-less (POSITION, no literal %). (2026-10-23)
+_NO_DNB = ("(POSITION('DNB' IN UPPER(COALESCE(course_name,''))) <> 1 "
+           "AND POSITION('NBEMS' IN UPPER(COALESCE(course_name,''))) = 0 AND COALESCE(section,'') <> 'dnb')")
+
+
+def _dnb_cond():
+    return [_NO_DNB] if HIDE_DNB else []
 
 DEFAULT_BODY = 'All India MCC'
 DEFAULT_YEAR = '2026-27'
@@ -63,7 +73,7 @@ def api_pg_seat_matrix():
     except Exception:
         page_size = 100
 
-    conds = ["counselling_body = ?", "academic_year = ?"]
+    conds = ["counselling_body = ?", "academic_year = ?"] + _dnb_cond()
     params = [body, year]
     if state:
         conds.append("state = ?"); params.append(state)
@@ -107,7 +117,7 @@ def api_pg_seat_matrix():
             # All-India / Central University / Deemed University).
             it = (r.get('institute_type') or '').lower()
             r['college_type'] = ('Deemed' if 'deemed' in it else 'Central University' if it.startswith('central')
-                                 else 'Government' if it else '')
+                                 else 'Private' if 'private' in it else 'Government' if it else '')
             out.append(r)
         return jsonify({
             'ok': True,
@@ -136,7 +146,8 @@ def api_pg_seat_matrix_facets():
     conn = get_db()
     try:
         body = _s(request.args.get('body')) or _default_body(conn, year)
-        base = "FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?"
+        base = "FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?" + \
+               ''.join(' AND ' + c for c in _dnb_cond())
         p = [body, year]
         states = [r['state'] for r in conn.execute(
             f"SELECT DISTINCT state {base} AND state<>'' ORDER BY state", p).fetchall()]
@@ -165,6 +176,9 @@ def api_pg_seat_matrix_facets():
             "FROM pg_seat_matrix_source WHERE counselling_body=? AND academic_year=?",
             (body, year)).fetchone()
         src = dict(src) if src else None
+        if src and HIDE_DNB:             # the file's totals as doctors see them (without DNB courses)
+            src['row_count'], src['college_count'], src['total_seats'] = \
+                int(agg['rows'] or 0), int(agg['colleges'] or 0), int(agg['seats'] or 0)
         chg = change_payload(src)
         # All bodies/years available (for a top-level switcher)
         # Current matrices only (an older provisional one that was superseded is hidden).
@@ -177,6 +191,15 @@ def api_pg_seat_matrix_facets():
             "FROM pg_seat_matrix_source WHERE COALESCE(superseded,0)=0 "
             "ORDER BY academic_year DESC, (COALESCE(authority_code,'')<>'mcc'), "
             "COALESCE(sort_order,0), counselling_body ASC").fetchall()]
+        if HIDE_DNB and available:       # every card's totals without DNB courses (one grouped query)
+            live = {(r['counselling_body'], r['academic_year']): r for r in conn.execute(
+                "SELECT counselling_body, academic_year, COUNT(*) AS n, COALESCE(SUM(seats),0) AS s, "
+                "COUNT(DISTINCT college_code||'|'||college_name) AS c FROM pg_seat_matrix WHERE " + _NO_DNB +
+                " GROUP BY counselling_body, academic_year").fetchall()}
+            for a in available:
+                v = live.get((a['counselling_body'], a['academic_year']))
+                if v:
+                    a['row_count'], a['total_seats'], a['college_count'] = int(v['n']), int(v['s']), int(v['c'])
         return jsonify({
             'ok': True,
             'counselling_body': body, 'academic_year': year,
