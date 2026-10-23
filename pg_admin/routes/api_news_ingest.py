@@ -713,6 +713,16 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('plans') == '1':   # plans + how many active subscribers, by category (read-only)
+            rows = [dict(r) for r in conn.execute(
+                "SELECT p.code, p.name, p.plan_kind, COALESCE(p.is_active,1) AS active, "
+                "(SELECT COUNT(*) FROM pg_subscriptions s WHERE s.plan_id = p.id AND s.status = 'active') AS subs, "
+                "(SELECT COUNT(*) FROM pg_subscriptions s WHERE s.plan_id = p.id AND s.status = 'active' "
+                " AND s.source = 'internal_auto') AS internal_subs, "
+                "(SELECT string_agg(feature_code, ',') FROM pg_plan_features f WHERE f.plan_id = p.id "
+                " AND f.feature_code = 'dash_news_follow' AND COALESCE(f.value_type,'off') <> 'off') AS news_follow "
+                "FROM pg_plans p ORDER BY p.id").fetchall()]
+            return jsonify({'ok': True, 'rows': rows})
         if request.args.get('docs'):           # one authority's documents (read-only, no file bytes)
             rows = []
             for r in conn.execute(
