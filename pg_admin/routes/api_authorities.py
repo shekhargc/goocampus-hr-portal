@@ -21,7 +21,7 @@ from pg_admin.authorities import all_authorities, get_authority, DOC_CATEGORIES,
 def _doctor_access(conn):
     """Resolve the requesting doctor (from their Bearer token, if sent) → (user, home_state,
     is_paid). Free = no paid plan: may access only MCC (All-India) + their home state.
-    Paid (starter/standard/premium) = all authorities. No token → (None,'',False): the
+    Paid (starter/standard/premium), Internal, team and desk accounts = all authorities. No token → (None,'',False): the
     caller (frontend) applies its own gating; the list is returned unfiltered."""
     user = _user(conn)
     if not user:
@@ -35,13 +35,9 @@ def _doctor_access(conn):
                 break
     except Exception:
         pass
-    is_paid = False
-    try:
-        plan, _sub = entitlements.effective_plan(conn, uid)
-        code = (plan.get('code') or '').lower() if plan else ''
-        is_paid = any(t in code for t in ('starter', 'standard', 'premium'))
-    except Exception:
-        pass
+    # paid plans, Internal clients, team members and Counselling Desk accounts see every authority
+    # (founder 2026-10-23 — plan differences apply only to choice entry)
+    is_paid = entitlements.full_news_access(conn, uid)
     return user, home, is_paid
 
 

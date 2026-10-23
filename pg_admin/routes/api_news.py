@@ -604,7 +604,9 @@ def api_pg_news_follows():
         if not user:
             return jsonify({'ok': False, 'error': 'no_token'}), 401
         uid = user['id']
-        can_follow = _plan_has(conn, uid, 'dash_news_follow')
+        # the Plan Features matrix, or full access for Internal / team / desk accounts (founder 2026-10-23)
+        from pg_admin.data import entitlements as _ent
+        can_follow = _plan_has(conn, uid, 'dash_news_follow') or _ent.full_news_access(conn, uid)
 
         if request.method == 'GET':
             avail = _states_with_news(conn)
