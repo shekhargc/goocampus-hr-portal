@@ -275,3 +275,36 @@ def summary(conn, user_id):
         },
         'features': out,
     }
+
+
+def full_news_access(conn, user_id):
+    """News, 2026 Counselling Updates and Upcoming Deadlines for EVERY state (founder 2026-10-23):
+    Starter / Standard / Premium, Internal clients (comped PGCP invitation), team members and
+    Counselling Desk accounts all get full access — plan differences apply only to choice entry.
+    Read-only; any error → False (the caller falls back to MCC + home state)."""
+    try:
+        plan, _sub = effective_plan(conn, user_id)
+        code = (plan.get('code') or '').lower() if plan else ''
+        if any(t in code for t in ('starter', 'standard', 'premium')):
+            return True
+        u = conn.execute(
+            "SELECT COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) AS team, "
+            "COALESCE((to_jsonb(u)->>'desk_access')::int, 0) AS desk, "
+            "RIGHT(regexp_replace(COALESCE(u.mobile,''),'[^0-9]','','g'),10) AS m10 "
+            "FROM pg_users u WHERE u.id = ?", (user_id,)).fetchone()
+        if not u:
+            return False
+        if u['team'] or u['desk']:
+            return True
+        if u['m10']:
+            inv = conn.execute(
+                "SELECT 1 FROM pg_pgcp_invitations WHERE status <> 'cancelled' AND client_type = 'internal' "
+                "AND RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? LIMIT 1",
+                (u['m10'],)).fetchone()
+            if inv:
+                return True
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.warning("entitlements.full_news_access: %s", e)
+    return False
