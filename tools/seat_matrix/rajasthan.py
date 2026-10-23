@@ -1,7 +1,10 @@
 """Rajasthan NEET PG 2026 Round 1 provisional seat matrix (pg.neetrajasthan.com, 18.10.2026) → standardised
 seat rows, bridged to Rajasthan's 2025 cut-offs. Run with /usr/bin/python3 (PyMuPDF)."""
 import json, re, sys, collections
+import os
 import fitz
+sys.path.insert(0, os.path.dirname(__file__))
+from common import college_code
 
 PDF, CUTS, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 
@@ -214,6 +217,11 @@ for i, x in enumerate(rows, 1):
            'cr_r3': pick['r3'] if pick else None, 'cr_closing': pick['closing_rank'] if pick else None,
            'cutoff_fee': pick['fee'] if pick else None}
     out.append(row)
+all_courses = {c['course'] for c in json.load(open(CUTS))['rows'] if c['course']}
+for row in out:   # stable college code; course "linked" when the name exists anywhere in the cut-offs
+    row['college_code'] = college_code('RJ', row['college_name'])
+    if row['course_name'] in all_courses:
+        row['cutoff_course'] = row['course_name']
 json.dump({'rows': out, 'checks': checks}, open(OUT, 'w'), ensure_ascii=False, indent=0)
 print('checks (parsed, printed total):', checks)
 print('rows', len(out), 'seats', sum(r['seats'] for r in out), 'colleges', len({r['college_name'] for r in out}))
