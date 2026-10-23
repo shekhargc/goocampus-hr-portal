@@ -713,6 +713,14 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('sources') == '1':  # seat-matrix source files and their flags (read-only)
+            rows = [{k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v) for k, v in dict(r).items()}
+                    for r in conn.execute(
+                        "SELECT counselling_body, academic_year, COALESCE(authority_code,'') AS authority_code, "
+                        "COALESCE(section,'') AS section, COALESCE(superseded,0) AS superseded, COALESCE(sort_order,0) AS sort_order, "
+                        "row_count, college_count, total_seats, source_file_name, uploaded_at "
+                        "FROM pg_seat_matrix_source ORDER BY academic_year, counselling_body").fetchall()]
+            return jsonify({'ok': True, 'rows': rows})
         if request.args.get('access') == '1':  # full_news_access for team / desk / internal accounts (read-only)
             from pg_admin.data import entitlements as _ent
             out = []
