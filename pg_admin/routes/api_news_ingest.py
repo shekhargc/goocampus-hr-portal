@@ -713,6 +713,16 @@ def api_seatmatrix_dump():
     body = (request.args.get('body') or '').strip()
     conn = get_db()
     try:
+        if request.args.get('facets'):         # call /api/pg/seat-matrix/facets internally (read-only check)
+            from flask import current_app
+            with current_app.test_client() as tc:
+                r = tc.get('/api/pg/seat-matrix/facets', query_string={'body': request.args.get('facets')},
+                           environ_base={'pg.internal_check': True})
+                f = r.get_json() or {}
+            return jsonify({'ok': True, 'totals': f.get('totals'), 'quotas': f.get('quotas'),
+                            'dnb_courses': [c for c in (f.get('courses') or []) if 'DNB' in c.upper()],
+                            'source_total': (f.get('source') or {}).get('total_seats'),
+                            'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []]})
         if request.args.get('sources') == '1':  # seat-matrix source files and their flags (read-only)
             rows = [{k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v) for k, v in dict(r).items()}
                     for r in conn.execute(
