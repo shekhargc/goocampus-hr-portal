@@ -24,6 +24,7 @@ from pg_admin.data import seat_matrix_tables as _seat_matrix
 from pg_admin.data import news_tables as _news_tables
 from pg_admin.data import authority_docs_tables as _authority_docs
 from pg_admin.data import specialty_groups as _specialty_groups
+from pg_admin.data import results_tables as _results_tables
 from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              plans_admin, users_admin, coupons_admin,
                              bookings_admin, college_master_admin, api_college,
@@ -33,7 +34,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
                              calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments,
-                             mgmt_inquiries, archive_admin)
+                             mgmt_inquiries, archive_admin, results_api)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -69,7 +70,8 @@ def register_pg_admin(app):
                _news_tables.ensure_pg_news,
                _authority_docs.ensure_pg_authority_docs,
                _specialty_groups.ensure_course_branch_table,
-               _news_scraper.ensure_news_inbox_tables):
+               _news_scraper.ensure_news_inbox_tables,
+               _results_tables.ensure_results_tables):
         try:
             fn()
         except Exception as e:
@@ -152,6 +154,21 @@ def register_pg_admin(app):
                      seat_matrix_ingest.api_seat_matrix_source_update, methods=['POST'])
     app.add_url_rule('/api/pg/seat-matrix/file-to-authority', 'api_seat_matrix_file_to_authority',
                      seat_matrix_ingest.api_seat_matrix_file_to_authority, methods=['POST'])
+    # ── 2026 counselling results + name memory (founder 2026-10-24) ──
+    app.add_url_rule('/api/pg/results/ingest', 'api_results_ingest', results_api.api_results_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/name-memory/seed', 'api_name_memory_seed', results_api.api_name_memory_seed,
+                     methods=['POST'])
+    app.add_url_rule('/api/pg/results/rounds', 'api_results_rounds', results_api.api_results_rounds, methods=['GET'])
+    app.add_url_rule('/api/pg/results', 'api_results', results_api.api_results, methods=['GET'])
+    app.add_url_rule('/api/pg/results/facets', 'api_results_facets', results_api.api_results_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/results/rank', 'api_results_rank', results_api.api_results_rank, methods=['GET'])
+    app.add_url_rule('/api/pg/results/cutoffs', 'api_results_cutoffs', results_api.api_results_cutoffs, methods=['GET'])
+    app.add_url_rule('/api/pg/results/trends', 'api_results_trends', results_api.api_results_trends, methods=['GET'])
+    app.add_url_rule('/api/pg/results/leftover', 'api_results_leftover', results_api.api_results_leftover,
+                     methods=['GET'])
+    app.add_url_rule('/admin/pg/name-memory', 'pg_name_memory', results_api.name_memory_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/name-memory/confirm', 'pg_name_memory_confirm', results_api.name_memory_confirm,
+                     methods=['POST'])
     app.add_url_rule('/admin/pg/seat-matrix', 'pg_seat_matrix_admin',
                      seat_matrix_admin.seat_matrix_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/seat-matrix/upload', 'pg_seat_matrix_upload',
