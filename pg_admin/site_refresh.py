@@ -47,6 +47,10 @@ _ENDPOINT_TAGS = {
     'pg_authority_doc_publish': ['authority'],
     'pg_authority_doc_category': ['authority'],
     'pg_authority_doc_main': ['authority'],
+    # 2026 counselling results (+ the name decisions that change them)
+    'api_results_ingest': ['results', 'authority'],
+    'api_name_memory_seed': ['results'],
+    'pg_name_memory_confirm': ['results'],
     # college tiers → MCC College Rankings
     'pg_college_tiers': ['rankings'],
     'api_pg_desk_tiers': ['rankings'],
