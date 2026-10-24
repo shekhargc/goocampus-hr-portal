@@ -78,10 +78,29 @@ def _prefixes(raw):
     return out
 
 
+def _master_std(conn):
+    """Medical colleges in our College Database → the name to use: its 2025 cut-off name when it has one, else
+    its College Database name. So a college with NO 2025 cut-off (e.g. MD/MS new at Rampurhat in 2026) is still
+    recognised instead of being guessed at. (founder 2026-10-24)"""
+    out = {}
+    try:
+        cut = {}
+        for r in conn.execute("SELECT master_id, alias_name FROM pg_college_alias WHERE alias_source='cutoff' "
+                              "AND COALESCE(is_active,1)=1 ORDER BY id").fetchall():
+            cut.setdefault(r['master_id'], r['alias_name'])
+        for r in conn.execute("SELECT id, college_name FROM pg_college_master WHERE kind='medical' "
+                              "AND COALESCE(college_name,'')<>''").fetchall():
+            out[r['id']] = cut.get(r['id']) or r['college_name']
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    return out
+
+
 def standard_names(conn, kind):
     if kind == 'college':
         rows = conn.execute("SELECT DISTINCT institute AS n FROM pg_cutoffs WHERE COALESCE(institute,'')<>''").fetchall()
-        return [r['n'] for r in rows]
+        return list(dict.fromkeys([r['n'] for r in rows] + sorted(set(_master_std(conn).values()))))
     import os
     p = os.path.join(os.path.dirname(__file__), 'data', 'specialty_sheet.json')
     names = [c['course'] for c in json.load(open(p))['courses']]
@@ -90,16 +109,14 @@ def standard_names(conn, kind):
 
 
 def _alias_map(conn):
-    """normalised college-workbook / former / variant name → the cut-off (standard) name of the same college."""
+    """normalised college-workbook / former / variant name → the standard name of the same college (its cut-off
+    name, or its College Database name when it has no cut-off)."""
     out = {}
     try:
-        cut = {}
-        for r in conn.execute("SELECT master_id, alias_name FROM pg_college_alias WHERE alias_source='cutoff' "
-                              "AND COALESCE(is_active,1)=1 ORDER BY id").fetchall():
-            cut.setdefault(r['master_id'], r['alias_name'])
+        std = _master_std(conn)
         for r in conn.execute("SELECT master_id, alias_key FROM pg_college_alias WHERE COALESCE(is_active,1)=1").fetchall():
-            if r['master_id'] in cut and r['alias_key']:
-                out.setdefault(r['alias_key'], cut[r['master_id']])
+            if r['master_id'] in std and r['alias_key']:
+                out.setdefault(r['alias_key'], std[r['master_id']])
     except Exception:
         try: conn.rollback()
         except Exception: pass
@@ -172,6 +189,25 @@ def teach(conn, kind, raw, std, authority_code=''):
         "VALUES (?,?,?,?,?,'importer','ok',0) ON CONFLICT (kind, raw_key) DO UPDATE SET std_name=EXCLUDED.std_name, "
         "status='ok', how='importer' WHERE pg_name_memory.how <> 'confirmed'",
         [kind, raw, norm(raw), std, authority_code or ''])
+
+
+def rematch_pending(conn):
+    """Names waiting in review (never a team decision) are matched again against today's standard names — e.g. after
+    the College Database joined the standards. Returns {raw_key: std} for the ones that now match."""
+    fixed = {}
+    for kind in ('college', 'course'):
+        rows = conn.execute("SELECT raw_name, raw_key FROM pg_name_memory WHERE kind=? AND status IN ('review','unmatched') "
+                            "AND how <> 'confirmed'", [kind]).fetchall()
+        if not rows:
+            continue
+        conn.execute("DELETE FROM pg_name_memory WHERE kind=? AND status IN ('review','unmatched') AND how <> 'confirmed'",
+                     [kind])
+        res = resolve(conn, kind, [r['raw_name'] for r in rows])
+        for r in rows:
+            v = res.get(r['raw_name']) or {}
+            if v.get('status') == 'ok':
+                fixed[(kind, r['raw_key'])] = v['std']
+    return fixed
 
 
 def confirm(conn, kind, raw_key, std_name, who):

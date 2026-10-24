@@ -69,14 +69,34 @@ def _qn(q):
 
 
 def _college_info(conn, names):
-    """standard name → (state, college type), from the cut-offs."""
+    """standard name → (state, college type), from the cut-offs, else the College Database."""
     out = {}
     if not names:
         return out
     for r in conn.execute("SELECT institute, MAX(state) AS state, MAX(institute_type) AS it FROM pg_cutoffs "
                           "WHERE institute = ANY(?) GROUP BY institute", [list(names)]).fetchall():
         out[r['institute']] = (r['state'] or '', _college_type(r['it']))
+    rest = [n for n in names if n not in out]
+    if rest:
+        for r in conn.execute("SELECT college_name, MAX(state) AS state, MAX(college_type) AS it FROM pg_college_master "
+                              "WHERE kind='medical' AND college_name = ANY(?) GROUP BY college_name", [rest]).fetchall():
+            out[r['college_name']] = (r['state'] or '', _college_type(r['it']))
     return out
+
+
+def _apply_memory(conn, fixed):
+    """Write newly matched names onto results already imported (+ state / type), and refresh match counts."""
+    for (kind, raw_key), std in fixed.items():
+        col, scol = ('institute', 'institute_raw') if kind == 'college' else ('course', 'course_raw')
+        conn.execute(f"UPDATE pg_results SET {col}=? WHERE COALESCE({col},'')='' AND "
+                     f"btrim(regexp_replace(lower({scol}), '[^a-z0-9]+', ' ', 'g'))=?", [std, raw_key])
+        if kind == 'college':
+            info = _college_info(conn, {std}).get(std)
+            if info:
+                conn.execute("UPDATE pg_results SET state=?, college_type=? WHERE institute=?", [info[0], info[1], std])
+    conn.execute("UPDATE pg_results_source s SET matched_rows=(SELECT COUNT(*) FROM pg_results r WHERE "
+                 "r.authority_code=s.authority_code AND r.academic_year=s.academic_year AND r.round=s.round "
+                 "AND (r.section='dnb' OR (COALESCE(r.institute,'')<>'' AND COALESCE(r.course,'')<>'')))")
 
 
 def _ensure():
@@ -208,6 +228,9 @@ def api_name_memory_seed():
     conn = get_db()
     try:
         n = NM.seed(conn)
+        fixed = NM.rematch_pending(conn)          # review names that today's standards now recognise
+        _apply_memory(conn, fixed)
+        n['rematched'] = {k[1]: v for k, v in fixed.items()}
         conn.commit()
         tot = conn.execute("SELECT kind, status, COUNT(*) AS n FROM pg_name_memory GROUP BY kind, status").fetchall()
         return jsonify({'ok': True, 'seeded': n, 'memory': [dict(r) for r in tot]})
