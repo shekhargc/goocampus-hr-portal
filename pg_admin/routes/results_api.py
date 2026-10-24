@@ -494,7 +494,7 @@ def _closing_rows(conn, auth, year, rd, a):
 
 def api_results_cutoffs():
     """GET /api/pg/results/cutoffs?authority=&round=&q=&course=&quota=&category=&state=&college_type=
-    &trend=tougher|easier|same|new&rank=<open at your rank>&sort=closing|change|change_pct&page=
+    &trend=tougher|easier|same|new&rank=<open at your rank>&sort=closing (default, lowest first)|change|change_pct|institute&page=
     &compare_group=compared|new  (new = a college in NO authority's 2025 cut-offs; everything else is
     compared: closing_2025 is last year's closing in the SAME round, or — when that seat type was first filled in
     a later round — that later closing with closing_2025_round 'Round 2' / 'Round 3' / 'Stray' and filled_earlier;
@@ -525,7 +525,7 @@ def api_results_cutoffs():
             rows = [r for r in rows if r['compare_group'] == grp]
         if cmp_:
             rows = [r for r in rows if r['compare'] == cmp_]
-        sort = _s(a.get('sort')) or ('closing' if rank else 'institute')
+        sort = _s(a.get('sort')) or 'closing'     # default: lowest 2026 closing rank first (founder 2026-10-24)
         key = {'closing': lambda r: r['closing'], 'change': lambda r: (r['change'] is None, r['change'] or 0),
                'change_pct': lambda r: (r['change_pct'] is None, r['change_pct'] or 0),
                'institute': lambda r: (r['institute'], r['course'], r['quota'], r['category'])}.get(sort)
