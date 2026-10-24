@@ -394,20 +394,44 @@ def api_results_rank():
 def _closing_rows(conn, auth, year, rd, a):
     """2026 opening/closing per college × course × quota × category for this round, joined to the 2025
     closing rank of the same round."""
-    conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.institute,'')<>''",
-             "COALESCE(r.course,'')<>''", "r.rank IS NOT NULL"] + _hide_dnb()
+    conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.course,'')<>''",
+             "r.rank IS NOT NULL"] + _hide_dnb()
     params = [auth, year, rd['round']]
     _filters(a, conds, params)
-    rows = conn.execute(
-        f"SELECT r.institute, r.course, r.quota, r.allotted_category AS category, MAX(r.state) AS state, "
-        f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN(r.rank) AS opening, MAX(r.rank) AS closing "
-        f"FROM pg_results r WHERE {' AND '.join(conds)} GROUP BY r.institute, r.course, r.quota, r.allotted_category",
-        params).fetchall()
+    # a college without a standard name only counts when the team CONFIRMED it is not in our list (a genuinely
+    # new college); names still waiting in the review queue stay out until they are matched
+    confirmed_new = {r['raw_key'] for r in conn.execute(
+        "SELECT raw_key FROM pg_name_memory WHERE kind='college' AND status='unmatched' AND how='confirmed'").fetchall()}
+    rows = []
+    for r in conn.execute(
+            f"SELECT r.institute, r.institute_raw, r.course, r.quota, r.allotted_category AS category, MAX(r.state) AS state, "
+            f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN(r.rank) AS opening, MAX(r.rank) AS closing "
+            f"FROM pg_results r WHERE {' AND '.join(conds)} "
+            f"GROUP BY r.institute, r.institute_raw, r.course, r.quota, r.allotted_category", params).fetchall():
+        r = dict(r)
+        if not r['institute']:
+            if NM.norm(r['institute_raw']) not in confirmed_new:
+                continue
+            r['institute'], r['unlisted'] = r['institute_raw'].split(',')[0].strip(), True
+        rows.append(r)
+    merged = {}
+    for r in rows:   # one line per standard college (several MCC spellings can map to one college)
+        k = (r['institute'], r['course'], r['quota'], r['category'])
+        if k in merged:
+            m = merged[k]
+            m['allotted'] += r['allotted']; m['opening'] = min(m['opening'], r['opening'])
+            m['closing'] = max(m['closing'], r['closing'])
+        else:
+            merged[k] = r
+    rows = list(merged.values())
     col = ROUND_COL.get(int(rd.get('round_order') or 1), 'closing_rank')
     rnd_no = int(rd.get('round_order') or 1)
     # all of last year's cut-off lines for this authority, to say WHY a seat type has no direct comparison
     # and to give the nearest 2025 reference (founder 2026-10-24: keep new colleges apart from the comparison)
     prev, later, by_icq, inst, ic, icq = {}, {}, defaultdict(list), set(), set(), set()
+    # every college in ANY authority's 2025 cut-offs — only a college missing from all of them is "new in 2026"
+    known_2025 = {c['institute'] for c in conn.execute(
+        "SELECT DISTINCT institute FROM pg_cutoffs WHERE year=2025 AND COALESCE(institute,'')<>''").fetchall()}
     for c in conn.execute(
             "SELECT institute, course, quota, category, r1, r2, r3, r4, stray, closing_rank, fee FROM pg_cutoffs "
             "WHERE authority=? AND year=2025", [cutoff_authority(auth)]).fetchall():
@@ -427,7 +451,8 @@ def _closing_rows(conn, auth, year, rd, a):
                     break
     out = []
     for r in rows:
-        r = dict(r)
+        r.pop('institute_raw', None)
+        unlisted = r.pop('unlisted', False)
         k = (r['institute'], r['course'], r['quota'], r['category'])
         p = prev.get(k)
         r['closing_2025'] = r['closing_2025_round'] = r['change'] = r['change_pct'] = None
@@ -443,8 +468,10 @@ def _closing_rows(conn, auth, year, rd, a):
             r['closing_2025'], r['closing_2025_round'], r['compare'] = v, rn, 'later_round'
             r['fee_2025'] = float(fee) if fee is not None else r['fee_2025']
             r['filled_earlier'] = True        # 2025: needed a later round · 2026: gone in this round
+        elif unlisted or r['institute'] not in known_2025:
+            r['compare'] = 'new_college'      # in no authority's 2025 cut-offs — a genuinely new college
         elif r['institute'] not in inst:
-            r['compare'] = 'new_college'      # not in last year's cut-offs at all
+            r['compare'] = 'new_to_authority'  # existed in 2025 (another authority, e.g. state quota) but not here
         elif k[:2] not in ic:
             r['compare'] = 'new_course'       # course new at this college
         elif k[:3] not in icq:
@@ -455,11 +482,12 @@ def _closing_rows(conn, auth, year, rd, a):
             r['change'] = r['closing'] - r['closing_2025']           # + = closed at a higher rank (easier)
             r['change_pct'] = round(100.0 * r['change'] / r['closing_2025'], 1)
             r['trend'] = 'easier' if r['change'] > 0 else 'tougher' if r['change'] < 0 else 'same'
-        elif r['compare'] == 'no_2025_seat':
-            r['trend'] = 'no_2025_seat'
-        else:
+        elif r['compare'] == 'new_college':
             r['trend'] = 'new'
-        r['compare_group'] = 'new' if r['compare'] in ('new_college', 'new_course', 'new_quota') else 'compared'
+        else:
+            r['trend'] = r['compare']         # no_2025_seat | new_course | new_quota | new_to_authority
+        # only a genuinely new college goes to the separate tab; an old college's new course / quota stays in the table
+        r['compare_group'] = 'new' if r['compare'] == 'new_college' else 'compared'
         out.append(r)
     return out
 
@@ -467,11 +495,13 @@ def _closing_rows(conn, auth, year, rd, a):
 def api_results_cutoffs():
     """GET /api/pg/results/cutoffs?authority=&round=&q=&course=&quota=&category=&state=&college_type=
     &trend=tougher|easier|same|new&rank=<open at your rank>&sort=closing|change|change_pct&page=
-    &compare_group=compared|new  (new = new college / new course / new quota — no 2025 history; everything else is
+    &compare_group=compared|new  (new = a college in NO authority's 2025 cut-offs; everything else is
     compared: closing_2025 is last year's closing in the SAME round, or — when that seat type was first filled in
     a later round — that later closing with closing_2025_round 'Round 2' / 'Round 3' / 'Stray' and filled_earlier;
-    trend 'no_2025_seat' = 2025 had the course + quota but no seat in this category)
-    &compare=direct|later_round|no_2025_seat|new_college|new_course|new_quota. Response carries group_counts."""
+    trend 'no_2025_seat' = 2025 had the course + quota but no seat in this category; 'new_course' / 'new_quota' =
+    an existing college's course / quota not offered in 2025; 'new_to_authority' = college counselled elsewhere in
+    2025, e.g. state quota only)
+    &compare=direct|later_round|no_2025_seat|new_course|new_quota|new_to_authority|new_college. Has group_counts."""
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
