@@ -1,6 +1,6 @@
 """MCC NEET-PG seat allotment result (provisional / final, any round) → rows for POST /api/pg/results/ingest.
 Reads the official PDF (one line per allotted seat: SNo, Rank, Allotted Quota, Allotted Institute, Course,
-Allotted Category, Candidate Category, Remarks), maps quota / category / course to the names used in the
+Allotted Category, Candidate Category, [Remarks — provisional lists only]), maps quota / category / course to the names used in the
 2025 cut-offs, and checks the serial numbers run 1..N with none missing. College names are matched on the
 portal through the name memory. Run with /usr/bin/python3 (PyMuPDF):
     mcc.py <result.pdf> <out.json>            (add --cache <raw.json> to reuse an earlier read)"""
@@ -63,8 +63,9 @@ def read(pdf):
     for pg in fitz.open(pdf):
         for t in pg.find_tables().tables:
             for r in t.extract():
-                if len(r) == 8 and clean(r[0]).isdigit():
-                    out.append([clean(x) for x in r])
+                # provisional lists have a Remarks column (8); the final list drops it (7)
+                if len(r) in (7, 8) and clean(r[0]).isdigit():
+                    out.append([clean(x) for x in r] + ([''] if len(r) == 7 else []))
     return out
 
 
