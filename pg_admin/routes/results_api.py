@@ -591,6 +591,29 @@ def api_results_leftover():
         conn.close()
 
 
+def api_results_pdf():
+    """GET /api/pg/results/pdf?authority=&round=&year= — the official result PDF (file lock like every other
+    PG document file: X-PG-Key unless PG_FILES_PUBLIC)."""
+    from pg_admin.routes.api import file_key_block
+    from flask import Response
+    blk = file_key_block()
+    if blk:
+        return blk
+    _ensure()
+    a = request.args
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT pdf_name, pdf_data FROM pg_results_source WHERE authority_code=? AND academic_year=? "
+                           "AND round=?", [_s(a.get('authority')) or 'mcc', _s(a.get('year')) or YEAR,
+                                           _s(a.get('round')) or 'Round 1']).fetchone()
+    finally:
+        conn.close()
+    if not row or not row['pdf_data']:
+        return jsonify({'ok': False, 'error': 'not_found'}), 404
+    return Response(bytes(row['pdf_data']), mimetype='application/pdf',
+                    headers={'Content-Disposition': f'inline; filename="{row["pdf_name"] or "result.pdf"}"'})
+
+
 # ───────────────────────────── admin: name memory review ─────────────────────────────
 def _require_admin():
     from core.users import get_user

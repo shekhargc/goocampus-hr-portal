@@ -164,6 +164,7 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/results/rank', 'api_results_rank', results_api.api_results_rank, methods=['GET'])
     app.add_url_rule('/api/pg/results/cutoffs', 'api_results_cutoffs', results_api.api_results_cutoffs, methods=['GET'])
     app.add_url_rule('/api/pg/results/trends', 'api_results_trends', results_api.api_results_trends, methods=['GET'])
+    app.add_url_rule('/api/pg/results/pdf', 'api_results_pdf', results_api.api_results_pdf, methods=['GET'])
     app.add_url_rule('/api/pg/results/leftover', 'api_results_leftover', results_api.api_results_leftover,
                      methods=['GET'])
     app.add_url_rule('/admin/pg/name-memory', 'pg_name_memory', results_api.name_memory_admin, methods=['GET'])
