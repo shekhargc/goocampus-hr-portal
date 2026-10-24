@@ -94,7 +94,9 @@ def api_results_ingest():
     {authority_code, year, round, round_order, status: provisional|final, title, published_on,
      source_file_name, pdf_name, pdf_b64, notes, rows:[{sno, rank, quota_raw, quota, institute_raw,
      course_raw, section, allotted_category, allotted_category_raw, candidate_category, remarks}]}
-    Replaces that one (authority, year, round)."""
+    Replaces that one (authority, year, round). Big lists go in parts so no request runs long:
+    mode 'start' (clears the round, inserts its rows) → 'append' … → 'finish' (rows optional; saves the
+    source row + PDF, counts taken from what is stored). No mode = all in one call."""
     from pg_admin.routes.api_news_ingest import _ok
     if not _ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
@@ -102,7 +104,10 @@ def api_results_ingest():
     auth, rnd = _s(d.get('authority_code')), _s(d.get('round'))
     year = _s(d.get('year')) or YEAR
     rows = d.get('rows') or []
-    if not auth or not rnd or not rows:
+    mode = _s(d.get('mode')) or 'all'
+    if mode not in ('all', 'start', 'append', 'finish'):
+        return jsonify({'ok': False, 'error': 'bad mode'}), 400
+    if not auth or not rnd or (not rows and mode != 'finish'):
         return jsonify({'ok': False, 'error': 'authority_code, round and rows required'}), 400
     pdf = None
     if d.get('pdf_b64'):
@@ -116,18 +121,19 @@ def api_results_ingest():
         # DNB hospitals are hidden from doctors and are not in our college list — keep them as published
         # (matching them would only flood the review queue). An importer's explicit standard name wins
         # and is remembered.
-        NM.seed(conn)                     # what the seat matrices already matched (never overwrites)
+        if mode in ('all', 'start'):
+            NM.seed(conn)                 # what the seat matrices already matched (never overwrites)
         listed = [r for r in rows if _s(r.get('section')) != 'dnb']
         for kind, raw_f, std_f in (('college', 'institute_raw', 'institute'), ('course', 'course_raw', 'course')):
-            for r in listed:
-                if _s(r.get(std_f)) and _s(r.get(raw_f)):
-                    NM.teach(conn, kind, _s(r.get(raw_f)), _s(r.get(std_f)), auth)
+            for raw, std in {(_s(r.get(raw_f)), _s(r.get(std_f))) for r in listed if _s(r.get(std_f)) and _s(r.get(raw_f))}:
+                NM.teach(conn, kind, raw, std, auth)
         colleges = NM.resolve(conn, 'college', [_s(r.get('institute_raw')) for r in listed], auth)
         courses = NM.resolve(conn, 'course', [_s(r.get('course_raw')) for r in listed], auth)
         info = _college_info(conn, {v['std'] for v in colleges.values() if v['std']})
         old = conn.execute("SELECT status, row_count FROM pg_results_source WHERE authority_code=? AND academic_year=? "
                            "AND round=?", [auth, year, rnd]).fetchone()
-        conn.execute("DELETE FROM pg_results WHERE authority_code=? AND academic_year=? AND round=?", [auth, year, rnd])
+        if mode in ('all', 'start'):
+            conn.execute("DELETE FROM pg_results WHERE authority_code=? AND academic_year=? AND round=?", [auth, year, rnd])
         batch, matched = [], 0
         for r in rows:
             ir, cr = _s(r.get('institute_raw')), _s(r.get('course_raw'))
@@ -140,12 +146,24 @@ def api_results_ingest():
                           _s(r.get('quota')), ir, inst, st, ct, cr, course, _s(r.get('section')) or 'mdms',
                           _s(r.get('allotted_category')), _s(r.get('allotted_category_raw')),
                           _s(r.get('candidate_category')), _s(r.get('remarks'))])
-        conn.execute_batch(
-            "INSERT INTO pg_results (authority_code, academic_year, round, sno, rank, quota_raw, quota, institute_raw, "
-            "institute, state, college_type, course_raw, course, section, allotted_category, allotted_category_raw, "
-            "candidate_category, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", batch, page_size=1000)
+        if batch:
+            conn.execute_batch(
+                "INSERT INTO pg_results (authority_code, academic_year, round, sno, rank, quota_raw, quota, institute_raw, "
+                "institute, state, college_type, course_raw, course, section, allotted_category, allotted_category_raw, "
+                "candidate_category, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", batch, page_size=1000)
+        if mode in ('start', 'append'):
+            conn.commit()
+            return jsonify({'ok': True, 'mode': mode, 'rows': len(rows), 'matched_rows': matched,
+                            'colleges_to_review': sorted({k for k, v in colleges.items() if v['status'] != 'ok'})})
+        if mode == 'finish':        # counts from everything stored for this round
+            t = conn.execute("SELECT COUNT(*) AS n, SUM(CASE WHEN section='dnb' OR (COALESCE(institute,'')<>'' AND "
+                             "COALESCE(course,'')<>'') THEN 1 ELSE 0 END) AS m FROM pg_results WHERE authority_code=? "
+                             "AND academic_year=? AND round=?", [auth, year, rnd]).fetchone()
+            n_rows, matched = int(t['n'] or 0), int(t['m'] or 0)
+        else:
+            n_rows = len(rows)
         vals = [int(d.get('round_order') or 1), _s(d.get('status')) or 'provisional', _s(d.get('title')),
-                _s(d.get('published_on')), _s(d.get('source_file_name')), _s(d.get('pdf_name')), len(rows), matched,
+                _s(d.get('published_on')), _s(d.get('source_file_name')), _s(d.get('pdf_name')), n_rows, matched,
                 _s(d.get('notes'))]
         src = conn.execute("SELECT id FROM pg_results_source WHERE authority_code=? AND academic_year=? AND round=?",
                            [auth, year, rnd]).fetchone()
@@ -169,7 +187,7 @@ def api_results_ingest():
         how = defaultdict(int)
         for v in colleges.values():
             how[v['how'] + ('' if v['status'] == 'ok' else '_' + v['status'])] += 1
-        return jsonify({'ok': True, 'rows': len(rows), 'matched_rows': matched, 'colleges': len(colleges),
+        return jsonify({'ok': True, 'rows': n_rows, 'matched_rows': matched, 'colleges': len(colleges),
                         'college_match': dict(how), 'colleges_to_review': need[:60], 'colleges_to_review_n': len(need),
                         'courses_to_review': needc, 'replaced': dict(old) if old else None})
     except Exception as e:
