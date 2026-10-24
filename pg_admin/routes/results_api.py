@@ -20,7 +20,7 @@ DNB courses stay hidden from doctors (HIDE_DNB), like everywhere else.
 import base64
 import logging
 import statistics
-from collections import defaultdict
+from collections import defaultdict, Counter
 from flask import request, jsonify, render_template, redirect, url_for, flash
 from db import get_db
 from core.auth import login_required
@@ -404,34 +404,74 @@ def _closing_rows(conn, auth, year, rd, a):
         f"FROM pg_results r WHERE {' AND '.join(conds)} GROUP BY r.institute, r.course, r.quota, r.allotted_category",
         params).fetchall()
     col = ROUND_COL.get(int(rd.get('round_order') or 1), 'closing_rank')
-    prev = {}
+    rnd_no = int(rd.get('round_order') or 1)
+    # all of last year's cut-off lines for this authority, to say WHY a seat type has no direct comparison
+    # and to give the nearest 2025 reference (founder 2026-10-24: keep new colleges apart from the comparison)
+    prev, later, by_icq, inst, ic, icq = {}, {}, defaultdict(list), set(), set(), set()
     for c in conn.execute(
-            f"SELECT institute, course, quota, category, MAX({col}) AS cr, MAX(fee) AS fee FROM pg_cutoffs "
-            f"WHERE authority=? AND year=2025 AND {col} IS NOT NULL GROUP BY institute, course, quota, category",
-            [cutoff_authority(auth)]).fetchall():
-        k = (c['institute'], c['course'], _qn(c['quota']), c['category'])
-        if k not in prev or (c['cr'] or 0) > (prev[k][0] or 0):
-            prev[k] = (c['cr'], c['fee'])
+            "SELECT institute, course, quota, category, r1, r2, r3, r4, stray, closing_rank, fee FROM pg_cutoffs "
+            "WHERE authority=? AND year=2025", [cutoff_authority(auth)]).fetchall():
+        q = _qn(c['quota'])
+        k = (c['institute'], c['course'], q, c['category'])
+        inst.add(c['institute']); ic.add(k[:2]); icq.add(k[:3])
+        v = c[col]
+        if v is not None:
+            if k not in prev or v > (prev[k][0] or 0):
+                prev[k] = (v, c['fee'])
+            by_icq[k[:3]].append((c['category'], v))
+        else:
+            # filled only in a later round in 2025 → the first later round that has a closing rank
+            for n, rc in ((2, 'r2'), (3, 'r3'), (4, 'r4'), (5, 'stray')):
+                if n > rnd_no and c[rc] is not None:
+                    later.setdefault(k, (c[rc], 'Stray' if rc == 'stray' else f'Round {n}', c['fee']))
+                    break
     out = []
     for r in rows:
         r = dict(r)
-        p = prev.get((r['institute'], r['course'], r['quota'], r['category']))
-        r['closing_2025'] = p[0] if p else None
+        k = (r['institute'], r['course'], r['quota'], r['category'])
+        p = prev.get(k)
+        r['closing_2025'] = r['closing_2025_round'] = r['change'] = r['change_pct'] = None
         r['fee_2025'] = float(p[1]) if p and p[1] is not None else None
+        r['filled_earlier'] = False
         if p and p[0]:
-            r['change'] = r['closing'] - p[0]                       # + = closed at a higher rank (easier)
-            r['change_pct'] = round(100.0 * r['change'] / p[0], 1)
-            r['trend'] = 'easier' if r['change'] > 0 else 'tougher' if r['change'] < 0 else 'same'
+            # same seat type, same round last year — the true like-for-like comparison
+            r['closing_2025'], r['closing_2025_round'], r['compare'] = p[0], rd['round'], 'direct'
+        elif k in later:
+            # last year this seat type was first filled in a later round → show THAT closing, with its round
+            # (founder 2026-10-24: "show the rank with a bracket saying Round 2 / Round 3 / mop-up")
+            v, rn, fee = later[k]
+            r['closing_2025'], r['closing_2025_round'], r['compare'] = v, rn, 'later_round'
+            r['fee_2025'] = float(fee) if fee is not None else r['fee_2025']
+            r['filled_earlier'] = True        # 2025: needed a later round · 2026: gone in this round
+        elif r['institute'] not in inst:
+            r['compare'] = 'new_college'      # not in last year's cut-offs at all
+        elif k[:2] not in ic:
+            r['compare'] = 'new_course'       # course new at this college
+        elif k[:3] not in icq:
+            r['compare'] = 'new_quota'        # quota not offered for this course in 2025
         else:
-            r['change'] = r['change_pct'] = None
-            r['trend'] = 'new'                                       # no 2025 cut-off for this seat type
+            r['compare'] = 'no_2025_seat'     # 2025 had this course + quota, but no seat in this category
+        if r['closing_2025']:
+            r['change'] = r['closing'] - r['closing_2025']           # + = closed at a higher rank (easier)
+            r['change_pct'] = round(100.0 * r['change'] / r['closing_2025'], 1)
+            r['trend'] = 'easier' if r['change'] > 0 else 'tougher' if r['change'] < 0 else 'same'
+        elif r['compare'] == 'no_2025_seat':
+            r['trend'] = 'no_2025_seat'
+        else:
+            r['trend'] = 'new'
+        r['compare_group'] = 'new' if r['compare'] in ('new_college', 'new_course', 'new_quota') else 'compared'
         out.append(r)
     return out
 
 
 def api_results_cutoffs():
     """GET /api/pg/results/cutoffs?authority=&round=&q=&course=&quota=&category=&state=&college_type=
-    &trend=tougher|easier|new&rank=<open at your rank>&sort=closing|change|change_pct&page="""
+    &trend=tougher|easier|same|new&rank=<open at your rank>&sort=closing|change|change_pct&page=
+    &compare_group=compared|new  (new = new college / new course / new quota — no 2025 history; everything else is
+    compared: closing_2025 is last year's closing in the SAME round, or — when that seat type was first filled in
+    a later round — that later closing with closing_2025_round 'Round 2' / 'Round 3' / 'Stray' and filled_earlier;
+    trend 'no_2025_seat' = 2025 had the course + quota but no seat in this category)
+    &compare=direct|later_round|no_2025_seat|new_college|new_course|new_quota. Response carries group_counts."""
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
@@ -448,6 +488,13 @@ def api_results_cutoffs():
             rows = [r for r in rows if r['trend'] == trend]
         if rank:
             rows = [r for r in rows if r['closing'] >= rank]
+        group_counts = dict(Counter(r['compare_group'] for r in rows))     # for the tab badges
+        reason_counts = dict(Counter(r['compare'] for r in rows))
+        grp, cmp_ = _s(a.get('compare_group')), _s(a.get('compare'))
+        if grp:                                   # compared | new
+            rows = [r for r in rows if r['compare_group'] == grp]
+        if cmp_:
+            rows = [r for r in rows if r['compare'] == cmp_]
         sort = _s(a.get('sort')) or ('closing' if rank else 'institute')
         key = {'closing': lambda r: r['closing'], 'change': lambda r: (r['change'] is None, r['change'] or 0),
                'change_pct': lambda r: (r['change_pct'] is None, r['change_pct'] or 0),
@@ -457,6 +504,7 @@ def api_results_cutoffs():
         size = min(500, max(1, _int(a.get('page_size')) or 100))
         total = len(rows)
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'compared_with': f"2025 {rd['round']}",
+                        'group_counts': group_counts, 'reason_counts': reason_counts,
                         'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,
                         'page_size': size, 'total_pages': (total + size - 1) // size})
     except Exception as e:
@@ -474,7 +522,7 @@ def _summary(rows, key):
         g[r.get(key) or '—'].append(r)
     out = []
     for k, rs in g.items():
-        comp = [r for r in rs if r['change'] is not None]
+        comp = [r for r in rs if r['compare'] == 'direct']      # medians: same round both years only
         pct = [r['change_pct'] for r in comp]
         out.append({key: k, 'seat_types': len(rs), 'compared': len(comp),
                     'tougher': sum(1 for r in comp if r['change'] < 0), 'easier': sum(1 for r in comp if r['change'] > 0),
@@ -500,7 +548,7 @@ def api_results_trends():
         if not rd:
             return jsonify({'ok': True, 'round': None})
         rows = _closing_rows(conn, auth, year, rd, a)
-        comp = [r for r in rows if r['change'] is not None]
+        comp = [r for r in rows if r['compare'] == 'direct']
         # movers: seat types with 2+ seats and a 2025 closing beyond rank 100 (a single seat swings wildly)
         mv = sorted([r for r in comp if r['allotted'] >= 2 and (r['closing_2025'] or 0) >= 100],
                     key=lambda r: r['change_pct'])
@@ -508,7 +556,11 @@ def api_results_trends():
                         'totals': {'seat_types': len(rows), 'compared': len(comp),
                                    'tougher': sum(1 for r in comp if r['change'] < 0),
                                    'easier': sum(1 for r in comp if r['change'] > 0),
-                                   'new': sum(1 for r in rows if r['trend'] == 'new')},
+                                   'new': sum(1 for r in rows if r['trend'] == 'new'),
+                                   'filled_earlier': sum(1 for r in rows if r['filled_earlier']),
+                                   'no_2025_seat': sum(1 for r in rows if r['compare'] == 'no_2025_seat'),
+                                   'by_group': dict(Counter(r['compare_group'] for r in rows)),
+                                   'by_reason': dict(Counter(r['compare'] for r in rows))},
                         'by_course': _summary(rows, 'course'), 'by_state': _summary(rows, 'state'),
                         'by_college_type': _summary(rows, 'college_type'),
                         'most_tougher': mv[:25], 'most_easier': mv[::-1][:25]})
