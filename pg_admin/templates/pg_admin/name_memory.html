@@ -1,0 +1,128 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Name Matching · goocampus.in{% endblock %}
+
+{% block section_content %}
+<style>
+  .nm-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  .nm-tiles { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 14px; }
+  .nm-tile { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:9px 14px; min-width:130px; }
+  .nm-tile .k { font-size:0.7rem; text-transform:uppercase; letter-spacing:.5px; color:var(--gray-500); }
+  .nm-tile .v { font-size:1.15rem; font-weight:800; color:var(--navy); }
+  .nm-tabs { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px; }
+  .nm-tabs a { padding:6px 12px; border-radius:999px; border:1px solid var(--gray-300); background:#fff; font-size:0.8rem; text-decoration:none; color:var(--gray-700); }
+  .nm-tabs a.on { background:var(--navy); color:#fff; border-color:var(--navy); }
+  table.nm { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--gray-200); border-radius:10px; overflow:hidden; font-size:0.82rem; }
+  table.nm th { text-align:left; background:var(--gray-100); padding:8px 10px; font-size:0.7rem; text-transform:uppercase; letter-spacing:.4px; color:var(--gray-500); }
+  table.nm td { padding:8px 10px; border-top:1px solid var(--gray-100); vertical-align:top; }
+  .nm-pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:0.7rem; font-weight:700; }
+  .nm-pill.ok { background:#DCFCE7; color:#166534; } .nm-pill.review { background:#FEF3C7; color:#92400E; }
+  .nm-pill.unmatched { background:#FEE2E2; color:#991B1B; }
+  .nm-sub { color:var(--gray-500); font-size:0.74rem; }
+  .nm-btn { border:1px solid var(--gray-300); background:#fff; border-radius:6px; padding:3px 10px; font-size:0.76rem; cursor:pointer; color:#2952a3; }
+  .nm-drawer-bg { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:50; }
+  .nm-drawer { position:fixed; top:0; right:-560px; width:520px; max-width:100%; height:100vh; background:#fff; z-index:51; box-shadow:-8px 0 24px rgba(0,0,0,.12); padding:22px; transition:right .2s; overflow-y:auto; }
+  .nm-drawer.open { right:0; } .nm-drawer-bg.open { display:block; }
+  .nm-drawer label { display:block; font-size:0.75rem; font-weight:700; color:var(--gray-600); margin:14px 0 4px; }
+  .nm-drawer input[type=text] { width:100%; padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; box-sizing:border-box; }
+  .nm-cand { display:block; width:100%; text-align:left; margin:5px 0; padding:7px 10px; border:1px solid var(--gray-200); border-radius:8px; background:var(--gray-50); cursor:pointer; font-size:0.8rem; }
+  .nm-cand:hover { border-color:#2952a3; }
+  .nm-save { background:var(--navy); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; cursor:pointer; }
+</style>
+<div class="nm-wrap">
+  <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Name Matching</h1>
+  <p style="margin:0 0 14px;font-size:0.88rem;color:var(--gray-500);max-width:920px;">
+    Every authority writes college and course names its own way. Each spelling we have ever seen is remembered here,
+    tied to our standard name (the one used in the cut-offs, seat matrices and predictor), so the next result or seat
+    matrix from any authority is matched automatically. <b>Needs review</b> = the system was not sure — pick the right
+    college once and it is remembered for good. Until then those seats show the name exactly as the authority printed it.
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}{% for cat, m in msgs %}
+      <div style="padding:9px 13px;border-radius:8px;margin-bottom:10px;font-size:0.86rem;background:{{ '#DCFCE7' if cat=='success' else '#FEE2E2' }};color:{{ '#166534' if cat=='success' else '#991B1B' }};">{{ m }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <div class="nm-tiles">
+    {% for k in ['college', 'course'] %}
+      <div class="nm-tile"><div class="k">{{ k }} names known</div><div class="v">{{ (counts.get((k,'ok')) or 0) }}</div></div>
+      <div class="nm-tile"><div class="k">{{ k }} — needs review</div><div class="v" style="color:#b45309">{{ (counts.get((k,'review')) or 0) + (counts.get((k,'unmatched')) or 0) }}</div></div>
+    {% endfor %}
+  </div>
+
+  {% if rounds %}
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:0.82rem;">
+    <b>Results imported</b>
+    {% for r in rounds %}
+      <div class="nm-sub" style="margin-top:3px;">{{ r.authority_code|upper }} · {{ r.round }} ({{ r.status }}) · {{ r.row_count }} seats ·
+        {{ r.matched_rows }} matched{% if r.row_count %} ({{ (100.0 * r.matched_rows / r.row_count)|round(1) }}%){% endif %} · {{ r.uploaded_at|string|truncate(16, True, '') }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="nm-tabs">
+    {% for k in ['college', 'course'] %}<a href="?kind={{ k }}&show={{ show }}" class="{{ 'on' if kind==k }}">{{ k|capitalize }}s</a>{% endfor %}
+    <span style="width:14px"></span>
+    {% for s, l in [('review','Needs review'), ('unmatched','No match found'), ('learned','Learned from files'), ('all','All')] %}
+      <a href="?kind={{ kind }}&show={{ s }}" class="{{ 'on' if show==s }}">{{ l }}</a>
+    {% endfor %}
+  </div>
+
+  {% if not rows %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:22px;text-align:center;color:var(--gray-500);">Nothing here ✓</div>
+  {% else %}
+  <table class="nm">
+    <tr><th>As the authority wrote it</th><th>Our standard name</th><th>How</th><th>Seen</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.raw_name }}<div class="nm-sub">{{ r.authority_code|upper or '—' }} · first seen {{ r.first_seen|string|truncate(10, True, '') }}</div></td>
+      <td>{% if r.std_name %}{{ r.std_name }}{% else %}<span class="nm-sub">—</span>{% endif %}
+          {% if r.status != 'ok' and r.cands %}<div class="nm-sub">best guess: {{ r.cands[0][1] }} ({{ (r.cands[0][0]*100)|round|int }}%)</div>{% endif %}</td>
+      <td><span class="nm-pill {{ r.status }}">{{ {'ok':'matched','review':'needs review','unmatched':'no match'}[r.status] }}</span>
+          <div class="nm-sub">{{ {'seed_matrix':'from seat matrix','seed_alias':'college workbook name','exact':'exact','fuzzy':'similar name','confirmed':'confirmed','importer':'importer map'}.get(r.how, r.how) }}{% if r.confirmed_by %} · {{ r.confirmed_by }}{% endif %}</div></td>
+      <td>{{ r.seen_count }}</td>
+      <td><button class="nm-btn" type="button" data-raw="{{ r.raw_name }}" data-key="{{ r.raw_key }}" data-std="{{ r.std_name }}"
+                  data-cands='{{ r.cands|tojson }}' onclick="nmOpen(this)">{{ 'Fix' if r.status == 'ok' else 'Choose' }}</button></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<div class="nm-drawer-bg" id="nmBg" onclick="nmClose()"></div>
+<div class="nm-drawer" id="nmDrawer">
+  <h3 style="margin:0 0 4px;color:var(--navy);">Match this {{ kind }}</h3>
+  <div class="nm-sub" id="nmRaw" style="font-size:0.85rem;color:var(--gray-700);"></div>
+  <form method="post" action="{{ url_for('pg_name_memory_confirm') }}">
+    <input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="show" value="{{ show }}">
+    <input type="hidden" name="raw_key" id="nmKey">
+    <label>Suggestions</label><div id="nmCands"></div>
+    <label>Our standard name (type to search)</label>
+    <input type="text" name="std_name" id="nmStd" list="nmStdList" autocomplete="off" placeholder="Start typing the college / course…">
+    <datalist id="nmStdList">{% for n in std %}<option value="{{ n }}">{% endfor %}</datalist>
+    <div class="nm-sub" style="margin-top:6px;">Leave empty and save = "not a {{ kind }} in our list" (e.g. a new 2026 college).</div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button class="nm-save" type="submit">Save</button>
+      <button class="nm-btn" type="button" onclick="nmClose()">Cancel</button>
+    </div>
+  </form>
+</div>
+<script>
+function nmOpen(b) {
+  document.getElementById('nmRaw').textContent = b.dataset.raw;
+  document.getElementById('nmKey').value = b.dataset.key;
+  document.getElementById('nmStd').value = b.dataset.std || '';
+  const box = document.getElementById('nmCands'); box.innerHTML = '';
+  let c = []; try { c = JSON.parse(b.dataset.cands || '[]'); } catch (e) {}
+  if (!c.length) box.innerHTML = '<div class="nm-sub">No close names found.</div>';
+  c.forEach(function (x) {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'nm-cand';
+    btn.textContent = x[1] + '  ·  ' + Math.round(x[0] * 100) + '%';
+    btn.onclick = function () { document.getElementById('nmStd').value = x[1]; };
+    box.appendChild(btn);
+  });
+  document.getElementById('nmDrawer').classList.add('open'); document.getElementById('nmBg').classList.add('open');
+}
+function nmClose() { document.getElementById('nmDrawer').classList.remove('open'); document.getElementById('nmBg').classList.remove('open'); }
+</script>
+{% endblock %}
