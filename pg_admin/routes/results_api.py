@@ -84,6 +84,19 @@ def _college_info(conn, names):
     return out
 
 
+def _display_college(r):
+    """Standard name, else the name exactly as published. DNB hospitals are never renamed: always MCC's full text
+    (founder 2026-10-24 — the site bolds the part before the first comma)."""
+    if r.get('section') == 'dnb':
+        return r.get('institute_raw') or ''
+    return r.get('institute') or r.get('institute_raw') or ''
+
+
+def _program(a):
+    """program=dnb → DNB seats only (DNB quota: DNB, DNB Diploma, post-MBBS DNB); default MD/MS + diploma."""
+    return ["COALESCE(r.section,'') = 'dnb'"] if _s(a.get('program')).lower() == 'dnb' else _hide_dnb()
+
+
 def _apply_memory(conn, fixed):
     """Write newly matched names onto results already imported (+ state / type), and refresh match counts."""
     for (kind, raw_key), std in fixed.items():
@@ -316,7 +329,7 @@ def api_results():
         rd = _pick_round(conn, auth, year, _s(a.get('round')))
         if not rd:
             return jsonify({'ok': True, 'round': None, 'rows': [], 'total_matched': 0})
-        conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _hide_dnb()
+        conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _program(a)
         params = [auth, year, rd['round']]
         rank, rf, rt = _int(a.get('rank')), _int(a.get('rank_from')), _int(a.get('rank_to'))
         if rank:
@@ -332,13 +345,14 @@ def api_results():
         total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_results r WHERE {where}", params).fetchone()['n']
         rows = conn.execute(
             f"SELECT r.sno, r.rank, r.quota, r.quota_raw, r.institute, r.institute_raw, r.state, r.college_type, "
-            f"r.course, r.course_raw, r.allotted_category, r.candidate_category, r.remarks FROM pg_results r "
+            f"r.course, r.course_raw, r.section, r.allotted_category, r.candidate_category, r.remarks FROM pg_results r "
             f"WHERE {where} ORDER BY r.rank ASC NULLS LAST, r.sno LIMIT {size} OFFSET {(page - 1) * size}",
             params).fetchall()
         out = []
         for r in rows:
             r = dict(r)
-            r['college'] = r['institute'] or r['institute_raw']      # standard name, else as published
+            r['college'] = _display_college(r)       # standard name, else as published (DNB: before the first comma)
+            r['program'] = 'dnb' if r.get('section') == 'dnb' else 'mdms'
             r['course_name'] = r['course'] or r['course_raw']
             out.append(r)
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'rows': out, 'total_matched': total,
@@ -363,7 +377,7 @@ def api_results_facets():
         rd = _pick_round(conn, auth, year, _s(a.get('round')))
         if not rd:
             return jsonify({'ok': True, 'round': None})
-        base = " AND ".join(["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _hide_dnb())
+        base = " AND ".join(["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _program(a))
         p = [auth, year, rd['round']]
         out = {'ok': True, 'round': rd}
         for key, col in (('quotas', 'r.quota'), ('categories', 'r.allotted_category'), ('courses', 'r.course'),
@@ -405,11 +419,63 @@ def api_results_rank():
         out = []
         for r in rows:
             r = dict(r)
-            r['college'] = r['institute'] or r['institute_raw']
+            r['college'] = _display_college(r)
             r['course_name'] = r['course'] or r['course_raw']
+            r['program'] = 'dnb' if r.get('section') == 'dnb' else 'mdms'
             out.append(r)
         return jsonify({'ok': True, 'rank': rank, 'allotments': out,
                         'note': 'MCC lists All-India ranks; state lists use the state merit rank.'})
+    finally:
+        conn.close()
+
+
+def api_results_colleges():
+    """GET /api/pg/results/colleges?authority=&round=&program=dnb|mdms&q=&state=&course=&quota=&category=&page=
+    → the colleges / hospitals with allotments in this round: {college, state, college_type, allotted, courses[],
+    opening, closing}, most seats first."""
+    if not _auth():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    _ensure()
+    a = request.args
+    auth, year = _s(a.get('authority')) or 'mcc', _s(a.get('year')) or YEAR
+    conn = get_db()
+    try:
+        rd = _pick_round(conn, auth, year, _s(a.get('round')))
+        if not rd:
+            return jsonify({'ok': True, 'round': None, 'rows': []})
+        conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _program(a)
+        params = [auth, year, rd['round']]
+        _filters(a, conds, params)
+        g = {}
+        for r in conn.execute(
+                f"SELECT r.institute, r.institute_raw, r.section, MAX(r.state) AS state, MAX(r.college_type) AS ct, "
+                f"r.course, COALESCE(NULLIF(r.course,''), r.course_raw) AS cname, COUNT(*) AS n, MIN(r.rank) AS lo, "
+                f"MAX(r.rank) AS hi FROM pg_results r WHERE {' AND '.join(conds)} "
+                f"GROUP BY r.institute, r.institute_raw, r.section, r.course, r.course_raw", params).fetchall():
+            name = _display_college(dict(r))
+            c = g.setdefault(name, {'college': name, 'state': '', 'college_type': '', 'allotted': 0, 'courses': set(),
+                                    'opening': r['lo'], 'closing': r['hi']})
+            c['state'] = c['state'] or r['state'] or ''
+            c['college_type'] = c['college_type'] or r['ct'] or ''
+            c['allotted'] += int(r['n'] or 0)
+            c['courses'].add(r['cname'])
+            c['opening'] = min(c['opening'], r['lo']) if r['lo'] is not None else c['opening']
+            c['closing'] = max(c['closing'], r['hi']) if r['hi'] is not None else c['closing']
+        rows = sorted(g.values(), key=lambda c: (-c['allotted'], c['college']))
+        for c in rows:
+            c['courses'] = sorted(c['courses'])
+        page = max(1, _int(a.get('page')) or 1)
+        size = min(500, max(1, _int(a.get('page_size')) or 100))
+        total = len(rows)
+        return jsonify({'ok': True, 'authority': auth, 'round': rd,
+                        'program': 'dnb' if _s(a.get('program')).lower() == 'dnb' else 'mdms',
+                        'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,
+                        'page_size': size, 'total_pages': (total + size - 1) // size})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_results_colleges: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
 
@@ -717,6 +783,35 @@ def api_results_pdf():
         return jsonify({'ok': False, 'error': 'not_found'}), 404
     return Response(bytes(row['pdf_data']), mimetype='application/pdf',
                     headers={'Content-Disposition': f'inline; filename="{row["pdf_name"] or "result.pdf"}"'})
+
+
+def api_announce():
+    """POST /api/pg/announce (X-News-Key) {key, mode: status | test | all, to?, confirm?}
+    One-off announcement email to all goocampus.in users (pg_admin/announce_email.py). 'test' sends to one
+    address; 'all' needs confirm == "SEND <key>" and never emails anyone twice."""
+    from pg_admin.routes.api_news_ingest import _ok
+    from pg_admin import announce_email as AE
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    key, mode = _s(d.get('key')), _s(d.get('mode')) or 'status'
+    if key not in AE.ANNOUNCEMENTS:
+        return jsonify({'ok': False, 'error': 'unknown announcement'}), 400
+    try:
+        if mode == 'test':
+            to = _s(d.get('to'))
+            if '@' not in to:
+                return jsonify({'ok': False, 'error': 'to required'}), 400
+            return jsonify({'ok': AE.send_test(key, to), 'sent_to': to})
+        if mode == 'all':
+            if _s(d.get('confirm')) != f'SEND {key}':
+                return jsonify({'ok': False, 'error': f'confirm must be "SEND {key}"'}), 400
+            AE.start_send_all(key)
+            return jsonify({'ok': True, 'started': True, **AE.status(key)})
+        return jsonify({'ok': True, **AE.status(key)})
+    except Exception as e:
+        logging.error("api_announce: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error', 'detail': str(e)[:200]}), 500
 
 
 # ───────────────────────────── admin: name memory review ─────────────────────────────
