@@ -719,6 +719,35 @@ def api_results_pdf():
                     headers={'Content-Disposition': f'inline; filename="{row["pdf_name"] or "result.pdf"}"'})
 
 
+def api_announce():
+    """POST /api/pg/announce (X-News-Key) {key, mode: status | test | all, to?, confirm?}
+    One-off announcement email to all goocampus.in users (pg_admin/announce_email.py). 'test' sends to one
+    address; 'all' needs confirm == "SEND <key>" and never emails anyone twice."""
+    from pg_admin.routes.api_news_ingest import _ok
+    from pg_admin import announce_email as AE
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    key, mode = _s(d.get('key')), _s(d.get('mode')) or 'status'
+    if key not in AE.ANNOUNCEMENTS:
+        return jsonify({'ok': False, 'error': 'unknown announcement'}), 400
+    try:
+        if mode == 'test':
+            to = _s(d.get('to'))
+            if '@' not in to:
+                return jsonify({'ok': False, 'error': 'to required'}), 400
+            return jsonify({'ok': AE.send_test(key, to), 'sent_to': to})
+        if mode == 'all':
+            if _s(d.get('confirm')) != f'SEND {key}':
+                return jsonify({'ok': False, 'error': f'confirm must be "SEND {key}"'}), 400
+            AE.start_send_all(key)
+            return jsonify({'ok': True, 'started': True, **AE.status(key)})
+        return jsonify({'ok': True, **AE.status(key)})
+    except Exception as e:
+        logging.error("api_announce: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error', 'detail': str(e)[:200]}), 500
+
+
 # ───────────────────────────── admin: name memory review ─────────────────────────────
 def _require_admin():
     from core.users import get_user
