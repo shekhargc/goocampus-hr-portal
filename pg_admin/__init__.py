@@ -161,6 +161,8 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/results/rounds', 'api_results_rounds', results_api.api_results_rounds, methods=['GET'])
     app.add_url_rule('/api/pg/results', 'api_results', results_api.api_results, methods=['GET'])
     app.add_url_rule('/api/pg/results/facets', 'api_results_facets', results_api.api_results_facets, methods=['GET'])
+    app.add_url_rule('/api/pg/results/colleges', 'api_results_colleges', results_api.api_results_colleges,
+                     methods=['GET'])
     app.add_url_rule('/api/pg/results/rank', 'api_results_rank', results_api.api_results_rank, methods=['GET'])
     app.add_url_rule('/api/pg/results/cutoffs', 'api_results_cutoffs', results_api.api_results_cutoffs, methods=['GET'])
     app.add_url_rule('/api/pg/results/trends', 'api_results_trends', results_api.api_results_trends, methods=['GET'])
