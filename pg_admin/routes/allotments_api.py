@@ -67,23 +67,29 @@ def my_rank_confirm():
         vals = {k: d.get(k) for k in AL.RANK_FIELDS if k in d}
         st = AL.rank_state(conn, u['id'])
         cur = {k: st.get(k) for k in AL.RANK_FIELDS}
-        try:
-            new = {k: (int(str(v).replace(',', '').strip()) if v not in (None, '') else None) for k, v in vals.items()}
-        except (TypeError, ValueError):
-            return jsonify({'ok': False, 'error': 'bad_value', 'message': 'Rank and score must be whole numbers.'}), 400
+        new = {}
+        for k, v in vals.items():
+            n = AL.parse_rank_value(k, v)          # ValueError → 400 with a readable message
+            if n is not None:
+                new[k] = n                         # blank = keep what is there
         differs = any(new[k] != cur.get(k) for k in new)
         who = (u.get('name') or u.get('mobile') or 'doctor').strip()
         if not st['rank_confirmed']:
+            if not (new.get('neet_pg_rank') or cur.get('neet_pg_rank')):
+                return jsonify({'ok': False, 'error': 'bad_value', 'message': 'Please enter your All-India rank.'}), 400
             AL.set_ranks(conn, u['id'], vals, who, 'goocampus.in (rank confirmation)')
-            conn.execute("UPDATE pg_users SET rank_confirmed_at = CURRENT_TIMESTAMP WHERE id = ?", [u['id']])
+            conn.execute("UPDATE pg_users SET rank_confirmed_at = CURRENT_TIMESTAMP, "
+                         "rank_prompt_closed_at = COALESCE(rank_prompt_closed_at, CURRENT_TIMESTAMP) WHERE id = ?",
+                         [u['id']])
         elif differs:
             if st['corrections_left'] <= 0:
                 return jsonify({'ok': False, 'error': 'correction_used',
                                 'message': 'You have already corrected your rank once. Please contact the '
                                            'GooCampus team with your scorecard to change it again.'}), 403
             AL.set_ranks(conn, u['id'], vals, who, 'goocampus.in (one-time correction)')
-            conn.execute("UPDATE pg_users SET rank_self_edits = COALESCE(rank_self_edits,0) + 1 WHERE id = ?",
-                         [u['id']])
+            conn.execute("UPDATE pg_users SET rank_self_edits = COALESCE(rank_self_edits,0) + 1, "
+                         "correction_prompt_closed_at = COALESCE(correction_prompt_closed_at, CURRENT_TIMESTAMP) "
+                         "WHERE id = ?", [u['id']])
         conn.commit()
         st = AL.rank_state(conn, u['id'])
         return jsonify({'ok': True, 'rank': st,
@@ -125,6 +131,30 @@ def my_allotment_not_me():
         try: conn.rollback()
         except Exception: pass
         logging.error("my_allotment_not_me: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def my_rank_prompt():
+    """POST /api/pg/my/rank-prompt {prompt: 'confirm'|'correction'} — the doctor closed that pop-up ("Later" /
+    ✕): never show it automatically again (founder 2026-10-26: ask once). They can still confirm / correct from
+    My Allotments."""
+    conn = get_db()
+    try:
+        AL.ensure(conn)
+        u, err = _doctor(conn)
+        if err:
+            return err
+        which = _s((request.get_json(silent=True) or {}).get('prompt')) or 'confirm'
+        col = 'correction_prompt_closed_at' if which == 'correction' else 'rank_prompt_closed_at'
+        conn.execute(f"UPDATE pg_users SET {col} = COALESCE({col}, CURRENT_TIMESTAMP) WHERE id = ?", [u['id']])
+        conn.commit()
+        return jsonify({'ok': True, 'rank': AL.rank_state(conn, u['id'])})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("my_rank_prompt: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
