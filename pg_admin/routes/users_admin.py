@@ -342,8 +342,21 @@ def users_admin():
             from pg_admin import allotments as _al2
             _alls = _al2.for_users(conn, users, include_not_me=True)
             for u in users:
+                live = [a for a in _alls.get(u['id'], []) if a['verdict'] != 'not_me']
                 u['allot'] = _al2.latest(_alls.get(u['id'], []))
-                u['allot_n'] = len([a for a in _alls.get(u['id'], []) if a['verdict'] != 'not_me'])
+                u['allot_n'] = len(live)
+                # compact tag per authority: "MCC MD/MS", "MCC DNB", "MCC MD/MS / DNB" (founder 2026-10-26)
+                progs = {}
+                for a in live:
+                    progs.setdefault('MCC' if a['authority_code'] == 'mcc' else a['authority_name'], set()).add(
+                        'DNB' if a['program'] == 'dnb' else 'MD/MS')
+                u['allot_tag'] = ' · '.join(f"{k} {' / '.join(sorted(v, key=lambda x: x != 'MD/MS'))}"
+                                            for k, v in sorted(progs.items(), key=lambda kv: kv[0] != 'MCC'))
+                u['allot_tip'] = '\n'.join(
+                    f"{'MCC' if a['authority_code'] == 'mcc' else a['authority_name']} {a['round']} ({a['status']}): "
+                    f"{a['course']} — {a['college_short']} ({a['quota']} · {a['allotted_category']})"
+                    + (' ✔ confirmed' if a['verdict'] == 'confirmed' else '')
+                    for a in sorted(live, key=lambda a: -int(a['round_order'] or 0)))
         except Exception as _ae2:
             logging.error("users_admin allot column: %s", _ae2)
             conn.rollback()
