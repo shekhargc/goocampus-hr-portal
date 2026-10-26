@@ -378,7 +378,9 @@ def _check_data_quality():
         r = conn.execute("SELECT COUNT(*) AS n, COUNT(DISTINCT m.course_name) AS c FROM pg_seat_matrix m "
                          "JOIN pg_seat_matrix_source s ON s.counselling_body=m.counselling_body "
                          "AND s.academic_year=m.academic_year WHERE COALESCE(s.superseded,0)=0 "
-                         "AND COALESCE(s.section,'') NOT IN ('', 'nmc_initial') AND COALESCE(m.cutoff_course,'')=''").fetchone()
+                         "AND COALESCE(s.section,'') NOT IN ('', 'nmc_initial') AND COALESCE(m.cutoff_course,'')='' "
+                         # DNB lines are hidden from doctors and have no 2025 cut-off course — not a gap (2026-10-26)
+                         "AND COALESCE(m.section,'') <> 'dnb'").fetchone()
         n, c = int((r or {}).get('n') or 0), int((r or {}).get('c') or 0)
         out['matrix_courses'] = (_warn(f'{n} seat-matrix line(s) across {c} course name(s) are not linked to a '
                                        f'cut-off course (predictor/rankings can\'t use them)') if n else
