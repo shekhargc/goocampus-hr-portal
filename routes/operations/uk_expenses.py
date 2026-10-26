@@ -11,7 +11,9 @@ Line amount : 1) an ACTUAL amount wins — the team's entered amount (ops_servic
               4) paid by not set → list price shown separately as an ESTIMATE;
               5) no price → "not priced" (counted, so gaps are visible).
 Per client  : received (ex-GST, same as the refund worksheet: ops_payments) − spent = balance.
-              The consulting fee / welcome kit are not deducted yet (they come from per-product pricing).
+              Spent includes the Welcome kit (₹20,000, founder 2026-10-26) for every client whose kit is marked
+              Given (plab_clients.welcome_kit_given — empty = Given, like AMC; the client page toggles it).
+              The consulting fee is not deducted yet (it comes from per-product pricing).
 """
 import io
 import json
@@ -73,7 +75,29 @@ def _ensure(conn):
         id SERIAL PRIMARY KEY, pathway TEXT, file_name TEXT DEFAULT '', data TEXT,
         uploaded_by TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, applied_at TIMESTAMP)''')
     conn.execute("ALTER TABLE ops_service_meta ADD COLUMN IF NOT EXISTS amount_spent NUMERIC(14,2)")
+    conn.execute("ALTER TABLE plab_clients ADD COLUMN IF NOT EXISTS welcome_kit_given INTEGER DEFAULT 1")
     conn.commit()
+
+
+KIT_DEFAULT = 20000.0       # founder 2026-10-26
+_KIT_KEY = ('welcome_kit', 'welcome kit', '')
+
+
+def _kit_given(v):
+    """plab_clients.welcome_kit_given: empty / anything but 0 = Given (same rule as AMC)."""
+    return (v is None) or (str(v).strip() not in ('0', '0.0', 'False', 'false'))
+
+
+def _kit_price(conn):
+    r = conn.execute("SELECT price FROM ops_service_prices WHERE pathway = ? AND section_key = ? AND service_key = ? "
+                     "AND provider_key = ?", (PATHWAY,) + _KIT_KEY).fetchone()
+    return float(r['price']) if r else KIT_DEFAULT
+
+
+def _kit_map(conn):
+    """client id → welcome kit given?"""
+    return {r['id']: _kit_given(r['k']) for r in conn.execute(
+        "SELECT id, welcome_kit_given AS k FROM plab_clients WHERE COALESCE(pathway,'plab') = 'plab'").fetchall()}
 
 
 def _prices(conn):
@@ -144,8 +168,12 @@ def _client_totals(conn, statuses):
                              'status': cl.get('account_status') or '', 'stage': cl.get('current_stage') or '',
                              'lines': 0, 'spent': 0.0, 'estimate': 0.0, 'unpriced': 0, 'client_paid': 0}
     out = []
+    kit_price, kits = _kit_price(conn), _kit_map(conn)
     for c in per.values():
         c['received'] = A._refund_paid_ex_gst(conn, c['registration_number']) if c['registration_number'] else 0.0
+        c['kit'] = kit_price if kits.get(c['client_id'], True) else 0.0
+        c['services_spent'] = c['spent']
+        c['spent'] += c['kit']
         c['balance'] = c['received'] - c['spent']
         out.append(c)
     out.sort(key=lambda c: c['name'].lower())
@@ -174,7 +202,7 @@ def expenses_page():
     q = _norm(request.args.get('q'))
     if q:
         clients = [c for c in clients if q in _norm(f"{c['name']} {c['registration_number']}")]
-    tot = {k: sum(c[k] for c in clients) for k in ('received', 'spent', 'estimate', 'balance', 'unpriced', 'lines')}
+    tot = {k: sum(c[k] for c in clients) for k in ('received', 'spent', 'kit', 'estimate', 'balance', 'unpriced', 'lines')}
     return render_template('ops_plab_expenses.html', clients=clients, tot=tot, n_prices=n_prices,
                            statuses_all=sorted(set(statuses) | set(A._SVC_DEFAULT_STATUSES)), picked=f['statuses'],
                            status_qs=A._svc_status_qs(f['statuses']), q=request.args.get('q') or '',
@@ -195,14 +223,14 @@ def expenses_download():
     finally:
         conn.close()
     headers = ['Client Name', 'Registration Number', 'Status', 'Current Stage', 'Received (ex-GST ₹)',
-               'Spent by GooCampus (₹)', 'Balance (₹)', 'Estimate — paid by not set (₹)', 'Service lines',
-               'Lines not priced', 'Lines paid by client']
+               'Services spent (₹)', 'Welcome kit (₹)', 'Total spent (₹)', 'Balance (₹)',
+               'Estimate — paid by not set (₹)', 'Service lines', 'Lines not priced', 'Lines paid by client']
     wb = Workbook(write_only=True)
-    ws = A._svc_xl_sheet(wb, 'UK expenses', headers, [28, 22, 14, 22, 16, 18, 14, 20, 10, 12, 12])
+    ws = A._svc_xl_sheet(wb, 'UK expenses', headers, [28, 22, 14, 22, 16, 16, 14, 16, 14, 20, 10, 12, 12])
     for c in clients:
         ws.append([A._svc_xl_value(c['name']), c['registration_number'], c['status'], c['stage'],
-                   round(c['received'], 2), round(c['spent'], 2), round(c['balance'], 2), round(c['estimate'], 2),
-                   c['lines'], c['unpriced'], c['client_paid']])
+                   round(c['received'], 2), round(c['services_spent'], 2), round(c['kit'], 2), round(c['spent'], 2),
+                   round(c['balance'], 2), round(c['estimate'], 2), c['lines'], c['unpriced'], c['client_paid']])
     A._svc_xl_filter(ws, len(headers), len(clients))
     return A._svc_xl_send(wb, 'UK_PGCP_Client_Expenses')
 
@@ -230,13 +258,17 @@ def expense_client(client_id):
             r['basis_label'] = _BASIS_LABEL[r['basis']]
             r['team_amount'] = actuals.get((r['source_table'], r['record_id']))
         received = A._refund_paid_ex_gst(conn, cl.get('registration_number') or '')
+        kit_price = _kit_price(conn)
     finally:
         conn.close()
-    spent = sum(r['amt'] for r in rows if r['basis'] in ('actual', 'price'))
+    kit_given = _kit_given(cl.get('welcome_kit_given'))
+    kit = kit_price if kit_given else 0.0
+    spent = sum(r['amt'] for r in rows if r['basis'] in ('actual', 'price')) + kit
     est = sum(r['amt'] for r in rows if r['basis'] == 'estimate')
     name = ' '.join(f"{cl.get('prefix') or ''} {cl.get('first_name') or ''} {cl.get('last_name') or ''}".split())
     return render_template('ops_plab_expense_client.html', cl=cl, name=name, rows=rows, received=received,
-                           spent=spent, estimate=est, balance=received - spent,
+                           spent=spent, estimate=est, balance=received - spent, kit=kit, kit_given=kit_given,
+                           kit_price=kit_price,
                            unpriced=sum(1 for r in rows if r['basis'] == 'unpriced'),
                            active_ops_page='plab-expenses')
 
@@ -447,11 +479,37 @@ def current_price_lookup(conn):
         return {}
 
 
+@admin_required
+def expense_kit_toggle(client_id):
+    """Mark this client's Welcome kit as Given / Not given (counts ₹20,000 in spent when Given)."""
+    if not _is_admin():
+        return _deny()
+    given = 1 if request.form.get('given') == '1' else 0
+    conn = get_db()
+    try:
+        _ensure(conn)
+        conn.execute("UPDATE plab_clients SET welcome_kit_given = ? WHERE id = ? AND COALESCE(pathway,'plab') = 'plab'",
+                     (given, client_id))
+        conn.commit()
+        logging.info("UK expenses: welcome kit %s for client %s by %s", 'given' if given else 'not given', client_id, _who())
+        flash('Welcome kit marked ' + ('Given' if given else 'Not given') + '.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("expense_kit_toggle: %s", e)
+        flash('Could not save — please try again.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('ops_plab_expense_client', client_id=client_id))
+
+
 def register_routes(app):
     app.add_url_rule('/operations/plab/expenses', 'ops_plab_expenses', expenses_page, methods=['GET'])
     app.add_url_rule('/operations/plab/expenses/download', 'ops_plab_expenses_download', expenses_download, methods=['GET'])
     app.add_url_rule('/operations/plab/expenses/<int:client_id>', 'ops_plab_expense_client', expense_client, methods=['GET'])
     app.add_url_rule('/operations/plab/expenses/amount', 'ops_plab_expense_amount', expense_amount_save, methods=['POST'])
+    app.add_url_rule('/operations/plab/expenses/<int:client_id>/kit', 'ops_plab_expense_kit', expense_kit_toggle,
+                     methods=['POST'])
     app.add_url_rule('/operations/plab/service-prices', 'ops_plab_service_prices', prices_page, methods=['GET'])
     app.add_url_rule('/operations/plab/service-prices/upload', 'ops_plab_service_prices_upload', prices_upload, methods=['POST'])
     app.add_url_rule('/operations/plab/service-prices/apply/<int:upload_id>', 'ops_plab_service_prices_apply',
