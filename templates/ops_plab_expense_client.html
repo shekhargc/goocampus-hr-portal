@@ -34,10 +34,19 @@
 
 <div class="stats">
   <div class="stat"><b>₹{{ '{:,.0f}'.format(received) }}</b>received (ex-GST)</div>
-  <div class="stat"><b>₹{{ '{:,.0f}'.format(spent) }}</b>spent by GooCampus</div>
+  <div class="stat"><b>₹{{ '{:,.0f}'.format(spent) }}</b>spent by GooCampus (incl. welcome kit)</div>
   <div class="stat"><b class="{{ 'neg' if balance < 0 }}">₹{{ '{:,.0f}'.format(balance) }}</b>balance</div>
   <div class="stat"><b style="color:#b45309;">₹{{ '{:,.0f}'.format(estimate) }}</b>estimate (paid by not set)</div>
   <div class="stat"><b style="color:#b45309;">{{ unpriced }}</b>lines not priced</div>
+</div>
+
+<div class="note" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+  <b>Welcome kit:</b>
+  {% if kit_given %}Given · ₹{{ '{:,.0f}'.format(kit_price) }} counted in spent{% else %}Not given · ₹0{% endif %}
+  <form method="POST" action="{{ url_for('ops_plab_expense_kit', client_id=cl.id) }}" style="margin:0;">
+    <input type="hidden" name="given" value="{{ '0' if kit_given else '1' }}">
+    <button class="btn" type="submit">{{ 'Mark Not given' if kit_given else 'Mark Given' }}</button>
+  </form>
 </div>
 
 <div class="table-wrap">
