@@ -7,8 +7,8 @@ same row (change logged in team_notes, updated_at set); a fresh drop to 1–3★
 What: 1–5 stars + what they like (tick the sections from LIKE_OPTIONS + an optional "Other" line) + what to improve
 (+ may we call). Stored here; the team works it on
 /admin/pg/feedback (status, notes, Excel).
-Google review (founder's rule): invited when the doctor rated 4–5 stars AND (has a seat allotment OR has used the
-dashboard on 3+ days). A 1–3 star
+Google review (founder's rule): every 4–5 star feedback is invited (even on a first visit). The seat / 3-visit-day
+rule only decides when the form opens by itself. A 1–3 star
 rating raises a team alert (portal bell) for a call-back; once the team marks it Resolved, the doctor is offered the
 Google review on their next visit. Clicks on the Google link are counted.
 
@@ -198,8 +198,7 @@ def my_feedback_submit():
         if rating < 1 or rating > 5:
             return jsonify({'ok': False, 'error': 'bad_rating', 'message': 'Please choose 1 to 5 stars.'}), 400
         allotted = _has_allotment(conn, u)
-        regular = _visit_days(conn, u['id']) >= VISIT_DAYS
-        show_google = rating >= 4 and (allotted or regular)      # founder: a seat OR used it on 3+ days
+        show_google = rating >= 4      # founder: any 4–5★ (the seat / 3-visit rule only decides when the form auto-opens)
         low = rating <= 3
         dtype = _doctor_type(conn, u['id'])
         tags = d.get('liked_tags') or []
