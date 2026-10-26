@@ -8,7 +8,7 @@ price/GST preview, 2026-10-16)
 import logging
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from db import get_db
 from core.auth import login_required
@@ -88,7 +88,7 @@ def coupons_admin():
         for r in conn.execute("SELECT coupon_id, plan_id FROM pg_coupon_plans").fetchall():
             coupon_plans.setdefault(r['coupon_id'], []).append(r['plan_id'])
 
-        now = datetime.utcnow()
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)   # coupon dates are entered + stored in IST
         view = []
         for c in rows:
             c['plan_ids'] = coupon_plans.get(c['id'], [])

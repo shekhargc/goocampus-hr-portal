@@ -70,7 +70,7 @@ def _coupon_options(conn):
     """ACTIVE, currently-valid, not-used-up coupons for the invite form, with the rules
     the browser needs to compute the discount live (mirrors coupons.compute_discount).
     The server re-validates on save."""
-    now = datetime.utcnow()
+    now = datetime.utcnow() + timedelta(hours=5, minutes=30)   # coupon dates are entered + stored in IST
     links = {}
     try:
         for r in conn.execute("SELECT coupon_id, plan_id FROM pg_coupon_plans").fetchall():

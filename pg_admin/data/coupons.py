@@ -12,7 +12,7 @@ see pg_admin/data/pgcp_package.py, which burns the use with the invite noted).
 repeatable; redemption is the thing that burns a use.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 
@@ -62,7 +62,7 @@ def validate(conn, code, plan_id=None, user_id=None, amount=None, gst_percent=No
     if not coupon.get('is_active'):
         return False, {'error': 'This coupon is no longer active.'}
 
-    now = datetime.utcnow()
+    now = datetime.utcnow() + timedelta(hours=5, minutes=30)   # coupon dates are entered + stored in IST
     if coupon.get('valid_from') and coupon['valid_from'] > now:
         return False, {'error': 'This coupon is not available yet.'}
     if coupon.get('valid_until') and coupon['valid_until'] < now:
