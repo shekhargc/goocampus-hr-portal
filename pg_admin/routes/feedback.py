@@ -21,7 +21,12 @@ from db import get_db
 from core.auth import login_required
 
 REVIEW_URL = 'https://g.page/r/CWVb6jAK7SwKEBM/review'
-REVIEW_QR_URL = REVIEW_URL + '?utm_source=gbp&utm_medium=reviews&utm_campaign=qr'
+REVIEW_QR_URL = REVIEW_URL + '?utm_source=gbp&utm_medium=reviews&utm_campaign=qr'   # the link the QR encodes
+QR_IMAGE_PATH = '/static/img/google-review-qr.png'     # public PNG of that QR (no key needed)
+
+
+def _qr_image():
+    return request.url_root.rstrip('/') + QR_IMAGE_PATH
 VISIT_DAYS = 3
 STATUSES = ('New', 'Call back', 'Reviewed', 'Planned', 'Done', 'Resolved')
 
@@ -132,6 +137,7 @@ def my_feedback_state():
             conn.commit()
         return jsonify({'ok': True, 'show_prompt': show, 'trigger': trigger, 'given': given,
                         'review': {'show': bool(pend), 'url': REVIEW_URL, 'qr_url': REVIEW_QR_URL,
+                                   'qr_image': _qr_image(),
                                    'message': 'Thank you for giving us the chance to make it right. Would you share '
                                               'your experience on Google?' if pend else ''}})
     except Exception as e:
@@ -174,6 +180,7 @@ def my_feedback_submit():
         return jsonify({'ok': True, 'id': fid, 'show_google': show_google,
                         'google_url': REVIEW_URL if show_google else '',
                         'google_qr_url': REVIEW_QR_URL if show_google else '',
+                        'google_qr_image': _qr_image() if show_google else '',
                         'message': ('Thank you! Would you share your experience on Google? It helps other doctors '
                                     'find us.' if show_google else
                                     ('Sorry we fell short. Our counselling team will call you within 24 hours to '
