@@ -33,9 +33,9 @@
   <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Doctor Feedback</h1>
   <p style="margin:0 0 14px;font-size:0.88rem;color:var(--gray-500);max-width:960px;">
     What doctors say about the goocampus.in dashboard. Asked once — after their 3rd visit day or when they get a seat —
-    plus a Feedback button any time. <b>1–3 stars</b> raise an alert for a call-back (status "Call back"); once you mark it
-    <b>Resolved</b>, the doctor is offered the Google review on their next visit. Doctors with a seat who give
-    <b>4–5 stars</b> are offered the Google review straight away.
+    plus a Feedback button any time. One feedback per doctor: they can reopen and edit it (changes are kept in History). <b>1–3 stars</b> raise an alert for a call-back (status "Call back"); once you mark it
+    <b>Resolved</b>, the doctor is offered the Google review on their next visit. Doctors who give <b>4–5 stars</b>
+    and have a seat <b>or</b> have used the dashboard on 3+ days are offered the Google review straight away.
   </p>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}
@@ -93,7 +93,8 @@
     <tr><th>Date</th><th>Doctor</th><th>Rating</th><th>Likes</th><th>Improve</th><th>Status</th><th></th></tr>
     {% for r in rows %}
     <tr>
-      <td style="white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}<div class="sub">{{ {'visits':'after 3 visits','allotment':'got a seat','button':'Feedback button'}.get(r.trigger, r.trigger) }}</div></td>
+      <td style="white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}<div class="sub">{{ {'visits':'after 3 visits','allotment':'got a seat','button':'Feedback button'}.get(r.trigger, r.trigger) }}</div>
+        {% if r.updated_at %}<div class="sub" style="color:#b45309;">edited by doctor {{ r.updated_at|format_datetime }}</div>{% endif %}</td>
       <td>{% if r.user_id %}<a href="/admin/pg/users/{{ r.user_id }}" style="color:#2952a3;font-weight:600;text-decoration:none;">{{ r.display_name }}</a>{% else %}{{ r.display_name }}{% endif %}
         <div class="sub">{{ r.mobile or '' }} · {{ (r.doctor_type or '')|capitalize }}{% if r.has_allotment %} · has a seat{% endif %}{% if r.call_ok %} · OK to call{% endif %}</div></td>
       <td class="stars">{{ '★' * r.rating }}<span style="color:var(--gray-300);">{{ '★' * (5 - r.rating) }}</span>

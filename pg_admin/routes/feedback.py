@@ -2,15 +2,19 @@
 
 When: once, after the doctor's 3rd visit day OR as soon as they have a seat allotment (whichever first) — plus a
 Feedback button any time. Never shown again automatically after they answer or close it.
+One feedback per doctor (founder): the Feedback button shows what they gave (GET → mine) and a re-submit UPDATES that
+same row (change logged in team_notes, updated_at set); a fresh drop to 1–3★ re-alerts the team.
 What: 1–5 stars + what they like (tick the sections from LIKE_OPTIONS + an optional "Other" line) + what to improve
 (+ may we call). Stored here; the team works it on
 /admin/pg/feedback (status, notes, Excel).
-Google review (founder's rule): invited only when the doctor has a seat allotment AND rated 4–5 stars. A 1–3 star
+Google review (founder's rule): invited when the doctor rated 4–5 stars AND (has a seat allotment OR has used the
+dashboard on 3+ days). A 1–3 star
 rating raises a team alert (portal bell) for a call-back; once the team marks it Resolved, the doctor is offered the
 Google review on their next visit. Clicks on the Google link are counted.
 
 Doctor APIs (X-PG-Key + doctor token):
-  GET  /api/pg/my/feedback            → {show_prompt, trigger, like_options, review:{show, url, qr_image}, given}
+  GET  /api/pg/my/feedback            → {show_prompt, trigger, like_options, mine (their feedback or null),
+                                         review:{show, url, qr_image}, given}
        ?peek=1                        → same, but never spends/marks the one-time Google invite (review.show false)
   POST /api/pg/my/feedback            {rating, liked_tags:[...], liked (Other text), improve, call_ok, page, trigger}
                                       → {ok, show_google, ...}
@@ -67,6 +71,9 @@ def ensure(conn):
         if not conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name='pg_feedback' "
                             "AND column_name='liked_tags'").fetchone():
             conn.execute("ALTER TABLE pg_feedback ADD COLUMN IF NOT EXISTS liked_tags TEXT DEFAULT ''")
+        if not conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name='pg_feedback' "
+                            "AND column_name='updated_at'").fetchone():
+            conn.execute("ALTER TABLE pg_feedback ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP")
         for col, typ in (('feedback_prompt_closed_at', 'TIMESTAMP'), ('feedback_given_at', 'TIMESTAMP')):
             if not conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name='pg_users' "
                                 "AND column_name=?", [col]).fetchone():
@@ -76,6 +83,21 @@ def ensure(conn):
         try: conn.rollback()
         except Exception: pass
         logging.error("feedback.ensure: %s", e)
+
+
+def _mine(conn, uid):
+    """The doctor's own feedback (latest row) — one per doctor."""
+    r = conn.execute("SELECT * FROM pg_feedback WHERE user_id = ? ORDER BY id DESC LIMIT 1", [uid]).fetchone()
+    return dict(r) if r else None
+
+
+def _mine_out(r):
+    if not r:
+        return None
+    return {'id': r['id'], 'rating': r['rating'], 'liked_tags': [t for t in (r.get('liked_tags') or '').split(',') if t],
+            'liked': r.get('liked') or '', 'improve': r.get('improve') or '', 'call_ok': bool(r.get('call_ok')),
+            'created_at': r['created_at'].isoformat() if r.get('created_at') else None,
+            'updated_at': r['updated_at'].isoformat() if r.get('updated_at') else None}
 
 
 def _doctor(conn):
@@ -147,7 +169,7 @@ def my_feedback_state():
             conn.execute("UPDATE pg_feedback SET review_offered = 1 WHERE id = ?", [pend['id']])
             conn.commit()
         return jsonify({'ok': True, 'show_prompt': show, 'trigger': trigger, 'given': given,
-                        'like_options': LIKE_OPTIONS,
+                        'like_options': LIKE_OPTIONS, 'mine': _mine_out(_mine(conn, u['id'])),
                         'review': {'show': bool(pend), 'url': REVIEW_URL, 'qr_url': REVIEW_QR_URL,
                                    'qr_image': _qr_image(),
                                    'message': 'Thank you for giving us the chance to make it right. Would you share '
@@ -176,32 +198,65 @@ def my_feedback_submit():
         if rating < 1 or rating > 5:
             return jsonify({'ok': False, 'error': 'bad_rating', 'message': 'Please choose 1 to 5 stars.'}), 400
         allotted = _has_allotment(conn, u)
-        show_google = allotted and rating >= 4
+        regular = _visit_days(conn, u['id']) >= VISIT_DAYS
+        show_google = rating >= 4 and (allotted or regular)      # founder: a seat OR used it on 3+ days
         low = rating <= 3
         dtype = _doctor_type(conn, u['id'])
         tags = d.get('liked_tags') or []
         if isinstance(tags, str):
             tags = tags.split(',')
         tags = [t for t in LIKE_OPTIONS if t in {_s(x) for x in tags}]     # only known sections, in list order
-        fid = conn.execute(
-            "INSERT INTO pg_feedback (user_id, rating, liked_tags, liked, improve, call_ok, page, trigger, doctor_type, "
-            "has_allotment, status, review_offered) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
-            [u['id'], rating, ','.join(tags), _s(d.get('liked'))[:2000], _s(d.get('improve'))[:2000],
-             1 if d.get('call_ok') else 0,
-             _s(d.get('page'))[:200], _s(d.get('trigger'))[:20], dtype, 1 if allotted else 0,
-             'Call back' if low else 'New', 1 if show_google else 0]).fetchone()['id']
+        liked, improve, call_ok = _s(d.get('liked'))[:2000], _s(d.get('improve'))[:2000], 1 if d.get('call_ok') else 0
+        old = _mine(conn, u['id'])
+        alert = low
+        if old:           # one feedback per doctor — update it, keep what changed in the team's history
+            if old.get('review_clicked_at'):
+                show_google = False                      # already went to Google — don't ask again
+            alert = low and (old['rating'] >= 4 or old.get('status') in ('Resolved', 'Done'))   # a fresh problem only
+            status = 'Call back' if alert else old.get('status') or 'New'   # the team closes call-backs, not the doctor
+            ch = []
+            if old['rating'] != rating:
+                ch.append(f"{old['rating']}★ → {rating}★")
+            if (old.get('liked_tags') or '') != ','.join(tags) or (old.get('liked') or '') != liked:
+                ch.append('likes: ' + (', '.join(tags + ([liked] if liked else [])) or '—'))
+            if (old.get('improve') or '') != improve:
+                ch.append('improve: ' + (improve or '—'))
+            if bool(old.get('call_ok')) != bool(call_ok):
+                ch.append('OK to call: ' + ('yes' if call_ok else 'no'))
+            from datetime import datetime, timedelta
+            stamp = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime('%d-%b-%Y %I:%M %p')
+            notes = old.get('team_notes') or ''
+            if ch:
+                notes = (f"[{stamp} · doctor edited] " + '; '.join(ch) + "\n" + notes)[:8000]
+            fid = old['id']
+            conn.execute(
+                "UPDATE pg_feedback SET rating = ?, liked_tags = ?, liked = ?, improve = ?, call_ok = ?, page = ?, "
+                "doctor_type = ?, has_allotment = ?, status = ?, team_notes = ?, "
+                "review_offered = CASE WHEN ? = 1 THEN 1 ELSE review_offered END, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                [rating, ','.join(tags), liked, improve, call_ok, _s(d.get('page'))[:200] or old.get('page') or '',
+                 dtype, 1 if allotted else 0, status, notes, 1 if show_google else 0, fid])
+        else:
+            fid = conn.execute(
+                "INSERT INTO pg_feedback (user_id, rating, liked_tags, liked, improve, call_ok, page, trigger, doctor_type, "
+                "has_allotment, status, review_offered) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+                [u['id'], rating, ','.join(tags), liked, improve, call_ok,
+                 _s(d.get('page'))[:200], _s(d.get('trigger'))[:20], dtype, 1 if allotted else 0,
+                 'Call back' if low else 'New', 1 if show_google else 0]).fetchone()['id']
         conn.execute("UPDATE pg_users SET feedback_given_at = CURRENT_TIMESTAMP WHERE id = ?", [u['id']])
         conn.commit()
-        if low:
+        if alert:
             _alert_team(conn, u, rating, fid)
-        return jsonify({'ok': True, 'id': fid, 'show_google': show_google,
+        return jsonify({'ok': True, 'id': fid, 'updated': bool(old), 'show_google': show_google,
+                        'mine': _mine_out(_mine(conn, u['id'])),
                         'google_url': REVIEW_URL if show_google else '',
                         'google_qr_url': REVIEW_QR_URL if show_google else '',
                         'google_qr_image': _qr_image() if show_google else '',
                         'message': ('Thank you! Would you share your experience on Google? It helps other doctors '
                                     'find us.' if show_google else
                                     ('Sorry we fell short. Our counselling team will call you within 24 hours to '
-                                     'make it right.' if low else 'Thank you for your feedback!'))})
+                                     'make it right.' if low else
+                                     ('Your feedback is updated. Thank you!' if old else 'Thank you for your feedback!')))})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
