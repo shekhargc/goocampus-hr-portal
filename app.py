@@ -47913,6 +47913,7 @@ ACCESS_SECTION_CATALOG = [
             ('users',  'Registered Doctors', 'View doctors, activate/edit profiles, grant plans, add team members'),
             ('events', 'Events',             'See event sign-ups + who registered for each event'),
             ('mgmt_inquiries', 'Management / NRI Inquiries', 'Call-back requests from the Management / NRI / deemed-quota pages, with budget; Edit = add follow-ups'),
+            ('doctor_feedback', 'Doctor Feedback', 'Doctors\' ratings + comments on the goocampus.in dashboard; low ratings alert for a call-back; Edit = status + notes'),
         ],
     },
 ]
@@ -51165,6 +51166,9 @@ ACCESS_ROUTE_MAP = {
     'pg_event_export':       _ap('goocampus_in', 'events', 'view'),
     'pg_mgmt_inquiries':     _ap('goocampus_in', 'mgmt_inquiries', 'view'),
     'pg_mgmt_inquiry_followup': _ap('goocampus_in', 'mgmt_inquiries', 'edit'),
+    'pg_feedback_admin':     _ap('goocampus_in', 'doctor_feedback', 'view'),
+    'pg_feedback_download':  _ap('goocampus_in', 'doctor_feedback', 'view'),
+    'pg_feedback_update':    _ap('goocampus_in', 'doctor_feedback', 'edit'),
     # ── College (directory + Medical Predictor + NEET PG PDFs) ──
     # VIEW = the page; a granted team member can look up + download. The
     # management actions (add/edit/import/upload/publish/delete/blast) require
