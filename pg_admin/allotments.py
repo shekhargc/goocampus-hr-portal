@@ -21,7 +21,8 @@ SELF_CORRECTIONS = 1
 def ensure(conn):
     try:
         for col, typ in (('home_state_rank', 'INTEGER'), ('rank_confirmed_at', 'TIMESTAMP'),
-                         ('rank_self_edits', 'INTEGER DEFAULT 0')):
+                         ('rank_self_edits', 'INTEGER DEFAULT 0'), ('rank_prompt_closed_at', 'TIMESTAMP'),
+                         ('correction_prompt_closed_at', 'TIMESTAMP')):
             if not conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name='pg_users' "
                                 "AND column_name=?", [col]).fetchone():
                 conn.execute(f"ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS {col} {typ}")
@@ -204,6 +205,20 @@ def mark(conn, user_id, authority_code, year, rnd, verdict, by, via, rank_used=N
 RANK_FIELDS = ('neet_pg_rank', 'neet_pg_score', 'home_state_rank')
 
 
+def parse_rank_value(field, v):
+    """'1,234' / 1234 / '512.0' → int; blank → None. A NEET-PG score can be 0 or negative; ranks must be > 0.
+    Raises ValueError with a doctor-readable message."""
+    if v is None or str(v).strip() == '':
+        return None
+    try:
+        n = int(round(float(str(v).replace(',', '').strip())))
+    except (TypeError, ValueError):
+        raise ValueError({'neet_pg_score': 'Score must be a number.'}.get(field, 'Rank must be a whole number.'))
+    if field != 'neet_pg_score' and n <= 0:
+        raise ValueError('Rank must be above 0.')
+    return n
+
+
 def set_ranks(conn, user_id, values, by, via, note=''):
     """Write rank / score / home-state rank, logging each change. Returns the changed field names."""
     cur = conn.execute("SELECT neet_pg_rank, neet_pg_score, home_state_rank FROM pg_users WHERE id=?",
@@ -212,16 +227,10 @@ def set_ranks(conn, user_id, values, by, via, note=''):
         return []
     changed = []
     for f in RANK_FIELDS:
-        if f not in values:
-            continue
-        v = values[f]
-        try:
-            v = int(str(v).replace(',', '').strip()) if v not in (None, '') else None
-        except (TypeError, ValueError):
-            raise ValueError(f'{f} must be a whole number')
-        if v is not None and v <= 0:
-            raise ValueError(f'{f} must be above 0')
-        if (cur[f] or None) != v:
+        v = parse_rank_value(f, values.get(f)) if f in values else None
+        if v is None:
+            continue                       # left blank = keep what is there (never wipes a rank)
+        if cur[f] != v:
             conn.execute(f"UPDATE pg_users SET {f}=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", [v, user_id])
             conn.execute("INSERT INTO pg_profile_edit_log (user_id, field, old_value, new_value, changed_by, source) "
                          "VALUES (?,?,?,?,?,?)",
@@ -234,17 +243,25 @@ def set_ranks(conn, user_id, values, by, via, note=''):
 def rank_state(conn, user_id):
     """What the doctor may do: confirm (first time), correct (once), or nothing (ask the team)."""
     u = conn.execute("SELECT neet_pg_rank, neet_pg_score, home_state_rank, state, rank_confirmed_at, "
-                     "COALESCE(rank_self_edits,0) AS edits FROM pg_users WHERE id=?", [user_id]).fetchone()
+                     "COALESCE(rank_self_edits,0) AS edits, rank_prompt_closed_at, correction_prompt_closed_at "
+                     "FROM pg_users WHERE id=?", [user_id]).fetchone()
     if not u:
         return None
     u = dict(u)
     confirmed = u['rank_confirmed_at'] is not None
+    left = 0 if not confirmed else max(0, SELF_CORRECTIONS - int(u['edits'] or 0))
+    not_me = conn.execute("SELECT 1 FROM pg_allotment_marks WHERE user_id=? AND verdict='not_me' AND via='doctor' "
+                          "LIMIT 1", [user_id]).fetchone() is not None
+    # Ask ONCE (founder 2026-10-26): the confirm pop-up shows until the doctor confirms OR closes it once; the
+    # correction pop-up after "This isn't me" shows once. Both can still be done any time from My Allotments.
     return {'neet_pg_rank': u['neet_pg_rank'], 'neet_pg_score': u['neet_pg_score'],
             'home_state': u['state'] or '', 'home_state_rank': u['home_state_rank'],
             'rank_confirmed': confirmed,
             'rank_confirmed_at': str(u['rank_confirmed_at'])[:16] if confirmed else '',
             'needs_confirm': not confirmed,
-            'corrections_left': 0 if not confirmed else max(0, SELF_CORRECTIONS - int(u['edits'] or 0))}
+            'show_confirm_prompt': (not confirmed) and u['rank_prompt_closed_at'] is None,
+            'show_correction_prompt': bool(confirmed and left > 0 and not_me and u['correction_prompt_closed_at'] is None),
+            'corrections_left': left}
 
 
 def summary(conn):

@@ -1434,9 +1434,16 @@ def api_pg_profile():
             return jsonify({'ok': True, 'updated': 0, 'profile_complete': not _miss, 'missing': _miss,
                             'name_missing': not (row.get('name') or '').strip()})
         params.append(row['id'])
+        # The doctor typing their own All-India rank (Edit Profile / the predictor's rank prompt) IS a confirmation —
+        # never ask them to confirm it again (founder 2026-10-26, Dr. Anjali's feedback).
+        _own_rank = any(x.startswith('neet_pg_rank =') for x in sets) and \
+            (params[[x.split(' =')[0] for x in sets].index('neet_pg_rank')] or 0) > 0
         conn.execute(
             f"UPDATE pg_users SET {', '.join(sets)}, updated_by = 'goocampus.in', "
-            f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", params)
+            f"updated_at = CURRENT_TIMESTAMP"
+            + (", rank_confirmed_at = COALESCE(rank_confirmed_at, CURRENT_TIMESTAMP), "
+               "rank_prompt_closed_at = COALESCE(rank_prompt_closed_at, CURRENT_TIMESTAMP)" if _own_rank else "")
+            + " WHERE id = ?", params)
         conn.commit()
 
         # The Home / Domicile State also becomes the doctor's LOCKED home state for the

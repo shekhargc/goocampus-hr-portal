@@ -166,6 +166,7 @@ def register_pg_admin(app):
     from pg_admin.routes import allotments_api as _alapi
     app.add_url_rule('/api/pg/my/allotments', 'api_pg_my_allotments', _alapi.my_allotments, methods=['GET'])
     app.add_url_rule('/api/pg/my/rank-confirm', 'api_pg_my_rank_confirm', _alapi.my_rank_confirm, methods=['POST'])
+    app.add_url_rule('/api/pg/my/rank-prompt', 'api_pg_my_rank_prompt', _alapi.my_rank_prompt, methods=['POST'])
     app.add_url_rule('/api/pg/my/allotment-not-me', 'api_pg_my_allotment_not_me', _alapi.my_allotment_not_me,
                      methods=['POST'])
     app.add_url_rule('/api/pg/desk/doctors/<int:doctor_id>/allotments', 'api_pg_desk_allotments',

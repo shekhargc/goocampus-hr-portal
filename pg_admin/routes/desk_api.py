@@ -196,6 +196,9 @@ def desk_doctors():
         counts = {r['doc_type']: r['n'] for r in conn.execute(
             f"SELECT doc_type, COUNT(*) AS n FROM ({base}) x GROUP BY doc_type").fetchall()}
         where, params = ["x.doc_type = ?"], [dtype]
+        if _s(request.args.get('allotted')) in ('1', 'true', 'yes'):     # only doctors with a seat (2026-10-26)
+            from pg_admin.routes.users_admin import _allotted_sql
+            where.append(_allotted_sql('x'))
         if q:
             digits = ''.join(ch for ch in q if ch.isdigit())
             cond = "(x.name ILIKE ? OR x.email ILIKE ?"
