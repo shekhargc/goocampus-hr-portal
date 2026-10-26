@@ -20,11 +20,11 @@ ANNOUNCEMENTS = {
     'mcc_r1_final_2026': {
         'subject': 'MCC NEET PG Round 1 final result is out — check your allotment',
         'title': 'MCC NEET PG 2026 — Round 1 final result is out',
-        'preheader': 'Check your Round 1 allotment and the seats still open at your rank for Round 2.',
+        'preheader': 'Check your Round 1 allotment and plan Round 2 with the 2025 vs 2026 closing ranks.',
         'lead': 'MCC has published the NEET PG 2026 Round 1 <b>final</b> seat allotment (24 Oct 2026).',
         'links': [
             ('Check your result', 'https://goocampus.in/dashboard/results'),
-            ('Seats still open at your rank for Round 2', 'https://goocampus.in/dashboard/round-analysis?tab=open'),
+            ('Plan Round 2: see how closing ranks compare with 2025', 'https://goocampus.in/dashboard/round-analysis'),
             ('Not logged in? Check by rank', 'https://goocampus.in/neet-pg-mcc-round-1-result-2026'),
             ('Official MCC result (PDF)',
              'https://cdnbbsr.s3waas.gov.in/s3e0f7a4d0ef9b84b83b693bbf3feb8e6e/uploads/2026/10/202610241746468472.pdf'),
