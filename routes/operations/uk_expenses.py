@@ -75,8 +75,16 @@ def _ensure(conn):
         id SERIAL PRIMARY KEY, pathway TEXT, file_name TEXT DEFAULT '', data TEXT,
         uploaded_by TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, applied_at TIMESTAMP)''')
     conn.execute("ALTER TABLE ops_service_meta ADD COLUMN IF NOT EXISTS amount_spent NUMERIC(14,2)")
-    conn.execute("ALTER TABLE plab_clients ADD COLUMN IF NOT EXISTS welcome_kit_given INTEGER DEFAULT 1")
     conn.commit()
+    try:                                  # usually already there (AMC added it); never let it block a page
+        if not conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'plab_clients' "
+                            "AND column_name = 'welcome_kit_given'").fetchone():
+            conn.execute("ALTER TABLE plab_clients ADD COLUMN IF NOT EXISTS welcome_kit_given INTEGER DEFAULT 1")
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.warning("uk_expenses: welcome_kit_given column: %s", e)
 
 
 KIT_DEFAULT = 20000.0       # founder 2026-10-26
@@ -395,15 +403,21 @@ def prices_upload():
     try:
         _ensure(conn)
         current = _prices(conn)
-        # how many delivered lines each priced row will cover (so you see it matters)
+        # how many delivered lines each priced row will cover (so you see it matters) — informational only:
+        # a problem here must never block the upload
         A = _A()
-        lines, _s, _g = A._plab_services_detail_data(conn)
         cover = {}
-        for r in lines:
-            k = (r['section_key'], _norm(r.get('service')))
-            cover.setdefault(k + (_norm(r.get('provider')),), 0)
-            cover[k + (_norm(r.get('provider')),)] += 1
-            cover[k + ('',)] = cover.get(k + ('',), 0) + 1
+        try:
+            lines, _s, _g = A._plab_services_detail_data(conn)
+            for r in lines:
+                k = (r['section_key'], _norm(r.get('service')))
+                cover.setdefault(k + (_norm(r.get('provider')),), 0)
+                cover[k + (_norm(r.get('provider')),)] += 1
+                cover[k + ('',)] = cover.get(k + ('',), 0) + 1
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.exception("prices_upload: line count skipped: %s", e)
         new = changed = same = 0
         for it in items:
             cur = current.get((it['section_key'], it['service_key'], it['provider_key']))
@@ -415,16 +429,31 @@ def prices_upload():
                           "RETURNING id", (PATHWAY, f.filename[:200], json.dumps(items), _who())).fetchone()['id']
         conn.commit()
         prices = sorted(current.values(), key=lambda p: (p['section_key'], p['service_key'], p['provider_key']))
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.exception("prices_upload: %s", e)
+        flash(f'Could not prepare the preview — {type(e).__name__}: {str(e)[:300]}', 'error')
+        return redirect(url_for('ops_plab_service_prices'))
     finally:
         conn.close()
     labels = {k: l for k, l, _t in _A().PLAB_SERVICE_COLUMNS}
     for p in prices:
         p['section'] = labels.get(p['section_key'], p['section_key'])
-    return render_template('ops_plab_service_prices.html', prices=prices,
-                           preview={'id': up, 'items': items, 'problems': problems, 'new': new,
+    return _render_preview(prices, {'id': up, 'items': items, 'problems': problems, 'new': new,
                                     'changed': changed, 'same': same, 'file': f.filename,
-                                    'unmatched': sum(1 for i in items if not i['lines'])},
-                           active_ops_page='plab-expenses')
+                                    'unmatched': sum(1 for i in items if not i['lines'])})
+
+
+def _render_preview(prices, preview):
+    try:
+        return render_template('ops_plab_service_prices.html', prices=prices, preview=preview,
+                               active_ops_page='plab-expenses')
+    except Exception as e:
+        logging.exception("prices preview render: %s", e)
+        flash(f'Upload #{preview.get("id")} was read ({len(preview.get("items") or [])} prices) but the preview page '
+              f'failed — {type(e).__name__}: {str(e)[:300]}', 'error')
+        return redirect(url_for('ops_plab_service_prices'))
 
 
 @admin_required
