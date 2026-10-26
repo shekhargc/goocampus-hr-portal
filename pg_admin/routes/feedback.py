@@ -2,15 +2,18 @@
 
 When: once, after the doctor's 3rd visit day OR as soon as they have a seat allotment (whichever first) — plus a
 Feedback button any time. Never shown again automatically after they answer or close it.
-What: 1–5 stars + what they like + what to improve (+ may we call). Stored here; the team works it on
+What: 1–5 stars + what they like (tick the sections from LIKE_OPTIONS + an optional "Other" line) + what to improve
+(+ may we call). Stored here; the team works it on
 /admin/pg/feedback (status, notes, Excel).
 Google review (founder's rule): invited only when the doctor has a seat allotment AND rated 4–5 stars. A 1–3 star
 rating raises a team alert (portal bell) for a call-back; once the team marks it Resolved, the doctor is offered the
 Google review on their next visit. Clicks on the Google link are counted.
 
 Doctor APIs (X-PG-Key + doctor token):
-  GET  /api/pg/my/feedback            → {show_prompt, trigger, review:{show, url, qr_url}, given}
-  POST /api/pg/my/feedback            {rating, liked, improve, call_ok, page, trigger} → {ok, show_google, ...}
+  GET  /api/pg/my/feedback            → {show_prompt, trigger, like_options, review:{show, url, qr_image}, given}
+       ?peek=1                        → same, but never spends/marks the one-time Google invite (review.show false)
+  POST /api/pg/my/feedback            {rating, liked_tags:[...], liked (Other text), improve, call_ok, page, trigger}
+                                      → {ok, show_google, ...}
   POST /api/pg/my/feedback-prompt     {action:'close'} — closed without answering: never auto-shown again
   POST /api/pg/my/review-click        — counts the Google click (and stops re-offering)
 """
@@ -28,6 +31,10 @@ QR_IMAGE_PATH = '/static/img/google-review-qr.png'     # public PNG of that QR (
 def _qr_image():
     return request.url_root.rstrip('/') + QR_IMAGE_PATH
 VISIT_DAYS = 3
+# "What do you like?" tick boxes — the website renders this list as-is, so rename/add sections here only.
+# Kept short (founder): the main sections only, named exactly as in the website sidebar; the rest goes in "Other".
+LIKE_OPTIONS = ['College Predictor', 'Cut-off Explorer', '2026 PG Seat Matrix', '2026 Counselling Results',
+                'Counselling News & Updates', 'Choice List', 'User-friendly dashboard', 'Counselling team support']
 STATUSES = ('New', 'Call back', 'Reviewed', 'Planned', 'Done', 'Resolved')
 
 
@@ -57,6 +64,9 @@ def ensure(conn):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_feedback_user ON pg_feedback (user_id)")
+        if not conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name='pg_feedback' "
+                            "AND column_name='liked_tags'").fetchone():
+            conn.execute("ALTER TABLE pg_feedback ADD COLUMN IF NOT EXISTS liked_tags TEXT DEFAULT ''")
         for col, typ in (('feedback_prompt_closed_at', 'TIMESTAMP'), ('feedback_given_at', 'TIMESTAMP')):
             if not conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name='pg_users' "
                                 "AND column_name=?", [col]).fetchone():
@@ -131,11 +141,13 @@ def my_feedback_state():
         days = _visit_days(conn, u['id'])
         trigger = 'allotment' if allotted else ('visits' if days >= VISIT_DAYS else '')
         show = (not given) and (not closed) and bool(trigger)
-        pend = _pending_review(conn, u['id'])
+        peek = request.args.get('peek') == '1'      # Feedback button just needs like_options: no side effects
+        pend = None if peek else _pending_review(conn, u['id'])
         if pend:          # shown now — mark offered so it appears only once
             conn.execute("UPDATE pg_feedback SET review_offered = 1 WHERE id = ?", [pend['id']])
             conn.commit()
         return jsonify({'ok': True, 'show_prompt': show, 'trigger': trigger, 'given': given,
+                        'like_options': LIKE_OPTIONS,
                         'review': {'show': bool(pend), 'url': REVIEW_URL, 'qr_url': REVIEW_QR_URL,
                                    'qr_image': _qr_image(),
                                    'message': 'Thank you for giving us the chance to make it right. Would you share '
@@ -167,10 +179,15 @@ def my_feedback_submit():
         show_google = allotted and rating >= 4
         low = rating <= 3
         dtype = _doctor_type(conn, u['id'])
+        tags = d.get('liked_tags') or []
+        if isinstance(tags, str):
+            tags = tags.split(',')
+        tags = [t for t in LIKE_OPTIONS if t in {_s(x) for x in tags}]     # only known sections, in list order
         fid = conn.execute(
-            "INSERT INTO pg_feedback (user_id, rating, liked, improve, call_ok, page, trigger, doctor_type, has_allotment, "
-            "status, review_offered) VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
-            [u['id'], rating, _s(d.get('liked'))[:2000], _s(d.get('improve'))[:2000], 1 if d.get('call_ok') else 0,
+            "INSERT INTO pg_feedback (user_id, rating, liked_tags, liked, improve, call_ok, page, trigger, doctor_type, "
+            "has_allotment, status, review_offered) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+            [u['id'], rating, ','.join(tags), _s(d.get('liked'))[:2000], _s(d.get('improve'))[:2000],
+             1 if d.get('call_ok') else 0,
              _s(d.get('page'))[:200], _s(d.get('trigger'))[:20], dtype, 1 if allotted else 0,
              'Call back' if low else 'New', 1 if show_google else 0]).fetchone()['id']
         conn.execute("UPDATE pg_users SET feedback_given_at = CURRENT_TIMESTAMP WHERE id = ?", [u['id']])
@@ -289,9 +306,11 @@ def _rows(conn, a):
         conds.append('f.status = ?'); params.append(_s(a.get('status')))
     if _s(a.get('type')):
         conds.append('f.doctor_type = ?'); params.append(_s(a.get('type')))
+    if _s(a.get('likes')):
+        conds.append("(',' || COALESCE(f.liked_tags,'') || ',') LIKE ?"); params.append('%,' + _s(a.get('likes')) + ',%')
     if _s(a.get('q')):
-        conds.append("(u.name ILIKE ? OR u.mobile ILIKE ? OR f.liked ILIKE ? OR f.improve ILIKE ?)")
-        params += ['%' + _s(a.get('q')) + '%'] * 4
+        conds.append("(u.name ILIKE ? OR u.mobile ILIKE ? OR f.liked ILIKE ? OR f.liked_tags ILIKE ? OR f.improve ILIKE ?)")
+        params += ['%' + _s(a.get('q')) + '%'] * 5
     return [dict(r) for r in conn.execute(
         "SELECT f.*, u.name, u.mobile, u.email, u.state FROM pg_feedback f LEFT JOIN pg_users u ON u.id = f.user_id "
         f"WHERE {' AND '.join(conds)} ORDER BY f.id DESC LIMIT 1000", params).fetchall()]
@@ -315,12 +334,18 @@ def feedback_admin():
             "COALESCE(SUM(review_offered),0) AS invited, "
             "COALESCE(SUM(CASE WHEN review_clicked_at IS NOT NULL THEN 1 ELSE 0 END),0) AS clicked "
             "FROM pg_feedback").fetchone()
+        like_counts = {t: 0 for t in LIKE_OPTIONS}          # how many doctors ticked each section (all feedback)
+        for x in conn.execute("SELECT liked_tags FROM pg_feedback WHERE COALESCE(liked_tags,'') <> ''").fetchall():
+            for t in (x['liked_tags'] or '').split(','):
+                if t in like_counts:
+                    like_counts[t] += 1
     finally:
         conn.close()
     from core.helpers import format_dr_name as dr_name
     for r in rows:
         r['display_name'] = dr_name(r['name']) if (r.get('name') or '').strip() else (r.get('mobile') or '—')
     return render_template('pg_admin/feedback.html', rows=rows, stats=dict(s), statuses=STATUSES, a=request.args,
+                           like_options=LIKE_OPTIONS, like_counts=like_counts,
                            open_id=_s(request.args.get('open')), review_url=REVIEW_URL,
                            can_edit=bool(_require('edit')), active_section='goocampus_in')
 
@@ -383,7 +408,7 @@ def feedback_download():
     wb = Workbook()
     ws = wb.active
     ws.title = 'Doctor feedback'
-    ws.append(['Date (IST)', 'Doctor', 'Mobile', 'Email', 'State', 'Type', 'Rating', 'What they like',
+    ws.append(['Date (IST)', 'Doctor', 'Mobile', 'Email', 'State', 'Type', 'Rating', 'Sections they like', 'Other likes',
                'What to improve', 'May we call', 'Page', 'Asked because', 'Has allotment', 'Status',
                'Google invite shown', 'Clicked Google', 'Team notes'])
     from datetime import timedelta
@@ -391,7 +416,8 @@ def feedback_download():
         ws.append([(r['created_at'] + timedelta(hours=5, minutes=30)).strftime('%d-%b-%Y %H:%M') if r.get('created_at') else '',
                    dr_name(r['name']) if (r.get('name') or '').strip() else '', r.get('mobile') or '',
                    r.get('email') or '', r.get('state') or '', r.get('doctor_type') or '', r['rating'],
-                   r.get('liked') or '', r.get('improve') or '', 'Yes' if r.get('call_ok') else 'No', r.get('page') or '',
+                   (r.get('liked_tags') or '').replace(',', ', '), r.get('liked') or '', r.get('improve') or '',
+                   'Yes' if r.get('call_ok') else 'No', r.get('page') or '',
                    r.get('trigger') or '', 'Yes' if r.get('has_allotment') else 'No', r.get('status') or '',
                    'Yes' if r.get('review_offered') else 'No', 'Yes' if r.get('review_clicked_at') else 'No',
                    r.get('team_notes') or ''])
