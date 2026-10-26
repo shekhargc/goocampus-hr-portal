@@ -93,6 +93,24 @@ def _m10_sql(col):
 _CATEGORY_LABELS = {'team': 'Team', 'internal': 'Internal', 'paid': 'Paid', 'free': 'Free'}
 
 
+def _allotted_sql(ualias='u'):
+    """SQL: the doctor has at least one seat allotment matched by rank (MCC by All-India rank, their home state's
+    counselling by home-state rank) that nobody marked 'not me'. Param-less."""
+    from pg_admin.authorities import AUTHORITIES
+    vals = ', '.join("('%s', '%s')" % (a[0].replace("'", ''), ' '.join(a[2].lower().replace('&', 'and').split()).replace("'", ''))
+                     for a in AUTHORITIES if a[0] != 'mcc')
+    notme = (f"NOT EXISTS (SELECT 1 FROM pg_allotment_marks m WHERE m.user_id = {ualias}.id "
+             f"AND m.authority_code = r.authority_code AND m.academic_year = r.academic_year AND m.round = r.round "
+             f"AND m.verdict = 'not_me')")
+    live = ("JOIN pg_results_source s ON s.authority_code = r.authority_code AND s.academic_year = r.academic_year "
+            "AND s.round = r.round AND COALESCE(s.is_hidden,0) = 0")
+    return (f"(EXISTS (SELECT 1 FROM pg_results r {live} WHERE r.authority_code = 'mcc' "
+            f"AND r.rank = {ualias}.neet_pg_rank AND {notme}) "
+            f"OR EXISTS (SELECT 1 FROM pg_results r {live} JOIN (VALUES {vals}) AS au(code, st) "
+            f"ON au.code = r.authority_code WHERE au.st = lower(regexp_replace(replace(COALESCE({ualias}.state,''), '&', 'and'), '\\s+', ' ', 'g')) "
+            f"AND r.rank = {ualias}.home_state_rank AND {notme}))")
+
+
 def _category_case(ualias='u'):
     um = _m10_sql(f"{ualias}.mobile")
     # Team = an EXPLICIT staff flag the founder sets via the "add employees" flow —
@@ -158,11 +176,13 @@ def users_admin():
     f_lead = (request.args.get('lead') or '').strip()      # lead/follow-up status filter (founder 2026-10-07)
     f_reg = (request.args.get('reg') or '').strip()        # registered-date window (founder 2026-10-19)
     f_prof = (request.args.get('prof') or '').strip()      # incomplete profile filter (founder 2026-10-19)
+    f_allot = (request.args.get('allot') or '').strip()    # seat allotment matched by rank (founder 2026-10-26)
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
     session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
     conn = get_db()
     users, plans, tab_counts, states = [], [], {}, []
+    allot_summary = []
     stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
              'blocked': 0, 'new_30d': 0}
     total_pages = 1
@@ -223,6 +243,19 @@ def users_admin():
         # from a matching lead for display — this filter ignores that). (2026-10-19)
         if f_prof in _PROF_FILTERS:
             conds.append(_PROF_FILTERS[f_prof][1])
+        allot_summary = []
+        try:
+            from pg_admin import allotments as _al
+            _al.ensure(conn)
+            if f_allot in ('yes', 'no', 'norank'):
+                has = _allotted_sql()
+                norank = "(COALESCE(u.neet_pg_rank,0) <= 0 AND COALESCE(u.home_state_rank,0) <= 0)"
+                conds.append({'yes': has, 'no': f"(NOT {norank} AND NOT {has})", 'norank': norank}[f_allot])
+            allot_summary = _al.summary(conn)
+        except Exception as _ae:
+            logging.error("users_admin allotments: %s", _ae)
+            try: conn.rollback()
+            except Exception: pass
         where = (' WHERE ' + ' AND '.join(conds)) if conds else ''
 
         # Lead-status filter: the Status column is derived (latest shared follow-up, else
@@ -304,6 +337,17 @@ def users_admin():
         except Exception:
             conn.rollback()
 
+        # Latest seat allotment matched by rank — list column with a hover card (founder 2026-10-26)
+        try:
+            from pg_admin import allotments as _al2
+            _alls = _al2.for_users(conn, users, include_not_me=True)
+            for u in users:
+                u['allot'] = _al2.latest(_alls.get(u['id'], []))
+                u['allot_n'] = len([a for a in _alls.get(u['id'], []) if a['verdict'] != 'not_me'])
+        except Exception as _ae2:
+            logging.error("users_admin allot column: %s", _ae2)
+            conn.rollback()
+
         # Follow-up status per doctor (shared thread / inquiry, else New) — shown in the
         # list column in place of plan-ends. (founder 2026-10-05)
         try:
@@ -361,6 +405,7 @@ def users_admin():
                            total_found=total,
                            f_reg=f_reg, reg_options=[(k, v[0]) for k, v in _REG_WINDOWS.items()],
                            f_prof=f_prof, prof_options=[(k, v[0]) for k, v in _PROF_FILTERS.items()],
+                           f_allot=f_allot, allot_summary=allot_summary,
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
 
@@ -508,6 +553,21 @@ def user_detail(user_id):
             "FROM pg_plans WHERE COALESCE(is_active,1)=1 ORDER BY sort_order, id"
         ).fetchall()]
         ent = entitlements.summary(conn, user_id)
+        # Seat allotments matched by this doctor's rank + their rank confirmation status (2026-10-26)
+        allots, rank_st, rank_log = [], None, []
+        try:
+            from pg_admin import allotments as _al
+            _al.ensure(conn)
+            doctor = dict(conn.execute("SELECT * FROM pg_users WHERE id = ?", (user_id,)).fetchone())
+            allots = _al.for_users(conn, [doctor], include_not_me=True).get(user_id, [])
+            rank_st = _al.rank_state(conn, user_id)
+            rank_log = [dict(r) for r in conn.execute(
+                "SELECT field, old_value, new_value, changed_by, source, changed_at FROM pg_profile_edit_log "
+                "WHERE user_id = ? AND field IN ('neet_pg_rank','neet_pg_score','home_state_rank') "
+                "ORDER BY id DESC LIMIT 20", (user_id,)).fetchall()]
+        except Exception as _ae:
+            logging.error("user_detail allotments: %s", _ae)
+            conn.rollback()
         recent = [dict(r) for r in conn.execute(
             "SELECT feature_code, period_key, item_key, hits, first_used_at, last_used_at "
             "FROM pg_usage_items WHERE user_id = ? ORDER BY last_used_at DESC LIMIT 50",
@@ -690,7 +750,8 @@ def user_detail(user_id):
         specialty_mdms, specialty_dnb = list(_MDMS), list(_DNB)
     except Exception:
         specialty_mdms, specialty_dnb = [], []
-    return render_template('pg_admin/user_detail.html', user=admin, d=doctor,
+    return render_template('pg_admin/user_detail.html', user=admin, d=doctor, allots=allots, rank_st=rank_st,
+                           rank_log=rank_log,
                            subs=subs, plans=plans, ent=ent, recent=recent,
                            favorites=favorites, states=states, news_follows=news_follows,
                            choice_sets=choice_sets,
@@ -704,6 +765,35 @@ def user_detail(user_id):
                            fu_thread=fu_thread, fu_state=fu_state, fu_statuses=fu_statuses,
                            fu_time_slots=fu_time_slots,
                            active_section='goocampus_in')
+
+
+@login_required
+def user_allotment_mark(user_id):
+    """Admin marks a rank-matched allotment Confirmed / Not this doctor (or clears the mark)."""
+    admin = _require_users_section("edit")
+    if not admin:
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    f = request.form
+    try:
+        from pg_admin import allotments as _al
+        conn = get_db()
+        try:
+            _al.ensure(conn)
+            u = conn.execute("SELECT neet_pg_rank, home_state_rank FROM pg_users WHERE id = ?", (user_id,)).fetchone()
+            auth = (f.get('authority') or '').strip()
+            rank = (u['neet_pg_rank'] if auth == 'mcc' else u['home_state_rank']) if u else None
+            _al.mark(conn, user_id, auth, (f.get('year') or '2026-27').strip(), (f.get('round') or '').strip(),
+                     (f.get('verdict') or '').strip(), admin.get('name') or 'admin', 'admin', rank_used=rank)
+            conn.commit()
+            flash({'confirmed': 'Allotment confirmed.', 'not_me': 'Marked as not this doctor — hidden from them.',
+                   '': 'Mark cleared.'}.get((f.get('verdict') or '').strip(), 'Saved.'), 'success')
+        finally:
+            conn.close()
+    except Exception as e:
+        logging.error("user_allotment_mark: %s", e)
+        flash('Could not save.', 'error')
+    return redirect(url_for('pg_user_detail', user_id=user_id) + '#allotments')
 
 
 @login_required
@@ -780,6 +870,7 @@ def user_save(user_id):
         'neet_pg_year': (form.get('neet_pg_year') or '').strip(),
         'neet_pg_rank': _int_or_none(form.get('neet_pg_rank')),
         'neet_pg_score': _int_or_none(form.get('neet_pg_score')),
+        'home_state_rank': _int_or_none(form.get('home_state_rank')),
         'target_speciality': (form.get('target_speciality') or '').strip(),
         'city': (form.get('city') or '').strip(),
         'state': (form.get('state') or '').strip(),
@@ -801,9 +892,22 @@ def user_save(user_id):
             conn.commit()
         except Exception:
             conn.rollback()
+        try:
+            from pg_admin import allotments as _al
+            _al.ensure(conn)
+            before = dict(conn.execute("SELECT neet_pg_rank, neet_pg_score, home_state_rank FROM pg_users "
+                                       "WHERE id = ?", (user_id,)).fetchone() or {})
+        except Exception:
+            conn.rollback(); before = {}
         sets = ', '.join(f"{k} = ?" for k in fields)
         conn.execute(f"UPDATE pg_users SET {sets}, updated_at = CURRENT_TIMESTAMP "
                      "WHERE id = ?", tuple(fields.values()) + (user_id,))
+        for k in ('neet_pg_rank', 'neet_pg_score', 'home_state_rank'):   # rank changes are logged (2026-10-26)
+            if k in before and before.get(k) != fields.get(k):
+                conn.execute("INSERT INTO pg_profile_edit_log (user_id, field, old_value, new_value, changed_by, source) "
+                             "VALUES (?,?,?,?,?,?)", (user_id, k, '' if before.get(k) is None else str(before.get(k)),
+                                                       '' if fields.get(k) is None else str(fields.get(k)),
+                                                       admin.get('name') or 'admin', 'admin'))
         # The Home/Domicile State is LOCKED for the doctor and mirrored into
         # pg_doctor_states (role='home'), which drives the counselling home-state
         # choice list. The team can correct it here → keep both in sync so the

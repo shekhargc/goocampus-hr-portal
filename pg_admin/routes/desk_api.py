@@ -80,6 +80,8 @@ def ensure_desk_columns(conn, force=False):
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.commit()
+        from pg_admin import allotments as _al      # home-state rank + allotment marks (2026-10-26)
+        _al.ensure(conn)
         _COLS_READY = True
     except Exception as e:
         logging.warning("ensure_desk_columns: %s", e)
@@ -189,7 +191,7 @@ def desk_doctors():
     conn = get_db()
     try:
         base = (f"SELECT u.id, u.name, u.mobile, u.email, u.state, u.city, u.college, "
-                f"u.neet_pg_year, u.neet_pg_score, u.neet_pg_rank, u.target_speciality, u.created_at, "
+                f"u.neet_pg_year, u.neet_pg_score, u.neet_pg_rank, u.home_state_rank, u.target_speciality, u.created_at, "
                 f"{_type_sql('u')} AS doc_type FROM pg_users u WHERE COALESCE(u.is_blocked,0) = 0")
         counts = {r['doc_type']: r['n'] for r in conn.execute(
             f"SELECT doc_type, COUNT(*) AS n FROM ({base}) x GROUP BY doc_type").fetchall()}
@@ -212,6 +214,16 @@ def desk_doctors():
             f"FROM ({base}) x WHERE {wsql} "
             "ORDER BY x.neet_pg_rank ASC NULLS LAST, x.name ASC "
             f"LIMIT {per} OFFSET {(page - 1) * per}", params).fetchall()]
+        try:                                   # latest seat allotment matched by rank (2026-10-26)
+            from pg_admin import allotments as _al
+            _alls = _al.for_users(conn, rows, include_not_me=True)
+            for r in rows:
+                r['latest_allotment'] = _al.latest(_alls.get(r['id'], []))
+                r['allotments_count'] = len([a for a in _alls.get(r['id'], []) if a['verdict'] != 'not_me'])
+        except Exception as _ae:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error("desk_doctors allotments: %s", _ae)
         for r in rows:
             r['type_label'] = _TYPE_LABEL.get(r.get('doc_type'), '')
             for k in ('created_at', 'last_team_edit', 'last_emailed'):
@@ -806,9 +818,9 @@ def _map_specialities(conn, names):
 
 
 # ── Team edits a doctor's profile (internal / paid only) ─────────────────────
-_EDITABLE = ('name', 'email', 'neet_pg_year', 'neet_pg_rank', 'neet_pg_score', 'target_speciality',
-             'college', 'city', 'state')
-_INTS = {'neet_pg_rank', 'neet_pg_score'}
+_EDITABLE = ('name', 'email', 'neet_pg_year', 'neet_pg_rank', 'neet_pg_score', 'home_state_rank',
+             'target_speciality', 'college', 'city', 'state')
+_INTS = {'neet_pg_rank', 'neet_pg_score', 'home_state_rank'}
 
 
 def desk_profile(doctor_id):

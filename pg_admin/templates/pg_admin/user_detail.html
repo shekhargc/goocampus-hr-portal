@@ -146,7 +146,8 @@
             <div class="f"><label>Email</label><input name="email" value="{{ d.email or '' }}"></div>
             <div class="f"><label>NEET-PG year</label><input name="neet_pg_year" value="{{ d.neet_pg_year or '' }}"></div>
             <div class="f"><label>NEET-PG score</label><input type="number" name="neet_pg_score" value="{{ d.neet_pg_score or '' }}"></div>
-          <div class="f"><label>NEET-PG rank</label><input type="number" name="neet_pg_rank" value="{{ d.neet_pg_rank or '' }}"></div>
+          <div class="f"><label>NEET-PG rank (All India)</label><input type="number" name="neet_pg_rank" value="{{ d.neet_pg_rank or '' }}"></div>
+            <div class="f"><label>Home-state merit rank</label><input type="number" name="home_state_rank" value="{{ d.home_state_rank or '' }}" placeholder="for state counselling results"></div>
             <div class="f"><label>Target speciality</label><input name="target_speciality" value="{{ d.target_speciality or '' }}"></div>
             <div class="f"><label>College</label><input name="college" value="{{ d.college or '' }}"></div>
             <div class="f"><label>City</label><input name="city" value="{{ d.city or '' }}"></div>
@@ -165,6 +166,37 @@
           <span style="font-size:0.76rem;color:var(--gray-400);margin-left:0.5rem;">Mobile is the login and can't be changed here.</span>
         </div>
       </form>
+
+      <div class="card" id="allotments">
+        <h3><i class="fa-solid fa-graduation-cap"></i> Seat allotments <span class="n">{{ allots|length }}</span></h3>
+        {% if rank_st %}<p style="font-size:0.8rem;color:var(--gray-500);margin:0 0 0.6rem;">
+          Matched by rank — All India {{ '{:,}'.format(rank_st.neet_pg_rank) if rank_st.neet_pg_rank else '—' }} (MCC) ·
+          Home-state rank {{ '{:,}'.format(rank_st.home_state_rank) if rank_st.home_state_rank else '—' }}{% if rank_st.home_state %} ({{ rank_st.home_state }}){% endif %} ·
+          {% if rank_st.rank_confirmed %}<span style="color:#16a34a;">rank confirmed by the doctor {{ rank_st.rank_confirmed_at }}</span>{% if rank_st.corrections_left == 0 %} · one-time correction used{% endif %}
+          {% else %}<span style="color:#b45309;">rank not yet confirmed by the doctor</span>{% endif %}</p>{% endif %}
+        {% if allots %}
+        <table class="tbl">
+          <thead><tr><th>Counselling</th><th>College</th><th>Course · quota · category</th><th>Matched by</th><th></th></tr></thead>
+          <tbody>{% for a in allots %}
+            <tr style="{{ 'opacity:0.5;' if a.verdict == 'not_me' }}">
+              <td><b>{{ 'MCC' if a.authority_code == 'mcc' else a.authority_name }}</b> · {{ a.round }}<div style="font-size:0.72rem;color:var(--gray-400);">{{ a.status }}{% if a.program == 'dnb' %} · DNB{% endif %}</div></td>
+              <td style="font-size:0.8rem;">{{ a.college }}</td>
+              <td style="font-size:0.8rem;">{{ a.course }}<div style="color:var(--gray-500);">{{ a.quota }} · {{ a.allotted_category }}</div></td>
+              <td style="font-size:0.78rem;">{{ a.rank_type }} {{ '{:,}'.format(a.rank) }}
+                {% if a.verdict == 'confirmed' %}<div style="color:#16a34a;">✔ confirmed · {{ a.marked_by }}</div>{% elif a.verdict == 'not_me' %}<div style="color:#b91c1c;">✖ not this doctor · {{ a.marked_by }}</div>{% endif %}</td>
+              <td style="white-space:nowrap;">
+                {% for v, lbl in [('confirmed','✔ Confirm'),('not_me','✖ Not this doctor'),('','Clear')] %}{% if (a.verdict or '') != v %}
+                <form method="POST" action="/admin/pg/users/{{ d.id }}/allotment-mark" style="display:inline;">
+                  <input type="hidden" name="authority" value="{{ a.authority_code }}"><input type="hidden" name="round" value="{{ a.round }}">
+                  <input type="hidden" name="verdict" value="{{ v }}">
+                  <button class="btn btn-sm" type="submit" style="font-size:0.7rem;padding:2px 7px;">{{ lbl }}</button></form>{% endif %}{% endfor %}
+              </td></tr>
+          {% endfor %}</tbody></table>
+        {% else %}<p style="font-size:0.84rem;color:var(--gray-500);">No allotment matches this doctor's rank in the results published so far{% if not d.neet_pg_rank %} — no All-India rank on the profile{% endif %}.</p>{% endif %}
+        {% if rank_log %}<details style="margin-top:0.6rem;font-size:0.76rem;color:var(--gray-500);"><summary>Rank / score change history</summary>
+          {% for r in rank_log %}<div>{{ r.changed_at|format_datetime if r.changed_at else '' }} · {{ {'neet_pg_rank':'All-India rank','neet_pg_score':'Score','home_state_rank':'Home-state rank'}[r.field] }}: {{ r.old_value or '—' }} → {{ r.new_value or '—' }} · {{ r.changed_by }} ({{ r.source }})</div>{% endfor %}
+        </details>{% endif %}
+      </div>
 
       <div class="card">
         <h3><i class="fa-solid fa-clock-rotate-left"></i> Plan history</h3>

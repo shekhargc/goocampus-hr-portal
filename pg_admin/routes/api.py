@@ -1309,6 +1309,7 @@ PG_PROFILE_BLUEPRINT = [
     {'key': 'neet_pg_year',      'label': 'NEET-PG Year',              'type': 'text',   'editable': True},
     {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True},
     {'key': 'neet_pg_rank',      'label': 'NEET-PG Rank (All India)',  'type': 'number', 'editable': True},
+    {'key': 'home_state_rank',   'label': 'Home-State Merit Rank',     'type': 'number', 'editable': True},
     {'key': 'target_speciality', 'label': 'Target Speciality',         'type': 'text',   'editable': True},
     {'key': 'college',           'label': 'MBBS College',              'type': 'text',   'editable': True},
     {'key': 'city',              'label': 'City',                      'type': 'text',   'editable': True},
@@ -1316,7 +1317,10 @@ PG_PROFILE_BLUEPRINT = [
     {'key': 'mobile',            'label': 'Mobile',                    'type': 'tel',    'editable': False},
     {'key': 'photo_url',         'label': 'Profile Photo',             'type': 'image',  'editable': True},
 ]
-_PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score'}
+_PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score', 'home_state_rank'}
+# Once the doctor has CONFIRMED rank / score / home-state rank (My Allotments), Edit Profile shows them read-only:
+# further changes go through the one-time correction (/api/pg/my/rank-confirm) or the team. (founder 2026-10-26)
+_RANK_LOCKED = ('neet_pg_rank', 'neet_pg_score', 'home_state_rank')
 
 # Founder 2026-10-20: sign-up stays mobile + OTP only. DOMICILE STATE is mandatory right after the
 # first login — no dashboard without it (news, access, choice entry depend on it). NEET-PG RANK is
@@ -1372,18 +1376,26 @@ def api_pg_profile():
             conn.commit()
         except Exception:
             conn.rollback()
+        try:
+            from pg_admin import allotments as _al
+            _al.ensure(conn)
+        except Exception:
+            conn.rollback()
         row = _pg_user_by_token(conn, token)
         if not row:
             return jsonify({'ok': False, 'error': 'invalid_token'}), 401
         row = as_dict(row)
+        _locked = row.get('rank_confirmed_at') is not None
 
         if request.method == 'GET':
+            fields = [dict(f, editable=False, locked_reason='Confirmed — use "Correct my rank" in My Allotments')
+                      if (_locked and f['key'] in _RANK_LOCKED) else f for f in PG_PROFILE_BLUEPRINT]
             values = {}
             for f in PG_PROFILE_BLUEPRINT:
                 v = row.get(f['key'])
                 values[f['key']] = '' if v is None else v
             _miss = profile_missing(row)
-            return jsonify({'ok': True, 'fields': PG_PROFILE_BLUEPRINT, 'values': values,
+            return jsonify({'ok': True, 'fields': fields, 'values': values, 'rank_confirmed': _locked,
                             'profile_complete': not _miss, 'missing': _miss,
                             'name_missing': not (row.get('name') or '').strip()})
 
@@ -1400,6 +1412,8 @@ def api_pg_profile():
             if not f.get('editable') or f['key'] not in data:
                 continue
             k = f['key']
+            if _locked and k in _RANK_LOCKED:
+                continue                  # confirmed ranks change only via the one-time correction / the team
             # Home / domicile state LOCKS after the first save (it also sets the choice-list
             # home state) — ignore later changes so it can't diverge (server-side lock).
             if k == 'state' and (row.get('state') or '').strip():
