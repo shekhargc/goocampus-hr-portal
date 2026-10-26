@@ -163,6 +163,15 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/results/facets', 'api_results_facets', results_api.api_results_facets, methods=['GET'])
     app.add_url_rule('/api/pg/results/colleges', 'api_results_colleges', results_api.api_results_colleges,
                      methods=['GET'])
+    from pg_admin.routes import allotments_api as _alapi
+    app.add_url_rule('/api/pg/my/allotments', 'api_pg_my_allotments', _alapi.my_allotments, methods=['GET'])
+    app.add_url_rule('/api/pg/my/rank-confirm', 'api_pg_my_rank_confirm', _alapi.my_rank_confirm, methods=['POST'])
+    app.add_url_rule('/api/pg/my/allotment-not-me', 'api_pg_my_allotment_not_me', _alapi.my_allotment_not_me,
+                     methods=['POST'])
+    app.add_url_rule('/api/pg/desk/doctors/<int:doctor_id>/allotments', 'api_pg_desk_allotments',
+                     _alapi.desk_allotments, methods=['GET'])
+    app.add_url_rule('/api/pg/desk/doctors/<int:doctor_id>/allotment-mark', 'api_pg_desk_allotment_mark',
+                     _alapi.desk_allotment_mark, methods=['POST'])
     app.add_url_rule('/api/pg/results/rank', 'api_results_rank', results_api.api_results_rank, methods=['GET'])
     app.add_url_rule('/api/pg/results/cutoffs', 'api_results_cutoffs', results_api.api_results_cutoffs, methods=['GET'])
     app.add_url_rule('/api/pg/results/trends', 'api_results_trends', results_api.api_results_trends, methods=['GET'])
@@ -607,6 +616,8 @@ def register_pg_admin(app):
                      diag_states.pg_states_cleanup, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/save', 'pg_user_save',
                      users_admin.user_save, methods=['POST'])
+    app.add_url_rule('/admin/pg/users/<int:user_id>/allotment-mark', 'pg_user_allotment_mark',
+                     users_admin.user_allotment_mark, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/followup', 'pg_user_followup_add',
                      users_admin.user_followup_add, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/followup/<int:fu_id>/delete', 'pg_user_followup_delete',
