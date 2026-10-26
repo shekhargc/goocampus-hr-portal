@@ -11,6 +11,7 @@ Google review on their next visit. Clicks on the Google link are counted.
 
 Doctor APIs (X-PG-Key + doctor token):
   GET  /api/pg/my/feedback            → {show_prompt, trigger, like_options, review:{show, url, qr_image}, given}
+       ?peek=1                        → same, but never spends/marks the one-time Google invite (review.show false)
   POST /api/pg/my/feedback            {rating, liked_tags:[...], liked (Other text), improve, call_ok, page, trigger}
                                       → {ok, show_google, ...}
   POST /api/pg/my/feedback-prompt     {action:'close'} — closed without answering: never auto-shown again
@@ -31,9 +32,9 @@ def _qr_image():
     return request.url_root.rstrip('/') + QR_IMAGE_PATH
 VISIT_DAYS = 3
 # "What do you like?" tick boxes — the website renders this list as-is, so rename/add sections here only.
-# Kept short (founder): the main sections only; anything else goes in the "Other" line.
-LIKE_OPTIONS = ['College Predictor', 'Cut-offs', 'Seat Matrix', 'Counselling Results', 'News & Updates',
-                'Counselling team support']
+# Kept short (founder): the main sections only, named exactly as in the website sidebar; the rest goes in "Other".
+LIKE_OPTIONS = ['College Predictor', 'Cut-off Explorer', '2026 PG Seat Matrix', '2026 Counselling Results',
+                'Counselling News & Updates', 'Choice List', 'User-friendly dashboard', 'Counselling team support']
 STATUSES = ('New', 'Call back', 'Reviewed', 'Planned', 'Done', 'Resolved')
 
 
@@ -140,7 +141,8 @@ def my_feedback_state():
         days = _visit_days(conn, u['id'])
         trigger = 'allotment' if allotted else ('visits' if days >= VISIT_DAYS else '')
         show = (not given) and (not closed) and bool(trigger)
-        pend = _pending_review(conn, u['id'])
+        peek = request.args.get('peek') == '1'      # Feedback button just needs like_options: no side effects
+        pend = None if peek else _pending_review(conn, u['id'])
         if pend:          # shown now — mark offered so it appears only once
             conn.execute("UPDATE pg_feedback SET review_offered = 1 WHERE id = ?", [pend['id']])
             conn.commit()
