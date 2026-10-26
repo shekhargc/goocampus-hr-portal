@@ -153,7 +153,7 @@
   </tr></thead>
   <tbody>
     {% for u in users %}
-    <tr>
+    <tr{% if u.allot_tag %} style="background:#ecfdf3;" title="Got a seat — {{ u.allot_tag }}"{% endif %}>
       <td style="color:var(--gray-400);font-weight:600;">{{ (page_offset or 0) + loop.index }}</td>
       <td>
         {% set _cat = u.client_category or 'free' %}
@@ -166,12 +166,9 @@
       <td>{{ u.mobile }}<div class="pu-sub">{{ u.email or '' }}</div></td>
       <td>{% if u.neet_pg_rank %}Rank {{ '{:,}'.format(u.neet_pg_rank) }}{% else %}—{% endif %}
         <div class="pu-sub">{{ u.target_speciality or '' }}</div></td>
-      <td style="font-size:0.8rem;">{% if u.allot %}{% set a = u.allot %}
-        <span title="{{ a.authority_name }} · {{ a.round }} ({{ a.status }})&#10;{{ a.college }}&#10;{{ a.course }} · {{ a.quota }} · {{ a.allotted_category }}&#10;Matched by {{ a.rank_type }} {{ '{:,}'.format(a.rank) }}{% if a.verdict == 'confirmed' %} · confirmed by {{ a.marked_by }}{% endif %}"
-              style="cursor:help;border-bottom:1px dotted var(--gray-400);">{{ a.label }}</span>
-        {% if a.program == 'dnb' %}<span class="chip" style="font-size:0.65rem;">DNB</span>{% endif %}
-        {% if a.verdict == 'confirmed' %}<span title="Confirmed by {{ a.marked_by }}">✔</span>{% endif %}
-        <div class="pu-sub">{{ a.college_short[:38] }}{% if u.allot_n > 1 %} · +{{ u.allot_n - 1 }} more{% endif %}</div>
+      <td style="font-size:0.8rem;white-space:nowrap;">{% if u.allot_tag %}
+        <a href="/admin/pg/users/{{ u.id }}#allotments" title="{{ u.allot_tip }}"
+           style="display:inline-block;padding:2px 9px;border-radius:999px;background:#16a34a;color:#fff;font-weight:700;text-decoration:none;cursor:help;">✓ {{ u.allot_tag }}</a>
       {% else %}<span style="color:var(--gray-400);">—</span>{% endif %}</td>
       <td>
         {% if u.plan_kind == 'paid' %}<span class="chip chip-green">{{ u.plan_name }}</span>
