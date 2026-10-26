@@ -163,6 +163,14 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/results/facets', 'api_results_facets', results_api.api_results_facets, methods=['GET'])
     app.add_url_rule('/api/pg/results/colleges', 'api_results_colleges', results_api.api_results_colleges,
                      methods=['GET'])
+    from pg_admin.routes import feedback as _fb          # doctor feedback + Google review invites (2026-10-26)
+    app.add_url_rule('/api/pg/my/feedback', 'api_pg_my_feedback_state', _fb.my_feedback_state, methods=['GET'])
+    app.add_url_rule('/api/pg/my/feedback', 'api_pg_my_feedback_submit', _fb.my_feedback_submit, methods=['POST'])
+    app.add_url_rule('/api/pg/my/feedback-prompt', 'api_pg_my_feedback_prompt', _fb.my_feedback_prompt, methods=['POST'])
+    app.add_url_rule('/api/pg/my/review-click', 'api_pg_my_review_click', _fb.my_review_click, methods=['POST'])
+    app.add_url_rule('/admin/pg/feedback', 'pg_feedback_admin', _fb.feedback_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/feedback/<int:fid>', 'pg_feedback_update', _fb.feedback_update, methods=['POST'])
+    app.add_url_rule('/admin/pg/feedback/download', 'pg_feedback_download', _fb.feedback_download, methods=['GET'])
     from pg_admin.routes import allotments_api as _alapi
     app.add_url_rule('/api/pg/my/allotments', 'api_pg_my_allotments', _alapi.my_allotments, methods=['GET'])
     app.add_url_rule('/api/pg/my/rank-confirm', 'api_pg_my_rank_confirm', _alapi.my_rank_confirm, methods=['POST'])

@@ -1,0 +1,122 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Doctor Feedback · goocampus.in{% endblock %}
+
+{% block section_content %}
+<style>
+  .fb-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  .fb-tiles { display:flex; gap:10px; flex-wrap:wrap; margin:0 0 14px; }
+  .fb-tile { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:9px 14px; min-width:120px; }
+  .fb-tile .k { font-size:0.7rem; text-transform:uppercase; letter-spacing:.5px; color:var(--gray-500); }
+  .fb-tile .v { font-size:1.15rem; font-weight:800; color:var(--navy); }
+  .fb-bar { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px; align-items:center; }
+  .fb-bar select, .fb-bar input { padding:6px 9px; border:1px solid var(--gray-300); border-radius:7px; font-size:0.82rem; }
+  table.fb { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--gray-200); font-size:0.82rem; }
+  table.fb th { text-align:left; background:var(--gray-100); padding:8px 10px; font-size:0.7rem; text-transform:uppercase; color:var(--gray-500); }
+  table.fb td { padding:8px 10px; border-top:1px solid var(--gray-100); vertical-align:top; }
+  .stars { color:#f59e0b; white-space:nowrap; letter-spacing:1px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:0.7rem; font-weight:700; background:#eef2ff; color:#3730a3; }
+  .pill.cb { background:#fee2e2; color:#991b1b; } .pill.res { background:#dcfce7; color:#166534; }
+  .sub { color:var(--gray-500); font-size:0.74rem; }
+  .btn-s { border:1px solid var(--gray-300); background:#fff; border-radius:6px; padding:3px 10px; font-size:0.76rem; cursor:pointer; color:#2952a3; }
+  .dr-bg { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:50; }
+  .dr { position:fixed; top:0; right:-560px; width:520px; max-width:100%; height:100vh; background:#fff; z-index:51; box-shadow:-8px 0 24px rgba(0,0,0,.12); padding:22px; transition:right .2s; overflow-y:auto; }
+  .dr.open { right:0; } .dr-bg.open { display:block; }
+  .dr label { display:block; font-size:0.75rem; font-weight:700; color:var(--gray-600); margin:14px 0 4px; }
+  .dr select, .dr textarea { width:100%; padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; box-sizing:border-box; }
+  .save { background:var(--navy); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; cursor:pointer; }
+  pre.notes { white-space:pre-wrap; font-family:inherit; font-size:0.78rem; color:var(--gray-600); background:var(--gray-50); border-radius:8px; padding:8px 10px; max-height:200px; overflow:auto; }
+</style>
+<div class="fb-wrap">
+  <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Doctor Feedback</h1>
+  <p style="margin:0 0 14px;font-size:0.88rem;color:var(--gray-500);max-width:960px;">
+    What doctors say about the goocampus.in dashboard. Asked once — after their 3rd visit day or when they get a seat —
+    plus a Feedback button any time. <b>1–3 stars</b> raise an alert for a call-back (status "Call back"); once you mark it
+    <b>Resolved</b>, the doctor is offered the Google review on their next visit. Doctors with a seat who give
+    <b>4–5 stars</b> are offered the Google review straight away.
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}{% for cat, m in msgs %}
+      <div style="padding:9px 13px;border-radius:8px;margin-bottom:10px;font-size:0.86rem;background:{{ '#DCFCE7' if cat=='success' else '#FEE2E2' }};color:{{ '#166534' if cat=='success' else '#991B1B' }};">{{ m }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <div class="fb-tiles">
+    <div class="fb-tile"><div class="k">Responses</div><div class="v">{{ stats.n or 0 }}</div></div>
+    <div class="fb-tile"><div class="k">Average</div><div class="v">{{ stats.avg or '—' }} ★</div></div>
+    <div class="fb-tile"><div class="k">4–5 stars</div><div class="v" style="color:#16a34a;">{{ stats.happy or 0 }}</div></div>
+    <div class="fb-tile"><div class="k">1–3 stars</div><div class="v" style="color:#b91c1c;">{{ stats.low or 0 }}</div></div>
+    <div class="fb-tile"><div class="k">Waiting for a call-back</div><div class="v" style="color:#b91c1c;">{{ stats.callback or 0 }}</div></div>
+    <div class="fb-tile"><div class="k">Google invite shown</div><div class="v">{{ stats.invited or 0 }}</div></div>
+    <div class="fb-tile"><div class="k">Clicked to Google</div><div class="v">{{ stats.clicked or 0 }}</div></div>
+  </div>
+
+  <form class="fb-bar" method="GET">
+    <select name="rating" onchange="this.form.submit()">
+      <option value="">Any rating</option>
+      <option value="low" {{ 'selected' if a.rating=='low' }}>1–3 stars</option>
+      <option value="high" {{ 'selected' if a.rating=='high' }}>4–5 stars</option>
+      {% for n in [5,4,3,2,1] %}<option value="{{ n }}" {{ 'selected' if a.rating==n|string }}>{{ n }} ★</option>{% endfor %}
+    </select>
+    <select name="status" onchange="this.form.submit()">
+      <option value="">Any status</option>
+      {% for s in statuses %}<option {{ 'selected' if a.status==s }}>{{ s }}</option>{% endfor %}
+    </select>
+    <select name="type" onchange="this.form.submit()">
+      <option value="">Any doctor</option>
+      {% for t, l in [('internal','Internal'),('paid','Paid'),('free','Free'),('team','Team')] %}<option value="{{ t }}" {{ 'selected' if a.type==t }}>{{ l }}</option>{% endfor %}
+    </select>
+    <input type="text" name="q" value="{{ a.q or '' }}" placeholder="Search doctor / comments">
+    <button class="btn-s" type="submit">Search</button>
+    <a class="btn-s" style="text-decoration:none;" href="{{ url_for('pg_feedback_download', **a) }}">⬇ Excel</a>
+  </form>
+
+  {% if not rows %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:22px;text-align:center;color:var(--gray-500);">No feedback yet.</div>
+  {% else %}
+  <table class="fb">
+    <tr><th>Date</th><th>Doctor</th><th>Rating</th><th>Likes</th><th>Improve</th><th>Status</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td style="white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}<div class="sub">{{ {'visits':'after 3 visits','allotment':'got a seat','button':'Feedback button'}.get(r.trigger, r.trigger) }}</div></td>
+      <td>{% if r.user_id %}<a href="/admin/pg/users/{{ r.user_id }}" style="color:#2952a3;font-weight:600;text-decoration:none;">{{ r.display_name }}</a>{% else %}{{ r.display_name }}{% endif %}
+        <div class="sub">{{ r.mobile or '' }} · {{ (r.doctor_type or '')|capitalize }}{% if r.has_allotment %} · has a seat{% endif %}{% if r.call_ok %} · OK to call{% endif %}</div></td>
+      <td class="stars">{{ '★' * r.rating }}<span style="color:var(--gray-300);">{{ '★' * (5 - r.rating) }}</span>
+        {% if r.review_offered %}<div class="sub">Google invite shown{% if r.review_clicked_at %} · clicked{% endif %}</div>{% endif %}</td>
+      <td style="max-width:240px;">{{ r.liked or '—' }}</td>
+      <td style="max-width:260px;">{{ r.improve or '—' }}</td>
+      <td><span class="pill {{ 'cb' if r.status=='Call back' else ('res' if r.status in ('Resolved','Done') else '') }}">{{ r.status }}</span>
+        {% if r.handled_by %}<div class="sub">{{ r.handled_by }}</div>{% endif %}</td>
+      <td>{% if can_edit %}<button class="btn-s" type="button" onclick="fbOpen({{ r.id }})">Update</button>{% endif %}
+        <template id="fbt{{ r.id }}">
+          <h3 style="margin:0 0 4px;color:var(--navy);">{{ r.display_name }} · {{ r.rating }} ★</h3>
+          <div class="sub">{{ r.mobile or '' }}{% if r.email %} · {{ r.email }}{% endif %} · received {{ r.created_at|format_datetime if r.created_at else '' }}</div>
+          <label>What they like</label><div style="font-size:0.85rem;">{{ r.liked or '—' }}</div>
+          <label>What to improve</label><div style="font-size:0.85rem;">{{ r.improve or '—' }}</div>
+          <form method="POST" action="{{ url_for('pg_feedback_update', fid=r.id) }}">
+            <label>Status</label>
+            <select name="status">{% for s in statuses %}<option {{ 'selected' if r.status==s }}>{{ s }}</option>{% endfor %}</select>
+            <div class="sub" style="margin-top:4px;">"Resolved" on a 1–3 star feedback = the doctor is happy now → they are offered the Google review on their next visit.</div>
+            <label>Add a note (kept with date and your name)</label>
+            <textarea name="note" rows="3" placeholder="e.g. Called — fixed the predictor rank issue"></textarea>
+            <div style="display:flex;gap:10px;margin-top:16px;"><button class="save" type="submit">Save</button>
+              <button class="btn-s" type="button" onclick="fbClose()">Cancel</button></div>
+          </form>
+          {% if r.team_notes %}<label>History</label><pre class="notes">{{ r.team_notes }}</pre>{% endif %}
+        </template>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+<div class="dr-bg" id="fbBg" onclick="fbClose()"></div>
+<div class="dr" id="fbDr"></div>
+<script>
+function fbOpen(id) { var t = document.getElementById('fbt' + id); if (!t) return;
+  var d = document.getElementById('fbDr'); d.innerHTML = ''; d.appendChild(t.content.cloneNode(true));
+  d.classList.add('open'); document.getElementById('fbBg').classList.add('open'); }
+function fbClose() { document.getElementById('fbDr').classList.remove('open'); document.getElementById('fbBg').classList.remove('open'); }
+{% if open_id %}document.addEventListener('DOMContentLoaded', function () { fbOpen({{ open_id|int }}); });{% endif %}
+</script>
+{% endblock %}

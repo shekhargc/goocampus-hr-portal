@@ -451,8 +451,8 @@
                     {% if has_college_access %}
                     <li><a href="{{ colleges_landing_url }}" class="{% if active_section == 'colleges' %}active{% endif %}">Colleges</a></li>
                     {% endif %}
-                    {% if can_access('goocampus_in','users','view') or can_access('goocampus_in','events','view') or can_access('goocampus_in','mgmt_inquiries','view') %}
-                    <li><a href="{% if can_access('goocampus_in','users','view') %}/admin/pg/users{% elif can_access('goocampus_in','mgmt_inquiries','view') %}/admin/pg/mgmt-inquiries{% else %}/admin/pg/events{% endif %}" class="{% if active_section == 'goocampus_in' %}active{% endif %}">GooCampus.in</a></li>
+                    {% if can_access('goocampus_in','users','view') or can_access('goocampus_in','events','view') or can_access('goocampus_in','mgmt_inquiries','view') or can_access('goocampus_in','doctor_feedback','view') %}
+                    <li><a href="{% if can_access('goocampus_in','users','view') %}/admin/pg/users{% elif can_access('goocampus_in','mgmt_inquiries','view') %}/admin/pg/mgmt-inquiries{% elif can_access('goocampus_in','doctor_feedback','view') %}/admin/pg/feedback{% else %}/admin/pg/events{% endif %}" class="{% if active_section == 'goocampus_in' %}active{% endif %}">GooCampus.in</a></li>
                     {% endif %}
                     <li><a href="/holidays" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
                 {% endif %}
