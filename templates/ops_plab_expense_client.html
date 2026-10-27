@@ -35,7 +35,8 @@
 <div class="stats">
   <div class="stat"><b>₹{{ '{:,.0f}'.format(received) }}</b>received (ex-GST)</div>
   <div class="stat"><b>₹{{ '{:,.0f}'.format(spent) }}</b>spent by GooCampus (incl. welcome kit)</div>
-  <div class="stat"><b class="{{ 'neg' if balance < 0 }}">₹{{ '{:,.0f}'.format(balance) }}</b>balance</div>
+  <div class="stat"><b>₹{{ '{:,.0f}'.format(fee) }}</b>Consulting &amp; Operations fee ({{ stage or 'no stage' }})</div>
+  <div class="stat"><b class="{{ 'neg' if balance < 0 }}">₹{{ '{:,.0f}'.format(balance) }}</b>balance (received − spent − fee)</div>
   <div class="stat"><b style="color:#b45309;">{{ to_confirm }}</b>lines "paid by" not set (₹{{ '{:,.0f}'.format(estimate) }}, counted in spent)</div>
   <div class="stat"><b style="color:#b45309;">{{ unpriced }}</b>lines not priced</div>
 </div>

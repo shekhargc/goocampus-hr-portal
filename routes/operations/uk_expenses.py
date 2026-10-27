@@ -16,7 +16,9 @@ Line amount : 1) an ACTUAL amount wins — the team's entered amount (ops_servic
 Per client  : received (ex-GST, same as the refund worksheet: ops_payments) − spent = balance.
               Spent includes the Welcome kit (₹20,000, founder 2026-10-26) for every client whose kit is marked
               Given (plab_clients.welcome_kit_given — empty = Given, like AMC; the client page toggles it).
-              The consulting fee is not deducted yet (it comes from per-product pricing).
+              Consulting & Operations fee (founder 2026-10-27): one fee for the client's CURRENT stage
+              (STAGE_FEES defaults, editable on the Expenses page; stored in ops_service_prices under
+              section 'consulting_fee'). Balance = received (ex-GST) − spent − fee.
 """
 import io
 import json
@@ -92,6 +94,28 @@ def _ensure(conn):
 
 KIT_DEFAULT = 20000.0       # founder 2026-10-26
 _KIT_KEY = ('welcome_kit', 'welcome kit', '')
+
+
+STAGE_FEES = [('English Stage', 200000.0), ('PLAB 1 Stage', 300000.0), ('PLAB 2 Stage', 500000.0),
+              ('Job Stage', 500000.0)]           # founder 2026-10-27 — fee for the client's current stage only
+_FEE_SECTION = 'consulting_fee'
+_EXTRA_LABELS = {_FEE_SECTION: 'Consulting & Operations fee', 'welcome_kit': 'Welcome kit'}
+
+
+def _stage_fees(conn):
+    """[(stage label, fee)] — saved values win over the defaults."""
+    saved = {r['service_key']: float(r['price']) for r in conn.execute(
+        "SELECT service_key, price FROM ops_service_prices WHERE pathway = ? AND section_key = ?",
+        (PATHWAY, _FEE_SECTION)).fetchall()}
+    return [(st, saved.get(_norm(st), d)) for st, d in STAGE_FEES]
+
+
+def _fee_for(fees, stage):
+    st = _norm(stage)
+    for label, fee in fees:
+        if _norm(label) == st:
+            return fee
+    return 0.0
 
 
 def _kit_given(v):
@@ -185,13 +209,14 @@ def _client_totals(conn, statuses):
                              'lines': 0, 'spent': 0.0, 'estimate': 0.0, 'to_confirm': 0, 'unpriced': 0,
                              'client_paid': 0}
     out = []
-    kit_price, kits = _kit_price(conn), _kit_map(conn)
+    kit_price, kits, fees = _kit_price(conn), _kit_map(conn), _stage_fees(conn)
     for c in per.values():
         c['received'] = A._refund_paid_ex_gst(conn, c['registration_number']) if c['registration_number'] else 0.0
         c['kit'] = kit_price if kits.get(c['client_id'], True) else 0.0
         c['services_spent'] = c['spent']
         c['spent'] += c['kit']
-        c['balance'] = c['received'] - c['spent']
+        c['fee'] = _fee_for(fees, c['stage'])
+        c['balance'] = c['received'] - c['spent'] - c['fee']
         out.append(c)
     out.sort(key=lambda c: c['name'].lower())
     return out, all_statuses, stages
@@ -214,14 +239,15 @@ def expenses_page():
         _ensure(conn)
         clients, statuses, stages = _client_totals(conn, f['statuses'])
         n_prices = conn.execute("SELECT COUNT(*) AS n FROM ops_service_prices WHERE pathway = ?", (PATHWAY,)).fetchone()['n']
+        fees = _stage_fees(conn)
     finally:
         conn.close()
     q = _norm(request.args.get('q'))
     if q:
         clients = [c for c in clients if q in _norm(f"{c['name']} {c['registration_number']}")]
-    tot = {k: sum(c[k] for c in clients) for k in ('received', 'spent', 'kit', 'estimate', 'to_confirm', 'balance',
-                                                    'unpriced', 'lines')}
-    return render_template('ops_plab_expenses.html', clients=clients, tot=tot, n_prices=n_prices,
+    tot = {k: sum(c[k] for c in clients) for k in ('received', 'spent', 'kit', 'fee', 'estimate', 'to_confirm',
+                                                    'balance', 'unpriced', 'lines')}
+    return render_template('ops_plab_expenses.html', clients=clients, tot=tot, n_prices=n_prices, fees=fees,
                            statuses_all=sorted(set(statuses) | set(A._SVC_DEFAULT_STATUSES)), picked=f['statuses'],
                            status_qs=A._svc_status_qs(f['statuses']), q=request.args.get('q') or '',
                            active_ops_page='plab-expenses')
@@ -241,15 +267,16 @@ def expenses_download():
     finally:
         conn.close()
     headers = ['Client Name', 'Registration Number', 'Status', 'Current Stage', 'Received (ex-GST ₹)',
-               'Services spent (₹)', 'Welcome kit (₹)', 'Total spent (₹)', 'Balance (₹)',
+               'Services spent (₹)', 'Welcome kit (₹)', 'Total spent (₹)', 'Consulting & Operations fee (₹)',
+               'Balance (₹)',
                'Of which "paid by" not set (₹)', 'Service lines', 'Lines "paid by" not set', 'Lines not priced',
                'Lines paid by client']
     wb = Workbook(write_only=True)
-    ws = A._svc_xl_sheet(wb, 'UK expenses', headers, [28, 22, 14, 22, 16, 16, 14, 16, 14, 20, 10, 14, 12, 12])
+    ws = A._svc_xl_sheet(wb, 'UK expenses', headers, [28, 22, 14, 22, 16, 16, 14, 16, 18, 14, 20, 10, 14, 12, 12])
     for c in clients:
         ws.append([A._svc_xl_value(c['name']), c['registration_number'], c['status'], c['stage'],
                    round(c['received'], 2), round(c['services_spent'], 2), round(c['kit'], 2), round(c['spent'], 2),
-                   round(c['balance'], 2), round(c['estimate'], 2), c['lines'], c['to_confirm'], c['unpriced'],
+                   round(c['fee'], 2), round(c['balance'], 2), round(c['estimate'], 2), c['lines'], c['to_confirm'], c['unpriced'],
                    c['client_paid']])
     A._svc_xl_filter(ws, len(headers), len(clients))
     return A._svc_xl_send(wb, 'UK_PGCP_Client_Expenses')
@@ -279,6 +306,7 @@ def expense_client(client_id):
             r['team_amount'] = actuals.get((r['source_table'], r['record_id']))
         received = A._refund_paid_ex_gst(conn, cl.get('registration_number') or '')
         kit_price = _kit_price(conn)
+        fee = _fee_for(_stage_fees(conn), cl.get('current_stage'))
     finally:
         conn.close()
     kit_given = _kit_given(cl.get('welcome_kit_given'))
@@ -287,7 +315,8 @@ def expense_client(client_id):
     est = sum(r['amt'] for r in rows if r['basis'] == 'estimate')
     name = ' '.join(f"{cl.get('prefix') or ''} {cl.get('first_name') or ''} {cl.get('last_name') or ''}".split())
     return render_template('ops_plab_expense_client.html', cl=cl, name=name, rows=rows, received=received,
-                           spent=spent, estimate=est, balance=received - spent, kit=kit, kit_given=kit_given,
+                           spent=spent, estimate=est, balance=received - spent - fee, fee=fee,
+                           stage=cl.get('current_stage') or '', kit=kit, kit_given=kit_given,
                            kit_price=kit_price, to_confirm=sum(1 for r in rows if r['basis'] == 'estimate'),
                            unpriced=sum(1 for r in rows if r['basis'] == 'unpriced'),
                            active_ops_page='plab-expenses')
@@ -347,7 +376,7 @@ def prices_page():
                         key=lambda p: (p['section_key'], p['service_key'], p['provider_key']))
     finally:
         conn.close()
-    labels = {k: l for k, l, _t in A.PLAB_SERVICE_COLUMNS}
+    labels = {k: l for k, l, _t in A.PLAB_SERVICE_COLUMNS} | _EXTRA_LABELS
     for p in prices:
         p['section'] = labels.get(p['section_key'], p['section_key'])
     return render_template('ops_plab_service_prices.html', prices=prices, preview=None,
@@ -449,7 +478,7 @@ def prices_upload():
         return redirect(url_for('ops_plab_service_prices'))
     finally:
         conn.close()
-    labels = {k: l for k, l, _t in _A().PLAB_SERVICE_COLUMNS}
+    labels = {k: l for k, l, _t in _A().PLAB_SERVICE_COLUMNS} | _EXTRA_LABELS
     for p in prices:
         p['section'] = labels.get(p['section_key'], p['section_key'])
     return _render_preview(prices, {'id': up, 'items': items, 'problems': problems, 'new': new,
@@ -521,6 +550,41 @@ def current_price_lookup(conn):
 
 
 @admin_required
+def stage_fees_save():
+    """Save the Consulting & Operations fee per stage (Expenses page form; logged like a price change)."""
+    if not _is_admin():
+        return _deny()
+    conn = get_db()
+    try:
+        _ensure(conn)
+        cur = dict(_stage_fees(conn))
+        n = 0
+        for i, (label, _d) in enumerate(STAGE_FEES):
+            raw = (request.form.get(f'fee_{i}') or '').strip()
+            amt = _money(raw)
+            if amt is None or abs(amt - cur[label]) < 0.005:
+                continue
+            key = (PATHWAY, _FEE_SECTION, _norm(label), '')
+            conn.execute("INSERT INTO ops_service_prices (pathway, section_key, service_key, provider_key, service_label, "
+                         "provider_label, price, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) "
+                         "ON CONFLICT (pathway, section_key, service_key, provider_key) DO UPDATE SET "
+                         "price = EXCLUDED.price, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP",
+                         key + (label, '', amt, _who()))
+            conn.execute("INSERT INTO ops_service_prices_log (pathway, section_key, service_key, provider_key, old_price, "
+                         "new_price, changed_by, source) VALUES (?,?,?,?,?,?,?,?)",
+                         key + (cur[label], amt, _who(), 'stage fee form'))
+            n += 1
+        conn.commit()
+        flash(f'Consulting & Operations fee updated for {n} stage(s).' if n else 'No fee changed.', 'success')
+    except Exception as e:
+        conn.rollback(); logging.error("stage_fees_save: %s", e)
+        flash('Could not save the fees.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('ops_plab_expenses'))
+
+
+@admin_required
 def expense_kit_toggle(client_id):
     """Mark this client's Welcome kit as Given / Not given (counts ₹20,000 in spent when Given)."""
     if not _is_admin():
@@ -549,6 +613,7 @@ def register_routes(app):
     app.add_url_rule('/operations/plab/expenses/download', 'ops_plab_expenses_download', expenses_download, methods=['GET'])
     app.add_url_rule('/operations/plab/expenses/<int:client_id>', 'ops_plab_expense_client', expense_client, methods=['GET'])
     app.add_url_rule('/operations/plab/expenses/amount', 'ops_plab_expense_amount', expense_amount_save, methods=['POST'])
+    app.add_url_rule('/operations/plab/expenses/stage-fees', 'ops_plab_stage_fees', stage_fees_save, methods=['POST'])
     app.add_url_rule('/operations/plab/expenses/<int:client_id>/kit', 'ops_plab_expense_kit', expense_kit_toggle,
                      methods=['POST'])
     app.add_url_rule('/operations/plab/service-prices', 'ops_plab_service_prices', prices_page, methods=['GET'])
