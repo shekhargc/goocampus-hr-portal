@@ -284,9 +284,11 @@ def news_save():
     # linked to that state, 'all' = everyone.
     doc_id = _s(request.form.get('doc_id'))
     doc_id = int(doc_id) if doc_id.isdigit() else None
-    # 'team' = only team members get the email (founder 2026-10-27: check it before everyone does)
-    email_audience = _s(request.form.get('email_audience'))
-    email_audience = email_audience if email_audience in ('state', 'team') else 'all'
+    # Doctors (all / this state / none) + a separate "team members" tick (founder 2026-10-27): the
+    # team only gets the email when ticked. Stored like 'state+team'; see news_email._audience.
+    _doc_aud = _s(request.form.get('email_audience'))
+    _doc_aud = _doc_aud if _doc_aud in ('state', 'none') else 'all'
+    email_audience = _doc_aud + ('+team' if request.form.get('email_team') in ('1', 'on') else '')
     link_doc = None
     add_events = request.form.get('add_events') in ('1', 'on')
     category = _s(request.form.get('category'))
@@ -522,13 +524,16 @@ def news_save():
     except (TypeError, ValueError): _blast_id = None
     if saved_ok and send_alert and is_published and _blast_id:
         try:
-            from pg_admin.news_email import trigger_news_blast, recipient_count
+            from pg_admin.news_email import trigger_news_blast, recipient_count, audience_label
             n = recipient_count(_blast_id)
-            trigger_news_blast(_blast_id)
-            _who = 'team members' if email_audience == 'team' else 'recipients'
-            flash(f'Emailing this update to {n} {_who} in the background…'
-                  if n is not None else f'Emailing this update to {_who} in the background…',
-                  'success')
+            _who = audience_label(email_audience, state if scope == 'state' else '')
+            if n == 0:
+                flash(f'Saved — no email sent: nobody to send to ({_who}).', 'info')
+            else:
+                trigger_news_blast(_blast_id)
+                flash(f'Emailing this update to {n} people ({_who}) in the background…'
+                      if n is not None else f'Emailing this update to {_who} in the background…',
+                      'success')
         except Exception as e:
             logging.error("news_save: email alert failed to start: %s", e)
             flash('Saved, but the email alert could not be started.', 'error')
@@ -583,8 +588,9 @@ def news_test_email():
 @login_required
 def news_send_alert():
     """Re-send the email alert for a posted item on demand (regardless of the original checkbox).
-    audience = 'all' (everyone, default) | 'state' (that state's doctors) | 'team' (team members only,
-    founder 2026-10-27). Lets the founder test on the team, then push it out. (founder 2026-10-06)"""
+    audience = 'all' (all doctors, default) | 'state' (that state's doctors) | 'team' (team members only,
+    founder 2026-10-27) — doctors never include the team. Lets the founder test on the team, then push
+    it out. (founder 2026-10-06)"""
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
     try: nid = int(_s(request.form.get('news_id')))
