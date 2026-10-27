@@ -42,7 +42,7 @@
   </form>
   <div class="table-wrap" style="margin-top:.8rem;max-height:45vh;">
     <table class="t"><thead><tr><th>Section</th><th>Service</th><th>Provider</th><th style="text-align:right;">Old ₹</th><th style="text-align:right;">New ₹</th><th>Change</th><th style="text-align:right;">Lines it covers</th></tr></thead>
-    <tbody>{% for it in preview.items if it.change != 'same' %}
+    <tbody>{% for it in preview['items'] if it.change != 'same' %}
       <tr><td>{{ it.section }}</td><td>{{ it.service }}</td><td class="muted">{{ it.provider or 'any provider' }}</td>
         <td class="num muted">{{ '₹{:,.0f}'.format(it.old) if it.old is not none else '—' }}</td>
         <td class="num"><b>₹{{ '{:,.0f}'.format(it.price) }}</b></td><td class="{{ it.change }}">{{ it.change }}</td>
