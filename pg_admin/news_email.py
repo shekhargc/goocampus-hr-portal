@@ -255,8 +255,9 @@ def _state_filter_sql(state):
             [state, state, state])
 
 
-def _recipients(conn, only_state=None):
-    """Everyone who should get a news alert, de-duplicated by email:
+def _recipients(conn, only_state=None, team_only=False):
+    """Everyone who should get a news alert, de-duplicated by email.
+    team_only (founder 2026-10-27): just the team — doctors flagged is_team_member + active staff.
     - Registered doctors (pg_users) — incl. team members now (founder 2026-10-06).
       'free' (gets the upgrade banner) = a NON-team doctor with NO active paid/counselling plan.
     - Internal staff (active employees) — always the clean update, greeted by name, no banner.
@@ -272,8 +273,11 @@ def _recipients(conn, only_state=None):
             "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
             "FROM pg_users u "
             "WHERE COALESCE(u.email,'') <> '' AND strpos(u.email, '@') > 0"
-            + (" AND " + _state_filter_sql(only_state)[0] if only_state else ""),
-            _state_filter_sql(only_state)[1] if only_state else []
+            + (" AND COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) = 1" if team_only
+               # state update: that state's doctors + team members (who always get every update)
+               else " AND (COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) = 1 OR "
+                    + _state_filter_sql(only_state)[0] + ")" if only_state else ""),
+            [] if team_only else (_state_filter_sql(only_state)[1] if only_state else [])
         ).fetchall()
         for r in rows:
             r = dict(r)
@@ -305,8 +309,9 @@ def _recipients(conn, only_state=None):
     return out
 
 
-def send_news_blast(news_id):
+def send_news_blast(news_id, audience=None):
     """Load the news item + all recipients, send one branded email each (throttled).
+    audience overrides the item's saved email_audience ('all' | 'state' | 'team').
     Opens its own DB connection — safe to run in a background thread."""
     try:
         from email_utils import send_email
@@ -328,7 +333,9 @@ def send_news_blast(news_id):
         if not news.get("is_published", True):
             logger.info("news blast: news %s is not published — skipping", news_id)
             return
-        recips = _recipients(conn, _audience_state(news))
+        if audience:
+            news['email_audience'] = audience
+        recips = _recipients(conn, _audience_state(news), team_only=_is_team(news))
     except Exception as e:
         logger.error("news blast: load failed: %s", e)
         try: conn.rollback()
@@ -366,11 +373,10 @@ def send_news_blast(news_id):
     logger.info("news blast #%s done: %s sent, %s failed", news_id, sent, failed)
 
 
-def trigger_news_blast(news_id):
-    """Fire the blast in a background daemon thread so the request returns immediately.
-    Returns the recipient count (quick pre-count) for the admin flash, or None."""
+def trigger_news_blast(news_id, audience=None):
+    """Fire the blast in a background daemon thread so the request returns immediately."""
     try:
-        t = threading.Thread(target=send_news_blast, args=(news_id,), daemon=True)
+        t = threading.Thread(target=send_news_blast, args=(news_id, audience), daemon=True)
         t.start()
     except Exception as e:
         logger.error("news blast: could not start thread: %s", e)
@@ -386,16 +392,24 @@ def _audience_state(news):
     return None
 
 
-def recipient_count(news_id=None):
+def _is_team(news):
+    """True when the blast goes to team members only (email_audience 'team')."""
+    return ((news or {}).get('email_audience') or 'all') == 'team'
+
+
+def recipient_count(news_id=None, audience=None):
     """Quick count of who a blast would reach (for the admin confirmation flash)."""
     conn = get_db()
     try:
-        st = None
+        news = {'email_audience': audience or 'all'}
         if news_id:
             r = conn.execute("SELECT scope, state, COALESCE(to_jsonb(pg_news)->>'email_audience','all') AS email_audience "
                              "FROM pg_news WHERE id = ?", (news_id,)).fetchone()
-            st = _audience_state(dict(r)) if r else None
-        return len(_recipients(conn, st))
+            if r:
+                news = dict(r)
+                if audience:
+                    news['email_audience'] = audience
+        return len(_recipients(conn, _audience_state(news), team_only=_is_team(news)))
     except Exception:
         try: conn.rollback()
         except Exception: pass

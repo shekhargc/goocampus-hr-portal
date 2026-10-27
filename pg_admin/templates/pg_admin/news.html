@@ -150,13 +150,14 @@ Result | 24 Oct | 14 Nov | 4 Dec"
       </label>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.85rem;color:var(--gray-700);background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;margin-bottom:16px;cursor:pointer;">
         <input type="checkbox" name="send_alert" id="send_alert" value="1" {% if not (prefill and prefill.news_id) %}checked{% endif %} style="margin-top:2px;">
-        <span><strong>📧 Email this update to all registered users</strong> (free + paid). They get a glimpse + a link to log in and read/download. Free users also see a gentle upgrade note. Leave unticked when just fixing a typo.</span>
+        <span><strong>📧 Email this update</strong> (choose who below — all, state, or team only). They get a glimpse + a link to log in and read/download. Free users also see a gentle upgrade note. Leave unticked when just fixing a typo.</span>
       </label>
       <div id="audienceBox" style="display:none;font-size:0.84rem;color:var(--gray-700);background:#f8fafc;border:1px solid var(--gray-200);border-radius:8px;padding:9px 12px;margin:-8px 0 16px;">
-        <b>Email goes to</b> (state update):
-        <label style="margin-left:10px;cursor:pointer;"><input type="radio" name="email_audience" value="state" {% if prefill and prefill.kind == 'doc' and prefill.is_state %}checked{% endif %}> only doctors linked to <span id="audState">this state</span> (home or followed state)</label>
+        <b>Email goes to</b>:
+        <label id="audStateOpt" style="margin-left:10px;cursor:pointer;"><input type="radio" name="email_audience" value="state" {% if prefill and prefill.kind == 'doc' and prefill.is_state %}checked{% endif %}> only doctors linked to <span id="audState">this state</span> (home or followed state)</label>
         <label style="margin-left:10px;cursor:pointer;"><input type="radio" name="email_audience" value="all" {% if not (prefill and prefill.kind == 'doc' and prefill.is_state) %}checked{% endif %}> all registered doctors</label>
-        <div style="color:var(--gray-500);font-size:0.76rem;margin-top:3px;">Team members always get every update.</div>
+        <label style="margin-left:10px;cursor:pointer;"><input type="radio" name="email_audience" value="team"> 👥 team members only</label>
+        <div style="color:var(--gray-500);font-size:0.76rem;margin-top:3px;">Team members (doctors marked Team + staff) always get every update. Pick “team members only” to check the email first — then use 📧 Send to all on the posted update.</div>
       </div>
       <button type="submit"
               style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;">
@@ -209,8 +210,18 @@ Result | 24 Oct | 14 Nov | 4 Dec"
                     data-dates="{{ it.key_dates_d|tojson|forceescape }}" data-schedule="{{ it.schedule_text or '' }}"
                     data-ktimes="{{ (it.key_times_d or {})|tojson|forceescape }}" data-kround="{{ it.key_round or '' }}">Edit</button>
             <button type="button" onclick="newsTest({{ it.id }})" style="background:none;border:0;color:#b45309;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">✉️ Test</button>
+            <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to TEAM MEMBERS only (doctors marked Team + staff)?');" style="display:inline;">
+              <input type="hidden" name="news_id" value="{{ it.id }}"><input type="hidden" name="audience" value="team">
+              <button type="submit" style="background:none;border:0;color:#7c3aed;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">👥 Send to team</button>
+            </form>
+            {% if it.scope == 'state' and it.state %}
+            <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to doctors linked to {{ it.state }} (+ team) now?');" style="display:inline;">
+              <input type="hidden" name="news_id" value="{{ it.id }}"><input type="hidden" name="audience" value="state">
+              <button type="submit" style="background:none;border:0;color:#166534;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">📧 Send to {{ it.state }}</button>
+            </form>
+            {% endif %}
             <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to ALL registered users + staff now?');" style="display:inline;">
-              <input type="hidden" name="news_id" value="{{ it.id }}">
+              <input type="hidden" name="news_id" value="{{ it.id }}"><input type="hidden" name="audience" value="all">
               <button type="submit" style="background:none;border:0;color:#166534;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">📧 Send to all</button>
             </form>
             <form method="POST" action="{{ url_for('pg_news_toggle') }}" style="display:inline;">
@@ -284,10 +295,17 @@ function newsTest(id){
   function setAlert(on){ var a=document.getElementById('send_alert'); if(a) a.checked=on; }
   // state updates can be emailed to that state's doctors only (founder 2026-10-22)
   var authSel=f.querySelector('[name="authority"]');
+  // + "team members only" for any update (founder 2026-10-27); the box shows while the email is ticked
+  var alertCb=document.getElementById('send_alert');
   function syncAudience(){ var v=(authSel&&authSel.value)||''; var box=document.getElementById('audienceBox');
-    if(!box) return; var st=v.indexOf('state:')===0; box.style.display=st?'block':'none';
+    if(!box) return; var st=v.indexOf('state:')===0;
+    box.style.display=(alertCb&&!alertCb.checked)?'none':'block';
+    var opt=document.getElementById('audStateOpt'); if(opt) opt.style.display=st?'':'none';
+    var sr=f.querySelector('[name="email_audience"][value="state"]');
+    if(!st && sr && sr.checked){ sr.checked=false; f.querySelector('[name="email_audience"][value="all"]').checked=true; }
     if(st) document.getElementById('audState').textContent=v.slice(6); }
   if(authSel) authSel.addEventListener('change', syncAudience);
+  if(alertCb) alertCb.addEventListener('change', syncAudience);
   setTimeout(syncAudience, 0);
   window.newsClearEdit=function(){
     set('news_id',''); set('inbox_id',''); set('doc_id',''); set('authority','__all__'); set('heading',''); set('news_date','');
