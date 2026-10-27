@@ -8,8 +8,11 @@ Line amount : 1) an ACTUAL amount wins — the team's entered amount (ops_servic
                  or one recorded on the service itself (mentorship amount paid, observership payment);
               2) paid by Client → ₹0 to GooCampus;
               3) paid by GooCampus → list price;
-              4) paid by not set → list price shown separately as an ESTIMATE;
+              4) paid by not set → list price, COUNTED AS GOOCAMPUS in spent (founder 2026-10-27); the lines are
+                 counted as "paid by not set" so the team can still confirm them;
               5) no price → "not priced" (counted, so gaps are visible).
+              Mentorship: the amount recorded on the session (no currency — mostly £60–80 typed as numbers) is
+              ignored; the price list (₹10,000) applies unless the team enters an actual ₹ here (founder 2026-10-27).
 Per client  : received (ex-GST, same as the refund worksheet: ops_payments) − spent = balance.
               Spent includes the Welcome kit (₹20,000, founder 2026-10-26) for every client whose kit is marked
               Given (plab_clients.welcome_kit_given — empty = Given, like AMC; the client page toggles it).
@@ -128,7 +131,7 @@ def _actuals(conn):
 def _price_line(row, prices, actuals):
     """→ (amount, basis): basis actual | price | estimate | client | unpriced."""
     a = actuals.get((row['source_table'], row['record_id']))
-    if a is None:
+    if a is None and row.get('section_key') not in _IGNORE_RECORDED:
         rec = _money(row.get('amount'))
         a = rec if rec else None
     if a is not None:
@@ -142,7 +145,11 @@ def _price_line(row, prices, actuals):
     return float(p['price']), ('price' if row.get('paid_by') == 'GooCampus' else 'estimate')
 
 
-_BASIS_LABEL = {'actual': 'Actual amount', 'price': 'Price list', 'estimate': 'Estimate (paid by not set)',
+_IGNORE_RECORDED = {'mentorship'}     # recorded amounts there have no currency (mostly £) — use the price list
+
+
+_BASIS_LABEL = {'actual': 'Actual amount', 'price': 'Price list',
+                'estimate': 'Price list (paid by not set → counted as GooCampus)',
                 'client': 'Paid by client (₹0)', 'unpriced': 'Not priced yet'}
 
 
@@ -157,12 +164,13 @@ def _client_totals(conn, statuses):
         c = per.setdefault(r['client_id'], {
             'client_id': r['client_id'], 'name': r['name'], 'registration_number': r['registration_number'],
             'status': r['account_status'], 'stage': r['current_stage'], 'lines': 0,
-            'spent': 0.0, 'estimate': 0.0, 'unpriced': 0, 'client_paid': 0})
+            'spent': 0.0, 'estimate': 0.0, 'to_confirm': 0, 'unpriced': 0, 'client_paid': 0})
         c['lines'] += 1
-        if basis in ('actual', 'price'):
+        if basis in ('actual', 'price', 'estimate'):     # paid by not set counts as GooCampus (founder)
             c['spent'] += amt
-        elif basis == 'estimate':
+        if basis == 'estimate':
             c['estimate'] += amt
+            c['to_confirm'] += 1
         elif basis == 'unpriced':
             c['unpriced'] += 1
         else:
@@ -174,7 +182,8 @@ def _client_totals(conn, statuses):
                              'name': ' '.join(f"{cl.get('prefix') or ''} {cl.get('first_name') or ''} "
                                               f"{cl.get('last_name') or ''}".split()) or '—',
                              'status': cl.get('account_status') or '', 'stage': cl.get('current_stage') or '',
-                             'lines': 0, 'spent': 0.0, 'estimate': 0.0, 'unpriced': 0, 'client_paid': 0}
+                             'lines': 0, 'spent': 0.0, 'estimate': 0.0, 'to_confirm': 0, 'unpriced': 0,
+                             'client_paid': 0}
     out = []
     kit_price, kits = _kit_price(conn), _kit_map(conn)
     for c in per.values():
@@ -210,7 +219,8 @@ def expenses_page():
     q = _norm(request.args.get('q'))
     if q:
         clients = [c for c in clients if q in _norm(f"{c['name']} {c['registration_number']}")]
-    tot = {k: sum(c[k] for c in clients) for k in ('received', 'spent', 'kit', 'estimate', 'balance', 'unpriced', 'lines')}
+    tot = {k: sum(c[k] for c in clients) for k in ('received', 'spent', 'kit', 'estimate', 'to_confirm', 'balance',
+                                                    'unpriced', 'lines')}
     return render_template('ops_plab_expenses.html', clients=clients, tot=tot, n_prices=n_prices,
                            statuses_all=sorted(set(statuses) | set(A._SVC_DEFAULT_STATUSES)), picked=f['statuses'],
                            status_qs=A._svc_status_qs(f['statuses']), q=request.args.get('q') or '',
@@ -232,13 +242,15 @@ def expenses_download():
         conn.close()
     headers = ['Client Name', 'Registration Number', 'Status', 'Current Stage', 'Received (ex-GST ₹)',
                'Services spent (₹)', 'Welcome kit (₹)', 'Total spent (₹)', 'Balance (₹)',
-               'Estimate — paid by not set (₹)', 'Service lines', 'Lines not priced', 'Lines paid by client']
+               'Of which "paid by" not set (₹)', 'Service lines', 'Lines "paid by" not set', 'Lines not priced',
+               'Lines paid by client']
     wb = Workbook(write_only=True)
-    ws = A._svc_xl_sheet(wb, 'UK expenses', headers, [28, 22, 14, 22, 16, 16, 14, 16, 14, 20, 10, 12, 12])
+    ws = A._svc_xl_sheet(wb, 'UK expenses', headers, [28, 22, 14, 22, 16, 16, 14, 16, 14, 20, 10, 14, 12, 12])
     for c in clients:
         ws.append([A._svc_xl_value(c['name']), c['registration_number'], c['status'], c['stage'],
                    round(c['received'], 2), round(c['services_spent'], 2), round(c['kit'], 2), round(c['spent'], 2),
-                   round(c['balance'], 2), round(c['estimate'], 2), c['lines'], c['unpriced'], c['client_paid']])
+                   round(c['balance'], 2), round(c['estimate'], 2), c['lines'], c['to_confirm'], c['unpriced'],
+                   c['client_paid']])
     A._svc_xl_filter(ws, len(headers), len(clients))
     return A._svc_xl_send(wb, 'UK_PGCP_Client_Expenses')
 
@@ -271,12 +283,12 @@ def expense_client(client_id):
         conn.close()
     kit_given = _kit_given(cl.get('welcome_kit_given'))
     kit = kit_price if kit_given else 0.0
-    spent = sum(r['amt'] for r in rows if r['basis'] in ('actual', 'price')) + kit
+    spent = sum(r['amt'] for r in rows if r['basis'] in ('actual', 'price', 'estimate')) + kit
     est = sum(r['amt'] for r in rows if r['basis'] == 'estimate')
     name = ' '.join(f"{cl.get('prefix') or ''} {cl.get('first_name') or ''} {cl.get('last_name') or ''}".split())
     return render_template('ops_plab_expense_client.html', cl=cl, name=name, rows=rows, received=received,
                            spent=spent, estimate=est, balance=received - spent, kit=kit, kit_given=kit_given,
-                           kit_price=kit_price,
+                           kit_price=kit_price, to_confirm=sum(1 for r in rows if r['basis'] == 'estimate'),
                            unpriced=sum(1 for r in rows if r['basis'] == 'unpriced'),
                            active_ops_page='plab-expenses')
 
