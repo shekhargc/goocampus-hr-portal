@@ -26,7 +26,7 @@ SECTION_LABELS = {
     'deadlines': 'Deadlines', 'seat_matrix': '2026 PG Seat Matrix', 'results_mdms': '2026 Results (MD/MS)',
     'results_dnb': '2026 Results (DNB)', 'result_analysis': 'Round Analysis', 'rankings': 'College Rankings',
     'official_documents': 'Official Documents', 'news': 'News & Updates', 'aiq': 'AIQ', 'ciq': 'CIQ',
-    'state': 'State quota', 'deemed': 'Deemed',
+    'state': 'State quota', 'deemed': 'Deemed', 'dashboard_home': 'Dashboard home',
 }
 EMAIL_KINDS = {'news': 'News alert', 'deadline': 'Deadline reminder', 'announcement': 'Announcement',
                'rankings': 'Rankings email'}
