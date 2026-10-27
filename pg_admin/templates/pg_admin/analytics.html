@@ -1,100 +1,282 @@
 {% extends "pg_admin/pg_admin_base.html" %}
-{% block title %}User Analytics · goocampus.in{% endblock %}
+{% block title %}Dashboard Analytics · goocampus.in{% endblock %}
 
 {% block section_content %}
+{% set card = 'background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:1.1rem 1.2rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);' %}
+{% set h3 = 'font-size:0.95rem;font-weight:700;color:var(--navy);margin:0 0 0.25rem;' %}
+{% set sub = 'margin:0 0 0.9rem;color:var(--gray-500);font-size:0.8rem;' %}
+{% set hs = 'padding:0.5rem 0.75rem;font-weight:700;color:var(--navy);font-size:0.64rem;text-transform:uppercase;border-bottom:1px solid var(--gray-200);background:var(--gray-50);text-align:left;white-space:nowrap;' %}
+{% set td = 'padding:0.45rem 0.75rem;border-top:1px solid var(--gray-100);' %}
+{% set num = 'text-align:right;font-variant-numeric:tabular-nums;' %}
+{% set qs = '&team=1' if d.team else '' %}
+{% macro pct(a, b) %}{{ ((a or 0) / b * 100)|round|int if b else 0 }}%{% endmacro %}
+
+<style>
+  .an-bar{height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden}
+  .an-bar>span{display:block;height:100%;background:var(--orange);border-radius:0 4px 4px 0}
+  .an-trend{display:flex;align-items:flex-end;gap:2px;height:150px;border-bottom:1px solid var(--gray-200);padding-top:6px}
+  .an-col{flex:1;height:100%;display:flex;align-items:flex-end;position:relative;cursor:default}
+  .an-col>span{display:block;width:100%;background:var(--orange);border-radius:4px 4px 0 0;min-height:1px}
+  .an-col:hover>span{background:var(--navy)}
+  .an-tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+          font-size:0.72rem;padding:5px 8px;border-radius:6px;white-space:nowrap;z-index:5;pointer-events:none;line-height:1.45}
+  .an-col:hover .an-tip{display:block}
+  .an-tbl{width:100%;border-collapse:collapse;font-size:0.82rem}
+  .an-tbl tr:hover td{background:var(--gray-50)}
+  .an-pill{display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--gray-100);color:var(--gray-600)}
+  .an-pill.paid{background:#DCFCE7;color:#166534}.an-pill.internal{background:#DBEAFE;color:#1E40AF}.an-pill.team{background:#F3E8FF;color:#6B21A8}
+</style>
+
 <div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:0.4rem;">
-    <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0;">User Analytics</h1>
-    <div style="display:flex;gap:0.3rem;">
+    <h1 style="font-size:1.5rem;font-weight:800;color:var(--navy);margin:0;">Dashboard Analytics</h1>
+    <div style="display:flex;gap:0.3rem;flex-wrap:wrap;align-items:center;">
       {% for opt, lbl in [('7','7 days'),('30','30 days'),('90','90 days'),('all','All time')] %}
-      <a href="?days={{ opt }}" style="text-decoration:none;font-size:0.8rem;font-weight:600;padding:0.35rem 0.8rem;border-radius:20px;
+      <a href="?days={{ opt }}{{ qs }}" style="text-decoration:none;font-size:0.8rem;font-weight:600;padding:0.35rem 0.8rem;border-radius:20px;
          background:{{ 'var(--navy)' if d.days==opt else 'var(--gray-100)' }};color:{{ '#fff' if d.days==opt else 'var(--gray-600)' }};">{{ lbl }}</a>
       {% endfor %}
+      <a href="?days={{ d.days }}{{ '' if d.team else '&team=1' }}" style="text-decoration:none;font-size:0.78rem;font-weight:600;margin-left:0.4rem;color:var(--gray-600);">
+        {{ '☑' if d.team else '☐' }} Include team members</a>
     </div>
   </div>
-  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.86rem;">What registered doctors do on the goocampus.in dashboard — sections used, searches, colleges opened, and quota / category / fee interest.</p>
+  <p style="margin:0 0 1.2rem;color:var(--gray-500);font-size:0.86rem;">
+    How registered doctors use the goocampus.in dashboard. A <b>visit day</b> = a day the doctor signed in or opened any section
+    (they stay signed in for 30 days, so visit days — not sign-ins — show who comes back).
+    {% if d.tracking_since %}Section tracking since {{ d.tracking_since|format_date }}.{% endif %}
+    Sign-ins and email opens are recorded from 27 Oct 2026.
+  </p>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}{% for c,m in msgs %}
   <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.88rem;background:#FEE2E2;color:#991B1B;">{{ m }}</div>{% endfor %}{% endwith %}
 
-  <!-- stat cards -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem;">
-    {% macro stat(label, val) %}
-    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:1rem 1.1rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-      <p style="margin:0 0 0.35rem;font-size:0.66rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">{{ label }}</p>
-      <p style="margin:0;font-size:1.5rem;font-weight:800;color:var(--navy);">{{ val }}</p>
-    </div>
-    {% endmacro %}
-    {{ stat('Total events', '{:,}'.format(d.total or 0)) }}
-    {{ stat('Registered users active', '{:,}'.format(d.users or 0)) }}
-    {{ stat('Active days', d.days_active or 0) }}
-    {{ stat('Predictor searches', '{:,}'.format((d.ranks.c if d.ranks else 0) or 0)) }}
+  {% macro stat(label, val, note='') %}
+  <div style="{{ card }}">
+    <p style="margin:0 0 0.35rem;font-size:0.66rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">{{ label }}</p>
+    <p style="margin:0;font-size:1.5rem;font-weight:800;color:var(--navy);">{{ val }}</p>
+    {% if note %}<p style="margin:0.2rem 0 0;font-size:0.74rem;color:var(--gray-500);">{{ note }}</p>{% endif %}
+  </div>
+  {% endmacro %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    {{ stat('Registered doctors', '{:,}'.format(d.registered or 0), '+' ~ '{:,}'.format(d.new_signups or 0) ~ (' new in this period' if d.days != 'all' else ' all time')) }}
+    {{ stat('Used the dashboard', '{:,}'.format(d.active or 0), pct(d.active, d.registered) ~ ' of registered') }}
+    {{ stat('Came back (2+ days)', '{:,}'.format(d.returning or 0), pct(d.returning, d.active) ~ ' of those who used it') }}
+    {{ stat('Came back (3+ days)', '{:,}'.format(d.returning3 or 0), pct(d.returning3, d.active) ~ ' of those who used it') }}
+    {{ stat('Visited only once', '{:,}'.format(d.once or 0), 'avg ' ~ (d.avg_days or 0) ~ ' visit days per doctor') }}
+    {% set et = d.email_tot or {} %}
+    {{ stat('Emails opened', pct(et.opened, et.sent) if et.sent else '—', ('{:,}'.format(et.opened or 0) ~ ' of ' ~ '{:,}'.format(et.sent or 0) ~ ' · ' ~ pct(et.clicked, et.sent) ~ ' clicked') if et.sent else 'tracking starts with the next email') }}
   </div>
 
-  {% macro toplist(title, items, unit='') %}
-  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:1.1rem 1.2rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <h3 style="font-size:0.92rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem;">{{ title }}</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.1rem;margin-bottom:1.5rem;">
+    <!-- come-back buckets -->
+    <div style="{{ card }}">
+      <h3 style="{{ h3 }}">How often doctors come back</h3>
+      <p style="{{ sub }}">Registered doctors by number of visit days {{ 'in this period' if d.days != 'all' else '(all time)' }}.</p>
+      {% set bmax = (d.buckets|map(attribute='n')|max) if d.buckets else 1 %}
+      {% for b in d.buckets or [] %}
+      <div style="margin-bottom:0.6rem;">
+        <div style="display:flex;justify-content:space-between;font-size:0.83rem;margin-bottom:3px;">
+          <span style="color:{{ 'var(--gray-500)' if b.muted else 'var(--navy)' }};font-weight:600;">{{ b.label }}</span>
+          <span style="color:var(--gray-600);font-variant-numeric:tabular-nums;">{{ '{:,}'.format(b.n) }} · {{ pct(b.n, d.registered) }}</span>
+        </div>
+        <div class="an-bar"><span style="width:{{ (b.n / (bmax or 1) * 100)|round|int }}%;{{ 'background:var(--gray-300);' if b.muted }}"></span></div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- free vs paid -->
+    <div style="{{ card }}">
+      <h3 style="{{ h3 }}">Free vs paid doctors</h3>
+      <p style="{{ sub }}">Who uses the dashboard, by doctor type.</p>
+      <table class="an-tbl">
+        <thead><tr><th style="{{ hs }}">Type</th><th style="{{ hs }}{{ num }}">Registered</th><th style="{{ hs }}{{ num }}">Used it</th><th style="{{ hs }}{{ num }}">Came back 2+</th></tr></thead>
+        <tbody>
+        {% for c in d.cats or [] %}
+          <tr><td style="{{ td }}"><span class="an-pill {{ c.cat }}">{{ c.label }}</span></td>
+            <td style="{{ td }}{{ num }}">{{ '{:,}'.format(c.registered) }}</td>
+            <td style="{{ td }}{{ num }}">{{ '{:,}'.format(c.active) }} <span style="color:var(--gray-400);">({{ pct(c.active, c.registered) }})</span></td>
+            <td style="{{ td }}{{ num }}">{{ '{:,}'.format(c.ret2) }} <span style="color:var(--gray-400);">({{ pct(c.ret2, c.active) }})</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <p style="margin:0.8rem 0 0;font-size:0.76rem;color:var(--gray-500);">
+        Sign-ins in this period: <b>{{ '{:,}'.format((d.logins or {}).get('c') or 0) }}</b> by {{ '{:,}'.format((d.logins or {}).get('doctors') or 0) }} doctors
+        {% if not d.login_since %}(recording starts with the next sign-in){% endif %}.</p>
+    </div>
+  </div>
+
+  <!-- daily trend -->
+  <div style="{{ card }}margin-bottom:1.5rem;">
+    <h3 style="{{ h3 }}">Doctors who visited, per day</h3>
+    <p style="{{ sub }}">Last {{ (d.trend or [])|length }} days (IST). Hover a bar for the day's visitors and new sign-ups.</p>
+    {% set tmax = d.trend_max or 1 %}
+    <div class="an-trend">
+      {% for t in d.trend or [] %}
+      <div class="an-col"><span style="height:{{ (t.active / tmax * 100)|round(1) }}%;"></span>
+        <div class="an-tip"><b>{{ t.d.strftime('%a %d %b') }}</b><br>{{ t.active }} doctors visited<br>{{ t.signups }} new sign-ups</div></div>
+      {% endfor %}
+    </div>
+    {% if d.trend %}
+    <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--gray-500);margin-top:4px;">
+      <span>{{ d.trend[0].d.strftime('%d %b') }}</span><span>peak {{ tmax }} / day</span><span>{{ d.trend[-1].d.strftime('%d %b') }}</span></div>
+    {% endif %}
+  </div>
+
+  <!-- sections -->
+  <div style="{{ card }}margin-bottom:1.5rem;">
+    <h3 style="{{ h3 }}">Most-viewed sections</h3>
+    <p style="{{ sub }}">Doctors who opened each section, how many came back to it on another day, and total actions inside it.</p>
+    {% set smax = (d.sections[0].doctors if d.sections else 1) or 1 %}
+    <table class="an-tbl">
+      <thead><tr><th style="{{ hs }}">Section</th><th style="{{ hs }}width:34%;"></th><th style="{{ hs }}{{ num }}">Doctors</th>
+        <th style="{{ hs }}{{ num }}">% of active</th><th style="{{ hs }}{{ num }}">Came back to it</th><th style="{{ hs }}{{ num }}">Actions</th></tr></thead>
+      <tbody>
+      {% for s in d.sections or [] %}
+        <tr><td style="{{ td }}font-weight:600;color:var(--navy);">{{ s.label }}</td>
+          <td style="{{ td }}"><div class="an-bar"><span style="width:{{ (s.doctors / smax * 100)|round|int }}%;"></span></div></td>
+          <td style="{{ td }}{{ num }}">{{ '{:,}'.format(s.doctors) }}</td>
+          <td style="{{ td }}{{ num }}">{{ pct(s.doctors, d.active) }}</td>
+          <td style="{{ td }}{{ num }}">{{ '{:,}'.format(s.rep2) }}</td>
+          <td style="{{ td }}{{ num }}color:var(--gray-500);">{{ '{:,}'.format(s.actions) }}</td></tr>
+      {% else %}
+        <tr><td colspan="6" style="{{ td }}color:var(--gray-400);text-align:center;">No section views in this period.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- top doctors -->
+  <div style="{{ card }}margin-bottom:1.5rem;padding:0;overflow:hidden;">
+    <div style="padding:1rem 1.2rem 0.6rem;display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+      <div><h3 style="{{ h3 }}">Most active doctors</h3>
+        <p style="{{ sub }}margin-bottom:0;">Top 50 by visit days in this period. Click a name to open the doctor's profile.</p></div>
+      <a href="{{ url_for('pg_analytics_doctors_xlsx') }}?days={{ d.days }}{{ qs }}" style="font-size:0.8rem;font-weight:700;color:#fff;background:var(--navy);padding:0.45rem 0.9rem;border-radius:8px;text-decoration:none;white-space:nowrap;">⬇ Excel — every doctor</a>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="an-tbl">
+      <thead><tr><th style="{{ hs }}">#</th><th style="{{ hs }}">Doctor</th><th style="{{ hs }}">Type</th><th style="{{ hs }}{{ num }}">Visit days</th>
+        <th style="{{ hs }}{{ num }}">Actions</th><th style="{{ hs }}{{ num }}">Sections</th><th style="{{ hs }}">Most used</th>
+        <th style="{{ hs }}{{ num }}">Sign-ins</th><th style="{{ hs }}">Last seen</th></tr></thead>
+      <tbody>
+      {% for r in d.doctors or [] %}
+        <tr><td style="{{ td }}color:var(--gray-400);">{{ loop.index }}</td>
+          <td style="{{ td }}"><a href="{{ url_for('pg_user_detail', user_id=r.id) }}" style="font-weight:600;color:var(--navy);text-decoration:none;">
+            {{ (r.name if r.cat == 'team' else (r.name|dr_name)) if r.name else (r.mobile or '—') }}</a>
+            {% if r.state %}<span style="color:var(--gray-400);font-size:0.74rem;"> · {{ r.state }}</span>{% endif %}</td>
+          <td style="{{ td }}"><span class="an-pill {{ r.cat }}">{{ r.cat_label }}</span></td>
+          <td style="{{ td }}{{ num }}font-weight:700;">{{ r.days }}</td>
+          <td style="{{ td }}{{ num }}">{{ '{:,}'.format(r.actions) }}</td>
+          <td style="{{ td }}{{ num }}">{{ r.sections }}</td>
+          <td style="{{ td }}color:var(--gray-600);">{{ r.fav_label or '—' }}</td>
+          <td style="{{ td }}{{ num }}">{{ r.logins }}</td>
+          <td style="{{ td }}color:var(--gray-500);white-space:nowrap;">{{ r.last_seen|format_datetime if r.last_seen else '—' }}</td></tr>
+      {% else %}
+        <tr><td colspan="9" style="{{ td }}color:var(--gray-400);text-align:center;">No doctor activity in this period.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- emails -->
+  <div style="{{ card }}margin-bottom:1.5rem;padding:0;overflow:hidden;" id="emails">
+    <div style="padding:1rem 1.2rem 0.6rem;">
+      <h3 style="{{ h3 }}">Emails to doctors — opened &amp; clicked</h3>
+      <p style="{{ sub }}margin-bottom:0;">News alerts, deadline reminders, announcements and rankings emails. Click a row to see who opened it.
+        Opens are approximate (some mail apps load images automatically, some block them); clicks are exact.
+        {% if not d.email_since %}<b>Recording starts with the next email sent.</b>{% endif %}</p>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="an-tbl">
+      <thead><tr><th style="{{ hs }}">Sent</th><th style="{{ hs }}">Type</th><th style="{{ hs }}">Email</th><th style="{{ hs }}{{ num }}">Sent to</th>
+        <th style="{{ hs }}{{ num }}">Opened</th><th style="{{ hs }}{{ num }}">Clicked</th></tr></thead>
+      <tbody>
+      {% for c in d.camps or [] %}
+        {% set link = '?days=' ~ d.days ~ qs ~ '&ek=' ~ (c.kind|urlencode) ~ '&er=' ~ c.ref_id ~ '&el=' ~ (c.ref_label|urlencode) ~ '#emails' %}
+        <tr style="cursor:pointer;" onclick="location.href='{{ link }}'">
+          <td style="{{ td }}color:var(--gray-500);white-space:nowrap;">{{ c.first_sent|format_datetime }}</td>
+          <td style="{{ td }}"><span class="an-pill">{{ c.kind_label }}</span></td>
+          <td style="{{ td }}font-weight:600;color:var(--navy);max-width:420px;"><a href="{{ link }}" style="color:inherit;text-decoration:none;">{{ c.subject or c.ref_label }}</a></td>
+          <td style="{{ td }}{{ num }}">{{ '{:,}'.format(c.sent) }}</td>
+          <td style="{{ td }}{{ num }}">{{ '{:,}'.format(c.opened) }} <span style="color:var(--gray-400);">({{ pct(c.opened, c.sent) }})</span></td>
+          <td style="{{ td }}{{ num }}">{{ '{:,}'.format(c.clicked) }} <span style="color:var(--gray-400);">({{ pct(c.clicked, c.sent) }})</span></td></tr>
+      {% else %}
+        <tr><td colspan="6" style="{{ td }}color:var(--gray-400);text-align:center;">No tracked emails in this period yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if d.camp_sel %}
+    <div style="border-top:2px solid var(--gray-200);padding:1rem 1.2rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+        <h3 style="{{ h3 }}margin:0;">{{ d.camp_sel.kind_label }}: {{ d.camp_sel.ref_label }} — who opened it</h3>
+        <a href="?days={{ d.days }}{{ qs }}#emails" style="font-size:0.8rem;color:var(--gray-500);">✕ close</a>
+      </div>
+      <div style="max-height:460px;overflow-y:auto;">
+      <table class="an-tbl">
+        <thead><tr><th style="{{ hs }}">Recipient</th><th style="{{ hs }}">Opened</th><th style="{{ hs }}{{ num }}">Opens</th><th style="{{ hs }}">Clicked</th><th style="{{ hs }}{{ num }}">Clicks</th></tr></thead>
+        <tbody>
+        {% for g in d.camp_rows or [] %}
+          <tr><td style="{{ td }}">
+              {% if g.user_id %}<a href="{{ url_for('pg_user_detail', user_id=g.user_id) }}" style="font-weight:600;color:var(--navy);text-decoration:none;">{{ g.name|dr_name if g.name else g.email }}</a>{% else %}<span style="font-weight:600;color:var(--navy);">{{ g.email }}</span>{% endif %}
+              {% if g.name %}<span style="color:var(--gray-400);font-size:0.74rem;"> · {{ g.email }}</span>{% endif %}</td>
+            <td style="{{ td }}color:{{ 'var(--navy)' if g.opened_at else 'var(--gray-400)' }};white-space:nowrap;">{{ g.opened_at|format_datetime if g.opened_at else 'Not opened' }}</td>
+            <td style="{{ td }}{{ num }}">{{ g.open_count or 0 }}</td>
+            <td style="{{ td }}white-space:nowrap;color:{{ 'var(--navy)' if g.clicked_at else 'var(--gray-400)' }};">{{ g.clicked_at|format_datetime if g.clicked_at else '—' }}</td>
+            <td style="{{ td }}{{ num }}">{{ g.click_count or 0 }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- what doctors look for -->
+  {% macro toplist(title, items) %}
+  <div style="{{ card }}">
+    <h3 style="{{ h3 }}margin-bottom:0.8rem;">{{ title }}</h3>
     {% if items %}
       {% set maxc = items[0].c or 1 %}
       {% for it in items %}
       <div style="margin-bottom:0.55rem;">
         <div style="display:flex;justify-content:space-between;font-size:0.83rem;margin-bottom:2px;">
-          <span style="color:var(--navy);font-weight:600;max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ it.v }}</span>
-          <span style="color:var(--gray-500);font-variant-numeric:tabular-nums;">{{ '{:,}'.format(it.c) }}{{ unit }}</span>
+          <span style="color:var(--navy);font-weight:600;max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ it.v }}">{{ it.v }}</span>
+          <span style="color:var(--gray-500);font-variant-numeric:tabular-nums;">{{ '{:,}'.format(it.c) }}</span>
         </div>
-        <div style="height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;">
-          <span style="display:block;height:100%;width:{{ (it.c / maxc * 100)|round|int }}%;background:var(--orange);"></span>
-        </div>
+        <div class="an-bar" style="height:6px;"><span style="width:{{ (it.c / maxc * 100)|round|int }}%;"></span></div>
       </div>
       {% endfor %}
     {% else %}<p style="color:var(--gray-400);font-size:0.83rem;margin:0;">No data yet.</p>{% endif %}
   </div>
   {% endmacro %}
-
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem;margin-bottom:1.5rem;">
-    {{ toplist('Most-used sections', d.sections) }}
-    {{ toplist('Top searches', d.searches) }}
-    {{ toplist('Specialities searched', d.specialities) }}
+  <h2 style="font-size:1.05rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem;">What doctors look for</h2>
+  <p style="{{ sub }}">Number of doctors who searched or opened each one in this period{% if d.ranks and d.ranks.avg_rank %} · {{ '{:,}'.format(d.ranks.c or 0) }} predictor runs, average rank {{ '{:,}'.format(d.ranks.avg_rank|int) }}{% endif %}.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin-bottom:1.5rem;">
+    {{ toplist('Specialities', d.specialities) }}
     {{ toplist('College profiles opened', d.colleges) }}
-    {{ toplist('Quotas of interest', d.quotas) }}
-    {{ toplist('Categories of interest', d.categories) }}
-    {{ toplist('States of interest', d.states) }}
-    <!-- Fee + rank interest -->
-    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:1.1rem 1.2rem;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-      <h3 style="font-size:0.92rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem;">Fee &amp; rank interest</h3>
-      <div style="font-size:0.85rem;color:var(--gray-700);line-height:1.9;">
-        <div><b>{{ '{:,}'.format((d.fees.c if d.fees else 0) or 0) }}</b> fee searches</div>
-        {% if d.fees and d.fees.avg_lo is not none %}<div>Typical fee range searched: <b>₹{{ '{:,.0f}'.format(d.fees.avg_lo) }} – ₹{{ '{:,.0f}'.format(d.fees.avg_hi or 0) }}</b></div>{% endif %}
-        {% if d.fees and d.fees.lo is not none %}<div>Overall min–max touched: ₹{{ '{:,.0f}'.format(d.fees.lo) }} – ₹{{ '{:,.0f}'.format(d.fees.hi or 0) }}</div>{% endif %}
-        <hr style="border:none;border-top:1px solid var(--gray-100);margin:0.5rem 0;">
-        {% if d.ranks and d.ranks.avg_rank is not none %}<div>Avg rank searched: <b>{{ '{:,}'.format(d.ranks.avg_rank) }}</b></div>
-        <div>Rank range: {{ '{:,}'.format(d.ranks.lo) }} – {{ '{:,}'.format(d.ranks.hi) }}</div>{% else %}<div style="color:var(--gray-400);">No predictor searches yet.</div>{% endif %}
-      </div>
-    </div>
+    {{ toplist('Quotas', d.quotas) }}
+    {{ toplist('States', d.states) }}
   </div>
 
   <!-- recent activity -->
-  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-    <div style="padding:0.9rem 1.2rem;border-bottom:1px solid var(--gray-100);"><h3 style="margin:0;font-size:0.92rem;font-weight:700;color:var(--navy);">Recent activity</h3></div>
-    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-      {% set hs='padding:0.5rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.64rem;text-transform:uppercase;border-bottom:1px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
-      <thead><tr><th style="{{ hs }}">User</th><th style="{{ hs }}">Section</th><th style="{{ hs }}">Action</th><th style="{{ hs }}">Details</th><th style="{{ hs }}">When</th></tr></thead>
+  <details style="{{ card }}padding:0;overflow:hidden;">
+    <summary style="padding:0.9rem 1.2rem;cursor:pointer;font-size:0.92rem;font-weight:700;color:var(--navy);">Recent activity (latest 40)</summary>
+    <table class="an-tbl">
+      <thead><tr><th style="{{ hs }}">Doctor</th><th style="{{ hs }}">Section</th><th style="{{ hs }}">Action</th><th style="{{ hs }}">Details</th><th style="{{ hs }}">When</th></tr></thead>
       <tbody>
-        {% for r in d.recent %}
-        <tr style="border-top:1px solid var(--gray-100);">
-          <td style="padding:0.45rem 0.9rem;font-weight:600;color:var(--navy);">{{ r.who }}</td>
-          <td style="padding:0.45rem 0.9rem;color:var(--gray-600);">{{ r.section or '—' }}</td>
-          <td style="padding:0.45rem 0.9rem;color:var(--gray-600);">{{ r.event_type or '—' }}</td>
-          <td style="padding:0.45rem 0.9rem;color:var(--gray-500);">
-            {% if r.q %}"{{ r.q }}" {% endif %}{% if r.college_name %}· {{ r.college_name }}{% endif %}{% if r.speciality %}· {{ r.speciality }}{% endif %}{% if r.quota %}· {{ r.quota }}{% endif %}{% if r.category %}· {{ r.category }}{% endif %}{% if r.state %}· {{ r.state }}{% endif %}{% if r.rank %}· rank {{ '{:,}'.format(r.rank) }}{% endif %}{% if r.fee_min or r.fee_max %}· ₹{{ '{:,.0f}'.format(r.fee_min or 0) }}–{{ '{:,.0f}'.format(r.fee_max or 0) }}{% endif %}
+        {% for r in d.recent or [] %}
+        <tr>
+          <td style="{{ td }}font-weight:600;color:var(--navy);">{% if r.user_id %}<a href="{{ url_for('pg_user_detail', user_id=r.user_id) }}" style="color:inherit;text-decoration:none;">{{ r.who|dr_name if r.who else '—' }}</a>{% else %}Not signed in{% endif %}</td>
+          <td style="{{ td }}color:var(--gray-600);">{{ r.label }}</td>
+          <td style="{{ td }}color:var(--gray-600);">{{ (r.event_type or '—')|replace('_', ' ') }}</td>
+          <td style="{{ td }}color:var(--gray-500);">
+            {% if r.q %}"{{ r.q }}" {% endif %}{% if r.college_name %}· {{ r.college_name }}{% endif %}{% if r.speciality %}· {{ r.speciality }}{% endif %}{% if r.quota %}· {{ r.quota }}{% endif %}{% if r.category %}· {{ r.category }}{% endif %}{% if r.state %}· {{ r.state }}{% endif %}{% if r.rank %}· rank {{ '{:,}'.format(r.rank) }}{% endif %}
           </td>
-          <td style="padding:0.45rem 0.9rem;color:var(--gray-400);white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}</td>
+          <td style="{{ td }}color:var(--gray-400);white-space:nowrap;">{{ r.created_at|format_datetime if r.created_at else '' }}</td>
         </tr>
-        {% else %}
-        <tr><td colspan="5" style="padding:2rem;text-align:center;color:var(--gray-400);">No activity recorded yet — it fills in as the goocampus.in frontend sends tracking events.</td></tr>
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  </details>
 </div>
 {% endblock %}

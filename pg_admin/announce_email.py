@@ -115,10 +115,14 @@ def _send_all(key):
         todo = [r for r in recipients(conn) if r['email'] not in done]
         conn.commit()
         logger.info("announcement %s → %s recipient(s)", key, len(todo))
+        from pg_admin import email_tracking as ET
         for r in todo:
             ok = 0
             try:
-                ok = 1 if send_email([r['email']], a['subject'], build_html(key, r['name'])) else 0
+                html, tok = ET.wrap(conn, build_html(key, r['name']), kind='announcement', email=r['email'],
+                                    subject=a['subject'], ref_label=key)
+                ok = 1 if send_email([r['email']], a['subject'], html) else 0
+                ET.mark_sent(conn, tok, ok)
             except Exception as e:
                 logger.error("announcement %s: %s failed: %s", key, r['email'], e)
             conn.execute("INSERT INTO pg_announcement_sends (announcement, email, ok) VALUES (?,?,?) "

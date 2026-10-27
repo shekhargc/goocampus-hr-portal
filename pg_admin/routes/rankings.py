@@ -397,11 +397,17 @@ def _send_all(log_id, sender, test_to=''):
     atts = [{'filename': fa, 'content': base64.b64encode(a).decode('ascii')},
             {'filename': fb, 'content': base64.b64encode(b).decode('ascii')}]
     sent = failed = 0
+    from pg_admin import email_tracking as ET
+    subj = 'GooCampus MCC College Rankings 2026 — Top, Good & Average colleges'
     for r in recips:
         try:
-            ok = send_email([r['email']], 'GooCampus MCC College Rankings 2026 — Top, Good & Average colleges',
-                            _email_html(r['name'], sender), from_address='GooCampus <info@goocampus.in>',
+            html, tok = _email_html(r['name'], sender), None
+            if not test_to:      # a test send is not a campaign
+                html, tok = ET.wrap(conn, html, kind='rankings', email=r['email'], subject=subj,
+                                    ref_id=log_id, ref_label='MCC College Rankings 2026')
+            ok = send_email([r['email']], subj, html, from_address='GooCampus <info@goocampus.in>',
                             attachments=atts)
+            ET.mark_sent(conn, tok, ok)
             sent += 1 if ok else 0
             failed += 0 if ok else 1
         except Exception as e:
