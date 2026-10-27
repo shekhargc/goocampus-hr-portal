@@ -284,7 +284,9 @@ def news_save():
     # linked to that state, 'all' = everyone.
     doc_id = _s(request.form.get('doc_id'))
     doc_id = int(doc_id) if doc_id.isdigit() else None
-    email_audience = 'state' if _s(request.form.get('email_audience')) == 'state' else 'all'
+    # 'team' = only team members get the email (founder 2026-10-27: check it before everyone does)
+    email_audience = _s(request.form.get('email_audience'))
+    email_audience = email_audience if email_audience in ('state', 'team') else 'all'
     link_doc = None
     add_events = request.form.get('add_events') in ('1', 'on')
     category = _s(request.form.get('category'))
@@ -523,8 +525,9 @@ def news_save():
             from pg_admin.news_email import trigger_news_blast, recipient_count
             n = recipient_count(_blast_id)
             trigger_news_blast(_blast_id)
-            flash(f'Emailing this update to {n} registered users in the background…'
-                  if n is not None else 'Emailing this update to all registered users in the background…',
+            _who = 'team members' if email_audience == 'team' else 'recipients'
+            flash(f'Emailing this update to {n} {_who} in the background…'
+                  if n is not None else f'Emailing this update to {_who} in the background…',
                   'success')
         except Exception as e:
             logging.error("news_save: email alert failed to start: %s", e)
@@ -579,8 +582,9 @@ def news_test_email():
 
 @login_required
 def news_send_alert():
-    """Re-send the email alert for a posted item to everyone, on demand (regardless of the
-    original checkbox). Lets the founder push a news update out again. (founder 2026-10-06)"""
+    """Re-send the email alert for a posted item on demand (regardless of the original checkbox).
+    audience = 'all' (everyone, default) | 'state' (that state's doctors) | 'team' (team members only,
+    founder 2026-10-27). Lets the founder test on the team, then push it out. (founder 2026-10-06)"""
     if not _require_admin():
         flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
     try: nid = int(_s(request.form.get('news_id')))
@@ -589,9 +593,11 @@ def news_send_alert():
         flash('Could not find that update.', 'error'); return redirect(url_for('pg_news_admin'))
     try:
         from pg_admin.news_email import trigger_news_blast, recipient_count
-        n = recipient_count()
-        trigger_news_blast(nid)
-        flash(f'Email alert is being sent to {n} recipient(s) in the background…'
+        audience = _s(request.form.get('audience'))
+        audience = audience if audience in ('state', 'team') else 'all'
+        n = recipient_count(nid, audience)
+        trigger_news_blast(nid, audience)
+        flash(f'Email alert is being sent to {n} {"team member(s)" if audience == "team" else "recipient(s)"} in the background…'
               if n is not None else 'Email alert is being sent in the background…', 'success')
     except Exception as e:
         logging.error("news_send_alert: %s", e)
