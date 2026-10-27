@@ -75,7 +75,7 @@
     {% for p in prices %}
       <tr><td>{{ p.section }}</td><td>{{ p.service_label or p.service_key }}</td><td class="muted">{{ p.provider_label or 'any provider' }}</td>
         <td class="num"><b>₹{{ '{:,.0f}'.format(p.price|float) }}</b></td>
-        <td class="muted">{{ p.updated_by }} · {{ (p.updated_at|string)[:16] }}</td></tr>
+        <td class="muted">{{ p.updated_by }} · {{ p.updated_at|format_datetime }}</td></tr>
     {% else %}
       <tr><td colspan="5" class="muted" style="text-align:center;padding:18px;">No prices yet — upload the Excel above.</td></tr>
     {% endfor %}

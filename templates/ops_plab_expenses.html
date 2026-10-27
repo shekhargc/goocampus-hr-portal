@@ -53,7 +53,7 @@
   <div class="stat"><b>₹{{ '{:,.0f}'.format(tot.received) }}</b>received (ex-GST)</div>
   <div class="stat"><b>₹{{ '{:,.0f}'.format(tot.spent) }}</b>spent by GooCampus</div>
   <div class="stat"><b class="{{ 'neg' if tot.balance < 0 }}">₹{{ '{:,.0f}'.format(tot.balance) }}</b>balance</div>
-  <div class="stat"><b class="warn">₹{{ '{:,.0f}'.format(tot.estimate) }}</b>estimate — "paid by" not set</div>
+  <div class="stat"><b class="warn">{{ '{:,}'.format(tot.to_confirm) }}</b>lines "paid by" not set (₹{{ '{:,.0f}'.format(tot.estimate) }}, counted in spent)</div>
   <div class="stat"><b class="warn">{{ tot.unpriced }}</b>service lines not priced</div>
 </div>
 
@@ -70,7 +70,7 @@
   <table class="t">
     <thead><tr><th>Client Name</th><th>Registration No.</th><th>Status</th><th>Stage</th>
       <th class="num">Received (ex-GST)</th><th class="num">Spent</th><th class="num">Balance</th>
-      <th class="num">Estimate</th><th class="num">Lines</th><th class="num">Not priced</th></tr></thead>
+      <th class="num">Lines</th><th class="num" title="Lines with no 'Paid by' — counted as paid by GooCampus">Paid by not set</th><th class="num">Not priced</th></tr></thead>
     <tbody>
     {% for c in clients %}
       <tr>
@@ -79,8 +79,8 @@
         <td class="num">₹{{ '{:,.0f}'.format(c.received) }}</td>
         <td class="num">₹{{ '{:,.0f}'.format(c.spent) }}</td>
         <td class="num {{ 'neg' if c.balance < 0 }}">₹{{ '{:,.0f}'.format(c.balance) }}</td>
-        <td class="num {{ 'warn' if c.estimate }}">{{ '₹{:,.0f}'.format(c.estimate) if c.estimate else '—' }}</td>
         <td class="num">{{ c.lines }}</td>
+        <td class="num {{ 'warn' if c.to_confirm }}">{{ c.to_confirm or '—' }}</td>
         <td class="num {{ 'warn' if c.unpriced }}">{{ c.unpriced or '—' }}</td>
       </tr>
     {% else %}
@@ -89,6 +89,8 @@
     </tbody>
   </table>
 </div>
-<p class="muted" style="margin-top:.8rem;">Balance = received (ex-GST) − spent. Spent includes the Welcome kit (₹20,000) for every client whose kit is marked Given (open a client to change it). The consulting fee is not deducted yet.
-  "Estimate" = services with a price but no "Paid by" set — set it on the Services Detail page to move them into Spent (GooCampus) or ₹0 (client).</p>
+<p class="muted" style="margin-top:.8rem;"><b>Spent</b> = each client's total cost to GooCampus: actual amounts where recorded, otherwise the price list,
+  plus the Welcome kit (₹20,000) when Given (open a client to change it). Lines with no "Paid by" are counted as paid by GooCampus —
+  "Paid by not set" shows how many; mark a line "Client" on the Services Detail page to make it ₹0. Mentorship uses the price list (₹10,000 a session).
+  Balance = received (ex-GST) − spent. The consulting fee is not deducted yet.</p>
 {% endblock %}
