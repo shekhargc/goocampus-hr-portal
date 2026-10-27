@@ -305,7 +305,7 @@ def build_pdf(conn, lid, states=None):
     pdf.multi_cell(0, 4.6, _t(
         "Deemed university colleges in MCC's 2026 seat matrix, in the order GooCampus recommends "
         + ("across India" if data['list'].get('mode') == 'all_india' else "within each state") + " - based on each college's clinical exposure, faculty and standing, not on last year's cut-offs or "
-        "fees. Colleges marked 'New' are new in 2026."), new_x='LMARGIN', new_y='NEXT')
+        "fees. Colleges marked 'New' had no MCC allotment in 2025 (a new college, or one that was in its state's counselling)."), new_x='LMARGIN', new_y='NEXT')
     pdf.ln(1); pdf.set_fill_color(255, 247, 237); pdf.set_draw_color(253, 186, 116); pdf.set_text_color(124, 45, 18)
     pdf.set_font('Helvetica', '', 8.6)
     pdf.multi_cell(0, 4.6, _t('Please note: this is a suggestion from GooCampus to help you decide. Please verify '
