@@ -255,57 +255,68 @@ def _state_filter_sql(state):
             [state, state, state])
 
 
-def _recipients(conn, only_state=None, team_only=False):
-    """Everyone who should get a news alert, de-duplicated by email.
-    team_only (founder 2026-10-27): just the team — doctors flagged is_team_member + active staff.
-    - Registered doctors (pg_users) — incl. team members now (founder 2026-10-06).
-      'free' (gets the upgrade banner) = a NON-team doctor with NO active paid/counselling plan.
-    - Internal staff (active employees) — always the clean update, greeted by name, no banner.
-    Paid users, internal clients and staff all get the personalised update with no banner."""
+def _recipients(conn, doctors='all', state=None, team=False):
+    """Who gets a news alert, de-duplicated by email (founder 2026-10-27: the team is a separate tick):
+    - doctors: 'all' = every registered doctor, 'state' = only `state`'s doctors, 'none' = no doctors.
+      Doctors here NEVER include the team — no team-flagged doctor, no address of an active employee.
+    - team: also the team — doctors flagged is_team_member + active staff (employees).
+    'free' (gets the upgrade banner) = a doctor with NO active paid/counselling plan.
+    Paid users, internal clients and staff get the personalised update with no banner."""
     out, seen = [], set()
+    staff = []
     try:
-        rows = conn.execute(
-            "SELECT u.id, u.name, LOWER(TRIM(u.email)) AS email, "
-            "  COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) AS is_team, "
-            "  EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
-            "          WHERE s.user_id = u.id AND s.status = 'active' "
-            "          AND p.plan_kind IN ('paid','counselling') "
-            "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
-            "FROM pg_users u "
-            "WHERE COALESCE(u.email,'') <> '' AND strpos(u.email, '@') > 0"
-            + (" AND COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) = 1" if team_only
-               # state update: that state's doctors + team members (who always get every update)
-               else " AND (COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) = 1 OR "
-                    + _state_filter_sql(only_state)[0] + ")" if only_state else ""),
-            [] if team_only else (_state_filter_sql(only_state)[1] if only_state else [])
-        ).fetchall()
-        for r in rows:
-            r = dict(r)
-            em = (r.get("email") or "").strip()
-            if not em or "@" not in em or em in seen:
-                continue
-            seen.add(em)
-            is_free = (not r.get("is_team")) and (not r.get("has_plan"))
-            out.append({"email": em, "name": r.get("name") or "", "is_free": is_free, "user_id": r.get("id")})
+        staff = [dict(r) for r in conn.execute(
+            "SELECT name, LOWER(TRIM(email)) AS email FROM employees "
+            "WHERE is_active = 1 AND COALESCE(email,'') <> '' AND strpos(email, '@') > 0").fetchall()]
     except Exception as e:
-        logger.error("news blast recipients (doctors): %s", e)
+        logger.error("news blast recipients (staff): %s", e)
         try: conn.rollback()
         except Exception: pass
-    # Internal staff / employees — the clean update, named, no upgrade banner.
-    try:
-        for r in conn.execute(
-                "SELECT name, LOWER(TRIM(email)) AS email FROM employees "
-                "WHERE is_active = 1 AND COALESCE(email,'') <> '' AND strpos(email, '@') > 0").fetchall():
-            r = dict(r)
+    staff_emails = {(r.get("email") or "").strip() for r in staff}
+    team_sql = "COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) = 1"
+    passes = []                                   # (extra WHERE, params, is_team_pass)
+    if doctors == 'state' and state:
+        st_sql, st_params = _state_filter_sql(state)
+        passes.append((" AND NOT (" + team_sql + ") AND " + st_sql, st_params, False))
+    elif doctors != 'none':
+        passes.append((" AND NOT (" + team_sql + ")", [], False))
+    if team:
+        passes.append((" AND " + team_sql, [], True))
+    for where, params, team_pass in passes:
+        try:
+            rows = conn.execute(
+                "SELECT u.id, u.name, LOWER(TRIM(u.email)) AS email, "
+                "  COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) AS is_team, "
+                "  EXISTS (SELECT 1 FROM pg_subscriptions s JOIN pg_plans p ON p.id = s.plan_id "
+                "          WHERE s.user_id = u.id AND s.status = 'active' "
+                "          AND p.plan_kind IN ('paid','counselling') "
+                "          AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)) AS has_plan "
+                "FROM pg_users u "
+                "WHERE COALESCE(u.email,'') <> '' AND strpos(u.email, '@') > 0" + where,
+                params
+            ).fetchall()
+            for r in rows:
+                r = dict(r)
+                em = (r.get("email") or "").strip()
+                if not em or "@" not in em or em in seen:
+                    continue
+                if not team_pass and em in staff_emails:
+                    continue      # a staff member's own doctor account — team, so not in the doctor list
+                seen.add(em)
+                is_free = (not r.get("is_team")) and (not r.get("has_plan"))
+                out.append({"email": em, "name": r.get("name") or "", "is_free": is_free, "user_id": r.get("id")})
+        except Exception as e:
+            logger.error("news blast recipients (doctors): %s", e)
+            try: conn.rollback()
+            except Exception: pass
+    if team:
+        # Internal staff / employees — the clean update, named, no upgrade banner.
+        for r in staff:
             em = (r.get("email") or "").strip()
             if not em or "@" not in em or em in seen:
                 continue
             seen.add(em)
             out.append({"email": em, "name": r.get("name") or "", "is_free": False})
-    except Exception as e:
-        logger.error("news blast recipients (staff): %s", e)
-        try: conn.rollback()
-        except Exception: pass
     return out
 
 
@@ -335,7 +346,7 @@ def send_news_blast(news_id, audience=None):
             return
         if audience:
             news['email_audience'] = audience
-        recips = _recipients(conn, _audience_state(news), team_only=_is_team(news))
+        recips = _recipients(conn, *_audience(news))
     except Exception as e:
         logger.error("news blast: load failed: %s", e)
         try: conn.rollback()
@@ -382,19 +393,31 @@ def trigger_news_blast(news_id, audience=None):
         logger.error("news blast: could not start thread: %s", e)
 
 
-def _audience_state(news):
-    """The state to restrict a blast to, or None for everyone: a state-scoped news item whose
-    email_audience is 'state'."""
+def _audience(news):
+    """email_audience → (doctors, state, team) for _recipients. Stored as the doctor choice
+    ('all' | 'state' | 'none') plus '+team' when the team box is ticked, e.g. 'state+team';
+    a bare 'team' = team only. 'state' only applies to a state-scoped item (else all doctors)."""
     news = news or {}
-    if (news.get('scope') == 'state' and (news.get('state') or '').strip()
-            and (news.get('email_audience') or 'all') == 'state'):
-        return news['state'].strip()
-    return None
+    parts = set(((news.get('email_audience') or 'all').strip().lower()).split('+'))
+    team = 'team' in parts
+    doctors = parts - {'team'}
+    state = (news.get('state') or '').strip()
+    if team and (not doctors or 'none' in doctors):
+        return 'none', None, True
+    if 'none' in doctors:
+        return 'none', None, False
+    if 'state' in doctors and news.get('scope') == 'state' and state:
+        return 'state', state, team
+    return 'all', None, team
 
 
-def _is_team(news):
-    """True when the blast goes to team members only (email_audience 'team')."""
-    return ((news or {}).get('email_audience') or 'all') == 'team'
+def audience_label(audience, state=''):
+    """Plain words for the admin flash, e.g. 'Karnataka doctors + team members'."""
+    d, st, t = _audience({'email_audience': audience, 'scope': 'state' if state else '', 'state': state})
+    bits = (['all registered doctors'] if d == 'all' else [f'{st} doctors'] if d == 'state' else [])
+    if t:
+        bits.append('team members')
+    return ' + '.join(bits) or 'nobody'
 
 
 def recipient_count(news_id=None, audience=None):
@@ -409,7 +432,7 @@ def recipient_count(news_id=None, audience=None):
                 news = dict(r)
                 if audience:
                     news['email_audience'] = audience
-        return len(_recipients(conn, _audience_state(news), team_only=_is_team(news)))
+        return len(_recipients(conn, *_audience(news)))
     except Exception:
         try: conn.rollback()
         except Exception: pass
