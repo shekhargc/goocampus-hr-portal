@@ -35,6 +35,7 @@ def ensure_analytics_tables():
             ('idx_pg_user_events_created', 'created_at'),
         ]:
             conn.execute(f"CREATE INDEX IF NOT EXISTS {idx} ON pg_user_events ({cols})")
+        _ensure_login_log(conn)
         conn.commit()
         logging.info("pg_user_events table ensured")
     except Exception as e:
@@ -44,3 +45,36 @@ def ensure_analytics_tables():
     finally:
         try: conn.close()
         except Exception: pass
+
+
+def _ensure_login_log(conn):
+    conn.execute('''CREATE TABLE IF NOT EXISTS pg_login_log (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        is_new INTEGER DEFAULT 0,           -- 1 = this login created the account
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_login_log_user ON pg_login_log (user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_login_log_created ON pg_login_log (created_at)")
+
+
+def log_login(conn, user_id, is_new=False):
+    """One row per successful OTP sign-in (no history existed before 2026-10-27: OTP rows are
+    deleted and pg_users keeps only last_login_at). Never breaks the login."""
+    for attempt in range(2):
+        try:
+            conn.execute("INSERT INTO pg_login_log (user_id, is_new) VALUES (?, ?)",
+                         (user_id, 1 if is_new else 0))
+            conn.commit()
+            return
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            if attempt:
+                logging.warning("log_login: %s", e)
+                return
+            try:   # table missing (boot DDL skipped on a cold start) → create it and retry once
+                _ensure_login_log(conn); conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass

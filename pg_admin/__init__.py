@@ -530,6 +530,12 @@ def register_pg_admin(app):
     # ── Usage analytics: ingest (goocampus.in) + admin dashboard ──
     app.add_url_rule('/api/pg/track', 'api_pg_track', api_track.api_pg_track, methods=['POST'])
     app.add_url_rule('/admin/pg/analytics', 'pg_analytics', analytics_admin.analytics_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/analytics/doctors.xlsx', 'pg_analytics_doctors_xlsx',
+                     analytics_admin.analytics_doctors_xlsx, methods=['GET'])
+    # Email open pixel + click redirect (public — hit from the doctor's mail app)
+    from pg_admin import email_tracking as _email_tracking
+    app.add_url_rule('/e/o/<token>.gif', 'pg_email_open', _email_tracking.email_open, methods=['GET'])
+    app.add_url_rule('/e/c/<token>', 'pg_email_click', _email_tracking.email_click, methods=['GET'])
 
     # ── Predictor Data admin (cut-off dataset behind the goocampus.in predictor) ──
     app.add_url_rule('/admin/pg/predictor', 'pg_predictor_admin',

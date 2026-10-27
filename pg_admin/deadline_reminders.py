@@ -211,6 +211,10 @@ def run(today=None, only_email=None):
             subj, html = build_email({'name': 'Rahul Sharma'}, mine)
             summary['sent'] = 1 if send_email([only_email], '[PREVIEW] ' + subj, html) else 0
             return summary
+        from pg_admin import email_tracking as ET
+        from datetime import datetime as _dt, timedelta as _td
+        day_lbl = (today or (_dt.utcnow() + _td(hours=5, minutes=30)).date()).strftime('%d %b %Y') \
+            if not isinstance(today, str) else today
         for d, mine in targets:
             fresh = []
             for r, kind, when in mine:
@@ -224,7 +228,11 @@ def run(today=None, only_email=None):
                 summary['skipped'] += 1
                 continue
             subj, html = build_email(d, fresh)
-            if send_email([d['email']], subj, html):
+            html, tok = ET.wrap(conn, html, kind='deadline', email=d['email'], subject=subj,
+                                ref_label=f'Deadline reminders {day_lbl}', user_id=d['id'])
+            ok = send_email([d['email']], subj, html)
+            ET.mark_sent(conn, tok, ok)
+            if ok:
                 summary['sent'] += 1
             else:
                 summary['failed'] += 1

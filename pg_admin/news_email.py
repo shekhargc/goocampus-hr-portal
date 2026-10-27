@@ -282,7 +282,7 @@ def _recipients(conn, only_state=None):
                 continue
             seen.add(em)
             is_free = (not r.get("is_team")) and (not r.get("has_plan"))
-            out.append({"email": em, "name": r.get("name") or "", "is_free": is_free})
+            out.append({"email": em, "name": r.get("name") or "", "is_free": is_free, "user_id": r.get("id")})
     except Exception as e:
         logger.error("news blast recipients (doctors): %s", e)
         try: conn.rollback()
@@ -341,17 +341,28 @@ def send_news_blast(news_id):
     subject = news_subject(news)
     sent = failed = 0
     logger.info("news blast #%s → %s recipient(s)", news_id, len(recips))
-    for r in recips:
-        try:
-            html = build_news_email_html(news, r["is_free"], r.get("name"))
-            if send_email([r["email"]], subject, html):
-                sent += 1
-            else:
+    from pg_admin import email_tracking as ET
+    tconn = get_db()          # open/click tracking log (analytics)
+    try:
+        for r in recips:
+            try:
+                html = build_news_email_html(news, r["is_free"], r.get("name"))
+                html, tok = ET.wrap(tconn, html, kind="news", email=r["email"], subject=subject,
+                                    ref_id=news_id, ref_label=news.get("heading") or "",
+                                    user_id=r.get("user_id"))
+                ok = send_email([r["email"]], subject, html)
+                ET.mark_sent(tconn, tok, ok)
+                if ok:
+                    sent += 1
+                else:
+                    failed += 1
+            except Exception as e:
                 failed += 1
-        except Exception as e:
-            failed += 1
-            logger.error("news blast: send to %s failed: %s", r.get("email"), e)
-        time.sleep(0.4)   # stay under Resend's 2 req/sec cap
+                logger.error("news blast: send to %s failed: %s", r.get("email"), e)
+            time.sleep(0.4)   # stay under Resend's 2 req/sec cap
+    finally:
+        try: tconn.close()
+        except Exception: pass
     logger.info("news blast #%s done: %s sent, %s failed", news_id, sent, failed)
 
 
