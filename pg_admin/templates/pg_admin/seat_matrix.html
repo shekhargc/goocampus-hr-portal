@@ -183,7 +183,7 @@
             <td style="padding:8px 12px;">{{ r.course_name }}</td>
             <td style="padding:8px 12px;">{{ r.category_code or r.category }}</td>
             <td style="padding:8px 12px;text-align:right;font-weight:600;">{{ r.seats }}</td>
-            <td style="padding:8px 12px;white-space:nowrap;">{% if r.has_cutoff == 1 %}{{ '{:,}'.format(r.cr_closing) if r.cr_closing else '—' }}{% elif r.has_cutoff == 0 %}<span style="font-size:0.72rem;color:#9a3412;background:#fff7ed;padding:1px 7px;border-radius:10px;">{{ 'New college' if r.new_reason == 'new_college' else 'New in 2026' }}</span>{% endif %}</td>
+            <td style="padding:8px 12px;white-space:nowrap;">{% if r.has_cutoff == 1 %}{{ '{:,}'.format(r.cr_closing) if r.cr_closing else '—' }}{% elif r.has_cutoff == 0 %}<span style="font-size:0.72rem;color:#9a3412;background:#fff7ed;padding:1px 7px;border-radius:10px;">{{ 'No 2025 MCC result' if r.new_reason == 'new_college' else 'New in 2026' }}</span>{% endif %}</td>
           </tr>
           {% else %}
           <tr><td colspan="9" style="padding:14px;color:var(--gray-400);">No rows match those filters.</td></tr>

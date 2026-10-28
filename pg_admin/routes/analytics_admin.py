@@ -16,6 +16,7 @@ from core.users import get_user
 from core.auth import login_required
 
 IST = "INTERVAL '330 minutes'"
+LIVE_MINUTES = 5          # "Live now" = any dashboard activity in the last 5 minutes
 TEAM_SQL = "COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) = 1"
 
 SECTION_LABELS = {
@@ -149,6 +150,27 @@ def analytics_admin():
         data['logins'] = one(f"SELECT COUNT(*) AS c, COUNT(DISTINCT l.user_id) AS doctors FROM pg_login_log l "
                              f"JOIN pg_users u ON u.id = l.user_id WHERE {uf} AND {_tw('l.created_at', d)}")
         data['login_since'] = one("SELECT MIN(created_at) AS a FROM pg_login_log").get('a')
+
+        # Today (IST) + live now — always, whatever the period pills say (founder 2026-10-28)
+        today = f"(x.created_at + {IST})::date = (CURRENT_TIMESTAMP + {IST})::date"
+        t = one(f"SELECT COUNT(DISTINCT x.user_id) AS doctors, COUNT(*) FILTER (WHERE x.k = 'e') AS actions FROM ("
+                f"  SELECT user_id, created_at, 'e' AS k FROM pg_user_events WHERE user_id IS NOT NULL "
+                f"  UNION ALL SELECT user_id, created_at, 'l' FROM pg_login_log WHERE user_id IS NOT NULL) x "
+                f"JOIN pg_users u ON u.id = x.user_id WHERE {uf} AND {today}")
+        data['today'] = {'doctors': t.get('doctors') or 0, 'actions': t.get('actions') or 0,
+                         'signups': one(f"SELECT COUNT(*) AS c FROM pg_users u WHERE {uf} AND "
+                                        f"{today.replace('x.created_at', 'u.created_at')}")['c']}
+        # live = did something on the dashboard in the last LIVE_MINUTES (opening a section, a search, a filter…)
+        live = rows(f"SELECT u.id, u.name, ({TEAM_SQL}) AS is_team, MAX(x.created_at) AS at FROM ("
+                    f"  SELECT user_id, created_at FROM pg_user_events WHERE user_id IS NOT NULL "
+                    f"  UNION ALL SELECT user_id, created_at FROM pg_login_log WHERE user_id IS NOT NULL) x "
+                    f"JOIN pg_users u ON u.id = x.user_id WHERE {uf} "
+                    f"AND x.created_at > CURRENT_TIMESTAMP - INTERVAL '{LIVE_MINUTES} minutes' "
+                    f"GROUP BY u.id, u.name ORDER BY MAX(x.created_at) DESC")
+        from core.helpers import format_dr_name
+        data['live'] = {'n': len(live), 'minutes': LIVE_MINUTES,
+                        'names': [(r['name'] if r['is_team'] else format_dr_name(r['name'])) if (r.get('name') or '').strip()
+                                  else 'Doctor #' + str(r['id']) for r in live[:4]]}
 
         # How often doctors come back (visit days inside the window)
         per = rows(f"WITH {V} SELECT days, COUNT(*) AS n FROM per GROUP BY days")

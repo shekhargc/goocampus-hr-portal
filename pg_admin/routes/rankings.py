@@ -16,6 +16,7 @@ import base64
 import logging
 import threading
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from flask import request, jsonify, Response
@@ -140,6 +141,7 @@ def rankings_data(conn, speciality=''):
     news = sorted(new_by_code.values(), key=lambda x: (x['state'], x['college']))
     for n in news:
         n['seats'] = sum(n['seats_by_list'].values())
+    _add_2025_notes(conn, news, bodies)
     return {'lists': lists, 'new_colleges': news, 'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
 
 
@@ -233,25 +235,91 @@ def build_rankings_pdf(conn, speciality=''):
     return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026' + (('_' + slug) if slug else '') + '.pdf'
 
 
+NOTE_MATCH_MIN = 0.6
+_GENERIC = {'government', 'govt', 'medical', 'college', 'colleges', 'hospital', 'hospitals', 'institute', 'institutes',
+            'sciences', 'science', 'research', 'centre', 'center', 'and', 'of', 'the', 'gmc', 'mch', 'health',
+            'university', 'faculty', 'district', 'state', 'post', 'graduate', 'pg', 'education', 'general',
+            'j', 'k', 'jk', 'south', 'north', 'east', 'west', 'road', 'india'}
+
+
+def _distinct(name, state=''):
+    """The words that tell one college from another (place / founder names), minus generic and state words."""
+    from pg_admin import name_memory as NM
+    return set(NM.norm(name).split()) - _GENERIC - set(NM.norm(state).split()) - {t for t in NM.norm(name).split() if t.isdigit()}
+
+
+def _add_2025_notes(conn, news, bodies):
+    """note per new-to-MCC college: 'In 2025: Tamil Nadu state counselling' when another authority had it in
+    2025, else 'New college' (founder 2026-10-27, option B). Matched by name through the name memory, and only
+    trusted when that 2025 college is in the same state — otherwise no note rather than a wrong one."""
+    if not news:
+        return
+    try:
+        from pg_admin import name_memory as NM
+        from pg_admin.routes.results_api import _was_in_note
+        ph = ','.join(['?'] * len(bodies))
+        full = {r['college_code']: r['name'] for r in conn.execute(
+            f"SELECT college_code, MAX(college_name) AS name FROM pg_seat_matrix WHERE counselling_body IN ({ph}) "
+            f"AND college_code = ANY(?) GROUP BY college_code", bodies + [[n['college_code'] for n in news]]).fetchall()}
+        hits = NM.resolve(conn, 'college', list(full.values()), learn=False)
+        known = defaultdict(lambda: (set(), set()))       # 2025 institute → (authorities, states)
+        for c in conn.execute("SELECT DISTINCT institute, authority, state FROM pg_cutoffs "
+                              "WHERE year=2025 AND COALESCE(institute,'')<>''").fetchall():
+            known[c['institute']][0].add(c['authority'] or '')
+            known[c['institute']][1].add((c['state'] or '').strip().lower())
+        by_state = defaultdict(list)
+        for inst, (_a, sts) in known.items():
+            for st in sts:
+                by_state[st].append(inst)
+        for n in news:
+            std = (hits.get(full.get(n['college_code']) or '') or {}).get('std') or ''
+            if not std and full.get(n['college_code']):
+                # not in the name memory: closest 2025 college IN THE SAME STATE (the note only names the
+                # counselling, so a near-namesake in that state still gives the right answer)
+                st_l = (n['state'] or '').strip().lower()
+                own = _distinct(full[n['college_code']], st_l)
+                cands = NM._Index(by_state.get(st_l, [])).best(full[n['college_code']], 3)
+                # must share a distinctive word (Karpaga, Srinivasan…) — "Government Medical College" alone
+                # would tie a brand-new GMC to an old one in the same state
+                cands = [c for c in cands if c[0] >= NOTE_MATCH_MIN and own & _distinct(c[1], st_l)]
+                if cands:
+                    std = cands[0][1]
+            auths, states = known[std] if std in known else (set(), set())
+            if not std:
+                n['note'] = ''                     # name not recognised — say nothing rather than guess
+            elif std not in known:
+                n['note'] = 'New college'          # a College Database college with no 2025 cut-off anywhere
+            elif (n['state'] or '').strip().lower() in states:
+                n['note'] = _was_in_note(auths - {'MCC (All India)'})
+            else:
+                n['note'] = ''
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.warning("rankings 2025 notes: %s", e)
+
+
 def build_new_colleges_pdf(conn):
     from pg_admin.choice_pdf import _t, _GREY
     data = rankings_data(conn)
-    pdf = _pdf_base('New colleges in 2026', 'MCC PG counselling · colleges with no previous allotment')
+    pdf = _pdf_base('New in 2026', 'MCC PG counselling · colleges with no MCC allotment in 2025')
     pdf.set_font('Helvetica', '', 8.8); pdf.set_text_color(*_GREY)
     pdf.multi_cell(0, 4.6, _t(
-        "These colleges appear in MCC's 2026 seat matrix for the first time, so there is no previous year's "
-        'allotment to judge them by. We have not graded them - look at each one on its own merits (hospital, '
+        "These colleges are in MCC's 2026 seat matrix but had no MCC allotment in 2025, so there is no MCC rank "
+        "from last year to judge them by. Some are new colleges; others were in their state's counselling in "
+        "2025 (see 'In 2025'). We have not graded them - look at each one on its own merits (hospital, "
         'faculty, location) before adding it to your choices.'), new_x='LMARGIN', new_y='NEXT')
     pdf.ln(3)
     rows = data['new_colleges']
     if rows:
-        _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], ', '.join(r['lists']), str(r['seats'])]
+        _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], ', '.join(r['lists']),
+                      (r.get('note') or '').replace('In 2025: ', ''), str(r['seats'])]
                      for i, r in enumerate(rows, start=1)],
-               ('#', 'College', 'State', 'Type', 'Seat lists', '2026 seats'), (8, 66, 26, 30, 42, 14),
-               ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
+               ('#', 'College', 'State', 'Type', 'Seat lists', 'In 2025', '2026 seats'), (8, 52, 22, 24, 34, 32, 14),
+               ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
     else:
         pdf.set_font('Helvetica', 'I', 10)
-        pdf.cell(0, 8, 'No new colleges in this year\'s MCC seat matrix.', new_x='LMARGIN', new_y='NEXT')
+        pdf.cell(0, 8, 'Every college in this year\'s MCC seat matrix had an MCC allotment in 2025.', new_x='LMARGIN', new_y='NEXT')
     return bytes(pdf.output()), 'GooCampus_New_Colleges_2026.pdf'
 
 

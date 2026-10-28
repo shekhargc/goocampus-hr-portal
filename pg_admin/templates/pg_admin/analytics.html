@@ -57,6 +57,14 @@
   </div>
   {% endmacro %}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    {% set tdy = d.today or {} %}{% set lv = d.live or {} %}
+    {{ stat('Today', '{:,}'.format(tdy.doctors or 0) ~ ' doctors', '{:,}'.format(tdy.actions or 0) ~ ' actions · ' ~ '{:,}'.format(tdy.signups or 0) ~ ' new sign-ups') }}
+    <div style="{{ card }}" title="Doctors who did anything on the dashboard (opened a section, searched, filtered, signed in) in the last {{ lv.minutes or 5 }} minutes. Someone just reading a page without clicking is not counted.">
+      <p style="margin:0 0 0.35rem;font-size:0.66rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{{ '#16a34a' if lv.n else '#9ca3af' }};margin-right:5px;vertical-align:1px;"></span>Live now</p>
+      <p style="margin:0;font-size:1.5rem;font-weight:800;color:var(--navy);">{{ lv.n or 0 }}</p>
+      <p style="margin:0.2rem 0 0;font-size:0.74rem;color:var(--gray-500);">{% if lv.names %}{{ lv.names|join(', ') }}{% if lv.n > lv.names|length %} +{{ lv.n - lv.names|length }} more{% endif %}{% else %}active in the last {{ lv.minutes or 5 }} min{% endif %}</p>
+    </div>
     {{ stat('Registered doctors', '{:,}'.format(d.registered or 0), '+' ~ '{:,}'.format(d.new_signups or 0) ~ (' new in this period' if d.days != 'all' else ' all time')) }}
     {{ stat('Used the dashboard', '{:,}'.format(d.active or 0), pct(d.active, d.registered) ~ ' of registered') }}
     {{ stat('Came back (2+ days)', '{:,}'.format(d.returning or 0), pct(d.returning, d.active) ~ ' of those who used it') }}
