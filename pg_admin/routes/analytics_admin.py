@@ -33,6 +33,10 @@ EMAIL_KINDS = {'news': 'News alert', 'deadline': 'Deadline reminder', 'announcem
                'rankings': 'Rankings email'}
 CATEGORY_LABELS = {'paid': 'Paid', 'free': 'Free', 'internal': 'Internal client', 'team': 'Team'}
 BUCKETS = [('1 day', 1, 1), ('2 days', 2, 2), ('3–5 days', 3, 5), ('6–10 days', 6, 10), ('11+ days', 11, 10 ** 6)]
+# A "visit" = a burst of activity; a new one starts after VISIT_GAP_MIN minutes of nothing (GA rule)
+VISIT_GAP_MIN = 30
+VISIT_BUCKETS = [('1 visit', 1, 1), ('2 visits', 2, 2), ('3–5 visits', 3, 5), ('6–10 visits', 6, 10),
+                 ('11–20 visits', 11, 20), ('21+ visits', 21, 10 ** 6)]
 
 
 def section_label(k):
@@ -73,12 +77,18 @@ def _ensure(conn):
 
 
 def _visits_cte(d, uf):
-    """per(user_id, days) — visit days inside the window, team filtered."""
-    return (f"v AS (SELECT e.user_id, (e.created_at + {IST})::date AS d FROM pg_user_events e "
+    """per(user_id, days, visits) — visit days and visits inside the window, team filtered.
+    A visit starts on any activity after VISIT_GAP_MIN minutes of none (or the first in the window)."""
+    return (f"raw AS (SELECT e.user_id, e.created_at FROM pg_user_events e "
             f"      WHERE e.user_id IS NOT NULL AND {_tw('e.created_at', d)} "
-            f"      UNION SELECT l.user_id, (l.created_at + {IST})::date FROM pg_login_log l "
+            f"      UNION ALL SELECT l.user_id, l.created_at FROM pg_login_log l "
             f"      WHERE l.user_id IS NOT NULL AND {_tw('l.created_at', d)}), "
-            f"per AS (SELECT v.user_id, COUNT(*) AS days FROM v JOIN pg_users u ON u.id = v.user_id "
+            f"v AS (SELECT DISTINCT user_id, (created_at + {IST})::date AS d FROM raw), "
+            f"gap AS (SELECT user_id, CASE WHEN created_at - LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) "
+            f"        < INTERVAL '{int(VISIT_GAP_MIN)} minutes' THEN 0 ELSE 1 END AS starts FROM raw), "
+            f"sv AS (SELECT user_id, SUM(starts) AS visits FROM gap GROUP BY user_id), "
+            f"per AS (SELECT v.user_id, COUNT(*) AS days, MAX(sv.visits) AS visits FROM v "
+            f"        JOIN pg_users u ON u.id = v.user_id LEFT JOIN sv ON sv.user_id = v.user_id "
             f"        WHERE {uf} GROUP BY v.user_id)")
 
 
@@ -96,13 +106,13 @@ def _doctor_rows(conn, d, uf, limit=None, active_only=True):
            f"         AND COALESCE(TRIM(section),'') <> '' AND {_tw('created_at', d)} GROUP BY 1, 2) t "
            f"       ORDER BY user_id, c DESC) "
            f"SELECT u.id, u.name, u.mobile, u.email, u.state, u.created_at, ({_category_case('u')}) AS cat, "
-           f"  COALESCE(per.days, 0) AS days, COALESCE(ev.actions, 0) AS actions, COALESCE(ev.sections, 0) AS sections, "
+           f"  COALESCE(per.days, 0) AS days, COALESCE(per.visits, 0) AS visits, COALESCE(ev.actions, 0) AS actions, COALESCE(ev.sections, 0) AS sections, "
            f"  fav.section AS fav, COALESCE(lg.logins, 0) AS logins, "
            f"  GREATEST(ev.last_seen, lg.last_login) AS last_seen "
            f"FROM pg_users u LEFT JOIN per ON per.user_id = u.id LEFT JOIN ev ON ev.user_id = u.id "
            f"LEFT JOIN lg ON lg.user_id = u.id LEFT JOIN fav ON fav.user_id = u.id "
            f"WHERE {uf} {'AND per.user_id IS NOT NULL' if active_only else ''} "
-           f"ORDER BY COALESCE(per.days,0) DESC, COALESCE(ev.actions,0) DESC, u.id"
+           f"ORDER BY COALESCE(per.days,0) DESC, COALESCE(per.visits,0) DESC, COALESCE(ev.actions,0) DESC, u.id"
            + (f" LIMIT {int(limit)}" if limit else ""))
     out = []
     for r in conn.execute(sql).fetchall():
@@ -140,9 +150,13 @@ def analytics_admin():
         data['new_signups'] = one(f"SELECT COUNT(*) AS c FROM pg_users u WHERE {uf} AND {_tw('u.created_at', d)}")['c']
         s = one(f"WITH {V} SELECT COUNT(*) AS active, COUNT(*) FILTER (WHERE days >= 2) AS ret, "
                 f"COUNT(*) FILTER (WHERE days >= 3) AS ret3, COUNT(*) FILTER (WHERE days = 1) AS once, "
-                f"ROUND(AVG(days)::numeric, 1) AS avg_days FROM per")
+                f"ROUND(AVG(days)::numeric, 1) AS avg_days, "
+                f"COUNT(*) FILTER (WHERE visits >= 2) AS v2, COUNT(*) FILTER (WHERE visits >= 5) AS v5, "
+                f"COUNT(*) FILTER (WHERE visits >= 10) AS v10, ROUND(AVG(visits)::numeric, 1) AS avg_visits FROM per")
         data.update(active=s.get('active') or 0, returning=s.get('ret') or 0, returning3=s.get('ret3') or 0,
-                    once=s.get('once') or 0, avg_days=s.get('avg_days') or 0)
+                    once=s.get('once') or 0, avg_days=s.get('avg_days') or 0,
+                    visits2=s.get('v2') or 0, visits5=s.get('v5') or 0, visits10=s.get('v10') or 0,
+                    avg_visits=s.get('avg_visits') or 0, visit_gap=VISIT_GAP_MIN)
         data['never'] = one(
             f"SELECT COUNT(*) AS c FROM pg_users u WHERE {uf} "
             f"AND NOT EXISTS (SELECT 1 FROM pg_user_events e WHERE e.user_id = u.id) "
@@ -181,6 +195,11 @@ def analytics_admin():
                            'n': (data['never'] if not d else max(0, data['registered'] - data['active'])),
                            'muted': True})
         data['buckets'] = buckets
+        # How many times doctors came (visits inside the window) — same "did not visit" row first
+        pv = rows(f"WITH {V} SELECT visits, COUNT(*) AS n FROM per GROUP BY visits")
+        vb = [{'label': lbl, 'n': sum(x['n'] for x in pv if lo <= (x['visits'] or 0) <= hi)}
+              for lbl, lo, hi in VISIT_BUCKETS]
+        data['visit_buckets'] = [dict(buckets[0])] + vb
 
         # Daily trend (IST days): doctors active, new sign-ups, actions
         n = min(d or 90, 90)
@@ -313,7 +332,7 @@ def analytics_doctors_xlsx():
     def ist(v):
         return (v + timedelta(hours=5, minutes=30)).strftime('%d-%b-%Y %I:%M %p') if v else ''
     wb = Workbook(); ws = wb.active; ws.title = 'Doctor usage'
-    ws.append(['Name', 'Mobile', 'Email', 'Type', 'Home state', 'Signed up (IST)', 'Visit days',
+    ws.append(['Name', 'Mobile', 'Email', 'Type', 'Home state', 'Signed up (IST)', 'Visit days', 'Visits',
                'Actions', 'Sections used', 'Most-used section', 'Sign-ins (tracked from 27 Oct 2026)',
                'Last seen (IST)'])
     for c in ws[1]:
@@ -322,7 +341,7 @@ def analytics_doctors_xlsx():
         nm = r.get('name') or ''
         ws.append([clean(nm if r['cat'] == 'team' else format_dr_name(nm)), r.get('mobile') or '',
                    clean(r.get('email') or ''), r['cat_label'], clean(r.get('state') or ''), ist(r.get('created_at')),
-                   r['days'], r['actions'], r['sections'], r['fav_label'], r['logins'], ist(r.get('last_seen'))])
+                   r['days'], r['visits'], r['actions'], r['sections'], r['fav_label'], r['logins'], ist(r.get('last_seen'))])
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     lbl = 'all-time' if not d else f'last-{d}-days'
     return send_file(buf, as_attachment=True, download_name=f'goocampus-doctor-usage-{lbl}.xlsx',

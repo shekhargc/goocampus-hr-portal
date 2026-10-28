@@ -70,6 +70,10 @@
     {{ stat('Came back (2+ days)', '{:,}'.format(d.returning or 0), pct(d.returning, d.active) ~ ' of those who used it') }}
     {{ stat('Came back (3+ days)', '{:,}'.format(d.returning3 or 0), pct(d.returning3, d.active) ~ ' of those who used it') }}
     {{ stat('Visited only once', '{:,}'.format(d.once or 0), 'avg ' ~ (d.avg_days or 0) ~ ' visit days per doctor') }}
+    {{ stat('Came 2+ times', '{:,}'.format(d.visits2 or 0), pct(d.visits2, d.active) ~ ' of those who used it') }}
+    {{ stat('Came 5+ times', '{:,}'.format(d.visits5 or 0), pct(d.visits5, d.active) ~ ' of those who used it') }}
+    {{ stat('Came 10+ times', '{:,}'.format(d.visits10 or 0), pct(d.visits10, d.active) ~ ' of those who used it') }}
+    {{ stat('Average visits', (d.avg_visits or 0)|string, 'per doctor who used it') }}
     {% set et = d.email_tot or {} %}
     {{ stat('Emails opened', pct(et.opened, et.sent) if et.sent else '—', ('{:,}'.format(et.opened or 0) ~ ' of ' ~ '{:,}'.format(et.sent or 0) ~ ' · ' ~ pct(et.clicked, et.sent) ~ ' clicked') if et.sent else 'tracking starts with the next email') }}
   </div>
@@ -87,6 +91,23 @@
           <span style="color:var(--gray-600);font-variant-numeric:tabular-nums;">{{ '{:,}'.format(b.n) }} · {{ pct(b.n, d.registered) }}</span>
         </div>
         <div class="an-bar"><span style="width:{{ (b.n / (bmax or 1) * 100)|round|int }}%;{{ 'background:var(--gray-300);' if b.muted }}"></span></div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- visit-count buckets -->
+    <div style="{{ card }}">
+      <h3 style="{{ h3 }}">How many times doctors came</h3>
+      <p style="{{ sub }}">Registered doctors by number of visits {{ 'in this period' if d.days != 'all' else '(all time)' }}.
+        A new visit starts when a doctor comes back after {{ d.visit_gap or 30 }}+ minutes away — no sign-in needed.</p>
+      {% set vmax = (d.visit_buckets|map(attribute='n')|max) if d.visit_buckets else 1 %}
+      {% for b in d.visit_buckets or [] %}
+      <div style="margin-bottom:0.6rem;">
+        <div style="display:flex;justify-content:space-between;font-size:0.83rem;margin-bottom:3px;">
+          <span style="color:{{ 'var(--gray-500)' if b.muted else 'var(--navy)' }};font-weight:600;">{{ b.label }}</span>
+          <span style="color:var(--gray-600);font-variant-numeric:tabular-nums;">{{ '{:,}'.format(b.n) }} · {{ pct(b.n, d.registered) }}</span>
+        </div>
+        <div class="an-bar"><span style="width:{{ (b.n / (vmax or 1) * 100)|round|int }}%;{{ 'background:var(--gray-300);' if b.muted }}"></span></div>
       </div>
       {% endfor %}
     </div>
@@ -161,7 +182,7 @@
     </div>
     <div style="overflow-x:auto;">
     <table class="an-tbl">
-      <thead><tr><th style="{{ hs }}">#</th><th style="{{ hs }}">Doctor</th><th style="{{ hs }}">Type</th><th style="{{ hs }}{{ num }}">Visit days</th>
+      <thead><tr><th style="{{ hs }}">#</th><th style="{{ hs }}">Doctor</th><th style="{{ hs }}">Type</th><th style="{{ hs }}{{ num }}">Visit days</th><th style="{{ hs }}{{ num }}">Visits</th>
         <th style="{{ hs }}{{ num }}">Actions</th><th style="{{ hs }}{{ num }}">Sections</th><th style="{{ hs }}">Most used</th>
         <th style="{{ hs }}{{ num }}">Sign-ins</th><th style="{{ hs }}">Last seen</th></tr></thead>
       <tbody>
@@ -172,13 +193,14 @@
             {% if r.state %}<span style="color:var(--gray-400);font-size:0.74rem;"> · {{ r.state }}</span>{% endif %}</td>
           <td style="{{ td }}"><span class="an-pill {{ r.cat }}">{{ r.cat_label }}</span></td>
           <td style="{{ td }}{{ num }}font-weight:700;">{{ r.days }}</td>
+          <td style="{{ td }}{{ num }}">{{ r.visits }}</td>
           <td style="{{ td }}{{ num }}">{{ '{:,}'.format(r.actions) }}</td>
           <td style="{{ td }}{{ num }}">{{ r.sections }}</td>
           <td style="{{ td }}color:var(--gray-600);">{{ r.fav_label or '—' }}</td>
           <td style="{{ td }}{{ num }}">{{ r.logins }}</td>
           <td style="{{ td }}color:var(--gray-500);white-space:nowrap;">{{ r.last_seen|format_datetime if r.last_seen else '—' }}</td></tr>
       {% else %}
-        <tr><td colspan="9" style="{{ td }}color:var(--gray-400);text-align:center;">No doctor activity in this period.</td></tr>
+        <tr><td colspan="10" style="{{ td }}color:var(--gray-400);text-align:center;">No doctor activity in this period.</td></tr>
       {% endfor %}
       </tbody>
     </table>
