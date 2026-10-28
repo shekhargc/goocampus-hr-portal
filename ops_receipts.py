@@ -14,7 +14,6 @@ from datetime import datetime, timedelta
 from fpdf import FPDF
 
 _LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logo-full.png')
-_LOGO_WHITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logo-white.png')
 _NAVY = (15, 27, 51)
 _ORANGE = (234, 108, 30)
 _GRAY = (100, 110, 125)
@@ -178,28 +177,28 @@ def build_pdf(r, pathway_label='', _compact=False):
     from core.helpers import format_dr_name
     pdf = FPDF(format='A4')
     pdf.set_auto_page_break(True, margin=27)
-    hb = 40 if _compact else 48       # header band height
+    hb = 40 if _compact else 48       # header height (orange rule sits here)
     pdf.set_margins(16, 14, 16)
     pdf.add_page()
     W, L = pdf.w - 32, 16
     cancelled = (r.get('status') or 'active') == 'cancelled'
 
-    # Header band
-    pdf.set_fill_color(*_NAVY); pdf.rect(0, 0, pdf.w, hb, 'F')
-    pdf.set_fill_color(*_ORANGE); pdf.rect(0, hb, pdf.w, 2.2, 'F')
+    # Header: white, colour logo left, title + number right, orange rule (founder: keep it light)
     try:
-        pdf.image(_LOGO_WHITE, x=L, y=8, h=hb - 18)
+        pdf.image(_LOGO, x=L, y=10, h=hb - 20)
     except Exception as e:
         logging.warning("receipt logo: %s", e)
     issued = r.get('created_at')
     issued = (issued + timedelta(hours=5, minutes=30)) if isinstance(issued, datetime) else issued
-    pdf.set_xy(L, 8 if _compact else 11)
-    pdf.set_font('Helvetica', 'B', 24); pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(L, 10 if _compact else 13)
+    pdf.set_font('Helvetica', 'B', 24); pdf.set_text_color(*_NAVY)
     pdf.cell(W, 11, 'PAYMENT RECEIPT', align='R', new_x='LMARGIN', new_y='NEXT')
     pdf.ln(2)
-    pdf.set_font('Helvetica', '', 11); pdf.set_text_color(214, 222, 235)
+    pdf.set_font('Helvetica', '', 11); pdf.set_text_color(*_GRAY)
     pdf.cell(W, 6.5, _latin(f"Receipt No:  {r['receipt_no']}"), align='R', new_x='LMARGIN', new_y='NEXT')
     pdf.cell(W, 6.5, _latin(f"Date issued:  {_date(issued)}"), align='R', new_x='LMARGIN', new_y='NEXT')
+    pdf.set_draw_color(*_ORANGE); pdf.set_line_width(1.0)
+    pdf.line(L, hb, L + W, hb)
     y = hb + (8 if _compact else 12)
 
     if cancelled:
