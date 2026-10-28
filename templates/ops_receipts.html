@@ -1,0 +1,320 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Receipts - Operations{% endblock %}
+{% block ops_content %}
+{% set can_add = can_use_route('ops_receipt_add') %}
+{% set can_edit = can_use_route('ops_receipt_edit') %}
+<style>
+  .rc-btn{display:inline-block;padding:6px 11px;border-radius:6px;font-weight:600;font-size:12.5px;text-decoration:none;cursor:pointer;border:1px solid var(--gray-300);background:#fff;color:var(--navy);white-space:nowrap}
+  .rc-btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .rc-btn.orange{background:var(--orange);color:#fff;border-color:var(--orange)}
+  .rc-tbl{width:100%;border-collapse:collapse;font-size:0.86rem;min-width:980px}
+  .rc-tbl th{padding:10px 12px;text-align:left;color:var(--gray-500);border-bottom:2px solid var(--gray-100);font-size:0.78rem;text-transform:uppercase;letter-spacing:0.3px}
+  .rc-tbl td{padding:10px 12px;border-bottom:1px solid var(--gray-100);vertical-align:top}
+  .rc-tbl tr.cancelled td{color:var(--gray-400)}
+  .rc-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+  .rc-drawer-bg{display:none;position:fixed;inset:0;background:rgba(15,27,51,0.35);z-index:1000}
+  .rc-drawer{position:fixed;top:0;right:0;height:100%;width:min(520px,100%);background:#fff;box-shadow:-6px 0 24px rgba(0,0,0,0.15);z-index:1001;transform:translateX(105%);transition:transform .2s ease;display:flex;flex-direction:column}
+  .rc-drawer.open{transform:none}
+  .rc-drawer header{padding:16px 20px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+  .rc-drawer .body{padding:16px 20px;overflow-y:auto;flex:1}
+  .rc-drawer footer{padding:12px 20px;border-top:1px solid var(--gray-100);display:flex;gap:10px;justify-content:flex-end}
+  .rc-f{margin-bottom:12px}
+  .rc-f label{display:block;font-size:0.78rem;font-weight:700;color:var(--gray-600);margin-bottom:4px}
+  .rc-f input,.rc-f select,.rc-f textarea{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--gray-200);border-radius:7px;font-size:0.9rem;font-family:inherit}
+  .rc-f .hint{font-size:0.74rem;color:var(--gray-500);margin-top:3px}
+  .rc-row{display:flex;gap:12px}.rc-row .rc-f{flex:1}
+  .rc-sugg{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid var(--gray-200);border-radius:0 0 7px 7px;box-shadow:0 6px 14px rgba(0,0,0,0.1);z-index:5;max-height:240px;overflow-y:auto}
+  .rc-sugg div{padding:8px 10px;cursor:pointer;font-size:0.86rem;border-bottom:1px solid var(--gray-100)}
+  .rc-sugg div:hover,.rc-sugg div.hl{background:var(--gray-50)}
+  .rc-sugg small{color:var(--gray-500)}
+  .rc-box{background:var(--gray-50);border:1px solid var(--gray-100);border-radius:8px;padding:12px;margin-top:6px}
+  .rc-log{font-size:0.8rem;border-left:2px solid var(--gray-200);padding:2px 0 8px 10px;margin-left:4px}
+  .rc-log b{color:var(--navy)}
+</style>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+    <div>
+      <h1 style="margin:0;font-size:1.35rem;font-weight:700;color:var(--navy);">Receipts</h1>
+      <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);max-width:760px;">
+        Payment receipts for clients across all pathways. Each receipt gets a permanent number; it can be emailed as a
+        GooCampus PDF or downloaded. Mistakes can be edited (the number never changes) or the receipt cancelled.
+        <b>{{ total }}</b> receipt{{ '' if total == 1 else 's' }} so far.
+      </p>
+    </div>
+    {% if can_add %}<button type="button" class="rc-btn orange" style="padding:9px 18px;font-size:0.9rem;" onclick="rcOpen(null)">+ New Receipt</button>{% endif %}
+  </div>
+
+  <form method="GET" style="background:#fff;border-radius:12px;padding:14px 18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+    <div class="autocomplete-wrap" style="flex:1;min-width:240px;">
+      <input type="search" id="ops-search" name="q" value="{{ q }}" data-pathway="all" autocomplete="off"
+             placeholder="Search by doctor name, receipt number or registration number…"
+             style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:0.9rem;">
+      <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
+    <select name="status" onchange="this.form.submit()" style="padding:9px 10px;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;">
+      <option value="" {{ 'selected' if not status }}>All receipts</option>
+      <option value="active" {{ 'selected' if status == 'active' }}>Active only</option>
+      <option value="cancelled" {{ 'selected' if status == 'cancelled' }}>Cancelled only</option>
+    </select>
+    <button type="submit" style="padding:9px 20px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:0.88rem;cursor:pointer;">Search</button>
+    {% if q or status %}<a href="{{ url_for('ops_receipts') }}" style="color:var(--gray-500);text-decoration:none;font-size:0.85rem;">Clear</a>{% endif %}
+  </form>
+  {% include '_ops_name_search.html' %}
+
+  <div style="background:#fff;border-radius:12px;padding:6px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow-x:auto;">
+    <table class="rc-tbl">
+      <thead><tr>
+        <th>Receipt No</th><th>Doctor</th><th>For</th><th style="text-align:right;">Amount (₹)</th>
+        <th>Date paid</th><th>Mode</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="{{ 'cancelled' if r.status == 'cancelled' }}">
+          <td style="white-space:nowrap;font-weight:700;color:var(--navy);">{{ r.receipt_no }}
+            <div style="font-weight:400;font-size:0.75rem;color:var(--gray-500);">{{ r.created_at|format_date }} · {{ r.created_by_name or '—' }}</div></td>
+          <td><span style="font-weight:600;color:var(--navy);">{{ r.display_name or '—' }}</span>
+            <div style="font-size:0.75rem;color:var(--gray-500);">{{ r.pathway_label }}{% if r.registration_number %} · {{ r.registration_number|format_reg }}{% endif %}</div></td>
+          <td style="max-width:260px;">{{ r.service }}</td>
+          <td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;">{{ r.amount_fmt }}</td>
+          <td style="white-space:nowrap;">{{ r.paid_on|format_date }}</td>
+          <td style="font-size:0.8rem;">{{ r.payment_mode or '—' }}{% if r.payment_ref %}<div style="color:var(--gray-500);">{{ r.payment_ref }}</div>{% endif %}</td>
+          <td style="white-space:nowrap;">
+            {% if r.status == 'cancelled' %}<span class="rc-badge" style="background:#FEE2E2;color:#B91C1C;">Cancelled</span>
+            {% elif r.last_sent_at %}<span class="rc-badge" style="background:#DCFCE7;color:#15803D;">Sent</span>
+              <div style="font-size:0.72rem;color:var(--gray-500);margin-top:3px;">{{ r.last_sent_at|format_datetime }}</div>
+            {% else %}<span class="rc-badge" style="background:var(--gray-100);color:var(--gray-600);">Not sent</span>{% endif %}
+            {% if r.updated_at %}<div style="font-size:0.72rem;color:var(--gray-500);margin-top:3px;">edited by {{ r.updated_by_name }}</div>{% endif %}
+          </td>
+          <td style="white-space:nowrap;text-align:right;">
+            <a class="rc-btn" href="{{ url_for('ops_receipt_pdf', rid=r.id) }}" target="_blank">View PDF</a>
+            <a class="rc-btn" href="{{ url_for('ops_receipt_pdf', rid=r.id, dl=1) }}">Download</a>
+            {% if can_edit and r.status != 'cancelled' %}<button type="button" class="rc-btn primary" onclick="rcSend({{ r.id }})">Send</button>{% endif %}
+            {% if can_edit %}<button type="button" class="rc-btn" onclick="rcOpen({{ r.id }})">Edit</button>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" style="padding:24px;text-align:center;color:var(--gray-400);">
+          {% if q or status %}No receipts match.{% else %}No receipts yet. Click <b>+ New Receipt</b> to create the first one.{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- New / edit drawer -->
+<div class="rc-drawer-bg" id="rcBg" onclick="rcClose()"></div>
+<form class="rc-drawer" id="rcDrawer" method="POST" autocomplete="off" onsubmit="return rcCheck()">
+  <header>
+    <div><h2 id="rcTitle" style="margin:0;font-size:1.05rem;color:var(--navy);">New Receipt</h2>
+      <div id="rcNo" style="font-size:0.8rem;color:var(--gray-500);margin-top:2px;">Receipt number is created automatically when you save.</div></div>
+    <button type="button" onclick="rcClose()" style="border:none;background:none;font-size:1.4rem;color:var(--gray-500);cursor:pointer;">&times;</button>
+  </header>
+  <div class="body">
+    <input type="hidden" name="back_q" value="{{ q }}">
+    <div id="rcCancelled" style="display:none;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:10px 12px;font-size:0.85rem;margin-bottom:12px;"></div>
+    <div class="rc-f" style="position:relative;">
+      <label>Doctor *</label>
+      <input type="text" id="rcClientSearch" placeholder="Type the doctor's name or registration number…">
+      <input type="hidden" name="client_id" id="rcClientId">
+      <div class="rc-sugg" id="rcSugg"></div>
+      <div class="hint">Clients from every pathway. Pick the name from the list.</div>
+    </div>
+    <div class="rc-f"><label>Doctor's email</label>
+      <input type="email" name="client_email" id="rcEmail" placeholder="Filled in from the client record">
+      <div class="hint">Shown on the receipt and used when sending.</div></div>
+    <div class="rc-row">
+      <div class="rc-f"><label>Amount paid (₹) *</label><input type="text" inputmode="decimal" name="amount" id="rcAmount" placeholder="e.g. 50000"></div>
+      <div class="rc-f"><label>Date paid *</label><input type="date" name="paid_on" id="rcPaidOn"></div>
+    </div>
+    <div class="rc-f"><label>For (service) *</label>
+      <input type="text" name="service" id="rcService" maxlength="300" placeholder="e.g. PLAB 1 coaching – 2nd instalment"></div>
+    <div class="rc-f"><label>Description</label>
+      <textarea name="description" id="rcDesc" rows="3" maxlength="2000" placeholder="Optional details shown under the service on the receipt"></textarea></div>
+    <div class="rc-row">
+      <div class="rc-f"><label>Payment mode</label>
+        <select name="payment_mode" id="rcMode"><option value="">— Select —</option>
+          {% for m in modes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
+      <div class="rc-f"><label>Transaction reference</label><input type="text" name="payment_ref" id="rcRef" maxlength="120" placeholder="UTR / UPI ref / cheque no."></div>
+    </div>
+
+    <div class="rc-box" id="rcSendBox">
+      <label style="display:flex;gap:8px;align-items:center;font-weight:700;font-size:0.86rem;color:var(--navy);cursor:pointer;">
+        <input type="checkbox" name="send_now" value="1" id="rcSendNow" onchange="rcToggleSend()" style="width:auto;"> Email the receipt after saving</label>
+      <div id="rcSendFields" style="display:none;margin-top:10px;">
+        <div class="rc-f"><label>Send to</label><input type="text" name="send_to" id="rcSendTo"></div>
+        <div class="rc-f" style="margin-bottom:0;"><label>Also send to (optional)</label>
+          <input type="text" name="send_extra" id="rcSendExtra" placeholder="One or more emails, separated by commas">
+          <div class="hint">These addresses get a copy of the same email.</div></div>
+      </div>
+    </div>
+
+    <div id="rcMeta" style="display:none;margin-top:16px;">
+      <div style="font-size:0.78rem;color:var(--gray-500);" id="rcCreated"></div>
+      <div style="font-size:0.78rem;color:var(--gray-500);margin-top:2px;" id="rcUpdated"></div>
+      <h4 style="margin:14px 0 8px;font-size:0.85rem;color:var(--navy);">History</h4>
+      <div id="rcLog"></div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--gray-100);" id="rcCancelWrap"></div>
+    </div>
+  </div>
+  <footer>
+    <button type="button" class="rc-btn" onclick="rcClose()">Close</button>
+    <button type="submit" class="rc-btn orange" id="rcSave" style="padding:8px 20px;">Save</button>
+  </footer>
+</form>
+
+<!-- Send drawer -->
+<form class="rc-drawer" id="rcSendDrawer" method="POST" autocomplete="off" style="width:min(440px,100%);">
+  <header>
+    <div><h2 style="margin:0;font-size:1.05rem;color:var(--navy);">Send receipt</h2>
+      <div id="rcSendNo" style="font-size:0.8rem;color:var(--gray-500);margin-top:2px;"></div></div>
+    <button type="button" onclick="rcClose()" style="border:none;background:none;font-size:1.4rem;color:var(--gray-500);cursor:pointer;">&times;</button>
+  </header>
+  <div class="body">
+    <input type="hidden" name="back_q" value="{{ q }}">
+    <p style="font-size:0.85rem;color:var(--gray-600);margin-top:0;">The receipt PDF is attached to a GooCampus email from info@goocampus.in.</p>
+    <div class="rc-f"><label>Send to *</label><input type="text" name="send_to" id="rcS2To"></div>
+    <div class="rc-f"><label>Also send to (optional)</label>
+      <input type="text" name="send_extra" placeholder="One or more emails, separated by commas">
+      <div class="hint">These addresses get a copy of the same email.</div></div>
+  </div>
+  <footer>
+    <button type="button" class="rc-btn" onclick="rcClose()">Close</button>
+    <button type="submit" class="rc-btn primary" style="padding:8px 20px;">Send email</button>
+  </footer>
+</form>
+
+<form id="rcCancelForm" method="POST" style="display:none;"><input type="hidden" name="reason" id="rcCancelReason"><input type="hidden" name="restore" id="rcRestore"></form>
+
+<script>
+(function () {
+  var RC = {};
+  {% for r in rows %}RC[{{ r.id }}] = {{ r.js|tojson }};
+  {% endfor %}
+  var addUrl = "{{ url_for('ops_receipt_add') }}";
+  var editUrl = "{{ url_for('ops_receipt_edit', rid=0) }}".replace('/0/', '/__/');
+  var sendUrl = "{{ url_for('ops_receipt_send', rid=0) }}".replace('/0/', '/__/');
+  var cancelUrl = "{{ url_for('ops_receipt_cancel', rid=0) }}".replace('/0/', '/__/');
+  var $ = function (id) { return document.getElementById(id); };
+  var bg = $('rcBg'), dr = $('rcDrawer'), sd = $('rcSendDrawer');
+  var current = null;
+
+  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+  function today() { var d = new Date(Date.now() + 330 * 60000); return d.toISOString().slice(0, 10); }
+
+  window.rcClose = function () { dr.classList.remove('open'); sd.classList.remove('open'); bg.style.display = 'none'; };
+  window.rcToggleSend = function () {
+    $('rcSendFields').style.display = $('rcSendNow').checked ? 'block' : 'none';
+    if ($('rcSendNow').checked && !$('rcSendTo').value) $('rcSendTo').value = $('rcEmail').value;
+  };
+
+  window.rcOpen = function (id) {
+    var r = id ? RC[id] : null; current = r;
+    dr.action = r ? editUrl.replace('__', r.id) : addUrl;
+    $('rcTitle').textContent = r ? 'Edit receipt' : 'New Receipt';
+    $('rcNo').innerHTML = r ? 'Receipt No <b style="color:var(--navy)">' + esc(r.receipt_no) + '</b> — this number does not change.'
+                            : 'Receipt number is created automatically when you save.';
+    $('rcClientSearch').value = r ? r.client_label : '';
+    $('rcClientId').value = r ? r.client_id : '';
+    $('rcEmail').value = r ? r.client_email : '';
+    $('rcAmount').value = r ? r.amount : '';
+    $('rcPaidOn').value = r ? r.paid_on : today();
+    $('rcService').value = r ? r.service : '';
+    $('rcDesc').value = r ? r.description : '';
+    $('rcMode').value = r ? r.payment_mode : '';
+    $('rcRef').value = r ? r.payment_ref : '';
+    $('rcSendNow').checked = false; $('rcSendTo').value = ''; $('rcSendExtra').value = ''; rcToggleSend();
+    var cancelled = r && r.status === 'cancelled';
+    $('rcSendBox').style.display = cancelled ? 'none' : 'block';
+    $('rcCancelled').style.display = cancelled ? 'block' : 'none';
+    if (cancelled) $('rcCancelled').innerHTML = '<b>Cancelled.</b> ' + esc(r.cancel_reason);
+    $('rcMeta').style.display = r ? 'block' : 'none';
+    if (r) {
+      $('rcCreated').textContent = 'Created by ' + r.created;
+      $('rcUpdated').textContent = r.updated ? 'Last edited by ' + r.updated : '';
+      $('rcLog').innerHTML = (r.log || []).map(function (l) {
+        return '<div class="rc-log"><b>' + esc(l.action.charAt(0).toUpperCase() + l.action.slice(1)) + '</b> · ' + esc(l.by || '—') +
+               ' · <span style="color:var(--gray-500)">' + esc(l.at) + '</span>' + (l.detail ? '<div style="color:var(--gray-600)">' + esc(l.detail) + '</div>' : '') + '</div>';
+      }).join('') || '<div style="font-size:0.8rem;color:var(--gray-400)">No history yet.</div>';
+      $('rcCancelWrap').innerHTML = cancelled
+        ? '<button type="button" class="rc-btn" onclick="rcCancel(true)">Restore this receipt</button>'
+        : '<button type="button" class="rc-btn" style="color:#B91C1C;border-color:#FECACA" onclick="rcCancel(false)">Cancel this receipt…</button>' +
+          '<div class="hint" style="font-size:0.74rem;color:var(--gray-500);margin-top:4px">Receipts are never deleted, so numbers never have gaps.</div>';
+    }
+    sd.classList.remove('open'); bg.style.display = 'block'; dr.classList.add('open');
+    setTimeout(function () { (r ? $('rcAmount') : $('rcClientSearch')).focus(); }, 150);
+  };
+
+  window.rcSend = function (id) {
+    var r = RC[id]; sd.action = sendUrl.replace('__', id);
+    $('rcSendNo').textContent = r.receipt_no + ' · ' + r.client_label;
+    $('rcS2To').value = r.client_email || '';
+    sd.querySelector('[name=send_extra]').value = '';
+    dr.classList.remove('open'); bg.style.display = 'block'; sd.classList.add('open');
+  };
+
+  window.rcCancel = function (restore) {
+    var f = $('rcCancelForm'); f.action = cancelUrl.replace('__', current.id);
+    if (restore) { $('rcRestore').value = '1'; f.submit(); return; }
+    var why = prompt('Why is receipt ' + current.receipt_no + ' being cancelled?');
+    if (!why || !why.trim()) return;
+    $('rcRestore').value = ''; $('rcCancelReason').value = why.trim(); f.submit();
+  };
+
+  window.rcCheck = function () {
+    if (!$('rcClientId').value) { alert('Pick the doctor from the list — type the name and choose.'); $('rcClientSearch').focus(); return false; }
+    if (!(parseFloat(($('rcAmount').value || '').replace(/,/g, '')) > 0)) { alert('Enter the amount paid.'); $('rcAmount').focus(); return false; }
+    if (!$('rcPaidOn').value) { alert('Pick the date paid.'); return false; }
+    if (!$('rcService').value.trim()) { alert('Enter what the payment is for.'); $('rcService').focus(); return false; }
+    if ($('rcSendNow').checked && !$('rcSendTo').value.trim()) { alert('Add the email to send the receipt to.'); return false; }
+    $('rcSave').disabled = true; $('rcSave').textContent = 'Saving…';
+    return true;
+  };
+
+  // Doctor picker — every pathway, shows the pathway with the name
+  var inp = $('rcClientSearch'), box = $('rcSugg'), timer = null, items = [], hl = -1;
+  function render() {
+    box.innerHTML = items.length ? items.map(function (c, i) {
+      return '<div data-i="' + i + '" class="' + (i === hl ? 'hl' : '') + '">' + esc(c.label) +
+             '<br><small>' + esc(c.pathway_label) + (c.display_reg ? ' · ' + esc(c.display_reg) : '') + (c.email ? ' · ' + esc(c.email) : '') + '</small></div>';
+    }).join('') : '<div style="color:var(--gray-400);cursor:default">No client found</div>';
+    box.style.display = 'block';
+  }
+  function pick(c) {
+    inp.value = c.label + ' · ' + c.pathway_label + (c.display_reg ? ' · ' + c.display_reg : '');
+    $('rcClientId').value = c.id;
+    if (c.email) $('rcEmail').value = c.email;
+    box.style.display = 'none';
+  }
+  inp.addEventListener('input', function () {
+    $('rcClientId').value = '';
+    clearTimeout(timer);
+    var q = inp.value.trim();
+    if (q.length < 2) { box.style.display = 'none'; return; }
+    timer = setTimeout(function () {
+      fetch('/operations/api/client-search?pathway=all&q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (list) {
+          items = (list || []).map(function (c) {
+            var n = (c.name || '').replace(/^\s*(dr\.?|mr\.?|mrs\.?|ms\.?|miss|prof\.?)\s+/i, '');
+            c.label = 'Dr. ' + n; return c;
+          });
+          hl = -1; render();
+        }).catch(function () { box.style.display = 'none'; });
+    }, 250);
+  });
+  inp.addEventListener('keydown', function (e) {
+    if (box.style.display !== 'block' || !items.length) return;
+    if (e.key === 'ArrowDown') { hl = Math.min(hl + 1, items.length - 1); render(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { hl = Math.max(hl - 1, 0); render(); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (hl >= 0) pick(items[hl]); e.preventDefault(); }
+    else if (e.key === 'Escape') { box.style.display = 'none'; }
+  });
+  box.addEventListener('mousedown', function (e) {
+    var el = e.target.closest('[data-i]'); if (el) { pick(items[+el.getAttribute('data-i')]); e.preventDefault(); }
+  });
+  inp.addEventListener('blur', function () { setTimeout(function () { box.style.display = 'none'; }, 150); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') rcClose(); });
+})();
+</script>
+{% endblock %}

@@ -20,6 +20,7 @@ Use this to jump straight to the code for any area **without scanning `app.py`**
 | Ops — PLAB (legacy) | `/operations/plab*` | app.py L19560–19672, `ops_plab_dashboard.html` | plab_clients, ops_* | [operations](sections/operations.md) |
 | Ops — other pathways | `/operations/{australia,consulting,uae,portfolio,training}/*` | `routes/operations/{pathway}.py` + `{au,cs,uae,pf,tr}_*.py` | plab_clients, ops_* | [operations](sections/operations.md) |
 | Ops — Call Notes report | `/operations/{pathway}/call-notes/report` | `routes/operations/call_notes_report.py` | ops_call_notes | [operations](sections/operations.md) |
+| Ops — Receipts (all pathways) | `/operations/receipts` | app.py (`ops_receipts*`), `ops_receipts.py` (number/PDF/words), `ops_receipts.html` | ops_receipts, ops_receipt_log | [operations](sections/operations.md) |
 | Module wiring | — | `routes/operations/__init__.py` (`register_operations_modules`) | — | [architecture](ARCHITECTURE.md) |
 | **HR** — leave | `/apply-leave` `/approve` `/admin/monthly-report` | app.py L186–430 (calc), L4135–7400 | leave_records, holidays, employees | [hr](sections/hr-leave-attendance.md) |
 | HR — attendance | `/admin/upload-attendance` `/time-log` | app.py L30317+ | attendance_logs | [hr](sections/hr-leave-attendance.md) |

@@ -429,7 +429,7 @@ def inject_manager_status():
         port_ok = has_section_permission(user, 'portfolio_pathway', 'dashboard', 'view') if user else False
         trn_ok  = has_section_permission(user, 'training_pathway', 'dashboard', 'view') if user else False
         shared_ok = any(has_section_permission(user, 'operations_shared', s, 'view')
-                        for s in ('reports', 'field_manager', 'vendors_providers')) if user else False
+                        for s in ('reports', 'field_manager', 'vendors_providers', 'receipts')) if user else False
         ops_access = plab_ok or aus_ok or cons_ok or port_ok or trn_ok or shared_ok
 
         # Smart landing URL — unified Operations dashboard when the user
@@ -32082,6 +32082,321 @@ def ops_resumes_hub():
                            active_ops_page='resumes', user=user)
 
 
+# ── Operations › Receipts (all pathways) ─────────────────────────────────────
+# Payment receipts for internal clients: auto number GC/RCPT/<FY>/NNNN (never edited),
+# branded PDF (download / email to client + extra addresses), edit + cancel with a log.
+# INR only, no GST/GSTIN, no signature. Kept in this section only. (founder 2026-10-28)
+_RECEIPT_EMAIL_RE = re.compile(r'^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$')
+_RECEIPT_FIELDS = (('client_email', 'Email'), ('amount', 'Amount'), ('paid_on', 'Date paid'),
+                   ('service', 'For'), ('description', 'Description'), ('payment_mode', 'Payment mode'),
+                   ('payment_ref', 'Reference'))
+
+
+def _receipt_client(conn, client_id):
+    try:
+        c = conn.execute("SELECT id, registration_number, prefix, first_name, last_name, "
+                         "COALESCE(pathway,'plab') AS pathway, COALESCE(email,'') AS email "
+                         "FROM plab_clients WHERE id = ?", (int(client_id),)).fetchone()
+    except (TypeError, ValueError):
+        return None
+    if not c:
+        return None
+    c = dict(c)
+    c['name'] = ' '.join(x for x in (c.get('first_name'), c.get('last_name')) if x).strip()
+    return c
+
+
+def _receipt_emails(raw):
+    """'a@x.com, b@y.com; c@z.com' → (valid list, invalid list)."""
+    good, bad = [], []
+    for e in re.split(r'[,;\s]+', raw or ''):
+        e = e.strip()
+        if not e:
+            continue
+        (good if _RECEIPT_EMAIL_RE.match(e) else bad).append(e)
+    return list(dict.fromkeys(good)), bad
+
+
+def _receipt_form():
+    """Validated form values or (None, error)."""
+    f = request.form
+    try:
+        amount = round(float((f.get('amount') or '').replace(',', '').strip()), 2)
+    except ValueError:
+        return None, 'Enter the amount paid as a number.'
+    if amount <= 0:
+        return None, 'Amount paid must be more than zero.'
+    paid_on = (f.get('paid_on') or '').strip()
+    try:
+        datetime.strptime(paid_on, '%Y-%m-%d')
+    except ValueError:
+        return None, 'Pick the date paid.'
+    service = (f.get('service') or '').strip()
+    if not service:
+        return None, 'Enter what the payment is for.'
+    email = (f.get('client_email') or '').strip()
+    if email and not _RECEIPT_EMAIL_RE.match(email):
+        return None, f'"{email}" is not a valid email.'
+    return {'client_email': email, 'amount': amount, 'paid_on': paid_on, 'service': service[:300],
+            'description': (f.get('description') or '').strip()[:2000],
+            'payment_mode': (f.get('payment_mode') or '').strip()[:60],
+            'payment_ref': (f.get('payment_ref') or '').strip()[:120]}, None
+
+
+def _receipt_send(conn, r, to_list, cc_list, by_name):
+    """Email the receipt PDF. Returns (ok, message)."""
+    import base64
+    import ops_receipts as OR
+    from email_utils import send_email, render_branded_email, brand_detail_rows
+    pw_label = REFERRAL_PATHWAY_LABELS.get(r.get('pathway') or '', '')
+    try:
+        pdf = OR.build_pdf(r, pw_label)
+    except Exception as e:
+        logging.error("receipt pdf %s: %s", r.get('receipt_no'), e)
+        return False, 'Could not create the PDF.'
+    name = format_dr_name(r.get('client_name') or '')
+    inner = (f"<p>Dear {name or 'Doctor'},</p>"
+             f"<p>Thank you for your payment. Your receipt is attached to this email.</p>"
+             + brand_detail_rows([('Receipt No', r['receipt_no']), ('Amount received', '&#8377; ' + OR.inr(r['amount'])),
+                                  ('Date paid', OR._date(r.get('paid_on'))), ('For', r.get('service') or '')])
+             + "<p>&mdash; GooCampus Team</p>")
+    body = render_branded_email('Payment Receipt', inner, preheader=f"Receipt {r['receipt_no']}")
+    ok = send_email(to_list, f"Payment Receipt {r['receipt_no']} - GooCampus", body,
+                    cc_list=cc_list or None, from_address="GooCampus <info@goocampus.in>",
+                    attachments=[{'filename': OR.pdf_filename(r['receipt_no']),
+                                  'content': base64.b64encode(pdf).decode()}])
+    if ok:
+        conn.execute("UPDATE ops_receipts SET last_sent_at = CURRENT_TIMESTAMP WHERE id = ?", (r['id'],))
+        OR.log(conn, r['id'], 'sent', 'To ' + ', '.join(to_list + (cc_list or [])), by_name)
+        conn.commit()
+        return True, 'Receipt emailed to ' + ', '.join(to_list + (cc_list or [])) + '.'
+    return False, 'The email could not be sent. Please try again.'
+
+
+def _receipt_send_from_form(conn, r, by_name):
+    to, bad1 = _receipt_emails(request.form.get('send_to'))
+    cc, bad2 = _receipt_emails(request.form.get('send_extra'))
+    if bad1 or bad2:
+        return False, 'Not a valid email: ' + ', '.join(bad1 + bad2)
+    if not to:
+        return False, 'Add the email address to send the receipt to.'
+    cc = [e for e in cc if e not in to]
+    return _receipt_send(conn, r, to, cc, by_name)
+
+
+@app.route('/operations/receipts')
+@admin_required
+def ops_receipts():
+    import ops_receipts as OR
+    user = get_user()
+    q = (request.args.get('q') or '').strip()
+    status = (request.args.get('status') or '').strip()
+    conn = get_db()
+    OR.ensure(conn)
+    where, params = ['TRUE'], []
+    if q:
+        where.append("(LOWER(COALESCE(client_name,'')) LIKE ? OR LOWER(receipt_no) LIKE ? "
+                     "OR LOWER(COALESCE(registration_number,'')) LIKE ?)")
+        params += [f'%{q.lower()}%'] * 3
+    if status in ('active', 'cancelled'):
+        where.append("COALESCE(status,'active') = ?"); params.append(status)
+    rows, total, logs = [], 0, {}
+    try:
+        rows = [dict(x) for x in conn.execute(
+            f"SELECT * FROM ops_receipts WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT 500", params).fetchall()]
+        total = conn.execute("SELECT COUNT(*) AS c FROM ops_receipts").fetchone()['c']
+        ids = [r['id'] for r in rows]
+        if ids:
+            for lg in conn.execute("SELECT receipt_id, action, detail, by_name, at FROM ops_receipt_log "
+                                   "WHERE receipt_id = ANY(?) ORDER BY id DESC", (ids,)).fetchall():
+                logs.setdefault(lg['receipt_id'], []).append(
+                    {'action': lg['action'], 'detail': lg['detail'], 'by': lg['by_name'],
+                     'at': format_datetime_filter(lg['at'])})
+    except Exception as e:
+        logging.error("ops_receipts: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    conn.close()
+    for r in rows:
+        r['pathway_label'] = REFERRAL_PATHWAY_LABELS.get(r.get('pathway') or '', r.get('pathway') or '')
+        r['amount_fmt'] = OR.inr(r['amount'])
+        r['display_name'] = format_dr_name(r.get('client_name') or '')
+        r['js'] = {'id': r['id'], 'receipt_no': r['receipt_no'], 'client_id': r['client_id'],
+                   'client_label': f"{r['display_name']} · {r['pathway_label']}"
+                                   + (f" · {format_reg_filter(r['registration_number'])}" if r.get('registration_number') else ''),
+                   'client_email': r.get('client_email') or '', 'amount': f"{float(r['amount']):.2f}",
+                   'paid_on': str(r.get('paid_on') or '')[:10], 'service': r.get('service') or '',
+                   'description': r.get('description') or '', 'payment_mode': r.get('payment_mode') or '',
+                   'payment_ref': r.get('payment_ref') or '', 'status': r.get('status') or 'active',
+                   'cancel_reason': r.get('cancel_reason') or '',
+                   'created': f"{r.get('created_by_name') or '—'} · {format_datetime_filter(r.get('created_at'))}",
+                   'updated': (f"{r.get('updated_by_name')} · {format_datetime_filter(r.get('updated_at'))}"
+                               if r.get('updated_at') else ''),
+                   'log': logs.get(r['id'], [])}
+    return render_template('ops_receipts.html', rows=rows, q=q, status=status, total=total,
+                           modes=OR.PAYMENT_MODES, active_ops_page='receipts', user=user)
+
+
+@app.route('/operations/receipts/add', methods=['POST'])
+@admin_required
+def ops_receipt_add():
+    import ops_receipts as OR
+    u = get_user(); by = (u['name'] if u else '') or ''
+    conn = get_db()
+    OR.ensure(conn)
+    c = _receipt_client(conn, request.form.get('client_id'))
+    if not c:
+        conn.close(); flash('Pick the doctor from the list (type the name and choose).', 'error')
+        return redirect(url_for('ops_receipts'))
+    v, err = _receipt_form()
+    if err:
+        conn.close(); flash(err, 'error'); return redirect(url_for('ops_receipts'))
+    try:
+        no, fy, seq = OR.next_number(conn)
+        rid = conn.execute(
+            "INSERT INTO ops_receipts (receipt_no, fy, seq, client_id, registration_number, pathway, client_name, "
+            " client_email, amount, paid_on, service, description, payment_mode, payment_ref, created_by, created_by_name) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            (no, fy, seq, c['id'], c['registration_number'], c['pathway'], c['name'], v['client_email'],
+             v['amount'], v['paid_on'], v['service'], v['description'], v['payment_mode'], v['payment_ref'],
+             session.get('user_id'), by)).fetchone()['id']
+        OR.log(conn, rid, 'created', f"Rs. {OR.inr(v['amount'])} - {v['service']}", by)
+        conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        conn.close(); logging.error("ops_receipt_add: %s", e)
+        flash('Could not save the receipt. Please try again.', 'error'); return redirect(url_for('ops_receipts'))
+    msg = f'Receipt {no} created.'
+    if request.form.get('send_now') == '1':
+        r = dict(conn.execute("SELECT * FROM ops_receipts WHERE id = ?", (rid,)).fetchone())
+        ok, m = _receipt_send_from_form(conn, r, by)
+        msg += ' ' + m
+        flash(msg, 'success' if ok else 'error')
+    else:
+        flash(msg, 'success')
+    conn.close()
+    return redirect(url_for('ops_receipts', q=request.form.get('back_q') or None))
+
+
+@app.route('/operations/receipts/<int:rid>/edit', methods=['POST'])
+@admin_required
+def ops_receipt_edit(rid):
+    """Edit everything except the receipt number (which never changes)."""
+    import ops_receipts as OR
+    u = get_user(); by = (u['name'] if u else '') or ''
+    conn = get_db()
+    OR.ensure(conn)
+    old = conn.execute("SELECT * FROM ops_receipts WHERE id = ?", (rid,)).fetchone()
+    if not old:
+        conn.close(); flash('Receipt not found.', 'error'); return redirect(url_for('ops_receipts'))
+    old = dict(old)
+    c = _receipt_client(conn, request.form.get('client_id')) or _receipt_client(conn, old['client_id'])
+    v, err = _receipt_form()
+    if err or not c:
+        conn.close(); flash(err or 'Pick the doctor from the list.', 'error'); return redirect(url_for('ops_receipts'))
+    changes = []
+    if c['id'] != old['client_id']:
+        changes.append(f"Doctor: {old.get('client_name') or '-'} -> {c['name']}")
+    for k, label in _RECEIPT_FIELDS:
+        a, b = old.get(k), v[k]
+        if k == 'amount':
+            a, b = OR.inr(a), OR.inr(b)
+        a, b = str(a or '')[:10] if k == 'paid_on' else str(a or ''), str(b or '')
+        if a != b:
+            changes.append(f"{label}: {a or '-'} -> {b or '-'}" if k != 'description' else 'Description changed')
+    try:
+        if changes:
+            conn.execute(
+                "UPDATE ops_receipts SET client_id = ?, registration_number = ?, pathway = ?, client_name = ?, "
+                "client_email = ?, amount = ?, paid_on = ?, service = ?, description = ?, payment_mode = ?, "
+                "payment_ref = ?, updated_by_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (c['id'], c['registration_number'], c['pathway'], c['name'], v['client_email'], v['amount'],
+                 v['paid_on'], v['service'], v['description'], v['payment_mode'], v['payment_ref'], by, rid))
+            OR.log(conn, rid, 'edited', '; '.join(changes), by)
+            conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        conn.close(); logging.error("ops_receipt_edit: %s", e)
+        flash('Could not save the changes. Please try again.', 'error'); return redirect(url_for('ops_receipts'))
+    msg = f"Receipt {old['receipt_no']} updated." if changes else f"No changes to {old['receipt_no']}."
+    ok = True
+    if request.form.get('send_now') == '1':
+        if (old.get('status') or 'active') == 'cancelled':
+            ok, m = False, 'A cancelled receipt cannot be sent.'
+        else:
+            r = dict(conn.execute("SELECT * FROM ops_receipts WHERE id = ?", (rid,)).fetchone())
+            ok, m = _receipt_send_from_form(conn, r, by)
+        msg += ' ' + m
+    conn.close()
+    flash(msg, 'success' if ok else 'error')
+    return redirect(url_for('ops_receipts', q=request.form.get('back_q') or None))
+
+
+@app.route('/operations/receipts/<int:rid>/send', methods=['POST'])
+@admin_required
+def ops_receipt_send(rid):
+    import ops_receipts as OR
+    u = get_user(); by = (u['name'] if u else '') or ''
+    conn = get_db()
+    OR.ensure(conn)
+    r = conn.execute("SELECT * FROM ops_receipts WHERE id = ?", (rid,)).fetchone()
+    if not r:
+        conn.close(); flash('Receipt not found.', 'error'); return redirect(url_for('ops_receipts'))
+    r = dict(r)
+    if (r.get('status') or 'active') == 'cancelled':
+        ok, m = False, 'A cancelled receipt cannot be sent.'
+    else:
+        ok, m = _receipt_send_from_form(conn, r, by)
+    conn.close()
+    flash(m, 'success' if ok else 'error')
+    return redirect(url_for('ops_receipts', q=request.form.get('back_q') or None))
+
+
+@app.route('/operations/receipts/<int:rid>/cancel', methods=['POST'])
+@admin_required
+def ops_receipt_cancel(rid):
+    """Cancel (or restore) — receipts are never deleted, so numbers never have gaps."""
+    import ops_receipts as OR
+    u = get_user(); by = (u['name'] if u else '') or ''
+    restore = request.form.get('restore') == '1'
+    reason = (request.form.get('reason') or '').strip()[:300]
+    if not restore and not reason:
+        flash('Give a reason for cancelling the receipt.', 'error'); return redirect(url_for('ops_receipts'))
+    conn = get_db()
+    OR.ensure(conn)
+    r = conn.execute("SELECT receipt_no FROM ops_receipts WHERE id = ?", (rid,)).fetchone()
+    if r:
+        conn.execute("UPDATE ops_receipts SET status = ?, cancel_reason = ?, updated_by_name = ?, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     ('active' if restore else 'cancelled', None if restore else reason, by, rid))
+        OR.log(conn, rid, 'restored' if restore else 'cancelled', '' if restore else reason, by)
+        conn.commit()
+        flash(f"Receipt {r['receipt_no']} {'restored' if restore else 'cancelled'}.", 'success')
+    conn.close()
+    return redirect(url_for('ops_receipts'))
+
+
+@app.route('/operations/receipts/<int:rid>/pdf')
+@admin_required
+def ops_receipt_pdf(rid):
+    import ops_receipts as OR
+    conn = get_db()
+    OR.ensure(conn)
+    r = conn.execute("SELECT * FROM ops_receipts WHERE id = ?", (rid,)).fetchone()
+    conn.close()
+    if not r:
+        abort(404)
+    r = dict(r)
+    pdf = OR.build_pdf(r, REFERRAL_PATHWAY_LABELS.get(r.get('pathway') or '', ''))
+    disp = 'attachment' if request.args.get('dl') == '1' else 'inline'
+    resp = make_response(pdf)
+    resp.headers['Content-Type'] = 'application/pdf'
+    resp.headers['Content-Disposition'] = f'{disp}; filename="{OR.pdf_filename(r["receipt_no"])}"'
+    return resp
+
+
 @app.route('/admin/plab-contracts-bulk', methods=['GET', 'POST'])
 @admin_required
 def admin_plab_contracts_bulk():
@@ -47733,6 +48048,7 @@ ACCESS_SECTION_CATALOG = [
             ('reports',           'Reports',                  'Operations reports'),
             ('field_manager',     'Settings (Field Manager)', 'Lookup options + form config (pathway-aware)'),
             ('vendors_providers', 'Vendors & Providers',      'Vendor / partner directory (pathway-aware)'),
+            ('receipts',          'Receipts',                 'Create / edit / email payment receipts (all pathways)'),
         ],
     },
     # ── Partners (its OWN top-level group — matches the top menu, moved out of
@@ -51606,6 +51922,12 @@ ACCESS_ROUTE_MAP = {
     'ops_reports_export':            _ap('operations_shared', 'reports'),
     'ops_field_manager':            _ap('operations_shared', 'field_manager'),
     'ops_vendors_providers':        _ap('operations_shared', 'vendors_providers'),
+    'ops_receipts':                 _ap('operations_shared', 'receipts'),
+    'ops_receipt_pdf':              _ap('operations_shared', 'receipts'),
+    'ops_receipt_add':              _ap('operations_shared', 'receipts', 'add'),
+    'ops_receipt_edit':             _ap('operations_shared', 'receipts', 'edit'),
+    'ops_receipt_send':             _ap('operations_shared', 'receipts', 'edit'),
+    'ops_receipt_cancel':           _ap('operations_shared', 'receipts', 'edit'),
 
     # ── Sales ─────────────────────────────────────────────────────────────
     'meetings_list':                _ap('sales', 'meetings'),
