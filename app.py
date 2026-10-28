@@ -32137,8 +32137,8 @@ def _receipt_form():
     email = (f.get('client_email') or '').strip()
     if email and not _RECEIPT_EMAIL_RE.match(email):
         return None, f'"{email}" is not a valid email.'
-    return {'client_email': email, 'amount': amount, 'paid_on': paid_on, 'service': service[:300],
-            'description': (f.get('description') or '').strip()[:2000],
+    return {'client_email': email, 'amount': amount, 'paid_on': paid_on, 'service': service[:150],
+            'description': (f.get('description') or '').strip()[:400],
             'payment_mode': (f.get('payment_mode') or '').strip()[:60],
             'payment_ref': (f.get('payment_ref') or '').strip()[:120]}, None
 
