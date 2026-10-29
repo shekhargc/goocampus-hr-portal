@@ -32397,6 +32397,30 @@ def ops_receipt_pdf(rid):
     return resp
 
 
+@app.route('/operations/receipts/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_receipt_delete(rid):
+    """Permanently delete a receipt + its history — ADMINS ONLY (e.g. clearing test
+    receipts). Team members only get Cancel. The next number continues from the highest
+    receipt left. (founder 2026-10-29)"""
+    import ops_receipts as OR
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Only an admin can delete a receipt. Use Cancel instead.', 'error')
+        return redirect(url_for('ops_receipts'))
+    conn = get_db()
+    OR.ensure(conn)
+    r = conn.execute("SELECT receipt_no FROM ops_receipts WHERE id = ?", (rid,)).fetchone()
+    if r:
+        conn.execute("DELETE FROM ops_receipt_log WHERE receipt_id = ?", (rid,))
+        conn.execute("DELETE FROM ops_receipts WHERE id = ?", (rid,))
+        conn.commit()
+        logging.info("receipt %s deleted by %s", r['receipt_no'], user.get('name'))
+        flash(f"Receipt {r['receipt_no']} deleted.", 'success')
+    conn.close()
+    return redirect(url_for('ops_receipts'))
+
+
 @app.route('/admin/plab-contracts-bulk', methods=['GET', 'POST'])
 @admin_required
 def admin_plab_contracts_bulk():
@@ -51928,6 +51952,7 @@ ACCESS_ROUTE_MAP = {
     'ops_receipt_edit':             _ap('operations_shared', 'receipts', 'edit'),
     'ops_receipt_send':             _ap('operations_shared', 'receipts', 'edit'),
     'ops_receipt_cancel':           _ap('operations_shared', 'receipts', 'edit'),
+    'ops_receipt_delete':           _ap('operations_shared', 'receipts', 'edit'),
 
     # ── Sales ─────────────────────────────────────────────────────────────
     'meetings_list':                _ap('sales', 'meetings'),

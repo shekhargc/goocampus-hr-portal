@@ -195,6 +195,8 @@
   var editUrl = "{{ url_for('ops_receipt_edit', rid=0) }}".replace('/0/', '/__/');
   var sendUrl = "{{ url_for('ops_receipt_send', rid=0) }}".replace('/0/', '/__/');
   var cancelUrl = "{{ url_for('ops_receipt_cancel', rid=0) }}".replace('/0/', '/__/');
+  var deleteUrl = "{{ url_for('ops_receipt_delete', rid=0) }}".replace('/0/', '/__/');
+  var isAdmin = {{ 'true' if session.get('is_admin') else 'false' }};
   var $ = function (id) { return document.getElementById(id); };
   var bg = $('rcBg'), dr = $('rcDrawer'), sd = $('rcSendDrawer');
   var current = null;
@@ -239,7 +241,9 @@
       $('rcCancelWrap').innerHTML = cancelled
         ? '<button type="button" class="rc-btn" onclick="rcCancel(true)">Restore this receipt</button>'
         : '<button type="button" class="rc-btn" style="color:#B91C1C;border-color:#FECACA" onclick="rcCancel(false)">Cancel this receipt…</button>' +
-          '<div class="hint" style="font-size:0.74rem;color:var(--gray-500);margin-top:4px">Receipts are never deleted, so numbers never have gaps.</div>';
+          '<div class="hint" style="font-size:0.74rem;color:var(--gray-500);margin-top:4px">Cancel keeps the receipt (and its number) on record.</div>';
+      if (isAdmin) $('rcCancelWrap').innerHTML += '<div style="margin-top:10px"><button type="button" class="rc-btn" style="background:#B91C1C;color:#fff;border-color:#B91C1C" onclick="rcDelete()">Delete permanently</button>' +
+          '<div class="hint" style="font-size:0.74rem;color:var(--gray-500);margin-top:4px">Admins only — e.g. for test receipts. This cannot be undone.</div></div>';
     }
     sd.classList.remove('open'); bg.style.display = 'block'; dr.classList.add('open');
     setTimeout(function () { (r ? $('rcAmount') : $('rcClientSearch')).focus(); }, 150);
@@ -259,6 +263,11 @@
     var why = prompt('Why is receipt ' + current.receipt_no + ' being cancelled?');
     if (!why || !why.trim()) return;
     $('rcRestore').value = ''; $('rcCancelReason').value = why.trim(); f.submit();
+  };
+
+  window.rcDelete = function () {
+    if (!confirm('Delete receipt ' + current.receipt_no + ' permanently? This cannot be undone.')) return;
+    var f = $('rcCancelForm'); f.action = deleteUrl.replace('__', current.id); f.submit();
   };
 
   window.rcCheck = function () {
