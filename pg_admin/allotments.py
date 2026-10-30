@@ -77,6 +77,7 @@ def _row(r, auths, mark=None):
            'round_order': r['round_order'], 'status': r['status'], 'published_on': r['published_on'] or '',
            'program': 'dnb' if sec == 'dnb' else 'mdms', 'rank': r['rank'],
            'rank_type': 'All India rank' if r['authority_code'] == 'mcc' else 'State rank',
+           'rank_ai': r.get('rank_ai'),            # state lists: the All-India rank beside the state rank
            'college': college, 'college_short': (college or '').split(',')[0].strip(),
            'state': r.get('state') or '', 'college_type': r.get('college_type') or '',
            'course': r['course'] or r['course_raw'], 'quota': r['quota'] or r['quota_raw'],
@@ -135,7 +136,7 @@ def for_users(conn, users, include_not_me=True):
         if not by_rank:
             continue
         for r in conn.execute(
-                "SELECT authority_code, academic_year, round, rank, section, institute, institute_raw, state, "
+                "SELECT authority_code, academic_year, round, rank, rank_ai, section, institute, institute_raw, state, "
                 "college_type, course, course_raw, quota, quota_raw, allotted_category, candidate_category "
                 "FROM pg_results WHERE authority_code = ? AND rank = ANY(?)", [code, list(by_rank)]).fetchall():
             r = dict(r)
