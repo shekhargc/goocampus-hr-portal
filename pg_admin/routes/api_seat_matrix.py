@@ -200,6 +200,8 @@ def api_pg_seat_matrix_facets():
                 v = live.get((a['counselling_body'], a['academic_year']))
                 if v:
                     a['row_count'], a['total_seats'], a['college_count'] = int(v['n']), int(v['s']), int(v['c'])
+            # a matrix that is ALL DNB (MCC's DNB file) has no card while DNB is hidden (2026-10-30)
+            available = [a for a in available if (a['counselling_body'], a['academic_year']) in live]
         return jsonify({
             'ok': True,
             'counselling_body': body, 'academic_year': year,

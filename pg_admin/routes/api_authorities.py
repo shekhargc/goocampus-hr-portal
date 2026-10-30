@@ -78,7 +78,7 @@ def _seat_matrix_for(conn, authority):
             "prev_row_count, prev_college_count, prev_total_seats, prev_replaced_at, prev_source_file_name, "
             "colleges_added, colleges_removed, "
             "(pdf_data IS NOT NULL) AS has_pdf FROM pg_seat_matrix_source WHERE authority_code = ? "
-            "AND COALESCE(superseded,0)=0 AND COALESCE(section,'') NOT IN ('', 'nmc_initial') "
+            "AND COALESCE(superseded,0)=0 AND COALESCE(section,'') NOT IN ('', 'nmc_initial', 'dnb') "
             "ORDER BY academic_year DESC, COALESCE(sort_order,0)", (authority['code'],)).fetchall()]
         if secs:
             yr = secs[0]['academic_year']
