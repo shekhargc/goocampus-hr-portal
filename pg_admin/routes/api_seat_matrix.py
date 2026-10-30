@@ -17,7 +17,24 @@ _NO_DNB = ("(POSITION('DNB' IN UPPER(COALESCE(course_name,''))) <> 1 "
            "AND POSITION('NBEMS' IN UPPER(COALESCE(course_name,''))) = 0 AND COALESCE(section,'') <> 'dnb')")
 
 
-def _dnb_cond():
+_ONLY_DNB = "NOT " + _NO_DNB
+
+
+def _dnb_cond(conn=None, body=None, program=None):
+    """DNB on the seat matrix is shown FOR INFORMATION, like results (founder 2026-10-30): program=dnb → only
+    the DNB lines; a matrix that is all DNB (MCC's DNB file, section 'dnb') → every line; otherwise DNB is
+    left out. Predictor / choice lists / rankings never show DNB (HIDE_DNB elsewhere)."""
+    if (program or '').lower() == 'dnb':
+        return [_ONLY_DNB]
+    if conn is not None and body:
+        try:
+            r = conn.execute("SELECT COALESCE(section,'') AS section FROM pg_seat_matrix_source "
+                             "WHERE counselling_body=? ORDER BY academic_year DESC LIMIT 1", [body]).fetchone()
+            if r and r['section'] == 'dnb':
+                return []
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
     return [_NO_DNB] if HIDE_DNB else []
 
 DEFAULT_BODY = 'All India MCC'
@@ -73,7 +90,13 @@ def api_pg_seat_matrix():
     except Exception:
         page_size = 100
 
-    conds = ["counselling_body = ?", "academic_year = ?"] + _dnb_cond()
+    program = _s(request.args.get('program'))
+    _c = get_db()
+    try:
+        dnb = _dnb_cond(_c, body, program)
+    finally:
+        _c.close()
+    conds = ["counselling_body = ?", "academic_year = ?"] + dnb
     params = [body, year]
     if state:
         conds.append("state = ?"); params.append(state)
@@ -146,8 +169,9 @@ def api_pg_seat_matrix_facets():
     conn = get_db()
     try:
         body = _s(request.args.get('body')) or _default_body(conn, year)
+        dnb = _dnb_cond(conn, body, request.args.get('program'))
         base = "FROM pg_seat_matrix WHERE counselling_body=? AND academic_year=?" + \
-               ''.join(' AND ' + c for c in _dnb_cond())
+               ''.join(' AND ' + c for c in dnb)
         p = [body, year]
         states = [r['state'] for r in conn.execute(
             f"SELECT DISTINCT state {base} AND state<>'' ORDER BY state", p).fetchall()]
@@ -176,7 +200,7 @@ def api_pg_seat_matrix_facets():
             "FROM pg_seat_matrix_source WHERE counselling_body=? AND academic_year=?",
             (body, year)).fetchone()
         src = dict(src) if src else None
-        if src and HIDE_DNB:             # the file's totals as doctors see them (without DNB courses)
+        if src and dnb:                  # the file's totals as doctors see them (this view's DNB rule)
             src['row_count'], src['college_count'], src['total_seats'] = \
                 int(agg['rows'] or 0), int(agg['colleges'] or 0), int(agg['seats'] or 0)
         chg = change_payload(src)
@@ -196,9 +220,14 @@ def api_pg_seat_matrix_facets():
                 "SELECT counselling_body, academic_year, COUNT(*) AS n, COALESCE(SUM(seats),0) AS s, "
                 "COUNT(DISTINCT college_code||'|'||college_name) AS c FROM pg_seat_matrix WHERE " + _NO_DNB +
                 " GROUP BY counselling_body, academic_year").fetchall()}
+            dnb_seats = {(r['counselling_body'], r['academic_year']): int(r['s'] or 0) for r in conn.execute(
+                "SELECT counselling_body, academic_year, COALESCE(SUM(seats),0) AS s FROM pg_seat_matrix WHERE "
+                + _ONLY_DNB + " GROUP BY counselling_body, academic_year").fetchall()}
             for a in available:
-                v = live.get((a['counselling_body'], a['academic_year']))
-                if v:
+                k = (a['counselling_body'], a['academic_year'])
+                a['dnb_seats'] = dnb_seats.get(k, 0)      # DNB lines in this file (view with program=dnb)
+                v = live.get(k)
+                if v and a['section'] != 'dnb':          # an all-DNB matrix (MCC DNB) keeps the file's totals
                     a['row_count'], a['total_seats'], a['college_count'] = int(v['n']), int(v['s']), int(v['c'])
         return jsonify({
             'ok': True,

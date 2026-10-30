@@ -45,7 +45,10 @@ def build(rows, cuts, state, prefix, quota_family, cat_match=None, default_type=
     """rows: dicts with college, course, quota, seats, section and optional category / institute_type.
     quota_family(seat_quota) → tuple of 2025 cut-off quota prefixes that count as the same quota (best first).
     cat_match(seat_row) → tuple of 2025 categories that are the same category (first = best);
-    with no category match the open / general rank is used and cutoff_category says which it is."""
+    with no category match the open / general rank is used and cutoff_category says which it is.
+    A family entry ending in '$' must match the 2025 quota exactly (e.g. 'Government Quota$' keeps
+    'Government Quota-Inservice' out); every other entry is a prefix."""
+    hit = lambda q, f: q == f[:-1] if f.endswith('$') else q.startswith(f)
     ok = approved_courses()
     bad = sorted({x['course'] for x in rows if x['course'] not in ok and not x['course'].startswith('DNB')})
     if bad:
@@ -58,13 +61,13 @@ def build(rows, cuts, state, prefix, quota_family, cat_match=None, default_type=
     out = []
     for i, x in enumerate(rows, 1):
         fams = quota_family(x['quota'])
-        cand = [c for c in by.get((x['college'], x['course']), []) if c['quota'].startswith(fams)]
+        cand = [c for c in by.get((x['college'], x['course']), []) if any(hit(c['quota'], f) for f in fams)]
         want = cat_match(x) if cat_match else ()
 
         def rank(c):   # same category first, then the open rank; earlier quota prefix wins; then the later round
             cat = c['category'] or ''
             return (0 if cat in want else (1 if cat in general else 2), want.index(cat) if cat in want else 0,
-                    [i for i, f in enumerate(fams) if c['quota'].startswith(f)][0], -(c['closing_rank'] or 0))
+                    [i for i, f in enumerate(fams) if hit(c['quota'], f)][0], -(c['closing_rank'] or 0))
         pick = (sorted(cand, key=rank)[:1] or [None])[0]
         known = x['college'] in inst_type
         out.append({
