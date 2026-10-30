@@ -616,6 +616,26 @@ def read_kea_aspnet(url):
         title, d = split_title_date(raw)
         items.append({'item_key': 'lnk' + item_id, 'raw_title': raw, 'title': title,
                       'url': href, 'kind': _kind(href), 'notice_date': d})
+    # Grouped notices (2026-10-30): the heading is a plain <span id='lnk<ID>'> with no link, and
+    # its PDFs sit in the collapsed body as <a id='<ID>' href=...> (e.g. "FIRST ROUND PROVISIONAL
+    # SEAT MATRIX & FEE STRUCTURE" → 6 PDFs). Each child PDF becomes its own item, dated by the heading.
+    from urllib.parse import urljoin
+    seen = {i['url'] for i in items}
+    for gid, ghead in re.findall(r"<span\s+id=['\"]lnk(\d+)['\"][^>]*>(.*?)</span>", page, re.S | re.I):
+        _, gdate = split_title_date(_text(ghead))
+        body = re.search(r"id=['\"]coll%s['\"].*?(?=<div class=['\"]card['\"]>|$)" % gid, page, re.S)
+        if not body:
+            continue
+        for cid, href, inner in re.findall(
+                r"<a\s+id=['\"](\d+)['\"][^>]*?href=['\"]([^'\"]*)['\"][^>]*>(.*?)</a>", body.group(0), re.S | re.I):
+            raw = _text(inner)
+            href = urljoin(r.url, _html.unescape(href).strip())
+            if not raw or href in seen:
+                continue
+            seen.add(href)
+            title, d = split_title_date(raw)
+            items.append({'item_key': 'lnk' + cid, 'raw_title': raw, 'title': title,
+                          'url': href, 'kind': _kind(href), 'notice_date': d or gdate})
     if not items:
         raise ValueError('No notices found on the page — the site layout may have changed.')
     return items

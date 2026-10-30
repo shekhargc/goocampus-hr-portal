@@ -336,6 +336,9 @@ def api_results():
         rank, rf, rt = _int(a.get('rank')), _int(a.get('rank_from')), _int(a.get('rank_to'))
         if rank:
             conds.append("r.rank = ?"); params.append(rank)
+        air = _int(a.get('air'))          # a doctor's NEET All-India rank (state lists also print a state rank)
+        if air:
+            conds.append("COALESCE(r.rank_ai, r.rank) = ?"); params.append(air)
         if rf:
             conds.append("r.rank >= ?"); params.append(rf)
         if rt:
