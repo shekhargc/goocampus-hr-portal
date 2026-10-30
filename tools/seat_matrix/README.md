@@ -170,8 +170,8 @@ so never bridged); GMP / GMPH → Private Quota - GMP; OPN → Private Quota - O
 Quota (2025 MNG); MMH … ME and St John's RC1-3 → Private Quota - Minority. Government seats bridge to KEA's 2025 codes:
 2A → 2AG, 2A (KK) → 2AH, CAT1 → 1G, SC-A → SC-AG, PwD → P-prefix (PGM, P2AG), then GM / GMH (KK seats then RK);
 SC-C (20%) bridges as SC-C. DNB Regular → `DNB - <course> (Post-MBBS)`, section dnb, DNB Quota (In-service); DNB Diploma →
-`Diploma in …`, section diploma, Diploma Quota (In-service), except General Medicine / General Surgery (no approved or
-NBEMS diploma of that name) → `DNB Diploma - <course>`, section dnb (hidden). The two ESIC colleges get hand-made
+`DNB Diploma - <course>`, section dnb (hidden), Diploma Quota (In-service) — all 30 seats (founder 2026-10-30: the file
+lists General Medicine / Surgery, which have no diploma, so it is treated as DNB until KEA clarifies). The two ESIC colleges get hand-made
 codes (`CODE_FIX`, the 40-char cut collides). Checks: column headings on every page, every KK / RK line = its HK-RK,
 every course's Total Seats = KK + RK + private, college Sr No 1…n, every column = the GRAND TOTAL lines (all four files),
 and the files' grand totals. 2026 Round 1: 4,724 medical (4,718 MD/MS + 6 diploma) + 94 St John's + 44 DNB + 30 DNB

@@ -31,9 +31,9 @@ GMH / 1H / 2AH / … for KK, a 'P' prefix for PwD — PGM, P2AG, PGMH):
   MMH MEH MC MM MK MU MA ME → 'Private Quota - Minority', category as printed (MMH / MEH fall back to MM / ME).
   St John's RC1 / RC2 / RC3 → 'Private Quota - Minority', category RC1 / RC2 / RC3 (as the 2025 St John's rows).
   DNB REGULAR        → `DNB - <course> (Post-MBBS)`, section dnb, 'DNB Quota (In-service)' (hidden by HIDE_DNB).
-  DNB DIPLOMA        → `Diploma in …`, section diploma, 'Diploma Quota (In-service)' (as Gujarat / Rajasthan), EXCEPT
-                       General Medicine / General Surgery: no approved 'Diploma in …' name and no NBEMS post-MBBS
-                       diploma of that name → `DNB Diploma - <course>` (MCC wording), section dnb (hidden), same quota.
+  DNB DIPLOMA        → `DNB Diploma - <course>` (MCC wording), section dnb (hidden), 'Diploma Quota (In-service)'.
+                       All 30 seats (founder 2026-10-30): the file lists General Medicine / Surgery, which have no
+                       diploma, so it is treated as DNB until KEA clarifies.
   Medical-college diplomas in the medical PDF (Clinical Pathology, DPH, TB & Chest) → section diploma, quota by column.
 Run with /usr/bin/python3 (PyMuPDF):
     karnataka.py <medical.pdf> <stjohns.pdf> <dnb_regular.pdf> <dnb_diploma.pdf> <cutoffs2025.json> <out.json>"""
@@ -167,12 +167,14 @@ DNB_REG = {  # DNB Regular: (code, name) → course (section dnb)
     ('F0', 'familymedicine'): 'DNB - Family Medicine (Post-MBBS)', ('F7', 'ent'): 'DNB - ENT (Post-MBBS)',
     ('G3', 'opthalmology'): 'DNB - Ophthalmology (Post-MBBS)', ('G1', 'obstricgynaecology'): 'DNB - Obstetrics and Gynaecology (Post-MBBS)',
     ('F3', 'radiology'): 'DNB - Radio-Diagnosis (Post-MBBS)'}
-DNB_DIP = {  # DNB Diploma: (code, name) → (course, section)
-    ('C3', 'paediatrics'): ('Diploma in Child Health / Paediatrics', 'diploma'), ('D1', 'opthalmology'): ('Diploma in Ophthalmology', 'diploma'),
-    ('D3', 'orthopaedics'): ('Diploma in Orthopaedics', 'diploma'), ('D4', 'anaesthesiology'): ('Diploma in Anaesthesiology', 'diploma'),
-    ('D6', 'obstetricsgynaecology'): ('Diploma in Obstetrics and Gynaecology', 'diploma'),
-    ('C4', 'generalmedicine'): ('DNB Diploma - General Medicine', 'dnb'),     # no approved / NBEMS "Diploma in General Medicine"
-    ('D5', 'generalsurgery'): ('DNB Diploma - General Surgery', 'dnb')}       # nor "Diploma in General Surgery" → hidden
+DNB_DIP = {  # DNB Diploma: (code, name) → (course, section). Founder 2026-10-30: the file looks mislabelled (it
+    # lists General Medicine / Surgery, which have no diploma, and reuses MD/MS course codes), so ALL 30 seats are
+    # stored as DNB (section dnb, hidden from doctors) under MCC's "DNB Diploma - <course>" wording until KEA clarifies.
+    ('C3', 'paediatrics'): ('DNB Diploma - Paediatrics', 'dnb'), ('D1', 'opthalmology'): ('DNB Diploma - Ophthalmology', 'dnb'),
+    ('D3', 'orthopaedics'): ('DNB Diploma - Orthopaedics', 'dnb'), ('D4', 'anaesthesiology'): ('DNB Diploma - Anaesthesiology', 'dnb'),
+    ('D6', 'obstetricsgynaecology'): ('DNB Diploma - Obstetrics and Gynaecology', 'dnb'),
+    ('C4', 'generalmedicine'): ('DNB Diploma - General Medicine', 'dnb'),
+    ('D5', 'generalsurgery'): ('DNB Diploma - General Surgery', 'dnb')}
 COURSE_TYPE = {'government': ('Government Institute',), 'privateunaided': ('Private Institute',),
                'deemedprivateuniversity': ('Deemed', 'State Private University')}
 
