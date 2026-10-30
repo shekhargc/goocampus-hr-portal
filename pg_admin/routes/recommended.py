@@ -456,9 +456,16 @@ def desk_tiers():
     m, _, err = _guard()
     if err:
         return err
+    combo = _s((request.get_json(silent=True) or {}).get('combo') if request.method == 'POST'
+               else request.args.get('combo'))
+    if combo.startswith('st:'):               # a state list — 'st:<authority>:<govt|private|management|nri>'
+        from pg_admin.routes import state_rankings as srk
+        if request.method == 'POST':
+            return srk.tiers_post(_actor_name(m), request.get_json(silent=True) or {})
+        return srk.tiers_get(combo)
     if request.method == 'POST':
         return _tiers_post(_actor_name(m))
-    return _tiers_get(_s(request.args.get('combo')) or 'aiq_open')
+    return _tiers_get(combo or 'aiq_open')
 
 
 def desk_recommended(doctor_id):

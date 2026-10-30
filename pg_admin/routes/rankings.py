@@ -327,7 +327,14 @@ def _pdf_resp(kind):
     conn = get_db()
     try:
         sp = (request.args.get('speciality') or '').strip()
-        pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp)
+        auth = (request.args.get('authority') or 'mcc').strip().lower()
+        if auth != 'mcc':                    # a state's PDF carries its own "New in 2026" section
+            from pg_admin.routes import state_rankings as srk
+            pdf, fn = srk.build_pdf(conn, auth, sp)
+            if not pdf:
+                return jsonify({'ok': False, 'error': 'unknown_authority'}), 404
+        else:
+            pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp)
         return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': f'attachment; filename="{fn}"'})
     finally:
         conn.close()
@@ -358,14 +365,27 @@ def _doctor_or_desk():
 
 
 def api_rankings():
-    """GET /api/pg/rankings → the rankings for the dashboard page (Internal / Paid / desk)."""
+    """GET /api/pg/rankings[?authority=mcc|<state code>&speciality=] → the rankings for the dashboard page
+    (Internal / Paid / desk). `authorities` lists the tabs (MCC + every state with a 2026 seat matrix)."""
     ok, err = _doctor_or_desk()
     if not ok:
         return err
     conn = get_db()
     try:
+        from pg_admin.routes import state_rankings as srk
         sp = (request.args.get('speciality') or '').strip()
-        return jsonify({'ok': True, **rankings_data(conn, sp), 'specialities': speciality_options(conn)})
+        auth = (request.args.get('authority') or 'mcc').strip().lower()
+        # tabs: MCC first, then every state with a 2026 seat matrix (founder 2026-10-31)
+        tabs = [{'authority': 'mcc', 'name': 'MCC (All India)'}] + [
+            {'authority': a['authority'], 'name': a['name']} for a in srk.authorities(conn)]
+        if auth != 'mcc':
+            d = srk.rankings_data(conn, auth, sp)
+            if not d:
+                return jsonify({'ok': False, 'error': 'unknown_authority', 'authorities': tabs}), 404
+            return jsonify({'ok': True, **d, 'authorities': tabs,
+                            'specialities': srk.speciality_options(conn, d['body'])})
+        return jsonify({'ok': True, 'authority': 'mcc', 'name': 'MCC (All India)', **rankings_data(conn, sp),
+                        'authorities': tabs, 'specialities': speciality_options(conn)})
     except Exception as e:
         logging.error("api_rankings: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
@@ -374,7 +394,7 @@ def api_rankings():
 
 
 def api_rankings_pdf():
-    """GET /api/pg/rankings/pdf?kind=rankings|new"""
+    """GET /api/pg/rankings/pdf?kind=rankings|new[&authority=<state code>&speciality=]"""
     ok, err = _doctor_or_desk()
     if not ok:
         return err
