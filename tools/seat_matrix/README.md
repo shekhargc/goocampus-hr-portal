@@ -97,19 +97,24 @@ column in both files. 2026 Round 1: 3,961 MD/MS-PDF seats + 164 DNB-PDF seats = 
 
 ## Odisha (`odisha.py`)
     /usr/bin/python3 tools/seat_matrix/odisha.py <mdms.pdf> <diploma.pdf> <dnb.pdf> <cutoffs2025.json> <out.json>
-Body "Odisha — State Counselling", authority Odisha (PG (Medical) Counselling Committee, MKCG Brahmapur; notices
-No. 46 MD/MS, No. 47 Post-MBBS Diploma, No. 48 Post-MBBS DNB, 26.10.2026). All three PDFs are SCANNED images: the
-tables are transcribed in the script cell by cell and pinned to the PDFs' SHA-256 (a re-issued file stops the
-script — re-transcribe it). MD/MS: In-service State Quota and Direct State Quota, 11 colleges each (count + category
-list "1-SEBC 1-SC 3-UR"), then the Hi-Tech BBSR / Hi-Tech Rourkela / DRIEMS management columns (counts only).
-Quotas: State Quota, In-service Quota, Management Quota, Management Quota (In-service) → 2025 Government Quota /
+Body "Odisha — State Counselling", authority Odisha (PG (Medical) Counselling Committee, MKCG Brahmapur). Round 1
+matrices REVISED 30.10.2026 "after redressal of grievances": notices No. 58 MD/MS, No. 59 Post-MBBS Diploma,
+No. 60 Post-MBBS DNB (they replace No. 46/47/48 of 26.10.2026). The tables are transcribed in the script cell by
+cell and pinned to the PDFs' SHA-256 (a re-issued file stops the script — re-transcribe it). The MD/MS and diploma
+PDFs now have a text layer: every transcribed cell is re-read from it and must match (the MD/MS layer draws some
+labels twice at the same spot — repeated glyphs are dropped first). The DNB PDF is still SCANNED (transcribed from
+the image). MD/MS: In-service State Quota (left half) and Direct State Quota (right half), 11 colleges each (count +
+category list "1-SEBC 1-SC 3-UR"), then the Hi-Tech BBSR / Hi-Tech Rourkela / DRIEMS management columns (counts
+only). Quotas: State Quota, In-service Quota, Management Quota, Management Quota (In-service) → 2025 Government Quota /
 Government Quota-Inservice / Management Quota / Management Quota-Inservice, matched exactly ('$'). Diploma → section
 diploma, Diploma Quota (2025 Odisha diplomas: Government Quota, then -Inservice); DNB → `DNB - <course> (Post-MBBS)`,
 section dnb, DNB Quota. Categories UR / SC / ST / SEBC / EWS with "-GC" (green card → 2025 GCH/GC), "-ES"
 (ex-serviceman → ES), "-PwD" (→ PH). Checks: each cell's count = its category list, every row = its Total, every
-column = the TOTAL / Grand Total row (MD/MS, MGT, diploma, DNB). Two MKCG in-service cells (Community Medicine,
-General Medicine) print a category list that does not match the count — kept with no category (`MISPRINTS`).
-2026-27: 463 MD/MS + 43 diploma + 18 DNB = 524 seats.
+column = the TOTAL / Grand Total row (MD/MS, MGT, diploma, DNB), and the text layer. The two 26.10 MKCG in-service
+misprints (Community Medicine, General Medicine) are fixed in the revision, so `MISPRINTS` is empty. 2026-27
+(revised): 463 MD/MS (In-service 193 + 38 MGT, Direct 193 + 39 MGT) + 43 diploma + 18 DNB = 524 seats — same
+totals as 26.10; the revision only moves seats between in-service and direct (SCB / MKCG / VIMSAR) and relabels
+categories. Diploma and DNB are unchanged.
 
 ## Jammu & Kashmir (`jammu_kashmir.py`)
     /usr/bin/python3 tools/seat_matrix/jammu_kashmir.py <bopee.pdf> <cutoffs2025.json> <out.json>
@@ -131,3 +136,43 @@ categories (bridge = 2025 UR rank). Quotas: State Quota → 2025 'Government Quo
 → `DNB - Obstetrics and Gynaecology (Post-MBBS)`, section dnb. New: Sadar Hospital Ranchi, RINPAS Kanke
 ("Phychiatry" read as MD - Psychiatry). Checks: each institute's Total line and the notice's 122 State Quota + 7
 In-service. 2026: 129 seats.
+
+## West Bengal (`west_bengal.py`)
+    /usr/bin/python3 tools/seat_matrix/west_bengal.py <matrix.pdf> <cutoffs2025.json> <out.json>
+Body "West Bengal — State Counselling", authority `wbmcc` (WBMCC "West Bengal PG Medical Counselling 2026 · Round No: 1 ·
+Seat Matrix", printed 30/10/2026, 121 pages). Pages are stored rotated 90°: words are turned to the visible page and read
+by column position. One line per institute × program × quota (SNo, Institute Name / Type, Program Name, Stream, Quota,
+UR, UR PwD, EWS, EWS PwD, OBC, OBC PwD, SC, SC PwD, ST, ST PwD, Total Seats); cell text wraps mid-word, so names are
+matched with white space removed. College codes `WB-<STANDARD-NAME>`; 29 colleges map to their 2025 cut-off names
+(`COLLEGES`, e.g. MEDICAL COLLEGE KOLKATA → 'Government Medical College, Kolkata'), 37 new colleges / district hospitals
+get a standard name (`NEW_COLLEGES`). Quotas: Open Seat → State Quota (2025 'State Quota$'), In Service → In-service
+Quota ('State Quota-Inservice$'), Private Management → Management Quota, NRI → NRI Quota, In Service DNB Quota →
+DNB Quota (In-service) for "(NBEMS)" programs (section dnb, `DNB - <course> (Post-MBBS)`; the two direct 6-year
+programs use MCC DNB's `DNB - … (Direct 6 Years Course)`) or Diploma Quota (In-service) for "(NBEMS- DIPLOMA)"
+programs (section diploma, `Diploma in …`). WB 2025 has no DNB cut-offs, so those are all new. Categories as printed,
+PwD as "-PwD" (bridged to 2025 "-PH", then the base category); OBC (one column in 2026) bridges to 2025 OBC, then
+OBC-A, then OBC-B; Management → MQ; NRI → UR, then NRI. The PDF prints NO totals (no page / institute / grand
+total), so the checks are: headings + page header + "Page No." on every page, SNo 1…878 continuous, every line's
+categories = its Total Seats, every cell one whole number, and the output re-adds to the Total Seats column.
+2026 Round 1: 878 lines / 66 colleges / 1,459 seats (1,272 MD/MS/MPH + 127 diploma + 60 DNB).
+
+## Karnataka (`karnataka.py`)
+    /usr/bin/python3 tools/seat_matrix/karnataka.py <medical.pdf> <stjohns.pdf> <dnb_regular.pdf> <dnb_diploma.pdf> <cutoffs2025.json> <out.json>
+Body "Karnataka — State Counselling", authority `kea`, section `state` (KEA "PROVISIONAL SEAT MATRIX - 2026 (30/10/2026)",
+four PDFs, all with a text layer, read with `grids()`). Medical: 65 colleges (M01 …, printed name must match `COLLEGES`
+exactly → 2025 name), one KK (Kalyana Karnataka) + one RK (Rest of Karnataka) line per course, columns NON-INSERVICE /
+INSERVICE / PWD × (CAT1 2A 2B 3A 3B ST SCA SCB SCC SCC(20%) GM) + HK-RK total, and on the RK line the private columns
+GMP GMPH OPN NRI OTH(Q) MMH MEH MC MM MK MU MA ME + Total Seats. St John's (M48) RC1 / RC2 / RC3 are a separate PDF.
+DNB Regular (Q…) and DNB Diploma (V…) are in-service seats at government hospitals, same KK / RK layout.
+Quotas (2025 KEA names, matched exactly with '$'): non-inservice → Government Quota (govt + private colleges' govt seats),
+category as printed + " (KK)" on the KK line, PwD → "-PwD"; in-service → In-service Quota (no 2025 KEA in-service rows,
+so never bridged); GMP / GMPH → Private Quota - GMP; OPN → Private Quota - Open; NRI → NRI Quota; OTH(Q) → Management
+Quota (2025 MNG); MMH … ME and St John's RC1-3 → Private Quota - Minority. Government seats bridge to KEA's 2025 codes:
+2A → 2AG, 2A (KK) → 2AH, CAT1 → 1G, SC-A → SC-AG, PwD → P-prefix (PGM, P2AG), then GM / GMH (KK seats then RK);
+SC-C (20%) bridges as SC-C. DNB Regular → `DNB - <course> (Post-MBBS)`, section dnb, DNB Quota (In-service); DNB Diploma →
+`Diploma in …`, section diploma, Diploma Quota (In-service), except General Medicine / General Surgery (no approved or
+NBEMS diploma of that name) → `DNB Diploma - <course>`, section dnb (hidden). The two ESIC colleges get hand-made
+codes (`CODE_FIX`, the 40-char cut collides). Checks: column headings on every page, every KK / RK line = its HK-RK,
+every course's Total Seats = KK + RK + private, college Sr No 1…n, every column = the GRAND TOTAL lines (all four files),
+and the files' grand totals. 2026 Round 1: 4,724 medical (4,718 MD/MS + 6 diploma) + 94 St John's + 44 DNB + 30 DNB
+diploma = 4,892 seats; 85 institutes (64 in 2025 + Chikkamagaluru IMS + 20 hospitals).
