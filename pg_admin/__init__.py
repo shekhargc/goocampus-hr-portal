@@ -34,7 +34,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
                              calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments,
-                             mgmt_inquiries, archive_admin, results_api)
+                             mgmt_inquiries, archive_admin, results_api, neet_result_api)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -156,6 +156,12 @@ def register_pg_admin(app):
                      seat_matrix_ingest.api_seat_matrix_file_to_authority, methods=['POST'])
     # ── 2026 counselling results + name memory (founder 2026-10-24) ──
     app.add_url_rule('/api/pg/results/ingest', 'api_results_ingest', results_api.api_results_ingest, methods=['POST'])
+    app.add_url_rule('/api/pg/neet-result/ingest', 'api_neet_result_ingest', neet_result_api.api_neet_result_ingest,
+                     methods=['POST'])
+    app.add_url_rule('/api/pg/neet-result/status', 'api_neet_result_status', neet_result_api.api_neet_result_status,
+                     methods=['GET'])
+    app.add_url_rule('/api/pg/state-merit/ingest', 'api_state_merit_ingest', neet_result_api.api_state_merit_ingest,
+                     methods=['POST'])
     app.add_url_rule('/api/pg/name-memory/seed', 'api_name_memory_seed', results_api.api_name_memory_seed,
                      methods=['POST'])
     app.add_url_rule('/api/pg/results/rounds', 'api_results_rounds', results_api.api_results_rounds, methods=['GET'])
