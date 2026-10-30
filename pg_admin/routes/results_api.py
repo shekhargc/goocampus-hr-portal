@@ -175,15 +175,17 @@ def api_results_ingest():
             course = _s(r.get('course')) if dnb else (courses.get(cr) or {}).get('std', '')
             st, ct = info.get(inst, ('', ''))
             matched += 1 if (inst and course) or dnb else 0
-            batch.append([auth, year, rnd, _int(r.get('sno')), _int(r.get('rank')), _s(r.get('quota_raw')),
+            batch.append([auth, year, rnd, _int(r.get('sno')), _int(r.get('rank')), _int(r.get('rank_ai')),
+                          _s(r.get('quota_raw')),
                           _s(r.get('quota')), ir, inst, st, ct, cr, course, _s(r.get('section')) or 'mdms',
                           _s(r.get('allotted_category')), _s(r.get('allotted_category_raw')),
                           _s(r.get('candidate_category')), _s(r.get('remarks'))])
         if batch:
             conn.execute_batch(
-                "INSERT INTO pg_results (authority_code, academic_year, round, sno, rank, quota_raw, quota, institute_raw, "
-                "institute, state, college_type, course_raw, course, section, allotted_category, allotted_category_raw, "
-                "candidate_category, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", batch, page_size=1000)
+                "INSERT INTO pg_results (authority_code, academic_year, round, sno, rank, rank_ai, quota_raw, quota, "
+                "institute_raw, institute, state, college_type, course_raw, course, section, allotted_category, "
+                "allotted_category_raw, candidate_category, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                batch, page_size=1000)
         if mode in ('start', 'append'):
             conn.commit()
             return jsonify({'ok': True, 'mode': mode, 'rows': len(rows), 'matched_rows': matched,
@@ -344,7 +346,7 @@ def api_results():
         size = min(500, max(1, _int(a.get('page_size')) or 100))
         total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_results r WHERE {where}", params).fetchone()['n']
         rows = conn.execute(
-            f"SELECT r.sno, r.rank, r.quota, r.quota_raw, r.institute, r.institute_raw, r.state, r.college_type, "
+            f"SELECT r.sno, r.rank, r.rank_ai, r.quota, r.quota_raw, r.institute, r.institute_raw, r.state, r.college_type, "
             f"r.course, r.course_raw, r.section, r.allotted_category, r.candidate_category, r.remarks FROM pg_results r "
             f"WHERE {where} ORDER BY r.rank ASC NULLS LAST, r.sno LIMIT {size} OFFSET {(page - 1) * size}",
             params).fetchall()
@@ -414,7 +416,8 @@ def api_results_rank():
             "SELECT r.authority_code, r.round, s.round_order, s.status, s.published_on, r.section, r.quota, r.institute, "
             "r.institute_raw, r.state, r.college_type, r.course, r.course_raw, r.allotted_category, "
             "r.candidate_category, r.remarks FROM pg_results r JOIN pg_results_source s ON s.authority_code=r.authority_code "
-            "AND s.academic_year=r.academic_year AND s.round=r.round WHERE r.rank=? AND COALESCE(s.is_hidden,0)=0 "
+            "AND s.academic_year=r.academic_year AND s.round=r.round WHERE COALESCE(r.rank_ai, r.rank)=? "
+            "AND COALESCE(s.is_hidden,0)=0 "
             "ORDER BY s.round_order DESC", [rank]).fetchall()
         out = []
         for r in rows:
@@ -424,7 +427,7 @@ def api_results_rank():
             r['program'] = 'dnb' if r.get('section') == 'dnb' else 'mdms'
             out.append(r)
         return jsonify({'ok': True, 'rank': rank, 'allotments': out,
-                        'note': 'MCC lists All-India ranks; state lists use the state merit rank.'})
+                        'note': 'Matched on the NEET-PG All-India rank (state lists also print a state merit rank).'})
     finally:
         conn.close()
 
@@ -492,7 +495,7 @@ def _closing_rows(conn, auth, year, rd, a):
     """2026 opening/closing per college × course × quota × category for this round, joined to the 2025
     closing rank of the same round."""
     conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.course,'')<>''",
-             "r.rank IS NOT NULL"] + _hide_dnb()
+             "COALESCE(r.rank_ai, r.rank) IS NOT NULL"] + _hide_dnb()
     params = [auth, year, rd['round']]
     _filters(a, conds, params)
     # a college without a standard name only counts when the team CONFIRMED it is not in our list (a genuinely
@@ -502,7 +505,8 @@ def _closing_rows(conn, auth, year, rd, a):
     rows = []
     for r in conn.execute(
             f"SELECT r.institute, r.institute_raw, r.course, r.quota, r.allotted_category AS category, MAX(r.state) AS state, "
-            f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN(r.rank) AS opening, MAX(r.rank) AS closing "
+            f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN(COALESCE(r.rank_ai, r.rank)) AS opening, "
+            f"MAX(COALESCE(r.rank_ai, r.rank)) AS closing "
             f"FROM pg_results r WHERE {' AND '.join(conds)} "
             f"GROUP BY r.institute, r.institute_raw, r.course, r.quota, r.allotted_category", params).fetchall():
         r = dict(r)

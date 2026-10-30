@@ -65,6 +65,10 @@ def ensure_results_tables():
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_round ON pg_results (authority_code, academic_year, round)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_rank ON pg_results (rank)")
+        # State lists print TWO ranks: `rank` = the state merit rank (My Allotments matches home_state_rank),
+        # `rank_ai` = the NEET-PG All-India rank (2025 cut-offs + "my NEET rank" lookup). NULL for MCC. (2026-10-30)
+        conn.execute("ALTER TABLE pg_results ADD COLUMN IF NOT EXISTS rank_ai INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_rank_ai ON pg_results (rank_ai)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_inst ON pg_results (institute, course)")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_results_source (
