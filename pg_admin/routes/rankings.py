@@ -186,26 +186,30 @@ def _table(pdf, rows, heads, widths, aligns):
                 row.cell(_t(v))
 
 
-def build_rankings_pdf(conn, speciality='', only=''):
-    """only = one list key (aiq_open | deemed_paid_open | ciq_open | nri_deemed) → just that list."""
+def build_rankings_pdf(conn, speciality='', only='', plain=False):
+    """only = one list key (aiq_open | deemed_paid_open | ciq_open | nri_deemed) → just that list.
+    plain = one continuous numbered list per list (same order: Top, Good, Average), no tier headings."""
     from pg_admin.choice_pdf import _t, _NAVY, _GREY
     data = rankings_data(conn, speciality)
     if only:
         data['lists'] = [l for l in data['lists'] if l['key'] == only]
     pdf = _pdf_base('MCC College Rankings 2026' + (f' — {speciality}' if speciality else '')
                     + (f" — {rec.TIER_LISTS[only]['label']}" if only else ''),
-                    'GooCampus guidance · Top · Good · Average colleges')
+                    'GooCampus guidance · ' + ('colleges in recommended order' if plain else 'Top · Good · Average colleges'))
     pdf.set_font('Helvetica', '', 8.6); pdf.set_text_color(*_GREY)
-    pdf.multi_cell(0, 4.4, _t(
+    intro = (
         'How to read this: colleges are grouped by how quickly their seats were taken in the MAIN rounds of last '
         "year's MCC counselling (Round 1 / Round 2; mop-up and stray rounds are ignored). It is by college only - "
         'not by speciality or location. Colleges that are new in 2026 are listed in a separate document. '
-        f"Prepared by the GooCampus team on {data['generated_at']}.") if not speciality else _t(
+        f"Prepared by the GooCampus team on {data['generated_at']}.") if not speciality else (
         f"How to read this: for {speciality}, colleges in each list are in the order their {speciality} seat was "
         "taken in Round 1 of last year's MCC counselling (Round 2 where it wasn't filled in Round 1; Open category). "
         "Top = first 20%, Good = next 35%, Average = the rest. Seats with no previous allotment are listed as "
-        f"'New in 2026' at the end of each list. Prepared by the GooCampus team on {data['generated_at']}."),
-        new_x='LMARGIN', new_y='NEXT')
+        f"'New in 2026' at the end of each list. Prepared by the GooCampus team on {data['generated_at']}.")
+    if plain:   # plain list: no tier wording in the intro
+        intro = intro.replace('colleges are grouped by how quickly', 'colleges are listed in the order of how quickly') \
+                     .replace('Top = first 20%, Good = next 35%, Average = the rest. ', '')
+    pdf.multi_cell(0, 4.4, _t(intro), new_x='LMARGIN', new_y='NEXT')
     TIER_COL = {'Top': (22, 101, 52), 'Good': (37, 99, 235), 'Average': (107, 114, 128)}
     for lst in data['lists']:
         if not any(lst['tiers'].values()) and not lst.get('new'):
@@ -214,14 +218,16 @@ def build_rankings_pdf(conn, speciality='', only=''):
             pdf.add_page()
         pdf.ln(4); pdf.set_font('Helvetica', 'B', 13); pdf.set_text_color(*_NAVY)
         pdf.cell(0, 8, _t(lst['label']), new_x='LMARGIN', new_y='NEXT')
-        for tier in _TIER_ORDER:
-            rows = lst['tiers'].get(tier) or []
+        groups = ([('', [r for t in _TIER_ORDER for r in (lst['tiers'].get(t) or [])])] if plain
+                  else [(t, lst['tiers'].get(t) or []) for t in _TIER_ORDER])
+        for tier, rows in groups:
             if not rows:
                 continue
             if pdf.get_y() > 250:
                 pdf.add_page()
-            pdf.ln(1); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*TIER_COL[tier])
-            pdf.cell(0, 6.5, f'{tier} colleges ({len(rows)})', new_x='LMARGIN', new_y='NEXT')
+            if tier:
+                pdf.ln(1); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*TIER_COL[tier])
+                pdf.cell(0, 6.5, f'{tier} colleges ({len(rows)})', new_x='LMARGIN', new_y='NEXT')
             _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], str(r['seats'])]
                          for i, r in enumerate(rows, start=1)],
                    ('#', 'College', 'State', 'Type', '2026 seats'), (9, 102, 34, 26, 15),
@@ -238,7 +244,8 @@ def build_rankings_pdf(conn, speciality='', only=''):
     import re
     slug = re.sub(r'[^A-Za-z0-9]+', '_', speciality).strip('_')[:40] if speciality else ''
     one = re.sub(r'[^A-Za-z0-9]+', '_', rec.TIER_LISTS[only]['label']).strip('_') if only else ''
-    return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026' + ''.join('_' + x for x in (slug, one) if x) + '.pdf'
+    return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026' + ''.join(
+        '_' + x for x in (slug, one, 'List' if plain else '') if x) + '.pdf'
 
 
 NOTE_MATCH_MIN = 0.6
@@ -335,17 +342,18 @@ def _pdf_resp(kind):
         sp = (request.args.get('speciality') or '').strip()
         auth = (request.args.get('authority') or 'mcc').strip().lower()
         only = (request.args.get('list') or '').strip()      # one list only (founder 2026-10-31); '' = all lists
+        plain = (request.args.get('style') or '').strip().lower() == 'plain'   # no Top/Good/Average headings
         if auth != 'mcc':                    # a state's PDF carries its own "New in 2026" section
             from pg_admin.routes import state_rankings as srk
             if only and only not in srk.LISTS:
                 return jsonify({'ok': False, 'error': 'unknown_list', 'allowed': list(srk.LISTS)}), 400
-            pdf, fn = srk.build_pdf(conn, auth, sp, only)
+            pdf, fn = srk.build_pdf(conn, auth, sp, only, plain)
             if not pdf:
                 return jsonify({'ok': False, 'error': 'unknown_authority'}), 404
         else:
             if only and only not in rec.TIER_LISTS:
                 return jsonify({'ok': False, 'error': 'unknown_list', 'allowed': list(rec.TIER_LISTS)}), 400
-            pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp, only)
+            pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp, only, plain)
         return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': f'attachment; filename="{fn}"'})
     finally:
         conn.close()
@@ -405,7 +413,7 @@ def api_rankings():
 
 
 def api_rankings_pdf():
-    """GET /api/pg/rankings/pdf?kind=rankings|new[&authority=<state code>&speciality=&list=<one list key>]"""
+    """GET /api/pg/rankings/pdf?kind=rankings|new[&authority=<state code>&speciality=&list=<one list key>&style=plain]"""
     ok, err = _doctor_or_desk()
     if not ok:
         return err
