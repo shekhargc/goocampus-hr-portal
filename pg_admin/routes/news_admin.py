@@ -430,6 +430,24 @@ def news_save():
                                    f"{_st['unchanged']} unchanged.")
             except Exception as _ce:
                 logging.warning("news_save calendar: %s", _ce)
+        # …and the dates typed into the form's date boxes (founder 2026-10-31: Karnataka's choice-filling
+        # dates never reached the stage tracker). SAVEPOINT: a calendar problem never undoes the news save.
+        if news_id and key_dates_json:
+            try:
+                conn.execute("SAVEPOINT news_kd")
+                _code = _authority_code_for(scope, state)
+                if _code:
+                    from pg_admin.data.calendar import events_from_key_dates, apply_news_dates
+                    _st2 = apply_news_dates(conn, _code, events_from_key_dates(key_dates_json, heading),
+                                            int(news_id), inbox_id, who)
+                    if _st2['added'] or _st2['changed']:
+                        cal_msg = (cal_msg + ' ' if cal_msg else '') + (
+                            f"Dates from the form → Counselling Calendar: {_st2['added']} added, {_st2['changed']} updated.")
+                conn.execute("RELEASE SAVEPOINT news_kd")
+            except Exception as _ke:
+                logging.warning("news_save key dates → calendar: %s", _ke)
+                try: conn.execute("ROLLBACK TO SAVEPOINT news_kd")
+                except Exception: pass
         if pdf_r2 and news_id:
             conn.execute("UPDATE pg_news SET pdf_r2_key = ?, pdf_name = ?, pdf_content_type = 'application/pdf', "
                          "pdf_data = NULL WHERE id = ?", (pdf_r2, pdf_name or 'notice.pdf', news_id))

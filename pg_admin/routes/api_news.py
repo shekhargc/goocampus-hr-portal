@@ -435,6 +435,49 @@ BAR_STEPS = {'round_window': 'Counselling round', 'registration': 'Registration'
              'choice_filling': 'Choice filling', 'result': 'Result', 'reporting': 'Reporting / joining'}
 
 
+# The usual flow of every counselling (founder 2026-10-31: show every authority's rounds like MCC, with
+# 'dates awaited' until the dates come). Opt-in with template=1 so an older site never sees dateless steps.
+TEMPLATE_ROUNDS = {'mcc': ['Round 1', 'Round 2', 'Round 3', 'Stray']}
+DEFAULT_TEMPLATE_ROUNDS = ['Round 1', 'Round 2', 'Mop-up', 'Stray']
+TEMPLATE_STEPS = ['registration', 'choice_filling', 'result', 'reporting']
+
+
+def _template_steps(code, rnd):
+    # MCC registers again every round; states register once (Round 1) and run later rounds on that registration
+    return [s for s in TEMPLATE_STEPS if s != 'registration' or rnd == 'Round 1' or code == 'mcc']
+
+
+def add_template(code, st):
+    """Fill a counselling_status result with the steps / rounds that have no dates yet: status 'awaited',
+    start / end None, expected True (a round with no dates at all is status 'awaited'). Dated steps untouched."""
+    from pg_admin.data import calendar as CAL
+    rorder = {r: i for i, r in enumerate(CAL.ROUNDS)}
+    st = dict(st or {'status': 'not_started', 'stage': None, 'next_deadline': None, 'progress': 0, 'rounds': [],
+                     'headline': 'Round 1 dates awaited'})
+    have = {r['round']: r for r in st.get('rounds') or []}
+    general = have.get('General')
+    # a general (round-less) registration counts as Round 1's registration
+    gen_steps = {i['step'] for i in (general or {}).get('steps', [])}
+    rounds = [r for r in st.get('rounds') or [] if r['round'] not in (TEMPLATE_ROUNDS.get(code) or DEFAULT_TEMPLATE_ROUNDS)]
+    for rnd in TEMPLATE_ROUNDS.get(code) or DEFAULT_TEMPLATE_ROUNDS:
+        cur = have.get(rnd)
+        steps = list(cur['steps']) if cur else []
+        dated = {i['step'] for i in steps} | (gen_steps if rnd == 'Round 1' else set())
+        for stp in _template_steps(code, rnd):
+            if stp not in dated:
+                steps.append({'round': rnd, 'step': stp, 'label': CAL.EVENT_LABELS.get(stp, stp),
+                              'bar_label': BAR_STEPS.get(stp), 'start': None, 'end': None, 'time': None, 'note': None,
+                              'status': 'awaited', 'expected': True, 'news_id': None, 'revised': None})
+        steps.sort(key=lambda i: STEP_ORDER.index(i['step']) if i['step'] in STEP_ORDER else 99)
+        if cur:
+            rounds.append({**cur, 'steps': steps})
+        else:
+            rounds.append({'round': rnd, 'status': 'awaited', 'start': None, 'end': None, 'live_step': None,
+                           'steps': steps, 'expected': True})
+    rounds.sort(key=lambda r: -1 if r['round'] == 'General' else rorder.get(r['round'], 50))
+    return {**st, 'rounds': rounds, 'template': True}
+
+
 def _fmt_d(d):
     return d.strftime('%d %b').lstrip('0') if d else ''
 
@@ -531,8 +574,10 @@ def _authority_order(codes):
 
 
 def api_pg_counselling_status():
-    """GET /api/pg/counselling-status[?authority=<code> | states=<list|all>] — per-authority
+    """GET /api/pg/counselling-status[?authority=<code> | states=<list|all>][&template=1] — per-authority
     counselling STAGE for the website's stage bar (2026-10-09). Doctor token → MCC + their states.
+    template=1 also returns the usual rounds / steps that have no dates yet (status 'awaited', start/end null,
+    expected true) — MCC Round 1-3 + Stray, states Round 1, 2, Mop-up, Stray (founder 2026-10-31).
     Authorities with a bulletin / news but no dates yet come back as status 'not_started'."""
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
@@ -558,6 +603,7 @@ def api_pg_counselling_status():
                               "WHERE is_published AND deleted_at IS NULL").fetchall():
             news_states.add('mcc' if r['scope'] == 'all_india' else r['st'])
         out = []
+        tmpl = _s(request.args.get('template')) == '1'     # also the steps / rounds with no dates yet
         for c in _authority_order(codes):
             a = get_authority(c)
             st = counselling_status(conn, c, headings=headings)
@@ -568,6 +614,8 @@ def api_pg_counselling_status():
                 st = {'status': 'not_started', 'stage': None, 'next_deadline': None, 'progress': 0, 'rounds': [],
                       'headline': ('Information bulletin released — schedule awaited' if c in brochure
                                    else 'Counselling updates out — schedule awaited')}
+            if tmpl:
+                st = add_template(c, st)
             out.append({'code': c, 'name': a['name'], 'state': a['state'], 'has_brochure': c in brochure, **st})
         return jsonify({'ok': True, 'as_of': _ist_today().isoformat(), 'authorities': out})
     except Exception as e:

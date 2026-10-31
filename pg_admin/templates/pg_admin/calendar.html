@@ -30,6 +30,39 @@
     {% endfor %}
   {% endwith %}
 
+  {% if pending %}
+  <div class="cal-card" style="border-color:#fdba74;">
+    <div class="cal-round" style="background:#fff7ed;color:#9a3412;">📅 Dates typed into posted news — not in the calendar yet ({{ pending|length }})</div>
+    <div style="padding:8px 16px 0;font-size:0.82rem;color:var(--gray-600);">
+      These dates were entered in the news form's date boxes, so the website's stage tracker can't see them yet.
+      Check them, then press <b>Add to calendar</b>. (From now on, dates typed into the news form go into the calendar automatically.)
+    </div>
+    <table class="cal-t">
+      <tr><th>Authority</th><th>News</th><th>Round</th><th>Step</th><th>Dates in the news</th><th class="cal-hide-sm">In the calendar now</th><th></th></tr>
+      {% for p in pending %}
+      <tr>
+        <td>{{ auth_names.get(p.authority_code, p.authority_code) }}</td>
+        <td style="max-width:280px;">{{ p.heading }}</td>
+        <td>{{ p.round }}</td>
+        <td>{{ p.event_label }}</td>
+        <td><b>{{ p.start }}{% if p.end %} → {{ p.end }}{% endif %}</b></td>
+        <td class="cal-hide-sm">{% if p.what == 'update' %}{{ p.existing_start }}{% if p.existing_end %} → {{ p.existing_end }}{% endif %}{% else %}<span style="color:var(--gray-400);">not there</span>{% endif %}</td>
+        <td>
+          <form method="POST" action="{{ url_for('pg_calendar_news_dates') }}" style="margin:0;">
+            <input type="hidden" name="news_id" value="{{ p.news_id }}"><input type="hidden" name="authority" value="{{ auth.code }}">
+            <button type="submit" style="padding:5px 10px;border-radius:7px;border:1px solid #fdba74;background:#fff;color:#9a3412;font-weight:700;cursor:pointer;font-size:0.8rem;">Add to calendar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <form method="POST" action="{{ url_for('pg_calendar_news_dates') }}" style="padding:10px 16px;margin:0;">
+      <input type="hidden" name="authority" value="{{ auth.code }}">
+      <button type="submit" style="padding:7px 14px;border-radius:8px;border:none;background:#ea580c;color:#fff;font-weight:700;cursor:pointer;">Add all {{ pending|length }} to the calendar</button>
+    </form>
+  </div>
+  {% endif %}
+
   <div class="cal-card" style="padding:12px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
     <div style="font-size:0.88rem;">
       <b>⏰ Deadline reminder emails:</b>

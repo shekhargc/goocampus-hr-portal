@@ -24,7 +24,7 @@ def calendar_admin():
     code = (request.args.get('authority') or 'mcc').strip().lower()
     auth = get_authority(code) or get_authority('mcc')
     conn = get_db()
-    events, counts, dups = [], {}, []
+    events, counts, dups, pending = [], {}, [], []
     rem = {'on': False, 'today_doctors': 0, 'today_items': 0}
     try:
         CAL.ensure_calendar_table(conn)
@@ -44,6 +44,11 @@ def calendar_admin():
             logging.warning("calendar reminders status: %s", _re)
             conn.rollback()
         events = CAL.events_for(conn, [auth['code']])
+        try:   # dates typed into posted news that aren't in the calendar yet (all authorities; review + Apply)
+            pending = CAL.pending_news_dates(conn)
+        except Exception as _pe:
+            logging.warning("calendar pending news dates: %s", _pe)
+            conn.rollback()
         dups = CAL.duplicate_steps(conn, [auth['code']])
         for r in conn.execute("SELECT authority_code, COUNT(*) AS n FROM pg_counselling_events "
                               "WHERE is_active GROUP BY authority_code").fetchall():
@@ -62,7 +67,8 @@ def calendar_admin():
     grouped = sorted(rounds.items(), key=lambda kv: order.get(kv[0], 50))
     from datetime import date as _date
     return render_template('pg_admin/calendar.html', auth=auth, authorities=all_authorities(), today=_date.today(),
-                           counts=counts, grouped=grouped, dups=dups,
+                           counts=counts, grouped=grouped, dups=dups, pending=pending,
+                           auth_names={a['code']: a['state'] if a['code'] != 'mcc' else 'MCC' for a in all_authorities()},
                            event_labels=CAL.EVENT_LABELS, event_types=CAL.EVENT_TYPES,
                            rounds=[r for r in CAL.ROUNDS if r], rem=rem, active_section='goocampus_in')
 
@@ -171,6 +177,43 @@ def calendar_tidy():
     finally:
         conn.close()
     return redirect(url_for('pg_calendar_admin', authority=code))
+
+
+@login_required
+def calendar_news_dates():
+    """Apply the dates typed into posted news (the date boxes on the news form) to the calendar — only after
+    the founder reviews the list on this page (founder 2026-10-31). news_id = one item, else all listed."""
+    user = _admin()
+    if not user:
+        flash('Access denied', 'error'); return redirect(url_for('dashboard'))
+    who = user.get('name') or user.get('emp_code') or 'admin'
+    only = (request.form.get('news_id') or '').strip()
+    conn = get_db()
+    added = changed = 0
+    try:
+        items = CAL.pending_news_dates(conn)
+        seen = set()
+        for it in items:
+            if only and str(it['news_id']) != only:
+                continue
+            key = (it['news_id'], it['authority_code'])
+            if key in seen:
+                continue
+            seen.add(key)
+            n = conn.execute("SELECT heading, key_dates FROM pg_news WHERE id = ?", (it['news_id'],)).fetchone()
+            st = CAL.apply_news_dates(conn, it['authority_code'], CAL.events_from_key_dates(n['key_dates'], n['heading']),
+                                      it['news_id'], None, who)
+            added += st['added']; changed += st['changed']
+        conn.commit()
+        flash(f'Dates from news added to the calendar: {added} new step(s), {changed} updated.', 'success')
+    except Exception as ex:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("calendar_news_dates: %s", ex)
+        flash('Could not apply the dates.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_calendar_admin', authority=request.form.get('authority') or 'mcc'))
 
 
 @login_required

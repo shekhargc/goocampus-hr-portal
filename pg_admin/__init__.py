@@ -291,6 +291,8 @@ def register_pg_admin(app):
     app.add_url_rule('/admin/pg/calendar/save', 'pg_calendar_save', calendar_admin.calendar_save, methods=['POST'])
     app.add_url_rule('/admin/pg/calendar/remove', 'pg_calendar_remove', calendar_admin.calendar_remove, methods=['POST'])
     app.add_url_rule('/admin/pg/calendar/tidy', 'pg_calendar_tidy', calendar_admin.calendar_tidy, methods=['POST'])
+    app.add_url_rule('/admin/pg/calendar/news-dates', 'pg_calendar_news_dates', calendar_admin.calendar_news_dates,
+                     methods=['POST'])
     app.add_url_rule('/admin/pg/calendar/reminders', 'pg_calendar_reminders_toggle',
                      calendar_admin.calendar_reminders_toggle, methods=['POST'])
     app.add_url_rule('/admin/pg/calendar/reminders/preview', 'pg_calendar_reminders_preview',
