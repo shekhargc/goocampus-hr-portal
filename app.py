@@ -843,7 +843,7 @@ def login_send_otp():
     session['emp_login_code'] = code
     session['emp_login_num'] = num
     session['emp_login_time'] = datetime.now().isoformat()
-    ok, err = _send_whatsapp_otp(num, otp_code)
+    ok, err = _send_otp_fast([('whatsapp', lambda: _send_whatsapp_otp(num, otp_code))])
     if not ok:
         return jsonify({'error': err or 'Could not send the OTP.'}), 500
     return jsonify({'success': True, 'masked': _mask_mobile(num),
@@ -1398,7 +1398,7 @@ def client_login_send_otp():
     session['client_login_otp'] = otp_code
     session['client_login_num'] = clean
     session['client_login_time'] = datetime.now().isoformat()
-    ok, err = _send_whatsapp_otp(clean, otp_code)
+    ok, err = _send_otp_fast([('whatsapp', lambda: _send_whatsapp_otp(clean, otp_code))])
     if not ok:
         return jsonify({'error': err or 'Could not send the OTP.'}), 500
     return jsonify({'success': True, 'masked': _mask_mobile(clean),
@@ -43623,6 +43623,38 @@ def _normalise_in_mobile(raw):
     if len(digits) >= 10:
         return digits[-10:]
     return ''
+
+
+def _send_otp_fast(jobs, wait=5.0):
+    """Run OTP senders in parallel and answer the login screen FAST (founder 2026-10-31: the code reached the phone
+    but the 'enter OTP' box opened ~30 s later, because we waited for each provider's HTTP reply in turn).
+    jobs = [(name, fn)], fn() -> (ok, err). Returns (ok, err) as soon as ONE succeeds, or all have finished, or
+    `wait` seconds pass — then the providers are only slow to reply (the message usually lands first) and it
+    counts as sent; they finish in the background. Each provider's time is logged."""
+    import threading, time
+    t0, results, lock, done = time.time(), {}, threading.Lock(), threading.Event()
+
+    def run(name, fn):
+        try:
+            r = fn()
+        except Exception as e:
+            r = (False, str(e))
+        took = time.time() - t0
+        logging.info(f"OTP send {name}: ok={r[0]} in {took:.1f}s")
+        with lock:
+            results[name] = r
+            if r[0] or len(results) == len(jobs):
+                done.set()
+    for name, fn in jobs:
+        threading.Thread(target=run, args=(name, fn), daemon=True).start()
+    done.wait(wait)
+    with lock:
+        if any(r[0] for r in results.values()):
+            return True, None
+        if len(results) == len(jobs):
+            return False, next((r[1] for r in results.values() if r[1]), 'Could not send the OTP.')
+    logging.info(f"OTP send: no reply yet after {wait:.0f}s — showing the OTP box; sending continues in background")
+    return True, None
 
 
 def _send_whatsapp_otp(mobile_10, otp_code):

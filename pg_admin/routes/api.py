@@ -85,23 +85,18 @@ def api_pg_otp_send():
     conn.close()
     # Send the SAME code over BOTH WhatsApp and SMS. A number that isn't on WhatsApp
     # still gets the code by SMS, and either message logs the doctor in. Succeed if
-    # EITHER channel is accepted. (founder 2026-09-28)
-    wa_ok, wa_err = False, None
+    # EITHER channel is accepted. (founder 2026-09-28) Both go out IN PARALLEL and the reply
+    # comes as soon as one is accepted (max ~5 s), so the OTP box opens right away (2026-10-31).
     try:
-        from app import _send_whatsapp_otp  # reuse the portal's live WhatsApp OTP sender
-        wa_ok, wa_err = _send_whatsapp_otp(mobile, otp)
-    except Exception as e:
-        logging.error("api_pg_otp_send WA: %s", e)
-        wa_err = str(e)
-    sms_ok, sms_err = False, None
-    try:
+        from app import _send_whatsapp_otp, _send_otp_fast  # the portal's live WhatsApp OTP sender
         from sms_utils import send_sms_otp
-        sms_ok, sms_err = send_sms_otp(mobile, otp)
+        ok, err = _send_otp_fast([('whatsapp', lambda: _send_whatsapp_otp(mobile, otp)),
+                                  ('sms', lambda: send_sms_otp(mobile, otp))])
     except Exception as e:
-        logging.error("api_pg_otp_send SMS: %s", e)
-        sms_err = str(e)
-    if not (wa_ok or sms_ok):
-        logging.error("api_pg_otp_send: both channels failed WA=%s SMS=%s", wa_err, sms_err)
+        logging.error("api_pg_otp_send: %s", e)
+        ok, err = False, str(e)
+    if not ok:
+        logging.error("api_pg_otp_send: both channels failed: %s", err)
         return jsonify({'ok': False, 'error': 'Could not send the code. Please try again.'}), 502
     return jsonify({'ok': True})
 
@@ -158,7 +153,10 @@ def api_pg_otp_verify():
                              "last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                              (sname, token, token_exp, uid))
                 uname = sname
+            elif _team_extra_login(conn, uid, token, token_exp):
+                pass                     # team member: the other devices stay signed in (founder 2026-10-31)
             else:
+                # one device per DOCTOR account: the new token replaces the old one → other devices signed out
                 conn.execute("UPDATE pg_users SET session_token = ?, token_expires_at = ?, "
                              "last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                              (token, token_exp, uid))
@@ -1098,7 +1096,7 @@ def _resolve_pg_user(conn):
             "SELECT id FROM pg_users WHERE session_token = ? "
             "AND (token_expires_at IS NULL OR token_expires_at > CURRENT_TIMESTAMP) "
             "AND COALESCE(is_blocked,0) = 0", (token,)).fetchone()
-        return row['id'] if row else None
+        return row['id'] if row else _team_session_user(conn, token)
     except Exception:
         try: conn.rollback()
         except Exception: pass
@@ -1353,10 +1351,65 @@ def profile_missing(row):
 
 
 def _pg_user_by_token(conn, token):
-    return conn.execute(
+    row = conn.execute(
         "SELECT * FROM pg_users WHERE session_token = ? "
         "AND (token_expires_at IS NULL OR token_expires_at > CURRENT_TIMESTAMP) "
         "AND COALESCE(is_blocked,0) = 0", (token,)).fetchone()
+    if row or not token:
+        return row
+    uid = _team_session_user(conn, token)
+    return conn.execute("SELECT * FROM pg_users WHERE id = ?", (uid,)).fetchone() if uid else None
+
+
+# ── Team members: several devices at once (founder 2026-10-31) ───────────────
+# Doctor accounts (free / paid / internal) stay ONE device at a time: logging in elsewhere replaces
+# pg_users.session_token, which signs the other device out. A TEAM member (is_team_member=1) whose current
+# token is still valid keeps it, and the new device gets an extra token in pg_team_sessions. Extra tokens only
+# work while the account is still a non-blocked team member.
+def _team_extra_login(conn, uid, token, token_exp):
+    # a SAVEPOINT, so a failure here never undoes the rest of the login (e.g. the used OTP being deleted)
+    try:
+        conn.execute("SAVEPOINT team_login")
+    except Exception:
+        return False
+    try:
+        u = conn.execute(
+            "SELECT COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) AS team, session_token, "
+            "(u.token_expires_at IS NULL OR u.token_expires_at > CURRENT_TIMESTAMP) AS live "
+            "FROM pg_users u WHERE u.id = ?", (uid,)).fetchone()
+        if not (u and int(u['team'] or 0) == 1 and u['session_token'] and u['live']):
+            conn.execute("RELEASE SAVEPOINT team_login")
+            return False
+        conn.execute("CREATE TABLE IF NOT EXISTS pg_team_sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, "
+                     "expires_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("DELETE FROM pg_team_sessions WHERE expires_at < CURRENT_TIMESTAMP")
+        conn.execute("INSERT INTO pg_team_sessions (token, user_id, expires_at) VALUES (?, ?, ?)", (token, uid, token_exp))
+        conn.execute("UPDATE pg_users SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     (uid,))
+        conn.execute("RELEASE SAVEPOINT team_login")
+        return True
+    except Exception as e:
+        logging.warning("team extra login: %s", e)
+        try: conn.execute("ROLLBACK TO SAVEPOINT team_login")
+        except Exception: pass
+        return False
+
+
+def _team_session_user(conn, token):
+    """user id for an extra team-member token, else None (never raises; a SAVEPOINT keeps a failure here
+    from aborting the caller's transaction)."""
+    try:
+        conn.execute("SAVEPOINT team_tok")
+        r = conn.execute(
+            "SELECT u.id FROM pg_team_sessions s JOIN pg_users u ON u.id = s.user_id WHERE s.token = ? "
+            "AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP) AND COALESCE(u.is_blocked,0) = 0 "
+            "AND COALESCE((to_jsonb(u)->>'is_team_member')::int, 0) = 1", (token,)).fetchone()
+        conn.execute("RELEASE SAVEPOINT team_tok")
+        return r['id'] if r else None
+    except Exception:
+        try: conn.execute("ROLLBACK TO SAVEPOINT team_tok")
+        except Exception: pass
+        return None
 
 
 def api_pg_profile():
