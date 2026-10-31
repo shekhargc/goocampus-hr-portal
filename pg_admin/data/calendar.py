@@ -327,3 +327,115 @@ def sync_from_inbox(conn, inbox_id=None):
         for k in tot:
             tot[k] += st[k]
     return tot
+
+
+# ── Dates typed into the NEWS FORM → the calendar (founder 2026-10-31) ───────
+# The news form has date boxes (registration / verification / choice filling start & end, fee payment,
+# reporting, result). They used to stay on the news item only, so the website's stage tracker (built from
+# this calendar) never showed them — e.g. Karnataka's Round 1 choice-filling dates typed into the Option
+# Entry news. Now they become calendar steps: matched to an existing step by ROUND + STEP TYPE (whatever its
+# label), updated with the change logged, or added. Typed dates count as today's notice, so they win over
+# older AI dates.
+KEY_DATE_STEPS = [('registration', 'registration_start', 'registration_end'),
+                  ('verification', 'verification_start', 'verification_end'),
+                  ('choice_filling', 'choice_filling_start', 'choice_filling_end'),
+                  ('payment', None, 'payment_last_date'),
+                  ('reporting', None, 'reporting_last_date'),
+                  ('result', 'result_date', None)]
+_ROUND_EVENTS = {'choice_filling', 'choice_locking', 'payment', 'seat_processing', 'result', 'reporting'}
+
+
+def _round_from_text(text):
+    import re as _re
+    m = _re.search(r'\b(?:round|phase)[\s-]*(?:\d|i{1,3}v?|iv|one|two|three|four|first|second|third|fourth)\b'
+                   r'|special\s+stray|stray(?:\s+vacancy)?(?:\s+round)?|mop[\s-]*up', text or '', _re.I)
+    return norm_round(m.group(0).replace('phase', 'round').replace('Phase', 'round')) if m else ''
+
+
+def events_from_key_dates(key_dates, heading=''):
+    """A news item's key_dates ({field: {date, time?, round?}}) → calendar steps (clean_events shape).
+    Round: the one picked on the form, else named in the heading, else Round 1 for allotment steps
+    (choice filling / payment / result / reporting); registration / verification may stay general."""
+    try:
+        kd = json.loads(key_dates) if isinstance(key_dates, str) else (key_dates or {})
+    except Exception:
+        kd = {}
+    if not isinstance(kd, dict):
+        return []
+    raw = []
+    for ev, ks, ke in KEY_DATE_STEPS:
+        s = (kd.get(ks) or {}) if ks else {}
+        e = (kd.get(ke) or {}) if ke else {}
+        sd, ed = _d(s.get('date')), _d(e.get('date'))
+        if not (sd or ed):
+            continue
+        rnd = norm_round(s.get('round') or e.get('round')) or _round_from_text(heading)
+        if not rnd and ev in _ROUND_EVENTS:
+            rnd = 'Round 1'
+        raw.append({'event': ev, 'round': rnd, 'label': EVENT_LABELS[ev],
+                    'start': (sd or ed).isoformat(), 'end': ed.isoformat() if (sd and ed and ed >= sd) else '',
+                    'time': e.get('time') or s.get('time') or '', 'quote': 'Entered on the news form'})
+    return clean_events(raw)
+
+
+def _step_row(conn, code, rnd, ev):
+    return conn.execute("SELECT * FROM pg_counselling_events WHERE authority_code = ? AND COALESCE(round,'') = ? "
+                        "AND event = ? AND is_active ORDER BY COALESCE(source_notice_date, DATE '1900-01-01') DESC, id DESC "
+                        "LIMIT 1", (code, rnd or '', ev)).fetchone()
+
+
+def news_date_changes(conn, code, events):
+    """[(event, existing_row | None, 'add' | 'update')] — only steps whose dates are missing or different."""
+    out = []
+    for e in events:
+        row = _step_row(conn, code, e['round'], e['event'])
+        if row:
+            row = dict(row)
+            if row['start_date'] == _d(e['start']) and (row.get('end_date') or None) == (_d(e['end']) if e['end'] else None):
+                continue
+            out.append((e, row, 'update'))
+        else:
+            out.append((e, None, 'add'))
+    return out
+
+
+def apply_news_dates(conn, code, events, news_id=None, inbox_id=None, who='news form'):
+    """Put a news item's typed dates into the calendar (see news_date_changes). Returns merge stats."""
+    stats = {'added': 0, 'changed': 0, 'unchanged': 0, 'skipped_older': 0}
+    if not (code and events):
+        return stats
+    ensure_calendar_table(conn)
+    for e, row, _what in news_date_changes(conn, code, events):
+        if row:                       # same step under the existing label → merge_events updates it (logged)
+            e = dict(e, label=row.get('label') or e['label'])
+        st = merge_events(conn, code, [e], news_id, inbox_id, date.today(), who)
+        for k in stats:
+            stats[k] += st[k]
+    return stats
+
+
+def pending_news_dates(conn, codes=None):
+    """Published news whose typed dates are NOT in the calendar yet (for the Calendar page review list):
+    [{news_id, heading, authority_code, event, event_label, round, start, end, existing_start, existing_end, what}]."""
+    from pg_admin.authorities import all_authorities
+    states = {a['state'].strip().lower(): a['code'] for a in all_authorities() if a['kind'] == 'state'}
+    ensure_calendar_table(conn)
+    out = []
+    try:
+        rows = conn.execute("SELECT id, heading, scope, COALESCE(state,'') AS state, key_dates FROM pg_news "
+                            "WHERE is_published AND deleted_at IS NULL AND COALESCE(key_dates,'') NOT IN ('', '{}') "
+                            "ORDER BY id").fetchall()
+    except Exception:
+        conn.rollback()
+        return out
+    for n in rows:
+        code = 'mcc' if n['scope'] == 'all_india' else states.get((n['state'] or '').strip().lower(), '')
+        if not code or (codes and code not in codes):
+            continue
+        for e, row, what in news_date_changes(conn, code, events_from_key_dates(n['key_dates'], n['heading'])):
+            out.append({'news_id': n['id'], 'heading': n['heading'], 'authority_code': code, 'event': e['event'],
+                        'event_label': EVENT_LABELS.get(e['event'], e['event']), 'round': e['round'] or 'General',
+                        'start': e['start'], 'end': e['end'], 'what': what,
+                        'existing_start': str(row['start_date']) if row else '',
+                        'existing_end': str(row.get('end_date') or '') if row else ''})
+    return out
