@@ -45,7 +45,8 @@ def _s(v):
 def list_of(quota, itype):
     """Which of the four lists a seat belongs to (None = left out)."""
     q = (quota or '').lower()
-    if any(k in q for k in ('in-service', 'inservice', 'in service', 'dnb', 'diploma quota')):
+    # in-service is left out — incl. Tamil Nadu's 'Government Quota-Service'
+    if any(k in q for k in ('in-service', 'inservice', 'in service', 'quota-service', 'dnb', 'diploma quota')):
         return None
     if 'nri' in q or 'non-resident' in q:
         return 'nri'
@@ -68,15 +69,68 @@ def _type_label(it):
     return 'Government' if t else ''
 
 
-def authorities(conn):
-    """[{authority, body, name, seats}] — every state body with a current seat matrix, by name."""
+# ── States with no 2026 seat matrix yet: rankings from LAST YEAR's cut-offs (founder 2026-10-31) ───────
+# Until a state's 2026 matrix is loaded, its rankings come straight from its 2025 cut-offs (pg_cutoffs, MD/MS):
+# same four lists / categories / specialities / tier rule, but the colleges & courses are last year's, there are
+# no seat counts (the list shows the number of courses instead) and nothing is "new in 2026". When the matrix
+# arrives the tab switches by itself. College codes = the importers' '<XX>-<STANDARD NAME>' (common.college_code),
+# so the team's Desk tiers carry over to the 2026 version — a new state's importer must use the prefix below.
+CUTOFF_YEAR = 2025
+_CUT = 'cutoffs2025:'                    # body marker for a cut-off-based state
+PREFIX = {'Karnataka': 'KA', 'Madhya Pradesh': 'MP', 'Uttar Pradesh': 'UP', 'Gujarat': 'GJ', 'West Bengal': 'WB',
+          'Odisha': 'OD', 'Rajasthan': 'RJ', 'Jammu and Kashmir': 'JK', 'Jharkhand': 'JH', 'Chhattisgarh': 'CG',
+          'Goa': 'GA', 'Tamil Nadu': 'TN', 'Kerala': 'KL', 'Maharashtra': 'MH', 'Andhra Pradesh': 'AP',
+          'Telangana': 'TS', 'Bihar': 'BR', 'Haryana': 'HR', 'Punjab': 'PB', 'Uttarakhand': 'UK',
+          'Puducherry': 'PY', 'Himachal Pradesh': 'HP', 'Tripura': 'TR', 'Chandigarh': 'CH', 'Sikkim': 'SK',
+          'Assam': 'AS', 'Delhi': 'DL'}
+
+
+def _norm_state(x):
+    import re
+    return re.sub(r'[^a-z]+', ' ', (x or '').lower().replace('&', ' and ')).strip()
+
+
+def _code(state, name):
+    import re
+    pre = PREFIX.get(state) or re.sub(r'[^A-Z]', '', state.upper())[:2]
+    return pre + '-' + re.sub(r'[^A-Z0-9]+', '-', (name or '').upper()).strip('-')[:40]
+
+
+def _cutoff_authorities(conn, have):
+    """State authorities with 2025 MD/MS cut-offs but no current 2026 matrix (codes in `have` are skipped)."""
+    from pg_admin import authorities as A
+    try:
+        counts = {_norm_state(r['authority']): (r['authority'], int(r['n'] or 0), int(r['c'] or 0)) for r in conn.execute(
+            "SELECT authority, COUNT(*) AS n, COUNT(DISTINCT institute) AS c FROM pg_cutoffs WHERE year = ? "
+            "AND COALESCE(authority_type,'') = 'state' AND COALESCE(degree_group,'') = 'mdms' "
+            "AND COALESCE(is_reference,0) = 0 GROUP BY authority", [CUTOFF_YEAR]).fetchall()}
+    except Exception:
+        return []
+    out = []
+    for a in A.all_authorities():
+        if a['kind'] != 'state' or a['code'] in have:
+            continue
+        hit = counts.get(_norm_state(a['state']))
+        if hit and hit[2] >= 2:
+            out.append({'authority': a['code'], 'body': _CUT + hit[0], 'name': a['state'], 'seats': 0,
+                        'source': 'cutoffs2025', 'colleges': hit[2]})
+    return out
+
+
+def authorities(conn, with_cutoffs=True):
+    """[{authority, body, name, seats, source}] — every state body with a current 2026 seat matrix
+    (source 'matrix') + (with_cutoffs) states that only have last year's cut-offs (source 'cutoffs2025'), by name."""
     out = []
     for r in conn.execute(
             "SELECT counselling_body, COALESCE(authority_code,'') AS a, total_seats FROM pg_seat_matrix_source "
             "WHERE COALESCE(superseded,0)=0 AND COALESCE(authority_code,'') NOT IN ('', 'mcc') "
             "AND COALESCE(section,'')='state' ORDER BY counselling_body").fetchall():
         out.append({'authority': r['a'], 'body': r['counselling_body'],
-                    'name': r['counselling_body'].split(' —')[0].strip(), 'seats': int(r['total_seats'] or 0)})
+                    'name': r['counselling_body'].split(' —')[0].strip(), 'seats': int(r['total_seats'] or 0),
+                    'source': 'matrix'})
+    if with_cutoffs:
+        out += _cutoff_authorities(conn, {a['authority'] for a in out})
+        out.sort(key=lambda a: a['name'])
     return out
 
 
@@ -88,10 +142,28 @@ def _body(conn, authority):
 
 
 def _rows(conn, body):
+    if (body or '').startswith(_CUT):
+        return _cutoff_rows(conn, body[len(_CUT):])
     return [dict(r) for r in conn.execute(
         "SELECT college_code, college_name, state, institute_type, quota, category, cutoff_category, "
         "cutoff_course, cutoff_institute, seats, has_cutoff, cr_r1, cr_r2 FROM pg_seat_matrix "
         "WHERE counselling_body=? AND COALESCE(section,'')='mdms'", [body]).fetchall()]
+
+
+def _cutoff_rows(conn, authority_name):
+    """Last year's cut-off rows shaped like seat-matrix rows (seats 0, one row per college x course x quota x category)."""
+    out = []
+    for r in conn.execute(
+            "SELECT institute, course, quota, category, institute_type, state, r1, r2 FROM pg_cutoffs WHERE year = ? "
+            "AND authority = ? AND COALESCE(degree_group,'') = 'mdms' AND COALESCE(is_reference,0) = 0 "
+            "AND COALESCE(institute,'') <> ''", [CUTOFF_YEAR, authority_name]).fetchall():
+        st = r['state'] or authority_name
+        out.append({'college_code': _code(authority_name, r['institute']), 'college_name': r['institute'],
+                    'state': st, 'institute_type': r['institute_type'], 'quota': r['quota'],
+                    'category': r['category'], 'cutoff_category': r['category'], 'cutoff_course': r['course'],
+                    'cutoff_institute': r['institute'], 'seats': 0, 'has_cutoff': 1,
+                    'cr_r1': r['r1'], 'cr_r2': r['r2']})
+    return out
 
 
 def _clinical_fn(conn):
@@ -148,9 +220,9 @@ def _band(i, n):
 # Default per list = the founder's choice for Karnataka (Govt GM, Private GMP, Management MNG, NRI NRI) and
 # the open / general code elsewhere. Team tiers (Desk) apply to the DEFAULT category only.
 _DEFAULT_PREF = {
-    'govt': ('GM', 'UR', 'GEN', 'OP', 'OM', 'UR/X/OP', 'OPEN', 'GN'),
-    'private': ('GMP', 'GM', 'UR', 'GEN', 'OP', 'OM', 'UR/X/OP', 'OPEN', 'GN'),
-    'management': ('MNG', 'MQ', 'GEN', 'UR', 'GM', 'OP'),
+    'govt': ('GM', 'UR', 'GEN', 'OP', 'OM', 'UR/X/OP', 'OPEN', 'GN', 'OC'),
+    'private': ('GMP', 'GM', 'UR', 'GEN', 'OP', 'OM', 'UR/X/OP', 'OPEN', 'GN', 'OC'),
+    'management': ('MNG', 'MQ', 'GEN', 'UR', 'GM', 'OP', 'OPEN', 'OC'),
     'nri': ('NRI', 'UR/NRI/OP'),
 }
 _CAT_LABEL = {   # readable names; anything else shows its own code
@@ -159,7 +231,8 @@ _CAT_LABEL = {   # readable names; anything else shows its own code
     'NRI': 'NRI', 'UR': 'Unreserved / General', 'GEN': 'General', 'OP': 'Open', 'OM': 'Open Merit',
     'UR/X/OP': 'Unreserved', 'UR/NRI/OP': 'NRI', 'SC/X/OP': 'SC', 'ST/X/OP': 'ST', 'OBC/X/OP': 'OBC',
     'EWS/X/OP': 'EWS', 'BC': 'Backward Class', 'SE': 'SEBC', 'EW': 'EWS', 'OBC-NCL': 'OBC (non-creamy)',
-    'MBC-NCL': 'MBC (non-creamy)', '1G': 'Category 1', '1H': 'Category 1 - Kalyana Karnataka',
+    'MBC-NCL': 'MBC (non-creamy)', 'OC': 'Open Competition', 'BCM': 'BC (Muslim)', 'MBC&DNC': 'MBC & DNC',
+    'SCA': 'SC (Arunthathiyar)', '1G': 'Category 1', '1H': 'Category 1 - Kalyana Karnataka',
     '2AG': 'Category 2A', '2AH': 'Category 2A - Kalyana Karnataka', '2BG': 'Category 2B',
     '2BH': 'Category 2B - Kalyana Karnataka', '3AG': 'Category 3A', '3AH': 'Category 3A - Kalyana Karnataka',
     '3BG': 'Category 3B', '3BH': 'Category 3B - Kalyana Karnataka', 'STG': 'ST', 'STH': 'ST - Kalyana Karnataka',
@@ -223,8 +296,9 @@ def list_payload(conn, authority, body, key, rows=None, clinical=None, category=
             continue
         d = by.setdefault(r['college_code'], {
             'college_code': r['college_code'], 'college': rec._short_name(r['college_name']), 'state': r['state'],
-            'institute_type': _type_label(r['institute_type']), 'seats': 0, 'hist': False})
+            'institute_type': _type_label(r['institute_type']), 'seats': 0, 'hist': False, '_c': set()})
         d['seats'] += int(r['seats'] or 0)
+        d['_c'].add(_s(r['cutoff_course']))
         if r['has_cutoff']:
             d['hist'] = True
         v = _r12(r) if _cat_ok(r, key, cat) else None
@@ -233,6 +307,8 @@ def list_payload(conn, authority, body, key, rows=None, clinical=None, category=
             cur = best[course].get(r['college_code'])
             if cur is None or v < cur:
                 best[course][r['college_code']] = v
+    for d in by.values():
+        d['courses'] = len(d.pop('_c') - {''})    # MD/MS courses in this list (the column for 2025-based states)
     draft = score_colleges(by, best, clinical, newc)
     stored = _stored(conn, authority, key) if use_team else {}
     return _finish(by, draft, stored)
@@ -306,7 +382,7 @@ def _speciality_lists(conn, authority, body, speciality, rows, cats_sel=None):
                 continue
             d = by.setdefault(r['college_code'], {
                 'college_code': r['college_code'], 'college': rec._short_name(r['college_name']), 'state': r['state'],
-                'institute_type': _type_label(r['institute_type']), 'seats': 0, 'r1': None, 'hist': False})
+                'institute_type': _type_label(r['institute_type']), 'seats': 0, 'courses': 1, 'r1': None, 'hist': False})
             d['seats'] += int(r['seats'] or 0)
             if r['has_cutoff']:
                 d['hist'] = True
@@ -334,6 +410,10 @@ def speciality_options(conn, body):
     from pg_admin.data import specialty_groups as sg
     ctx = sg.context(conn)
     out = {'clinical': [], 'non_clinical': []}
+    if (body or '').startswith(_CUT):
+        for c in sorted({r['cutoff_course'] for r in _cutoff_rows(conn, body[len(_CUT):]) if r['cutoff_course']}):
+            out['clinical' if sg.group_source(c, ctx)[0] == 'clinical' else 'non_clinical'].append(c)
+        return out
     for r in conn.execute("SELECT DISTINCT cutoff_course AS c FROM pg_seat_matrix WHERE counselling_body=? "
                           "AND COALESCE(section,'')='mdms' AND COALESCE(cutoff_course,'')<>'' ORDER BY cutoff_course",
                           [body]).fetchall():
@@ -349,7 +429,11 @@ def rankings_data(conn, authority, speciality='', cats_sel=None):
     if not a:
         return None
     rows = _rows(conn, a['body'])
-    base = {'authority': authority, 'name': a['name'], 'body': a['body'],
+    src = a.get('source') or 'matrix'
+    base = {'authority': authority, 'name': a['name'], 'body': a['body'], 'source': src,
+            'source_note': ('' if src == 'matrix' else
+                            f"{a['name']}'s 2026 seat matrix is not out yet - these rankings use last year's (2025) "
+                            "colleges, courses and allotments. They switch to the 2026 matrix as soon as it is published."),
             'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
     if speciality:
         return {**base, 'speciality': speciality,
@@ -365,7 +449,7 @@ def rankings_data(conn, authority, speciality='', cats_sel=None):
             continue
         tiers = {t: [] for t in _TIER_ORDER}
         for c in cols:
-            item = {k: c[k] for k in ('college', 'state', 'institute_type', 'seats', 'college_code')}
+            item = {k: c[k] for k in ('college', 'state', 'institute_type', 'seats', 'courses', 'college_code')}
             if c['tier'] == rec.NEW_TIER:
                 n = news.setdefault(c['college_code'], {**item, 'seats': 0, 'lists': [], 'seats_by_list': {}})
                 n['lists'].append(label); n['seats_by_list'][label] = c['seats']; n['seats'] += c['seats']
@@ -417,9 +501,18 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
     if plain:   # plain list: no tier wording in the intro
         intro = intro.replace('colleges are grouped by how quickly', 'colleges are listed in the order of how quickly') \
                      .replace('Top = first 20%, Good = next 35%, Average = the rest. ', '')
+    if data.get('source') == 'cutoffs2025':     # last year's colleges only — nothing is 'new in 2026'
+        intro = intro.replace('Colleges new to this counselling in 2026 are listed at the end. ', '')
     pdf.multi_cell(0, 4.4, _t(intro), new_x='LMARGIN', new_y='NEXT')
     TIER_COL = {'Top': (22, 101, 52), 'Good': (37, 99, 235), 'Average': (107, 114, 128)}
-    heads, widths = ('#', 'College', 'Type', 'Seats'), (9, 128, 34, 15)
+    cut = data.get('source') == 'cutoffs2025'      # no 2026 matrix yet: count of last year's courses, not seats
+    if cut:
+        pdf.ln(1); pdf.set_fill_color(239, 246, 255); pdf.set_draw_color(147, 197, 253); pdf.set_text_color(30, 64, 175)
+        pdf.set_font('Helvetica', 'B', 8.8)
+        pdf.multi_cell(0, 4.8, _t(data['source_note']), border='L', fill=True, new_x='LMARGIN', new_y='NEXT')
+        pdf.set_fill_color(255, 255, 255)
+    heads, widths = ('#', 'College', 'Type', 'Courses' if cut else 'Seats'), (9, 126, 34, 17)
+    cnt = (lambda r: str(r.get('courses') or '')) if cut else (lambda r: str(r['seats']))
     aligns = ('CENTER', 'LEFT', 'LEFT', 'RIGHT')
 
     def block(title, rows, colour):
@@ -429,7 +522,7 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
             pdf.add_page()
         pdf.ln(1); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*colour)
         pdf.cell(0, 6.5, _t(f'{title} ({len(rows)})'), new_x='LMARGIN', new_y='NEXT')
-        _table(pdf, [[str(i), r['college'], r['institute_type'], str(r['seats'])] for i, r in enumerate(rows, 1)],
+        _table(pdf, [[str(i), r['college'], r['institute_type'], cnt(r)] for i, r in enumerate(rows, 1)],
                heads, widths, aligns)
 
     for lst in data['lists']:
@@ -483,6 +576,7 @@ def tiers_get(combo):
             return jsonify({'ok': False, 'error': 'unknown list'}), 400
         cols = list_payload(conn, authority, a['body'], key)
         return jsonify({'ok': True, 'combo': combo, 'authority': authority, 'name': a['name'],
+                        'source': a.get('source') or 'matrix',
                         'label': f"{a['name']} — {LISTS[key]}", 'tiers': list(rec.TIERS),
                         'lists': [{'key': f'st:{authority}:{k}', 'label': f"{a['name']} — {v}"} for k, v in LISTS.items()],
                         'colleges': cols})

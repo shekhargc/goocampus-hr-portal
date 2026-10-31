@@ -484,7 +484,8 @@ def api_rankings():
         sel = {lk: ck} if (lk and ck) else None   # recompute that one list in that category (founder 2026-10-31)
         # tabs: MCC first, then every state with a 2026 seat matrix (founder 2026-10-31)
         tabs = [{'authority': 'mcc', 'name': 'MCC (All India)'}] + [
-            {'authority': a['authority'], 'name': a['name']} for a in srk.authorities(conn)]
+            {'authority': a['authority'], 'name': a['name'], 'source': a.get('source') or 'matrix'}
+            for a in srk.authorities(conn)]
         if auth != 'mcc':
             d = srk.rankings_data(conn, auth, sp, sel)
             if not d:

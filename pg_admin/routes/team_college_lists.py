@@ -101,7 +101,7 @@ def _state_colleges(conn, authority):
     """[{group, college_code, name, seats, is_new}] for a state body, groups in College Rankings order."""
     from pg_admin.routes import state_rankings as srk
     a = srk._body(conn, authority)
-    if not a:
+    if not a or (a.get('source') or 'matrix') != 'matrix':   # state lists need the 2026 matrix (seat counts)
         return None, []
     rows = srk._rows(conn, a['body'])
     clinical = srk._clinical_fn(conn)
@@ -240,7 +240,7 @@ def _generate_states(conn, who, kinds=None):
         kinds = {r['kind'] for r in conn.execute(
             "SELECT kind FROM pg_team_college_lists WHERE LEFT(COALESCE(kind,''), 6)='state:'").fetchall()}
     made = 0
-    for a in srk.authorities(conn):
+    for a in srk.authorities(conn, with_cutoffs=False):
         k = 'state:' + a['authority']
         if k not in kinds and _create(conn, who, _STATE_BASE.format(name=a['name']), 'by_state', [], kind=k):
             made += 1
