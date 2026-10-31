@@ -41,7 +41,63 @@ def _type_label(it):
         else 'Government' if it else ''
 
 
-def _speciality_lists(conn, speciality):
+# ── Category picker for MCC (founder 2026-10-31) ─────────────────────────────
+# Default OPEN keeps the team-curated tiers; any other category (EWS / OBC / SC / ST …) is computed live,
+# course against course, from last year's MCC main-round allotments in that category (state_rankings rule).
+_MCC_PREF = ('OPEN',)
+
+
+def _mcc_rows(conn, key):
+    meta = rec.TIER_LISTS[key]
+    bodies = rec._bodies(conn, meta['section'])
+    if not bodies:
+        return []
+    ph = ','.join(['?'] * len(bodies)); qph = ','.join(['?'] * len(meta['seat_quotas']))
+    return [dict(r) for r in conn.execute(
+        f"SELECT college_code, college_name, state, institute_type, quota, category, cutoff_category, cutoff_course, "
+        f"cutoff_institute, seats, has_cutoff, cr_r1, cr_r2, cr_closing FROM pg_seat_matrix "
+        f"WHERE counselling_body IN ({ph}) AND quota IN ({qph})", bodies + list(meta['seat_quotas'])).fetchall()]
+
+
+def mcc_categories(conn, key, rows=None):
+    from pg_admin.routes import state_rankings as srk
+    return srk.categories_of(rows if rows is not None else _mcc_rows(conn, key), _MCC_PREF)
+
+
+def _pick(cats, dflt, want):
+    return want if want and want in {c['code'] for c in cats} else dflt
+
+
+def _mcc_category_tiers(conn, key, cat, rows):
+    """{Top:[..], Good:[..], Average:[..]} for one MCC list in a non-default category (new colleges left out —
+    they're in the separate New colleges document)."""
+    from pg_admin.routes import state_rankings as srk
+    from collections import defaultdict as _dd
+    clinical = srk._clinical_fn(conn)
+    newc = rec._new_codes(conn, key)
+    by, best = {}, _dd(dict)
+    for r in rows:
+        d = by.setdefault(r['college_code'], {
+            'college_code': r['college_code'], 'college': rec._short_name(r['college_name']), 'state': r['state'],
+            'institute_type': _type_label(r['institute_type']), 'seats': 0, 'hist': False})
+        d['seats'] += int(r['seats'] or 0)
+        if r['has_cutoff']:
+            d['hist'] = True
+        v = srk._r12(r) if (r.get('cutoff_category') or '') == cat else None
+        course = (r.get('cutoff_course') or '').strip()
+        if v and course and (best[course].get(r['college_code']) is None or v < best[course][r['college_code']]):
+            best[course][r['college_code']] = v
+    draft = srk.score_colleges(by, best, clinical, newc)
+    tiers = {t: [] for t in _TIER_ORDER}
+    for d in sorted(by.values(), key=lambda x: (x['score'] if x['score'] is not None else 9, x['college'])):
+        if d['new_college']:
+            continue
+        tiers[draft.get(d['college_code']) or 'Average'].append(
+            {k: d[k] for k in ('college', 'state', 'institute_type', 'seats', 'college_code')})
+    return tiers
+
+
+def _speciality_lists(conn, speciality, cats_sel=None):
     """Per-speciality view: in each list, the colleges offering THIS speciality ordered by how fast
     its seat went in last year's Round 1 (Round 2 as fallback; Open category), split Top (first 20%) /
     Good (next 35%) / Average (rest). Colleges/courses with no history → 'new' (new in 2026)."""
@@ -51,9 +107,11 @@ def _speciality_lists(conn, speciality):
         bodies = rec._bodies(conn, meta['section'])
         if not bodies:
             continue
+        cats, dflt = mcc_categories(conn, key)
+        cat = _pick(cats, dflt, (cats_sel or {}).get(key))
         ph = ','.join(['?'] * len(bodies)); qph = ','.join(['?'] * len(meta['seat_quotas']))
         rows = [dict(r) for r in conn.execute(
-            f"SELECT college_code, college_name, state, institute_type, category, seats, has_cutoff, "
+            f"SELECT college_code, college_name, state, institute_type, category, cutoff_category, seats, has_cutoff, "
             f"cr_r1, cr_r2, cr_closing FROM pg_seat_matrix WHERE counselling_body IN ({ph}) "
             f"AND quota IN ({qph}) AND (LOWER(TRIM(cutoff_course))=LOWER(TRIM(?)) OR cutoff_course ILIKE ?)",
             bodies + list(meta['seat_quotas']) + [speciality, '%' + _spec_core(speciality) + '%']).fetchall()]
@@ -66,7 +124,8 @@ def _speciality_lists(conn, speciality):
             d['seats'] += int(r['seats'] or 0)
             if r['has_cutoff']:
                 d['hist'] = True
-            if r['category'] == 'OPEN' and r['has_cutoff']:
+            # default OPEN = the 2026 Open seat's history (as before); another category = last year's rank IN it
+            if r['has_cutoff'] and ((r['category'] == 'OPEN') if cat == dflt else (r.get('cutoff_category') == cat)):
                 v = rec._r1(r)
                 if v and (d['r1'] is None or v < d['r1']):
                     d['r1'] = v
@@ -80,7 +139,8 @@ def _speciality_lists(conn, speciality):
                                        key=lambda d: (d['state'], d['college'])))
         new = sorted([d for d in by.values() if not d['r1'] and not d['hist']], key=lambda d: (d['state'], d['college']))
         lists.append({'key': key, 'label': meta['label'], 'tiers': tiers, 'new': new,
-                      'counts': {**{t: len(v) for t, v in tiers.items()}, 'New': len(new)}})
+                      'counts': {**{t: len(v) for t, v in tiers.items()}, 'New': len(new)},
+                      'categories': cats, 'category': cat, 'default_category': dflt})
     return lists
 
 
@@ -101,15 +161,24 @@ def speciality_options(conn):
     return out
 
 
-def rankings_data(conn, speciality=''):
+def rankings_data(conn, speciality='', cats_sel=None):
     """{lists:[{key,label,tiers:{Top:[..],Good:[..],Average:[..]},counts}], new_colleges:[..]}
     With `speciality`: the per-speciality order (each list also gets `new` for that course)."""
     rec.ensure_rec_tables(conn)
     if speciality:
-        return {'speciality': speciality, 'lists': _speciality_lists(conn, speciality), 'new_colleges': [],
+        return {'speciality': speciality, 'lists': _speciality_lists(conn, speciality, cats_sel), 'new_colleges': [],
                 'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
     lists, new_by_code = [], {}
     for key, meta in rec.TIER_LISTS.items():
+        mrows = _mcc_rows(conn, key)
+        cats, dflt = mcc_categories(conn, key, mrows)
+        cat = _pick(cats, dflt, (cats_sel or {}).get(key))
+        if cat != dflt:                      # another category: computed live, team tiers don't apply
+            tiers = _mcc_category_tiers(conn, key, cat, mrows)
+            lists.append({'key': key, 'label': meta['label'], 'tiers': tiers,
+                          'counts': {t: len(v) for t, v in tiers.items()},
+                          'categories': cats, 'category': cat, 'default_category': dflt, 'team_edited': False})
+            continue
         rows = rec.tiers_payload(conn, key)
         tiers = {t: [] for t in _TIER_ORDER}
         for r in rows:
@@ -120,7 +189,8 @@ def rankings_data(conn, speciality=''):
             tiers.setdefault(r['tier'], []).append(item)
         # within a tier: keep the curated order (tiers_payload sorts by tier then basis rank)
         lists.append({'key': key, 'label': meta['label'], 'tiers': tiers,
-                      'counts': {t: len(v) for t, v in tiers.items()}})
+                      'counts': {t: len(v) for t, v in tiers.items()},
+                      'categories': cats, 'category': cat, 'default_category': dflt, 'team_edited': True})
     # New colleges come from EVERY official MCC seat list (incl. Deemed 'All India' + minority quotas,
     # which a brand-new deemed college may have alone), not only the 4 ranked lists.
     bodies = rec._bodies(conn)
@@ -186,22 +256,32 @@ def _table(pdf, rows, heads, widths, aligns):
                 row.cell(_t(v))
 
 
-def build_rankings_pdf(conn, speciality=''):
+def build_rankings_pdf(conn, speciality='', only='', plain=False, category=''):
+    """only = one list key (aiq_open | deemed_paid_open | ciq_open | nri_deemed) → just that list.
+    plain = one continuous numbered list per list (same order: Top, Good, Average), no tier headings."""
     from pg_admin.choice_pdf import _t, _NAVY, _GREY
-    data = rankings_data(conn, speciality)
-    pdf = _pdf_base('MCC College Rankings 2026' + (f' — {speciality}' if speciality else ''),
-                    'GooCampus guidance · Top · Good · Average colleges')
+    data = rankings_data(conn, speciality, {only: category} if (only and category) else None)
+    used = ''
+    if only:
+        data['lists'] = [l for l in data['lists'] if l['key'] == only]
+        used = next((l.get('category') or '' for l in data['lists']), '')   # named in title + filename (as states)
+    pdf = _pdf_base('MCC College Rankings 2026' + (f' — {speciality}' if speciality else '')
+                    + (f" — {rec.TIER_LISTS[only]['label']}" if only else '') + (f' — {used}' if used else ''),
+                    'GooCampus guidance · ' + ('colleges in recommended order' if plain else 'Top · Good · Average colleges'))
     pdf.set_font('Helvetica', '', 8.6); pdf.set_text_color(*_GREY)
-    pdf.multi_cell(0, 4.4, _t(
+    intro = (
         'How to read this: colleges are grouped by how quickly their seats were taken in the MAIN rounds of last '
         "year's MCC counselling (Round 1 / Round 2; mop-up and stray rounds are ignored). It is by college only - "
         'not by speciality or location. Colleges that are new in 2026 are listed in a separate document. '
-        f"Prepared by the GooCampus team on {data['generated_at']}.") if not speciality else _t(
+        f"Prepared by the GooCampus team on {data['generated_at']}.") if not speciality else (
         f"How to read this: for {speciality}, colleges in each list are in the order their {speciality} seat was "
         "taken in Round 1 of last year's MCC counselling (Round 2 where it wasn't filled in Round 1; Open category). "
         "Top = first 20%, Good = next 35%, Average = the rest. Seats with no previous allotment are listed as "
-        f"'New in 2026' at the end of each list. Prepared by the GooCampus team on {data['generated_at']}."),
-        new_x='LMARGIN', new_y='NEXT')
+        f"'New in 2026' at the end of each list. Prepared by the GooCampus team on {data['generated_at']}.")
+    if plain:   # plain list: no tier wording in the intro
+        intro = intro.replace('colleges are grouped by how quickly', 'colleges are listed in the order of how quickly') \
+                     .replace('Top = first 20%, Good = next 35%, Average = the rest. ', '')
+    pdf.multi_cell(0, 4.4, _t(intro), new_x='LMARGIN', new_y='NEXT')
     TIER_COL = {'Top': (22, 101, 52), 'Good': (37, 99, 235), 'Average': (107, 114, 128)}
     for lst in data['lists']:
         if not any(lst['tiers'].values()) and not lst.get('new'):
@@ -210,14 +290,16 @@ def build_rankings_pdf(conn, speciality=''):
             pdf.add_page()
         pdf.ln(4); pdf.set_font('Helvetica', 'B', 13); pdf.set_text_color(*_NAVY)
         pdf.cell(0, 8, _t(lst['label']), new_x='LMARGIN', new_y='NEXT')
-        for tier in _TIER_ORDER:
-            rows = lst['tiers'].get(tier) or []
+        groups = ([('', [r for t in _TIER_ORDER for r in (lst['tiers'].get(t) or [])])] if plain
+                  else [(t, lst['tiers'].get(t) or []) for t in _TIER_ORDER])
+        for tier, rows in groups:
             if not rows:
                 continue
             if pdf.get_y() > 250:
                 pdf.add_page()
-            pdf.ln(1); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*TIER_COL[tier])
-            pdf.cell(0, 6.5, f'{tier} colleges ({len(rows)})', new_x='LMARGIN', new_y='NEXT')
+            if tier:
+                pdf.ln(1); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*TIER_COL[tier])
+                pdf.cell(0, 6.5, f'{tier} colleges ({len(rows)})', new_x='LMARGIN', new_y='NEXT')
             _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], str(r['seats'])]
                          for i, r in enumerate(rows, start=1)],
                    ('#', 'College', 'State', 'Type', '2026 seats'), (9, 102, 34, 26, 15),
@@ -231,8 +313,11 @@ def build_rankings_pdf(conn, speciality=''):
                          for i, r in enumerate(lst['new'], start=1)],
                    ('#', 'College', 'State', 'Type', '2026 seats'), (9, 102, 34, 26, 15),
                    ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
-    slug = ''.join(ch if ch.isalnum() else '_' for ch in speciality)[:40] if speciality else ''
-    return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026' + (('_' + slug) if slug else '') + '.pdf'
+    import re
+    slug = re.sub(r'[^A-Za-z0-9]+', '_', speciality).strip('_')[:40] if speciality else ''
+    one = re.sub(r'[^A-Za-z0-9]+', '_', rec.TIER_LISTS[only]['label']).strip('_') if only else ''
+    return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026' + ''.join(
+        '_' + x for x in (slug, one, re.sub(r'[^A-Za-z0-9]+', '_', used).strip('_'), 'List' if plain else '') if x) + '.pdf'
 
 
 NOTE_MATCH_MIN = 0.6
@@ -328,13 +413,20 @@ def _pdf_resp(kind):
     try:
         sp = (request.args.get('speciality') or '').strip()
         auth = (request.args.get('authority') or 'mcc').strip().lower()
+        only = (request.args.get('list') or '').strip()      # one list only (founder 2026-10-31); '' = all lists
+        plain = (request.args.get('style') or '').strip().lower() == 'plain'   # no Top/Good/Average headings
+        cat = (request.args.get('category') or '').strip()   # with list=: that list's category (unknown → default)
         if auth != 'mcc':                    # a state's PDF carries its own "New in 2026" section
             from pg_admin.routes import state_rankings as srk
-            pdf, fn = srk.build_pdf(conn, auth, sp)
+            if only and only not in srk.LISTS:
+                return jsonify({'ok': False, 'error': 'unknown_list', 'allowed': list(srk.LISTS)}), 400
+            pdf, fn = srk.build_pdf(conn, auth, sp, only, plain, cat)
             if not pdf:
                 return jsonify({'ok': False, 'error': 'unknown_authority'}), 404
         else:
-            pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp)
+            if only and only not in rec.TIER_LISTS:
+                return jsonify({'ok': False, 'error': 'unknown_list', 'allowed': list(rec.TIER_LISTS)}), 400
+            pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp, only, plain, cat)
         return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': f'attachment; filename="{fn}"'})
     finally:
         conn.close()
@@ -365,8 +457,10 @@ def _doctor_or_desk():
 
 
 def api_rankings():
-    """GET /api/pg/rankings[?authority=mcc|<state code>&speciality=] → the rankings for the dashboard page
-    (Internal / Paid / desk). `authorities` lists the tabs (MCC + every state with a 2026 seat matrix)."""
+    """GET /api/pg/rankings[?authority=mcc|<state code>&speciality=&list=<key>&category=<code>] → the rankings for
+    the dashboard page (Internal / Paid / desk). `authorities` lists the tabs (MCC + every state with a 2026 seat
+    matrix). Every list carries `categories` (default first), `category` (in use), `default_category`,
+    `team_edited`; list+category recompute that one list in that category, the others stay on their default."""
     ok, err = _doctor_or_desk()
     if not ok:
         return err
@@ -375,16 +469,18 @@ def api_rankings():
         from pg_admin.routes import state_rankings as srk
         sp = (request.args.get('speciality') or '').strip()
         auth = (request.args.get('authority') or 'mcc').strip().lower()
+        lk, ck = (request.args.get('list') or '').strip(), (request.args.get('category') or '').strip()
+        sel = {lk: ck} if (lk and ck) else None   # recompute that one list in that category (founder 2026-10-31)
         # tabs: MCC first, then every state with a 2026 seat matrix (founder 2026-10-31)
         tabs = [{'authority': 'mcc', 'name': 'MCC (All India)'}] + [
             {'authority': a['authority'], 'name': a['name']} for a in srk.authorities(conn)]
         if auth != 'mcc':
-            d = srk.rankings_data(conn, auth, sp)
+            d = srk.rankings_data(conn, auth, sp, sel)
             if not d:
                 return jsonify({'ok': False, 'error': 'unknown_authority', 'authorities': tabs}), 404
             return jsonify({'ok': True, **d, 'authorities': tabs,
                             'specialities': srk.speciality_options(conn, d['body'])})
-        return jsonify({'ok': True, 'authority': 'mcc', 'name': 'MCC (All India)', **rankings_data(conn, sp),
+        return jsonify({'ok': True, 'authority': 'mcc', 'name': 'MCC (All India)', **rankings_data(conn, sp, sel),
                         'authorities': tabs, 'specialities': speciality_options(conn)})
     except Exception as e:
         logging.error("api_rankings: %s", e)
@@ -394,7 +490,7 @@ def api_rankings():
 
 
 def api_rankings_pdf():
-    """GET /api/pg/rankings/pdf?kind=rankings|new[&authority=<state code>&speciality=]"""
+    """GET /api/pg/rankings/pdf?kind=rankings|new[&authority=<state code>&speciality=&list=<one list key>&category=<code>&style=plain]"""
     ok, err = _doctor_or_desk()
     if not ok:
         return err
