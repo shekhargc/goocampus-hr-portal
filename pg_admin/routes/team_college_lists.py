@@ -440,12 +440,7 @@ def _build_state_pdf(conn, data, groups=None):
     name = _state_name(conn, data['list'].get('kind'))
     pdf = _pdf_base('GooCampus Recommended Colleges', f'{name} state counselling · PG 2026 · by seat type')
     pdf.footer_note = 'GooCampus Recommended Colleges - a suggestion only; the final decision is yours.'
-    pdf.set_font('Helvetica', '', 8.8); pdf.set_text_color(*_GREY)
-    pdf.multi_cell(0, 4.6, _t(
-        f"MD/MS colleges in {name}'s 2026 state counselling seat matrix, in the order GooCampus recommends within "
-        "each seat type (Government colleges, Private colleges, Management Quota, NRI Quota) - based on each "
-        "college's clinical exposure, faculty and standing, not only on last year's cut-offs or fees. Colleges "
-        f"marked 'New' had no allotment in {name}'s counselling in 2025."), new_x='LMARGIN', new_y='NEXT')
+    # no intro paragraph (founder 2026-10-31) — only the "Please note" box above the lists
     pdf.ln(1); pdf.set_fill_color(255, 247, 237); pdf.set_draw_color(253, 186, 116); pdf.set_text_color(124, 45, 18)
     pdf.set_font('Helvetica', '', 8.6)
     pdf.multi_cell(0, 4.6, _t('Please note: this is a suggestion from GooCampus to help you decide. Please verify '
@@ -477,7 +472,7 @@ def _flex_table(pdf, items, with_state):
         cols.append(('State', 30, 'LEFT', lambda i, it: it.get('state') or ''))
     if has_grade:
         cols.append(('Grade', 20, 'LEFT', lambda i, it: it.get('label') or ''))
-    cols.append(('2026 seats', 17, 'RIGHT', lambda i, it: str(it['seats'])))
+    cols.append(('Seats', 17, 'RIGHT', lambda i, it: str(it['seats'])))
     if has_note:
         cols.append(('Remarks', 50, 'LEFT', lambda i, it: it.get('note') or ''))
     fixed = sum(w for _h, w, _a, _f in cols)
