@@ -176,6 +176,14 @@ def ensure_pg_auth_tables():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_users_token ON pg_users (session_token)")
+        # Extra logins for TEAM members only (founder 2026-10-31): a doctor account is one device at a time
+        # (a new login replaces pg_users.session_token), but a team member may stay signed in on several.
+        conn.execute('''CREATE TABLE IF NOT EXISTS pg_team_sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            expires_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_otps (
             id SERIAL PRIMARY KEY,
             mobile TEXT NOT NULL,
