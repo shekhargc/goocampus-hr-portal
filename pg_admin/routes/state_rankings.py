@@ -395,9 +395,11 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
             if label in n['lists']:
                 news.append({**n, 'lists': [label], 'seats': n['seats_by_list'].get(label, 0)})
         data['new_colleges'] = news
-    pdf = _pdf_base(f"{data['name']} College Rankings 2026" + (f' - {speciality}' if speciality else '')
-                    + (f" - {LISTS.get(only, '')}" if only else '') + (f" - {_cat_label(used)}" if used else ''),
-                    'GooCampus guidance · ' + ('colleges in recommended order' if plain else 'Top · Good · Average colleges'))
+    detail = ' · '.join(x for x in (speciality, LISTS.get(only, '') if only else '',
+                                    f'{_cat_label(used)} category' if used else '') if x)
+    pdf = _pdf_base(f"{data['name']} College Rankings 2026",
+                    'GooCampus guidance · ' + ('colleges in recommended order' if plain else 'Top · Good · Average colleges'),
+                    detail)
     pdf.footer_note = (f"GooCampus guidance from last year's {data['name']} main rounds. "
                        "A suggestion only - verify before locking your choices.")
     pdf.set_font('Helvetica', '', 8.6); pdf.set_text_color(*_GREY)
@@ -405,18 +407,19 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
         f"How to read this: {data['name']} state counselling seats, in four lists - Government colleges, Private "
         "colleges, Management Quota and NRI Quota. In each list colleges are grouped by how quickly their seats were "
         f"taken in the MAIN rounds of last year's {data['name']} counselling (Round 1 / Round 2; mop-up and stray "
-        "rounds ignored). It is by college only - not by speciality. Colleges new to this counselling in 2026 are "
+        "rounds ignored), in the category shown beside each list. It is by college only - not by speciality. "
+        "Colleges new to this counselling in 2026 are "
         f"listed at the end. Prepared by the GooCampus team on {data['generated_at']}.") if not speciality else (
         f"How to read this: for {speciality}, colleges in each list are in the order their {speciality} seat was "
         f"taken in Round 1 of last year's {data['name']} counselling (Round 2 where it wasn't filled in Round 1; "
-        "Open / General category). Top = first 20%, Good = next 35%, Average = the rest. Seats with no previous "
+        "in the category shown beside each list). Top = first 20%, Good = next 35%, Average = the rest. Seats with no previous "
         f"allotment are listed as 'New in 2026'. Prepared by the GooCampus team on {data['generated_at']}.")
     if plain:   # plain list: no tier wording in the intro
         intro = intro.replace('colleges are grouped by how quickly', 'colleges are listed in the order of how quickly') \
                      .replace('Top = first 20%, Good = next 35%, Average = the rest. ', '')
     pdf.multi_cell(0, 4.4, _t(intro), new_x='LMARGIN', new_y='NEXT')
     TIER_COL = {'Top': (22, 101, 52), 'Good': (37, 99, 235), 'Average': (107, 114, 128)}
-    heads, widths = ('#', 'College', 'Type', '2026 seats'), (9, 128, 34, 15)
+    heads, widths = ('#', 'College', 'Type', 'Seats'), (9, 128, 34, 15)
     aligns = ('CENTER', 'LEFT', 'LEFT', 'RIGHT')
 
     def block(title, rows, colour):
@@ -435,7 +438,8 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
         if pdf.get_y() > 240:
             pdf.add_page()
         pdf.ln(4); pdf.set_font('Helvetica', 'B', 13); pdf.set_text_color(*_NAVY)
-        pdf.cell(0, 8, _t(lst['label']), new_x='LMARGIN', new_y='NEXT')
+        pdf.multi_cell(0, 7, _t(lst['label'] + (f" · {_cat_label(lst['category'])} category" if lst.get('category') else '')),
+                       new_x='LMARGIN', new_y='NEXT')
         if plain:
             block('Colleges', [r for t in _TIER_ORDER for r in (lst['tiers'].get(t) or [])], _NAVY)
         else:
@@ -453,7 +457,7 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
                                   'merits (hospital, faculty, location).'), new_x='LMARGIN', new_y='NEXT')
         _table(pdf, [[str(i), r['college'], ', '.join(r['lists']), str(r['seats'])]
                      for i, r in enumerate(data['new_colleges'], 1)],
-               ('#', 'College', 'Seat lists', '2026 seats'), (9, 112, 50, 15), aligns)
+               ('#', 'College', 'Seat lists', 'Seats'), (9, 112, 50, 15), aligns)
     import re
     slug = re.sub(r'[^A-Za-z0-9]+', '_', data['name']).strip('_')
     sp = ('_' + re.sub(r'[^A-Za-z0-9]+', '_', speciality).strip('_')[:40]) if speciality else ''

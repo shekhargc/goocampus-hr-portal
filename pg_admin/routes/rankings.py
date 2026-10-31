@@ -216,7 +216,9 @@ def rankings_data(conn, speciality='', cats_sel=None):
 
 
 # ── PDFs ─────────────────────────────────────────────────────────────────────
-def _pdf_base(title, subtitle):
+def _pdf_base(title, subtitle, detail=''):
+    """Branded A4 header: logo left; title, optional detail line (speciality · list · category) and subtitle
+    right-aligned and WRAPPED inside x 60-198, so a long line never runs over the logo or off the page."""
     from pg_admin.choice_pdf import _PDF, _LOGO, _NAVY, _ORANGE, _t
     import os
     pdf = _PDF(orientation='P', unit='mm', format='A4')
@@ -233,9 +235,13 @@ def _pdf_base(title, subtitle):
         pass
     pdf.set_xy(60, 10)
     pdf.set_font('Helvetica', 'B', 15); pdf.set_text_color(*_NAVY)
-    pdf.cell(0, 7, _t(title), align='R', new_x='LMARGIN', new_y='NEXT')
+    pdf.multi_cell(138, 7, _t(title), align='R', new_x='LMARGIN', new_y='NEXT')
+    if detail:
+        pdf.set_x(60); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*_NAVY)
+        pdf.multi_cell(138, 5.5, _t(detail), align='R', new_x='LMARGIN', new_y='NEXT')
     pdf.set_x(60); pdf.set_font('Helvetica', 'B', 10); pdf.set_text_color(*_ORANGE)
-    pdf.cell(0, 6, _t(subtitle), align='R', new_x='LMARGIN', new_y='NEXT')
+    pdf.multi_cell(138, 6, _t(subtitle), align='R', new_x='LMARGIN', new_y='NEXT')
+    pdf.set_y(max(pdf.get_y(), 23))            # below the logo (y 10-22)
     pdf.ln(4); pdf.set_draw_color(*_ORANGE); pdf.set_line_width(0.6)
     pdf.line(12, pdf.get_y(), 198, pdf.get_y()); pdf.ln(3)
     return pdf
@@ -265,17 +271,21 @@ def build_rankings_pdf(conn, speciality='', only='', plain=False, category=''):
     if only:
         data['lists'] = [l for l in data['lists'] if l['key'] == only]
         used = next((l.get('category') or '' for l in data['lists']), '')   # named in title + filename (as states)
-    pdf = _pdf_base('MCC College Rankings 2026' + (f' — {speciality}' if speciality else '')
-                    + (f" — {rec.TIER_LISTS[only]['label']}" if only else '') + (f' — {used}' if used else ''),
-                    'GooCampus guidance · ' + ('colleges in recommended order' if plain else 'Top · Good · Average colleges'))
+    detail = ' · '.join(x for x in (speciality, rec.TIER_LISTS[only]['label'] if only else '',
+                                    f'{used} category' if used else '') if x)
+    pdf = _pdf_base('MCC College Rankings 2026',
+                    'GooCampus guidance · ' + ('colleges in recommended order' if plain else 'Top · Good · Average colleges'),
+                    detail)
     pdf.set_font('Helvetica', '', 8.6); pdf.set_text_color(*_GREY)
     intro = (
         'How to read this: colleges are grouped by how quickly their seats were taken in the MAIN rounds of last '
         "year's MCC counselling (Round 1 / Round 2; mop-up and stray rounds are ignored). It is by college only - "
-        'not by speciality or location. Colleges that are new in 2026 are listed in a separate document. '
+        'not by speciality or location. Each list uses last year\'s allotments in the category shown beside it. '
+        'Colleges that are new in 2026 are listed in a separate document. '
         f"Prepared by the GooCampus team on {data['generated_at']}.") if not speciality else (
         f"How to read this: for {speciality}, colleges in each list are in the order their {speciality} seat was "
-        "taken in Round 1 of last year's MCC counselling (Round 2 where it wasn't filled in Round 1; Open category). "
+        "taken in Round 1 of last year's MCC counselling (Round 2 where it wasn't filled in Round 1), in the category "
+        "shown beside each list. "
         "Top = first 20%, Good = next 35%, Average = the rest. Seats with no previous allotment are listed as "
         f"'New in 2026' at the end of each list. Prepared by the GooCampus team on {data['generated_at']}.")
     if plain:   # plain list: no tier wording in the intro
@@ -289,7 +299,8 @@ def build_rankings_pdf(conn, speciality='', only='', plain=False, category=''):
         if pdf.get_y() > 240:
             pdf.add_page()
         pdf.ln(4); pdf.set_font('Helvetica', 'B', 13); pdf.set_text_color(*_NAVY)
-        pdf.cell(0, 8, _t(lst['label']), new_x='LMARGIN', new_y='NEXT')
+        pdf.multi_cell(0, 7, _t(lst['label'] + (f" · {lst['category']} category" if lst.get('category') else '')),
+                       new_x='LMARGIN', new_y='NEXT')
         groups = ([('', [r for t in _TIER_ORDER for r in (lst['tiers'].get(t) or [])])] if plain
                   else [(t, lst['tiers'].get(t) or []) for t in _TIER_ORDER])
         for tier, rows in groups:
@@ -302,7 +313,7 @@ def build_rankings_pdf(conn, speciality='', only='', plain=False, category=''):
                 pdf.cell(0, 6.5, f'{tier} colleges ({len(rows)})', new_x='LMARGIN', new_y='NEXT')
             _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], str(r['seats'])]
                          for i, r in enumerate(rows, start=1)],
-                   ('#', 'College', 'State', 'Type', '2026 seats'), (9, 102, 34, 26, 15),
+                   ('#', 'College', 'State', 'Type', 'Seats'), (9, 102, 34, 26, 15),
                    ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
         if lst.get('new'):
             if pdf.get_y() > 250:
@@ -311,7 +322,7 @@ def build_rankings_pdf(conn, speciality='', only='', plain=False, category=''):
             pdf.cell(0, 6.5, f"New in 2026 ({len(lst['new'])}) - no previous allotment", new_x='LMARGIN', new_y='NEXT')
             _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], str(r['seats'])]
                          for i, r in enumerate(lst['new'], start=1)],
-                   ('#', 'College', 'State', 'Type', '2026 seats'), (9, 102, 34, 26, 15),
+                   ('#', 'College', 'State', 'Type', 'Seats'), (9, 102, 34, 26, 15),
                    ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
     import re
     slug = re.sub(r'[^A-Za-z0-9]+', '_', speciality).strip('_')[:40] if speciality else ''
@@ -400,7 +411,7 @@ def build_new_colleges_pdf(conn):
         _table(pdf, [[str(i), r['college'], r['state'], r['institute_type'], ', '.join(r['lists']),
                       (r.get('note') or '').replace('In 2025: ', ''), str(r['seats'])]
                      for i, r in enumerate(rows, start=1)],
-               ('#', 'College', 'State', 'Type', 'Seat lists', 'In 2025', '2026 seats'), (8, 52, 22, 24, 34, 32, 14),
+               ('#', 'College', 'State', 'Type', 'Seat lists', 'In 2025', 'Seats'), (8, 52, 22, 24, 34, 32, 14),
                ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
     else:
         pdf.set_font('Helvetica', 'I', 10)
