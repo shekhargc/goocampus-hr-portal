@@ -186,10 +186,14 @@ def _table(pdf, rows, heads, widths, aligns):
                 row.cell(_t(v))
 
 
-def build_rankings_pdf(conn, speciality=''):
+def build_rankings_pdf(conn, speciality='', only=''):
+    """only = one list key (aiq_open | deemed_paid_open | ciq_open | nri_deemed) → just that list."""
     from pg_admin.choice_pdf import _t, _NAVY, _GREY
     data = rankings_data(conn, speciality)
-    pdf = _pdf_base('MCC College Rankings 2026' + (f' — {speciality}' if speciality else ''),
+    if only:
+        data['lists'] = [l for l in data['lists'] if l['key'] == only]
+    pdf = _pdf_base('MCC College Rankings 2026' + (f' — {speciality}' if speciality else '')
+                    + (f" — {rec.TIER_LISTS[only]['label']}" if only else ''),
                     'GooCampus guidance · Top · Good · Average colleges')
     pdf.set_font('Helvetica', '', 8.6); pdf.set_text_color(*_GREY)
     pdf.multi_cell(0, 4.4, _t(
@@ -231,8 +235,10 @@ def build_rankings_pdf(conn, speciality=''):
                          for i, r in enumerate(lst['new'], start=1)],
                    ('#', 'College', 'State', 'Type', '2026 seats'), (9, 102, 34, 26, 15),
                    ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'RIGHT'))
-    slug = ''.join(ch if ch.isalnum() else '_' for ch in speciality)[:40] if speciality else ''
-    return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026' + (('_' + slug) if slug else '') + '.pdf'
+    import re
+    slug = re.sub(r'[^A-Za-z0-9]+', '_', speciality).strip('_')[:40] if speciality else ''
+    one = re.sub(r'[^A-Za-z0-9]+', '_', rec.TIER_LISTS[only]['label']).strip('_') if only else ''
+    return bytes(pdf.output()), 'GooCampus_MCC_College_Rankings_2026' + ''.join('_' + x for x in (slug, one) if x) + '.pdf'
 
 
 NOTE_MATCH_MIN = 0.6
@@ -328,13 +334,18 @@ def _pdf_resp(kind):
     try:
         sp = (request.args.get('speciality') or '').strip()
         auth = (request.args.get('authority') or 'mcc').strip().lower()
+        only = (request.args.get('list') or '').strip()      # one list only (founder 2026-10-31); '' = all lists
         if auth != 'mcc':                    # a state's PDF carries its own "New in 2026" section
             from pg_admin.routes import state_rankings as srk
-            pdf, fn = srk.build_pdf(conn, auth, sp)
+            if only and only not in srk.LISTS:
+                return jsonify({'ok': False, 'error': 'unknown_list', 'allowed': list(srk.LISTS)}), 400
+            pdf, fn = srk.build_pdf(conn, auth, sp, only)
             if not pdf:
                 return jsonify({'ok': False, 'error': 'unknown_authority'}), 404
         else:
-            pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp)
+            if only and only not in rec.TIER_LISTS:
+                return jsonify({'ok': False, 'error': 'unknown_list', 'allowed': list(rec.TIER_LISTS)}), 400
+            pdf, fn = build_new_colleges_pdf(conn) if kind == 'new' else build_rankings_pdf(conn, sp, only)
         return Response(pdf, mimetype='application/pdf', headers={'Content-Disposition': f'attachment; filename="{fn}"'})
     finally:
         conn.close()
@@ -394,7 +405,7 @@ def api_rankings():
 
 
 def api_rankings_pdf():
-    """GET /api/pg/rankings/pdf?kind=rankings|new[&authority=<state code>&speciality=]"""
+    """GET /api/pg/rankings/pdf?kind=rankings|new[&authority=<state code>&speciality=&list=<one list key>]"""
     ok, err = _doctor_or_desk()
     if not ok:
         return err

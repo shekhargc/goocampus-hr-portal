@@ -289,13 +289,23 @@ def rankings_data(conn, authority, speciality=''):
 
 
 # ── PDFs ─────────────────────────────────────────────────────────────────────
-def build_pdf(conn, authority, speciality=''):
+def build_pdf(conn, authority, speciality='', only=''):
+    """only = one list key (govt|private|management|nri) → just that list + its new colleges."""
     from pg_admin.choice_pdf import _t, _NAVY, _GREY
     from pg_admin.routes.rankings import _pdf_base, _table
     data = rankings_data(conn, authority, speciality)
     if not data:
         return None, None
-    pdf = _pdf_base(f"{data['name']} College Rankings 2026" + (f' - {speciality}' if speciality else ''),
+    if only:
+        label = LISTS.get(only, '')
+        data['lists'] = [l for l in data['lists'] if l['key'] == only]
+        news = []
+        for n in data.get('new_colleges') or []:
+            if label in n['lists']:
+                news.append({**n, 'lists': [label], 'seats': n['seats_by_list'].get(label, 0)})
+        data['new_colleges'] = news
+    pdf = _pdf_base(f"{data['name']} College Rankings 2026" + (f' - {speciality}' if speciality else '')
+                    + (f" - {LISTS.get(only, '')}" if only else ''),
                     'GooCampus guidance · Top · Good · Average colleges')
     pdf.footer_note = (f"GooCampus guidance from last year's {data['name']} main rounds. "
                        "A suggestion only - verify before locking your choices.")
@@ -350,7 +360,8 @@ def build_pdf(conn, authority, speciality=''):
     import re
     slug = re.sub(r'[^A-Za-z0-9]+', '_', data['name']).strip('_')
     sp = ('_' + re.sub(r'[^A-Za-z0-9]+', '_', speciality).strip('_')[:40]) if speciality else ''
-    return bytes(pdf.output()), f'GooCampus_{slug}_College_Rankings_2026{sp}.pdf'
+    one = ('_' + re.sub(r'[^A-Za-z0-9]+', '_', LISTS.get(only, '')).strip('_')) if only else ''
+    return bytes(pdf.output()), f'GooCampus_{slug}_College_Rankings_2026{sp}{one}.pdf'
 
 
 # ── Desk tier editor (combo 'st:<authority>:<list>') ─────────────────────────
