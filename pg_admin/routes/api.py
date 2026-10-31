@@ -85,23 +85,18 @@ def api_pg_otp_send():
     conn.close()
     # Send the SAME code over BOTH WhatsApp and SMS. A number that isn't on WhatsApp
     # still gets the code by SMS, and either message logs the doctor in. Succeed if
-    # EITHER channel is accepted. (founder 2026-09-28)
-    wa_ok, wa_err = False, None
+    # EITHER channel is accepted. (founder 2026-09-28) Both go out IN PARALLEL and the reply
+    # comes as soon as one is accepted (max ~5 s), so the OTP box opens right away (2026-10-31).
     try:
-        from app import _send_whatsapp_otp  # reuse the portal's live WhatsApp OTP sender
-        wa_ok, wa_err = _send_whatsapp_otp(mobile, otp)
-    except Exception as e:
-        logging.error("api_pg_otp_send WA: %s", e)
-        wa_err = str(e)
-    sms_ok, sms_err = False, None
-    try:
+        from app import _send_whatsapp_otp, _send_otp_fast  # the portal's live WhatsApp OTP sender
         from sms_utils import send_sms_otp
-        sms_ok, sms_err = send_sms_otp(mobile, otp)
+        ok, err = _send_otp_fast([('whatsapp', lambda: _send_whatsapp_otp(mobile, otp)),
+                                  ('sms', lambda: send_sms_otp(mobile, otp))])
     except Exception as e:
-        logging.error("api_pg_otp_send SMS: %s", e)
-        sms_err = str(e)
-    if not (wa_ok or sms_ok):
-        logging.error("api_pg_otp_send: both channels failed WA=%s SMS=%s", wa_err, sms_err)
+        logging.error("api_pg_otp_send: %s", e)
+        ok, err = False, str(e)
+    if not ok:
+        logging.error("api_pg_otp_send: both channels failed: %s", err)
         return jsonify({'ok': False, 'error': 'Could not send the code. Please try again.'}), 502
     return jsonify({'ok': True})
 
