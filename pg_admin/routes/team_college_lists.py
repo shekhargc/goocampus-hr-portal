@@ -402,11 +402,7 @@ def build_pdf(conn, lid, states=None):
     pdf = _pdf_base('GooCampus Recommended Colleges', 'Deemed universities · MCC PG 2026 · ' +
                     ('all India' if data['list'].get('mode') == 'all_india' else 'state by state'))
     pdf.footer_note = 'GooCampus Recommended Colleges - a suggestion only; the final decision is yours.'
-    pdf.set_font('Helvetica', '', 8.8); pdf.set_text_color(*_GREY)
-    pdf.multi_cell(0, 4.6, _t(
-        "Deemed university colleges in MCC's 2026 seat matrix, in the order GooCampus recommends "
-        + ("across India" if data['list'].get('mode') == 'all_india' else "within each state") + " - based on each college's clinical exposure, faculty and standing, not on last year's cut-offs or "
-        "fees. Colleges marked 'New' had no MCC allotment in 2025 (a new college, or one that was in its state's counselling)."), new_x='LMARGIN', new_y='NEXT')
+    # no intro paragraph (founder 2026-10-31) — only the "Please note" box above the lists
     pdf.ln(1); pdf.set_fill_color(255, 247, 237); pdf.set_draw_color(253, 186, 116); pdf.set_text_color(124, 45, 18)
     pdf.set_font('Helvetica', '', 8.6)
     pdf.multi_cell(0, 4.6, _t('Please note: this is a suggestion from GooCampus to help you decide. Please verify '
