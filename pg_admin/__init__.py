@@ -471,6 +471,8 @@ def register_pg_admin(app):
          ['GET', 'POST', 'DELETE']),
         ('/api/pg/desk/college-lists/<int:lid>/pdf', 'api_pg_desk_college_list_pdf', team_college_lists.list_pdf,
          ['GET']),
+        ('/api/pg/desk/college-lists/<int:lid>/email', 'api_pg_desk_college_list_email', team_college_lists.list_email,
+         ['GET', 'POST']),
         ('/api/pg/desk/doctors', 'api_pg_desk_doctors', _d.desk_doctors, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>', 'api_pg_desk_doctor', _d.desk_doctor, ['GET']),
         ('/api/pg/desk/doctors/<int:doctor_id>/states', 'api_pg_desk_states', _d.desk_states,
