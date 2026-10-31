@@ -308,7 +308,9 @@ def list_payload(conn, authority, body, key, rows=None, clinical=None, category=
             if cur is None or v < cur:
                 best[course][r['college_code']] = v
     for d in by.values():
-        d['courses'] = len(d.pop('_c') - {''})    # MD/MS courses in this list (the column for 2025-based states)
+        names = sorted(d.pop('_c') - {''})
+        d['courses'] = len(names)                 # MD/MS courses in this list (the column for 2025-based states)
+        d['course_names'] = names
     draft = score_colleges(by, best, clinical, newc)
     stored = _stored(conn, authority, key) if use_team else {}
     return _finish(by, draft, stored)
@@ -382,7 +384,8 @@ def _speciality_lists(conn, authority, body, speciality, rows, cats_sel=None):
                 continue
             d = by.setdefault(r['college_code'], {
                 'college_code': r['college_code'], 'college': rec._short_name(r['college_name']), 'state': r['state'],
-                'institute_type': _type_label(r['institute_type']), 'seats': 0, 'courses': 1, 'r1': None, 'hist': False})
+                'institute_type': _type_label(r['institute_type']), 'seats': 0, 'courses': 1,
+                'course_names': [_s(r['cutoff_course'])], 'r1': None, 'hist': False})
             d['seats'] += int(r['seats'] or 0)
             if r['has_cutoff']:
                 d['hist'] = True
@@ -449,7 +452,7 @@ def rankings_data(conn, authority, speciality='', cats_sel=None):
             continue
         tiers = {t: [] for t in _TIER_ORDER}
         for c in cols:
-            item = {k: c[k] for k in ('college', 'state', 'institute_type', 'seats', 'courses', 'college_code')}
+            item = {k: c[k] for k in ('college', 'state', 'institute_type', 'seats', 'courses', 'course_names', 'college_code')}
             if c['tier'] == rec.NEW_TIER:
                 n = news.setdefault(c['college_code'], {**item, 'seats': 0, 'lists': [], 'seats_by_list': {}})
                 n['lists'].append(label); n['seats_by_list'][label] = c['seats']; n['seats'] += c['seats']
