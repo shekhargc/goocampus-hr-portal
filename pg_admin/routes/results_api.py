@@ -494,11 +494,22 @@ def _was_in_note(auths):
     return 'In 2025: ' + ', '.join(a if a.startswith('MCC') else f'{a} state counselling' for a in names)
 
 
+# The 2025 cut-offs of these authorities hold STATE merit ranks, not All-India ranks (Tamil Nadu: ≤ 7,768) —
+# so their 2025-vs-2026 comparison uses the state rank; every other authority compares All-India ranks
+# (rank_ai, else rank). The "find by All-India rank" lookups always use rank_ai. (2026-11-01)
+STATE_RANK_CUTOFFS = {'dmer_tn'}
+
+
+def _cmp_rank(auth):
+    return "r.rank" if auth in STATE_RANK_CUTOFFS else "COALESCE(r.rank_ai, r.rank)"
+
+
 def _closing_rows(conn, auth, year, rd, a):
     """2026 opening/closing per college × course × quota × category for this round, joined to the 2025
     closing rank of the same round."""
+    rk = _cmp_rank(auth)
     conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.course,'')<>''",
-             "COALESCE(r.rank_ai, r.rank) IS NOT NULL"] + _hide_dnb()
+             f"{rk} IS NOT NULL"] + _hide_dnb()
     params = [auth, year, rd['round']]
     _filters(a, conds, params)
     # a college without a standard name only counts when the team CONFIRMED it is not in our list (a genuinely
@@ -508,8 +519,8 @@ def _closing_rows(conn, auth, year, rd, a):
     rows = []
     for r in conn.execute(
             f"SELECT r.institute, r.institute_raw, r.course, r.quota, r.allotted_category AS category, MAX(r.state) AS state, "
-            f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN(COALESCE(r.rank_ai, r.rank)) AS opening, "
-            f"MAX(COALESCE(r.rank_ai, r.rank)) AS closing "
+            f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN({rk}) AS opening, "
+            f"MAX({rk}) AS closing "
             f"FROM pg_results r WHERE {' AND '.join(conds)} "
             f"GROUP BY r.institute, r.institute_raw, r.course, r.quota, r.allotted_category", params).fetchall():
         r = dict(r)
@@ -648,6 +659,7 @@ def api_results_cutoffs():
         size = min(500, max(1, _int(a.get('page_size')) or 100))
         total = len(rows)
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'compared_with': f"2025 {rd['round']}",
+                        'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india',
                         'group_counts': group_counts, 'reason_counts': reason_counts,
                         'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,
                         'page_size': size, 'total_pages': (total + size - 1) // size})
@@ -696,7 +708,7 @@ def api_results_trends():
         # movers: seat types with 2+ seats and a 2025 closing beyond rank 100 (a single seat swings wildly)
         mv = sorted([r for r in comp if r['allotted'] >= 2 and (r['closing_2025'] or 0) >= 100],
                     key=lambda r: r['change_pct'])
-        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'compared_with': f"2025 {rd['round']}",
+        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india', 'compared_with': f"2025 {rd['round']}",
                         'totals': {'seat_types': len(rows), 'compared': len(comp),
                                    'tougher': sum(1 for r in comp if r['change'] < 0),
                                    'easier': sum(1 for r in comp if r['change'] > 0),
