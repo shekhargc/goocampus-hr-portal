@@ -434,6 +434,11 @@ def news_save():
         # dates never reached the stage tracker). SAVEPOINT: a calendar problem never undoes the news save.
         if news_id and key_dates_json:
             try:
+                from pg_admin.data.calendar import ensure_calendar_table as _ect
+                _ect(conn)                       # (commits) — BEFORE the savepoint, never inside it
+            except Exception as _ee:
+                logging.warning("news_save calendar table: %s", _ee)
+            try:
                 conn.execute("SAVEPOINT news_kd")
                 _code = _authority_code_for(scope, state)
                 if _code:
