@@ -551,6 +551,7 @@ def _closing_rows(conn, auth, year, rd, a):
     # all of last year's cut-off lines for this authority, to say WHY a seat type has no direct comparison
     # and to give the nearest 2025 reference (founder 2026-10-24: keep new colleges apart from the comparison)
     prev, later, by_icq, inst, ic, icq = {}, {}, defaultdict(list), set(), set(), set()
+    cats_2025 = set()                 # every category this authority's 2025 cut-offs carry at all
     # every college in ANY authority's 2025 cut-offs — only a college missing from all of them is "new in 2026"
     # + where each one was counselled, for the "New in 2026" note (founder 2026-10-27: a college with no 2025
     # result HERE goes to the New tab even if another authority had it — the note says where it was)
@@ -575,7 +576,7 @@ def _closing_rows(conn, auth, year, rd, a):
         # compare on the All-India value: the *_ai columns once filled (state ranks converted, NULL if not)
         c = {kk: (c0.get(_RB.AI_COL[kk]) if c0.get('rank_basis') in ('air', 'state') else c0.get(kk))
              if kk in _RB.AI_COL else c0.get(kk) for kk in c0}
-        inst.add(c['institute']); ic.add(k[:2]); icq.add(k[:3])
+        inst.add(c['institute']); ic.add(k[:2]); icq.add(k[:3]); cats_2025.add(c['category'])
         v = c[col]
         if v is not None:
             if k not in prev or v > (prev[k][0] or 0):
@@ -617,6 +618,10 @@ def _closing_rows(conn, auth, year, rd, a):
             r['compare'] = 'new_course'       # course new at this college
         elif k[:3] not in icq:
             r['compare'] = 'new_quota'        # quota not offered for this course in 2025
+        elif r['category'] not in cats_2025:
+            # last year's data for this authority has NO row in this category at all (e.g. Tamil Nadu 2025 has
+            # no PwD lines) — we can't say there was no seat, only that 2025 figures aren't on record (2026-11-01)
+            r['compare'] = 'no_2025_data'
         else:
             r['compare'] = 'no_2025_seat'     # 2025 had this course + quota, but no seat in this category
         if r['closing_2025']:
@@ -626,7 +631,7 @@ def _closing_rows(conn, auth, year, rd, a):
         elif r['compare'] in ('new_college', 'new_to_authority'):
             r['trend'] = 'new'
         else:
-            r['trend'] = r['compare']         # no_2025_seat | new_course | new_quota
+            r['trend'] = r['compare']         # no_2025_seat | no_2025_data | new_course | new_quota
         # New tab = a college with no 2025 result at THIS authority (new college, or counselled elsewhere in 2025 —
         # see new_note); an old college's new course / quota stays in the table (founder 2026-10-27, option B)
         r['compare_group'] = 'new' if r['compare'] in ('new_college', 'new_to_authority') else 'compared'
@@ -642,7 +647,8 @@ def api_results_cutoffs():
     (in no authority's 2025 cut-offs) or 'new_to_authority' (counselled elsewhere in 2025); each has new_note,
     e.g. 'New college' / 'In 2025: Tamil Nadu state counselling'. Everything else is compared: closing_2025 is last year's closing in the SAME round, or — when that seat type was first filled in
     a later round — that later closing with closing_2025_round 'Round 2' / 'Round 3' / 'Stray' and filled_earlier;
-    trend 'no_2025_seat' = 2025 had the course + quota but no seat in this category; 'new_course' / 'new_quota' =
+    trend 'no_2025_seat' = 2025 had the course + quota but no seat in this category; 'no_2025_data' = this
+    authority's 2025 cut-offs carry no row in this category at all (e.g. Tamil Nadu PwD), so no comparison exists; 'new_course' / 'new_quota' =
     an existing college's course / quota not offered in 2025)
     &compare=direct|later_round|no_2025_seat|new_course|new_quota|new_to_authority|new_college. Has group_counts."""
     if not _auth():
