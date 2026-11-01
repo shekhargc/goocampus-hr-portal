@@ -404,7 +404,8 @@ def apply_news_dates(conn, code, events, news_id=None, inbox_id=None, who='news 
     stats = {'added': 0, 'changed': 0, 'unchanged': 0, 'skipped_older': 0}
     if not (code and events):
         return stats
-    ensure_calendar_table(conn)
+    # NO ensure_calendar_table() here: it COMMITS, which breaks the caller's SAVEPOINT / transaction
+    # (2026-11-01: news save showed "Update saved" + "Could not save"). Callers ensure the table first.
     for e, row, _what in news_date_changes(conn, code, events):
         if row:                       # same step under the existing label → merge_events updates it (logged)
             e = dict(e, label=row.get('label') or e['label'])
