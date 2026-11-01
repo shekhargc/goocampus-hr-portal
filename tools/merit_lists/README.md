@@ -40,6 +40,10 @@ Added 2026-11-01 (built, not yet posted; outputs in the session scratchpad `nov1
 - Tamil Nadu special-quota eligibility lists (CMC 20% GQ; Christian minority, Telugu minority, NRI MQ) print only
   S.No / application no. / name in application-number order - no rank of their own, so no list is made.
   `sm4_tn_special.py` counts (in memory, by application no.) how many are already in the GQ / MQ rank lists.
+- Tamil Nadu 2025-26 (previous session, for the 2025 bridge): GQ (6,989) and MQ (3,912) provisional rank lists of
+  8 Nov 2025 (Medical Dialogues copies) - `sm4_tn_2025.py [<gq.pdf> <mq.pdf>]`, writes `dmer_tn_gq_2025.json` /
+  `dmer_tn_mq_2025.json`. Same reader as 2026 (`sm4_tn.read`) with 2025 column positions; AIR filled from the NBEMS
+  2025 result (`neet2025.json`) by roll; all rolls found, all scores agree. Built 2026-11-01, not yet posted.
 
 Set `MERIT_OUT=<dir>` to choose where the JSON files are written (default: the old scratchpad folder).
 `sm4_tn.py` is the shared Tamil Nadu page reader used by `sm4_tn_build.py` and `sm4_tn_special.py`.
