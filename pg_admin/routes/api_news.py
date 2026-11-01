@@ -440,9 +440,15 @@ BAR_STEPS = {'round_window': 'Counselling round', 'registration': 'Registration'
 TEMPLATE_ROUNDS = {'mcc': ['Round 1', 'Round 2', 'Round 3', 'Stray']}
 DEFAULT_TEMPLATE_ROUNDS = ['Round 1', 'Round 2', 'Mop-up', 'Stray']
 TEMPLATE_STEPS = ['registration', 'choice_filling', 'result', 'reporting']
+# Where an authority's rules differ from the usual flow (from its own notices):
+#   KEA (30-10-2026 schedule): "Candidates will not be allowed to enter OPTIONS again for second round" —
+#   Round 1 options carry over, so Round 2 has no choice-filling step.
+TEMPLATE_OVERRIDES = {'kea': {'Round 2': ['result', 'reporting']}}
 
 
 def _template_steps(code, rnd):
+    if rnd in TEMPLATE_OVERRIDES.get(code, {}):
+        return TEMPLATE_OVERRIDES[code][rnd]
     # MCC registers again every round; states register once (Round 1) and run later rounds on that registration
     return [s for s in TEMPLATE_STEPS if s != 'registration' or rnd == 'Round 1' or code == 'mcc']
 
@@ -455,14 +461,25 @@ def add_template(code, st):
     st = dict(st or {'status': 'not_started', 'stage': None, 'next_deadline': None, 'progress': 0, 'rounds': [],
                      'headline': 'Round 1 dates awaited'})
     have = {r['round']: r for r in st.get('rounds') or []}
-    general = have.get('General')
-    # a general (round-less) registration counts as Round 1's registration
-    gen_steps = {i['step'] for i in (general or {}).get('steps', [])}
-    rounds = [r for r in st.get('rounds') or [] if r['round'] not in (TEMPLATE_ROUNDS.get(code) or DEFAULT_TEMPLATE_ROUNDS)]
+    # round-less steps (a state's registration / verification before Round 1) are shown INSIDE Round 1, like MCC
+    # (founder 2026-11-01: no separate "Before Round 1" tab)
+    general = have.pop('General', None)
+    if general:
+        r1 = have.get('Round 1')
+        moved = [dict(i, round='Round 1') for i in general['steps']]
+        if r1:
+            have['Round 1'] = dict(r1, steps=moved + list(r1['steps']),
+                                   start=min(x for x in (r1.get('start'), general.get('start')) if x),
+                                   status=('live' if 'live' in (r1['status'], general['status']) else
+                                           'done' if r1['status'] == general['status'] == 'done' else
+                                           'upcoming' if r1['status'] == general['status'] == 'upcoming' else 'live'))
+        else:
+            have['Round 1'] = dict(general, round='Round 1', steps=moved)
+    rounds = [r for r in have.values() if r['round'] not in (TEMPLATE_ROUNDS.get(code) or DEFAULT_TEMPLATE_ROUNDS)]
     for rnd in TEMPLATE_ROUNDS.get(code) or DEFAULT_TEMPLATE_ROUNDS:
         cur = have.get(rnd)
         steps = list(cur['steps']) if cur else []
-        dated = {i['step'] for i in steps} | (gen_steps if rnd == 'Round 1' else set())
+        dated = {i['step'] for i in steps}
         for stp in _template_steps(code, rnd):
             if stp not in dated:
                 steps.append({'round': rnd, 'step': stp, 'label': CAL.EVENT_LABELS.get(stp, stp),
@@ -470,11 +487,13 @@ def add_template(code, st):
                               'status': 'awaited', 'expected': True, 'news_id': None, 'revised': None})
         steps.sort(key=lambda i: STEP_ORDER.index(i['step']) if i['step'] in STEP_ORDER else 99)
         if cur:
-            rounds.append({**cur, 'steps': steps})
+            # a round whose dated steps are all over but which still has awaited steps isn't finished
+            done_but_waiting = cur['status'] == 'done' and any(i['status'] == 'awaited' for i in steps)
+            rounds.append({**cur, 'steps': steps, 'status': 'live' if done_but_waiting else cur['status']})
         else:
             rounds.append({'round': rnd, 'status': 'awaited', 'start': None, 'end': None, 'live_step': None,
                            'steps': steps, 'expected': True})
-    rounds.sort(key=lambda r: -1 if r['round'] == 'General' else rorder.get(r['round'], 50))
+    rounds.sort(key=lambda r: rorder.get(r['round'], 50))
     return {**st, 'rounds': rounds, 'template': True}
 
 

@@ -371,14 +371,18 @@ def text(iid, first=None, last=None):
         # (founder 2026-10-18: never draft a notice from its title when the PDF is there)
         out = os.path.join(WORK, 'img')
         os.makedirs(out, exist_ok=True)
-        saved = []
-        for i in empty:
+        saved = _render_pages(path, [i + 1 for i in empty], out, iid)
+        for i in ([] if saved else empty):
+            # fallback: each embedded image, converted to PNG (TIFF layers can't be read as-is)
             try:
                 for j, im in enumerate(r.pages[i].images):
-                    ext = os.path.splitext(im.name)[1] or '.png'
-                    fp = os.path.join(out, f'{iid}_p{i + 1}_{j}{ext}')
-                    with open(fp, 'wb') as f:
-                        f.write(im.data)
+                    fp = os.path.join(out, f'{iid}_p{i + 1}_{j}.png')
+                    try:
+                        im.image.convert('RGB').save(fp, 'PNG')
+                    except Exception:
+                        fp = os.path.join(out, f'{iid}_p{i + 1}_{j}' + (os.path.splitext(im.name)[1] or '.png'))
+                        with open(fp, 'wb') as f:
+                            f.write(im.data)
                     saved.append(fp)
             except Exception as e:
                 print(f'(could not extract images from page {i + 1}: {e})')
@@ -386,6 +390,27 @@ def text(iid, first=None, last=None):
             print('\nSCANNED PAGES (no text layer) — READ these images with the Read tool before drafting:')
             for fp in saved:
                 print('  ' + fp)
+
+
+def _render_pages(pdf_path, pages, out, iid):
+    """Scanned pages → ONE readable PNG per page (2026-11-01: KEA's Round 1 schedule stores its text as TIFF
+    layers over a JPG background — the extracted layers were unreadable, so the draft came out with no dates).
+    PyMuPDF renders the whole page as printed; it lives in the Mac's system Python, not this venv."""
+    import subprocess
+    code = ("import sys, fitz\n"
+            "d = fitz.open(sys.argv[1])\n"
+            "for a in sys.argv[4:]:\n"
+            "    n = int(a); fp = f'{sys.argv[2]}/{sys.argv[3]}_p{n}.png'\n"
+            "    d[n - 1].get_pixmap(dpi=150).save(fp); print(fp)\n")
+    for py in (sys.executable, '/usr/bin/python3'):
+        try:
+            res = subprocess.run([py, '-c', code, pdf_path, out, iid] + [str(p) for p in pages],
+                                 capture_output=True, text=True, timeout=120)
+            if res.returncode == 0 and res.stdout.strip():
+                return [x for x in res.stdout.split('\n') if x.strip()]
+        except Exception:
+            continue
+    return []
 
 
 if __name__ == '__main__':
