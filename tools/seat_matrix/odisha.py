@@ -1,7 +1,8 @@
 """Odisha NEET PG 2026-27 Round 1 provisional seat matrices, REVISED "after redressal of grievances" (Convenor,
 PG (Medical) Counselling Committee, MKCG Medical College Brahmapur, 30.10.2026; they replace the 26.10.2026
-notices No. 46/47/48) → standardised seat rows, bridged to Odisha's 2025 cut-offs. Three PDFs:
-  mdms     — No. 58: MD/MS. In-service State Quota (left half) and Direct State Quota (right half), each 11
+notices No. 46/47/48), MD/MS revised once more on 31.10.2026 (No. 65, "typographical error … corrected by the
+Scrutinizing Committee"; it replaces No. 58) → standardised seat rows, bridged to Odisha's 2025 cut-offs. Three PDFs:
+  mdms     — No. 65 (31.10.2026): MD/MS. In-service State Quota (left half) and Direct State Quota (right half), each 11
              colleges (seat count + the category list, e.g. "1-SEBC 1-SC 3-UR"), a Total, then the 3 private
              Management columns (counts only)
   diploma  — No. 59: Post-MBBS (NBEMS) Diploma, 20 hospitals (count + category list), Total, Grand Total
@@ -19,7 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from common import load_cuts, build, report
 
 MDMS, DIP, DNB, CUTS, OUT = sys.argv[1:6]
-SHA = {MDMS: '40fe078da2d84eac163c75f23ce1a256c209add84b8776c0823d7b8df348285c',
+SHA = {MDMS: '0b039aa4a9814108d1b45757802014a898009a5128cb3091524028ba464c264c',   # No. 65 (31.10); No. 58 was 40fe078d…
        DIP: '886a07b0ddbebf4747f3e5c535d50dad9aeb9289fdb7448e9a7603c3e46e74a1',
        DNB: 'fcec7d8da84e435f4dc45abf5ae6b3d37fd452d3db9820e8f5797f265d21ddff'}
 TEXT_LAYER = {MDMS: True, DIP: True, DNB: False}
@@ -87,7 +88,8 @@ DNB_COURSES = {'General Medicine': 'DNB - General Medicine (Post-MBBS)',
                'Respiratory Medicine': 'DNB - Respiratory Medicine (Post-MBBS)',
                'Anaesthesiology': 'DNB - Anaesthesiology (Post-MBBS)'}
 
-# ── No. 58 MD/MS (revised 30.10.2026), transcribed. Per course: the 11 college cells (count=category list, "0" = none) | printed Total |
+# ── No. 65 MD/MS (revised 31.10.2026; vs No. 58 of 30.10 only SCB / MKCG General Medicine + in-service General Surgery
+#    categories changed), transcribed. Per course: the 11 college cells (count=category list, "0" = none) | printed Total |
 #    the 3 MGT counts | printed MGT Total. Columns: SCB MKCG VIMSAR PGIMER AHRCC FM PRM BB HiTech-BBSR HiTech-RKL DRIEMS
 IN_SERVICE = """
 Anatomy              | 2=1-UR,1-SC | 1=1-SEBC | 1=1-UR(GC) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1=1-ST | 5 | 0 0 1 | 1
@@ -98,21 +100,21 @@ Forensic Medicine    | 1=1-UR | 1=1-ST | 1=1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 
 Pathology            | 2=1-UR,1-SC | 3=1-SEBC,1-SC,1-UR(GC) | 1=1-EWS | 1=1-UR | 1=1-ST(PwD) | 0 | 0 | 0 | 2=1-ST,1-UR | 0 | 0 | 10 | 2 0 0 | 2
 Microbiology         | 2=1-ST,1-EWS | 2=1-SC,1-UR | 2=1-UR(ES),1-ST | 1=1-UR | 0 | 0 | 0 | 0 | 1=1-UR | 0 | 1=1-SEBC | 9 | 1 1 1 | 3
 Community Medicine   | 2=1-UR,1-ST(PwD) | 3=1-ST,1-SC,1-UR | 2=1-SEBC,1-ST | 0 | 0 | 0 | 0 | 0 | 1=1-UR | 0 | 1=1-UR | 9 | 2 0 0 | 2
-General Medicine     | 8=1-SEBC,2-SC,1-ST,1-ST(GC),1-UR(ES),2-UR | 3=1-ST,2-UR | 5=1-SEBC,1-ST,3-UR | 1=1-UR(PwD) | 0 | 0 | 1=1-SC | 0 | 3=1-ST,1-SC(PwD),1-UR | 0 | 0 | 21 | 3 0 0 | 3
+General Medicine     | 7=1-SEBC,1-SC,1-ST,1-ST(GC),1-UR(ES),2-UR | 4=1-ST,1-SC,2-UR | 5=1-SEBC,1-ST,3-UR | 1=1-UR(PwD) | 0 | 0 | 1=1-SC | 0 | 3=1-ST,1-SC(PwD),1-UR | 0 | 0 | 21 | 3 0 0 | 3
 Pediatrics           | 6=1-SEBC,1-SC,1-ST,1-UR(GC),2-UR | 3=1-SEBC(PwD),1-ST,1-UR | 3=1-ST,1-UR,1-UR(PwD) | 1=1-UR | 0 | 0 | 1=1-UR | 0 | 2=1-SC(GC),1-UR | 1=1-ST | 0 | 17 | 2 1 0 | 3
 Psychiatry           | 2=1-ST,1-UR(PwD) | 1=1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 1=1-SC | 0 | 0 | 4 | 1 0 0 | 1
 Respiratory Medicine | 1=1-UR(PwD) | 0 | 1=1-SC | 1=1-UR | 0 | 0 | 1=1-ST | 0 | 1=1-SEBC | 0 | 0 | 5 | 1 0 0 | 1
 Skin & VD [DVL]      | 2=1-ST,1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2=1-SEBC,1-SC | 1=1-UR(PwD) | 0 | 5 | 1 1 0 | 2
 Transfusion Medicine | 1=1-ST | 1=1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 0 0 | 0
 Obst. & Gyn.         | 5=1-SEBC,1-SC(ES),3-UR | 3=1-SC(GC),1-ST,1-UR | 2=1-ST,1-UR | 1=1-SEBC | 0 | 1=1-SC | 0 | 0 | 3=1-ST,1-UR,1-UR(GC) | 1=1-UR | 0 | 16 | 3 0 0 | 3
-General Surgery      | 6=1-SEBC(GC),1-ST,4-UR | 5=1-SEBC,1-SC,1-ST,2-UR | 5=1-SEBC,1-SC,1-ST,2-UR | 1=1-ST | 0 | 0 | 1=1-UR | 1=1-ST | 3=1-SC,2-UR | 0 | 0 | 22 | 3 1 0 | 4
+General Surgery      | 6=1-SEBC(GC),1-ST,1-SC,3-UR | 5=1-SEBC,1-ST,3-UR | 5=1-SEBC,1-SC,1-ST,2-UR | 1=1-ST | 0 | 0 | 1=1-UR | 1=1-ST | 3=1-SC,2-UR | 0 | 0 | 22 | 3 1 0 | 4
 Orthopaedics         | 4=1-SC,1-ST,2-UR | 2=1-ST,1-UR | 2=1-SEBC,1-SC | 0 | 0 | 0 | 0 | 1=1-UR | 2=1-ST,1-UR | 0 | 1=1-UR | 12 | 2 1 1 | 4
 Ophthalmology        | 2=1-ST,1-UR | 2=1-SC,1-SEBC | 1=1-UR | 1=1-ST(ES) | 0 | 0 | 0 | 0 | 1=1-UR | 1=1-UR | 0 | 8 | 1 0 0 | 1
 ENT                  | 1=1-UR | 0 | 1=1-UR | 0 | 0 | 1=1-UR | 0 | 0 | 2=1-SEBC,1-ST | 1=1-SC | 0 | 6 | 1 0 0 | 1
 Anesthesiology       | 5=1-SEBC(ES),1-ST,1-SC,2-UR | 3=1-ST,2-UR | 3=1-ST(GC),1-SC,1-UR | 1=1-UR | 1=1-UR | 0 | 1=1-SEBC | 0 | 2=2-UR | 0 | 1=1-SC | 17 | 2 0 1 | 3
 Radiodiagnosis       | 1=1-UR | 1=1-SC | 1=1-UR | 0 | 0 | 0 | 0 | 0 | 1=1-ST | 0 | 0 | 4 | 1 0 1 | 2
 Radiotherapy         | 1=1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 0 0 | 0
-TOTAL                | 59 | 39 | 36 | 9 | 2 | 2 | 5 | 2 | 28 | 5 | 6 | 193 | 27 5 6 | 38
+TOTAL                | 58 | 40 | 36 | 9 | 2 | 2 | 5 | 2 | 28 | 5 | 6 | 193 | 27 5 6 | 38
 """
 DIRECT = """
 Anatomy              | 2=1-SEBC,1-UR | 1=1-ST | 2=1-EWS,1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 0 0 0 | 0
@@ -123,7 +125,7 @@ Forensic Medicine    | 2=1-ST,1-UR | 1=1-SEBC | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 
 Pathology            | 2=1-EWS,1-SEBC | 2=1-ST,1-UR(PwD) | 2=1-SC,1-UR | 0 | 1=1-UR | 0 | 0 | 0 | 2=1-ST,1-UR(GC) | 1=1-UR | 0 | 10 | 2 1 0 | 3
 Microbiology         | 1=1-UR | 2=1-SC,1-UR | 1=1-EWS | 1=1-UR | 0 | 0 | 1=1-UR | 0 | 1=1-SEBC | 1=1-ST | 1=1-ST(GC) | 9 | 1 0 1 | 2
 Community Medicine   | 1=1-EWS | 3=1-SC,1-ST,1-UR | 3=1-SEBC,1-UR,1-UR(PwD) | 0 | 0 | 0 | 0 | 0 | 2=1-ST,1-UR | 0 | 1=1-SC | 10 | 1 0 1 | 2
-General Medicine     | 7=1-SEBC,1-SC,1-ST,1-ST(GC),2-UR,1-UR(GC) | 4=1-SC,1-ST,2-UR | 5=1-SEBC,1-ST,2-UR,1-UR(GC) | 1=1-UR | 0 | 0 | 1=1-SC | 0 | 3=1-ST,1-UR,1-UR(PwD) | 0 | 0 | 21 | 3 0 0 | 3
+General Medicine     | 8=1-SEBC,1-SC,1-ST,1-ST(GC),3-UR,1-UR(GC) | 3=1-SC,1-ST,1-UR | 5=1-SEBC,1-ST,2-UR,1-UR(GC) | 1=1-UR | 0 | 0 | 1=1-SC | 0 | 3=1-ST,1-UR,1-UR(PwD) | 0 | 0 | 21 | 3 0 0 | 3
 Pediatrics           | 6=1-SEBC,1-SC,1-ST(PwD),2-UR,1-UR(ES) | 3=1-ST,1-UR,1-UR(GC) | 2=1-ST,1-SC(ES) | 1=1-SC | 0 | 0 | 1=1-ST | 1=1-UR | 2=1-SEBC,1-UR | 1=1-UR | 0 | 17 | 2 1 0 | 3
 Psychiatry           | 2=1-ST,1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1=1-UR | 0 | 0 | 3 | 2 0 0 | 2
 Respiratory Medicine | 2=1-ST,1-UR | 1=1-SEBC(GC) | 1=1-UR | 1=1-UR | 0 | 0 | 0 | 0 | 1=1-SC | 0 | 0 | 6 | 1 0 0 | 1
@@ -137,7 +139,7 @@ ENT                  | 1=1-SEBC | 1=1-UR | 1=1-UR | 0 | 0 | 1=1-SC | 0 | 0 | 1=1
 Anesthesiology       | 5=1-SC,1-ST,2-UR,1-UR(PwD) | 2=1-ST,1-UR | 4=1-SEBC,1-SC,1-ST,1-UR | 1=1-SEBC | 0 | 1=1-UR | 1=1-UR | 0 | 2=1-SC,1-UR | 0 | 0 | 16 | 2 0 0 | 2
 Radiodiagnosis       | 2=1-ST,1-UR | 1=1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 1=1-SC | 0 | 1=1-UR | 5 | 2 0 0 | 2
 Radiotherapy         | 2=1-ST,1-UR | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 0 0 | 0
-TOTAL                | 58 | 40 | 36 | 9 | 1 | 2 | 5 | 3 | 27 | 5 | 7 | 193 | 28 5 6 | 39
+TOTAL                | 59 | 39 | 36 | 9 | 1 | 2 | 5 | 3 | 27 | 5 | 7 | 193 | 28 5 6 | 39
 """
 # Cells whose printed category list does not add up to their seat count → kept with no category, with the
 # reason. The 26.10 notice had two (MKCG in-service Community Medicine 3 vs "1-ST 1-SC 2-UR", General Medicine 4

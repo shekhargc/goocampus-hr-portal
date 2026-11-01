@@ -1,7 +1,7 @@
-import re, json, collections, fitz
+import os, re, json, collections, fitz
 ROLL = re.compile(r'2666\d{7}')
 NB_PATH = '/private/tmp/claude-501/-Users-Santosh-Desktop-Claude-Code/19945316-59b6-4770-8040-221aff24a059/scratchpad/neet_result/neet2026.json'
-OUT = '/private/tmp/claude-501/-Users-Santosh-Desktop-Claude-Code/19945316-59b6-4770-8040-221aff24a059/scratchpad/merit/'
+OUT = os.path.join(os.environ.get('MERIT_OUT') or '/private/tmp/claude-501/-Users-Santosh-Desktop-Claude-Code/19945316-59b6-4770-8040-221aff24a059/scratchpad/merit', '')
 
 def nbems():
     d = json.load(open(NB_PATH))
