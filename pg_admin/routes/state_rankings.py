@@ -516,6 +516,8 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
         pdf.set_fill_color(255, 255, 255)
     heads, widths = ('#', 'College', 'Type', 'Courses' if cut else 'Seats'), (9, 126, 34, 17)
     cnt = (lambda r: str(r.get('courses') or '')) if cut else (lambda r: str(r['seats']))
+    if cut and speciality:     # one speciality → every college would say "1 course": no number column (founder 2026-11-01)
+        heads, widths = ('#', 'College', 'Type'), (9, 143, 34)
     aligns = ('CENTER', 'LEFT', 'LEFT', 'RIGHT')
 
     def block(title, rows, colour):
@@ -525,8 +527,8 @@ def build_pdf(conn, authority, speciality='', only='', plain=False, category='')
             pdf.add_page()
         pdf.ln(1); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*colour)
         pdf.cell(0, 6.5, _t(f'{title} ({len(rows)})'), new_x='LMARGIN', new_y='NEXT')
-        _table(pdf, [[str(i), r['college'], r['institute_type'], cnt(r)] for i, r in enumerate(rows, 1)],
-               heads, widths, aligns)
+        _table(pdf, [[str(i), r['college'], r['institute_type'], cnt(r)][:len(heads)] for i, r in enumerate(rows, 1)],
+               heads, widths, aligns[:len(heads)])
 
     for lst in data['lists']:
         if not any(lst['tiers'].values()) and not lst.get('new'):
