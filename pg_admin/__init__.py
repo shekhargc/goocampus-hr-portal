@@ -162,6 +162,8 @@ def register_pg_admin(app):
                      methods=['GET'])
     app.add_url_rule('/api/pg/state-merit/ingest', 'api_state_merit_ingest', neet_result_api.api_state_merit_ingest,
                      methods=['POST'])
+    app.add_url_rule('/api/pg/rank-bridge/fill', 'api_rank_bridge_fill', neet_result_api.api_rank_bridge_fill,
+                     methods=['POST'])
     app.add_url_rule('/api/pg/name-memory/seed', 'api_name_memory_seed', results_api.api_name_memory_seed,
                      methods=['POST'])
     app.add_url_rule('/api/pg/results/rounds', 'api_results_rounds', results_api.api_results_rounds, methods=['GET'])
