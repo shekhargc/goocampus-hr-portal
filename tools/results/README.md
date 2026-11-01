@@ -44,3 +44,109 @@ DME MP publishes one line per **candidate** (allotted or `NOT ALLOTTED`) plus a 
   the allotted lines — else it stops.
 2026 Round 1 provisional (29.10.2026): 3,972 lines — 1,110 allotted (1,099 MD/MS, 10 Diploma, 1 DNB), 2,862 not
 allotted; 893/893 opening-closing groups match.
+
+## Rajasthan (`rajasthan.py`)
+    /usr/bin/python3 tools/results/rajasthan.py <allotment.pdf> <out.json> [--merit <ruhs_state_merit.json>] [--nbems <neet2026.json>]
+RUHS / SMS Medical College publishes notice pages + one line per **allotted** candidate (no not-allotted lines).
+Round, status (Indicative/Provisional → `provisional`, Final → `final`) and date are read from the notice.
+- **No personal data:** Reg ID, NEET roll no, name, gender and domicile are dropped as each line is read (the roll is
+  held in memory only for the `--nbems` check).
+- **Ranks:** `rank` = State Merit Rank, `rank_ai` = the printed All India Rank (2025 RJ cut-offs are All-India ranks).
+  `--merit` checks every (state rank, AI rank) pair against the loaded RUHS state merit list, `--nbems` checks the
+  AI rank against NBEMS by roll.
+- **Quota** = the seat type in brackets after the college + Service Status, in 2025 RJ spellings: `Government` /
+  `State` / `AI` / `Management` × `In-Service` / `Non-Service` → `Government Quota-In Service`, `All India Quota-Non
+  Service` …; Post-MBBS Diplomas (printed `Government (In-Service)`) → `Diploma Quota-In Service`; Post-MBBS DNB →
+  `DNB Quota-In Service` (new, section `dnb`). **Category** `General`→`GEN`, `OBC NCL`→`OBC-NCL`, `MBC NCL`→`MBC-NCL`,
+  SC ST EWS. `candidate_category` = "Additional Category (Filled)" (`STA` / `PwBD`, the candidate's claim).
+- A college printed without its "(Seat Type)" stops the run unless it is in `SEAT_MISSING` (hand-checked, keyed by
+  S.No + college + course; reported in `checks.seat_type_inferred`).
+2026 Round 1 indicative (31.10.2026): 1,366 allotted (1,269 MD/MS, 95 Diploma, 2 DNB), 46 colleges; S.No 1297 seat
+type not printed → AI inferred; AI rank matches the merit list and NBEMS for 1,366/1,366.
+
+## Goa (`goa.py`)
+    /usr/bin/python3 tools/results/goa.py <allotment.pdf> <out.json> [--seat-matrix <Goa seat rows.json>] [--nbems <neet2026.json>]
+DTE Goa publishes the whole merit list (Goa Medical College only) under GROUP headings, with the allotted programme
+code or blank / `OCNA` (no seat — counted and skipped). Reg no and name are dropped as each line is read.
+- `rank` = MERIT NO., `rank_ai` = printed NEET PG RANK; quota `Government Quota` (page 2 "state quota seats").
+- **The seat category is not printed** (the colour key only colours the candidate's own category cell), so
+  `allotted_category` = the candidate's CATEGORY 2 (`-` → GEN, PwD → DR-GEN as in 2025; EWS new) and
+  `allotted_category_raw` is empty. `--seat-matrix` walks the 2026 seat matrix in merit order and lists where a
+  candidate would sit on another category's seat (`checks.seat_matrix_walk`).
+- Checks: merit numbers 1..N, NEET rank never drops within a group, allotted per programme = page-2 seats, total = TOTAL.
+2026 Round 1 (31.10.2026, PDF date): 161 lines — 72 allotted (all MD/MS), 37 OCNA, 52 blank; seat-matrix walk
+agrees on 68/72 (3 GEN candidates on de-reserved EWS seats, 1 knock-on in Psychiatry).
+
+## Tamil Nadu (`tamil_nadu.py`)
+    /usr/bin/python3 tools/results/tamil_nadu.py <pwd_allotment.pdf> <out.json> --bridge <dmer_tn_gq.json>
+Reads the Government Quota **PwD** provisional allotment list (SNO, GRANK, ARNO, NAME, COMMUNITY, SERVICE, T.MARK,
+ALLOTTED TO = "GQ - course" + college). ARNO and NAME are never read. Stored as its own round, `Round 1 (PwD)`, so
+the main Round 1 list doesn't replace it.
+- `rank` = GRANK; `rank_ai` is not printed — looked up by GRANK in the loaded TN GQ merit list; 'nA' addendum ranks
+  share rank n there, so the line with the same COMMUNITY and total marks is taken (none / two → stop).
+- Quota `GQ` → `Government Quota`; seat category not printed → `allotted_category: PwD`, `candidate_category` =
+  community + ` PwD` (`OC PwD`, `MBC&DNC PwD` …), `remarks` = `Service` for in-service candidates.
+- NB: the 2025 TN cut-offs hold **TN merit ranks** (GRANK), not All-India ranks.
+2026 Round 1 PwD provisional (31.10.2026): 12 allotted (all MD/MS, 6 colleges); rank_ai 12/12 (all GRANKs unique).
+
+## Gujarat (`gujarat.py`)
+    /usr/bin/python3 tools/results/gujarat.py <meritwise.pdf> <institutewise.pdf> <last_merit.pdf> <out.json> [--bridge <acpmec merit list.json>]
+ACPPGMEC publishes three PDFs per round: **Meritwise** allotment list (main source, one line per allotted seat),
+**Institute Wise** list (same seats grouped by college — gives the printed college NAME) and **Last Merit** (closing
+merit per college × branch × quota block × category). Authority `acpmec`.
+- **No personal data:** student name, User ID, the gender flag and (institute-wise) pass college are dropped as each line
+  is read. Cells are read as PDF spans by column position (some cells are clipped: `NAMOME` = NAMOMED, `NService-n` =
+  `INService-n`; both repaired and recorded in checks).
+- **Ranks:** `rank` = MERITNO (state merit; half numbers like `256.5` are PwD candidates inserted later → floor, exact
+  number in `remarks`), `rank_ai` = the printed **AIQ Rank** (NEET PG AIR). `--bridge` checks every (merit, AIR) pair
+  against the loaded general merit list.
+- **Quota** (2025 Gujarat spellings): GQ → `Government Quota`, UQ → `Institutional Quota`, IQ →
+  `Government Quota-Inservice`, MQ → `Management Quota`, NQ → `NRI Quota` (`quota_raw` = the code). **Category** =
+  ADM Cat: `OP SE EW SC ST` (+ `-PH`, e.g. `SEPH` → `SE-PH`), `MQ`, `NRI`. `remarks` also carries Adm Type Merit
+  (`GU-3.0` university merit for UQ, `INService-1.0`, `NRI-…`).
+- **Courses:** same branch map as `tools/seat_matrix/gujarat.py`; Diplomas → section `diploma`; `<Branch> (DNB)` →
+  `DNB - <Branch>`, section `dnb`. `institute_raw` = the college name printed in the institute-wise list for the code.
+- **Cross-checks (stop on failure):** SR 1..N; every meritwise line equals an institute-wise line (college × course ×
+  quota × category × merit × AIR × candidate category × Adm Type Merit), so all institute × course × quota × category
+  counts agree; every printed Last Merit group equals our highest merit in that group — Government OPEN + Management =
+  MERITNO, Government EWS/SC/ST/SE = Cat Merit, Institutional / Inservice / NRI = the Adm Type Merit number; the `PWD`
+  lines (Government PwD merit, not printed in the allotment lists) are checked for presence and order; 99999 = seat
+  conversion.
+2026 Round 1 provisional (31.10.2026): 2,329 seats — 2,319 MD/MS, 9 Diploma, 1 DNB; GQ 1,542 · UQ 489 · MQ 253 ·
+NQ 37 · IQ 8; institute-wise 2,329/2,329 lines (1,785 groups) match; Last Merit 1,777/1,777 printed groups match
+(8 one-seat groups are not printed there); rank_ai 2,329/2,329 printed, all pairs found in the merit list.
+
+## Chhattisgarh (`chhattisgarh.py`)
+    /usr/bin/python3 tools/results/chhattisgarh.py <allotment.pdf> <out.json> [--nbems neet2026.json] [--merit dme_cg merit.json] [--matrix cg seat matrix out.json]
+DME CG prints one table line per allotted seat (no names): SN, roll no, candidate category, PH, institute, program,
+preference, quota, allotted category, allotted / candidate gender, All India NEET Rank, State Rank, scores, candidature
+type. Authority `dme_cg`.
+- **No personal data:** the roll number is used in memory only (`--nbems` / `--merit` check the printed AIR and state
+  rank against the NBEMS result and the loaded CG merit list by roll) and dropped; candidate gender dropped.
+- **Ranks:** `rank` = State Rank, `rank_ai` = All India NEET Rank (both printed).
+- **Quota:** the 2025 CG cut-offs are filed by **candidature** (`Government Quota-MBBS Passout / -Domicile /
+  -Non-Domicile / -Inservice`), so `quota` comes from the Candidature Type column; the printed seat quota (`State
+  Institutional Quota` / `State Open Quota`) is `quota_raw`, the candidature text is `remarks`.
+- **Category:** `UR-NC` → `UR`, `UR-Female` → `UR-F` (2025 spelling; allotted gender must agree); PH = Y → `-PwD`.
+- **Checks:** SN 1..N, roll numbers in the page text = table lines read, reserved seats only to that category,
+  `--matrix`: allotted per college × course ≤ the state seats of the seat matrix. No totals are printed.
+2026 Round 1 provisional (PDF dated 31.10.2026): 278 seats, all MD/MS, 10 colleges (223 Institutional, 55 Open);
+AIR + state rank 278/278 printed and verified (NBEMS 278/278, merit list 278/278); 110 groups within the matrix.
+
+## Kerala (`kerala.py`)
+    /usr/bin/python3 tools/results/kerala.py <allotment.pdf> <out.json> [--merit cee_kerala_state_merit_final.json]
+CEE Kerala → cee.kerala.gov.in/pgm2026 → Allotment List → "Phase 1 - Allotment List Provisional"
+(`list/allot_p1_provi.pdf`, "First Phase Allotment List (Provisional)"). Phase n = Round n. Authority `cee_kerala`.
+One table line per seat: Sl.No, ApplNo (dropped as read), Rank, `CODE- College`, `CC- Course`, candidate category,
+allotted category, option no. No names.
+- **Ranks:** the printed Rank is the **NEET PG AIR** (every value is an AIR of the Kerala State Merit List; the list runs
+  in AIR order) → `rank_ai`. `rank` = Kerala state merit rank looked up by AIR in the loaded final State Merit List.
+- **Quota** (not printed) from college type + category, 2025 CEE spellings: government college (Govt. MCs, RCC, Malabar
+  Cancer Centre) → `Government Quota`, self-financing → `Private Quota`, AC / MM → `Private Quota - Minority`,
+  NR → `NRI Quota`, NC / NM → `NRI Quota - Minority`.
+- **Category** as printed (`SM` = state merit, SC ST EZ BH MU LA BX KU EW …); `#` (subject to screening committee) and
+  `*` (NRI provisionally allowed) are cut off into `remarks`. `XS` (ex-serviceman) is new in 2026 — kept as `XS`.
+- **Checks:** Sl.No 1..N, application numbers in page text = lines read, AIR strictly increasing, state ranks in list
+  order, course code + name both known, minority/NRI codes only at self-financing colleges. No totals are printed.
+2026 Phase 1 provisional (31.10.2026): 1,082 seats (1,080 MD/MS, 2 Diploma), 30 colleges; rank_ai 1,082/1,082 printed,
+state rank 1,082/1,082 from the merit list.
