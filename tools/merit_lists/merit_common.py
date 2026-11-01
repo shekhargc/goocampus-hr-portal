@@ -4,7 +4,7 @@ import json, os, re, collections
 import fitz
 
 NBEMS_PATH = '/private/tmp/claude-501/-Users-Santosh-Desktop-Claude-Code/19945316-59b6-4770-8040-221aff24a059/scratchpad/neet_result/neet2026.json'
-OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = os.environ.get('MERIT_OUT') or os.path.dirname(os.path.abspath(__file__))
 ROLL_RE = re.compile(r'^2666\d{7}$')
 _nb = None
 

@@ -1,12 +1,13 @@
-"""Jammu & Kashmir NEET PG 2026 Round 1 seat matrix (BOPEE, "OPERATIVE V 1.0", 28.10.2026) → standardised seat
-rows, bridged to J&K's 2025 cut-offs. Two pages, same layout:
+"""Jammu & Kashmir NEET PG 2026 Round 1 seat matrix (BOPEE, "OPERATIVE V 1.01 · REVISED", 31.10.2026; it replaces
+"OPERATIVE V 1.0" of 28.10.2026) → standardised seat rows, bridged to J&K's 2025 cut-offs. Two pages, same layout:
   p1 — MD/MS, p2 — PG Diploma (+ the category table). Government colleges (GMC Jammu / Kathua / Rajouri /
   Srinagar, SKIMS, GMC Anantnag / Baramulla): per course TOTAL, OM, "CAT. & UT LADAKH" (all reserved
   categories together — the PDF does not split them per college). ASCOMS Jammu (private): Total, Govt. seats
   OM (G), Management seats OM (M), HM (Hindu Minority), NRI.
 Checks: every college row (TOTAL = OM + CAT; ASCOMS Total = OM(G)+OM(M)+HM+NRI), every column against the
 printed Total row, and the state category table (OM / reserved split of all government seats, its own total,
-and the PG Diploma category column). Run with /usr/bin/python3 (PyMuPDF):
+and the PG Diploma category column; when printed, the "NO. OF SEATS TO BE ALLOTTED … JK ONLY" figure = TOTAL − STK/STL).
+Run with /usr/bin/python3 (PyMuPDF):
   jammu_kashmir.py <bopee.pdf> <cutoffs2025.json> <out.json>"""
 import re, sys, os, json, collections
 import fitz
@@ -130,6 +131,8 @@ checks['category table | OM = government OM seats (MD/MS + diploma)'] = (gov_om 
 checks['category table | reserved = government CAT. & UT LADAKH seats'] = (gov_res + dip_res, left_total - left['OM'])
 checks['category table | PG Diploma total'] = (dip_om + dip_res, right_total)
 checks['category table | PG Diploma OM'] = (dip_om, right['OM'])
+if clean(cat_table[0][3]).isdigit():     # V 1.01 prints "342 … JK ONLY": the seats left once STK/STL (UT Ladakh) is set aside
+    checks['category table | JK ONLY = TOTAL − STK/STL'] = (left_total - left['STK/STL'], val(cat_table[0][3]))
 # the only reserved PG Diploma seat takes the one reserved category the diploma column names (RBA)
 dip_cats = [c for c in CATS if c != 'OM' and right[c]]
 if dip_res == 1 and len(dip_cats) == 1 and right[dip_cats[0]] == 1:

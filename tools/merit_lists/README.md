@@ -18,6 +18,32 @@ rank is filled in from that result.
 - Tamil Nadu: GQ (7,963, incl. addendum) and MQ (3,643)
 - Gujarat: general (6,095)
 
+2026 Round 1, read 2026-11-01 (outputs written, NOT yet posted):
+- Maharashtra (`cetcell_mh`, `read_cetcell_mh.py <pdf>`, auto-detects common vs in-service): Common Provisional SML
+  dated 30/10/2026 (7,225; 14 rows printed without an SML number left out; 0 AIR mismatches) and In-Service 20% quota
+  SML (65; 1 un-numbered row left out). The in-service "rank" column is CET Cell's rank of the WEIGHTED score
+  (NEET x (1 + incentive %), tie-split like 108331.2), not the AIR, so AIR is filled from NBEMS by roll there.
+- Andhra Pradesh (`ntruhs`, `read_ntruhs_ap.py <pdf>`, auto-detects non-service vs in-service): CQ Provisional Merit
+  List, Non-service (4,131) and In-service (363); state rank = Sl.No; 0 AIR mismatches. Local area (AU/SVU/APNL) is
+  counted in checks only. Both write to the nov1/ml1 scratchpad by default (`--out DIR` to change).
+
+Added 2026-11-01 (built, not yet posted; outputs in the session scratchpad `nov1/ml2/`):
+- Chhattisgarh (`dme_cg`): Round 1 provisional merit list (874) - `read_dme_cg.py <pdf>`. No names printed.
+- Odisha (`ojee`): revised merit list after grievances (31 Oct file), four separate lists - `read_ojee.py <revised.pdf>
+  [<earlier.pdf>]`: Direct (1,215), In-service (316, quota `In-service`), DNB (125), Post-MBBS Diploma (187). Rank =
+  the printed `Rank-UR` column (the common merit rank every candidate gets); score = New Score (NEET + weightage %).
+  The rejected-applications pages are skipped. Versus the 30 Oct file only the Diploma list changed (one candidate
+  added at rank 25, ranks below moved down by one).
+- Tamil Nadu GQ re-built with addenda A and B of 31 Oct (7,968 rows): `sm4_tn_build.py --gq-only`. Addenda are
+  applied in order; B repeats A's four rows (logged as duplicates) and adds one row and two community corrections.
+  `--first-addendum-only` reproduces the 30 Oct load exactly.
+- Tamil Nadu special-quota eligibility lists (CMC 20% GQ; Christian minority, Telugu minority, NRI MQ) print only
+  S.No / application no. / name in application-number order - no rank of their own, so no list is made.
+  `sm4_tn_special.py` counts (in memory, by application no.) how many are already in the GQ / MQ rank lists.
+
+Set `MERIT_OUT=<dir>` to choose where the JSON files are written (default: the old scratchpad folder).
+`sm4_tn.py` is the shared Tamil Nadu page reader used by `sm4_tn_build.py` and `sm4_tn_special.py`.
+
 The readers were written against the 2026 files and keep their scratchpad paths at the top; adjust the paths for
 a new round. `merit_common.py` / `sm4_common.py` hold the NBEMS checks. Ties are kept as published: TN "1980A"
 insertions and Gujarat half merit numbers keep their whole-number base.

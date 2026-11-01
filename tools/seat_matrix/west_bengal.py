@@ -1,5 +1,8 @@
 """West Bengal NEET PG 2026 Round 1 seat matrix (WBMCC, "West Bengal PG Medical Counselling 2026 · Round No: 1 ·
-Seat Matrix", printed 30/10/2026, 121 pages) → standardised seat rows, bridged to West Bengal's 2025 cut-offs.
+Seat Matrix", REVISED print of 31/10/2026 12:56, 121 pages; it replaces the 30/10/2026 15:11 print) → standardised
+seat rows, bridged to West Bengal's 2025 cut-offs. The 31/10 revision changes no seat line: only the Institute Type of
+Institute of Child Health and Ramakrishna Mission Seva Pratishthan VIMS (Private University/Institute → State
+Government); both are 2025 colleges, so their institute_type still comes from the 2025 cut-offs (Private Institute).
 Posted as body "West Bengal — State Counselling", authority_code `wbmcc`, body section `state`; rows carry
 section mdms / diploma / dnb. College codes WB-<STANDARD-NAME> (common.college_code).
 The pages are stored rotated 90° (landscape), so every word is turned to the page as seen before it is read.

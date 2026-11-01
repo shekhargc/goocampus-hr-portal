@@ -99,7 +99,8 @@ column in both files. 2026 Round 1: 3,961 MD/MS-PDF seats + 164 DNB-PDF seats = 
     /usr/bin/python3 tools/seat_matrix/odisha.py <mdms.pdf> <diploma.pdf> <dnb.pdf> <cutoffs2025.json> <out.json>
 Body "Odisha — State Counselling", authority Odisha (PG (Medical) Counselling Committee, MKCG Brahmapur). Round 1
 matrices REVISED 30.10.2026 "after redressal of grievances": notices No. 58 MD/MS, No. 59 Post-MBBS Diploma,
-No. 60 Post-MBBS DNB (they replace No. 46/47/48 of 26.10.2026). The tables are transcribed in the script cell by
+No. 60 Post-MBBS DNB (they replace No. 46/47/48 of 26.10.2026); the MD/MS was revised again on 31.10.2026 (No. 65,
+"typographical error" corrected — it replaces No. 58; diploma No. 59 and DNB No. 60 stay). The tables are transcribed in the script cell by
 cell and pinned to the PDFs' SHA-256 (a re-issued file stops the script — re-transcribe it). The MD/MS and diploma
 PDFs now have a text layer: every transcribed cell is re-read from it and must match (the MD/MS layer draws some
 labels twice at the same spot — repeated glyphs are dropped first). The DNB PDF is still SCANNED (transcribed from
@@ -114,18 +115,24 @@ column = the TOTAL / Grand Total row (MD/MS, MGT, diploma, DNB), and the text la
 misprints (Community Medicine, General Medicine) are fixed in the revision, so `MISPRINTS` is empty. 2026-27
 (revised): 463 MD/MS (In-service 193 + 38 MGT, Direct 193 + 39 MGT) + 43 diploma + 18 DNB = 524 seats — same
 totals as 26.10; the revision only moves seats between in-service and direct (SCB / MKCG / VIMSAR) and relabels
-categories. Diploma and DNB are unchanged.
+categories. Diploma and DNB are unchanged. No. 65 (31.10) keeps every total (still 524) and only re-labels SCB /
+MKCG seats: General Medicine — in-service SCB 8 → 7 / MKCG 3 → 4 (one SC seat moves SCB → MKCG), direct SCB 7 → 8 /
+MKCG 4 → 3 (one UR seat moves MKCG → SCB); in-service General Surgery — SCB one UR → SC, MKCG one SC → UR.
 
 ## Jammu & Kashmir (`jammu_kashmir.py`)
     /usr/bin/python3 tools/seat_matrix/jammu_kashmir.py <bopee.pdf> <cutoffs2025.json> <out.json>
-Body "Jammu and Kashmir — State Counselling", authority BOPEE ("OPERATIVE V 1.0", 28.10.2026). p1 MD/MS, p2 PG
+Body "Jammu and Kashmir — State Counselling", authority BOPEE ("OPERATIVE V 1.01 · REVISED", 31.10.2026; replaces
+V 1.0 of 28.10.2026 — same two pages, MD/MS + PG Diploma). p1 MD/MS, p2 PG
 Diploma (section diploma) + the category table. Government colleges print TOTAL / OM / "CAT. & UT LADAKH" per
 course — reserved categories are NOT split per college, so those seats are category "Reserved (CAT & UT Ladakh)"
 and bridge to the 2025 OM rank. ASCOMS Jammu: OM (G) → Government Quota (OM), OM (M) → Management Quota (OM),
 HM → Hindu Minority Quota, NRI → NRI Quota (bridged to 2025 HM / NRI). Checks: every row (TOTAL = OM + CAT;
 ASCOMS Total = G + M + HM + NRI), every column to the Total row, and the category table (its 360 total, OM 138 =
-government OM seats, the rest = government CAT seats, PG Diploma column); the one reserved PG Diploma seat takes
-the diploma column's only reserved category (RBA). 2026 Round 1: 409 MD/MS + 2 PG Diploma = 411 seats.
+government OM seats, the rest = government CAT seats, PG Diploma column, and V 1.01's "342 … JK ONLY" = total − STK/STL); the one
+reserved PG Diploma seat takes the diploma column's only reserved category (RBA). 2026 Round 1 (revised): 405 MD/MS +
+2 PG Diploma = 407 seats (V 1.0: 409 + 2 = 411; category table 360 → 356, OM 138 → 137). The revision only drops 4 GMC
+Kathua seats (Anaesthesiology, General Medicine, Pathology 2 → 1 each — one reserved seat; General Surgery 2 → 1 — one
+OM seat); PG Diploma unchanged.
 
 ## Jharkhand (`jharkhand.py`)
     /usr/bin/python3 tools/seat_matrix/jharkhand.py <jh.pdf> <cutoffs2025.json> <out.json>
@@ -140,7 +147,9 @@ In-service. 2026: 129 seats.
 ## West Bengal (`west_bengal.py`)
     /usr/bin/python3 tools/seat_matrix/west_bengal.py <matrix.pdf> <cutoffs2025.json> <out.json>
 Body "West Bengal — State Counselling", authority `wbmcc` (WBMCC "West Bengal PG Medical Counselling 2026 · Round No: 1 ·
-Seat Matrix", printed 30/10/2026, 121 pages). Pages are stored rotated 90°: words are turned to the visible page and read
+Seat Matrix", printed 30/10/2026, 121 pages; re-issued as the REVISED print of 31/10/2026 — same 878 lines and seats,
+only Institute of Child Health and RKMSP VIMS re-typed Private → State Government, which does not change the output
+because 2025 colleges take their type from the 2025 cut-offs). Pages are stored rotated 90°: words are turned to the visible page and read
 by column position. One line per institute × program × quota (SNo, Institute Name / Type, Program Name, Stream, Quota,
 UR, UR PwD, EWS, EWS PwD, OBC, OBC PwD, SC, SC PwD, ST, ST PwD, Total Seats); cell text wraps mid-word, so names are
 matched with white space removed. College codes `WB-<STANDARD-NAME>`; 29 colleges map to their 2025 cut-off names
@@ -176,3 +185,48 @@ codes (`CODE_FIX`, the 40-char cut collides). Checks: column headings on every p
 every course's Total Seats = KK + RK + private, college Sr No 1…n, every column = the GRAND TOTAL lines (all four files),
 and the files' grand totals. 2026 Round 1: 4,724 medical (4,718 MD/MS + 6 diploma) + 94 St John's + 44 DNB + 30 DNB
 diploma = 4,892 seats; 85 institutes (64 in 2025 + Chikkamagaluru IMS + 20 hospitals).
+
+## Kerala (`kerala.py`)
+    /usr/bin/python3 tools/seat_matrix/kerala.py <go.pdf> <cutoffs2025.json> <out.json>
+Body "Kerala — State Counselling", authority `cee_kerala` (CEE Kerala), section `state`. Source: the Government Order
+G.O.(Ms)No.360/2026/H&FWD (30-10-2026) approving the 2026-27 PG Medical seat matrix (24 pages, text layer, read with
+`grids()`). p1-2 are the order; the annexure "PG MEDICAL - 2026" has one table per institute ("<CODE>:<name>", one line
+per course with Total + category columns, a Total line) and a Summary line per group: Government medical colleges +
+RCC Thiruvananthapuram + Malabar Cancer Centre (State Quota seats EXCLUDING in-service; UR SC ST EZ BH MU LA BX KU EW,
+<cat>-PD, UR-XS, UR-DK), Self Financing (Non Minority) (excluding NRI; UR … KU EW) and Self Financing (Non Minority &
+Minority) (excluding Minority/NRI; UR … KU). So only state-merit seats are in the GO — no AIQ, in-service, NRI or
+minority-community seats (none stored; nothing to keep out of the rankings). Institute code + printed name must match
+`COLLEGES` (→ 2025 CEE name, codes `KL-<STANDARD-NAME>`); bracket code + course name must match `COURSES`.
+Quotas: government → 'Government Quota' (2025 'Government Quota$'), self-financing → 'Private Quota' (2025
+'Private Quota$', not '- Minority' / NRI). Categories as printed; bridge UR → SM (CEE's state-merit code), X-PD → PD,
+X, SM, UR-XS / UR-DK → SM, others same code then SM. "Diploma in Clinical Pathology" → 'Diploma in Pathology', section
+diploma. No DNB. Checks: group headings + page ranges, column headings, every course line = its Total, every institute =
+its Total line, every group = its Summary line, every number on p3-24 inside a parsed table, output = sum of the three
+Summary totals. 2026-27: 911 seats (Government 442 + SF Non Minority 183 + SF Non Minority & Minority 286; 908 MD/MS +
+3 diploma), 29 institutes, all in 2025 (Travancore Medical College, Kollam is in 2025 but not in the GO).
+
+## Tamil Nadu (`tamil_nadu.py`)
+    /usr/bin/python3 tools/seat_matrix/tamil_nadu.py <vacancy.pdf> <cutoffs2025.json> <out.json>
+Body "Tamil Nadu — State Counselling", authority `dmer_tn`, section `state` (Selection Committee / DMER "TENTATIVE VACANCY
+FOR PG DEGREE/DIPLOMA COURSE 2026-2027 … AS ON 31-10-2026", 64 pages, text layer; per the Rounds rule this Round 1 vacancy
+list is the full matrix). Three tables, one block per speciality (runs on across pages, ends with a TOTAL line):
+GOVERNMENT MEDICAL COLLEGES pp 1-33 (state share only — the 50% AIQ is MCC's; 26 colleges), SELF FINANCING pp 34-58 (21
+private colleges / hospitals incl. CMC Vellore and ESI-PGIMSR K.K. Nagar), PRIVATE pp 59-62 (Sri Venkateswaraa, private
+university); pp 63-64 split CMC Vellore's 50% management seats per branch into MNW / IP / S / GM. Not covered: deemed
+universities, AIQ, DNB. Pages are stored rotated 90°: words and ruling lines are turned and cells read by the drawn rules.
+On government pages the management / OVER ALL TOTAL columns are hidden under white boxes but still in the text layer —
+checked empty (OVER ALL TOTAL = TOTAL). College codes `TN-<STANDARD-NAME>` = the 2025 DMER names (`COLLEGES`; all 48
+colleges are in the 2025 cut-offs), so the 2025-based rankings' Desk tiers carry over.
+Quotas (2025 TN names, matched exactly with '$'): OPEN → Government Quota; SERVICE → Government Quota-Service (in-service,
+left out of rankings); CMC 20% → CMC 20% Quota (category blank — not split in 2026; bridges OC, then BC / MBC&DNC);
+MQ → Management Quota (category OPEN); CMC 50% → CMC 50% Quota, categories CMC-Minority Network / -Institutional
+Preference / -Service / -General Merit from pp 63-64; TM / MM / CM → Management Quota-Minority (Telugu / Malayalam /
+Christian Minority); NRI → NRI Quota (NRI). Categories OC BC BCM MBC&DNC SC SCA ST as printed; with no same-category
+2025 rank a government / service seat uses the 2025 OC rank. Sections: MD / MS / M.Ch 6-year Neuro Surgery → mdms;
+D.A. / D.C.H. / D.C.P. / D.D.V.L. / D.G.O / D.O. / D.ORTHO / Dip. in Diabetology → diploma.
+Checks: page count, titles, column / group headings and positions in every block, the footer key, SNO 1…n per block,
+every line (OPEN + SERVICE + CMC 20% = TOTAL, MQ … NRI = management TOTAL, both = OVER ALL TOTAL), every column = the
+block's TOTAL line, CMC 50% cells = pp 63-64 per branch (MNW + IP + S + GM = CMC 50%, Total line 127), output = sum of
+the printed OVER ALL TOTALs. 2026-27 Round 1 (31.10.2026): 2,336 seats (govt 1,231 + self-financing 1,056 + private
+49; 2,317 MD/MS/MCh + 19 diploma). The earlier 62-page issue of the same date has identical pages 1-62 — only the
+CMC 50% breakdown (pp 63-64) was added.
