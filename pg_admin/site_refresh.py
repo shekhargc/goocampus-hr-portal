@@ -55,6 +55,9 @@ _ENDPOINT_TAGS = {
     'pg_college_tiers': ['rankings'],
     'api_pg_desk_tiers': ['rankings'],
     'api_pg_tiers_ingest': ['rankings'],
+    # All-India rank fill for the 2025 cut-offs (both-ranks display) + news dates → calendar (2026-11-01)
+    'api_rank_bridge_fill': ['cutoffs', 'colleges', 'seat-matrix', 'rankings', 'results'],
+    'pg_calendar_news_dates': ['calendar', 'news'],
 }
 
 
