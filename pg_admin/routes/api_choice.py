@@ -93,6 +93,8 @@ def api_pg_cutoff_explorer():
     conn = get_db()
     try:
         from pg_admin.data import specialty_groups as _SG
+        from pg_admin.data import rank_bridge as _RB
+        _RB.ensure_cols(conn)
         _sg_ctx = _SG.context(conn)
         where, params = ["COALESCE(c.is_reference,0)=0"], []
         dgc, dgp = _deg_clause(dg)
@@ -120,7 +122,8 @@ def api_pg_cutoff_explorer():
             frag, fp = smart_name_clause("c.institute", q); where.append(frag); params.extend(fp)
         wsql = " WHERE " + " AND ".join(where)
         grp = (" GROUP BY c.institute, c.course, c.authority, c.quota, c.category, c.degree, "
-               "c.state, c.institute_type, c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank ")
+               "c.state, c.institute_type, c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank, "
+               "c.r1_ai, c.r2_ai, c.r3_ai, c.r4_ai, c.stray_ai, c.closing_ai, c.rank_basis ")
         # Annual-fee bound — same fee source (pg_cutoffs.fee) and "real fee > 1" rule as
         # /api/pg/fees. Applied per grouped row via HAVING so total + pagination reflect it;
         # when a bound is set, rows with no real fee are dropped.
@@ -143,16 +146,17 @@ def api_pg_cutoff_explorer():
             "SELECT c.institute, c.course, c.authority, c.quota, c.category, c.degree, c.state, "
             "c.institute_type, "
             "c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank, "
+            "c.r1_ai, c.r2_ai, c.r3_ai, c.r4_ai, c.stray_ai, c.closing_ai, c.rank_basis, "
             "MAX(c.fee) AS fee, MAX(c.year) AS fee_year, MAX(a.master_id) AS pg_college_id "
             "FROM pg_cutoffs c "
             f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL}"
             + wsql + grp + hsql +
-            " ORDER BY c.closing_rank ASC NULLS LAST, c.institute ASC LIMIT ? OFFSET ?",
+            f" ORDER BY {_RB.ai_sql('closing_rank', 'c')} ASC NULLS LAST, c.institute ASC LIMIT ? OFFSET ?",
             params + hparams + [_PER_PAGE, offset]).fetchall()
         out = []
         _sg_cache = {}
         for r in rows:
-            d = dict(r)
+            d = _RB.present(dict(r))           # All-India first + state rank for state-rank authorities
             if d.get('fee') is not None:
                 try: d['fee'] = float(d['fee'])
                 except Exception: d['fee'] = None
@@ -225,10 +229,13 @@ def api_pg_cutoff_summary():
                     where.append("1 = 0")
         by = 'c.course' if authority and not course else 'c.authority'
         label = 'course' if by == 'c.course' else 'authority'
+        from pg_admin.data import rank_bridge as _RB
+        _RB.ensure_cols(conn)
+        _cl = _RB.ai_sql('closing_rank', 'c')    # All-India, so states compare like with like (2026-11-01)
         rows = conn.execute(
-            f"SELECT {by} AS k, MIN(c.closing_rank) AS best, MAX(c.closing_rank) AS worst, COUNT(*) AS n "
+            f"SELECT {by} AS k, MIN({_cl}) AS best, MAX({_cl}) AS worst, COUNT(*) AS n "
             f"FROM pg_cutoffs c WHERE {' AND '.join(where)} AND COALESCE({by},'') <> '' "
-            f"GROUP BY {by} ORDER BY MIN(c.closing_rank) ASC NULLS LAST, {by} ASC", params).fetchall()
+            f"GROUP BY {by} ORDER BY MIN({_cl}) ASC NULLS LAST, {by} ASC", params).fetchall()
         out = {'ok': True, 'by': label, 'authority': authority, 'course': course, 'degree_group': dg,
                'rows': [{label: r['k'], 'best_closing_rank': r['best'], 'max_closing_rank': r['worst'],
                          'records': r['n']} for r in rows]}
@@ -429,8 +436,12 @@ def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, r
     """Fill one round sheet from the cut-offs, honouring specialties[] + quota_categories[].
     Reach is filtered IN SQL (HAVING) so the cap keeps reachable colleges, not the most
     competitive unreachable ones. Ordered by specialty preference, then closing rank."""
+    from pg_admin.data import rank_bridge as _RB
+    _RB.ensure_cols(conn)
     col = {1: 'r1', 2: 'r2', 3: 'r3'}[rnd]
-    where, params = [f"c.{col} IS NOT NULL", "COALESCE(c.is_reference,0)=0"], []
+    # the ALL-INDIA closing rank of that round (Tamil Nadu's state ranks converted — founder 2026-11-01)
+    ai = _RB.ai_sql(col, 'c')
+    where, params = [f"{ai} IS NOT NULL", "COALESCE(c.is_reference,0)=0"], []
     dgc, dgp = _deg_clause(dg)
     if dgc:
         where.append(dgc); params.append(dgp)
@@ -459,10 +470,10 @@ def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, r
     # reach floor IN SQL: keep seats the candidate can plausibly enter (down to a try-luck stretch)
     having = ""
     if rank and floor:      # floor=False → full list: every college, even ones above the doctor's rank
-        having = f" HAVING MIN(c.{col}) >= ?"
+        having = f" HAVING MIN({ai}) >= ?"
         floor_val = int(rank * 0.7)
     rows = conn.execute(
-        f"SELECT c.institute, c.course, c.quota, c.category, MIN(c.{col}) AS cr, "
+        f"SELECT c.institute, c.course, c.quota, c.category, MIN({ai}) AS cr, "
         "MAX(a.master_id) AS master_id, MAX(c.fee) AS fee "
         "FROM pg_cutoffs c "
         f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} "

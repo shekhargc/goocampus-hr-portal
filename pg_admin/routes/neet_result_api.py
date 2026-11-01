@@ -204,3 +204,23 @@ def api_neet_result_status():
         return jsonify({'ok': True, 'results': res, 'merit_lists': lists})
     finally:
         conn.close()
+
+
+def api_rank_bridge_fill():
+    """POST /api/pg/rank-bridge/fill {year?:2025} (X-News-Key) — fill the All-India columns of the cut-offs
+    (pg_cutoffs *_ai + rank_basis) from the loaded merit lists; originals untouched; safe to re-run."""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin.data import rank_bridge as RB
+    d = request.get_json(silent=True) or {}
+    conn = get_db()
+    try:
+        ensure_neet_result_tables(conn)
+        return jsonify({'ok': True, 'stats': RB.fill_cutoffs(conn, _int(d.get('year')) or 2025)})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("rank_bridge fill: %s", e)
+        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+    finally:
+        conn.close()

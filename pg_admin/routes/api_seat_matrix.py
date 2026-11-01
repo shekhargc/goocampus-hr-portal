@@ -125,7 +125,7 @@ def api_pg_seat_matrix():
         rows = conn.execute(
             f"SELECT sl_no, college_code, state, college_name, category, course_name, seats, "
             f"institute_type, quota, category_code, course_code, has_cutoff, new_reason, cutoff_institute, cutoff_course, "
-            f"cr_r1, cr_r2, cr_r3, cr_closing, cutoff_fee "
+            f"cr_r1, cr_r2, cr_r3, cr_closing, cutoff_fee, cutoff_quota "
             f"FROM pg_seat_matrix WHERE {where} "
             f"ORDER BY state ASC, college_name ASC, course_name ASC, id ASC "
             f"LIMIT {page_size} OFFSET {offset}", params).fetchall()
@@ -142,6 +142,11 @@ def api_pg_seat_matrix():
             r['college_type'] = ('Deemed' if 'deemed' in it else 'Central University' if it.startswith('central')
                                  else 'Private' if 'private' in it else 'Government' if it else '')
             out.append(r)
+        # 2025 closing ranks: All-India first + the state rank for state-rank authorities (founder 2026-11-01)
+        from pg_admin.data import rank_bridge as _RB
+        _RB.present_seat_rows(conn, body, out)
+        for r in out:
+            r.pop('cutoff_quota', None)
         return jsonify({
             'ok': True,
             'counselling_body': body, 'academic_year': year,

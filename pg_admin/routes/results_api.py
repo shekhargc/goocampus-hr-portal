@@ -494,11 +494,23 @@ def _was_in_note(auths):
     return 'In 2025: ' + ', '.join(a if a.startswith('MCC') else f'{a} state counselling' for a in names)
 
 
+# Every authority is compared on the ALL-INDIA rank (founder 2026-11-01): 2026 = rank_ai (else rank, which is
+# the AIR for MCC); 2025 = the cut-offs' All-India columns (pg_cutoffs *_ai — Tamil Nadu's state ranks converted
+# through its 2025-26 rank lists, see pg_admin/data/rank_bridge.py). The state ranks travel alongside
+# (opening_state / closing_state / closing_2025_state) so the site shows AIR first and the state rank under it.
+STATE_RANK_CUTOFFS = set()         # (was {'dmer_tn'} before TN's 2025 ranks could be converted)
+
+
+def _cmp_rank(auth):
+    return "r.rank" if auth in STATE_RANK_CUTOFFS else "COALESCE(r.rank_ai, r.rank)"
+
+
 def _closing_rows(conn, auth, year, rd, a):
     """2026 opening/closing per college × course × quota × category for this round, joined to the 2025
     closing rank of the same round."""
+    rk = _cmp_rank(auth)
     conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.course,'')<>''",
-             "COALESCE(r.rank_ai, r.rank) IS NOT NULL"] + _hide_dnb()
+             f"{rk} IS NOT NULL"] + _hide_dnb()
     params = [auth, year, rd['round']]
     _filters(a, conds, params)
     # a college without a standard name only counts when the team CONFIRMED it is not in our list (a genuinely
@@ -508,8 +520,11 @@ def _closing_rows(conn, auth, year, rd, a):
     rows = []
     for r in conn.execute(
             f"SELECT r.institute, r.institute_raw, r.course, r.quota, r.allotted_category AS category, MAX(r.state) AS state, "
-            f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN(COALESCE(r.rank_ai, r.rank)) AS opening, "
-            f"MAX(COALESCE(r.rank_ai, r.rank)) AS closing "
+            f"MAX(r.college_type) AS college_type, COUNT(*) AS allotted, MIN({rk}) AS opening, "
+            f"MAX({rk}) AS closing, "
+            # the state merit rank alongside (state lists carry both; MCC's rank IS the AIR → none)
+            f"MIN(CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END) AS opening_state, "
+            f"MAX(CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END) AS closing_state "
             f"FROM pg_results r WHERE {' AND '.join(conds)} "
             f"GROUP BY r.institute, r.institute_raw, r.course, r.quota, r.allotted_category", params).fetchall():
         r = dict(r)
@@ -525,6 +540,9 @@ def _closing_rows(conn, auth, year, rd, a):
             m = merged[k]
             m['allotted'] += r['allotted']; m['opening'] = min(m['opening'], r['opening'])
             m['closing'] = max(m['closing'], r['closing'])
+            for f2, fn in (('opening_state', min), ('closing_state', max)):
+                if r.get(f2) is not None:
+                    m[f2] = fn(m[f2], r[f2]) if m.get(f2) is not None else r[f2]
         else:
             merged[k] = r
     rows = list(merged.values())
@@ -542,11 +560,21 @@ def _closing_rows(conn, auth, year, rd, a):
                           "WHERE year=2025 AND COALESCE(institute,'')<>''").fetchall():
         auths_2025[c['institute']].add(c['authority'] or '')
     known_2025 = set(auths_2025)
-    for c in conn.execute(
-            "SELECT institute, course, quota, category, r1, r2, r3, r4, stray, closing_rank, fee FROM pg_cutoffs "
-            "WHERE authority=? AND year=2025", [cutoff_authority(auth)]).fetchall():
-        q = _qn(c['quota'])
-        k = (c['institute'], c['course'], q, c['category'])
+    from pg_admin.data import rank_bridge as _RB
+    _RB.ensure_cols(conn)
+    prev_state = {}                   # 2025 state rank of the same seat type (state-rank cut-offs only)
+    for c0 in conn.execute(
+            "SELECT institute, course, quota, category, r1, r2, r3, r4, stray, closing_rank, fee, "
+            f"{_RB.SELECT_AI} FROM pg_cutoffs WHERE authority=? AND year=2025", [cutoff_authority(auth)]).fetchall():
+        c0 = dict(c0)
+        q = _qn(c0['quota'])
+        k = (c0['institute'], c0['course'], q, c0['category'])
+        if c0.get('rank_basis') == 'state' and c0.get(col) is not None:
+            if k not in prev_state or c0[col] > prev_state[k]:
+                prev_state[k] = c0[col]
+        # compare on the All-India value: the *_ai columns once filled (state ranks converted, NULL if not)
+        c = {kk: (c0.get(_RB.AI_COL[kk]) if c0.get('rank_basis') in ('air', 'state') else c0.get(kk))
+             if kk in _RB.AI_COL else c0.get(kk) for kk in c0}
         inst.add(c['institute']); ic.add(k[:2]); icq.add(k[:3])
         v = c[col]
         if v is not None:
@@ -566,6 +594,7 @@ def _closing_rows(conn, auth, year, rd, a):
         k = (r['institute'], r['course'], r['quota'], r['category'])
         p = prev.get(k)
         r['closing_2025'] = r['closing_2025_round'] = r['change'] = r['change_pct'] = None
+        r['closing_2025_state'] = prev_state.get(k)    # the 2025 state rank as published (state-rank cut-offs)
         r['fee_2025'] = float(p[1]) if p and p[1] is not None else None
         r['filled_earlier'] = False
         if p and p[0]:
@@ -648,6 +677,7 @@ def api_results_cutoffs():
         size = min(500, max(1, _int(a.get('page_size')) or 100))
         total = len(rows)
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'compared_with': f"2025 {rd['round']}",
+                        'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india',
                         'group_counts': group_counts, 'reason_counts': reason_counts,
                         'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,
                         'page_size': size, 'total_pages': (total + size - 1) // size})
@@ -696,7 +726,7 @@ def api_results_trends():
         # movers: seat types with 2+ seats and a 2025 closing beyond rank 100 (a single seat swings wildly)
         mv = sorted([r for r in comp if r['allotted'] >= 2 and (r['closing_2025'] or 0) >= 100],
                     key=lambda r: r['change_pct'])
-        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'compared_with': f"2025 {rd['round']}",
+        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india', 'compared_with': f"2025 {rd['round']}",
                         'totals': {'seat_types': len(rows), 'compared': len(comp),
                                    'tougher': sum(1 for r in comp if r['change'] < 0),
                                    'easier': sum(1 for r in comp if r['change'] > 0),

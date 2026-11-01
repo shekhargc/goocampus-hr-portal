@@ -506,6 +506,8 @@ def api_pg_predictor():
 
     conn = get_db()
     try:
+        from pg_admin.data import rank_bridge as _RB
+        _RB.ensure_cols(conn)
         year_row = conn.execute(
             "SELECT COALESCE(MAX(year), 0) AS y FROM pg_cutoffs").fetchone()
         year = int(request.args.get('year') or (year_row['y'] if year_row else 0) or 0)
@@ -561,14 +563,16 @@ def api_pg_predictor():
         rows = conn.execute(
             "SELECT institute, authority, quota, category, degree, course, state, "
             "       fee, stipend, bond_years, penalty, r1, r2, r3, r4, stray, closing_rank, "
+            f"       {_RB.SELECT_AI}, "
             "       college_id, COALESCE(institute_type,'') AS institution_type "
             f"  FROM pg_cutoffs WHERE {where_sql} "
             # When the scope has more rows than the cap, keep the seats RELEVANT to this
             # rank — reachable + a stretch band (closing_rank >= rank*0.7) — first, so we
             # never truncate away the candidate's actual options in favour of the globally
             # most-competitive (unreachable) seats. Within each band, best (lowest) first.
-            "  ORDER BY (CASE WHEN closing_rank IS NOT NULL AND closing_rank >= ? THEN 0 ELSE 1 END), "
-            "           closing_rank ASC NULLS LAST, institute ASC LIMIT ?",
+            # compared on the ALL-INDIA rank (Tamil Nadu's state ranks converted — founder 2026-11-01)
+            f"  ORDER BY (CASE WHEN {_RB.ai_sql('closing_rank')} IS NOT NULL AND {_RB.ai_sql('closing_rank')} >= ? THEN 0 ELSE 1 END), "
+            f"           {_RB.ai_sql('closing_rank')} ASC NULLS LAST, institute ASC LIMIT ?",
             params + [int(rank * 0.7), limit]).fetchall()
         # Resolve each institute → unified college-master id so the site can link a
         # predicted college to its full profile (founder 2026-09-21). alias_key is the
@@ -602,7 +606,7 @@ def api_pg_predictor():
     results = []
     _sg_cache = {}
     for r in rows:
-        d = as_dict(r)
+        d = _RB.present(as_dict(r))               # r1..closing_rank = All-India; *_state + rank_basis for state ranks
         d['chance'] = _chance(d.get('closing_rank'))
         d['fee_period'] = 'year'                   # college fee is annual tuition (founder 2026-10-06)
         _c = d.get('course') or ''

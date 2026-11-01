@@ -208,9 +208,12 @@ def api_pg_pg_college_detail(college_id):
         cutoffs, stipend = [], []
         if names:
             ph = ','.join(['?'] * len(names))
-            cutoffs = [dict(r) for r in conn.execute(
+            from pg_admin.data import rank_bridge as _RB
+            _RB.ensure_cols(conn)
+            # All-India rank first + the state rank for state-rank authorities (founder 2026-11-01)
+            cutoffs = [_RB.present(dict(r)) for r in conn.execute(
                 f"SELECT course, category, quota, seat_type, authority, state, "
-                f"r1, r2, r3, r4, stray, closing_rank, degree "
+                f"r1, r2, r3, r4, stray, closing_rank, {_RB.SELECT_AI}, degree "
                 f"FROM pg_cutoffs WHERE institute IN ({ph}) "
                 f"ORDER BY authority, course, category, quota", names).fetchall()]
             stipend = [dict(r) for r in conn.execute(
