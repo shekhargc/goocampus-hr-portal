@@ -163,3 +163,15 @@ ultrasonography "Sikh Minority Management Seats" have no 2025 equivalent → kep
 dnb; diplomas, DCH/DA/Sports Medicine and Ultrasonography batches → section diploma.
 2026 Round 1 provisional (02.11.2026): 578 lines (505 MD/MS, 45 diploma, 28 DNB), 572 merit numbers match the merit list,
 578 AIRs match NBEMS.
+
+## Jharkhand (`jharkhand.py`)
+    /usr/bin/python3 tools/results/jharkhand.py <allotment.pdf> <out.json> --seat-matrix <jh seat-matrix out.json> [--nbems neet2026.json] [--round "Round 1"] [--round-order 1] [--status provisional]
+JCECEB "Provisional Seat Allotment List" of the State Quota PG Medical counselling: one 20-column table (Sl. No., App.
+No., Roll No., Name, Gender, D.O.B., Category, Is EWS, Is PWD, DisabilityType, Incentive %, CML Rank, Category / EWS /
+PTG / D.Q. Rank, Allotted Institute, Allotted Course, Seat Opted Category, Roster Point). App no, name, gender and DOB
+are never read into the output; the roll is used in memory only. Authority `jceceb`. `rank` = CML Rank (state merit),
+`rank_ai` = AIR from NBEMS 2026 by roll. No quota is printed: a seat is 'Government Quota-Inservice' when the 2026
+seat matrix has ONLY in-service seats for that institute + course, 'Government Quota' when only state seats; a course
+with both stops the run. Category = Seat Opted Category (UR ST SC EWS BC-I BC-II UR-PH); in-service incentive % in
+`remarks`. Post-MBBS DNB (Sadar Hospital, RINPAS, SNMMCH DNB) → section dnb.
+2026 Round 1 provisional (03.11.2026): 110 allotments, 5 in-service, CML 1–303, AIR 1,907–159,060 (110/110 from NBEMS).
