@@ -29,8 +29,8 @@ SECTION_LABELS = {
     'official_documents': 'Official Documents', 'news': 'News & Updates', 'aiq': 'AIQ', 'ciq': 'CIQ',
     'state': 'State quota', 'deemed': 'Deemed', 'dashboard_home': 'Dashboard home',
 }
-EMAIL_KINDS = {'news': 'News alert', 'deadline': 'Deadline reminder', 'announcement': 'Announcement',
-               'rankings': 'Rankings email'}
+EMAIL_KINDS = {'news': 'News alert', 'news_digest': 'Combined news email', 'deadline': 'Deadline reminder',
+               'announcement': 'Announcement', 'rankings': 'Rankings email'}
 CATEGORY_LABELS = {'paid': 'Paid', 'free': 'Free', 'internal': 'Internal client', 'team': 'Team'}
 BUCKETS = [('1 day', 1, 1), ('2 days', 2, 2), ('3–5 days', 3, 5), ('6–10 days', 6, 10), ('11+ days', 11, 10 ** 6)]
 # A "visit" = a burst of activity; a new one starts after VISIT_GAP_MIN minutes of nothing (GA rule)

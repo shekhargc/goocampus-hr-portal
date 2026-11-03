@@ -160,6 +160,12 @@ Result | 24 Oct | 14 Nov | 4 Dec"
         <div style="margin-top:6px;"><label style="cursor:pointer;font-weight:600;"><input type="checkbox" name="email_team" value="1"> 👥 also team members</label>
           <span style="color:var(--gray-500);font-size:0.76rem;">(doctors marked Team + staff)</span></div>
         <div style="color:var(--gray-500);font-size:0.76rem;margin-top:3px;">Team members get the email ONLY when this box is ticked. To check an email first: pick “no doctors” + tick team → post → then 📧 Send to all on the posted update.</div>
+        <div style="margin-top:9px;padding-top:9px;border-top:1px dashed var(--gray-300);">
+          <b>How to send</b>:
+          <label style="margin-left:10px;cursor:pointer;"><input type="radio" name="email_mode" value="now" checked> ⚡ Send now, on its own</label>
+          <label style="margin-left:10px;cursor:pointer;font-weight:600;color:#9a3412;"><input type="radio" name="email_mode" value="digest"> 📬 Add to the combined email</label>
+          <div style="color:var(--gray-500);font-size:0.76rem;margin-top:3px;">Combined: the update waits in the <b>Combined email</b> box below and goes out together with the others when you press <b>Send combined email now</b> — one email per person instead of one per update.</div>
+        </div>
       </div>
       <button type="submit"
               style="background:var(--navy,#1e3a5f);color:#fff;border:0;border-radius:8px;padding:10px 22px;font-size:0.9rem;font-weight:600;cursor:pointer;">
@@ -167,6 +173,60 @@ Result | 24 Oct | 14 Nov | 4 Dec"
       </button>
     </form>
   </div>
+
+  <!-- ── Combined email (founder 2026-11-03) ── -->
+  {% if digest %}
+  <div style="background:#fff;border:2px solid {{ '#fb923c' if digest['items'] else 'var(--gray-200)' }};border-radius:12px;padding:16px 18px;margin-bottom:22px;max-width:1000px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0 0 4px;font-size:1.05rem;font-weight:700;color:var(--navy);">📬 Combined email — {{ digest['items']|length }} update{{ '' if digest['items']|length == 1 else 's' }} waiting</h2>
+        {% if digest['items'] %}
+        <div style="font-size:0.82rem;color:var(--gray-600);">Goes to <b>{{ digest.recipients }}</b> people as one email each
+          {% if digest.would_be_singles > digest.recipients %}— instead of <b>{{ digest.would_be_singles }}</b> separate emails{% endif %}.
+          Each person gets only the updates meant for them.</div>
+        {% else %}
+        <div style="font-size:0.82rem;color:var(--gray-500);">Nothing waiting. On the form, pick <b>📬 Add to the combined email</b> to collect updates here.</div>
+        {% endif %}
+      </div>
+      {% if digest['items'] %}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button type="button" onclick="digestTest()" style="background:#fff;border:1px solid #fdba74;color:#9a3412;border-radius:8px;padding:8px 14px;font-size:0.84rem;font-weight:600;cursor:pointer;">✉️ Send me a test</button>
+        <form method="POST" action="{{ url_for('pg_news_digest_send') }}" onsubmit="return confirm('Send the combined email now — {{ digest['items']|length }} update(s) to {{ digest.recipients }} people (one email each)?');" style="display:inline;">
+          <button type="submit" style="background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:0.88rem;font-weight:700;cursor:pointer;">📬 Send combined email now</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% if digest['items'] %}
+    <table style="width:100%;border-collapse:collapse;font-size:0.84rem;margin-top:12px;">
+      <thead><tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+        <th style="padding:8px 12px;width:28px;">#</th><th style="padding:8px 12px;">Update</th>
+        <th style="padding:8px 12px;">Goes to</th><th style="padding:8px 12px;">Added</th><th style="padding:8px 12px;"></th></tr></thead>
+      <tbody>
+      {% for it in digest['items'] %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:8px 12px;color:#ea580c;font-weight:700;">{{ loop.index }}</td>
+          <td style="padding:8px 12px;"><b style="color:var(--navy);">{{ it.heading }}</b>
+            <div style="color:var(--gray-500);font-size:0.76rem;">{{ it.body_label or ('All India' if it.scope == 'all_india' else it.state) }}{% if it.hidden %} · <span style="color:#b45309;font-weight:700;">hidden — will be skipped</span>{% endif %}</div></td>
+          <td style="padding:8px 12px;color:var(--gray-600);">{{ it.audience_words }}</td>
+          <td style="padding:8px 12px;color:var(--gray-500);font-size:0.76rem;white-space:nowrap;">{{ it.digest_queued_at|format_datetime }}</td>
+          <td style="padding:8px 12px;text-align:right;">
+            <form method="POST" action="{{ url_for('pg_news_digest_queue') }}" style="display:inline;">
+              <input type="hidden" name="news_id" value="{{ it.id }}"><input type="hidden" name="add" value="0">
+              <button type="submit" style="background:none;border:0;color:#dc2626;font-size:0.8rem;cursor:pointer;">Take out</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if digest.last %}
+    <div style="margin-top:10px;font-size:0.76rem;color:var(--gray-500);">Last combined email #{{ digest.last.id }}: {{ digest.last.created_at|format_datetime }}{% if digest.last.created_by %} by {{ digest.last.created_by }}{% endif %} —
+      {% if digest.last.status == 'sent' %}sent to {{ digest.last.sent }} people{% if digest.last.failed %} ({{ digest.last.failed }} failed){% endif %}{% else %}sending… {{ digest.last.sent }} of {{ digest.last.recipients }} so far{% endif %}.</div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <!-- ── Posted ── -->
   <h2 style="margin:0 0 12px;font-size:1.05rem;font-weight:700;color:var(--navy);">Posted updates</h2>
@@ -211,6 +271,10 @@ Result | 24 Oct | 14 Nov | 4 Dec"
                     data-category="{{ it.category or '' }}" data-summary="{{ it.summary or '' }}"
                     data-dates="{{ it.key_dates_d|tojson|forceescape }}" data-schedule="{{ it.schedule_text or '' }}"
                     data-ktimes="{{ (it.key_times_d or {})|tojson|forceescape }}" data-kround="{{ it.key_round or '' }}">Edit</button>
+            <form method="POST" action="{{ url_for('pg_news_digest_queue') }}" style="display:inline;">
+              <input type="hidden" name="news_id" value="{{ it.id }}"><input type="hidden" name="add" value="1">
+              <button type="submit" title="Add this update to the combined email" style="background:none;border:0;color:#ea580c;font-size:0.82rem;cursor:pointer;font-weight:600;">📬 Combine</button>
+            </form>
             <button type="button" onclick="newsTest({{ it.id }})" style="background:none;border:0;color:#b45309;font-size:0.82rem;cursor:pointer;margin-left:8px;font-weight:600;">✉️ Test</button>
             <form method="POST" action="{{ url_for('pg_news_send_alert') }}" onsubmit="return confirm('Email this update to TEAM MEMBERS only (doctors marked Team + staff)?');" style="display:inline;">
               <input type="hidden" name="news_id" value="{{ it.id }}"><input type="hidden" name="audience" value="team">
@@ -279,6 +343,13 @@ Result | 24 Oct | 14 Nov | 4 Dec"
 </div>
 
 <script>
+function digestTest(){
+  var to=prompt('Send a TEST of the combined email as it stands now (free + paid views) to which email?','shekhar@goocampus.in');
+  if(!to) return;
+  var f=document.createElement('form'); f.method='POST'; f.action='/admin/pg/news/digest/test';
+  f.innerHTML='<input type="hidden" name="to">';
+  f.querySelector('[name=to]').value=to; document.body.appendChild(f); f.submit();
+}
 function newsTest(id){
   var to=prompt('Send a TEST of this update (free + paid views) to which email?','shekhar@goocampus.in');
   if(!to) return;
@@ -316,6 +387,7 @@ function newsTest(id){
     document.querySelectorAll('[name^="kd_"]').forEach(function(el){ el.value=''; });
     setAlert(true);   // new post → default to emailing everyone
     var tm=f.querySelector('[name="email_team"]'); if(tm) tm.checked=false;
+    var em=f.querySelector('[name="email_mode"][value="now"]'); if(em) em.checked=true;
     document.getElementById('editingBanner').style.display='none';
     submitLabel('Post update');
   };

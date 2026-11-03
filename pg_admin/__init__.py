@@ -225,6 +225,12 @@ def register_pg_admin(app):
                      news_admin.news_test_email, methods=['POST'])
     app.add_url_rule('/admin/pg/news/send-alert', 'pg_news_send_alert',
                      news_admin.news_send_alert, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/digest/send', 'pg_news_digest_send',
+                     news_admin.news_digest_send, methods=['POST'])      # combined news email (2026-11-03)
+    app.add_url_rule('/admin/pg/news/digest/queue', 'pg_news_digest_queue',
+                     news_admin.news_digest_queue, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/digest/test', 'pg_news_digest_test',
+                     news_admin.news_digest_test, methods=['POST'])
     app.add_url_rule('/admin/pg/news/recipients', 'pg_news_recipients_diag',
                      news_admin.news_recipients_diag, methods=['GET'])
     app.add_url_rule('/admin/pg/news/toggle', 'pg_news_toggle',
