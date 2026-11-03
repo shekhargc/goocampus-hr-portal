@@ -246,6 +246,93 @@ def build_news_email_html(news, is_free, name=""):
     return render_branded_email(f"📢 {heading}", inner, preheader=preheader)
 
 
+def digest_subject(items):
+    """Combined email subject: the count + the update with the nearest closing date (else the first one)."""
+    n = len(items)
+    best = None
+    for it in items:
+        ends = [x for x in _key_dates(it) if x[2] == 'end']
+        if ends and (best is None or ends[0][1] < best[1][1]):
+            best = (it, ends[0])
+    if best:
+        it, (label, d, _k, _n) = best
+        return f"⏰ {n} NEET-PG updates · {label}: {d.strftime('%d %b')} — {(it.get('heading') or '').strip()}"[:150]
+    return f"📢 {n} NEET-PG updates: {(items[0].get('heading') or '').strip()} + {n - 1} more"[:150]
+
+
+def _digest_item(news, no):
+    """One update inside the combined email — the same pieces as the single email (chip, authority, summary,
+    key-dates card, schedule, glimpse, PDF note, button), under a numbered heading."""
+    from email_utils import brand_button, brand_callout
+    heading = escape((news.get("heading") or "NEET-PG Update").strip())
+    cat = CATEGORY_LABELS.get((news.get("category") or "").strip(), "")
+    chip = (f'<span style="display:inline-block;padding:3px 10px;border-radius:999px;background:#eef2ff;'
+            f'color:#3730a3;font-size:12px;font-weight:700;margin-right:6px;">{escape(cat)}</span>' if cat else '')
+    summary = (news.get("summary") or "").strip()
+    glimpse = _glimpse(news.get("body_text"), 220 if summary else 300)
+    nid = news.get("id")
+    return (
+        f'<div id="u{no}" style="margin:0;padding:22px 0 6px;border-top:{"0" if no == 1 else "2px solid #e2e8f0"};">'
+        f'<p style="margin:0 0 6px;">{chip}<span style="color:#64748b;font-size:13px;">'
+        f'{escape(_authority_label(news))}</span></p>'
+        f'<h2 style="margin:0 0 4px;color:#1e3a5f;font-size:19px;line-height:1.35;font-weight:800;">'
+        f'<span style="color:#ea580c;">{no}.</span> {heading}</h2>'
+        + (f'<p style="margin:10px 0 4px;color:#0f172a;font-size:15px;line-height:1.55;font-weight:700;">'
+           f'{escape(summary)}</p>' if summary else '')
+        + _dates_card(news) + _schedule_table(news)
+        + (f'<p style="margin:12px 0 4px;color:#334155;font-size:14px;line-height:1.65;">{glimpse}</p>' if glimpse else '')
+        + (brand_callout("📄 The official notice (PDF) is attached — open the update to view or download it.",
+                         color="#FFF7ED", border="#FED7AA", tcolor="#9A3412")
+           if (news.get("pdf_name") or "").strip() else '')
+        + brand_button("Read the full update →", NEWS_URL.format(id=nid) if nid else LOGIN_URL)
+        + '</div>')
+
+
+def build_digest_html(items, is_free, name=""):
+    """Combined email: several updates in ONE branded email (founder 2026-11-03) — greeting, a numbered list of
+    the updates, then each update in full single-email format; the free-user upgrade note once at the end."""
+    from email_utils import render_branded_email
+    dr = "" if is_free else _dr_name(name)
+    greeting = f"Dear {escape(dr)}," if dr else "Dear Doctor,"
+    n = len(items)
+    contents = ''.join(
+        f'<tr><td style="padding:7px 10px 7px 0;vertical-align:top;color:#ea580c;font-weight:800;font-size:14px;'
+        f'width:22px;">{i}.</td><td style="padding:7px 0;border-bottom:1px solid #f1f5f9;">'
+        f'<a href="{NEWS_URL.format(id=it.get("id")) if it.get("id") else LOGIN_URL}" style="color:#1e3a5f;'
+        f'font-weight:700;font-size:14px;text-decoration:none;line-height:1.45;">'
+        f'{escape((it.get("heading") or "NEET-PG Update").strip())}</a>'
+        f'<div style="color:#64748b;font-size:12px;margin-top:2px;">{escape(_authority_label(it))}</div></td></tr>'
+        for i, it in enumerate(items, 1))
+    intro = (
+        f'<p style="margin:0 0 10px;color:#0f172a;font-size:15px;">{greeting}</p>'
+        f'<p style="margin:0 0 12px;color:#334155;font-size:15px;line-height:1.6;">Here are <b>{n} new NEET-PG '
+        'counselling updates</b> for you:</p>'
+        '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 14px;margin:0 0 6px;">'
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">'
+        f'{contents}</table></div>')
+    body = ''.join(_digest_item(it, i) for i, it in enumerate(items, 1))
+    access_note = (
+        '<p style="margin:18px 0 0;padding-top:14px;border-top:2px solid #e2e8f0;color:#64748b;font-size:13px;'
+        f'line-height:1.6;text-align:center;">Track every deadline for your states on your <a href="{LOGIN_URL}" '
+        'style="color:#ea580c;font-weight:700;text-decoration:none;">GooCampus dashboard</a>.</p>')
+    upgrade = ""
+    if is_free:
+        upgrade = (
+            '<div style="margin:24px 0 4px;background:linear-gradient(135deg,#fff5eb,#fef3e6);'
+            'border:1px solid #fed7aa;border-radius:10px;padding:16px 18px;">'
+            '<p style="margin:0 0 6px;color:#9a3412;font-weight:700;font-size:14px;">'
+            '⭐ Get your best college for your NEET-PG 2026</p>'
+            '<p style="margin:0 0 10px;color:#7c2d12;font-size:13px;line-height:1.6;">'
+            'Upgrade to GooCampus and get personalised NEET-PG counselling — expert, '
+            'one-on-one guidance on choices, documents and strategy to land you the best '
+            'possible college.</p>'
+            f'<a href="{UPGRADE_URL}" style="color:#ea580c;font-weight:700;font-size:13px;'
+            'text-decoration:none;">Explore counselling plans →</a>'
+            '</div>')
+    preheader = escape(" · ".join((it.get("heading") or "").strip() for it in items))[:150]
+    return render_branded_email(f"📢 {n} NEET-PG updates", intro + body + access_note + upgrade, preheader=preheader)
+
+
 def _state_filter_sql(state):
     """Doctors linked to a state: home state on the profile, a state chip (home/other), or a followed
     state in news. Case-insensitive. (founder 2026-10-22: state documents → that state's doctors)"""

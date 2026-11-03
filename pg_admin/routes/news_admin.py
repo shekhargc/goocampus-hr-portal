@@ -203,8 +203,18 @@ def news_admin():
             it['schedule_text'] = ''
     deleted = [it for it in items if it.get('deleted_at')]
     items = [it for it in items if not it.get('deleted_at')]
+    digest = None
+    try:
+        from pg_admin import news_digest as ND
+        _c = get_db()
+        try:
+            digest = ND.summary(_c)
+        finally:
+            _c.close()
+    except Exception as e:
+        logging.warning("news_admin combined email box: %s", e)
     from pg_admin.data.calendar import EVENT_LABELS
-    return render_template('pg_admin/news.html', items=items, prefill=prefill, deleted=deleted,
+    return render_template('pg_admin/news.html', items=items, prefill=prefill, deleted=deleted, digest=digest,
                            event_labels=EVENT_LABELS,
                            categories=NEWS_CATEGORIES, date_fields=NEWS_DATE_FIELDS,
                            states=_canonical_states(), active_section='goocampus_in')
@@ -268,6 +278,9 @@ def news_save():
     is_published = False if request.form.get('is_published') in ('0', 'off') else True
     # Email this update to all registered doctors? (founder 2026-10-06)
     send_alert = request.form.get('send_alert') in ('1', 'on', 'true', 'yes')
+    # 'now' = its own email straight away (as before); 'digest' = wait in the combined email until the founder
+    # presses "Send combined email now" (founder 2026-11-03, to cut the number of emails)
+    email_mode = 'digest' if _s(request.form.get('email_mode')) == 'digest' else 'now'
     inbox_id = _s(request.form.get('inbox_id'))
     inbox_id = int(inbox_id) if inbox_id.isdigit() else None
     if inbox_id:
@@ -545,7 +558,23 @@ def news_save():
     # Email alert to all registered doctors (only on a published item, when asked).
     try: _blast_id = int(news_id)
     except (TypeError, ValueError): _blast_id = None
-    if saved_ok and send_alert and is_published and _blast_id:
+    if saved_ok and send_alert and is_published and _blast_id and email_mode == 'digest':
+        try:
+            from pg_admin import news_digest as ND
+            from pg_admin.news_email import audience_label
+            _c = get_db()
+            try:
+                ND.queue(_c, _blast_id)
+                waiting = len(ND.queued_items(_c))
+            finally:
+                _c.close()
+            _who = audience_label(email_audience, state if scope == 'state' else '')
+            flash(f'Saved — added to the combined email ({_who}). {waiting} update(s) waiting; nothing is sent '
+                  'until you press “Send combined email now”.', 'success')
+        except Exception as e:
+            logging.error("news_save: add to combined email failed: %s", e)
+            flash('Saved, but it could not be added to the combined email.', 'error')
+    elif saved_ok and send_alert and is_published and _blast_id:
         try:
             from pg_admin.news_email import trigger_news_blast, recipient_count, audience_label
             n = recipient_count(_blast_id)
@@ -832,3 +861,73 @@ def news_pdf_admin():
         return redirect(url_for('pg_news_admin'))
     return Response(bytes(row['pdf_data']), mimetype=row['pdf_content_type'] or 'application/pdf',
                     headers={'Content-Disposition': f'inline; filename="{row["pdf_name"] or "news.pdf"}"'})
+
+
+# ── Combined news email (founder 2026-11-03) ─────────────────────────────────
+@login_required
+def news_digest_send():
+    """"Send combined email now" — everything waiting goes out together, one email per person."""
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    try:
+        from pg_admin import news_digest as ND
+        bid, n_items, n_people = ND.start((u.get('name') if isinstance(u, dict) else '') or 'admin')
+        if not bid:
+            flash('Nothing is waiting in the combined email.', 'info')
+        else:
+            flash(f'Combined email #{bid} is going out in the background: {n_items} update(s) in one email to '
+                  f'{n_people} people.', 'success')
+    except Exception as e:
+        logging.error("news_digest_send: %s", e)
+        flash('Could not start the combined email.', 'error')
+    return redirect(url_for('pg_news_admin'))
+
+
+@login_required
+def news_digest_queue():
+    """Add a posted update to the combined email (add=1) or take it out (add=0)."""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    try: nid = int(_s(request.form.get('news_id')))
+    except (TypeError, ValueError): nid = None
+    if nid:
+        from pg_admin import news_digest as ND
+        conn = get_db()
+        try:
+            if _s(request.form.get('add')) == '1':
+                ND.queue(conn, nid); flash('Added to the combined email.', 'success')
+            else:
+                ND.unqueue(conn, nid); flash('Taken out of the combined email.', 'info')
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error("news_digest_queue: %s", e)
+            flash('Could not change the combined email.', 'error')
+        finally:
+            conn.close()
+    return redirect(url_for('pg_news_admin'))
+
+
+@login_required
+def news_digest_test():
+    """Send the combined email as it stands now (free + paid views) to one address — nothing else is sent."""
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    to = _s(request.form.get('to')).strip()
+    if not to or '@' not in to:
+        flash('Enter a valid email address to send the test to.', 'error')
+        return redirect(url_for('pg_news_admin'))
+    try:
+        from pg_admin import news_digest as ND
+        ok = ND.send_test(to)
+        if ok is None:
+            flash('Nothing is waiting in the combined email to test.', 'info')
+        elif ok:
+            flash(f'Test of the combined email sent to {to} (free + paid views).', 'success')
+        else:
+            flash('Test could not be sent — email service may be unconfigured on the server.', 'error')
+    except Exception as e:
+        logging.error("news_digest_test: %s", e)
+        flash('Test could not be sent. Please try again.', 'error')
+    return redirect(url_for('pg_news_admin'))
