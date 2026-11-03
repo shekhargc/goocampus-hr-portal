@@ -36,16 +36,23 @@ Checks (every printed number): the three group headings and their page ranges, t
 each course line's categories = its Total, each institute's columns = its Total line, each group's columns = its
 Summary line, each institute printed once, every number word on pages 3-24 lies inside a parsed table (nothing
 outside find_tables()), and the output re-adds to the three Summary totals (no grand total is printed).
+Supplementary orders: G.O.(Ms)No.361/2026/H&FWD (02-11-2026) approves "Newly Added Seats (Available from First Phase
+Onward)" for Travancore Medical College, Kollam (TRM, self-financing Non Minority & Minority group, columns UR SC ST EZ
+BH MU LA) — pass it with --add; its institute Total and Summary line are checked the same way.
 Run with /usr/bin/python3 (PyMuPDF):
-    kerala.py <go.pdf> <cutoffs2025.json> <out.json>"""
+    kerala.py <go.pdf> <cutoffs2025.json> <out.json> [--add <go361.pdf>]"""
 import re, sys, os, json, collections
 import fitz
 sys.path.insert(0, os.path.dirname(__file__))
 from common import clean, grids, load_cuts, build, report
 
-if len(sys.argv) != 4:
+argv = sys.argv[1:]
+ADD = []
+while '--add' in argv:
+    i = argv.index('--add'); ADD.append(argv[i + 1]); del argv[i:i + 2]
+if len(argv) != 3:
     raise SystemExit(__doc__)
-GO, CUTS, OUT = sys.argv[1:4]
+GO, CUTS, OUT = argv
 key = lambda s: re.sub(r'[^a-z]', '', (s or '').lower())
 
 COLLEGES = {  # GO institute code → (name exactly as printed, standard name = the 2025 Kerala CEE cut-off name)
@@ -95,6 +102,10 @@ COURSES = {  # (bracket code, printed name in lower-case letters) → approved c
     ('OB', 'msobstetricsgynaecology'): 'MS - Obstetrics and Gynaecology', ('OP', 'msophthalmology'): 'MS - Ophthalmology',
     ('OR', 'msorthopaedics'): 'MS - Orthopaedics', ('ET', 'msotorhinolaryngology'): 'MS - ENT (Otorhinolaryngology)',
     ('DP', 'diplomainclinicalpathology'): 'Diploma in Pathology'}
+ADD_GOS = {  # supplementary order → (must-read phrases, page (0-based), institute code, printed name, standard name, cats)
+    'G.O.(Ms)No.361/2026/H&FWD': (('Travancore Medical College, Kollam', 'seat matrix for admission to Medical Post'), 2,
+                                  'TRM', 'Travancore Medical College, Mylapore, Umayanalloor P O, Kollam.',
+                                  'Travancore Medical College, Kollam', ['UR', 'SC', 'ST', 'EZ', 'BH', 'MU', 'LA'])}
 BASE = ['UR', 'SC', 'ST', 'EZ', 'BH', 'MU', 'LA', 'BX', 'KU']
 GROUPS = [  # (label, heading on the group's first page, pages (0-based), category columns, quota)
     ('Government', 'Category-wise distribution of the State Quota Seats (excluding In-Service quota seats) in Government '
@@ -215,8 +226,43 @@ if sorted(seen_codes) != sorted(COLLEGES):
 checks['institutes'] = (len(seen_codes), len(COLLEGES))
 summ = sum(checks[f'{g[0]} Summary Total'][1] for g in GROUPS)
 checks['all seats = sum of the three Summary totals'] = (sum(x['seats'] for x in rows), summ)
+
+# supplementary orders (newly added seats) — one institute table + a Summary line, every number checked
+for path in ADD:
+    d2 = fitz.open(path)
+    t1 = clean(d2[0].get_text())
+    go = next((g for g in ADD_GOS if g in t1), None)
+    if not go:
+        raise SystemExit(f'{path}: not a known supplementary GO')
+    must, pg, code, printed_name, std, cats = ADD_GOS[go]
+    if not all(m in clean(' '.join(x.get_text() for x in d2)) for m in must):
+        raise SystemExit(f'{go}: wording changed')
+    t = [[clean(c) if c is not None else None for c in r] for g in grids(d2[pg]) for r in g]
+    if t[0][0] != f'{code}:{printed_name}' or t[1] != ['Course', 'Total'] + cats:
+        raise SystemExit(f'{go}: table heading changed: {t[0][0]!r} / {t[1]}')
+    acc, n0, i = [0] * (len(cats) + 1), len(rows), 2
+    while t[i][0] != 'Total':
+        cm = re.fullmatch(r'(.+)\[([A-Z]{2})\]', t[i][0] or '')
+        if not cm or (cm.group(2), key(cm.group(1))) not in COURSES:
+            raise SystemExit(f'{go}: unknown course {t[i][0]!r}')
+        course = COURSES[(cm.group(2), key(cm.group(1)))]
+        v = [val(c, f'{code} {t[i][0]}') for c in t[i][1:]]
+        if sum(v[1:]) != v[0] or v[0] == 0:
+            raise SystemExit(f'{go} {t[i][0]}: categories add to {sum(v[1:])}, Total {v[0]}')
+        if any(x['college'] == std and x['course'] == course for x in rows):
+            raise SystemExit(f'{go}: {course} at {std} already in the matrix')
+        acc = [a + b for a, b in zip(acc, v)]
+        for cat, n in zip(cats, v[1:]):
+            if n:
+                rows.append({'college': std, 'course': course, 'quota': 'Private Quota', 'seats': n, 'category': cat,
+                             'section': 'diploma' if course.startswith('Diploma') else 'mdms'})
+        i += 1
+    printed = [val(c, f'{code} Total') for c in t[i][1:]]
+    if acc != printed or t[i + 1][0] != 'Summary' or [val(c, 'Summary') for c in t[i + 3][1:]] != printed:
+        raise SystemExit(f'{go}: course lines {acc} / Total {printed} / Summary disagree')
+    checks[f'{go} {code} newly added seats'] = (sum(x['seats'] for x in rows[n0:]), printed[0])
 for x in rows:
-    del x['group']
+    x.pop('group', None)
 
 FAMILY = {'Government Quota': ('Government Quota$',), 'Private Quota': ('Private Quota$',)}
 
@@ -240,4 +286,4 @@ out = build(rows, cuts, 'Kerala', 'KL', lambda q: FAMILY[q], cat_match)
 json.dump({'rows': out, 'checks': checks}, open(OUT, 'w'), ensure_ascii=False, indent=0)
 report(out, checks)
 print('by section', {s: sum(r['seats'] for r in out if r['section'] == s) for s in ('mdms', 'diploma', 'dnb')})
-print('2025 Kerala institutes not in the 2026 GO:', sorted(known - {v[1] for v in COLLEGES.values()}))
+print('2025 Kerala institutes not in the 2026 GO(s):', sorted(known - {v[1] for v in COLLEGES.values()} - {x['college'] for x in rows}))

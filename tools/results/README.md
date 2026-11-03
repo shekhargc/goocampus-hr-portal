@@ -150,3 +150,16 @@ allotted category, option no. No names.
   order, course code + name both known, minority/NRI codes only at self-financing colleges. No totals are printed.
 2026 Phase 1 provisional (31.10.2026): 1,082 seats (1,080 MD/MS, 2 Diploma), 30 colleges; rank_ai 1,082/1,082 printed,
 state rank 1,082/1,082 from the merit list.
+
+## Punjab (`punjab.py`)
+    /usr/bin/python3 tools/results/punjab.py <selection.pdf> <out.json> --merit bfuhs_r1_main.json [--nri bfuhs_r1_nri.json] [--nbems neet2026.json] [--round 1] [--status provisional]
+BFUHS Faridkot "Provisional selection list for admission to PG Courses under NEET PG 2026": one 10-column table (M No,
+Regn No., NEET PG Rollno, NAME, Category, University, Allotted College, Branch, Quota, Category); no title/date printed
+(published_on = PDF creation date). Regn No, name and university are never read into the output; the roll is used in
+memory only. `rank` = M No (checked against the Round 1 merit list by roll), `rank_ai` = AIR by roll (merit list,
+then NBEMS). NRI lines print no M No → `rank` empty, NRI list position in `remarks`. Private-college quotas map to the
+2025 college-specific spellings (DMC = Dayanand + Gian Sagar, CMC, SGRD, Adesh); CMC quota "A" and SGRD's
+ultrasonography "Sikh Minority Management Seats" have no 2025 equivalent → kept as new quotas. Post-MBBS DNB → section
+dnb; diplomas, DCH/DA/Sports Medicine and Ultrasonography batches → section diploma.
+2026 Round 1 provisional (02.11.2026): 578 lines (505 MD/MS, 45 diploma, 28 DNB), 572 merit numbers match the merit list,
+578 AIRs match NBEMS.

@@ -60,13 +60,15 @@ clean = lambda s: re.sub(r'\s+', ' ', (s or '').replace('\n', ' ')).strip()
 
 doc = fitz.open(PDF)
 t0 = clean(doc[0].get_text())
-m = re.search(r'ADMISSION TO PG MEDICAL COURSES (20\d\d) (\w+) Phase Allotment List \((Provisional|Final)\)', t0)
+# the published list (after complaints) prints no '(Provisional)' / '(Final)' tag → final (CEE notification
+# 'First Phase Centralised Allotment Published', 02.11.2026)
+m = re.search(r'ADMISSION TO PG MEDICAL COURSES (20\d\d) (\w+) Phase Allotment List(?: \((Provisional|Final)\))?', t0)
 if not m:
     raise SystemExit('title line changed')
 PHASES = {'First': 1, 'Second': 2, 'Third': 3}
 if m.group(2) not in PHASES:
     raise SystemExit(f'unknown phase {m.group(2)!r}')
-ROUND, STATUS = PHASES[m.group(2)], m.group(3).lower()
+ROUND, STATUS = PHASES[m.group(2)], (m.group(3) or 'Final').lower()
 dates = collections.Counter()
 lines, appl_text = [], 0
 for pg in doc:

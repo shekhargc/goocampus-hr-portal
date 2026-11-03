@@ -34,8 +34,16 @@ COURSES = {  # PDF course → (approved course name, section)
     'D.G.O.': ('Diploma in Obstetrics and Gynaecology', 'diploma'),
     'D.C.H.': ('Diploma in Child Health / Paediatrics', 'diploma'),
     'D.M.R.D.': ('Diploma in Radio Diagnosis', 'diploma'),
-    'Post M.B.B.S DNB (Obs. & Gynae.)': ('DNB - Obstetrics and Gynaecology (Post-MBBS)', 'dnb')}
-EXPECTED = {'State Quota': 122, 'In-service Quota': 7}   # the notice: 122 State Quota seats + 7 in-service
+    'Post M.B.B.S DNB (Obs. & Gynae.)': ('DNB - Obstetrics and Gynaecology (Post-MBBS)', 'dnb'),
+    # revised matrix of 02.11.2026: Sadar Hospital Ranchi adds Post-MBBS DNB in-service seats; RINPAS's seat is
+    # now printed as a Post-MBBS DNB (misspelt "Phychiatry" again)
+    'Post M.B.B.S DNB (General Surgery)': ('DNB - General Surgery (Post-MBBS)', 'dnb'),
+    'Post M.B.B.S DNB (Pathology)': ('DNB - Pathology (Post-MBBS)', 'dnb'),
+    'Post M.B.B.S DNB (Phychiatry)': ('DNB - Psychiatry (Post-MBBS)', 'dnb')}
+# the notice's totals: 122 State Quota + 7 in-service (15/16.10.2026); override for a revised print with
+# JH_EXPECTED='<state>,<in-service>' once the totals are read off the notice
+EXPECTED = dict(zip(('State Quota', 'In-service Quota'),
+                    map(int, (os.environ.get('JH_EXPECTED') or '122,7').split(','))))
 
 
 def val(s):
@@ -78,7 +86,7 @@ for r in t[2:]:
             rows.append({'college': college, 'course': course, 'quota': quota, 'seats': n, 'section': section,
                          'category': '', 'institute_type': 'Government Institute'})
 for k, n in EXPECTED.items():
-    checks[f'all institutes | {k} (notice: 122 + 7)'] = (sum(x['seats'] for x in rows if x['quota'] == k), n)
+    checks[f'all institutes | {k} (notice: {EXPECTED["State Quota"]} + {EXPECTED["In-service Quota"]})'] = (sum(x['seats'] for x in rows if x['quota'] == k), n)
 
 # 2025: 'Government Quota' is a prefix of 'Government Quota-Inservice' → '$' = exact match
 FAMILY = {'State Quota': ('Government Quota$',), 'In-service Quota': ('Government Quota-Inservice',)}
