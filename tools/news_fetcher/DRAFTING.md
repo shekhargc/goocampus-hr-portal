@@ -178,13 +178,21 @@ team publishes it). Classify it:
   - `results` — seat allotment result / allotted list (provisional or final, any round, mock allotment too)
   - `other` — any other official PDF worth keeping (schedules, notifications, notes)
   - `none` — not worth keeping as a document (e.g. a link to a login page — no PDF).
+- (`news` decides News Inbox vs Documents-only — see below; the PDF is filed as a document either way.)
 - `title`: clean and specific — "<State/MCC> PG Medical 2026 — <what it is> (<round if any>)". No dates in the title.
-- `news`: `false` when the PDF is ONLY a list or reference document with nothing for a doctor to do
-  (merit/rank lists, candidate data, allotment results lists, seat matrix, fee structure, vacancy list).
-  Such items skip the News Inbox and go straight to Documents — for them a short draft is enough:
+- `news`: `true` (founder 2026-10-22) for a SEAT MATRIX (any round, provisional or final), a FEE STRUCTURE
+  and allotment RESULTS (any round, mock too) — doctors act on these, so they are news AND the same PDF is
+  filed as the document (one stored file). Write a real short news draft: headline like "Rajasthan NEET PG
+  2026: Round 1 Seat Matrix Released", summary, a 80–150 word article (what was released, which round /
+  quota, totals or highlights if the PDF states them, what to do next — e.g. check seats before choice
+  filling closes on <date>), and the dates/events the PDF states. Also `true` for anything with dates,
+  actions, deadlines, rule changes, or a new bulletin/prospectus (a new bulletin is news AND a `brochure`
+  document).
+- `news`: `false` only when the PDF is a pure list with nothing new for a doctor to do — merit/rank lists,
+  candidate data, eligible/not-eligible lists, vacancy lists, blank forms, and a split copy / duplicate of a
+  file already filed. Those skip the News Inbox and go straight to Documents — a short draft is enough:
   headline = the title, summary one sentence, article 2–3 sentences, `dates: {}`, but STILL add `events`
-  if the PDF states dated steps. `news`: `true` for anything with dates, actions, deadlines, rule
-  changes, or a new bulletin/prospectus (a new bulletin is news AND a `brochure` document).
+  if the PDF states dated steps.
 
 Optional `registration_documents` — when the PDF (an Information Bulletin / Prospectus, or a
 "keep these certificates ready" notice) lists the documents/certificates a candidate must upload or

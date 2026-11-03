@@ -230,3 +230,18 @@ block's TOTAL line, CMC 50% cells = pp 63-64 per branch (MNW + IP + S + GM = CMC
 the printed OVER ALL TOTALs. 2026-27 Round 1 (31.10.2026): 2,336 seats (govt 1,231 + self-financing 1,056 + private
 49; 2,317 MD/MS/MCh + 19 diploma). The earlier 62-page issue of the same date has identical pages 1-62 — only the
 CMC 50% breakdown (pp 63-64) was added.
+
+## Maharashtra (`maharashtra.py`)
+    /usr/bin/python3 tools/seat_matrix/maharashtra.py <govt.pdf> <private.pdf> <diploma.pdf> <cutoffs2025.json> <out.json>
+Body "Maharashtra — State Counselling", authority `cetcell_mh` (State CET Cell), section `state`. Three provisional
+matrices dated 02.11.2026, merged: Govt/Corporation/Central-Govt/Aided MD/MS (summary page + one page per college, each
+category split GEN / INS / GEN PWD / INS PWD), Private/Minority MD/MS (Total, Inst., Avail., categories, MGT, NRI) and the
+PG Diploma page (LTMC Mumbai). Quotas: State Quota, In-service Quota (INS), Institutional Quota (MGT), NRI Quota,
+Minority Quota (JIIU Jalna), All India Quota (Vikhe Patil + NKP Salve print AIQ in place of MGT — no 2025 Maharashtra
+cut-off → new). Orphan seats ("1 ORP AB", "1 + 1 ORP C") are stored as "<category>-Orphan" and must equal the summary's
+ORPHAN A-B / C columns. 2025 spellings bridged by cat_match (NT1/NT2/NT3, "IS-" in-service, "-PH", IQ, NRI, Minority).
+Checks: every subject line adds to its State / Avail. seats, every page's columns to its Total line, private Inst. = MGT
++ NRI and Total = Inst. + Avail., both summary pages = the sum of the college pages (the private summary leaves out JIIU
+and the two AIQ colleges); printed category-total cells that skipped ORP-annotated cells are listed (soft) in
+printed_total_cells_off. 2026 R1 provisional: 2,759 seats, 54 colleges (govt 1,581 + private 1,164 + diploma 14;
+State 1,832, In-service 323, Institutional 315, NRI 163, AIQ 104, Minority 22); 2,472 seats bridged to a 2025 cut-off.
