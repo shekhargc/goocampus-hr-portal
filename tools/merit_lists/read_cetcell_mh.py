@@ -4,6 +4,8 @@ Usage: read_cetcell_mh.py <pdf> [--out DIR]
   Detects the list from the page-1 title:
    - 'Common Provisional State Merit List'            -> cetcell_mh_common_provisional.json (quota '')
    - 'Provisional State Merit List of In-Service ...'  -> cetcell_mh_inservice_provisional.json (quota 'In-service')
+  The 'Final Provisional State Merit List …' issues (02.11.2026) read the same way and keep the same list_name, so
+  loading them replaces the earlier provisional list (the ingest's 'start' clears that list_name).
 
 Reads ONLY: SML (merit no.), NEET PG rank, NEET PG score, roll no., category merit cell, NRI cell, candidature type,
 remark and the @/$/d markers. The App. No. and Name columns are never read or printed (x-ranges skipped).

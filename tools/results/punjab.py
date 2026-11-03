@@ -37,8 +37,9 @@ SHEET = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'pg
 HEAD = ['M No', 'Regn No.', 'NEET PG Rollno', 'NAME', 'Category', 'University from where passed MBBS',
         'Allotted College', 'Allotted Branch', 'Allotted Quota', 'Allotted Category']
 CATEGORY = {'IP': 'IP', 'General Category': 'General', 'Backward Classes': 'BC', 'Scheduled Caste': 'SC',
-            'EWS (IP)': 'EWS-IP', 'Christian': 'Minority', 'NRI': 'NRI'}
-CAND_CAT = {'General', 'BC', 'EWS', 'SC'}
+            'EWS (IP)': 'EWS-IP', 'Christian': 'Minority', 'NRI': 'NRI',
+            'Persons with Disability': 'PWD'}                    # revised R1 list (03.11.2026); 2025 spelling PWD
+CAND_CAT = {'General', 'BC', 'EWS', 'SC', 'PWD'}
 
 
 def family(college):
@@ -56,6 +57,7 @@ QUOTA = {  # (college family, printed quota) → 2025 cut-off quota
     ('DMC', 'Management Quota'): 'DMC Management Quota',          # NRI category → DMC NRI Quota (below)
     ('CMC', 'Minority Quota'): 'CMC Minority Quota', ('CMC', 'NRI Quota'): 'CMC NRI Quota',
     ('CMC', 'A'): 'CMC Quota A',                                   # new in 2026 — no 2025 equivalent
+    ('CMC', 'B'): 'CMC Quota B', ('CMC', 'C'): 'CMC Quota C',      # revised R1 list (03.11.2026) — also new
     ('SGRD', 'General Quota as per Punjab Govt. Notification'): 'SGRD General Quota',
     ('SGRD', 'Sikh Minority Seats'): 'SGRD Sikh Minority Quota',
     ('SGRD', 'Sikh Minority Management Seats'): 'SGRD Sikh Minority Management Quota',   # new (ultrasonography)
@@ -85,7 +87,7 @@ DNB = {'generalmedicine': 'General Medicine', 'psychiatry': 'Psychiatry', 'obst.
        'opthalmology': 'Ophthalmology', 'familymedicine': 'Family Medicine'}
 DIPLOMA = {'tuberculosisandchestdisease': 'Diploma in Respiratory Medicine',
            'paediatrics': 'Diploma in Child Health / Paediatrics', 'anaesthesiology': 'Diploma in Anaesthesiology',
-           'obst.&gynae': 'Diploma in Obstetrics and Gynaecology'}
+           'obst.&gynae': 'Diploma in Obstetrics and Gynaecology', 'radio-diagnosis': 'Diploma in Radio Diagnosis'}
 
 
 def clean(s):
