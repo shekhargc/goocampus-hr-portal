@@ -46,7 +46,7 @@
   <div class="nm-tiles">
     {% for k in ['college', 'course'] %}
       <div class="nm-tile"><div class="k">{{ k }} names known</div><div class="v">{{ (counts.get((k,'ok')) or 0) }}</div></div>
-      <div class="nm-tile"><div class="k">{{ k }} — needs review</div><div class="v" style="color:#b45309">{{ (counts.get((k,'review')) or 0) + (counts.get((k,'unmatched')) or 0) }}</div></div>
+      <div class="nm-tile"><div class="k">{{ k }} — needs review</div><div class="v" style="color:#b45309">{{ waiting.get(k) or 0 }}</div></div>
     {% endfor %}
   </div>
 

@@ -894,8 +894,15 @@ def name_memory_admin():
     try:
         counts = {(r['kind'], r['status']): r['n'] for r in conn.execute(
             "SELECT kind, status, COUNT(*) AS n FROM pg_name_memory GROUP BY kind, status").fetchall()}
+        # still waiting for a decision: unsure matches + no-match names nobody has decided yet (a team
+        # "not a college we list" is stored as unmatched + confirmed — that is done, not waiting)
+        waiting_sql = "(status='review' OR (status='unmatched' AND COALESCE(how,'') <> 'confirmed'))"
+        waiting = {r['kind']: r['n'] for r in conn.execute(
+            f"SELECT kind, COUNT(*) AS n FROM pg_name_memory WHERE {waiting_sql} GROUP BY kind").fetchall()}
         where, params = "kind=?", [kind]
-        if show in ('review', 'unmatched'):
+        if show == 'review':
+            where += " AND " + waiting_sql
+        elif show == 'unmatched':
             where += " AND status=?"; params.append(show)
         elif show == 'learned':
             where += " AND how IN ('exact','fuzzy','confirmed')"
@@ -914,7 +921,7 @@ def name_memory_admin():
             "SELECT authority_code, academic_year, round, status, row_count, matched_rows, uploaded_at FROM pg_results_source "
             "ORDER BY uploaded_at DESC").fetchall()]
         return render_template('pg_admin/name_memory.html', rows=rows, std=sorted(std), kind=kind, show=show,
-                               counts=counts, rounds=rounds)
+                               counts=counts, waiting=waiting, rounds=rounds)
     finally:
         conn.close()
 
