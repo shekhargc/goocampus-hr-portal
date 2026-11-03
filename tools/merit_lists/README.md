@@ -51,3 +51,17 @@ Set `MERIT_OUT=<dir>` to choose where the JSON files are written (default: the o
 The readers were written against the 2026 files and keep their scratchpad paths at the top; adjust the paths for
 a new round. `merit_common.py` / `sm4_common.py` hold the NBEMS checks. Ties are kept as published: TN "1980A"
 insertions and Gujarat half merit numbers keep their whole-number base.
+
+## Goa (`read_dte_goa.py`) — 2026-11-03
+DTE Goa "PG DEGREE ADMISSION 2026 - PROVISIONAL MERIT LIST" (29.10.2026): merit no. + NEET PG rank printed, no roll →
+air = printed rank (all 161 found in NBEMS), state_rank = merit no. Merit 157-161 sit after 156 out of AIR order
+(pending certificates) — stored as printed. Loaded: 161 rows, list 'PG Degree Admission 2026 Provisional Merit List'.
+
+## Assam (`read_dme_assam.py`) — 2026-11-03
+DME Assam provisional merit list (79 pages, text layer — not scanned): roll / category / score / AIR, no printed state
+rank → state_rank = list position. Applies the inclusion notice (17.10, '200-A') and the revised-merit-position notice
+(29.10, 3 in-service candidates '87-A' / '257-A' / '481-A'; n-A stored as n). 3,583 lines: roll, AIR and score = NBEMS
+on every line; loaded 3,584 rows.
+
+## Tamil Nadu addenda 02.11.2026 (`sm4_tn_build.py`)
+GQ addendum 5963A and the first MQ addendum 898A (one added candidate each) → GQ 7,969, MQ 3,644; nothing else changed.

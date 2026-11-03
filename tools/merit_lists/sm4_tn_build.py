@@ -8,8 +8,11 @@ nb = nbems()
 toi = lambda s: int(s) if re.fullmatch(r'\d+', s.strip()) else None
 tof = lambda s: float(s) if re.fullmatch(r'[\d.]+', s.strip()) else None
 ML2 = '/private/tmp/claude-501/-Users-Santosh-Desktop-Claude-Code/19945316-59b6-4770-8040-221aff24a059/scratchpad/nov1/ml2/'
-# GQ base list + addenda, applied in publication order (first addendum 29 Oct; addenda A and B 31 Oct, B repeats A's rows)
-ADDENDA_FILES = ['dd546004ecc3.pdf'] + ([] if '--first-addendum-only' in sys.argv else [ML2 + 'tn_gq_addendum_a.pdf', ML2 + 'tn_gq_addendum_b.pdf'])
+ML3 = '/private/tmp/claude-501/-Users-Santosh-Desktop-Claude-Code/19945316-59b6-4770-8040-221aff24a059/scratchpad/nov3/dl2/'
+# GQ base list + addenda, applied in publication order (first addendum 29 Oct; addenda A and B 31 Oct, B repeats A's rows;
+# 02 Nov: one more GQ addendum (5963A) and the first MQ addendum (898A) — inbox 1559 / 1558)
+ADDENDA_FILES = ['dd546004ecc3.pdf'] + ([] if '--first-addendum-only' in sys.argv else [ML2 + 'tn_gq_addendum_a.pdf', ML2 + 'tn_gq_addendum_b.pdf', ML3 + '1559.pdf'])
+MQ_ADDENDA_FILES = [] if '--first-addendum-only' in sys.argv else [ML3 + '1558.pdf']
 gq = read('cd488e3665c3.pdf', GQCOLS); mq = read('e6df5a89bbbc.pdf', MQCOLS)
 ADDENDA = [(fn, read(fn, GQCOLS)) for fn in ADDENDA_FILES]
 
@@ -105,7 +108,16 @@ write('dmer_tn_gq.json', {'authority_code': 'dmer_tn', 'list_name': 'PG Governme
 print(json.dumps(checks, indent=1, default=str)[:9000])
 if '--gq-only' in sys.argv:
     sys.exit()
-# ---- MQ
+# ---- MQ (+ addenda: an 'nA' line for a roll not in the list is added right after rank n, stored as n)
+mq_log = []
+for fn in MQ_ADDENDA_FILES:
+    for a in read(fn, MQCOLS):
+        lab = a['rank']; base = int(lab.rstrip('A'))
+        if any(r['roll'] == a['roll'] for r in mq) or not lab.endswith('A'):
+            raise SystemExit(f'MQ addendum {os.path.basename(fn)}: only additions are handled ({lab})')
+        a = dict(a); a['rank'] = str(base)
+        mq.insert(max(i for i, r in enumerate(mq) if toi(r['rank']) <= base) + 1, a)
+        mq_log.append({'file': os.path.basename(fn), 'type': 'added', 'printed_rank': lab, 'state_rank_stored': base})
 mrows = []
 for r in mq:
     n = nb.get(r['roll'])
@@ -124,6 +136,7 @@ mchecks = {
     'neet_score_vs_nbems': msc,
     'categories': dict(collections.Counter(r['category'] for r in mrows)),
     'also_in_gq_list': len({r['roll'] for r in mrows} & gqrolls),
+    'addenda': mq_log,
     'published_on_note': 'no date printed; PDF created 2026-10-28',
 }
 write('dmer_tn_mq.json', {'authority_code': 'dmer_tn', 'list_name': 'PG Management Quota Provisional Rank List', 'published_on': '',
