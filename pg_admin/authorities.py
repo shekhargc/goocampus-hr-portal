@@ -78,6 +78,24 @@ def all_authorities():
     return [as_dict(a) for a in AUTHORITIES if a[0] not in REMOVED]
 
 
+# The short name doctors search with (results page titles, "Revised list" labels — website 2026-11-04).
+SHORT_NAMES = {
+    "mcc": "MCC", "aniims": "ANIIMS", "ntruhs": "NTRUHS", "arunachal": "DHTE Arunachal", "dme_assam": "DME Assam",
+    "bceceb": "BCECEB", "gmch_chd": "GMCH Chandigarh", "dme_cg": "DME CG", "dmhs_dnh": "DMHS DNH", "ggsipu": "GGSIPU",
+    "dte_goa": "DTE Goa", "acpmec": "ACPMEC", "dmer_hr": "DMER Haryana", "amru_hp": "AMRU", "jk_bopee": "JKBOPEE",
+    "jceceb": "JCECEB", "kea": "KEA", "cee_kerala": "CEE Kerala", "dme_mp": "DME MP", "cetcell_mh": "CET Cell",
+    "dhs_manipur": "DHS Manipur", "rims_imphal": "RIMS Imphal", "neigrihms": "NEIGRIHMS", "dict_mz": "DHTE Mizoram",
+    "dte_nagaland": "DTE Nagaland", "ojee": "DMET Odisha", "centac": "CENTAC", "bfuhs": "BFUHS", "ruhs": "RUHS",
+    "smu_sikkim": "SMU", "dmer_tn": "DMER TN", "knruhs": "KNRUHS", "dme_tripura": "DME Tripura", "dmetup": "DMET UP",
+    "hnbumu": "HNBUMU", "wbmcc": "WBMCC",
+}
+
+
+def short_name(code):
+    a = get_authority(code)
+    return SHORT_NAMES.get((code or "").strip().lower()) or (a["name"] if a else (code or ""))
+
+
 def get_authority(code):
     a = _BY_CODE.get((code or "").strip().lower())
     return as_dict(a) if a and a[0] not in REMOVED else None
