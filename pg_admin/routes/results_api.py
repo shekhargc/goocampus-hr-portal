@@ -6,7 +6,8 @@ Import (X-News-Key, from the team's Mac — tools/results/):
                                     (pg_admin/name_memory.py) so every authority's spelling lands on one
                                     standard name; unsure names wait in /admin/pg/name-memory.
 Read (X-PG-Key, goocampus.in dashboard + Counselling Desk):
-  GET /api/pg/results/rounds        which results exist (authority, round, provisional/final)
+  GET /api/pg/results/rounds        which results exist (authority, round, provisional/final, short_name,
+                                    revised = corrected list re-published, replaced_at)
   GET /api/pg/results               search allotments (rank, college, course, quota, category, state, type)
   GET /api/pg/results/facets        filter values for one round
   GET /api/pg/results/rank          every allotment for one rank (also ?me=1 with the doctor's token)
@@ -163,7 +164,7 @@ def api_results_ingest():
         colleges = NM.resolve(conn, 'college', [_s(r.get('institute_raw')) for r in listed], auth)
         courses = NM.resolve(conn, 'course', [_s(r.get('course_raw')) for r in listed], auth)
         info = _college_info(conn, {v['std'] for v in colleges.values() if v['std']})
-        old = conn.execute("SELECT status, row_count FROM pg_results_source WHERE authority_code=? AND academic_year=? "
+        old = conn.execute("SELECT status, row_count, is_revised FROM pg_results_source WHERE authority_code=? AND academic_year=? "
                            "AND round=?", [auth, year, rnd]).fetchone()
         if mode in ('all', 'start'):
             conn.execute("DELETE FROM pg_results WHERE authority_code=? AND academic_year=? AND round=?", [auth, year, rnd])
@@ -214,6 +215,13 @@ def api_results_ingest():
         if old:
             conn.execute("UPDATE pg_results_source SET prev_status=?, prev_row_count=?, prev_replaced_at=CURRENT_TIMESTAMP "
                          "WHERE id=?", [old['status'] or '', old['row_count'], sid])
+        # 'revised': true only when the importer says the authority re-published a corrected list; without it a
+        # re-post of the same status keeps the earlier flag, a status change (provisional → final) clears it
+        if 'revised' in d:
+            revised = 1 if d.get('revised') else 0
+        else:
+            revised = (old['is_revised'] or 0) if old and (old['status'] or '') == vals[1] else 0
+        conn.execute("UPDATE pg_results_source SET is_revised=? WHERE id=?", [revised, sid])
         if pdf:
             conn.execute("UPDATE pg_results_source SET pdf_data=? WHERE id=?", [pdf, sid])
         conn.commit()
@@ -298,12 +306,13 @@ def api_results_rounds():
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
-    from pg_admin.authorities import get_authority
+    from pg_admin.authorities import get_authority, short_name
     conn = get_db()
     try:
         rows = conn.execute(
             "SELECT authority_code, academic_year, round, round_order, status, title, published_on, row_count, "
-            "matched_rows, (pdf_data IS NOT NULL) AS has_pdf, uploaded_at, prev_status FROM pg_results_source "
+            "matched_rows, (pdf_data IS NOT NULL) AS has_pdf, uploaded_at, prev_status, prev_replaced_at, "
+            "COALESCE(is_revised, 0) AS is_revised FROM pg_results_source "
             "WHERE COALESCE(is_hidden,0)=0 ORDER BY (authority_code<>'mcc'), authority_code, round_order").fetchall()
         out = []
         for r in rows:
@@ -312,6 +321,10 @@ def api_results_rounds():
             r['authority_name'] = (a.get('name') if isinstance(a, dict) else (a[1] if a else '')) or r['authority_code']
             r['state'] = (a.get('state') if isinstance(a, dict) else (a[2] if a else '')) or ''
             r['uploaded_at'] = str(r['uploaded_at'])[:16] if r.get('uploaded_at') else ''
+            r['short_name'] = short_name(r['authority_code'])
+            r['revised'] = bool(r.pop('is_revised'))           # authority re-published a corrected list
+            rep = r.pop('prev_replaced_at')
+            r['replaced_at'] = str(rep)[:16] if rep else ''
             out.append(r)
         return jsonify({'ok': True, 'rounds': out})
     finally:

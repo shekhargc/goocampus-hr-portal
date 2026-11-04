@@ -94,6 +94,13 @@ def ensure_results_tables():
         )''')
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pg_results_source "
                      "ON pg_results_source (authority_code, academic_year, round)")
+        # is_revised (2026-11-04): 1 = the authority re-published the SAME round + status with a corrected list
+        # (e.g. Punjab's 03.11 revised list). Not set by provisional → final or by our own re-imports.
+        # NULL only on rows from before the column existed → filled once below (Punjab R1 is the one revised list).
+        conn.execute("ALTER TABLE pg_results_source ADD COLUMN IF NOT EXISTS is_revised INTEGER")
+        conn.execute("UPDATE pg_results_source SET is_revised = CASE WHEN authority_code='bfuhs' AND "
+                     "academic_year='2026-27' AND round='Round 1' AND status='provisional' THEN 1 ELSE 0 END "
+                     "WHERE is_revised IS NULL")
         conn.commit()
         logging.info("pg_results + pg_name_memory tables ensured")
     except Exception as e:
