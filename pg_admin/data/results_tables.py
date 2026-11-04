@@ -98,6 +98,11 @@ def ensure_results_tables():
         # (e.g. Punjab's 03.11 revised list). Not set by provisional → final or by our own re-imports.
         # NULL only on rows from before the column existed → filled once below (Punjab R1 is the one revised list).
         conn.execute("ALTER TABLE pg_results_source ADD COLUMN IF NOT EXISTS is_revised INTEGER")
+        # notice (2026-11-04): a short line the website shows on the round (e.g. "Round 1 admissions on hold — High
+        # Court interim order (3 Nov)"), set by the team on /admin/pg/result-rounds; a re-import never touches it
+        for col in ("notice TEXT DEFAULT ''", "notice_url TEXT DEFAULT ''", "notice_by TEXT DEFAULT ''",
+                    "notice_at TIMESTAMP"):
+            conn.execute(f"ALTER TABLE pg_results_source ADD COLUMN IF NOT EXISTS {col}")
         conn.execute("UPDATE pg_results_source SET is_revised = CASE WHEN authority_code='bfuhs' AND "
                      "academic_year='2026-27' AND round='Round 1' AND status='provisional' THEN 1 ELSE 0 END "
                      "WHERE is_revised IS NULL")
