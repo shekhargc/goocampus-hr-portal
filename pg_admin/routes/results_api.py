@@ -7,7 +7,8 @@ Import (X-News-Key, from the team's Mac — tools/results/):
                                     standard name; unsure names wait in /admin/pg/name-memory.
 Read (X-PG-Key, goocampus.in dashboard + Counselling Desk):
   GET /api/pg/results/rounds        which results exist (authority, round, provisional/final, short_name,
-                                    revised = corrected list re-published, replaced_at)
+                                    revised = corrected list re-published, replaced_at, notice + notice_url)
+  POST /api/pg/results/notice       (X-News-Key) set / clear one round's notice; team: /admin/pg/result-rounds
   GET /api/pg/results               search allotments (rank, college, course, quota, category, state, type)
   GET /api/pg/results/facets        filter values for one round
   GET /api/pg/results/rank          every allotment for one rank (also ?me=1 with the doctor's token)
@@ -312,7 +313,8 @@ def api_results_rounds():
         rows = conn.execute(
             "SELECT authority_code, academic_year, round, round_order, status, title, published_on, row_count, "
             "matched_rows, (pdf_data IS NOT NULL) AS has_pdf, uploaded_at, prev_status, prev_replaced_at, "
-            "COALESCE(is_revised, 0) AS is_revised FROM pg_results_source "
+            "COALESCE(is_revised, 0) AS is_revised, COALESCE(notice, '') AS notice, "
+            "COALESCE(notice_url, '') AS notice_url FROM pg_results_source "
             "WHERE COALESCE(is_hidden,0)=0 ORDER BY (authority_code<>'mcc'), authority_code, round_order").fetchall()
         out = []
         for r in rows:
@@ -329,6 +331,111 @@ def api_results_rounds():
         return jsonify({'ok': True, 'rounds': out})
     finally:
         conn.close()
+
+
+def _ist(dt):
+    from pg_admin.routes.events_admin import _ist_str
+    return _ist_str(dt)
+
+
+def _clean_notice(notice, url):
+    """→ (notice, url, error). Plain text up to 200 chars; the link is our own path ('/news/…') or an https URL."""
+    notice, url = ' '.join(_s(notice).split())[:200], _s(url)
+    if url and not (url.startswith('/') or url.startswith('https://')):
+        return notice, url, 'The link must start with / (our page) or https:// (official site).'
+    if url and not notice:
+        return notice, url, 'Write the notice text first (a link alone is not shown).'
+    return notice, url[:500], ''
+
+
+def _set_notice(conn, auth, year, rnd, notice, url, who):
+    cur = conn.execute("UPDATE pg_results_source SET notice=?, notice_url=?, notice_by=?, notice_at=CURRENT_TIMESTAMP "
+                       "WHERE authority_code=? AND academic_year=? AND round=?", [notice, url, who, auth, year, rnd])
+    return cur.rowcount
+
+
+def api_results_notice():
+    """POST /api/pg/results/notice (X-News-Key) {authority_code, round, year?, notice, notice_url, by}
+    — set (or clear with notice '') the line the website shows on that result round."""
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    auth, rnd, year = _s(d.get('authority_code')).lower(), _s(d.get('round')), _s(d.get('year')) or YEAR
+    notice, url, err = _clean_notice(d.get('notice'), d.get('notice_url'))
+    if err:
+        return jsonify({'ok': False, 'error': err}), 400
+    _ensure()
+    conn = get_db()
+    try:
+        n = _set_notice(conn, auth, year, rnd, notice, url, (_s(d.get('by')) or 'portal (Mac)')[:60])
+        if not n:
+            conn.rollback()
+            return jsonify({'ok': False, 'error': 'no such round'}), 404
+        conn.commit()
+        return jsonify({'ok': True, 'authority_code': auth, 'round': rnd, 'notice': notice, 'notice_url': url})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_results_notice: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+@login_required
+def result_rounds_admin():
+    """/admin/pg/result-rounds — every loaded result round (what the website shows) + its notice line."""
+    if not _require_admin():
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+    _ensure()
+    from pg_admin.authorities import short_name
+    conn = get_db()
+    try:
+        rounds = []
+        for r in conn.execute(
+                "SELECT authority_code, academic_year, round, round_order, status, title, published_on, row_count, "
+                "matched_rows, COALESCE(is_revised, 0) AS is_revised, COALESCE(is_hidden, 0) AS is_hidden, "
+                "COALESCE(notice, '') AS notice, COALESCE(notice_url, '') AS notice_url, "
+                "COALESCE(notice_by, '') AS notice_by, notice_at, uploaded_at FROM pg_results_source "
+                "ORDER BY (authority_code<>'mcc'), authority_code, academic_year, round_order").fetchall():
+            r = dict(r)
+            r['short_name'] = short_name(r['authority_code'])
+            r['notice_at'] = _ist(r['notice_at'])
+            r['uploaded_at'] = _ist(r['uploaded_at'])
+            rounds.append(r)
+    finally:
+        conn.close()
+    return render_template('pg_admin/result_rounds.html', rounds=rounds, active_section='goocampus_in')
+
+
+@login_required
+def result_rounds_notice():
+    u = _require_admin()
+    if not u:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+    f = request.form
+    notice, url, err = _clean_notice(f.get('notice'), f.get('notice_url'))
+    if err:
+        flash(err, 'error')
+        return redirect(url_for('pg_result_rounds'))
+    conn = get_db()
+    try:
+        n = _set_notice(conn, _s(f.get('authority_code')), _s(f.get('year')) or YEAR, _s(f.get('round')),
+                        notice, url, u.get('name') or u.get('emp_code') or 'admin')
+        conn.commit()
+        flash(('Notice saved — the website shows it within about 5 minutes.' if notice else 'Notice removed.')
+              if n else 'That round was not found.', 'success' if n else 'error')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("result_rounds_notice: %s", e)
+        flash('Could not save — please try again.', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_result_rounds'))
 
 
 def api_results():

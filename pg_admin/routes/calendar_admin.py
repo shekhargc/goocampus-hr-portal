@@ -73,6 +73,41 @@ def calendar_admin():
                            rounds=[r for r in CAL.ROUNDS if r], rem=rem, active_section='goocampus_in')
 
 
+def _save_event(conn, code, f, who):
+    """Add or fix one dated step (shared by the Calendar page and POST /api/pg/calendar/fix).
+    f: round, event, label, start_date, end_date, time, note, id (id = fix that row). → (ok, message)"""
+    ev = CAL.clean_events([{'round': f.get('round'), 'event': f.get('event'), 'label': f.get('label'),
+                            'start': f.get('start_date'), 'end': f.get('end_date'), 'time': f.get('time')}])
+    if not ev:
+        return False, 'Enter at least a start date.'
+    e = ev[0]
+    eid = str(f.get('id') or '').strip()
+    CAL.ensure_calendar_table(conn)
+    if eid.isdigit():
+        old = conn.execute("SELECT start_date, end_date FROM pg_counselling_events WHERE id = ? AND authority_code = ?",
+                           (int(eid), code)).fetchone()
+        if not old:
+            return False, 'That date is not in this authority\'s calendar.'
+        if str(old['start_date']) != e['start'] or str(old['end_date'] or '') != (e['end'] or ''):
+            conn.execute("INSERT INTO pg_counselling_event_log (event_id, old_start, old_end, new_start, "
+                         "new_end, changed_by, note) VALUES (?,?,?,?,?,?,'edited on the Calendar page')",
+                         (int(eid), old['start_date'], old['end_date'], e['start'], e['end'] or None, who))
+        # A manual fix counts as "today's notice": older notices can't overwrite it; a newer one can.
+        conn.execute("UPDATE pg_counselling_events SET round=?, event=?, label=?, start_date=?, end_date=?, "
+                     "time_text=?, note=?, manual_edit=TRUE, source_notice_date=CURRENT_DATE, is_active=TRUE, "
+                     "updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                     (e['round'], e['event'], e['label'], e['start'], e['end'] or None, e['time'],
+                      str(f.get('note') or '').strip()[:300], who, int(eid)))
+        return True, 'Date updated.'
+    from pg_admin.data.calendar import merge_events
+    from datetime import date as _date
+    st = merge_events(conn, code, [e], None, None, _date.today(), who)
+    conn.execute("UPDATE pg_counselling_events SET manual_edit = TRUE WHERE authority_code = ? AND round = ? "
+                 "AND event = ? AND start_date = ?", (code, e['round'], e['event'], e['start']))
+    return True, ('Date added.' if st['added'] else ('That step already existed — its date was updated.'
+                  if st['changed'] else 'That step is already in the calendar with these dates.'))
+
+
 @login_required
 def calendar_save():
     user = _admin()
@@ -82,40 +117,13 @@ def calendar_save():
     code = (f.get('authority') or '').strip().lower()
     if not get_authority(code):
         flash('Pick an authority.', 'error'); return redirect(url_for('pg_calendar_admin'))
-    ev = CAL.clean_events([{'round': f.get('round'), 'event': f.get('event'), 'label': f.get('label'),
-                            'start': f.get('start_date'), 'end': f.get('end_date'), 'time': f.get('time')}])
-    if not ev:
-        flash('Enter at least a start date.', 'error')
-        return redirect(url_for('pg_calendar_admin', authority=code))
-    e = ev[0]
     who = user.get('name') or user.get('emp_code') or 'admin'
-    eid = (f.get('id') or '').strip()
     conn = get_db()
     try:
-        CAL.ensure_calendar_table(conn)
-        if eid.isdigit():
-            old = conn.execute("SELECT start_date, end_date FROM pg_counselling_events WHERE id = ?",
-                               (int(eid),)).fetchone()
-            if old and (str(old['start_date']) != e['start'] or str(old['end_date'] or '') != (e['end'] or '')):
-                conn.execute("INSERT INTO pg_counselling_event_log (event_id, old_start, old_end, new_start, "
-                             "new_end, changed_by, note) VALUES (?,?,?,?,?,?,'edited on the Calendar page')",
-                             (int(eid), old['start_date'], old['end_date'], e['start'], e['end'] or None, who))
-            # A manual fix counts as "today's notice": older notices can't overwrite it; a newer one can.
-            conn.execute("UPDATE pg_counselling_events SET round=?, event=?, label=?, start_date=?, end_date=?, "
-                         "time_text=?, note=?, manual_edit=TRUE, source_notice_date=CURRENT_DATE, is_active=TRUE, "
-                         "updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                         (e['round'], e['event'], e['label'], e['start'], e['end'] or None, e['time'],
-                          (f.get('note') or '').strip()[:300], who, int(eid)))
-            flash('Date updated.', 'success')
-        else:
-            from pg_admin.data.calendar import merge_events
-            from datetime import date as _date
-            st = merge_events(conn, code, [e], None, None, _date.today(), who)
-            conn.execute("UPDATE pg_counselling_events SET manual_edit = TRUE WHERE authority_code = ? AND round = ? "
-                         "AND event = ? AND start_date = ?", (code, e['round'], e['event'], e['start']))
-            flash('Date added.' if st['added'] else ('That step already existed — its date was updated.'
-                  if st['changed'] else 'That step is already in the calendar with these dates.'), 'success')
-        conn.commit()
+        ok, msg = _save_event(conn, code, f, who)
+        if ok:
+            conn.commit()
+        flash(msg, 'success' if ok else 'error')
     except Exception as ex:
         try: conn.rollback()
         except Exception: pass
@@ -124,6 +132,33 @@ def calendar_save():
     finally:
         conn.close()
     return redirect(url_for('pg_calendar_admin', authority=code))
+
+
+def api_calendar_fix():
+    """POST /api/pg/calendar/fix (X-News-Key, from the team's Mac) — add or fix one dated step, exactly as the
+    Calendar page does (manual edit, change logged). JSON {authority_code, id?, round, event, label, start_date,
+    end_date, time, note, by}."""
+    from flask import jsonify
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    code = str(d.get('authority_code') or '').strip().lower()
+    if not get_authority(code):
+        return jsonify({'ok': False, 'error': 'unknown authority_code'}), 400
+    conn = get_db()
+    try:
+        ok, msg = _save_event(conn, code, d, (str(d.get('by') or '').strip() or 'portal (Mac)')[:60])
+        if ok:
+            conn.commit()
+        return jsonify({'ok': ok, 'message': msg}), (200 if ok else 400)
+    except Exception as ex:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_calendar_fix: %s", ex)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
 
 
 @login_required

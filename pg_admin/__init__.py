@@ -197,6 +197,10 @@ def register_pg_admin(app):
     app.add_url_rule('/api/pg/results/leftover', 'api_results_leftover', results_api.api_results_leftover,
                      methods=['GET'])
     app.add_url_rule('/admin/pg/name-memory', 'pg_name_memory', results_api.name_memory_admin, methods=['GET'])
+    app.add_url_rule('/api/pg/results/notice', 'api_results_notice', results_api.api_results_notice, methods=['POST'])
+    app.add_url_rule('/admin/pg/result-rounds', 'pg_result_rounds', results_api.result_rounds_admin, methods=['GET'])
+    app.add_url_rule('/admin/pg/result-rounds/notice', 'pg_result_rounds_notice', results_api.result_rounds_notice,
+                     methods=['POST'])
     app.add_url_rule('/admin/pg/name-memory/confirm', 'pg_name_memory_confirm', results_api.name_memory_confirm,
                      methods=['POST'])
     app.add_url_rule('/admin/pg/seat-matrix', 'pg_seat_matrix_admin',
@@ -301,6 +305,7 @@ def register_pg_admin(app):
     # Counselling Calendar admin (round-wise dates per authority; 2026-10-09)
     app.add_url_rule('/admin/pg/calendar', 'pg_calendar_admin', calendar_admin.calendar_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/calendar/save', 'pg_calendar_save', calendar_admin.calendar_save, methods=['POST'])
+    app.add_url_rule('/api/pg/calendar/fix', 'api_pg_calendar_fix', calendar_admin.api_calendar_fix, methods=['POST'])
     app.add_url_rule('/admin/pg/calendar/remove', 'pg_calendar_remove', calendar_admin.calendar_remove, methods=['POST'])
     app.add_url_rule('/admin/pg/calendar/tidy', 'pg_calendar_tidy', calendar_admin.calendar_tidy, methods=['POST'])
     app.add_url_rule('/admin/pg/calendar/news-dates', 'pg_calendar_news_dates', calendar_admin.calendar_news_dates,

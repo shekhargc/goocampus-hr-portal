@@ -1,0 +1,84 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Result Rounds · goocampus.in{% endblock %}
+
+{% block section_content %}
+<style>
+  .rr-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  table.rr { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--gray-200); border-radius:10px; overflow:hidden; font-size:0.82rem; }
+  table.rr th { text-align:left; background:var(--gray-100); padding:8px 10px; font-size:0.7rem; text-transform:uppercase; letter-spacing:.4px; color:var(--gray-500); }
+  table.rr td { padding:8px 10px; border-top:1px solid var(--gray-100); vertical-align:top; }
+  .rr-pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:0.7rem; font-weight:700; margin-right:4px; }
+  .rr-pill.final { background:#DCFCE7; color:#166534; } .rr-pill.provisional { background:#E0E7FF; color:#3730A3; }
+  .rr-pill.revised { background:#FEF3C7; color:#92400E; } .rr-pill.hidden { background:#F1F5F9; color:#475569; }
+  .rr-notice { background:#FEF9C3; border:1px solid #FDE68A; border-radius:6px; padding:5px 8px; color:#713F12; }
+  .rr-sub { color:var(--gray-500); font-size:0.74rem; }
+  .rr-btn { border:1px solid var(--gray-300); background:#fff; border-radius:6px; padding:3px 10px; font-size:0.76rem; cursor:pointer; color:#2952a3; }
+  .rr-drawer-bg { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:50; }
+  .rr-drawer { position:fixed; top:0; right:-560px; width:520px; max-width:100%; height:100vh; background:#fff; z-index:51; box-shadow:-8px 0 24px rgba(0,0,0,.12); padding:22px; transition:right .2s; overflow-y:auto; }
+  .rr-drawer.open { right:0; } .rr-drawer-bg.open { display:block; }
+  .rr-drawer label { display:block; font-size:0.75rem; font-weight:700; color:var(--gray-600); margin:14px 0 4px; }
+  .rr-drawer input[type=text], .rr-drawer textarea { width:100%; padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; box-sizing:border-box; font-family:inherit; }
+  .rr-save { background:var(--navy); color:#fff; border:0; border-radius:8px; padding:9px 16px; font-weight:700; cursor:pointer; }
+</style>
+<div class="rr-wrap">
+  <h2 style="margin:0 0 4px;color:var(--navy);">Result Rounds</h2>
+  <p class="rr-sub" style="margin:0 0 16px;">Every allotment list loaded for 2026 — exactly what goocampus.in shows on its results pages.
+    A <b>notice</b> appears as a yellow line on that round's card, the results hub and the round page
+    (e.g. "Round 1 admissions on hold — High Court interim order (3 Nov)"). The website picks a change up within about 5 minutes.</p>
+  <table class="rr">
+    <thead><tr><th>Counselling</th><th>Round</th><th>Published</th><th>Allotments</th><th>Notice on the website</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rounds %}
+      <tr>
+        <td><b>{{ r.short_name }}</b><div class="rr-sub">{{ r.authority_code }} · {{ r.academic_year }}</div></td>
+        <td>{{ r.round }}<div style="margin-top:3px;">
+            <span class="rr-pill {{ r.status }}">{{ r.status|capitalize }}</span>
+            {% if r.is_revised %}<span class="rr-pill revised">Revised list</span>{% endif %}
+            {% if r.is_hidden %}<span class="rr-pill hidden">Hidden</span>{% endif %}</div></td>
+        <td>{{ r.published_on or '—' }}<div class="rr-sub">loaded {{ r.uploaded_at }}</div></td>
+        <td>{{ '{:,}'.format(r.row_count or 0) }}<div class="rr-sub">{{ '{:,}'.format(r.matched_rows or 0) }} matched</div></td>
+        <td>{% if r.notice %}<div class="rr-notice">{{ r.notice }}{% if r.notice_url %}<div class="rr-sub" style="color:#92400E;">→ {{ r.notice_url }}</div>{% endif %}</div>
+              <div class="rr-sub" style="margin-top:3px;">by {{ r.notice_by }} · {{ r.notice_at }}</div>
+            {% else %}<span class="rr-sub">—</span>{% endif %}</td>
+        <td><button type="button" class="rr-btn" data-auth="{{ r.authority_code }}" data-year="{{ r.academic_year }}"
+                    data-round="{{ r.round }}" data-name="{{ r.short_name }} · {{ r.round }}" data-notice="{{ r.notice }}"
+                    data-url="{{ r.notice_url }}" onclick="rrOpen(this)">{{ 'Edit notice' if r.notice else 'Add notice' }}</button></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="rr-sub">No result rounds loaded yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="rr-drawer-bg" id="rrBg" onclick="rrClose()"></div>
+<div class="rr-drawer" id="rrDrawer">
+  <h3 style="margin:0 0 4px;color:var(--navy);">Notice on the website</h3>
+  <div class="rr-sub" id="rrName" style="font-size:0.85rem;color:var(--gray-700);"></div>
+  <form method="post" action="{{ url_for('pg_result_rounds_notice') }}">
+    <input type="hidden" name="authority_code" id="rrAuth"><input type="hidden" name="year" id="rrYear">
+    <input type="hidden" name="round" id="rrRound">
+    <label>Notice (one short line, up to 200 characters)</label>
+    <textarea name="notice" id="rrNotice" rows="3" maxlength="200" placeholder="Round 1 admissions on hold — High Court interim order (3 Nov)"></textarea>
+    <label>Link (optional)</label>
+    <input type="text" name="notice_url" id="rrUrl" placeholder="/news/243-… (our news post) or https://… (official site)">
+    <div class="rr-sub" style="margin-top:6px;">Empty notice + Save = remove the notice from the website.</div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button class="rr-save" type="submit">Save</button>
+      <button class="rr-btn" type="button" onclick="rrClose()">Cancel</button>
+    </div>
+  </form>
+</div>
+<script>
+function rrOpen(b) {
+  document.getElementById('rrName').textContent = b.dataset.name;
+  document.getElementById('rrAuth').value = b.dataset.auth;
+  document.getElementById('rrYear').value = b.dataset.year;
+  document.getElementById('rrRound').value = b.dataset.round;
+  document.getElementById('rrNotice').value = b.dataset.notice || '';
+  document.getElementById('rrUrl').value = b.dataset.url || '';
+  document.getElementById('rrDrawer').classList.add('open'); document.getElementById('rrBg').classList.add('open');
+}
+function rrClose() { document.getElementById('rrDrawer').classList.remove('open'); document.getElementById('rrBg').classList.remove('open'); }
+</script>
+{% endblock %}
