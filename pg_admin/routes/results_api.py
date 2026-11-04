@@ -349,9 +349,9 @@ def _clean_notice(notice, url):
 
 
 def _set_notice(conn, auth, year, rnd, notice, url, who):
-    cur = conn.execute("UPDATE pg_results_source SET notice=?, notice_url=?, notice_by=?, notice_at=CURRENT_TIMESTAMP "
-                       "WHERE authority_code=? AND academic_year=? AND round=?", [notice, url, who, auth, year, rnd])
-    return cur.rowcount
+    return len(conn.execute("UPDATE pg_results_source SET notice=?, notice_url=?, notice_by=?, notice_at=CURRENT_TIMESTAMP "
+                            "WHERE authority_code=? AND academic_year=? AND round=? RETURNING id",
+                            [notice, url, who, auth, year, rnd]).fetchall())
 
 
 def api_results_notice():

@@ -73,6 +73,14 @@ def calendar_admin():
                            rounds=[r for r in CAL.ROUNDS if r], rem=rem, active_section='goocampus_in')
 
 
+def _link_news(conn, f, where, params):
+    """news_id in f (API only) → the posted news this dated step comes from; the website lists a round's linked news
+    as its official notices. Only a news post that exists is linked."""
+    nid = str(f.get('news_id') or '').strip()
+    if nid.isdigit() and conn.execute("SELECT 1 FROM pg_news WHERE id = ?", (int(nid),)).fetchone():
+        conn.execute(f"UPDATE pg_counselling_events SET news_id = ? WHERE {where}", (int(nid),) + tuple(params))
+
+
 def _save_event(conn, code, f, who):
     """Add or fix one dated step (shared by the Calendar page and POST /api/pg/calendar/fix).
     f: round, event, label, start_date, end_date, time, note, id (id = fix that row). → (ok, message)"""
@@ -98,12 +106,15 @@ def _save_event(conn, code, f, who):
                      "updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                      (e['round'], e['event'], e['label'], e['start'], e['end'] or None, e['time'],
                       str(f.get('note') or '').strip()[:300], who, int(eid)))
+        _link_news(conn, f, "id = ?", (int(eid),))
         return True, 'Date updated.'
     from pg_admin.data.calendar import merge_events
     from datetime import date as _date
     st = merge_events(conn, code, [e], None, None, _date.today(), who)
     conn.execute("UPDATE pg_counselling_events SET manual_edit = TRUE WHERE authority_code = ? AND round = ? "
                  "AND event = ? AND start_date = ?", (code, e['round'], e['event'], e['start']))
+    _link_news(conn, f, "authority_code = ? AND round = ? AND event = ? AND start_date = ?",
+               (code, e['round'], e['event'], e['start']))
     return True, ('Date added.' if st['added'] else ('That step already existed — its date was updated.'
                   if st['changed'] else 'That step is already in the calendar with these dates.'))
 
