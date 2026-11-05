@@ -102,13 +102,16 @@ def _allotted_sql(ualias='u'):
     notme = (f"NOT EXISTS (SELECT 1 FROM pg_allotment_marks m WHERE m.user_id = {ualias}.id "
              f"AND m.authority_code = r.authority_code AND m.academic_year = r.academic_year AND m.round = r.round "
              f"AND m.verdict = 'not_me')")
+    from pg_admin.allotments import OTHER_LIST_RANKS
+    other = ("NOT (r.authority_code, COALESCE(trim(r.quota_raw), '')) IN (" +
+             ', '.join("('%s', '%s')" % pair for pair in sorted(OTHER_LIST_RANKS)) + ")")
     live = ("JOIN pg_results_source s ON s.authority_code = r.authority_code AND s.academic_year = r.academic_year "
             "AND s.round = r.round AND COALESCE(s.is_hidden,0) = 0")
     return (f"(EXISTS (SELECT 1 FROM pg_results r {live} WHERE r.authority_code = 'mcc' "
             f"AND r.rank = {ualias}.neet_pg_rank AND {notme}) "
             f"OR EXISTS (SELECT 1 FROM pg_results r {live} JOIN (VALUES {vals}) AS au(code, st) "
             f"ON au.code = r.authority_code WHERE au.st = lower(regexp_replace(replace(COALESCE({ualias}.state,''), '&', 'and'), '\\s+', ' ', 'g')) "
-            f"AND r.rank = {ualias}.home_state_rank AND {notme}))")
+            f"AND r.rank = {ualias}.home_state_rank AND {other} AND {notme}))")
 
 
 def _category_case(ualias='u'):

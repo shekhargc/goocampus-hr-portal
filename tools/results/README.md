@@ -89,6 +89,26 @@ the main Round 1 list doesn't replace it.
 - NB: the 2025 TN cut-offs hold **TN merit ranks** (GRANK), not All-India ranks.
 2026 Round 1 PwD provisional (31.10.2026): 12 allotted (all MD/MS, 6 colleges); rank_ai 12/12 (all GRANKs unique).
 
+## Tamil Nadu main lists (`tamil_nadu_r1.py`)
+    /usr/bin/python3 tools/results/tamil_nadu_r1.py <gq.pdf> <mq.pdf> <out.json> --gq-bridge <dmer_tn_gq.json> --mq-bridge <dmer_tn_mq.json> [--seat-matrix <TN seat-matrix dump.json>]
+The Government Quota and Management Quota "Provisional List of Candidates allotted" PDFs go in **one** body, round
+`Round 1` (round_order 1): the ingest replaces a whole authority + round, so two posts would wipe each other. The PwD
+list stays its own round (`Round 1 (PwD)`, tamil_nadu.py); its candidates are not in these lists. APP. NO and NAME are
+never read. `rank` = each list's GRANK (GQ merit rank / MQ merit rank; `nA` → n, text in `remarks`), `rank_ai` from the
+GQ / MQ merit list by GRANK (GQ: community + total marks must agree; MQ: total marks, rank-898 tie with the 898A
+addendum line settled in `MQ_TIES`; MQ SNO 199 prints GRANK `0` → no rank / rank_ai).
+- Quota / category (2025 TN spellings): GQ → `Government Quota` / `Government Quota-Service` (SERVICE column) /
+  `CMC 20% Quota` (CATEGORY `CMC 20%`), category = COMMUNITY (seat category not printed; 2025 is filed by community).
+  MQ CATEGORY → `Management Quota`/`OPEN`, `NRI Quota`/`NRI`, `Management Quota-Minority`/`Telugu|Malayalam|Christian
+  Minority`, CMC only: `CMC 50% Quota`/`CMC-General Merit|CMC-Service|CMC-Minority Network|CMC-Institutional Preference`.
+- `institute` = the 2026 TN seat-matrix name (table shared with tools/seat_matrix/tamil_nadu.py). `--seat-matrix` checks
+  every college × course × quota (× category for minority / CMC 50%) is within the matrix.
+- NB My Allotments matches `home_state_rank` against every dmer_tn `rank`, so MQ/NRI rows (MQ GRANK) can collide with
+  GQ ranks — `quota_raw` (`GQ` / `MQ` / `NRI`) tells them apart.
+2026 Round 1 provisional (05.11.2026): 1,877 allotted — GQ 1,409 (856 Government, 503 Service, 50 CMC 20%), MQ 468
+(176 Management, 127 CMC 50%, 102 NRI, 63 Minority); 1,862 MD/MS + 15 Diploma; 48 colleges, 567 college × course
+groups all within the matrix; rank_ai 1,876/1,877.
+
 ## Gujarat (`gujarat.py`)
     /usr/bin/python3 tools/results/gujarat.py <meritwise.pdf> <institutewise.pdf> <last_merit.pdf> <out.json> [--bridge <acpmec merit list.json>]
 ACPPGMEC publishes three PDFs per round: **Meritwise** allotment list (main source, one line per allotted seat),

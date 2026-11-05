@@ -92,6 +92,11 @@ def _short_auth(code, name):
     return 'MCC' if code == 'mcc' else (name or code)
 
 
+# Result rows ranked on a DIFFERENT state merit list than the one doctors give as their home-state rank — never
+# matched by rank (Tamil Nadu's Management Quota / NRI rows carry the MQ merit rank, not the GQ rank; 2026-11-05).
+OTHER_LIST_RANKS = {('dmer_tn', 'MQ'), ('dmer_tn', 'NRI')}
+
+
 def _short_round(rnd):
     return (rnd or '').replace('Round ', 'R')
 
@@ -140,6 +145,8 @@ def for_users(conn, users, include_not_me=True):
                 "college_type, course, course_raw, quota, quota_raw, allotted_category, candidate_category "
                 "FROM pg_results WHERE authority_code = ? AND rank = ANY(?)", [code, list(by_rank)]).fetchall():
             r = dict(r)
+            if code != 'mcc' and (code, (r['quota_raw'] or '').strip()) in OTHER_LIST_RANKS:
+                continue
             s = src.get((r['authority_code'], r['academic_year'], r['round']))
             if not s:
                 continue
