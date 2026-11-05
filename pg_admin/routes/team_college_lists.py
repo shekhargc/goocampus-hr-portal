@@ -247,6 +247,27 @@ def _generate_states(conn, who, kinds=None):
     return made
 
 
+def _auto_state_lists(conn, who):
+    """Create the list of every state authority that has a 2026 seat matrix and was never handled before.
+    'state_lists_seen' remembers each authority once its list exists, so a list the team deletes stays deleted
+    (founder 2026-11-06: Maharashtra + Tripura matrices arrived after the one-time run and had no list)."""
+    from pg_admin.routes import state_rankings as srk
+    row = conn.execute("SELECT v FROM pg_team_college_lists_meta WHERE k='state_lists_seen'").fetchone()
+    try:
+        seen = set(json.loads(row['v'])) if row else set()
+    except Exception:
+        seen = set()
+    seen |= {r['kind'][6:] for r in conn.execute(
+        "SELECT kind FROM pg_team_college_lists WHERE LEFT(COALESCE(kind,''), 6)='state:'").fetchall()}
+    for a in srk.authorities(conn, with_cutoffs=False):
+        if a['authority'] not in seen and _create(conn, who, _STATE_BASE.format(name=a['name']), 'by_state', [],
+                                                  kind='state:' + a['authority']):
+            seen.add(a['authority'])
+    conn.execute("INSERT INTO pg_team_college_lists_meta (k, v) VALUES ('state_lists_seen', ?) "
+                 "ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v", [json.dumps(sorted(seen))])
+    conn.commit()
+
+
 # ── Routes (Desk team only) ──────────────────────────────────────────────────
 def lists_index():
     """GET → all lists.  POST {name, copy_from?} → create (prefilled with every 2026 deemed college)."""
@@ -267,13 +288,9 @@ def lists_index():
                 conn.execute("INSERT INTO pg_team_college_lists_meta (k, v) VALUES ('auto_generated_v2', ?) "
                              "ON CONFLICT (k) DO NOTHING", [who])
                 conn.commit()
-            # state counselling lists (founder 2026-10-31): created once per authority; a state whose matrix
-            # arrives later is added by "Create missing lists" (generate_all)
-            if not conn.execute("SELECT 1 FROM pg_team_college_lists_meta WHERE k='auto_generated_states_v1'").fetchone():
-                _generate_states(conn, who)
-                conn.execute("INSERT INTO pg_team_college_lists_meta (k, v) VALUES ('auto_generated_states_v1', ?) "
-                             "ON CONFLICT (k) DO NOTHING", [who])
-                conn.commit()
+            # state counselling lists (founder 2026-10-31): one per authority with a 2026 matrix; a state whose
+            # matrix arrives later gets its list automatically on the next visit (2026-11-06)
+            _auto_state_lists(conn, who)
             rows = [dict(r) for r in conn.execute(
                 "SELECT l.id, l.name, l.kind, COALESCE(l.mode,'by_state') AS mode, l.states_filter, "
                 "l.created_by, l.updated_by, l.updated_at, "
