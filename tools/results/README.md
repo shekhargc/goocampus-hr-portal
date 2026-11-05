@@ -89,6 +89,26 @@ the main Round 1 list doesn't replace it.
 - NB: the 2025 TN cut-offs hold **TN merit ranks** (GRANK), not All-India ranks.
 2026 Round 1 PwD provisional (31.10.2026): 12 allotted (all MD/MS, 6 colleges); rank_ai 12/12 (all GRANKs unique).
 
+## Tamil Nadu main lists (`tamil_nadu_r1.py`)
+    /usr/bin/python3 tools/results/tamil_nadu_r1.py <gq.pdf> <mq.pdf> <out.json> --gq-bridge <dmer_tn_gq.json> --mq-bridge <dmer_tn_mq.json> [--seat-matrix <TN seat-matrix dump.json>]
+The Government Quota and Management Quota "Provisional List of Candidates allotted" PDFs go in **one** body, round
+`Round 1` (round_order 1): the ingest replaces a whole authority + round, so two posts would wipe each other. The PwD
+list stays its own round (`Round 1 (PwD)`, tamil_nadu.py); its candidates are not in these lists. APP. NO and NAME are
+never read. `rank` = each list's GRANK (GQ merit rank / MQ merit rank; `nA` → n, text in `remarks`), `rank_ai` from the
+GQ / MQ merit list by GRANK (GQ: community + total marks must agree; MQ: total marks, rank-898 tie with the 898A
+addendum line settled in `MQ_TIES`; MQ SNO 199 prints GRANK `0` → no rank / rank_ai).
+- Quota / category (2025 TN spellings): GQ → `Government Quota` / `Government Quota-Service` (SERVICE column) /
+  `CMC 20% Quota` (CATEGORY `CMC 20%`), category = COMMUNITY (seat category not printed; 2025 is filed by community).
+  MQ CATEGORY → `Management Quota`/`OPEN`, `NRI Quota`/`NRI`, `Management Quota-Minority`/`Telugu|Malayalam|Christian
+  Minority`, CMC only: `CMC 50% Quota`/`CMC-General Merit|CMC-Service|CMC-Minority Network|CMC-Institutional Preference`.
+- `institute` = the 2026 TN seat-matrix name (table shared with tools/seat_matrix/tamil_nadu.py). `--seat-matrix` checks
+  every college × course × quota (× category for minority / CMC 50%) is within the matrix.
+- NB My Allotments matches `home_state_rank` against every dmer_tn `rank`, so MQ/NRI rows (MQ GRANK) can collide with
+  GQ ranks — `quota_raw` (`GQ` / `MQ` / `NRI`) tells them apart.
+2026 Round 1 provisional (05.11.2026): 1,877 allotted — GQ 1,409 (856 Government, 503 Service, 50 CMC 20%), MQ 468
+(176 Management, 127 CMC 50%, 102 NRI, 63 Minority); 1,862 MD/MS + 15 Diploma; 48 colleges, 567 college × course
+groups all within the matrix; rank_ai 1,876/1,877.
+
 ## Gujarat (`gujarat.py`)
     /usr/bin/python3 tools/results/gujarat.py <meritwise.pdf> <institutewise.pdf> <last_merit.pdf> <out.json> [--bridge <acpmec merit list.json>]
 ACPPGMEC publishes three PDFs per round: **Meritwise** allotment list (main source, one line per allotted seat),
@@ -185,3 +205,40 @@ Quota: Open → State Quota, In-service → State Quota-Inservice, Private Manag
 college × course (all quotas together).
 2026 Round 1 provisional (published 04.11.2026; PDF dated 3 Nov): 918 allotted (859 MD/MS, 25 Diploma, 34 DNB), 43
 institutes, 352 college × course groups within the 1,459-seat matrix.
+
+## Karnataka (`karnataka.py`)
+    /usr/bin/python3 tools/results/karnataka.py <allotment.pdf> <out.json> [--seat-matrix <KA seat-matrix dump.json>]
+KEA "PG NEET-2026 MEDICAL (MD/MS) PROVISIONAL ROUND SEAT ALLOTMENT": one 8-column table (SL.NO, All India Rank, Course
+Code, College, Course Name, Allotted Category, Course fees, Status) — no names or roll numbers; the fee is checked but
+not stored. Authority `kea`. `rank` = `rank_ai` = the printed AIR (strictly ascending).
+- **Quota** from the seat-type letter of the course code (`M01GC5` = college M01 · seat G · course C5): G → Government
+  Quota, P → Private Quota - GMP (GMP/GMPH) / - Open (OPN) / - Minority (ME MEH MM MMH MU MC MA RC1-3), Q → Management
+  Quota (MNG), N → NRI Quota; a category outside its seat type stops the run.
+- **Category** in the 2025 KEA code spellings (GM, 2AG, 1G, STG; …H = Kalyana Karnataka; P prefix = PwD). KEA's new
+  S1-S4 codes = SC-A, SC-B, SC-C, SC-C (20%) — the only order that fits the seat matrix (others overshoot 61-213
+  seats) — stored as SC-AG / SC-BH … and `SC-C (20%)G` / `SC-C (20%)H` (no 2025 equivalent).
+- `--seat-matrix`: every allotment within its college × course × quota × category seats of the 2026 KEA matrix (strict).
+2026 Round 1 provisional (05.11.2026): 3,272 seats (3,266 MD/MS, 6 Diploma, no DNB / in-service lines), 65 colleges;
+Government 1,574 (RK 1,307, KK 267) · GMP 577 · Open 443 · Minority 440 · Management 219 · NRI 19; 863 college × course
+(2,481 college × course × quota × category) groups all within the matrix.
+
+## Maharashtra (`maharashtra.py`)
+    /usr/bin/python3 tools/results/maharashtra.py <selection.pdf> <cetcell_mh_common_provisional.json> <cetcell_mh_inservice_provisional.json> <out.json> [--seat-matrix <MH seat rows.json>]
+State CET Cell "PROVISIONAL SELECTION LIST FOR NEET(PG)-CET 2026" (MD/MS/Diploma, Round 1.0): a fixed-width list, one
+line per merit-list candidate in SML order — allotted (Code CCSSq : subject, college, city, quota, remark) or "Choice Not
+Available" (counted, skipped). Authority `cetcell_mh`. FormNo and Name are cut out of each line as it is read.
+- **Ranks:** `rank` = SML (state merit no.), `rank_ai` = AIR from the final provisional common merit list by SML; the
+  printed Cat. must equal the merit list's category for that SML (≤ 3 differences tolerated + listed), in-service
+  candidates (`I`/`IB`) are checked against the in-service list (soft, listed).
+- **Quota/category** (2025 spellings): state categories → `State Quota` (VJA→VJ, NTB/NTC/NTD→NT1/NT2/NT3, `PH X` → `X-PH`,
+  earmarked `EMX` → X, ORPHAN → `Orphan`, Orphan-C OBC → `OBC-Orphan`); `IS X` → `State Quota-Inservice` / `IS-X`;
+  MINORITY → `State Quota-Minority` / `Minority`; `I.Q.` → `Institutional Quota` / `IQ` (incl. the Vikhe Patil + NKP
+  Salve seats, code suffix A, that the 2026 seat matrix files as All India Quota — 2025 had them as Institutional);
+  NRI → `NRI Quota` / `NRI`. Diplomas (LTMC only) → section `diploma`.
+- **Checks:** SrNo 1..N, SML ascending, form numbers in text = lines, code ↔ printed college/subject, quota ↔ seat type,
+  PH/NRI/minority/in-service seats only to such candidates; `--seat-matrix`: every college × course × quota exists and
+  allotted ≤ seats (LTMC diplomas compared all quotas together — the list fills the INS diploma cells from the state pool).
+2026 Round 1 provisional (05.11.2026): 6,885 lines — 2,112 allotted (2,102 MD/MS, 10 Diploma), 4,773 Choice Not
+Available; State 1,676 · Institutional 356 (96 AIQ-coded) · In-service 52 · Minority 22 · NRI 6; 675 college × course
+groups all within the 2,759-seat matrix (no category cell over); rank_ai 2,112/2,112; Cat. = merit list 6,884/6,885
+(SML 2103 SEBC vs OPEN); in-service 63/64 on the in-service list (SML 5611 not).
