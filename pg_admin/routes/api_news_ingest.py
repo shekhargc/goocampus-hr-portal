@@ -723,8 +723,8 @@ def api_seatmatrix_dump():
                             'dnb_courses': [c for c in (f.get('courses') or []) if 'DNB' in c.upper()],
                             'source_total': (f.get('source') or {}).get('total_seats'),
                             'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []]})
-        if request.args.get('audit') == '1':    # whole-pipeline health check, read-only (2026-11-06)
-            return jsonify(_pipeline_audit(conn))
+        if request.args.get('audit'):           # pipeline health check by part, read-only (2026-11-06)
+            return jsonify(_pipeline_audit(conn, request.args.get('audit'), request.args.get('auth') or ''))
         if request.args.get('sources') == '1':  # seat-matrix source files and their flags (read-only)
             rows = [{k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v) for k, v in dict(r).items()}
                     for r in conn.execute(
@@ -853,7 +853,7 @@ def api_seatmatrix_dump():
         conn.close()
 
 
-def _pipeline_audit(conn):
+def _pipeline_audit(conn, part, only=''):
     """Read-only: every 2026 seat matrix, results round, the 2025 comparison, rankings, Desk lists, calendar links,
     stored PDFs and recent news / inbox — one report of what is missing (founder 2026-11-06)."""
     from flask import current_app
@@ -879,6 +879,8 @@ def _pipeline_audit(conn):
             "SELECT COALESCE(new_reason,'') AS k, SUM(seats) AS n FROM pg_seat_matrix WHERE counselling_body=? "
             "AND academic_year='2026-27' AND COALESCE(has_cutoff,0)=0 GROUP BY 1", [b['body']]).fetchall()}
     out['seat_matrix'] = sm
+    if part == 'sm':
+        return out
     rounds = q("SELECT authority_code AS auth, round, round_order, status, row_count, matched_rows, "
                "(pdf_data IS NOT NULL) AS pdf, COALESCE(is_hidden,0) AS hidden, published_on "
                "FROM pg_results_source WHERE academic_year='2026-27' ORDER BY authority_code, round_order")
@@ -887,6 +889,8 @@ def _pipeline_audit(conn):
                           "WHERE academic_year='2026-27'").fetchall():
         sm_keys.setdefault(r['a'], set()).add((r['college_name'], r['course_name']))
     for rd in rounds:
+        if part != 'results' or (only and rd['auth'] != only):
+            continue
         rows = q("SELECT institute, institute_raw, course, rank, rank_ai, section FROM pg_results WHERE authority_code=? "
                  "AND academic_year='2026-27' AND round=?", [rd['auth'], rd['round']])
         keys = sm_keys.get(rd['auth'], set())
@@ -903,17 +907,17 @@ def _pipeline_audit(conn):
                 "AND (round=? OR round='') AND event IN ('result','other') AND news_id IS NOT NULL", [rd['auth'], rd['round']])
         rd['calendar_news_ids'] = sorted({c['news_id'] for c in cal})
     out['results_rounds'] = rounds
+    if part == 'results':
+        return out
+    if part == 'rankings':
+        code, js = internal('/api/pg/rankings', {'authority': only or 'mcc'})
+        lists = js.get('lists') or []
+        return {'ok': True, 'code': code, 'keys': sorted(js)[:30], 'authorities': js.get('authorities'),
+                'lists': [{k: (v if not isinstance(v, list) else len(v)) for k, v in l.items()} if isinstance(l, dict) else str(l)[:80]
+                          for l in (lists if isinstance(lists, list) else [])]}
     code, js = internal('/api/pg/rankings', {'authority': 'mcc'})
     tabs = js.get('authorities') or []
     out['ranking_tabs'] = [t.get('authority') if isinstance(t, dict) else t for t in tabs]
-    rk = {}
-    for a in [b['auth'] for b in sm if b['section'] == 'state' and not b['superseded']]:
-        code, js = internal('/api/pg/rankings', {'authority': a})
-        lists = js.get('lists') or []
-        rk[a] = (f'HTTP {code} {js.get("error", "")}' if code != 200 else
-                 {(l.get('key') or l.get('list') or l.get('title') or str(i)): len(l.get('colleges') or l.get('rows') or [])
-                  for i, l in enumerate(lists)} if isinstance(lists, list) else str(type(lists)))
-    out['rankings'] = rk
     try:
         kinds = {r['kind'] for r in conn.execute("SELECT kind FROM pg_team_college_lists WHERE LEFT(COALESCE(kind,''),6)='state:'").fetchall()}
         out['desk_state_lists_missing'] = sorted({b['auth'] for b in sm if b['section'] == 'state' and not b['superseded']}
