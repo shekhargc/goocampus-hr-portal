@@ -723,6 +723,8 @@ def api_seatmatrix_dump():
                             'dnb_courses': [c for c in (f.get('courses') or []) if 'DNB' in c.upper()],
                             'source_total': (f.get('source') or {}).get('total_seats'),
                             'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []]})
+        if request.args.get('audit') == '1':    # whole-pipeline health check, read-only (2026-11-06)
+            return jsonify(_pipeline_audit(conn))
         if request.args.get('sources') == '1':  # seat-matrix source files and their flags (read-only)
             rows = [{k: (str(v) if v is not None and not isinstance(v, (int, bool, str)) else v) for k, v in dict(r).items()}
                     for r in conn.execute(
@@ -849,6 +851,86 @@ def api_seatmatrix_dump():
         return jsonify({'ok': True, 'bodies': bodies, 'rows': rows})
     finally:
         conn.close()
+
+
+def _pipeline_audit(conn):
+    """Read-only: every 2026 seat matrix, results round, the 2025 comparison, rankings, Desk lists, calendar links,
+    stored PDFs and recent news / inbox — one report of what is missing (founder 2026-11-06)."""
+    from flask import current_app
+    from collections import Counter
+
+    def q(sql, p=()):
+        return [dict(r) for r in conn.execute(sql, p).fetchall()]
+
+    def internal(path, qs):
+        with current_app.test_client() as tc:
+            r = tc.get(path, query_string=qs, environ_base={'pg.internal_check': True})
+            return r.status_code, (r.get_json(silent=True) or {})
+    out = {'ok': True}
+    sm = q("SELECT counselling_body AS body, COALESCE(authority_code,'') AS auth, COALESCE(section,'') AS section, "
+           "COALESCE(superseded,0) AS superseded, row_count, total_seats, (pdf_data IS NOT NULL) AS pdf, "
+           "uploaded_at::text AS uploaded FROM pg_seat_matrix_source WHERE academic_year='2026-27' ORDER BY 1")
+    for b in sm:
+        st = conn.execute("SELECT COALESCE(SUM(seats),0) AS seats, COALESCE(SUM(CASE WHEN has_cutoff=1 THEN seats END),0) AS linked, "
+                          "COALESCE(SUM(CASE WHEN COALESCE(cutoff_course,'')='' THEN seats END),0) AS no_course "
+                          "FROM pg_seat_matrix WHERE counselling_body=? AND academic_year='2026-27'", [b['body']]).fetchone()
+        b.update(seats=int(st['seats']), linked_2025=int(st['linked']), course_not_in_2025=int(st['no_course']))
+        b['new_reason'] = {r['k']: int(r['n']) for r in conn.execute(
+            "SELECT COALESCE(new_reason,'') AS k, SUM(seats) AS n FROM pg_seat_matrix WHERE counselling_body=? "
+            "AND academic_year='2026-27' AND COALESCE(has_cutoff,0)=0 GROUP BY 1", [b['body']]).fetchall()}
+    out['seat_matrix'] = sm
+    rounds = q("SELECT authority_code AS auth, round, round_order, status, row_count, matched_rows, "
+               "(pdf_data IS NOT NULL) AS pdf, COALESCE(is_hidden,0) AS hidden, published_on "
+               "FROM pg_results_source WHERE academic_year='2026-27' ORDER BY authority_code, round_order")
+    sm_keys = {}
+    for r in conn.execute("SELECT DISTINCT COALESCE(authority_code,'') AS a, college_name, course_name FROM pg_seat_matrix "
+                          "WHERE academic_year='2026-27'").fetchall():
+        sm_keys.setdefault(r['a'], set()).add((r['college_name'], r['course_name']))
+    for rd in rounds:
+        rows = q("SELECT institute, institute_raw, course, rank, rank_ai, section FROM pg_results WHERE authority_code=? "
+                 "AND academic_year='2026-27' AND round=?", [rd['auth'], rd['round']])
+        keys = sm_keys.get(rd['auth'], set())
+        md = [x for x in rows if x['section'] != 'dnb']
+        rd.update(no_institute=sum(1 for x in md if not x['institute']), no_course=sum(1 for x in rows if not x['course']),
+                  no_rank=sum(1 for x in rows if not x['rank']), no_rank_ai=sum(1 for x in rows if not x['rank_ai']),
+                  not_in_matrix=sum(1 for x in md if x['institute'] and (x['institute'], x['course']) not in keys) if keys else None,
+                  not_in_matrix_eg=sorted({f"{x['institute']} | {x['course']}" for x in md if keys and x['institute']
+                                           and (x['institute'], x['course']) not in keys})[:5])
+        code, js = internal('/api/pg/results/cutoffs', {'authority': rd['auth'], 'round': rd['round'], 'page_size': 1})
+        rd['compare_2025'] = js.get('reason_counts') if code == 200 else f'HTTP {code}'
+        rd['compare_groups'] = js.get('group_counts') if code == 200 else None
+        cal = q("SELECT id, event, news_id FROM pg_counselling_events WHERE authority_code=? AND is_active "
+                "AND (round=? OR round='') AND event IN ('result','other') AND news_id IS NOT NULL", [rd['auth'], rd['round']])
+        rd['calendar_news_ids'] = sorted({c['news_id'] for c in cal})
+    out['results_rounds'] = rounds
+    code, js = internal('/api/pg/rankings', {'authority': 'mcc'})
+    tabs = js.get('authorities') or []
+    out['ranking_tabs'] = [t.get('authority') if isinstance(t, dict) else t for t in tabs]
+    rk = {}
+    for a in [b['auth'] for b in sm if b['section'] == 'state' and not b['superseded']]:
+        code, js = internal('/api/pg/rankings', {'authority': a})
+        lists = js.get('lists') or []
+        rk[a] = (f'HTTP {code} {js.get("error", "")}' if code != 200 else
+                 {(l.get('key') or l.get('list') or l.get('title') or str(i)): len(l.get('colleges') or l.get('rows') or [])
+                  for i, l in enumerate(lists)} if isinstance(lists, list) else str(type(lists)))
+    out['rankings'] = rk
+    try:
+        kinds = {r['kind'] for r in conn.execute("SELECT kind FROM pg_team_college_lists WHERE LEFT(COALESCE(kind,''),6)='state:'").fetchall()}
+        out['desk_state_lists_missing'] = sorted({b['auth'] for b in sm if b['section'] == 'state' and not b['superseded']}
+                                                 - {k[6:] for k in kinds})
+    except Exception as e:
+        conn.rollback(); out['desk_state_lists_missing'] = f'err {e}'
+    out['news_recent'] = q("SELECT id, LEFT(heading,90) AS heading, published_at::date::text AS date, is_published, "
+                           "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'')<>'' OR authority_doc_id IS NOT NULL) AS has_file, "
+                           "inbox_id, COALESCE(state,'') AS state FROM pg_news WHERE deleted_at IS NULL "
+                           "AND published_at >= CURRENT_DATE - 7 ORDER BY id")
+    out['inbox_open'] = q("SELECT id, source_code, status, LEFT(title,90) AS title, first_seen_at::date::text AS seen, kind, "
+                          "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'')<>'' OR pdf_doc_id IS NOT NULL) AS has_pdf FROM pg_news_inbox "
+                          "WHERE status='new' ORDER BY id")
+    out['inbox_pdf_missing'] = q("SELECT id, source_code, status, LEFT(title,80) AS title, first_seen_at::date::text AS seen "
+                                 "FROM pg_news_inbox WHERE kind='pdf' AND pdf_data IS NULL AND COALESCE(pdf_r2_key,'')='' AND pdf_doc_id IS NULL "
+                                 "AND first_seen_at >= CURRENT_DATE - 10 ORDER BY id")
+    return out
 
 
 def api_cutoffs_dump():
