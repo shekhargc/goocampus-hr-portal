@@ -285,6 +285,8 @@ def register_pg_admin(app):
                      api_news_ingest.api_news_inbox_undated, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/set-date', 'api_news_inbox_set_date',
                      api_news_ingest.api_news_inbox_set_date, methods=['POST'])
+    app.add_url_rule('/api/pg/news/edit', 'api_news_edit',
+                     api_news_ingest.api_news_edit, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/diag/news-key', 'pg_news_key_check',
                      api_news_ingest.admin_news_key_check, methods=['GET'])
     # Scraper schedule (10:00 / 13:00 / 18:30 / 23:00 IST) — same boot guard as app.py's scheduler.

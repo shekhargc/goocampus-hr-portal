@@ -175,3 +175,13 @@ seat matrix has ONLY in-service seats for that institute + course, 'Government Q
 with both stops the run. Category = Seat Opted Category (UR ST SC EWS BC-I BC-II UR-PH); in-service incentive % in
 `remarks`. Post-MBBS DNB (Sadar Hospital, RINPAS, SNMMCH DNB) → section dnb.
 2026 Round 1 provisional (03.11.2026): 110 allotments, 5 in-service, CML 1–303, AIR 1,907–159,060 (110/110 from NBEMS).
+
+## West Bengal (`west_bengal.py`)
+    /usr/bin/python3 tools/results/west_bengal.py <result.pdf> <out.json> [--seat-matrix <WB seat rows.json>] [--nbems <neet2026.json>]
+WBMCC prints one line per allotted seat: ROUND, ALL INDIA RANK, CHOICE NO., INSTITUTE, COURSE, ALLOTTED QUOTA,
+ALLOTTED CATEGORY, CANDIDATE CATEGORY, STATUS — no names or roll numbers. `rank` = `rank_ai` = AIR.
+Quota: Open → State Quota, In-service → State Quota-Inservice, Private Management → Management Quota, In-service DNB
+→ DNB Quota-Inservice (NBEMS courses, section dnb). Checks: AIR strictly ascending, allotted ≤ seat-matrix seats per
+college × course (all quotas together).
+2026 Round 1 provisional (published 04.11.2026; PDF dated 3 Nov): 918 allotted (859 MD/MS, 25 Diploma, 34 DNB), 43
+institutes, 352 college × course groups within the 1,459-seat matrix.

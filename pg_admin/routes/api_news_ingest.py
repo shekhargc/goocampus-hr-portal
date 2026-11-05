@@ -780,3 +780,64 @@ def api_news_inbox_stored_pdf():
         return jsonify({'ok': False, 'error': 'no stored file'}), 404
     from flask import Response
     return Response(data, mimetype='application/pdf')
+
+
+_EDITABLE = ('heading', 'summary', 'body_text')
+
+
+def api_news_edit():
+    """GET  /api/pg/news/edit?id=N  (X-News-Key) → the post's heading / summary / body_text as stored.
+    POST /api/pg/news/edit  (X-News-Key) {news_id, by, edits: [{field, old, new}] | set: {field: text}}
+    Text-only fix of an already-posted news item on the founder's behalf (founder 2026-11-05: "make these changes
+    on my behalf"). Touches ONLY heading / summary / body_text — never dates, PDF, publish state or emails; each
+    'old' must occur exactly once (else nothing is saved). Every change is logged in pg_news_edit_log (old + new
+    text) so it can be undone."""
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    conn = get_db()
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS pg_news_edit_log (id SERIAL PRIMARY KEY, news_id INTEGER, "
+                     "field TEXT, old_text TEXT, new_text TEXT, edited_by TEXT, "
+                     "edited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.commit()
+        if request.method == 'GET':
+            r = conn.execute("SELECT id, heading, summary, body_text, is_published FROM pg_news "
+                             "WHERE id = ? AND deleted_at IS NULL", (request.args.get('id', type=int),)).fetchone()
+            return (jsonify({'ok': True, 'news': dict(r)}) if r
+                    else (jsonify({'ok': False, 'error': 'no such news'}), 404))
+        d = request.get_json(silent=True) or {}
+        nid = int(d.get('news_id') or 0)
+        who = str(d.get('by') or 'news edit API').strip()[:80]
+        r = conn.execute("SELECT heading, summary, body_text FROM pg_news WHERE id = ? AND deleted_at IS NULL",
+                         (nid,)).fetchone()
+        if not r:
+            return jsonify({'ok': False, 'error': 'no such news'}), 404
+        cur = {f: r[f] or '' for f in _EDITABLE}
+        new = dict(cur)
+        for f, txt in (d.get('set') or {}).items():
+            if f not in _EDITABLE or not isinstance(txt, str) or not txt.strip():
+                return jsonify({'ok': False, 'error': f'cannot set {f!r}'}), 400
+            new[f] = txt.strip()
+        for e in d.get('edits') or []:
+            f, old, rep = e.get('field', 'body_text'), e.get('old') or '', e.get('new')
+            if f not in _EDITABLE or not old or not isinstance(rep, str):
+                return jsonify({'ok': False, 'error': 'each edit needs field, old and new'}), 400
+            if new[f].count(old) != 1:
+                return jsonify({'ok': False, 'error': f'{f}: text to replace found {new[f].count(old)} times, '
+                                                      f'must be exactly once', 'old': old[:120]}), 400
+            new[f] = new[f].replace(old, rep)
+        changed = [f for f in _EDITABLE if new[f] != cur[f]]
+        if not changed:
+            return jsonify({'ok': True, 'changed': []})
+        for f in changed:
+            conn.execute(f"UPDATE pg_news SET {f} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new[f], nid))
+            conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) "
+                         "VALUES (?,?,?,?,?)", (nid, f, cur[f], new[f], who))
+        conn.commit()
+        return jsonify({'ok': True, 'changed': changed})
+    except Exception as e:
+        conn.rollback()
+        logging.error("api_news_edit: %s", e)
+        return jsonify({'ok': False, 'error': str(e)[:200]}), 500
+    finally:
+        conn.close()
