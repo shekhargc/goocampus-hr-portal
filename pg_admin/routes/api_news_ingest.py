@@ -787,7 +787,8 @@ _EDITABLE = ('heading', 'summary', 'body_text')
 
 def api_news_edit():
     """GET  /api/pg/news/edit?id=N  (X-News-Key) → the post's heading / summary / body_text as stored.
-    POST /api/pg/news/edit  (X-News-Key) {news_id, by, edits: [{field, old, new}] | set: {field: text}}
+    POST /api/pg/news/edit  (X-News-Key) {news_id, by, edits: [{field, old, new}] | set: {field: text},
+                                          attach_inbox_id: N (only for a news with no file yet)}
     Text-only fix of an already-posted news item on the founder's behalf (founder 2026-11-05: "make these changes
     on my behalf"). Touches ONLY heading / summary / body_text — never dates, PDF, publish state or emails; each
     'old' must occur exactly once (else nothing is saved). Every change is logged in pg_news_edit_log (old + new
@@ -827,9 +828,24 @@ def api_news_edit():
                                                       f'must be exactly once', 'old': old[:120]}), 400
             new[f] = new[f].replace(old, rep)
         changed = [f for f in _EDITABLE if new[f] != cur[f]]
+        iid = int(d.get('attach_inbox_id') or 0)
+        if iid:      # a news posted without its file: attach the official PDF archived in the inbox (2026-11-06)
+            has = conn.execute("SELECT (pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'')<>'' OR authority_doc_id IS NOT NULL) "
+                               "AS f FROM pg_news WHERE id = ?", (nid,)).fetchone()['f']
+            ib = conn.execute("SELECT pdf_data, COALESCE(pdf_r2_key,'') AS r2, COALESCE(pdf_name,'') AS name "
+                              "FROM pg_news_inbox WHERE id = ?", (iid,)).fetchone()
+            if has:
+                return jsonify({'ok': False, 'error': 'this news already has a file — not replaced'}), 400
+            if not ib or not (ib['pdf_data'] or ib['r2']):
+                return jsonify({'ok': False, 'error': 'that inbox item has no stored PDF'}), 400
+            _attach_to_news(conn, nid, bytes(ib['pdf_data']) if ib['pdf_data'] else None, ib['r2'], ib['name'])
+            conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) "
+                         "VALUES (?,?,?,?,?)", (nid, 'pdf', '', f'attached inbox {iid} ({ib["name"]})', who))
+            conn.commit()
+            changed.append('pdf')
         if not changed:
             return jsonify({'ok': True, 'changed': []})
-        for f in changed:
+        for f in [f for f in changed if f != 'pdf']:
             conn.execute(f"UPDATE pg_news SET {f} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new[f], nid))
             conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) "
                          "VALUES (?,?,?,?,?)", (nid, f, cur[f], new[f], who))
