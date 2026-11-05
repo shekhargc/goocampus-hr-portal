@@ -899,7 +899,9 @@ def _pipeline_audit(conn, part, only=''):
                   no_rank=sum(1 for x in rows if not x['rank']), no_rank_ai=sum(1 for x in rows if not x['rank_ai']),
                   not_in_matrix=sum(1 for x in md if x['institute'] and (x['institute'], x['course']) not in keys) if keys else None,
                   not_in_matrix_eg=sorted({f"{x['institute']} | {x['course']}" for x in md if keys and x['institute']
-                                           and (x['institute'], x['course']) not in keys})[:5])
+                                           and (x['institute'], x['course']) not in keys})[:5],
+                  college_not_in_matrix=dict(Counter(f"{x['institute']} <= {x['institute_raw']}" for x in md if keys and x['institute']
+                                                     and x['institute'] not in {k[0] for k in keys})))
         if request.args.get('compare') == '1':
             code, js = internal('/api/pg/results/cutoffs', {'authority': rd['auth'], 'round': rd['round'], 'page_size': 1})
             rd['compare_2025'] = js.get('reason_counts') if code == 200 else f'HTTP {code}'
