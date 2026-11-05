@@ -27,6 +27,7 @@ from flask import request, jsonify, render_template, redirect, url_for, flash
 from db import get_db
 from core.auth import login_required
 from pg_admin import name_memory as NM
+from pg_admin.allotments import OTHER_LIST_RANKS
 
 YEAR = '2026-27'
 ROUND_COL = {1: 'r1', 2: 'r2', 3: 'r3', 4: 'r4'}      # 2025 cut-off column for the same round
@@ -440,7 +441,9 @@ def result_rounds_notice():
 
 def api_results():
     """GET /api/pg/results?authority=mcc&round=Round 1&rank=&rank_from=&rank_to=&q=&course=&quota=&category=
-    &state=&college_type=&page=&page_size="""
+    &state=&college_type=&page=&page_size=  (&rank_list=all: rank= also matches rows ranked on another list)
+    Each row: rank_is_state_merit — false for MCC and for rows whose rank is another list's own rank
+    (allotments.OTHER_LIST_RANKS, e.g. Tamil Nadu MQ / NRI)."""
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
@@ -456,6 +459,12 @@ def api_results():
         rank, rf, rt = _int(a.get('rank')), _int(a.get('rank_from')), _int(a.get('rank_to'))
         if rank:
             conds.append("r.rank = ?"); params.append(rank)
+            # rank= is a doctor's STATE MERIT rank: skip rows ranked on another list (TN Management Quota / NRI
+            # carry the MQ merit rank) unless rank_list=all (2026-11-05)
+            if _s(a.get('rank_list')) != 'all':
+                other = [q for c, q in OTHER_LIST_RANKS if c == auth]
+                if other:
+                    conds.append("COALESCE(trim(r.quota_raw),'') <> ALL(?)"); params.append(other)
         air = _int(a.get('air'))          # a doctor's NEET All-India rank (state lists also print a state rank)
         if air:
             conds.append("COALESCE(r.rank_ai, r.rank) = ?"); params.append(air)
@@ -479,6 +488,7 @@ def api_results():
             r['college'] = _display_college(r)       # standard name, else as published (DNB: before the first comma)
             r['program'] = 'dnb' if r.get('section') == 'dnb' else 'mdms'
             r['course_name'] = r['course'] or r['course_raw']
+            r['rank_is_state_merit'] = auth != 'mcc' and (auth, (r.get('quota_raw') or '').strip()) not in OTHER_LIST_RANKS
             out.append(r)
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'rows': out, 'total_matched': total,
                         'page': page, 'page_size': size, 'total_pages': (total + size - 1) // size})
