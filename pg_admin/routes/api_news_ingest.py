@@ -870,7 +870,7 @@ def _pipeline_audit(conn, part, only=''):
     sm = q("SELECT counselling_body AS body, COALESCE(authority_code,'') AS auth, COALESCE(section,'') AS section, "
            "COALESCE(superseded,0) AS superseded, row_count, total_seats, (pdf_data IS NOT NULL) AS pdf, "
            "uploaded_at::text AS uploaded FROM pg_seat_matrix_source WHERE academic_year='2026-27' ORDER BY 1")
-    for b in sm:
+    for b in (sm if part == 'sm' else []):
         st = conn.execute("SELECT COALESCE(SUM(seats),0) AS seats, COALESCE(SUM(CASE WHEN has_cutoff=1 THEN seats END),0) AS linked, "
                           "COALESCE(SUM(CASE WHEN COALESCE(cutoff_course,'')='' THEN seats END),0) AS no_course "
                           "FROM pg_seat_matrix WHERE counselling_body=? AND academic_year='2026-27'", [b['body']]).fetchone()
@@ -886,7 +886,7 @@ def _pipeline_audit(conn, part, only=''):
                "FROM pg_results_source WHERE academic_year='2026-27' ORDER BY authority_code, round_order")
     sm_keys = {}
     for r in conn.execute("SELECT DISTINCT COALESCE(authority_code,'') AS a, college_name, course_name FROM pg_seat_matrix "
-                          "WHERE academic_year='2026-27'").fetchall():
+                          "WHERE academic_year='2026-27' AND COALESCE(authority_code,'') = ?", [only]).fetchall() if part == 'results' else []:
         sm_keys.setdefault(r['a'], set()).add((r['college_name'], r['course_name']))
     for rd in rounds:
         if part != 'results' or (only and rd['auth'] != only):
@@ -900,9 +900,10 @@ def _pipeline_audit(conn, part, only=''):
                   not_in_matrix=sum(1 for x in md if x['institute'] and (x['institute'], x['course']) not in keys) if keys else None,
                   not_in_matrix_eg=sorted({f"{x['institute']} | {x['course']}" for x in md if keys and x['institute']
                                            and (x['institute'], x['course']) not in keys})[:5])
-        code, js = internal('/api/pg/results/cutoffs', {'authority': rd['auth'], 'round': rd['round'], 'page_size': 1})
-        rd['compare_2025'] = js.get('reason_counts') if code == 200 else f'HTTP {code}'
-        rd['compare_groups'] = js.get('group_counts') if code == 200 else None
+        if request.args.get('compare') == '1':
+            code, js = internal('/api/pg/results/cutoffs', {'authority': rd['auth'], 'round': rd['round'], 'page_size': 1})
+            rd['compare_2025'] = js.get('reason_counts') if code == 200 else f'HTTP {code}'
+            rd['compare_groups'] = js.get('group_counts') if code == 200 else None
         cal = q("SELECT id, event, news_id FROM pg_counselling_events WHERE authority_code=? AND is_active "
                 "AND (round=? OR round='') AND event IN ('result','other') AND news_id IS NOT NULL", [rd['auth'], rd['round']])
         rd['calendar_news_ids'] = sorted({c['news_id'] for c in cal})
