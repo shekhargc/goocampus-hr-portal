@@ -245,3 +245,12 @@ Checks: every subject line adds to its State / Avail. seats, every page's column
 and the two AIQ colleges); printed category-total cells that skipped ORP-annotated cells are listed (soft) in
 printed_total_cells_off. 2026 R1 provisional: 2,759 seats, 54 colleges (govt 1,581 + private 1,164 + diploma 14;
 State 1,832, In-service 323, Institutional 315, NRI 163, AIQ 104, Minority 22); 2,472 seats bridged to a 2025 cut-off.
+
+## Tripura (`tripura.py`)
+    /usr/bin/python3 tools/seat_matrix/tripura.py <matrix.pdf> <cutoffs2025.json> <out.json>
+Body "Tripura — State Counselling", authority `dme_tripura`. Five institution tables, columns UR / EWS / ST / SC /
+OBC-NCL / Total (category cells by header position, Total = the row's last filled cell). Quotas as in the 2025
+cut-offs: AGMC + LGBRIMH Tezpur + the NBEMS hospitals `State Quota`, TMC `Open Quota`. IGM Hospital NBEMS diplomas →
+section `diploma`; Modern Psychiatric Hospital DNB Psychiatry (Post-MBBS) → `dnb`. AGMC Community Medicine's UR cell is
+printed '01- WESM' (kept as 1 UR seat). Checks every row, every table's TOTAL SEATS line and the 77-seat total.
+2026-27 Round 1 (04.11.2026): 77 seats (MD/MS 67, diploma 8, DNB 2); 62 linked to a 2025 cut-off.
