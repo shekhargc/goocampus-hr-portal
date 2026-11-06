@@ -110,6 +110,12 @@ def _apply_memory(conn, fixed):
             info = _college_info(conn, {std}).get(std)
             if info:
                 conn.execute("UPDATE pg_results SET state=?, college_type=? WHERE institute=?", [info[0], info[1], std])
+    _recount_matched(conn)
+
+
+def _recount_matched(conn):
+    """matched_rows = rows whose college + course resolved (DNB rows always count: DNB hospitals are not in the
+    College Database). One rule for the importer and the Name Matching page."""
     conn.execute("UPDATE pg_results_source s SET matched_rows=(SELECT COUNT(*) FROM pg_results r WHERE "
                  "r.authority_code=s.authority_code AND r.academic_year=s.academic_year AND r.round=s.round "
                  "AND (r.section='dnb' OR (COALESCE(r.institute,'')<>'' AND COALESCE(r.course,'')<>'')))")
@@ -1078,9 +1084,7 @@ def name_memory_confirm():
             info = _college_info(conn, {std}).get(std)
             if info:
                 conn.execute("UPDATE pg_results SET state=?, college_type=? WHERE institute=?", [info[0], info[1], std])
-        conn.execute("UPDATE pg_results_source s SET matched_rows=(SELECT COUNT(*) FROM pg_results r WHERE "
-                     "r.authority_code=s.authority_code AND r.academic_year=s.academic_year AND r.round=s.round "
-                     "AND COALESCE(r.institute,'')<>'' AND COALESCE(r.course,'')<>'')")
+        _recount_matched(conn)
         conn.commit()
         flash('Saved — this spelling will be recognised in every future file.', 'success')
     except Exception as e:
