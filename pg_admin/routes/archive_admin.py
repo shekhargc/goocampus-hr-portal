@@ -215,6 +215,9 @@ def api_archive_backfill():
             out['filed'] = A.file_all_unfiled(conn)
         finally:
             conn.close()
+    if b.get('file_seen'):          # 'seen' notices' PDFs too (founder 2026-11-08: every PDF kept, once)
+        threading.Thread(target=A.file_all_seen, daemon=True).start()
+        out['file_seen'] = 'started in the background'
     if b.get('backups'):
         threading.Thread(target=A.sync_backups, daemon=True).start()
         out['backups'] = 'started in the background'
@@ -244,6 +247,7 @@ def api_archive_status():
             "COALESCE(i.url,'') <> '' AND NOT EXISTS (SELECT 1 FROM pg_authority_docs d WHERE "
             "d.auto_inbox_id = i.id AND d.auto_kind = 'snapshot')").fetchone()['n']
         return jsonify({'ok': True, **{k: int(v or 0) for k, v in r.items()}, 'inbox_pdfs_not_in_documents': int(un),
-                        'web_pages_without_snapshot': int(links)})
+                        'seen_pdfs_not_in_documents': len(A.seen_unfiled_ids(conn)),
+                        'seen_catch_up': A._seen_state, 'web_pages_without_snapshot': int(links)})
     finally:
         conn.close()

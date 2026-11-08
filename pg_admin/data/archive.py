@@ -221,6 +221,62 @@ def file_all_unfiled(conn):
     return out
 
 
+def archive_seen(conn, inbox_id):
+    """A 'seen' notice (a repeat of an earlier notice, or on the site before our first run) that holds a PDF:
+    kept as a hidden archive-only document like every other fetched PDF (founder 2026-11-08: every PDF is
+    kept, but never twice — an identical file is skipped, a revised/corrected file is different and kept).
+    The inbox's own copy is then released, so each file is stored once. Commits; never raises."""
+    try:
+        if conn.execute("SELECT COALESCE(doc_rejected, FALSE) AS r FROM pg_news_inbox WHERE id = ?",
+                        (inbox_id,)).fetchone()['r']:
+            return 'skip'
+        res = archive_inbox_pdf(conn, inbox_id)
+        conn.commit()
+        if res in ('archived', 'duplicate', 'already'):
+            from pg_admin.data.auto_docs import release_inbox_copy
+            if release_inbox_copy(conn, inbox_id):
+                conn.commit()
+        if res == 'archived':
+            kick_sync()
+        return res
+    except Exception as e:
+        logging.warning("archive seen %s: %s", inbox_id, e)
+        try: conn.rollback()
+        except Exception: pass
+        return 'error'
+
+
+def seen_unfiled_ids(conn):
+    """'seen' notices holding a PDF that is not yet in the authority's Documents (read-only)."""
+    return [x['id'] for x in conn.execute(
+        "SELECT i.id FROM pg_news_inbox i WHERE i.status = 'seen' AND (i.pdf_data IS NOT NULL OR "
+        "COALESCE(i.pdf_r2_key,'') <> '') AND COALESCE(i.doc_rejected, FALSE) = FALSE AND NOT EXISTS ("
+        "SELECT 1 FROM pg_authority_docs d WHERE d.auto_inbox_id = i.id AND COALESCE(d.auto_kind,'pdf') NOT IN "
+        "('reg_list','snapshot')) ORDER BY i.id").fetchall()]
+
+
+_seen_state = {'running': False, 'done': {}}
+
+
+def file_all_seen():
+    """Background catch-up: archive every 'seen' notice's PDF (one at a time; counts in _seen_state)."""
+    from db import get_db
+    if _seen_state['running']:
+        return
+    _seen_state.update(running=True, done={})
+    conn = get_db()
+    try:
+        ensure_cols(conn)
+        for i in seen_unfiled_ids(conn):
+            res = archive_seen(conn, i)
+            _seen_state['done'][res] = _seen_state['done'].get(res, 0) + 1
+    except Exception as e:
+        logging.warning("archive seen catch-up: %s", e)
+    finally:
+        conn.close()
+        _seen_state['running'] = False
+
+
 def archive_snapshot(conn, inbox_id, data, name=''):
     """A web-page notice (no PDF of its own) printed to PDF on the Mac → hidden archive-only document
     (auto_kind 'snapshot'), so the page's text survives after the authority edits or removes it.
