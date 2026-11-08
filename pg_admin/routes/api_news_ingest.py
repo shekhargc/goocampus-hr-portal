@@ -381,6 +381,9 @@ def api_news_inbox_ingest():
                 if row['status'] != 'seen':
                     from pg_admin.data.auto_docs import file_safely
                     file_safely(conn, row['id'], release=new_file)    # a newly arrived PDF is kept once
+                elif new_file:
+                    from pg_admin.data.archive import archive_seen
+                    archive_seen(conn, row['id'])                    # a 'seen' notice's PDF is kept too (2026-11-08)
                 if new_file and row['news_id']:
                     _attach_to_news(conn, row['news_id'], pdf, r2_key, pdf_name, inbox_id=row['id'])
             return jsonify({'ok': True, 'id': row['id'], 'result': 'updated' if sets else 'known'})
@@ -410,6 +413,9 @@ def api_news_inbox_ingest():
         if status == 'new' and (draft or pdf or r2_key):      # no draft → still archived (2026-10-22)
             from pg_admin.data.auto_docs import file_safely
             doc_res = file_safely(conn, new_id, release=True)    # PDF → authority Documents (hidden), kept once
+        elif status == 'seen' and (pdf or r2_key):              # repeat / baseline notice: its PDF is kept too
+            from pg_admin.data.archive import archive_seen
+            doc_res = archive_seen(conn, new_id)
         return jsonify({'ok': True, 'id': new_id, 'result': status, 'document': doc_res})
     except Exception as e:
         try: conn.rollback()
