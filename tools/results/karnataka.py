@@ -21,14 +21,17 @@ diploma. College: code + printed name must both be known (→ the 2025 cut-off /
 Checks (stop on failure): column headings + page header (KEA, title, one PUBLISHED ON date) on every page, SL.NO 1..N,
 AIR strictly ascending, Status = Allotted, fee numeric, seat type ↔ category family, and with --seat-matrix every
 allotment within the 2026 seat-matrix seats of its college × course × quota × category (strict — no pooling).
+The same reader takes the FINAL list ("PG NEET -2026 MEDICAL (MD/MS) 1st ROUND FINAL SEAT ALLOTMENT", Round 1: published
+07-11-2026, identical table): status comes from the page title (PROVISIONAL → provisional, FINAL → final; --status, if
+given, must agree), and an ordinal round in the title ("1st ROUND") must agree with --round.
 Run with /usr/bin/python3 (PyMuPDF):
     karnataka.py <allotment.pdf> <out.json> [--seat-matrix <KA seat-matrix dump.json>]
-                 [--round "Round 1"] [--round-order 1] [--status provisional]"""
+                 [--round "Round 1"] [--round-order 1] [--status provisional|final]"""
 import json, os, re, sys, collections
 import fitz
 
 args = sys.argv[1:]
-opt = {'--round': 'Round 1', '--round-order': '1', '--status': 'provisional'}
+opt = {'--round': 'Round 1', '--round-order': '1'}
 for f in ('--seat-matrix', '--round', '--round-order', '--status'):
     if f in args:
         i = args.index(f); opt[f] = args[i + 1]; del args[i:i + 2]
@@ -39,7 +42,7 @@ SHEET = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'pg
 
 HEAD = ['SL.NO', 'All India Rank', 'Course Code', 'Name of the College Allotted.', 'Course Name', 'Allotted Category',
         'Course fees', 'Status']
-TITLE = 'PG NEET -2026 MEDICAL (MD/MS) PROVISIONAL ROUND SEAT ALLOTMENT'
+TITLE = re.compile(r'PG NEET -2026 MEDICAL \(MD/MS\) (?:(PROVISIONAL) ROUND|(\d+)(?:st|nd|rd|th) ROUND (FINAL)) SEAT ALLOTMENT')
 COLLEGES = {  # KEA college code → (name exactly as printed, standard name = 2025 KEA cut-off / 2026 seat-matrix name)
     'M01': ('Bangalore Medical College and Research Institute, Bangalore', 'Bangalore Medical College and Research Institute, Bangalore'),
     'M02': ('Mysore Medical College and Research Instt. (Prev.name Government Medical College), Mysore', 'Mysore Medical College and Research Institute, Mysore'),
@@ -163,13 +166,14 @@ if bad:
     raise SystemExit(f'not in specialty_sheet.json: {bad}')
 
 doc = fitz.open(PDF)
-lines, dates = [], set()
+lines, dates, titles = [], set(), set()
 for pg in doc:
     text = clean(pg.get_text())
     d = re.findall(r'PUBLISHED ON \[ (\d\d)-(\d\d)-(\d{4}) \]', text)
-    if 'Karnataka Examinations Authority' not in text or TITLE not in text or len(d) != 1:
+    t = TITLE.findall(text)
+    if 'Karnataka Examinations Authority' not in text or len(t) != 1 or len(d) != 1:
         raise SystemExit(f'p{pg.number + 1}: page header changed')
-    dates.add(d[0])
+    dates.add(d[0]); titles.add(t[0])
     for tb in pg.find_tables().tables:
         for r in tb.extract():
             c = [clean(x) for x in r]
@@ -182,6 +186,14 @@ for pg in doc:
             lines.append(c)
 if len(dates) != 1:
     raise SystemExit(f'more than one PUBLISHED ON date: {dates}')
+if len(titles) != 1:
+    raise SystemExit(f'more than one page title: {titles}')
+prov, round_no, fin = titles.pop()
+list_status = 'final' if fin else 'provisional'   # (not `status`: the row loop reads a Status column)
+if opt.get('--status', list_status) != list_status:
+    raise SystemExit(f'--status {opt["--status"]} but the list says {list_status}')
+if round_no and opt['--round'] != f'Round {round_no}':
+    raise SystemExit(f'--round {opt["--round"]!r} but the list says round {round_no}')
 dd, mm, yyyy = dates.pop()
 published = f'{yyyy}-{mm}-{dd}'
 
@@ -236,16 +248,17 @@ checks.update({'by_quota': C('quota'), 'by_section': C('section'), 'by_seat_type
 for x in rows:
     del x['_sm'], x['_region']
 out = {'authority_code': 'kea', 'round': opt['--round'], 'round_order': int(opt['--round-order']),
-       'status': opt['--status'],
-       'title': f'Provisional Seat Allotment — {opt["--round"]}, PG NEET 2026 Medical (MD/MS + Diploma), Karnataka (KEA)',
+       'status': list_status,
+       'title': f'{list_status.title()} Seat Allotment — {opt["--round"]}, PG NEET 2026 Medical (MD/MS + Diploma), Karnataka (KEA)',
        'published_on': published, 'source_file_name': os.path.basename(PDF),
-       'notes': ('KEA PG NEET-2026 Medical (MD/MS) provisional round seat allotment. rank = rank_ai = the printed All '
+       'notes': (f'KEA PG NEET-2026 Medical (MD/MS) {"provisional round" if list_status == "provisional" else opt["--round"] + " final"} seat allotment. rank = rank_ai = the printed All '
                  'India Rank. Quota from the seat-type letter of the course code (M01GC5: G government → Government '
                  'Quota, P private → Private Quota - GMP / Open / Minority by category, Q → Management Quota (MNG), '
                  'N → NRI Quota). Categories in the 2025 KEA code spellings (GM, 2AG, GMH = Kalyana Karnataka, PGM = '
                  'PwD); KEA\'s new S1–S4 codes = SC-A, SC-B, SC-C, SC-C (20%) (stored SC-AG … , SC-C (20%)G). The list '
                  'prints no names or roll numbers and no in-service / DNB lines; course fees are printed but not '
-                 'stored. Objections to keauthority-ka@nic.in before 10 AM, 06-11-2026.'),
+                 'stored.' + (' Objections to keauthority-ka@nic.in before 10 AM, 06-11-2026.' if list_status == 'provisional' and
+                              published == '2026-11-05' else '')),
        'rows': rows, 'checks': checks}
 json.dump(out, open(OUT, 'w'), ensure_ascii=False)
 print(out['title'], '|', out['status'], out['published_on'])
