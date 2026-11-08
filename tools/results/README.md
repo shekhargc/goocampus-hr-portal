@@ -221,6 +221,11 @@ not stored. Authority `kea`. `rank` = `rank_ai` = the printed AIR (strictly asce
 2026 Round 1 provisional (05.11.2026): 3,272 seats (3,266 MD/MS, 6 Diploma, no DNB / in-service lines), 65 colleges;
 Government 1,574 (RK 1,307, KK 267) · GMP 577 · Open 443 · Minority 440 · Management 219 · NRI 19; 863 college × course
 (2,481 college × course × quota × category) groups all within the matrix.
+2026 Round 1 **final** (list dated 07.11.2026; KEA notice of 06.11 says published 06.11) — same reader, same table;
+status is read from the page title ("1st ROUND FINAL SEAT ALLOTMENT" → `final`, must agree with `--status` / `--round`
+if given): 3,268 seats (3,262 MD/MS, 6 Diploma); Government 1,574 · GMP 577 · Open 443 · Minority 440 · Management 220 ·
+NRI 14; 863 / 2,479 groups within the matrix. vs provisional by AIR: 3,267 same rank, +1 / −5 (NRI/Management), 2 seat
+changes (NRI → Management).
 
 ## Maharashtra (`maharashtra.py`)
     /usr/bin/python3 tools/results/maharashtra.py <selection.pdf> <cetcell_mh_common_provisional.json> <cetcell_mh_inservice_provisional.json> <out.json> [--seat-matrix <MH seat rows.json>]
@@ -242,3 +247,19 @@ Available" (counted, skipped). Authority `cetcell_mh`. FormNo and Name are cut o
 Available; State 1,676 · Institutional 356 (96 AIQ-coded) · In-service 52 · Minority 22 · NRI 6; 675 college × course
 groups all within the 2,759-seat matrix (no category cell over); rank_ai 2,112/2,112; Cat. = merit list 6,884/6,885
 (SML 2103 SEBC vs OPEN); in-service 63/64 on the in-service list (SML 5611 not).
+
+## Odisha (`odisha.py`)
+    /usr/bin/python3 tools/results/odisha.py <allotment.pdf> <merit_direct.json> <merit_inservice.json> <out.json> [--seat-matrix <OD seat rows.json>]
+    /usr/bin/python3 tools/results/odisha.py --upgraded <upgraded.pdf> <round1_body.json> <out.json> [--seat-matrix <OD seat rows.json>] [--merit-direct m.json] [--merit-inservice m.json]
+PG Medical Counselling Committee (MKCG Brahmapur), authority `ojee`. Round 1 "COMMON ALLOTMENT" (direct + in-service
+MD/MS/DNB): `rank` = CMR-UR, `rank_ai` = AIR from the revised merit list of the same kind; `-MGT` colleges = management
+seats; DNB → `DNB Quota`, section dnb. 2026 Round 1 provisional (04.11.2026): 374 seats (197 direct, 177 in-service).
+- **`--upgraded`** reads "UPGRADED ALLOTMENT WITH ROUND-1 ALLOTMENT AND ADMISSION STATUS" (UGR-1 seat + R-1 seat + R-1
+  admission status per candidate) and writes the Round 1 position **after upgradation** as the same round (replaces the
+  Round 1 body). UGR-1 filled = new seat (same / better / fresh); UGR-1 blank = kept the admitted R-1 seat; R-1
+  choice-1 candidates absent from the list are dropped (their seats were re-allotted — keeping them overshoots the
+  matrix). Every R-1 block must equal the loaded Round 1 row; rank_ai comes from that row, fresh allotments need the
+  merit files (else left empty and counted). Names / application numbers never read into the output.
+2026 upgraded Round 1 (08.11.2026): 372 seats — direct 195 (49 kept, 131 same seat, 8 upgraded, 7 fresh), in-service
+177 (131 kept, 46 same seat); 9 R-1 choice-1 direct candidates gone; 2 seats left (SCB Gen Med UR-GC, VIMSAR Comm Med
+UR-PwD); 121 college × course groups / 322 cells within the matrix; rank_ai 364/372 (7 fresh + the A116 line empty).

@@ -254,3 +254,19 @@ cut-offs: AGMC + LGBRIMH Tezpur + the NBEMS hospitals `State Quota`, TMC `Open Q
 section `diploma`; Modern Psychiatric Hospital DNB Psychiatry (Post-MBBS) → `dnb`. AGMC Community Medicine's UR cell is
 printed '01- WESM' (kept as 1 UR seat). Checks every row, every table's TOTAL SEATS line and the 77-seat total.
 2026-27 Round 1 (04.11.2026): 77 seats (MD/MS 67, diploma 8, DNB 2); 62 linked to a 2025 cut-off.
+
+## Puducherry (`puducherry.py`)
+    /usr/bin/python3 tools/seat_matrix/puducherry.py <matrix.pdf> <cutoffs2025.json> <out.json>
+Body "Puducherry — State Counselling", authority `centac`. Source: Health Secretariat letter dt 06.11.2026 to CENTAC
+(5 pages, SCANNED — the OCR layer is junk, so every number is hard-coded from the page images; the PDF is only checked
+to be that letter). p2 overview (PIMS / SMVMC / SVMC: Total, Govt, Management — SVMC's is Linguistic Minority; IGMCRI:
+Total, Govt, All India Quota), p4-5 Government-quota category matrix (GEN OBC MBC SC BCM EBC ST BT vertical; FF PH EXM
+MSP horizontal, which sit inside the vertical seats and add none), p3 SVMC detail sheet. Quotas as in the 2025 CENTAC
+cut-offs: Government Quota (per category, bridged to UGE/UOB/UMB/USC/UBM/UEB/UST/UBT, then UGE), Management Quota
+(PIMS, SMVMC; category OPEN → AGE), Management Quota-Telugu Minority (SVMC; falls back to 2025 Management Quota).
+IGMCRI's 37 AIQ seats are MCC's (checked, not stored). Checks: every row Total = Govt + other, the Overall-Govt column,
+TOTAL A / B / GRAND per column, the footer (395 / 197 / 161 / 37), every p4-5 college line = its (n) = p2's Govt cell,
+every course = its (N), both TOTAL lines (all 12 columns) and the horizontal box (FF 8, PH 10, EXM 2, MSP 2).
+Known PDF inconsistency: the p3 SVMC sheet swaps the Govt/minority split for 12 courses vs p2 + p4-5 (same totals);
+p2 + p4-5 agree cell for cell and are used, the differences are printed. 2026-27: 395 printed, 358 stored
+(Govt 197, Management 95, Telugu Minority 66); 351 linked to a 2025 cut-off.

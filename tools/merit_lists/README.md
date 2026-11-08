@@ -65,3 +65,28 @@ on every line; loaded 3,584 rows.
 
 ## Tamil Nadu addenda 02.11.2026 (`sm4_tn_build.py`)
 GQ addendum 5963A and the first MQ addendum 898A (one added candidate each) → GQ 7,969, MQ 3,644; nothing else changed.
+
+## Telangana (`read_knruhs_tg.py`) — 2026-11-08
+KNRUHS "Medical PG Degree/Diploma admissions under Competent Authority Quota AY 2026-27 — Provisional Merit List of
+registered candidates" (dated 07.11.2026, 104 pages): `read_knruhs_tg.py <pdf> [--out DIR]` → `knruhs_cq_provisional.json`.
+One common list (S.No, Rank = AIR, Roll No, Score, Name, Gender, Category, Local, Minority, Service, Remarks); reads
+only S.No / Rank / roll / score / category / local / minority / service. state_rank = S.No; in-service ('S') rows get
+quota 'In-service', non-service ''. 3,518 rows = the announced total; AIR printed on every row, AIR and score
+monotonic. Local '-' = the 171 non-local candidates listed "as per the directions of the Hon'ble High Court".
+
+## Himachal Pradesh (`read_amru_hp.py`) — 2026-11-08
+AMRU "Provisional Merit list of MD/MS/DNB 1st Round Counselling 2026" (notice 07.11.2026, 50 pages; page 1 = notice):
+`read_amru_hp.py <pdf> [--out DIR]` → `amru_hp_r1_provisional.json`. ONE merit list across all quotas (merit no. 1..795)
+with quota per row: HP Direct / In-service / Management / NRI. state_rank = merit no.; air = printed All India Merit
+Rank; score = "NEET Score + Service Incentive" (the merit basis; checked = NEET x (1 + incentive %)), so AIR is out of
+order only where the incentive lifts in-service rows. Application no. and name are never read.
+
+## Puducherry (`read_centac_py.py`) — 2026-11-08
+CENTAC "Draft Merit list of PG NEET Medical (M.D./M.S.) courses (2026-2027)", published 06-11-2026. The web page
+(`htmlpages/2026/PgMedical_2026/Draft_merit_list.html`) links each list as a Google-Drive PDF. `read_centac_py.py
+<gq_all.pdf> <mq_all.pdf> [--out DIR]` → `centac_gq_draft.json` (GQ-ALL, 298, quota 'GQ', category like 'MBC/FF') and
+`centac_mq_draft.json` (MQ-ALL, 851, quota 'MQ', AIQ category). state_rank = SL NO; AIR printed on every row. The
+column headed "NEET PERCENTILE" is the NEET score. Words are used, not find_tables (it misses every other striped row).
+The FF (21) / PwD (1) / ESM (4) / MQ-Telugu (3) sub-lists are subsets of GQ-ALL / MQ-ALL (the reader refuses them);
+the "Overall list of candidates applied" (1,250, AIR order, no merit rank; 150 are in neither list, 71 of them below
+the 226 cut-off) is not a merit list and is not read. authority_code is `centac` (pg_admin/authorities.py).
