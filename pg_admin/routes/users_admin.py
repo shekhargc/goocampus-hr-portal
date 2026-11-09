@@ -94,27 +94,15 @@ _CATEGORY_LABELS = {'team': 'Team', 'internal': 'Internal', 'paid': 'Paid', 'fre
 
 
 def _allotted_sql(ualias='u'):
-    """SQL: the doctor has at least one seat allotment matched by rank (MCC by All-India rank; any state's list by
-    the All-India rank printed/bridged beside it; their home state's counselling by home-state rank) that nobody
-    marked 'not me'. Param-less. Same rules as pg_admin.allotments.for_users."""
-    from pg_admin.authorities import AUTHORITIES
-    vals = ', '.join("('%s', '%s')" % (a[0].replace("'", ''), ' '.join(a[2].lower().replace('&', 'and').split()).replace("'", ''))
-                     for a in AUTHORITIES if a[0] != 'mcc')
+    """SQL: the doctor has at least one seat allotment matched on their All-India rank (MCC's rank; every state
+    list's rank_ai) that nobody marked 'not me'. Param-less. Same rule as pg_admin.allotments.for_users."""
     notme = (f"NOT EXISTS (SELECT 1 FROM pg_allotment_marks m WHERE m.user_id = {ualias}.id "
              f"AND m.authority_code = r.authority_code AND m.academic_year = r.academic_year AND m.round = r.round "
              f"AND m.verdict = 'not_me')")
-    from pg_admin.allotments import OTHER_LIST_RANKS
-    other = ("NOT (r.authority_code, COALESCE(trim(r.quota_raw), '')) IN (" +
-             ', '.join("('%s', '%s')" % pair for pair in sorted(OTHER_LIST_RANKS)) + ")")
     live = ("JOIN pg_results_source s ON s.authority_code = r.authority_code AND s.academic_year = r.academic_year "
             "AND s.round = r.round AND COALESCE(s.is_hidden,0) = 0")
-    return (f"(EXISTS (SELECT 1 FROM pg_results r {live} WHERE r.authority_code = 'mcc' "
-            f"AND r.rank = {ualias}.neet_pg_rank AND {notme}) "
-            f"OR EXISTS (SELECT 1 FROM pg_results r {live} WHERE r.authority_code <> 'mcc' "
-            f"AND r.rank_ai = {ualias}.neet_pg_rank AND {notme}) "
-            f"OR EXISTS (SELECT 1 FROM pg_results r {live} JOIN (VALUES {vals}) AS au(code, st) "
-            f"ON au.code = r.authority_code WHERE au.st = lower(regexp_replace(replace(COALESCE({ualias}.state,''), '&', 'and'), '\\s+', ' ', 'g')) "
-            f"AND r.rank = {ualias}.home_state_rank AND r.rank IS DISTINCT FROM r.rank_ai AND {other} AND {notme}))")
+    return (f"EXISTS (SELECT 1 FROM pg_results r {live} WHERE {ualias}.neet_pg_rank > 0 AND "
+            f"(CASE WHEN r.authority_code = 'mcc' THEN r.rank ELSE r.rank_ai END) = {ualias}.neet_pg_rank AND {notme})")
 
 
 def _category_case(ualias='u'):

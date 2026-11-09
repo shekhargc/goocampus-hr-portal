@@ -182,7 +182,7 @@
               <td><b>{{ 'MCC' if a.authority_code == 'mcc' else a.authority_name }}</b> · {{ a.round }}<div style="font-size:0.72rem;color:var(--gray-400);">{{ a.status }}{% if a.program == 'dnb' %} · DNB{% endif %}</div></td>
               <td style="font-size:0.8rem;">{{ a.college }}</td>
               <td style="font-size:0.8rem;">{{ a.course }}<div style="color:var(--gray-500);">{{ a.quota }} · {{ a.allotted_category }}</div></td>
-              <td style="font-size:0.78rem;">{{ a.rank_type }} {{ '{:,}'.format(a.rank) }}
+              <td style="font-size:0.78rem;">{% set air = a.rank if a.authority_code == 'mcc' else a.rank_ai %}AIR {{ '{:,}'.format(air) if air else '—' }}{% if a.authority_code != 'mcc' and a.rank and a.rank != a.rank_ai %}<div style="color:var(--gray-500);">State rank {{ '{:,}'.format(a.rank) }}</div>{% endif %}
                 {% if a.verdict == 'confirmed' %}<div style="color:#16a34a;">✔ confirmed · {{ a.marked_by }}</div>{% elif a.verdict == 'not_me' %}<div style="color:#b91c1c;">✖ not this doctor · {{ a.marked_by }}</div>{% endif %}</td>
               <td style="white-space:nowrap;">
                 {% for v, lbl in [('confirmed','✔ Confirm'),('not_me','✖ Not this doctor'),('','Clear')] %}{% if (a.verdict or '') != v %}
