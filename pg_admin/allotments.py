@@ -1,8 +1,11 @@
 """A doctor's own seat allotments, matched from the published counselling results by rank (founder 2026-10-24).
 
   MCC (All India)        → pg_users.neet_pg_rank   = pg_results.rank
-  a state's counselling  → pg_users.home_state_rank = pg_results.rank, for the doctor's home state only
-                           (state lists use the state merit rank, not the All-India rank)
+  a state's counselling  → pg_users.neet_pg_rank   = pg_results.rank_ai (the All-India rank printed or bridged
+                           beside the state rank — any doctor, any home state: management / NRI / open seats
+                           are not domicile-only, and KEA ranks by All-India rank; founder 2026-11-09)
+                           or pg_users.home_state_rank = pg_results.rank, for the doctor's home state only
+                           (rows whose rank IS the All-India rank are left to the All-India match)
 
 Nothing is copied: allotments are read live from pg_results, so a corrected rank or a final list that replaces a
 provisional one shows straight away. A profile rank can be wrong or old, so every match is labelled "matched by
@@ -76,7 +79,9 @@ def _row(r, auths, mark=None):
     out = {'authority_code': r['authority_code'], 'authority_name': name, 'round': r['round'],
            'round_order': r['round_order'], 'status': r['status'], 'published_on': r['published_on'] or '',
            'program': 'dnb' if sec == 'dnb' else 'mdms', 'rank': r['rank'],
-           'rank_type': 'All India rank' if r['authority_code'] == 'mcc' else 'State rank',
+           'rank_type': 'All India rank' if (r['authority_code'] == 'mcc' or r.get('rank') == r.get('rank_ai'))
+                        else 'State rank',
+           'matched_on': r.get('matched_on') or 'air',     # air = All-India rank, state_rank = home-state rank
            'rank_ai': r.get('rank_ai'),            # state lists: the All-India rank beside the state rank
            'college': college, 'college_short': (college or '').split(',')[0].strip(),
            'state': r.get('state') or '', 'college_type': r.get('college_type') or '',
@@ -118,44 +123,62 @@ def for_users(conn, users, include_not_me=True):
                           "FROM pg_allotment_marks WHERE user_id = ANY(?)", [ids]).fetchall():
         marks[(m['user_id'], m['authority_code'], m['academic_year'], m['round'])] = dict(m)
     src = {(r['authority_code'], r['academic_year'], r['round']): r for r in rounds}
+    by_air = {}                       # All-India rank → doctors (MCC rank, and every state's rank_ai)
+    for u in users:
+        try:
+            rk = int(u.get('neet_pg_rank') or 0)
+        except (TypeError, ValueError):
+            rk = 0
+        if rk > 0:
+            by_air.setdefault(rk, []).append(u['id'])
     for code in codes:
-        if code == 'mcc':
-            by_rank = {}
-            for u in users:
-                try:
-                    rk = int(u.get('neet_pg_rank') or 0)
-                except (TypeError, ValueError):
-                    rk = 0
-                if rk > 0:
-                    by_rank.setdefault(rk, []).append(u['id'])
-        else:
+        by_state = {}                 # home-state merit rank → doctors of that state (state counselling only)
+        if code != 'mcc':
             st = _state_key(auths.get(code, ('', ''))[1])
-            by_rank = {}
             for u in users:
                 try:
                     rk = int(u.get('home_state_rank') or 0)
                 except (TypeError, ValueError):
                     rk = 0
                 if rk > 0 and st and _state_key(u.get('state')) == st:
-                    by_rank.setdefault(rk, []).append(u['id'])
-        if not by_rank:
+                    by_state.setdefault(rk, []).append(u['id'])
+        if not by_air and not by_state:
             continue
-        for r in conn.execute(
-                "SELECT authority_code, academic_year, round, rank, rank_ai, section, institute, institute_raw, state, "
+        cols = ("SELECT authority_code, academic_year, round, rank, rank_ai, section, institute, institute_raw, state, "
                 "college_type, course, course_raw, quota, quota_raw, allotted_category, candidate_category "
-                "FROM pg_results WHERE authority_code = ? AND rank = ANY(?)", [code, list(by_rank)]).fetchall():
+                "FROM pg_results WHERE authority_code = ? AND ")
+        conds, params = [], [code]
+        if by_air:
+            conds.append("rank = ANY(?)" if code == 'mcc' else "rank_ai = ANY(?)")
+            params.append(list(by_air))
+        if by_state:
+            conds.append("rank = ANY(?)")
+            params.append(list(by_state))
+        if not conds:
+            continue
+        rows = conn.execute(cols + "(" + " OR ".join(conds) + ")", params).fetchall()
+        for r in rows:
             r = dict(r)
-            if code != 'mcc' and (code, (r['quota_raw'] or '').strip()) in OTHER_LIST_RANKS:
-                continue
             s = src.get((r['authority_code'], r['academic_year'], r['round']))
             if not s:
                 continue
             r.update(round_order=s['round_order'], status=s['status'], published_on=s['published_on'])
-            for uid in by_rank.get(r['rank'], []):
+            hits = {}                 # user → how the seat was matched (All-India rank wins)
+            if code == 'mcc':
+                for uid in by_air.get(r['rank'], []):
+                    hits[uid] = 'air'
+            else:
+                if r['rank_ai']:
+                    for uid in by_air.get(r['rank_ai'], []):
+                        hits[uid] = 'air'
+                if (r['rank'] != r['rank_ai'] and (code, (r['quota_raw'] or '').strip()) not in OTHER_LIST_RANKS):
+                    for uid in by_state.get(r['rank'], []):
+                        hits.setdefault(uid, 'state_rank')
+            for uid, how in hits.items():
                 mk = marks.get((uid, r['authority_code'], r['academic_year'], r['round']))
                 if mk and mk['verdict'] == 'not_me' and not include_not_me:
                     continue
-                out[uid].append(_row(r, auths, mk))
+                out[uid].append(_row(dict(r, matched_on=how), auths, mk))
     for uid in out:
         out[uid].sort(key=lambda a: (a['authority_code'] != 'mcc', -int(a['round_order'] or 0)))
     return out
@@ -287,7 +310,8 @@ def summary(conn):
             pool = [u for u in users if (u['neet_pg_rank'] or 0) > 0]
         else:
             st = _state_key(auths.get(code, ('', ''))[1])
-            pool = [u for u in users if (u['home_state_rank'] or 0) > 0 and _state_key(u['state']) == st]
+            pool = [u for u in users if (u['neet_pg_rank'] or 0) > 0
+                    or ((u['home_state_rank'] or 0) > 0 and _state_key(u['state']) == st)]
         cats = {c: {'with_rank': 0, 'mdms': 0, 'dnb': 0} for c in ('internal', 'paid', 'free', 'team')}
         for u in pool:
             c = cats.setdefault(u['cat'], {'with_rank': 0, 'mdms': 0, 'dnb': 0})

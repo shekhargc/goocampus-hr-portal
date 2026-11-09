@@ -94,8 +94,9 @@ _CATEGORY_LABELS = {'team': 'Team', 'internal': 'Internal', 'paid': 'Paid', 'fre
 
 
 def _allotted_sql(ualias='u'):
-    """SQL: the doctor has at least one seat allotment matched by rank (MCC by All-India rank, their home state's
-    counselling by home-state rank) that nobody marked 'not me'. Param-less."""
+    """SQL: the doctor has at least one seat allotment matched by rank (MCC by All-India rank; any state's list by
+    the All-India rank printed/bridged beside it; their home state's counselling by home-state rank) that nobody
+    marked 'not me'. Param-less. Same rules as pg_admin.allotments.for_users."""
     from pg_admin.authorities import AUTHORITIES
     vals = ', '.join("('%s', '%s')" % (a[0].replace("'", ''), ' '.join(a[2].lower().replace('&', 'and').split()).replace("'", ''))
                      for a in AUTHORITIES if a[0] != 'mcc')
@@ -109,9 +110,11 @@ def _allotted_sql(ualias='u'):
             "AND s.round = r.round AND COALESCE(s.is_hidden,0) = 0")
     return (f"(EXISTS (SELECT 1 FROM pg_results r {live} WHERE r.authority_code = 'mcc' "
             f"AND r.rank = {ualias}.neet_pg_rank AND {notme}) "
+            f"OR EXISTS (SELECT 1 FROM pg_results r {live} WHERE r.authority_code <> 'mcc' "
+            f"AND r.rank_ai = {ualias}.neet_pg_rank AND {notme}) "
             f"OR EXISTS (SELECT 1 FROM pg_results r {live} JOIN (VALUES {vals}) AS au(code, st) "
             f"ON au.code = r.authority_code WHERE au.st = lower(regexp_replace(replace(COALESCE({ualias}.state,''), '&', 'and'), '\\s+', ' ', 'g')) "
-            f"AND r.rank = {ualias}.home_state_rank AND {other} AND {notme}))")
+            f"AND r.rank = {ualias}.home_state_rank AND r.rank IS DISTINCT FROM r.rank_ai AND {other} AND {notme}))")
 
 
 def _category_case(ualias='u'):
