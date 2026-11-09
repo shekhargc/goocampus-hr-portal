@@ -367,15 +367,17 @@ def crm_rows(conn):
 
 def crm_counts(rows):
     """Tally crm_rows() into the CRM tab badges."""
-    c = {'did': 0, 'contacted': 0, 'followups': 0, 'visits': 0, 'converted': 0}
+    c = {'did': 0, 'contacted': 0, 'followups': 0, 'interested': 0, 'visits': 0, 'converted': 0}
     for r in rows:
         s = r.get('status')
         if s == 'Did not pick up':
             c['did'] += 1
         elif s == 'Contacted':
             c['contacted'] += 1
-        elif s in ('Follow-up', 'Interested'):
+        elif s == 'Follow-up':
             c['followups'] += 1
+        elif s == 'Interested':          # own tab since 2026-11-09 (founder)
+            c['interested'] += 1
         elif s == 'Converted':
             c['converted'] += 1
         if r.get('visit_office') == 'yes' and (r.get('visit_date') or ''):

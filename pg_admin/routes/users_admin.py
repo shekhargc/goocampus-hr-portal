@@ -155,6 +155,15 @@ _PROF_FILTERS = {       # key → (label, SQL). 'Incomplete' = domicile state (n
 }
 
 
+# NEET-PG qualifying score (founder 2026-11-09): 262 and above = qualified, below = not qualified.
+NEET_QUALIFY_SCORE = 262
+_QUAL_FILTERS = {
+    'yes': ('Qualified (262+)', f"COALESCE(u.neet_pg_score,0) >= {NEET_QUALIFY_SCORE}"),
+    'no': ('Not qualified (<262)', f"(COALESCE(u.neet_pg_score,0) > 0 AND u.neet_pg_score < {NEET_QUALIFY_SCORE})"),
+    'unknown': ('Score not entered', "COALESCE(u.neet_pg_score,0) <= 0"),
+}
+
+
 @login_required
 def users_admin():
     user = _require_users_section("view")
@@ -171,6 +180,7 @@ def users_admin():
     f_reg = (request.args.get('reg') or '').strip()        # registered-date window (founder 2026-10-19)
     f_prof = (request.args.get('prof') or '').strip()      # incomplete profile filter (founder 2026-10-19)
     f_allot = (request.args.get('allot') or '').strip()    # seat allotment matched by rank (founder 2026-10-26)
+    f_qual = (request.args.get('qual') or '').strip()      # NEET qualified / not (founder 2026-11-09)
     page = max(1, _int_or_none(request.args.get('page')) or 1)
 
     session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
@@ -237,6 +247,8 @@ def users_admin():
         # from a matching lead for display — this filter ignores that). (2026-10-19)
         if f_prof in _PROF_FILTERS:
             conds.append(_PROF_FILTERS[f_prof][1])
+        if f_qual in _QUAL_FILTERS:
+            conds.append(_QUAL_FILTERS[f_qual][1])
         allot_summary = []
         try:
             from pg_admin import allotments as _al
@@ -346,6 +358,20 @@ def users_admin():
                         'DNB' if a['program'] == 'dnb' else 'MD/MS')
                 u['allot_tag'] = ' · '.join(f"{k} {' / '.join(sorted(v, key=lambda x: x != 'MD/MS'))}"
                                             for k, v in sorted(progs.items(), key=lambda kv: kv[0] != 'MCC'))
+                # one capsule per authority ("MCC", "KEA"), hover = that authority's seats (founder 2026-11-09)
+                caps = {}
+                for a in sorted(live, key=lambda a: -int(a['round_order'] or 0)):
+                    c = caps.setdefault(a['authority_code'], {'tag': _al2.short_tag(a['authority_code']),
+                                                              'name': a['authority_name'], 'lines': [],
+                                                              'progs': set(), 'confirmed': False})
+                    c['progs'].add('DNB' if a['program'] == 'dnb' else 'MD/MS')
+                    c['confirmed'] = c['confirmed'] or a['verdict'] == 'confirmed'
+                    c['lines'].append(f"{a['round']} ({a['status']}): {a['course']} — {a['college_short']} "
+                                      f"({a['quota']} · {a['allotted_category']})"
+                                      + (' ✔ confirmed' if a['verdict'] == 'confirmed' else ''))
+                u['allot_caps'] = [dict(c, tip=c['name'] + ' · ' + ' / '.join(sorted(c['progs'], key=lambda x: x != 'MD/MS'))
+                                        + '\n' + '\n'.join(c['lines']))
+                                   for k, c in sorted(caps.items(), key=lambda kv: (kv[0] != 'mcc', kv[1]['tag']))]
                 u['allot_tip'] = '\n'.join(
                     f"{'MCC' if a['authority_code'] == 'mcc' else a['authority_name']} {a['round']} ({a['status']}): "
                     f"{a['course']} — {a['college_short']} ({a['quota']} · {a['allotted_category']})"
@@ -413,6 +439,8 @@ def users_admin():
                            f_reg=f_reg, reg_options=[(k, v[0]) for k, v in _REG_WINDOWS.items()],
                            f_prof=f_prof, prof_options=[(k, v[0]) for k, v in _PROF_FILTERS.items()],
                            f_allot=f_allot, allot_summary=allot_summary,
+                           f_qual=f_qual, qual_options=[(k, v[0]) for k, v in _QUAL_FILTERS.items()],
+                           qualify_score=NEET_QUALIFY_SCORE,
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
 
@@ -445,9 +473,10 @@ _CRM_STAGES = {
 
 
 @login_required
-def users_followups():
-    """Follow-up work queue — Follow-up + Interested (the ones with a date), grouped by week,
-    soonest first (Overdue pinned top). Reads the SHARED thread, so inquiry follow-ups show too."""
+def users_followups(which='followups'):
+    """Follow-up work queue (status Follow-up) or the Interested tab (status Interested — own tab
+    since 2026-11-09, founder), grouped by next follow-up week, soonest first (Overdue pinned top).
+    Reads the SHARED thread, so inquiry follow-ups show too."""
     admin = _require_users_section("view")
     if not admin:
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
@@ -458,7 +487,8 @@ def users_followups():
         from pg_admin import followups as _fu
         allrows = _fu.crm_rows(conn)
         counts = _fu.crm_counts(allrows)
-        rows = [r for r in allrows if r.get('status') in ('Follow-up', 'Interested')]
+        want = ('Interested',) if which == 'interested' else ('Follow-up',)
+        rows = [r for r in allrows if r.get('status') in want]
         total = len(rows)
         groups = _crm_week_groups(
             rows, 'next_followup_date', ['overdue', 'this', 'next', 'later', ''],
@@ -470,7 +500,9 @@ def users_followups():
         except Exception: pass
     finally:
         conn.close()
-    return render_template('pg_admin/users_crm.html', mode='followups', active='followups',
+    return render_template('pg_admin/users_crm.html', mode='followups',
+                           active='interested' if which == 'interested' else 'followups',
+                           stage_label='Interested' if which == 'interested' else 'Follow-ups',
                            groups=groups, total=total, counts=counts, active_section='goocampus_in')
 
 

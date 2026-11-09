@@ -1,11 +1,12 @@
 {% extends "pg_admin/pg_admin_base.html" %}
-{% block title %}Registered Doctors · {{ stage_label if mode=='stage' else ('Follow-ups' if mode=='followups' else 'Office Visits') }}{% endblock %}
+{% block title %}Registered Doctors · {{ stage_label if mode in ('stage','followups') else 'Office Visits' }}{% endblock %}
 
 {% block section_content %}
 <div style="max-width:1100px;margin:0 auto;padding:1.5rem;">
   <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">Registered Doctors</h1>
   <p style="color:var(--gray-500);font-size:0.9rem;margin:0 0 1rem;">
-    {% if mode=='followups' %}Follow-up work queue — who to call, grouped by week (soonest first).
+    {% if mode=='followups' and stage_label=='Interested' %}Interested doctors — grouped by their next follow-up date (soonest first).
+    {% elif mode=='followups' %}Follow-up work queue — who to call, grouped by week (soonest first).
     {% elif mode=='visits' %}Doctors planning an office visit, grouped by week.
     {% elif stage_label=='Did not pick up' %}Tried to reach, didn't connect — retry these.
     {% elif stage_label=='Contacted' %}Reached, but no follow-up scheduled yet.
