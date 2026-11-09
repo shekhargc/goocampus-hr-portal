@@ -45,8 +45,8 @@ def my_allotments():
         allots = AL.for_users(conn, [u], include_not_me=False).get(u['id'], [])
         st = AL.rank_state(conn, u['id'])
         return jsonify({'ok': True, 'rank': st, 'allotments': AL.grouped(allots), 'count': len(allots),
-                        'note': 'Matched by your rank: MCC uses your All-India rank, state counselling your '
-                                'home-state merit rank. Always confirm on the official result.'})
+                        'note': 'Matched by your All-India rank, for MCC and every state list. '
+                                'Always confirm on the official result.'})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
