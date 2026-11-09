@@ -638,6 +638,8 @@ def register_pg_admin(app):
                      users_admin.users_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/users/followups', 'pg_users_followups',
                      users_admin.users_followups, methods=['GET'])
+    app.add_url_rule('/admin/pg/users/interested', 'pg_users_interested',
+                     users_admin.users_followups, defaults={'which': 'interested'}, methods=['GET'])
     app.add_url_rule('/admin/pg/users/visits', 'pg_users_visits',
                      users_admin.users_visits, methods=['GET'])
     app.add_url_rule('/admin/pg/users/did-not-pick-up', 'pg_users_did',

@@ -28,6 +28,27 @@
   .pu-table tr:hover td { background:#f8fafc; }
   .pu-name { font-weight:600; color:var(--navy); }
   .pu-sub { color:var(--gray-500); font-size:0.78rem; }
+  .al-box { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.7rem 1rem; margin-bottom:1.2rem; }
+  .al-box summary { font-weight:700; color:var(--navy); cursor:pointer; list-style-position:inside; }
+  .al-box .al-note { font-weight:400; font-size:0.78rem; color:var(--gray-500); margin-left:0.3rem; }
+  .al-grid { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:0.55rem; margin-top:0.7rem; }
+  @media (max-width:1200px){ .al-grid{ grid-template-columns:repeat(4, minmax(0,1fr)); } }
+  @media (max-width:800px){ .al-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  .al-cap { border:1px solid #bbf7d0; background:#f0fdf4; border-radius:999px; padding:0.4rem 0.9rem; cursor:help; min-width:0; }
+  .al-cap.al-zero { border-color:var(--gray-200); background:var(--gray-50, #f9fafb); }
+  .al-head { font-size:0.82rem; color:var(--navy); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .al-head span { color:var(--gray-500); }
+  .al-head .al-st { font-size:0.64rem; font-weight:700; padding:0 6px; border-radius:10px; background:#fef3c7; color:#92400e; margin-left:2px; }
+  .al-head .al-st-final { background:#dcfce7; color:#166534; }
+  .al-nums { display:flex; gap:0.8rem; font-size:0.78rem; color:var(--gray-600); }
+  .al-nums b { color:#16a34a; font-size:0.9rem; }
+  .al-zero .al-nums b { color:var(--gray-400); }
+  .cap { display:inline-block; padding:1px 9px; border-radius:999px; background:#16a34a; color:#fff; font-weight:700;
+      font-size:0.74rem; text-decoration:none; cursor:help; margin:1px 2px 1px 0; }
+  .cap.cap-ok { background:#15803d; box-shadow:0 0 0 2px #bbf7d0; }
+  .q-yes { background:#dcfce7; color:#166534; } .q-no { background:#fee2e2; color:#991b1b; }
+  #pgTip { position:fixed; z-index:9999; max-width:440px; background:var(--navy); color:#fff; font-size:0.78rem; line-height:1.45;
+      padding:0.55rem 0.75rem; border-radius:8px; white-space:pre-line; pointer-events:none; display:none; box-shadow:0 6px 20px rgba(0,0,0,.2); }
   .chip { display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.72rem; font-weight:600; }
   .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-500); }
   .chip-red { background:#fee2e2; color:#b91c1c; } .chip-orange { background:#fde9d6; color:#c2410c; }
@@ -84,17 +105,24 @@
 </div>
 
 {% if allot_summary %}
-<div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.6rem;padding:0.8rem 1.1rem;margin-bottom:1.2rem;">
-  <div style="font-weight:700;color:var(--navy);margin-bottom:0.4rem;">🎓 Seat allotments (matched by the rank on each doctor's profile)</div>
-  {% for r in allot_summary %}
-  <div style="display:flex;flex-wrap:wrap;gap:0.4rem 1.2rem;align-items:baseline;font-size:0.85rem;padding:0.3rem 0;border-top:{{ '1px solid var(--gray-100)' if not loop.first else '0' }};">
-    <b>{{ 'MCC' if r.authority_code == 'mcc' else r.authority_name }} · {{ r.round }}</b><span style="color:var(--gray-500);">({{ r.status }})</span>
-    <span>{{ '{:,}'.format(r.total.with_rank) }} with a rank → <b style="color:#16a34a;">{{ '{:,}'.format(r.total.mdms + r.total.dnb) }} got a seat</b> (MD/MS {{ r.total.mdms }} · DNB {{ r.total.dnb }})</span>
-    {% for t, lbl in [('internal','Internal'),('paid','Paid'),('free','Free'),('team','Team')] %}{% set c = r.by_type[t] %}{% if c.with_rank %}
-      <span style="color:var(--gray-600);">{{ lbl }}: {{ c.mdms + c.dnb }}/{{ c.with_rank }}</span>{% endif %}{% endfor %}
-  </div>
+{# Seat allotments: one capsule per published round, 5 to a row, collapsible (founder 2026-11-09) #}
+<details id="allotBox" class="al-box" open>
+  <summary>🎓 Seat allotments <span class="al-note">matched by each doctor's All-India rank · use the filters below for type / plan / state</span></summary>
+  <div class="al-grid">
+  {% for r in allot_summary %}{% set n = r.total.mdms + r.total.dnb %}
+    <div class="al-cap{{ ' al-zero' if not n }}" data-tip="{{ r.authority_name }}{% if r.state_label %} ({{ r.state_label }}){% endif %} · {{ r.round }} ({{ r.status }})&#10;{{ '{:,}'.format(r.total.with_rank) }} doctors with a rank → {{ n }} got a seat{% for t, lbl in [('internal','Internal'),('paid','Paid'),('free','Free'),('team','Team')] %}{% set c = r.by_type[t] %}{% if c.with_rank %}&#10;{{ lbl }}: {{ c.mdms + c.dnb }} of {{ c.with_rank }}{% endif %}{% endfor %}">
+      <div class="al-head"><b>{{ r.short }}</b> <span>{{ r.round|replace('Round ', 'R') }}</span>
+        {% if r.status %}<span class="al-st al-st-{{ r.status|lower }}">{{ r.status }}</span>{% endif %}</div>
+      <div class="al-nums"><span><b>{{ r.total.mdms }}</b> MD/MS</span><span><b>{{ r.total.dnb }}</b> DNB</span></div>
+    </div>
   {% endfor %}
-</div>
+  </div>
+</details>
+<script>
+(function(){var d=document.getElementById('allotBox');if(!d)return;
+  try{if(localStorage.getItem('pgAllotBox')==='closed')d.removeAttribute('open');}catch(e){}
+  d.addEventListener('toggle',function(){try{localStorage.setItem('pgAllotBox',d.open?'open':'closed');}catch(e){}});})();
+</script>
 {% endif %}
 
 <form method="GET" class="pu-controls">
@@ -139,8 +167,12 @@
     <option value="no" {{ 'selected' if f_allot=='no' }}>Has rank — no seat</option>
     <option value="norank" {{ 'selected' if f_allot=='norank' }}>No rank on profile</option>
   </select>
+  <select name="qual" onchange="this.form.submit()" title="NEET-PG qualified = score {{ qualify_score }} or above">
+    <option value="">NEET qualified: any</option>
+    {% for k, lbl in qual_options %}<option value="{{ k }}" {{ 'selected' if f_qual==k }}>{{ lbl }}</option>{% endfor %}
+  </select>
   <button class="pu-btn pu-btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
-  {% if q or f_plan or f_status or f_type or f_state or f_lead or f_reg or f_prof or f_allot %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>
+  {% if q or f_plan or f_status or f_type or f_state or f_lead or f_reg or f_prof or f_allot or f_qual %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>
   <span style="font-size:0.82rem;color:var(--gray-500);align-self:center;">{{ '{:,}'.format(total_found or 0) }} doctor{{ '' if total_found == 1 else 's' }}</span>{% endif %}
   {% if session.get('is_admin') %}<a class="pu-btn pu-btn-ghost" href="/admin/diag/pg-states" title="Fix misspelt / duplicate states">🧹 Clean up states</a>{% endif %}
 </form>
@@ -149,11 +181,11 @@
 <div style="overflow-x:auto;">
 <table class="pu-table">
   <thead><tr>
-    <th style="width:46px;">#</th><th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>Latest allotment</th><th>Plan</th><th>Status</th><th>State</th><th>Registered</th><th></th>
+    <th style="width:46px;">#</th><th>Doctor</th><th>Contact</th><th>NEET-PG</th><th>NEET qualified</th><th>Latest allotment</th><th>Plan</th><th>Status</th><th>State</th><th>Registered</th><th></th>
   </tr></thead>
   <tbody>
     {% for u in users %}
-    <tr{% if u.allot_tag %} style="background:#ecfdf3;" title="Got a seat — {{ u.allot_tag }}"{% endif %}>
+    <tr{% if u.allot_tag %} style="background:#ecfdf3;"{% endif %}>
       <td style="color:var(--gray-400);font-weight:600;">{{ (page_offset or 0) + loop.index }}</td>
       <td>
         {% set _cat = u.client_category or 'free' %}
@@ -161,14 +193,15 @@
         <div class="pu-name">{% if _cat == 'team' %}{{ u.name or '(name pending)' }}{% else %}{{ (u.name|dr_name) or '(name pending)' }}{% endif %}
           <span class="chip chip-{{ _catcolor[_cat] }}">{{ cat_labels[_cat] }}</span>
           {% if u.is_blocked %}<span class="chip chip-red">Blocked</span>{% endif %}</div>
-        <div class="pu-sub">{{ u.college or '' }}{% if u.state %} · {{ u.state }}{% endif %}</div>
       </td>
-      <td>{{ u.mobile }}<div class="pu-sub">{{ u.email or '' }}</div></td>
-      <td>{% if u.neet_pg_rank %}Rank {{ '{:,}'.format(u.neet_pg_rank) }}{% else %}—{% endif %}
-        <div class="pu-sub">{{ u.target_speciality or '' }}</div></td>
-      <td style="font-size:0.8rem;white-space:nowrap;">{% if u.allot_tag %}
-        <a href="/admin/pg/users/{{ u.id }}#allotments" title="{{ u.allot_tip }}"
-           style="display:inline-block;padding:2px 9px;border-radius:999px;background:#16a34a;color:#fff;font-weight:700;text-decoration:none;cursor:help;">✓ {{ u.allot_tag }}</a>
+      <td style="white-space:nowrap;">{{ u.mobile }}</td>
+      <td style="white-space:nowrap;">{% if u.neet_pg_rank %}Rank {{ '{:,}'.format(u.neet_pg_rank) }}{% else %}—{% endif %}
+        {% if u.neet_pg_score %}<div class="pu-sub">Score {{ u.neet_pg_score|int }}</div>{% endif %}</td>
+      <td style="white-space:nowrap;">{% if u.neet_pg_score and u.neet_pg_score >= qualify_score %}<span class="chip q-yes">✓ Qualified</span>
+        {% elif u.neet_pg_score and u.neet_pg_score > 0 %}<span class="chip q-no">Not qualified</span>
+        {% else %}<span style="color:var(--gray-400);">—</span>{% endif %}</td>
+      <td style="white-space:nowrap;">{% if u.allot_caps %}{% for c in u.allot_caps %}
+        <a class="cap{{ ' cap-ok' if c.confirmed }}" href="/admin/pg/users/{{ u.id }}#allotments" data-tip="{{ c.tip }}">{{ c.tag }}</a>{% endfor %}
       {% else %}<span style="color:var(--gray-400);">—</span>{% endif %}</td>
       <td>
         {% if u.plan_kind == 'paid' %}<span class="chip chip-green">{{ u.plan_name }}</span>
@@ -192,7 +225,7 @@
 
 {% if total_pages > 1 %}
 <div class="pu-pager">
-  {% set qs = '&q=' ~ (q|urlencode) ~ '&plan=' ~ (f_plan|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&type=' ~ (f_type|urlencode) ~ '&state=' ~ (f_state|urlencode) ~ '&lead=' ~ (f_lead|urlencode) ~ '&reg=' ~ (f_reg|urlencode) ~ '&prof=' ~ (f_prof|urlencode) ~ '&allot=' ~ (f_allot|urlencode) %}
+  {% set qs = '&q=' ~ (q|urlencode) ~ '&plan=' ~ (f_plan|urlencode) ~ '&status=' ~ (f_status|urlencode) ~ '&type=' ~ (f_type|urlencode) ~ '&state=' ~ (f_state|urlencode) ~ '&lead=' ~ (f_lead|urlencode) ~ '&reg=' ~ (f_reg|urlencode) ~ '&prof=' ~ (f_prof|urlencode) ~ '&allot=' ~ (f_allot|urlencode) ~ '&qual=' ~ (f_qual|urlencode) %}
   {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}">‹ Prev</a>{% endif %}
   <span class="cur">{{ page }} / {{ total_pages }}</span>
   {% if page < total_pages %}<a href="?page={{ page+1 }}{{ qs }}">Next ›</a>{% endif %}
@@ -249,5 +282,15 @@ function pgEmpChosen(){
   if(!document.getElementById('pgEmpMobile').value){ alert('Pick a staff member from the search first.'); return false; }
   return true;
 }
+</script>
+<div id="pgTip"></div>
+<script>
+(function(){var t=document.getElementById('pgTip');
+  document.addEventListener('mouseover',function(e){var el=e.target.closest&&e.target.closest('[data-tip]');
+    if(!el){t.style.display='none';return;} t.textContent=el.getAttribute('data-tip'); t.style.display='block';});
+  document.addEventListener('mousemove',function(e){if(t.style.display!=='block')return;
+    var x=e.clientX+14,y=e.clientY+16,w=t.offsetWidth,h=t.offsetHeight;
+    if(x+w>innerWidth-8)x=innerWidth-w-8; if(y+h>innerHeight-8)y=e.clientY-h-12; t.style.left=x+'px'; t.style.top=y+'px';});
+})();
 </script>
 {% endblock %}

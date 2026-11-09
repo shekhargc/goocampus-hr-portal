@@ -111,6 +111,24 @@ def _short_auth(code, name):
     return 'MCC' if code == 'mcc' else (name or code)
 
 
+# Capsule short forms for the admin Registered Doctors list + seat-allotment box (founder 2026-11-09:
+# "MCC, KEA"); the full name + state show on hover. Admin display only — the API `label` is unchanged.
+SHORT_TAGS = {
+    'mcc': 'MCC', 'aniims': 'ANIIMS', 'ntruhs': 'NTRUHS', 'arunachal': 'Arunachal', 'dme_assam': 'Assam',
+    'bceceb': 'BCECEB', 'gmch_chd': 'GMCH', 'dme_cg': 'DME CG', 'dmhs_dnh': 'DNH', 'ggsipu': 'GGSIPU',
+    'dte_goa': 'Goa', 'acpmec': 'ACPMEC', 'dmer_hr': 'Haryana', 'amru_hp': 'AMRU', 'jk_bopee': 'BOPEE',
+    'jceceb': 'JCECEB', 'kea': 'KEA', 'cee_kerala': 'CEE Kerala', 'dme_mp': 'DME MP', 'cetcell_mh': 'CET MH',
+    'dhs_manipur': 'Manipur', 'rims_imphal': 'RIMS', 'neigrihms': 'Meghalaya', 'dict_mz': 'Mizoram',
+    'dte_nagaland': 'Nagaland', 'ojee': 'Odisha', 'centac': 'CENTAC', 'bfuhs': 'BFUHS', 'ruhs': 'Rajasthan',
+    'smu_sikkim': 'SMU', 'dmer_tn': 'TN', 'knruhs': 'KNRUHS', 'dme_tripura': 'Tripura', 'dmetup': 'UP',
+    'hnbumu': 'HNBUMU', 'wbmcc': 'WBMCC',
+}
+
+
+def short_tag(code):
+    return SHORT_TAGS.get(code) or (_authorities().get(code, (code, ''))[0].split(' — ')[0])
+
+
 # Result rows whose `rank` is on a DIFFERENT state merit list than the authority's main one (Tamil Nadu's
 # Management Quota / NRI rows carry the MQ merit rank, not the GQ rank; 2026-11-05) — used by the results API's
 # rank_is_state_merit flag. (Matching itself is on the All-India rank only since 2026-11-09.)
@@ -304,5 +322,6 @@ def summary(conn):
                 c[hit[0]['program']] += 1
         tot = {k: sum(c[k] for c in cats.values()) for k in ('with_rank', 'mdms', 'dnb')}
         rows.append({'authority_code': code, 'authority_name': auths.get(code, (code, ''))[0], 'round': rd['round'],
+                     'short': short_tag(code), 'state_label': auths.get(code, ('', ''))[1],
                      'status': rd['status'], 'by_type': cats, 'total': tot})
     return rows
