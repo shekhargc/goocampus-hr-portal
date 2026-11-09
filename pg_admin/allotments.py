@@ -81,6 +81,10 @@ def _row(r, auths, mark=None):
            'rank_type': 'All India rank' if (r['authority_code'] == 'mcc' or r.get('rank') == r.get('rank_ai'))
                         else 'State rank',
            'rank_ai': r.get('rank_ai'),            # state lists: the All-India rank beside the state rank
+           # rank is the authority's own state merit rank (not the AIR, not another list's rank e.g. TN MQ/NRI)
+           'rank_is_state_merit': (r['authority_code'] != 'mcc' and r.get('rank') != r.get('rank_ai')
+                                   and (r['authority_code'], (r.get('quota_raw') or '').strip()) not in OTHER_LIST_RANKS),
+           'state_rank_label': _state_rank_label(r),
            'college': college, 'college_short': (college or '').split(',')[0].strip(),
            'state': r.get('state') or '', 'college_type': r.get('college_type') or '',
            'course': r['course'] or r['course_raw'], 'quota': r['quota'] or r['quota_raw'],
@@ -89,6 +93,18 @@ def _row(r, auths, mark=None):
            'marked_via': (mark or {}).get('via') or ''}
     out['label'] = f"{_short_auth(r['authority_code'], name)} {_short_round(r['round'])} · {out['course']}"
     return out
+
+
+def _state_rank_label(r):
+    """What the state-side rank of an allotment row is: '' for MCC / rows ranked by AIR (KEA)."""
+    code = r['authority_code']
+    if code == 'mcc' or r.get('rank') == r.get('rank_ai'):
+        return ''
+    st = (_authorities().get(code) or ('', ''))[1] or 'State'
+    q = (r.get('quota_raw') or '').strip()
+    if (code, q) in OTHER_LIST_RANKS:
+        return f'{st} {q} merit rank'          # e.g. "Tamil Nadu MQ merit rank" — not the TN (GQ) rank
+    return f'{st} rank'
 
 
 def _short_auth(code, name):
