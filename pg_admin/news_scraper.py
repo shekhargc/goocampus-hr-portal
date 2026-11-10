@@ -367,10 +367,16 @@ SOURCES = {
         'short': 'Assam',
         'authority_code': 'dme_assam',
         'news_authority': 'state:Assam',
-        'url': 'https://dme.assam.gov.in/latest/admission-notice-ugpgothersnew',
+        # 2026-11-02 the site moved to the new 'Standardized Website Framework 2.0': the old
+        # /latest/admission-notice-ugpgothersnew list (and every old PDF) is gone (404). New notices —
+        # UG + PG mixed — are posted as PDFs on the 'Educational Notice' document page below. That page
+        # also carries 2018 files re-uploaded on 02-Nov-2026 (so Last-Modified can't age them), hence
+        # the extra exclude for titles naming a year 2000-2025 (not '2025-26').
+        'url': 'https://dme.assam.gov.in/document-details/educational-notice-0',
         'reader': 'pdf_links_lastmod',
         'include': 'NEET[\\s_-]*PG|\\bPG\\b|P\\.G\\.|post[\\s-]*graduate|\\bMD\\b|\\bMS\\b|\\bDNB\\b|prospectus|bulletin',
-        'exclude': '\\bMDS\\b|dental|nursing|M\\.?\\s*Sc|pharm|ayush|homoeo|ayurved|post[\\s_-]*PG|\\bSR\\b|engagement',
+        'exclude': '\\bMDS\\b|dental|nursing|M\\.?\\s*Sc|pharm|ayush|homoeo|ayurved|post[\\s_-]*PG|\\bSR\\b|engagement'
+                   '|\\b20(?:0\\d|1\\d|2[0-5])\\b(?![-\u2013/]\\s*(?:20)?2[67])',
         'enabled': True,
     },
     # Tripura: ready — Official link: the DME Tripura home page (dme.tripura.gov.in) has a menu link 'NEET Counselling' → https://trmcc.admissions.nic.in/ (Tripura Medical Counselling
