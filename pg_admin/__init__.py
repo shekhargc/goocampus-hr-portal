@@ -30,7 +30,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              bookings_admin, college_master_admin, api_college,
                              pgcp_admin, api_pgcp, api_choice, choice_admin,
                              api_events, events_admin, api_track, analytics_admin,
-                             diag_home_state, diag_states, seat_matrix_admin, api_seat_matrix,
+                             diag_home_state, diag_states, diag_neet_scores, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
                              calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments,
@@ -656,6 +656,8 @@ def register_pg_admin(app):
                      diag_home_state.home_state_backfill, methods=['GET', 'POST'])
     app.add_url_rule('/admin/diag/pg-states', 'pg_states_cleanup',
                      diag_states.pg_states_cleanup, methods=['GET', 'POST'])
+    app.add_url_rule('/admin/diag/pg-scores', 'pg_scores_check',
+                     diag_neet_scores.pg_scores_check, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/save', 'pg_user_save',
                      users_admin.user_save, methods=['POST'])
     app.add_url_rule('/admin/pg/users/<int:user_id>/allotment-mark', 'pg_user_allotment_mark',
