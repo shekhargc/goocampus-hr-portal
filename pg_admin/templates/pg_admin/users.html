@@ -167,7 +167,7 @@
     <option value="no" {{ 'selected' if f_allot=='no' }}>Has rank — no seat</option>
     <option value="norank" {{ 'selected' if f_allot=='norank' }}>No rank on profile</option>
   </select>
-  <select name="qual" onchange="this.form.submit()" title="NEET-PG qualified = score {{ qualify_score }} or above">
+  <select name="qual" onchange="this.form.submit()" title="NEET-PG qualified = score {{ qualify_score }} or above{% if qual_cut %}; with no score, rank {{ '{:,}'.format(qual_cut) }} or better (result sheet){% endif %}">
     <option value="">NEET qualified: any</option>
     {% for k, lbl in qual_options %}<option value="{{ k }}" {{ 'selected' if f_qual==k }}>{{ lbl }}</option>{% endfor %}
   </select>
@@ -175,6 +175,7 @@
   {% if q or f_plan or f_status or f_type or f_state or f_lead or f_reg or f_prof or f_allot or f_qual %}<a class="pu-btn pu-btn-ghost" href="/admin/pg/users">Clear</a>
   <span style="font-size:0.82rem;color:var(--gray-500);align-self:center;">{{ '{:,}'.format(total_found or 0) }} doctor{{ '' if total_found == 1 else 's' }}</span>{% endif %}
   {% if session.get('is_admin') %}<a class="pu-btn pu-btn-ghost" href="/admin/diag/pg-states" title="Fix misspelt / duplicate states">🧹 Clean up states</a>{% endif %}
+  {% if session.get('is_admin') %}<a class="pu-btn pu-btn-ghost" href="/admin/diag/pg-scores" title="Check entered rank + score against the NEET-PG result sheet; fill blank scores">🔎 Check scores vs result</a>{% endif %}
 </form>
 
 {% if users %}
@@ -199,6 +200,8 @@
         {% if u.neet_pg_score %}<div class="pu-sub">Score {{ u.neet_pg_score|int }}</div>{% endif %}</td>
       <td style="white-space:nowrap;">{% if u.neet_pg_score and u.neet_pg_score >= qualify_score %}<span class="chip q-yes">✓ Qualified</span>
         {% elif u.neet_pg_score and u.neet_pg_score > 0 %}<span class="chip q-no">Not qualified</span>
+        {% elif u.neet_pg_rank and qual_cut and u.neet_pg_rank <= qual_cut %}<span class="chip q-yes" title="No score entered — rank {{ '{:,}'.format(u.neet_pg_rank) }} is within the qualifying rank ({{ '{:,}'.format(qual_cut) }}) on the result sheet">✓ Qualified <small>(by rank)</small></span>
+        {% elif u.neet_pg_rank and qual_cut %}<span class="chip q-no" title="No score entered — rank is below the qualifying rank ({{ '{:,}'.format(qual_cut) }}) on the result sheet">Not qualified <small>(by rank)</small></span>
         {% else %}<span style="color:var(--gray-400);">—</span>{% endif %}</td>
       <td style="white-space:nowrap;">{% if u.allot_caps %}{% for c in u.allot_caps %}
         <a class="cap{{ ' cap-ok' if c.confirmed }}" href="/admin/pg/users/{{ u.id }}#allotments" data-tip="{{ c.tip }}">{{ c.tag }}</a>{% endfor %}

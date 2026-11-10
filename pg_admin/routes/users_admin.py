@@ -156,12 +156,9 @@ _PROF_FILTERS = {       # key → (label, SQL). 'Incomplete' = domicile state (n
 
 
 # NEET-PG qualifying score (founder 2026-11-09): 262 and above = qualified, below = not qualified.
+# No score entered → the rank decides vs the result sheet's cut-off rank (2026-11-10; pg_admin/neet_qualify.py).
 NEET_QUALIFY_SCORE = 262
-_QUAL_FILTERS = {
-    'yes': ('Qualified (262+)', f"COALESCE(u.neet_pg_score,0) >= {NEET_QUALIFY_SCORE}"),
-    'no': ('Not qualified (<262)', f"(COALESCE(u.neet_pg_score,0) > 0 AND u.neet_pg_score < {NEET_QUALIFY_SCORE})"),
-    'unknown': ('Score not entered', "COALESCE(u.neet_pg_score,0) <= 0"),
-}
+_QUAL_LABELS = {'yes': 'Qualified (262+ / rank)', 'no': 'Not qualified', 'unknown': 'No score or rank'}
 
 
 @login_required
@@ -186,6 +183,7 @@ def users_admin():
     session['pg_users_back'] = request.full_path   # profile's "← All doctors" returns here (same page + filters/tab) — founder 2026-10-07
     conn = get_db()
     users, plans, tab_counts, states = [], [], {}, []
+    qual_cut = None
     allot_summary = []
     stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
              'blocked': 0, 'new_30d': 0}
@@ -247,8 +245,10 @@ def users_admin():
         # from a matching lead for display — this filter ignores that). (2026-10-19)
         if f_prof in _PROF_FILTERS:
             conds.append(_PROF_FILTERS[f_prof][1])
-        if f_qual in _QUAL_FILTERS:
-            conds.append(_QUAL_FILTERS[f_qual][1])
+        from pg_admin import neet_qualify as _nq
+        qual_cut = _nq.cutoff_rank(conn)
+        if f_qual in _QUAL_LABELS:
+            conds.append(_nq.qual_sql(conn)[f_qual])
         allot_summary = []
         try:
             from pg_admin import allotments as _al
@@ -439,8 +439,8 @@ def users_admin():
                            f_reg=f_reg, reg_options=[(k, v[0]) for k, v in _REG_WINDOWS.items()],
                            f_prof=f_prof, prof_options=[(k, v[0]) for k, v in _PROF_FILTERS.items()],
                            f_allot=f_allot, allot_summary=allot_summary,
-                           f_qual=f_qual, qual_options=[(k, v[0]) for k, v in _QUAL_FILTERS.items()],
-                           qualify_score=NEET_QUALIFY_SCORE,
+                           f_qual=f_qual, qual_options=list(_QUAL_LABELS.items()),
+                           qualify_score=NEET_QUALIFY_SCORE, qual_cut=qual_cut,
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
 
