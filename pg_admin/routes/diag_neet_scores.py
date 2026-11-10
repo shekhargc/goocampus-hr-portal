@@ -8,9 +8,10 @@ NBEMS master result (pg_neet_result) shows for that rank and sort them into:
   not_found — the rank is not in the result sheet
   score_only— score but no rank (shows the rank band that score falls in; nothing to fill)
 
-APPLY (admin confirm only): writes pg_users.neet_pg_score for the ticked doctors, using the
-score the server looks up again for the doctor's CURRENT rank (posted values are never trusted).
-"fill" rows are ticked by default; "mismatch" rows are not. Every change is logged in
+APPLY (admin confirm only): fills pg_users.neet_pg_score ONLY where it is blank and a rank is entered,
+using the score the server looks up again for the doctor's CURRENT rank (posted values are never
+trusted). Mismatches and score-only doctors are shown for information and NEVER changed — we can't
+tell whether the rank or the score was typed wrong (founder 2026-11-10). Every fill is logged in
 pg_profile_edit_log (source 'result_sheet'), visible in the doctor's profile.
 """
 import logging
@@ -72,8 +73,10 @@ def pg_scores_check():
                     f"SELECT id, neet_pg_rank, neet_pg_score FROM pg_users WHERE id IN ({ph})", tuple(ids)).fetchall()]
                 by_rank = NQ.score_for_ranks(conn, [r['neet_pg_rank'] for r in rows])
                 for r in rows:
+                    if (r['neet_pg_score'] or 0) > 0:      # an entered score is NEVER changed (founder 2026-11-10)
+                        continue
                     hit = by_rank.get(r['neet_pg_rank'] or 0)
-                    if not hit or hit[0] != hit[1] or hit[0] == r['neet_pg_score']:
+                    if not hit or hit[0] != hit[1] or hit[0] is None:
                         continue
                     new = hit[0]
                     conn.execute("UPDATE pg_users SET neet_pg_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -84,7 +87,7 @@ def pg_scores_check():
                                   str(new), admin.get('name') or 'admin', 'result_sheet'))
                     done += 1
                 conn.commit()
-            flash(f'Updated the NEET-PG score for {done} doctor(s) from the {NQ.NEET_YEAR} result sheet '
+            flash(f'Filled the NEET-PG score for {done} doctor(s) from the {NQ.NEET_YEAR} result sheet '
                   f'(logged in each profile).', 'success')
             return redirect(url_for('pg_scores_check'))
 
