@@ -213,7 +213,8 @@ def build_pdf(conn, set_id, prepared_by=''):
                 cr = it.get('closing_rank')
                 vals = (str(i), _t(it.get('institute')), _t(it.get('course')), _t(it.get('quota')),
                         _t(it.get('category')), f"{cr:,}" if isinstance(cr, int) else (str(cr) if cr else '-'),
-                        _money(it.get('fee')), _CHANCE.get(ch, ch.title()))
+                        _money(it.get('fee')) + (f"\n({it['fee_label']})" if it.get('fee') and it.get('fee_label') else ''),
+                        _CHANCE.get(ch, ch.title()))
                 for j, v in enumerate(vals):
                     if j == 7 and ch in _CHANCE_RGB:
                         r.cell(v, style=_chance_style(_CHANCE_RGB[ch]))
@@ -230,7 +231,9 @@ def build_pdf(conn, set_id, prepared_by=''):
     pdf.multi_cell(0, 4.2, _t(
         'Chance compares your rank with last year\'s closing rank for that seat in that round: '
         'Strong / High / Good = within last year\'s closing rank, Borderline = slightly beyond it, '
-        'Very low = well beyond it. Fees are annual tuition as last published and may change. '
+        'Very low = well beyond it. Fees: (2026-27) = the fee for this year as printed by the counselling '
+        'authority, i.e. tuition + admission/university fee (hostel and other college charges extra); '
+        '(2025) = last year\'s fee, shown until the 2026-27 fee is verified. Fees may change between rounds. '
         'Questions? Write to info@goocampus.in or call your GooCampus counsellor.'))
     out = pdf.output()
     return bytes(out), pdf_filename(s, d)

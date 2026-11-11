@@ -809,6 +809,12 @@ def _closing_rows(conn, auth, year, rd, a):
         r['compare_group'] = 'new' if r['compare'] in ('new_college', 'new_to_authority') else 'compared'
         r.setdefault('new_note', None)
         out.append(r)
+    # the fee to show next to an allotment: verified 2026-27 fee, else the 2025 fee (fee_2025 unchanged)
+    from pg_admin.data import fees as _FEES
+    for r in out:
+        r['fee'] = r.get('fee_2025')
+        r['fee_year'] = 2025 if r.get('fee_2025') is not None else None
+    _FEES.attach(conn, out, authority=cutoff_authority(auth))
     return out
 
 

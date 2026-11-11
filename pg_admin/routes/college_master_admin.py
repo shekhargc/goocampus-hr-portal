@@ -879,7 +879,10 @@ def college_fees():
         page = max(1, int(request.args.get('page', 1)))
     except Exception:
         page = 1
-    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 1"]
+    conn = get_db()
+    from pg_admin.data import fees as _FEES          # 2026-27 fee where verified, else 2025 (2026-11-11)
+    eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
+    where = ["COALESCE(c.is_reference,0)=0", f"{eff} IS NOT NULL", f"{eff} > 1"]
     params = []
     if kind == 'dnb':
         where.append("UPPER(COALESCE(c.degree,'')) LIKE ?"); params.append('%DNB%')
@@ -897,20 +900,21 @@ def college_fees():
         where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
     wsql = " WHERE " + " AND ".join(where)
     grp = " GROUP BY c.institute, c.course, c.quota, c.category "
-    conn = get_db()
-    rows, states, quotas, cats, total, priced_seats = [], [], [], [], 0, 0
+    rows, states, quotas, cats, total, priced_seats, fee26 = [], [], [], [], 0, 0, []
     try:
-        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + wsql + grp + ") t",
+        fee26 = _FEES.summary(conn)
+        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + fj + wsql + grp + ") t",
                              params).fetchone()['n']
         offset = (page - 1) * _FEES_PER_PAGE
         rows = conn.execute(
             "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
-            "MAX(c.institute_type) AS institute_type, MAX(c.fee) AS fee, MAX(c.year) AS fee_year, "
-            "MAX(a.master_id) AS id FROM pg_cutoffs c "
+            f"MAX(c.institute_type) AS institute_type, MAX({eff}) AS fee, MAX({effy}) AS fee_year, "
+            "MAX(a.master_id) AS id" + _FEES.detail_sql(conn) + " FROM pg_cutoffs c "
             "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
-            + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",
+            + fj + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",
             params + [_FEES_PER_PAGE, offset]).fetchall()
+        rows = [_FEES.present(dict(r)) for r in rows]
         # coverage: how many priced seat-rows exist at all (any filter off)
         priced_seats = conn.execute(
             "SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 "
@@ -931,7 +935,7 @@ def college_fees():
                            priced_seats=priced_seats, states=states, quotas=quotas,
                            categories=cats, kind=kind, state=state, quota=quota,
                            category=category, q=q, sort=sort, page=page, pages=pages,
-                           per_page=_FEES_PER_PAGE, active_section='goocampus_in')
+                           per_page=_FEES_PER_PAGE, active_section='goocampus_in', fee26=fee26)
 
 
 # ── Edit a college's master fields (team fills logos / corrects data) ─────────

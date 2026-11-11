@@ -359,11 +359,12 @@ def _fee_filters():
     }
 
 
-def _fee_where(f):
-    """Build the WHERE for a fee query. Only real, priced seats."""
+def _fee_where(f, eff='c.fee'):
+    """Build the WHERE for a fee query. Only real, priced seats. eff = the effective fee
+    expression (the verified 2026-27 fee when there is one, else the 2025 fee — fees.eff_fee)."""
     # fee > 1 drops the ~148 placeholder ₹1 rows (fee not filled in the source) + blanks,
     # so the explorer only shows genuine tuition (there is a clean gap: no real fee is ≤ ₹1).
-    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 1"]
+    where = ["COALESCE(c.is_reference,0)=0", f"{eff} IS NOT NULL", f"{eff} > 1"]
     params = []
     if f['family'] in ('medical', 'dnb'):
         dc, dp = _fam(f['family']); where.append(dc); params.append(dp)
@@ -410,38 +411,42 @@ def api_pg_fees():
     fee_min, fee_max = _int_arg('fee_min'), _int_arg('fee_max')
     sort = (request.args.get('sort') or 'fee_asc').strip()
     page = _page()
-    where, params = _fee_where(f)
-    wsql = " WHERE " + " AND ".join(where)
-    having, hparams = [], []
-    if fee_min is not None:
-        having.append("MAX(c.fee) >= ?"); hparams.append(fee_min)
-    if fee_max is not None:
-        having.append("MAX(c.fee) <= ?"); hparams.append(fee_max)
-    hsql = (" HAVING " + " AND ".join(having)) if having else ""
-    order = {'fee_desc': "fee DESC NULLS LAST",
-             'college': "institute ASC, course ASC",
-             'fee_asc': "fee ASC NULLS LAST"}.get(sort, "fee ASC NULLS LAST")
-    grp = " GROUP BY c.institute, c.course, c.quota, c.category "
     conn = get_db()
     try:
+        from pg_admin.data import fees as _FEES       # 2026-27 fee where verified, else 2025 (2026-11-11)
+        eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
+        where, params = _fee_where(f, eff)
+        wsql = " WHERE " + " AND ".join(where)
+        having, hparams = [], []
+        if fee_min is not None:
+            having.append(f"MAX({eff}) >= ?"); hparams.append(fee_min)
+        if fee_max is not None:
+            having.append(f"MAX({eff}) <= ?"); hparams.append(fee_max)
+        hsql = (" HAVING " + " AND ".join(having)) if having else ""
+        order = {'fee_desc': "fee DESC NULLS LAST",
+                 'college': "institute ASC, course ASC",
+                 'fee_asc': "fee ASC NULLS LAST"}.get(sort, "fee ASC NULLS LAST")
+        grp = " GROUP BY c.institute, c.course, c.quota, c.category "
         total = conn.execute(
-            "SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + wsql + grp + hsql + ") t",
+            "SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + fj + wsql + grp + hsql + ") t",
             params + hparams).fetchone()['n']
         offset = (page - 1) * _PER_PAGE
         rows = conn.execute(
             "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
             "MAX(c.institute_type) AS institute_type, MAX(c.seat_type) AS seat_type, "
-            "MAX(c.fee) AS fee, MAX(c.year) AS fee_year, MAX(a.master_id) AS id "
+            f"MAX({eff}) AS fee, MAX({effy}) AS fee_year, MAX(a.master_id) AS id"
+            + _FEES.detail_sql(conn) + " "
             "FROM pg_cutoffs c "
-            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORM}"
+            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORM}" + fj
             + wsql + grp + hsql + f" ORDER BY {order}, institute ASC LIMIT ? OFFSET ?",
             params + hparams + [_PER_PAGE, offset]).fetchall()
-        out = [{'id': r['id'], 'institute': r['institute'], 'course': r['course'],
+        out = [_FEES.present({'id': r['id'], 'institute': r['institute'], 'course': r['course'],
                 'degree': r['degree'], 'quota': r['quota'], 'category': r['category'],
                 'state': r['state'], 'institute_type': r['institute_type'],
                 'seat_type': r['seat_type'], 'fee': _num(r['fee']),
-                'fee_year': r['fee_year'], 'fee_period': 'year'} for r in rows]
+                'fee_year': r['fee_year'], 'fee_period': 'year',
+                **{k: r[k] for k in r.keys() if k.startswith('fee_') and k != 'fee_year'}}) for r in rows]
     except Exception as e:
         logging.error("api_pg_fees: %s", e)
         conn.close()
@@ -513,13 +518,17 @@ def api_pg_fees_college(college_id):
                 xp.append('%DNB%')
             if HIDE_DNB:
                 extra += " AND " + no_dnb_sql('c')
-            rows = [{'course': r['course'], 'degree': r['degree'], 'quota': r['quota'],
+            from pg_admin.data import fees as _FEES   # 2026-27 fee where verified, else 2025
+            eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
+            rows = [_FEES.present({'course': r['course'], 'degree': r['degree'], 'quota': r['quota'],
                      'category': r['category'], 'fee': _num(r['fee']),
-                     'fee_year': r['fee_year'], 'fee_period': 'year'} for r in conn.execute(
+                     'fee_year': r['fee_year'], 'fee_period': 'year',
+                     **{k: r[k] for k in r.keys() if k.startswith('fee_') and k != 'fee_year'}}) for r in conn.execute(
                 "SELECT c.course AS course, MAX(c.degree) AS degree, c.quota AS quota, "
-                "c.category AS category, MAX(c.fee) AS fee, MAX(c.year) AS fee_year FROM pg_cutoffs c "
-                f"WHERE c.institute IN ({ph}) AND COALESCE(c.is_reference,0)=0 "
-                "AND c.fee IS NOT NULL AND c.fee > 1" + extra +
+                f"c.category AS category, MAX({eff}) AS fee, MAX({effy}) AS fee_year"
+                + _FEES.detail_sql(conn) + " FROM pg_cutoffs c" + fj +
+                f" WHERE c.institute IN ({ph}) AND COALESCE(c.is_reference,0)=0 "
+                f"AND {eff} IS NOT NULL AND {eff} > 1" + extra +
                 " GROUP BY c.course, c.quota, c.category ORDER BY c.course, c.quota, c.category",
                 names + xp).fetchall()]
     except Exception as e:

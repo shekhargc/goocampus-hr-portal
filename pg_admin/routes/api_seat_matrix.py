@@ -227,6 +227,13 @@ def api_pg_seat_matrix():
         # 2025 closing ranks: All-India first + the state rank for state-rank authorities (founder 2026-11-01)
         from pg_admin.data import rank_bridge as _RB
         _RB.present_seat_rows(conn, body, out)
+        # fee to show: the verified 2026-27 fee for this seat, else the 2025 cut-off fee (cutoff_fee stays = 2025)
+        from pg_admin.data import fees as _FEES
+        for r in out:
+            r['fee'] = r.get('cutoff_fee')
+            r['fee_year'] = 2025 if r.get('cutoff_fee') is not None else None
+        _FEES.attach(conn, out, authority=_FEES.seat_matrix_authority(body), inst='college_name',
+                     course='course_name', quota='quota', category='category')
         for r in out:
             r.pop('cutoff_quota', None)
         return jsonify({

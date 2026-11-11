@@ -12,6 +12,7 @@ the same closing rank / chance / master link as auto-generated ones. (founder 20
 import logging
 from flask import request, jsonify, redirect, url_for, flash, g
 from db import get_db
+from pg_admin.data import fees as _FEES     # 2026-27 fees where verified, else 2025 (2026-11-11)
 from core.users import get_user
 from core.auth import login_required
 from pg_admin.routes.api_choice import (_chance, _NORMSQL, _deg_clause, _spec_core,
@@ -386,9 +387,9 @@ def choice_cutoff_search(set_id):
             where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
         rows = conn.execute(
             f"SELECT c.institute, c.course, c.quota, c.category, MIN(c.{col}) AS cr, "
-            "MAX(a.master_id) AS master_id, MAX(c.fee) AS fee "
+            f"MAX(a.master_id) AS master_id, MAX({_FEES.eff_fee(conn)}) AS fee "   # 2026-27 fee where verified
             "FROM pg_cutoffs c "
-            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} "
+            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} " + _FEES.join_sql(conn) +
             "WHERE " + " AND ".join(where) +
             " GROUP BY c.institute, c.course, c.quota, c.category "
             f"ORDER BY MIN(c.{col}) ASC NULLS LAST, c.institute ASC LIMIT {limit} OFFSET {offset}",

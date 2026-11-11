@@ -34,7 +34,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
                              calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments,
-                             mgmt_inquiries, archive_admin, results_api, neet_result_api)
+                             mgmt_inquiries, archive_admin, results_api, neet_result_api, fees_api)
 from pg_admin import news_scraper as _news_scraper
 
 
@@ -268,6 +268,9 @@ def register_pg_admin(app):
                      api_news_ingest.api_seatmatrix_dump, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/cutoffs-dump', 'api_cutoffs_dump',
                      api_news_ingest.api_cutoffs_dump, methods=['GET'])
+    # 2026-27 fee store: verified per-authority import + read-only check (founder 2026-11-11)
+    app.add_url_rule('/api/pg/fees/import', 'api_fees_import', fees_api.api_fees_import, methods=['POST'])
+    app.add_url_rule('/api/pg/fees/store', 'api_fees_store', fees_api.api_fees_store, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/status', 'api_news_inbox_status',
                      api_news_ingest.api_news_inbox_status, methods=['GET'])
     app.add_url_rule('/api/pg/news-inbox/heartbeat', 'api_news_inbox_heartbeat',

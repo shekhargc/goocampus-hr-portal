@@ -584,6 +584,9 @@ def api_pg_predictor():
                 key2master.setdefault(mr['alias_key'], mr['master_id'])
         except Exception:
             key2master = {}
+        # 2026-27 fees where verified (else the 2025 fee, tagged 2025) — founder 2026-11-11
+        from pg_admin.data import fees as _FEES
+        fmap = _FEES.load_map(conn, {r['authority'] for r in rows})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -609,6 +612,7 @@ def api_pg_predictor():
         d = _RB.present(as_dict(r))               # r1..closing_rank = All-India; *_state + rank_basis for state ranks
         d['chance'] = _chance(d.get('closing_rank'))
         d['fee_period'] = 'year'                   # college fee is annual tuition (founder 2026-10-06)
+        _FEES.attach(None, [d], fmap=fmap, base_year=year)   # fee / fee_year / fee_label / fee_info
         _c = d.get('course') or ''
         if _c not in _sg_cache:
             _sg_cache[_c] = _SG.public_group(_SG.group_of(_c, _sg_ctx))
