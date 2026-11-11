@@ -60,7 +60,8 @@ def read(path, out):
     K = KINDS[m.group(1)]
     published = f'{m.group(4)}-{m.group(3)}-{m.group(2)}'
     top = ' '.join(w[4] for w in p0 if w[1] < hy[0][1] - 20)
-    if 'Draft Merit list of PG NEET Medical (M.D./M.S.) courses (2026 - 2027)' not in top:
+    # 10-11-2026 REVISED draft list drops the '(2026 - 2027)' from the title — same list, replaces the draft
+    if 'Draft Merit list of PG NEET Medical (M.D./M.S.) courses' not in top:
         raise SystemExit('page title changed')
     recs, text_rolls, markers, ended = [], 0, collections.Counter(), False
     for p in d:
@@ -70,7 +71,7 @@ def read(path, out):
         if len(h) != 1:
             raise SystemExit(f'p{p.number + 1}: header row not found')
         hdr = ' '.join(w[4] for w in sorted(ws, key=lambda w: w[0]) if abs(w[1] - h[0][1]) < 3)
-        if hdr != K['head']:
+        if hdr.replace('NEET SCORE', 'NEET PERCENTILE') != K['head']:      # revised list renamed the column
             raise SystemExit(f'p{p.number + 1}: column headings changed')
         end = [w for w in ws if w[4] == '***']
         y_end = min(w[1] for w in end) if end else 1e9
