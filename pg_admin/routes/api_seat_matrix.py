@@ -37,6 +37,76 @@ def _dnb_cond(conn=None, body=None, program=None):
             except Exception: pass
     return [_NO_DNB] if HIDE_DNB else []
 
+_ROUND_OK = {'v': False}
+
+
+def _round_cols(conn):
+    """True once the later-round columns exist (boot DDL can be skipped on a Render cold start — never let
+    the seat matrix break because of it; cached only once present)."""
+    if _ROUND_OK['v']:
+        return True
+    try:
+        n = conn.execute("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_name='pg_seat_matrix_source' "
+                         "AND column_name IN ('round_no','round_label','list_type','pdf_body')").fetchone()['n']
+        m = conn.execute("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_name='pg_seat_matrix' "
+                         "AND column_name='new_in_round'").fetchone()['n']
+        _ROUND_OK['v'] = (int(n) == 4 and int(m) == 1)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    return _ROUND_OK['v']
+
+
+def _rounds(conn, year):
+    """Every counselling round with a seat list, per authority (founder 2026-11-11): round 1 = the full
+    matrices (current cards), later rounds = the vacancy lists stored with superseded=2.
+    [{authority_code, round_no, round_label, list_type, bodies:[{counselling_body, section, total_seats,
+      dnb_seats, has_pdf, uploaded_at, new_in_round_seats, round1_seats}]}]"""
+    if not _round_cols(conn):
+        return []
+    src = [dict(r) for r in conn.execute(
+        "SELECT counselling_body, COALESCE(authority_code,'') AS authority_code, COALESCE(section,'') AS section, "
+        "COALESCE(round_no,1) AS round_no, COALESCE(round_label,'') AS round_label, COALESCE(list_type,'') AS list_type, "
+        "COALESCE(sort_order,0) AS sort_order, (pdf_data IS NOT NULL OR COALESCE(pdf_body,'')<>'') AS has_pdf, "
+        "uploaded_at, total_seats FROM pg_seat_matrix_source WHERE academic_year=? "
+        "AND COALESCE(superseded,0) IN (0,2) AND COALESCE(section,'') <> 'nmc_initial' "
+        "ORDER BY (COALESCE(authority_code,'')<>'mcc'), authority_code, COALESCE(round_no,1), "
+        "COALESCE(sort_order,0), counselling_body", [year]).fetchall()]
+    if not src:
+        return []
+    agg = {r['counselling_body']: r for r in conn.execute(
+        "SELECT counselling_body, COALESCE(SUM(CASE WHEN " + _NO_DNB + " THEN seats ELSE 0 END),0) AS md, "
+        "COALESCE(SUM(CASE WHEN " + _ONLY_DNB + " THEN seats ELSE 0 END),0) AS dnb, "
+        "COALESCE(SUM(CASE WHEN " + _NO_DNB + " THEN COALESCE(new_in_round,0) ELSE 0 END),0) AS nr "
+        "FROM pg_seat_matrix WHERE academic_year=? GROUP BY counselling_body", [year]).fetchall()}
+    def seats(b, section):
+        a = agg.get(b)
+        if not a:
+            return 0, 0, 0
+        md, dn = int(a['md'] or 0), int(a['dnb'] or 0)
+        return (dn if section == 'dnb' else md), dn, int(a['nr'] or 0)
+    r1 = {}
+    for x in src:
+        if x['round_no'] == 1:
+            r1[(x['authority_code'], x['section'])] = seats(x['counselling_body'], x['section'])[0]
+    out, idx = [], {}
+    for x in src:
+        k = (x['authority_code'], x['round_no'])
+        if k not in idx:
+            idx[k] = {'authority_code': x['authority_code'], 'round_no': x['round_no'],
+                      'round_label': x['round_label'] or ('Round 1 — full seat matrix' if x['round_no'] == 1
+                                                          else f"Round {x['round_no']}"),
+                      'list_type': x['list_type'] or ('matrix' if x['round_no'] == 1 else 'vacancy'), 'bodies': []}
+            out.append(idx[k])
+        tot, dn, nr = seats(x['counselling_body'], x['section'])
+        idx[k]['bodies'].append({
+            'counselling_body': x['counselling_body'], 'section': x['section'], 'total_seats': tot,
+            'dnb_seats': dn, 'has_pdf': bool(x['has_pdf']), 'uploaded_at': str(x['uploaded_at'] or '')[:16],
+            'new_in_round_seats': nr if x['round_no'] > 1 else 0,
+            'round1_seats': r1.get((x['authority_code'], x['section'])) if x['round_no'] > 1 else None})
+    return out
+
+
 DEFAULT_BODY = 'All India MCC'
 DEFAULT_YEAR = '2026-27'
 
@@ -78,6 +148,7 @@ def api_pg_seat_matrix():
     quota = _s(request.args.get('quota'))
     itype = _s(request.args.get('institute_type'))
     new_only = _s(request.args.get('new_only')) in ('1', 'true', 'yes')
+    new_round_only = _s(request.args.get('new_round_only')) in ('1', 'true', 'yes')
     category = _s(request.args.get('category'))
     course = _s(request.args.get('course'))
     q = _s(request.args.get('q'))
@@ -110,6 +181,13 @@ def api_pg_seat_matrix():
         conds.append("institute_type = ?"); params.append(itype)
     if new_only:
         conds.append("has_cutoff = 0")
+    _c = get_db()
+    try:
+        has_round = _round_cols(_c)
+    finally:
+        _c.close()
+    if new_round_only and has_round:          # seats NEWLY ADDED in this later round (2026-11-11)
+        conds.append("COALESCE(new_in_round,0) > 0")
     if q:
         fn, pn = smart_name_clause("college_name", q)
         conds.append(f"({fn} OR college_code ILIKE ?)"); params.extend(pn + [f"%{q}%"])
@@ -125,7 +203,8 @@ def api_pg_seat_matrix():
         rows = conn.execute(
             f"SELECT sl_no, college_code, state, college_name, category, course_name, seats, "
             f"institute_type, quota, category_code, course_code, has_cutoff, new_reason, cutoff_institute, cutoff_course, "
-            f"cr_r1, cr_r2, cr_r3, cr_closing, cutoff_fee, cutoff_quota "
+            f"cr_r1, cr_r2, cr_r3, cr_closing, cutoff_fee, cutoff_quota"
+            f"{', COALESCE(new_in_round,0) AS new_in_round' if has_round else ''} "
             f"FROM pg_seat_matrix WHERE {where} "
             f"ORDER BY state ASC, college_name ASC, course_name ASC, id ASC "
             f"LIMIT {page_size} OFFSET {offset}", params).fetchall()
@@ -136,6 +215,7 @@ def api_pg_seat_matrix():
                 r['cutoff_fee'] = float(r['cutoff_fee'])
             # has_cutoff: 1 = bridged to the 2025 cut-off; 0 = new in 2026; None = not analysed
             r['is_new'] = (r.get('has_cutoff') == 0)
+            r['new_in_round'] = int(r.get('new_in_round') or 0)      # later round: newly added seats on this line
             # Simple type for "seats by college type" splits (MCC's institute_type is only
             # All-India / Central University / Deemed University).
             it = (r.get('institute_type') or '').lower()
@@ -209,6 +289,23 @@ def api_pg_seat_matrix_facets():
             src['row_count'], src['college_count'], src['total_seats'] = \
                 int(agg['rows'] or 0), int(agg['colleges'] or 0), int(agg['seats'] or 0)
         chg = change_payload(src)
+        rounds, this_round = [], None
+        if _round_cols(conn):
+            rounds = _rounds(conn, year)
+            tr = conn.execute(
+                "SELECT COALESCE(round_no,1) AS round_no, COALESCE(round_label,'') AS round_label, "
+                "COALESCE(list_type,'') AS list_type, COALESCE(pdf_body,'') AS pdf_body, "
+                "COALESCE(authority_code,'') AS authority_code, COALESCE(section,'') AS section "
+                "FROM pg_seat_matrix_source WHERE counselling_body=? AND academic_year=?", (body, year)).fetchone()
+            if tr:
+                this_round = dict(tr)
+                nr = conn.execute(f"SELECT COALESCE(SUM(COALESCE(new_in_round,0)),0) AS n {base}", p).fetchone()
+                this_round['new_in_round_seats'] = int(nr['n'] or 0)
+                if this_round['round_no'] > 1:
+                    for rd in rounds:
+                        for b in rd['bodies']:
+                            if b['counselling_body'] == body:
+                                this_round['round1_seats'] = b['round1_seats']
         # All bodies/years available (for a top-level switcher)
         # Current matrices only (an older provisional one that was superseded is hidden).
         available = [dict(r) for r in conn.execute(
@@ -249,7 +346,9 @@ def api_pg_seat_matrix_facets():
             'previous': chg['previous'], 'change': chg['change'],
             'available': [{**{k: v for k, v in a.items() if not k.startswith('prev_') and k not in
                               ('colleges_added', 'colleges_removed')}, **change_payload(a)} for a in available],
-            'has_pdf': bool(src and src['has_pdf']),
+            'has_pdf': bool(src and src['has_pdf']) or bool(this_round and this_round.get('pdf_body')),
+            # counselling rounds (Round 1 full matrix, Round 2 vacancy, ...) for a Round switch — 2026-11-11
+            'round': this_round, 'rounds': rounds,
         }), 200
     except Exception as e:
         try: conn.rollback()
@@ -275,6 +374,14 @@ def api_pg_seat_matrix_pdf():
         row = conn.execute(
             "SELECT pdf_name, pdf_data, pdf_content_type FROM pg_seat_matrix_source "
             "WHERE counselling_body=? AND academic_year=?", (body, year)).fetchone()
+        if (not row or not row['pdf_data']) and _round_cols(conn):
+            # one official file split into sections (MCC Round 2 vacancy) → serve the body that holds it
+            pb = conn.execute("SELECT COALESCE(pdf_body,'') AS b FROM pg_seat_matrix_source "
+                              "WHERE counselling_body=? AND academic_year=?", (body, year)).fetchone()
+            if pb and pb['b']:
+                row = conn.execute(
+                    "SELECT pdf_name, pdf_data, pdf_content_type FROM pg_seat_matrix_source "
+                    "WHERE counselling_body=? AND academic_year=?", (pb['b'], year)).fetchone()
     except Exception as e:
         logging.error("api_pg_seat_matrix_pdf: %s", e)
         row = None

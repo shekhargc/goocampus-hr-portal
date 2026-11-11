@@ -81,7 +81,7 @@
       <tbody>
         {% for s in sources %}
         <tr style="border-top:1px solid var(--gray-100);">
-          <td style="padding:10px 14px;font-weight:600;color:var(--navy);">{{ s.counselling_body }}{% if s.superseded %} <span style="font-size:0.7rem;font-weight:600;color:#92400e;background:#fef3c7;padding:1px 7px;border-radius:10px;">superseded — hidden from doctors</span>{% endif %}</td>
+          <td style="padding:10px 14px;font-weight:600;color:var(--navy);">{{ s.counselling_body }}{% if s.superseded == 2 %} <span style="font-size:0.7rem;font-weight:600;color:#1e40af;background:#dbeafe;padding:1px 7px;border-radius:10px;">later-round seat list — shown under its Round tab only</span>{% elif s.superseded %} <span style="font-size:0.7rem;font-weight:600;color:#92400e;background:#fef3c7;padding:1px 7px;border-radius:10px;">superseded — hidden from doctors</span>{% endif %}</td>
           <td style="padding:10px 14px;">{{ s.academic_year }}</td>
           <td style="padding:10px 14px;text-align:right;">{{ '{:,}'.format(s.row_count or 0) }}</td>
           <td style="padding:10px 14px;text-align:right;">{{ '{:,}'.format(s.college_count or 0) }}</td>
