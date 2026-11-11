@@ -811,6 +811,36 @@ def _closing_rows(conn, auth, year, rd, a):
     return out
 
 
+def _dnb_closing_rows(conn, auth, year, rd, a):
+    """DNB 2026 opening/closing per hospital × course × quota × category for this round — information only, no
+    2025 comparison (we hold no 2025 DNB cut-offs). Hospitals stay as published (never matched to our college list);
+    rank = AIR. Never used by the predictor / lists / rankings. (founder 2026-11-11)"""
+    conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.section,'')='dnb'",
+             "COALESCE(r.rank_ai, r.rank) IS NOT NULL"]
+    params = [auth, year, rd['round']]
+    a2 = {k: v for k, v in a.items() if k != 'course'}
+    _filters(a2, conds, params)
+    course = _s(a.get('course'))
+    if course:
+        conds.append("COALESCE(NULLIF(r.course,''), r.course_raw) = ?"); params.append(course)
+    out = []
+    for r in conn.execute(
+            "SELECT r.institute_raw AS institute, COALESCE(NULLIF(r.course,''), r.course_raw) AS course, r.quota, "
+            "r.allotted_category AS category, MAX(r.state) AS state, MAX(r.college_type) AS college_type, "
+            "COUNT(*) AS allotted, MIN(COALESCE(r.rank_ai, r.rank)) AS opening, MAX(COALESCE(r.rank_ai, r.rank)) AS closing, "
+            "MIN(CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END) AS opening_state, "
+            "MAX(CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END) AS closing_state "
+            f"FROM pg_results r WHERE {' AND '.join(conds)} "
+            "GROUP BY r.institute_raw, COALESCE(NULLIF(r.course,''), r.course_raw), r.quota, r.allotted_category",
+            params).fetchall():
+        r = dict(r)
+        r.update(closing_2025=None, closing_2025_round=None, closing_2025_state=None, change=None, change_pct=None,
+                 fee_2025=None, filled_earlier=False, compare='no_2025_data', trend='no_2025_data',
+                 compare_group='compared', new_note=None, program='dnb')
+        out.append(r)
+    return out
+
+
 def api_results_cutoffs():
     """GET /api/pg/results/cutoffs?authority=&round=&q=&course=&quota=&category=&state=&college_type=
     &trend=tougher|easier|same|new&rank=<open at your rank>&sort=closing (default, lowest first)|change|change_pct|institute&page=
@@ -821,7 +851,9 @@ def api_results_cutoffs():
     trend 'no_2025_seat' = 2025 had the course + quota but no seat in this category; 'no_2025_data' = this
     authority's 2025 cut-offs carry no row in this category at all (e.g. Tamil Nadu PwD), so no comparison exists; 'new_course' / 'new_quota' =
     an existing college's course / quota not offered in 2025)
-    &compare=direct|later_round|no_2025_seat|new_course|new_quota|new_to_authority|new_college. Has group_counts."""
+    &compare=direct|later_round|no_2025_seat|new_course|new_quota|new_to_authority|new_college. Has group_counts.
+    &program=dnb → DNB closing ranks per hospital (as published) × course × quota × category, no 2025 columns
+    (compared_with null, trend 'no_2025_data') — information only (2026-11-11)."""
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
@@ -832,7 +864,8 @@ def api_results_cutoffs():
         rd = _pick_round(conn, auth, year, _s(a.get('round')))
         if not rd:
             return jsonify({'ok': True, 'round': None, 'rows': []})
-        rows = _closing_rows(conn, auth, year, rd, a)
+        dnb = _s(a.get('program')).lower() == 'dnb'     # DNB closing ranks, info only (2026-11-11)
+        rows = _dnb_closing_rows(conn, auth, year, rd, a) if dnb else _closing_rows(conn, auth, year, rd, a)
         trend, rank = _s(a.get('trend')), _int(a.get('rank'))
         if trend:
             rows = [r for r in rows if r['trend'] == trend]
@@ -853,7 +886,8 @@ def api_results_cutoffs():
         page = max(1, _int(a.get('page')) or 1)
         size = min(500, max(1, _int(a.get('page_size')) or 100))
         total = len(rows)
-        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'compared_with': f"2025 {rd['round']}",
+        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'program': 'dnb' if dnb else 'mdms',
+                        'compared_with': None if dnb else f"2025 {rd['round']}",
                         'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india',
                         'group_counts': group_counts, 'reason_counts': reason_counts,
                         'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,

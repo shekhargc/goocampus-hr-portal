@@ -730,6 +730,15 @@ def api_seatmatrix_dump():
                             'source_total': (f.get('source') or {}).get('total_seats'),
                             'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []],
                             'round': f.get('round'), 'rounds': f.get('rounds'), 'has_pdf': f.get('has_pdf')})
+        if (request.args.get('resget') or '').startswith('/api/pg/results'):   # read-only results API check (2026-11-11)
+            from flask import current_app
+            qs = {k: v for k, v in request.args.items() if k not in ('resget', 'n')}
+            with current_app.test_client() as tc:
+                r = tc.get(request.args.get('resget'), query_string=qs, environ_base={'pg.internal_check': True})
+                f = r.get_json() or {}
+            if isinstance(f.get('rows'), list):
+                f['rows'] = f['rows'][:int(request.args.get('n') or 5)]
+            return jsonify({'ok': True, 'status': r.status_code, 'data': f})
         if request.args.get('rowsof'):          # first rows of /api/pg/seat-matrix (read-only check, 2026-11-11)
             from flask import current_app
             qs = {k: v for k, v in request.args.items() if k not in ('rowsof',)}
