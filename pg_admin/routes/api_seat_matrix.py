@@ -77,14 +77,16 @@ def _rounds(conn, year):
     agg = {r['counselling_body']: r for r in conn.execute(
         "SELECT counselling_body, COALESCE(SUM(CASE WHEN " + _NO_DNB + " THEN seats ELSE 0 END),0) AS md, "
         "COALESCE(SUM(CASE WHEN " + _ONLY_DNB + " THEN seats ELSE 0 END),0) AS dnb, "
-        "COALESCE(SUM(CASE WHEN " + _NO_DNB + " THEN COALESCE(new_in_round,0) ELSE 0 END),0) AS nr "
+        "COALESCE(SUM(CASE WHEN " + _NO_DNB + " THEN COALESCE(new_in_round,0) ELSE 0 END),0) AS nr, "
+        "COALESCE(SUM(CASE WHEN " + _ONLY_DNB + " THEN COALESCE(new_in_round,0) ELSE 0 END),0) AS nr_dnb "
         "FROM pg_seat_matrix WHERE academic_year=? GROUP BY counselling_body", [year]).fetchall()}
     def seats(b, section):
         a = agg.get(b)
         if not a:
             return 0, 0, 0
         md, dn = int(a['md'] or 0), int(a['dnb'] or 0)
-        return (dn if section == 'dnb' else md), dn, int(a['nr'] or 0)
+        nr = int((a['nr_dnb'] if section == 'dnb' else a['nr']) or 0)     # DNB body counts its DNB lines
+        return (dn if section == 'dnb' else md), dn, nr
     r1 = {}
     for x in src:
         if x['round_no'] == 1:
