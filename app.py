@@ -175,6 +175,35 @@ def dr_name_filter(value):
     return format_dr_name(value)
 
 
+@app.template_filter('inr')
+def inr_filter(value, short=False):
+    """Rupees in Indian style. inr → '₹3,10,000'; inr(True) → '₹3.1 L' / '₹2 Cr' for tight
+    dashboard cards (founder 2026-11-11: western 20,000,000 grouping was hard to read).
+    Negative values keep their sign: '-₹44.9 L'."""
+    try:
+        v = float(value or 0)
+    except (TypeError, ValueError):
+        return str(value)
+    sign, v = ('-' if v < 0 else ''), abs(v)
+    if short and v >= 1e7:
+        s = f"{v / 1e7:.2f}".rstrip('0').rstrip('.') + ' Cr'
+    elif short and v >= 1e5:
+        s = f"{v / 1e5:.2f}".rstrip('0').rstrip('.') + ' L'
+    else:
+        n = str(int(round(v)))
+        if len(n) > 3:
+            head, tail = n[:-3], n[-3:]
+            groups = []
+            while len(head) > 2:
+                groups.insert(0, head[-2:])
+                head = head[:-2]
+            if head:
+                groups.insert(0, head)
+            n = ','.join(groups) + ',' + tail
+        s = n
+    return f"{sign}₹{s}"
+
+
 @app.template_filter('local_mobile')
 def local_mobile_filter(value):
     """Display an Indian mobile WITHOUT the country code — strip a leading +91/91

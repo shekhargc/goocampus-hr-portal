@@ -7,6 +7,7 @@
         <div>
             <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Targets — {{ year }}</h1>
             <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Targets are <strong>Sales Revenue–based</strong> (Gross Revenue − Cost). Achieved values come from logged closures.</p>
+            <p style="margin:0.35rem 0 0;color:var(--gray-600);font-size:0.85rem;">Type the <strong>Annual</strong> target and the quarters (÷4) and months (÷12) fill in automatically. Change a quarter and its 3 months follow; change a month and its quarter + annual add up. Nothing is saved until you click <strong>Save Targets</strong>.</p>
         </div>
         <form method="GET" style="display:flex;gap:0.5rem;align-items:center;">
             <select name="year" onchange="this.form.submit()" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
@@ -31,23 +32,23 @@
                 </div>
             </div>
             <div style="font-size:0.82rem;color:var(--gray-600);">
-                <span style="margin-right:1rem;">Annual target: <strong style="color:var(--navy);">₹{{ '{:,.0f}'.format(t.annual) }}</strong></span>
-                <span>Achieved YTD: <strong style="color:var(--orange);">₹{{ '{:,.0f}'.format(t.achieved_total) }}</strong></span>
+                <span style="margin-right:1rem;">Annual target: <strong style="color:var(--navy);">{{ t.annual|inr }}</strong></span>
+                <span>Achieved YTD: <strong style="color:var(--orange);">{{ t.achieved_total|inr }}</strong></span>
             </div>
         </div>
 
-        <form method="POST" style="padding:1.1rem 1.3rem;">
+        <form method="POST" class="tgt-form" style="padding:1.1rem 1.3rem;">
             <input type="hidden" name="employee_id" value="{{ t.id }}" />
 
             <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:0.7rem;margin-bottom:1rem;">
                 <div>
                     <label style="display:block;font-size:0.72rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;margin-bottom:0.25rem;">Annual</label>
-                    <input type="number" step="0.01" name="annual" value="{{ '%.2f' % t.annual }}" {% if not can_edit %}disabled{% endif %} style="width:100%;padding:0.45rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;font-variant-numeric:tabular-nums;" />
+                    <input type="number" step="1" name="annual" value="{{ '%.0f' % t.annual }}" data-k="annual" {% if not can_edit %}disabled{% endif %} style="width:100%;padding:0.45rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;font-variant-numeric:tabular-nums;" />
                 </div>
                 {% for q in [1,2,3,4] %}
                 <div>
                     <label style="display:block;font-size:0.72rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;margin-bottom:0.25rem;">Q{{ q }}</label>
-                    <input type="number" step="0.01" name="q{{ q }}" value="{{ '%.2f' % t.quarters[q] }}" {% if not can_edit %}disabled{% endif %} style="width:100%;padding:0.45rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;font-variant-numeric:tabular-nums;" />
+                    <input type="number" step="1" name="q{{ q }}" value="{{ '%.0f' % t.quarters[q] }}" data-k="q" data-q="{{ q }}" {% if not can_edit %}disabled{% endif %} style="width:100%;padding:0.45rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;font-variant-numeric:tabular-nums;" />
                 </div>
                 {% endfor %}
             </div>
@@ -67,21 +68,21 @@
                             <td style="padding:0.3rem;font-weight:700;color:var(--navy);text-align:center;border:1px solid var(--gray-200);">Target</td>
                             {% for m in range(1, 13) %}
                             <td style="padding:0.2rem;border:1px solid var(--gray-200);">
-                                <input type="number" step="0.01" name="m{{ m }}" value="{{ '%.0f' % t.months[m] }}" {% if not can_edit %}disabled{% endif %} style="width:100%;padding:0.35rem 0.3rem;border:none;font-size:0.78rem;text-align:right;background:transparent;font-variant-numeric:tabular-nums;" />
+                                <input type="number" step="1" name="m{{ m }}" value="{{ '%.0f' % t.months[m] }}" data-k="m" data-m="{{ m }}" {% if not can_edit %}disabled{% endif %} style="width:100%;padding:0.35rem 0.3rem;border:none;font-size:0.78rem;text-align:right;background:transparent;font-variant-numeric:tabular-nums;" />
                             </td>
                             {% endfor %}
                         </tr>
                         <tr style="background:rgba(245,130,32,0.05);">
                             <td style="padding:0.3rem;font-weight:700;color:var(--orange);text-align:center;border:1px solid var(--gray-200);">Achieved</td>
                             {% for m in range(1, 13) %}
-                            <td style="padding:0.35rem 0.4rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:700;border:1px solid var(--gray-200);">{{ '{:,.0f}'.format(t.achieved[m]) }}</td>
+                            <td data-ach="{{ m }}" data-v="{{ '%.0f' % t.achieved[m] }}" style="padding:0.35rem 0.4rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:700;border:1px solid var(--gray-200);">{{ '{:,.0f}'.format(t.achieved[m]) }}</td>
                             {% endfor %}
                         </tr>
                         <tr>
                             <td style="padding:0.3rem;font-weight:700;color:var(--gray-600);text-align:center;border:1px solid var(--gray-200);">Diff</td>
                             {% for m in range(1, 13) %}
                             {% set d = t.achieved[m] - t.months[m] %}
-                            <td style="padding:0.35rem 0.4rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:{% if d >= 0 %}#10b981{% else %}#ef4444{% endif %};border:1px solid var(--gray-200);">{% if d >= 0 %}+{% endif %}{{ '{:,.0f}'.format(d) }}</td>
+                            <td data-diff="{{ m }}" style="padding:0.35rem 0.4rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:{% if d >= 0 %}#10b981{% else %}#ef4444{% endif %};border:1px solid var(--gray-200);">{% if d >= 0 %}+{% endif %}{{ '{:,.0f}'.format(d) }}</td>
                             {% endfor %}
                         </tr>
                     </tbody>
@@ -89,7 +90,8 @@
             </div>
 
             {% if can_edit %}
-            <div style="margin-top:1rem;text-align:right;">
+            <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:0.6rem;align-items:center;">
+                <button type="button" class="tgt-split" style="background:white;color:var(--navy);border:1px solid var(--gray-300);padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.85rem;" title="Re-split the annual target evenly into 4 quarters and 12 months">↻ Split annual evenly</button>
                 <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.55rem 1.2rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.85rem;">Save Targets for {{ t.name.split(' ')[0] }}</button>
             </div>
             {% endif %}
@@ -98,4 +100,60 @@
     {% endfor %}
     {% endif %}
 </div>
+<script>
+/* Targets auto-split (founder 2026-11-11). Annual → 4 equal quarters + 12 equal months
+   (whole rupees; any leftover rupee goes to the last quarter/month so totals still add up).
+   Quarter edit → its 3 months; month edit → its quarter and the annual are re-added. */
+(function () {
+  function num(el) { var v = parseFloat(el.value); return isNaN(v) ? 0 : v; }
+  function split(total, n) {
+    var base = Math.floor(total / n), out = [];
+    for (var i = 0; i < n; i++) out.push(base);
+    out[n - 1] = Math.round(total - base * (n - 1));
+    return out;
+  }
+  document.querySelectorAll('.tgt-form').forEach(function (f) {
+    var annual = f.querySelector('[data-k="annual"]');
+    if (!annual || annual.disabled) return;
+    var Q = {}, M = {};
+    f.querySelectorAll('[data-k="q"]').forEach(function (e) { Q[e.dataset.q] = e; });
+    f.querySelectorAll('[data-k="m"]').forEach(function (e) { M[e.dataset.m] = e; });
+    function diffs() {
+      for (var m = 1; m <= 12; m++) {
+        var a = f.querySelector('[data-ach="' + m + '"]'), d = f.querySelector('[data-diff="' + m + '"]');
+        if (!a || !d) continue;
+        var v = (parseFloat(a.dataset.v) || 0) - num(M[m]);
+        d.textContent = (v >= 0 ? '+' : '') + Math.round(v).toLocaleString('en-IN');
+        d.style.color = v >= 0 ? '#10b981' : '#ef4444';
+      }
+    }
+    function quarterToMonths(q) {
+      var parts = split(num(Q[q]), 3);
+      for (var i = 0; i < 3; i++) M[(q - 1) * 3 + 1 + i].value = parts[i];
+    }
+    function annualToAll() {
+      var qs = split(num(annual), 4);
+      for (var q = 1; q <= 4; q++) { Q[q].value = qs[q - 1]; quarterToMonths(q); }
+      diffs();
+    }
+    function sumQuarters() {
+      var t = 0; for (var q = 1; q <= 4; q++) t += num(Q[q]);
+      annual.value = Math.round(t);
+    }
+    annual.addEventListener('input', annualToAll);
+    Object.keys(Q).forEach(function (q) {
+      Q[q].addEventListener('input', function () { quarterToMonths(+q); sumQuarters(); diffs(); });
+    });
+    Object.keys(M).forEach(function (m) {
+      M[m].addEventListener('input', function () {
+        var q = Math.floor((m - 1) / 3) + 1, t = 0;
+        for (var i = 0; i < 3; i++) t += num(M[(q - 1) * 3 + 1 + i]);
+        Q[q].value = Math.round(t); sumQuarters(); diffs();
+      });
+    });
+    var btn = f.querySelector('.tgt-split');
+    if (btn) btn.addEventListener('click', annualToAll);
+  });
+})();
+</script>
 {% endblock %}

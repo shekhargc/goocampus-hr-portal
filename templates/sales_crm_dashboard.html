@@ -42,90 +42,127 @@
         <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.4rem 0.85rem;border-radius:0.4rem;font-size:0.82rem;font-weight:600;cursor:pointer;">Apply</button>
     </form>
 
+    {% set MN = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
     {% if totals %}
-    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1rem;margin-bottom:1.5rem;">
-        {% for label, t, a, d, key in [
-            ('Annual Sales Revenue', totals.annual_target, totals.annual_achieved, totals.annual_diff, 'annual'),
-            ('Quarter Sales Revenue', totals.quarter_target, totals.quarter_achieved, totals.quarter_diff, 'quarter'),
-            ('Month Sales Revenue', totals.month_target, totals.month_achieved, totals.month_diff, 'month')
+    {# Revenue cards — redesigned 2026-11-11 (founder: numbers were crammed together).
+       Achieved is the headline, target underneath, then progress + gap. Indian ₹ L / Cr. #}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:1rem;margin-bottom:1.5rem;">
+        {% for label, sub, t, a in [
+            ('Annual Sales Revenue', 'Jan – Dec ' ~ year, totals.annual_target, totals.annual_achieved),
+            ('Quarter Sales Revenue', 'Q' ~ quarter ~ ' · ' ~ MN[(quarter-1)*3][:3] ~ ' – ' ~ MN[(quarter-1)*3+2][:3] ~ ' ' ~ year, totals.quarter_target, totals.quarter_achieved),
+            ('Month Sales Revenue', month_label, totals.month_target, totals.month_achieved)
         ] %}
-        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.1rem 1.3rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-            <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">{{ label }}</div>
-            <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:0.5rem;">
-                <div>
-                    <div style="font-size:0.72rem;color:var(--gray-400);">Target</div>
-                    <div style="font-size:1.15rem;font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(t) }}</div>
-                </div>
-                <div>
-                    <div style="font-size:0.72rem;color:var(--gray-400);">Achieved</div>
-                    <div style="font-size:1.15rem;font-weight:700;color:var(--orange);">₹{{ '{:,.0f}'.format(a) }}</div>
-                </div>
-                <div>
-                    <div style="font-size:0.72rem;color:var(--gray-400);">Diff</div>
-                    <div style="font-size:1.15rem;font-weight:700;color:{% if d >= 0 %}#10b981{% else %}#ef4444{% endif %};">{% if d >= 0 %}+{% endif %}₹{{ '{:,.0f}'.format(d) }}</div>
-                </div>
+        {% set pct = (a / t * 100) if t > 0 else 0 %}
+        {% set gap = a - t %}
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.15rem 1.35rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem;">
+                <div style="font-size:0.74rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">{{ label }}</div>
+                <div style="font-size:0.74rem;color:var(--gray-400);white-space:nowrap;">{{ sub }}</div>
             </div>
-            {% set pct = (a / t * 100) if t > 0 else 0 %}
-            <div style="height:6px;background:var(--gray-100);border-radius:3px;margin-top:0.65rem;overflow:hidden;">
-                <div style="height:100%;width:{{ pct if pct < 100 else 100 }}%;background:linear-gradient(90deg,var(--orange),var(--orange-dark));border-radius:3px;"></div>
+            <div style="margin-top:0.7rem;font-size:0.72rem;color:var(--gray-500);">Achieved</div>
+            <div style="font-size:1.9rem;font-weight:800;color:var(--orange);line-height:1.15;font-variant-numeric:tabular-nums;" title="{{ a|inr }}">{{ a|inr(True) }}</div>
+            {% if t > 0 %}
+            <div style="font-size:0.88rem;color:var(--gray-600);margin-top:0.15rem;">of <strong style="color:var(--navy);" title="{{ t|inr }}">{{ t|inr(True) }}</strong> target</div>
+            <div style="height:8px;background:var(--gray-100);border-radius:4px;margin-top:0.75rem;overflow:hidden;">
+                <div style="height:100%;width:{{ pct if pct < 100 else 100 }}%;background:{{ '#10b981' if pct >= 100 else 'linear-gradient(90deg,var(--orange),var(--orange-dark))' }};border-radius:4px;"></div>
             </div>
-            <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">{{ '%.1f' % pct }}% of target</div>
+            <div style="display:flex;justify-content:space-between;margin-top:0.5rem;font-size:0.8rem;">
+                <span style="font-weight:700;color:var(--navy);">{{ '%.1f' % pct }}% done</span>
+                {% if gap >= 0 %}
+                <span style="font-weight:700;color:#10b981;" title="{{ gap|inr }}">{{ gap|inr(True) }} ahead</span>
+                {% else %}
+                <span style="font-weight:700;color:#ef4444;" title="{{ (-gap)|inr }}">{{ (-gap)|inr(True) }} to go</span>
+                {% endif %}
+            </div>
+            {% else %}
+            <div style="font-size:0.85rem;color:var(--gray-500);margin-top:0.35rem;">No target set{% if is_admin %} · <a href="/sales/targets?year={{ year }}" style="color:var(--orange);font-weight:600;text-decoration:none;">Set targets &rarr;</a>{% endif %}</div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
     {% endif %}
 
+    {# Team Performance — MONTH only (founder 2026-11-11): the month's target vs achieved per
+       member, with a month picker right on the card to look back at any month. #}
+    {% set th = 'padding:0.7rem 0.7rem;font-weight:600;color:var(--gray-600);font-size:0.76rem;text-transform:uppercase;' %}
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;margin-bottom:1.5rem;">
-        <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;">
-            Team Performance &mdash; {{ month_label }}
+        <div style="padding:0.85rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+            <span style="font-weight:700;color:var(--navy);font-size:0.95rem;">Team Performance &mdash; {{ month_label }}</span>
+            <form method="GET" style="display:flex;gap:0.4rem;align-items:center;margin:0;">
+                <label style="font-size:0.78rem;color:var(--gray-600);font-weight:600;">Month:</label>
+                <select name="month" onchange="this.form.submit()" style="padding:0.35rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.83rem;background:white;">
+                    {% for m in range(1, 13) %}<option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ MN[m-1] }}</option>{% endfor %}
+                </select>
+                <select name="year" onchange="this.form.submit()" style="padding:0.35rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.83rem;background:white;">
+                    {% for y in range(year-2, year+2) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                </select>
+            </form>
         </div>
         {% if rows %}
         <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
                 <thead>
                     <tr style="background:var(--gray-50);text-align:left;">
-                        <th style="padding:0.7rem 0.8rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;width:55px;">Sl No</th>
-                        <th style="padding:0.7rem 0.8rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Sales Member</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;" title="Annual Sales Revenue — Target / Achieved">Annual T/A</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;" title="Quarter Sales Revenue — Target / Achieved">Quarter T/A</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;" title="Month Sales Revenue — Target / Achieved">Month T/A</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Leads</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Hot</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Calls</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Talk</th>
+                        <th style="{{ th }}width:50px;">Sl No</th>
+                        <th style="{{ th }}">Sales Member</th>
+                        <th style="{{ th }}text-align:right;">{{ MN[month-1][:3] }} Target</th>
+                        <th style="{{ th }}text-align:right;">{{ MN[month-1][:3] }} Achieved</th>
+                        <th style="{{ th }}min-width:130px;">Progress</th>
+                        <th style="{{ th }}text-align:right;">Gap</th>
+                        <th style="{{ th }}text-align:center;">Leads</th>
+                        <th style="{{ th }}text-align:center;">Hot</th>
+                        <th style="{{ th }}text-align:center;">Calls</th>
+                        <th style="{{ th }}text-align:center;">Talk</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for r in rows %}
-                    <tr style="border-top:1px solid var(--gray-100);cursor:pointer;transition:background 0.15s;" onclick="window.location='/sales/member/{{ r.id }}'" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''" title="Click to drill into {{ r.name }}'s sales data">
-                        <td style="padding:0.7rem 0.8rem;color:var(--gray-500);font-weight:600;">{{ loop.index }}</td>
-                        <td style="padding:0.7rem 0.8rem;">
+                    <tr style="border-top:1px solid var(--gray-100);cursor:pointer;transition:background 0.15s;" onclick="window.location='/sales/member/{{ r.id }}?year={{ year }}&month={{ month }}'" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''" title="Click to drill into {{ r.name }}'s sales data">
+                        <td style="padding:0.7rem;color:var(--gray-500);font-weight:600;">{{ loop.index }}</td>
+                        <td style="padding:0.7rem;">
                             <div style="font-weight:600;color:var(--navy);display:flex;align-items:center;gap:0.4rem;">
                                 {{ r.name }}
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" style="opacity:0.7;"><polyline points="9 18 15 12 9 6"/></svg>
                             </div>
                             <div style="font-size:0.72rem;color:var(--gray-500);">{{ r.emp_code }} &middot; <span style="text-transform:capitalize;">{{ r.role }}</span></div>
                         </td>
-                        <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
-                            <div style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(r.annual_target) }}</div>
-                            <div style="font-size:0.78rem;color:{% if r.annual_diff >= 0 %}#10b981{% else %}#ef4444{% endif %};font-weight:600;">₹{{ '{:,.0f}'.format(r.annual_achieved) }} ({{ '%.0f' % r.annual_pct }}%)</div>
+                        <td style="padding:0.7rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--navy);">{% if r.month_target > 0 %}{{ r.month_target|inr }}{% else %}<span style="color:var(--gray-400);font-weight:400;">not set</span>{% endif %}</td>
+                        <td style="padding:0.7rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--orange);">{{ r.month_achieved|inr }}</td>
+                        <td style="padding:0.7rem;">
+                            {% if r.month_target > 0 %}
+                            <div style="display:flex;align-items:center;gap:0.45rem;">
+                                <div style="flex:1;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;min-width:60px;">
+                                    <div style="height:100%;width:{{ r.month_pct if r.month_pct < 100 else 100 }}%;background:{{ '#10b981' if r.month_pct >= 100 else 'var(--orange)' }};"></div>
+                                </div>
+                                <span style="font-size:0.78rem;font-weight:700;color:var(--navy);min-width:38px;text-align:right;">{{ '%.0f' % r.month_pct }}%</span>
+                            </div>
+                            {% else %}<span style="color:var(--gray-400);">—</span>{% endif %}
                         </td>
-                        <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
-                            <div style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(r.quarter_target) }}</div>
-                            <div style="font-size:0.78rem;color:{% if r.quarter_diff >= 0 %}#10b981{% else %}#ef4444{% endif %};font-weight:600;">₹{{ '{:,.0f}'.format(r.quarter_achieved) }} ({{ '%.0f' % r.quarter_pct }}%)</div>
+                        <td style="padding:0.7rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">
+                            {% if r.month_target > 0 %}
+                                {% if r.month_diff >= 0 %}<span style="color:#10b981;">+{{ r.month_diff|inr }}</span>{% else %}<span style="color:#ef4444;">{{ r.month_diff|inr }}</span>{% endif %}
+                            {% else %}<span style="color:var(--gray-400);font-weight:400;">—</span>{% endif %}
                         </td>
-                        <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
-                            <div style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(r.month_target) }}</div>
-                            <div style="font-size:0.78rem;color:{% if r.month_diff >= 0 %}#10b981{% else %}#ef4444{% endif %};font-weight:600;">₹{{ '{:,.0f}'.format(r.month_achieved) }} ({{ '%.0f' % r.month_pct }}%)</div>
-                        </td>
-                        <td style="padding:0.7rem 0.6rem;text-align:center;font-weight:600;color:var(--navy);">{{ r.leads_open }}</td>
-                        <td style="padding:0.7rem 0.6rem;text-align:center;">
+                        <td style="padding:0.7rem;text-align:center;font-weight:600;color:var(--navy);">{{ r.leads_open }}</td>
+                        <td style="padding:0.7rem;text-align:center;">
                             {% if r.leads_hot %}<span style="background:#fee2e2;color:#b91c1c;padding:0.15rem 0.45rem;border-radius:0.3rem;font-weight:700;font-size:0.78rem;">{{ r.leads_hot }}</span>{% else %}<span style="color:var(--gray-400);">0</span>{% endif %}
                         </td>
-                        <td style="padding:0.7rem 0.6rem;text-align:center;font-weight:600;color:var(--navy);">{{ r.calls_month }}</td>
-                        <td style="padding:0.7rem 0.6rem;text-align:center;color:var(--gray-600);">{{ (r.talk_minutes_month // 60) }}h {{ r.talk_minutes_month % 60 }}m</td>
+                        <td style="padding:0.7rem;text-align:center;font-weight:600;color:var(--navy);">{{ r.calls_month }}</td>
+                        <td style="padding:0.7rem;text-align:center;color:var(--gray-600);">{{ (r.talk_minutes_month // 60) }}h {{ r.talk_minutes_month % 60 }}m</td>
                     </tr>
                     {% endfor %}
+                    {% if totals %}
+                    {% set tpct = (totals.month_achieved / totals.month_target * 100) if totals.month_target > 0 else 0 %}
+                    <tr style="border-top:2px solid var(--gray-200);background:var(--gray-50);font-weight:700;">
+                        <td style="padding:0.7rem;"></td>
+                        <td style="padding:0.7rem;color:var(--navy);">Team total</td>
+                        <td style="padding:0.7rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--navy);">{{ totals.month_target|inr }}</td>
+                        <td style="padding:0.7rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);">{{ totals.month_achieved|inr }}</td>
+                        <td style="padding:0.7rem;font-size:0.78rem;color:var(--navy);">{% if totals.month_target > 0 %}{{ '%.0f' % tpct }}%{% else %}—{% endif %}</td>
+                        <td style="padding:0.7rem;text-align:right;font-variant-numeric:tabular-nums;">{% if totals.month_target > 0 %}{% if totals.month_diff >= 0 %}<span style="color:#10b981;">+{{ totals.month_diff|inr }}</span>{% else %}<span style="color:#ef4444;">{{ totals.month_diff|inr }}</span>{% endif %}{% else %}—{% endif %}</td>
+                        <td colspan="4"></td>
+                    </tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>
@@ -154,8 +191,8 @@
                         <tr style="border-top:1px solid var(--gray-100);">
                             <td style="padding:0.55rem 0.5rem 0.55rem 0;color:var(--navy);font-weight:600;">{{ p.product_name or '—' }}</td>
                             <td style="padding:0.55rem 0;text-align:right;">{{ p.deals }}</td>
-                            <td style="padding:0.55rem 0;text-align:right;font-variant-numeric:tabular-nums;">₹{{ '{:,.0f}'.format(p.revenue) }}</td>
-                            <td style="padding:0.55rem 0;text-align:right;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums;">₹{{ '{:,.0f}'.format(p.margin) }}</td>
+                            <td style="padding:0.55rem 0;text-align:right;font-variant-numeric:tabular-nums;">{{ p.revenue|inr }}</td>
+                            <td style="padding:0.55rem 0;text-align:right;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums;">{{ p.margin|inr }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
