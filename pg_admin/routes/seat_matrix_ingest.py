@@ -15,8 +15,8 @@ from db import get_db
 _ROW_COLS = ('sl_no', 'college_code', 'state', 'college_name', 'category', 'course_name', 'seats',
              'section', 'institute_type', 'quota', 'category_code', 'course_code', 'cutoff_institute',
              'cutoff_course', 'cutoff_quota', 'cutoff_category', 'has_cutoff', 'new_reason',
-             'cr_r1', 'cr_r2', 'cr_r3', 'cr_closing', 'cutoff_fee')
-_INT_COLS = {'sl_no', 'seats', 'has_cutoff', 'cr_r1', 'cr_r2', 'cr_r3', 'cr_closing'}
+             'cr_r1', 'cr_r2', 'cr_r3', 'cr_closing', 'cutoff_fee', 'new_in_round')
+_INT_COLS = {'sl_no', 'seats', 'has_cutoff', 'cr_r1', 'cr_r2', 'cr_r3', 'cr_closing', 'new_in_round'}
 
 
 # What the replaced version looked like — so the site can say "what changed" from DATA, never typed
@@ -64,7 +64,10 @@ def _v(r, c):
 def api_seat_matrix_ingest():
     """POST /api/pg/seat-matrix/ingest  (X-News-Key)
     {body, year, section, authority_code, sort_order, source_file_name, pdf_name, pdf_b64,
-     rows:[{...}], supersede:[body,...], notes}"""
+     rows:[{...}], supersede:[body,...], notes,
+     round_no?, round_label?, list_type?, pdf_body?}
+    round_no > 1 = a later round's seat list (e.g. MCC Round 2 clear vacancy): stored with superseded=2 so
+    it never mixes into the Round-1 full matrix used by rankings / lists / predictor (2026-11-11)."""
     from pg_admin.routes.api_news_ingest import _ok
     if not _ok():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
@@ -83,6 +86,11 @@ def api_seat_matrix_ingest():
     from pg_admin.data.seat_matrix_tables import ensure_pg_seat_matrix
     ensure_pg_seat_matrix()
     auth = (d.get('authority_code') or 'mcc').strip()
+    try:
+        round_no = max(1, int(d.get('round_no') or 1))
+    except (TypeError, ValueError):
+        round_no = 1
+    sup_flag = 2 if round_no > 1 else 0
     conn = get_db()
     try:
         ensure_prev_cols(conn)
@@ -109,13 +117,18 @@ def api_seat_matrix_ingest():
         if src:
             conn.execute("UPDATE pg_seat_matrix_source SET source_file_name=?, pdf_name=?, row_count=?, "
                          "college_count=?, total_seats=?, notes=?, uploaded_by=?, authority_code=?, section=?, "
-                         "sort_order=?, superseded=0, uploaded_at=CURRENT_TIMESTAMP WHERE id=?", vals + [src['id']])
+                         "sort_order=?, superseded=?, uploaded_at=CURRENT_TIMESTAMP WHERE id=?",
+                         vals + [sup_flag, src['id']])
             sid = src['id']
         else:
             sid = conn.execute("INSERT INTO pg_seat_matrix_source (source_file_name, pdf_name, row_count, "
                                "college_count, total_seats, notes, uploaded_by, authority_code, section, sort_order, "
                                "counselling_body, academic_year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
                                vals + [body, year]).fetchone()['id']
+            conn.execute("UPDATE pg_seat_matrix_source SET superseded=? WHERE id=?", [sup_flag, sid])
+        conn.execute("UPDATE pg_seat_matrix_source SET round_no=?, round_label=?, list_type=?, pdf_body=? WHERE id=?",
+                     [round_no, (d.get('round_label') or '').strip()[:80], (d.get('list_type') or '').strip()[:40],
+                      (d.get('pdf_body') or '').strip()[:200], sid])
         if pdf:
             conn.execute("UPDATE pg_seat_matrix_source SET pdf_data=?, pdf_content_type='application/pdf' "
                          "WHERE id=?", [pdf, sid])
@@ -139,7 +152,7 @@ def api_seat_matrix_ingest():
                 sup.append(b)
         conn.commit()
         return jsonify({'ok': True, 'body': body, 'rows': len(rows), 'colleges': colleges,
-                        'seats': seats, 'superseded': sup, 'pdf': bool(pdf)})
+                        'seats': seats, 'superseded': sup, 'pdf': bool(pdf), 'round_no': round_no})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

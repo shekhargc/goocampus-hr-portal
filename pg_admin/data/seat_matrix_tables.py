@@ -80,6 +80,17 @@ def ensure_pg_seat_matrix():
         for col, typ in (('superseded', 'INTEGER DEFAULT 0'), ('section', "TEXT DEFAULT ''"),
                          ('sort_order', 'INTEGER DEFAULT 0')):
             conn.execute(f"ALTER TABLE pg_seat_matrix_source ADD COLUMN IF NOT EXISTS {col} {typ}")
+        # Later counselling ROUNDS (founder 2026-11-11): Round 1 = the full matrix (round_no 1, as before).
+        # A later round's seat list (e.g. MCC Round 2 "clear vacancy") is stored as its OWN body with
+        # round_no 2.., list_type ('vacancy' / 'virtual_vacancy') and superseded=2, so every full-matrix
+        # feature (rankings, recommended lists, Desk, predictor bridge, health, MCC headline) — which all
+        # read superseded=0 — never sees it. Only the seat-matrix screen shows it, behind a Round switch.
+        # new_in_round = seats on that line that are NEWLY ADDED in this round (from the authority's
+        # "newly added seats" file); pdf_body = serve another body's PDF (one file split into sections).
+        for col, typ in (('round_no', 'INTEGER DEFAULT 1'), ('round_label', "TEXT DEFAULT ''"),
+                         ('list_type', "TEXT DEFAULT ''"), ('pdf_body', "TEXT DEFAULT ''")):
+            conn.execute(f"ALTER TABLE pg_seat_matrix_source ADD COLUMN IF NOT EXISTS {col} {typ}")
+        conn.execute("ALTER TABLE pg_seat_matrix ADD COLUMN IF NOT EXISTS new_in_round INTEGER DEFAULT 0")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_seat_matrix_quota ON pg_seat_matrix (quota)")
         conn.execute("UPDATE pg_seat_matrix SET authority_code='mcc' " + _mcc_where)
         conn.execute("UPDATE pg_seat_matrix_source SET authority_code='mcc' " + _mcc_where)
