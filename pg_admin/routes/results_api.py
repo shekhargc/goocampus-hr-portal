@@ -22,6 +22,7 @@ DNB courses stay hidden from doctors (HIDE_DNB), like everywhere else.
 import base64
 import logging
 import statistics
+import time
 from collections import defaultdict, Counter
 from flask import request, jsonify, render_template, redirect, url_for, flash
 from db import get_db
@@ -776,6 +777,90 @@ def _closing_rows(conn, auth, year, rd, a):
     return out
 
 
+_DNB_STATE = {'at': 0.0, 'auth': None, 'exact': {}, 'first': {}, 'pats': []}
+_STATE_ALIAS = {'new delhi': 'Delhi', 'delhi nct': 'Delhi', 'orissa': 'Odisha', 'pondicherry': 'Puducherry',
+                'bangalore': 'Karnataka', 'bengaluru': 'Karnataka', 'mumbai': 'Maharashtra', 'kolkata': 'West Bengal',
+                'chennai': 'Tamil Nadu', 'hyderabad': 'Telangana', 'srinagar': 'Jammu and Kashmir',
+                'gurugram': 'Haryana', 'gurgaon': 'Haryana', 'noida': 'Uttar Pradesh'}
+
+
+def _canon_state(s):
+    s = ' '.join((s or '').split())
+    return 'Jammu and Kashmir' if s.lower() in ('jammu and kashmir', 'jammu & kashmir') else s
+
+
+def _dnb_state_of(conn, auth, names):
+    """{hospital text as published: state}. DNB results carry no state (hospitals are never matched to our college
+    list), so (founder 2026-11-11, state filter on DNB closing ranks): a state authority -> its own state; MCC -> the
+    same hospital in MCC's DNB seat matrix (exact text, else a first-segment match unique to one state), else the
+    last state named in the address (agrees with the seat matrix on 99% of hospitals)."""
+    import re as _re
+    from pg_admin.authorities import get_authority
+    au = get_authority(auth) or {}
+    if au.get('kind') == 'state' and au.get('state'):
+        return {n: _canon_state(au['state']) for n in names}
+    norm = lambda t: _re.sub(r'[^a-z0-9]+', ' ', (t or '').lower()).strip()
+    c = _DNB_STATE
+    if c['auth'] != auth or time.time() - c['at'] > 3600:
+        exact, first, states = {}, defaultdict(set), set()
+        for r in conn.execute("SELECT DISTINCT college_name, state FROM pg_seat_matrix WHERE authority_code=? "
+                              "AND COALESCE(section,'')='dnb' AND COALESCE(state,'')<>''", [auth]).fetchall():
+            st = _canon_state(r['state'])
+            exact.setdefault(norm(r['college_name']), st)
+            first[norm((r['college_name'] or '').split(',')[0])].add(st)
+        for r in conn.execute("SELECT DISTINCT state FROM pg_seat_matrix WHERE COALESCE(state,'')<>''").fetchall():
+            states.add(_canon_state(r['state']))
+        pats = [(norm(x), x) for x in states] + [(k, v) for k, v in _STATE_ALIAS.items()]
+        c.update(at=time.time(), auth=auth, exact=exact,
+                 first={k: next(iter(v)) for k, v in first.items() if len(v) == 1}, pats=pats)
+    out = {}
+    for n in names:
+        k = norm(n)
+        st = c['exact'].get(k) or c['first'].get(norm((n or '').split(',')[0]))
+        if not st:
+            t, pos = ' ' + k + ' ', -1
+            for p, name in c['pats']:
+                i = t.rfind(' ' + p + ' ')
+                if i > pos:
+                    pos, st = i, name
+        out[n] = st or ''
+    return out
+
+
+def _dnb_closing_rows(conn, auth, year, rd, a):
+    """DNB 2026 opening/closing per hospital × course × quota × category for this round — information only, no
+    2025 comparison (we hold no 2025 DNB cut-offs). Hospitals stay as published (never matched to our college list);
+    rank = AIR. Never used by the predictor / lists / rankings. (founder 2026-11-11)"""
+    conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.section,'')='dnb'",
+             "COALESCE(r.rank_ai, r.rank) IS NOT NULL"]
+    params = [auth, year, rd['round']]
+    a2 = {k: v for k, v in a.items() if k not in ('course', 'state')}    # state is derived below
+    _filters(a2, conds, params)
+    course = _s(a.get('course'))
+    if course:
+        conds.append("COALESCE(NULLIF(r.course,''), r.course_raw) = ?"); params.append(course)
+    out = []
+    for r in conn.execute(
+            "SELECT r.institute_raw AS institute, COALESCE(NULLIF(r.course,''), r.course_raw) AS course, r.quota, "
+            "r.allotted_category AS category, MAX(r.state) AS state, MAX(r.college_type) AS college_type, "
+            "COUNT(*) AS allotted, MIN(COALESCE(r.rank_ai, r.rank)) AS opening, MAX(COALESCE(r.rank_ai, r.rank)) AS closing, "
+            "MIN(CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END) AS opening_state, "
+            "MAX(CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END) AS closing_state "
+            f"FROM pg_results r WHERE {' AND '.join(conds)} "
+            "GROUP BY r.institute_raw, COALESCE(NULLIF(r.course,''), r.course_raw), r.quota, r.allotted_category",
+            params).fetchall():
+        r = dict(r)
+        r.update(closing_2025=None, closing_2025_round=None, closing_2025_state=None, change=None, change_pct=None,
+                 fee_2025=None, filled_earlier=False, compare='no_2025_data', trend='no_2025_data',
+                 compare_group='compared', new_note=None, program='dnb')
+        out.append(r)
+    st = _dnb_state_of(conn, auth, {r['institute'] for r in out})
+    for r in out:
+        r['state'] = r['state'] or st.get(r['institute'], '')
+    want = _canon_state(_s(a.get('state')))
+    return [r for r in out if r['state'] == want] if want else out
+
+
 def api_results_cutoffs():
     """GET /api/pg/results/cutoffs?authority=&round=&q=&course=&quota=&category=&state=&college_type=
     &trend=tougher|easier|same|new&rank=<open at your rank>&sort=closing (default, lowest first)|change|change_pct|institute&page=
@@ -786,7 +871,9 @@ def api_results_cutoffs():
     trend 'no_2025_seat' = 2025 had the course + quota but no seat in this category; 'no_2025_data' = this
     authority's 2025 cut-offs carry no row in this category at all (e.g. Tamil Nadu PwD), so no comparison exists; 'new_course' / 'new_quota' =
     an existing college's course / quota not offered in 2025)
-    &compare=direct|later_round|no_2025_seat|new_course|new_quota|new_to_authority|new_college. Has group_counts."""
+    &compare=direct|later_round|no_2025_seat|new_course|new_quota|new_to_authority|new_college. Has group_counts.
+    &program=dnb → DNB closing ranks per hospital (as published) × course × quota × category, no 2025 columns
+    (compared_with null, trend 'no_2025_data') — information only (2026-11-11)."""
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
@@ -797,7 +884,13 @@ def api_results_cutoffs():
         rd = _pick_round(conn, auth, year, _s(a.get('round')))
         if not rd:
             return jsonify({'ok': True, 'round': None, 'rows': []})
-        rows = _closing_rows(conn, auth, year, rd, a)
+        dnb = _s(a.get('program')).lower() == 'dnb'     # DNB closing ranks, info only (2026-11-11)
+        rows = _dnb_closing_rows(conn, auth, year, rd, a) if dnb else _closing_rows(conn, auth, year, rd, a)
+        states = None
+        if dnb:                                         # dropdown: every state in this round's DNB list
+            base = rows if not _s(a.get('state')) else _dnb_closing_rows(
+                conn, auth, year, rd, {k: v for k, v in a.items() if k != 'state'})
+            states = sorted({r['state'] for r in base if r['state']})
         trend, rank = _s(a.get('trend')), _int(a.get('rank'))
         if trend:
             rows = [r for r in rows if r['trend'] == trend]
@@ -818,7 +911,8 @@ def api_results_cutoffs():
         page = max(1, _int(a.get('page')) or 1)
         size = min(500, max(1, _int(a.get('page_size')) or 100))
         total = len(rows)
-        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'compared_with': f"2025 {rd['round']}",
+        return jsonify({'ok': True, 'authority': auth, 'round': rd, 'program': 'dnb' if dnb else 'mdms',
+                        'compared_with': None if dnb else f"2025 {rd['round']}", 'states': states,
                         'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india',
                         'group_counts': group_counts, 'reason_counts': reason_counts,
                         'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,
