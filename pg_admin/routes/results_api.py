@@ -390,6 +390,41 @@ def api_results_notice():
         conn.close()
 
 
+def api_results_status():
+    """POST /api/pg/results/status (X-News-Key) {authority_code, round, year?, status: provisional|final}
+    — relabel a loaded round WITHOUT re-posting its rows (founder 2026-11-11: West Bengal / Goa / Odisha R1
+    lists are the actual allotments, the authority never called them provisional). The old status is kept
+    in prev_status, like a re-post that changes status."""
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    auth, rnd, year = _s(d.get('authority_code')).lower(), _s(d.get('round')), _s(d.get('year')) or YEAR
+    status = _s(d.get('status')).lower()
+    if status not in ('provisional', 'final') or not auth or not rnd:
+        return jsonify({'ok': False, 'error': 'authority_code, round and status (provisional|final) required'}), 400
+    _ensure()
+    conn = get_db()
+    try:
+        old = conn.execute("SELECT id, status FROM pg_results_source WHERE authority_code=? AND academic_year=? "
+                           "AND round=?", [auth, year, rnd]).fetchone()
+        if not old:
+            return jsonify({'ok': False, 'error': 'no such round'}), 404
+        if (old['status'] or '') != status:
+            conn.execute("UPDATE pg_results_source SET prev_status=?, status=?, is_revised=0 WHERE id=?",
+                         [old['status'] or '', status, old['id']])
+            conn.commit()
+        return jsonify({'ok': True, 'authority_code': auth, 'round': rnd, 'status': status,
+                        'was': old['status'] or ''})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_results_status: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
 @login_required
 def result_rounds_admin():
     """/admin/pg/result-rounds — every loaded result round (what the website shows) + its notice line."""

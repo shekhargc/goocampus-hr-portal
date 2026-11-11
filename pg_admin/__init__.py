@@ -198,6 +198,7 @@ def register_pg_admin(app):
                      methods=['GET'])
     app.add_url_rule('/admin/pg/name-memory', 'pg_name_memory', results_api.name_memory_admin, methods=['GET'])
     app.add_url_rule('/api/pg/results/notice', 'api_results_notice', results_api.api_results_notice, methods=['POST'])
+    app.add_url_rule('/api/pg/results/status', 'api_results_status', results_api.api_results_status, methods=['POST'])
     app.add_url_rule('/admin/pg/result-rounds', 'pg_result_rounds', results_api.result_rounds_admin, methods=['GET'])
     app.add_url_rule('/admin/pg/result-rounds/notice', 'pg_result_rounds_notice', results_api.result_rounds_notice,
                      methods=['POST'])
