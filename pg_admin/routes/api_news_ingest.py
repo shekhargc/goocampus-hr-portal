@@ -728,7 +728,17 @@ def api_seatmatrix_dump():
             return jsonify({'ok': True, 'totals': f.get('totals'), 'quotas': f.get('quotas'),
                             'dnb_courses': [c for c in (f.get('courses') or []) if 'DNB' in c.upper()],
                             'source_total': (f.get('source') or {}).get('total_seats'),
-                            'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []]})
+                            'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []],
+                            'round': f.get('round'), 'rounds': f.get('rounds'), 'has_pdf': f.get('has_pdf')})
+        if request.args.get('rowsof'):          # first rows of /api/pg/seat-matrix (read-only check, 2026-11-11)
+            from flask import current_app
+            qs = {k: v for k, v in request.args.items() if k not in ('rowsof',)}
+            qs['body'] = request.args.get('rowsof')
+            with current_app.test_client() as tc:
+                r = tc.get('/api/pg/seat-matrix', query_string=qs, environ_base={'pg.internal_check': True})
+                f = r.get_json() or {}
+            return jsonify({'ok': True, 'total_matched': f.get('total_matched'), 'seats_matched': f.get('seats_matched'),
+                            'rows': (f.get('rows') or [])[:int(request.args.get('n') or 5)]})
         if request.args.get('audit'):           # pipeline health check by part, read-only (2026-11-06)
             return jsonify(_pipeline_audit(conn, request.args.get('audit'), request.args.get('auth') or ''))
         if request.args.get('sources') == '1':  # seat-matrix source files and their flags (read-only)
