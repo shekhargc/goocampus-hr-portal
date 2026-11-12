@@ -68,10 +68,18 @@
       </select>
     </div>
     <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Fee year</label>
+      <select name="fy" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+        <option value="" {{ 'selected' if not fy }}>All seats</option>
+        <option value="2026" {{ 'selected' if fy=='2026' }}>Has 2026-27 fee</option>
+        <option value="2025" {{ 'selected' if fy=='2025' }}>Only 2025 fee (2026-27 not yet)</option>
+      </select>
+    </div>
+    <div>
       <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Sort by fee</label>
       <select name="sort" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
-        <option value="fee_asc" {{ 'selected' if sort=='fee_asc' }}>Fee: low → high</option>
-        <option value="fee_desc" {{ 'selected' if sort=='fee_desc' }}>Fee: high → low</option>
+        <option value="fee_asc" {{ 'selected' if sort=='fee_asc' }}>Fee: low → high (2026-27 if available)</option>
+        <option value="fee_desc" {{ 'selected' if sort=='fee_desc' }}>Fee: high → low (2026-27 if available)</option>
         <option value="name" {{ 'selected' if sort=='name' }}>College name</option>
       </select>
     </div>
@@ -91,7 +99,7 @@
       <thead><tr>
         <th style="{{ hs }}">College</th><th style="{{ hs }}">Course</th>
         <th style="{{ hs }}">Quota</th><th style="{{ hs }}">Category</th>
-        <th style="{{ hs }}">State</th><th style="{{ hs }}text-align:right;">Fee</th>
+        <th style="{{ hs }}">State</th><th style="{{ hs }}text-align:right;">2025 fee</th><th style="{{ hs }}text-align:right;">2026-27 fee</th>
       </tr></thead>
       <tbody>
         {% for r in rows %}
@@ -104,9 +112,10 @@
           <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.quota or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.category or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;color:var(--gray-500);">{{ r.state or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-600);">
+            {% if r.fee_2025 and r.fee_2025 > 1 %}₹{{ '{:,.0f}'.format(r.fee_2025) }}<div style="font-size:0.68rem;color:var(--gray-400);">/ year · 2025</div>{% else %}<span style="color:var(--gray-400);">—</span>{% endif %}</td>
           <td style="padding:0.55rem 0.9rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:var(--navy);">
-            {% if r.fee %}₹{{ '{:,.0f}'.format(r.fee) }}
-              {% if r.fee_info %}
+            {% if r.fee_info %}₹{{ '{:,.0f}'.format(r.fee_info.total) }}
               <div style="font-size:0.68rem;font-weight:700;color:#166534;">2026-27</div>
               <details style="font-size:0.7rem;font-weight:500;color:var(--gray-600);text-align:left;"><summary style="cursor:pointer;color:var(--orange);">breakup</summary>
                 {% set fi = r.fee_info %}
@@ -114,13 +123,12 @@
                 {% if fi.other_fee %}+ {{ fi.other_label or 'Admission fee' }} ₹{{ '{:,.0f}'.format(fi.other_fee) }}<br>{% endif %}
                 {% if fi.note %}{{ fi.note }}<br>{% endif %}
                 {% if fi.prev_fee %}Earlier: ₹{{ '{:,.0f}'.format(fi.prev_fee) }} ({{ fi.prev_source }})<br>{% endif %}
-                <span style="color:var(--gray-400);">Source: {{ fi.source }}</span>
+                <span style="color:var(--gray-400);">Source: {{ fi.source }}{% if fi.source_date %} · {{ fi.source_date }}{% endif %}</span>
               </details>
-              {% else %}<div style="font-size:0.68rem;font-weight:500;color:var(--gray-400);">/ year{% if r.fee_year %} · {{ r.fee_year }}{% endif %}</div>{% endif %}
-            {% else %}—{% endif %}</td>
+            {% else %}<span style="font-size:0.72rem;font-weight:500;color:var(--gray-400);">not yet</span>{% endif %}</td>
         </tr>
         {% else %}
-        <tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--gray-400);">No priced seats match these filters.</td></tr>
+        <tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--gray-400);">No priced seats match these filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -128,7 +136,7 @@
 
   <!-- Pagination -->
   {% if pages > 1 %}
-  {% set qs = '&kind=' ~ kind ~ '&state=' ~ state ~ '&quota=' ~ quota ~ '&category=' ~ category ~ '&sort=' ~ sort ~ '&q=' ~ q %}
+  {% set qs = '&fy=' ~ fy ~ '&kind=' ~ kind ~ '&state=' ~ state ~ '&quota=' ~ quota ~ '&category=' ~ category ~ '&sort=' ~ sort ~ '&q=' ~ q %}
   <div style="display:flex;justify-content:center;align-items:center;gap:0.8rem;margin-top:1.2rem;font-size:0.85rem;">
     {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" style="color:var(--orange);text-decoration:none;font-weight:600;">← Prev</a>{% endif %}
     <span style="color:var(--gray-500);">Page {{ page }} of {{ pages }}</span>

@@ -871,6 +871,9 @@ def college_fees():
     quota = _s(request.args.get('quota'))
     category = _s(request.args.get('category'))
     q = _s(request.args.get('q'))
+    fy = _s(request.args.get('fy'))          # '' all | '2026' has a 2026-27 fee | '2025' only the 2025 fee
+    if fy not in ('', '2026', '2025'):
+        fy = ''
     sort = _s(request.args.get('sort')) or 'fee_asc'
     order = {'fee_asc': 'fee ASC NULLS LAST, institute ASC',
              'fee_desc': 'fee DESC NULLS LAST, institute ASC',
@@ -898,6 +901,8 @@ def college_fees():
         fi, pi = smart_name_clause("c.institute", q)
         fc, pc = smart_name_clause("c.course", q)
         where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
+    if fy and _FEES.available(conn):
+        where.append("f26.id IS NOT NULL" if fy == '2026' else "f26.id IS NULL")
     wsql = " WHERE " + " AND ".join(where)
     grp = " GROUP BY c.institute, c.course, c.quota, c.category "
     rows, states, quotas, cats, total, priced_seats, fee26 = [], [], [], [], 0, 0, []
@@ -910,11 +915,15 @@ def college_fees():
             "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
             f"MAX(c.institute_type) AS institute_type, MAX({eff}) AS fee, MAX({effy}) AS fee_year, "
+            "MAX(c.fee) AS fee_2025, " + ("MAX(f26.fee_total)" if _FEES.available(conn) else "NULL") + " AS fee_2026, "
             "MAX(a.master_id) AS id" + _FEES.detail_sql(conn) + " FROM pg_cutoffs c "
             "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
             + fj + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",
             params + [_FEES_PER_PAGE, offset]).fetchall()
         rows = [_FEES.present(dict(r)) for r in rows]
+        for r in rows:
+            r['fee_2025'] = float(r['fee_2025']) if r.get('fee_2025') is not None else None
+            r['fee_2026'] = float(r['fee_2026']) if r.get('fee_2026') is not None else None
         # coverage: how many priced seat-rows exist at all (any filter off)
         priced_seats = conn.execute(
             "SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 "
@@ -935,7 +944,7 @@ def college_fees():
                            priced_seats=priced_seats, states=states, quotas=quotas,
                            categories=cats, kind=kind, state=state, quota=quota,
                            category=category, q=q, sort=sort, page=page, pages=pages,
-                           per_page=_FEES_PER_PAGE, active_section='goocampus_in', fee26=fee26)
+                           per_page=_FEES_PER_PAGE, active_section='goocampus_in', fee26=fee26, fy=fy)
 
 
 # ── Edit a college's master fields (team fills logos / corrects data) ─────────
