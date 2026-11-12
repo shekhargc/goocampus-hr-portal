@@ -11693,9 +11693,12 @@ def profile():
         # Onboarding-completion fields — fill only if currently blank (lock once set),
         # so the employee can complete what they left blank without changing set values.
         _ensure_employee_onboarding(conn)
+        # pf_number added 2026-11-12 (founder): new joiners may already have a UAN — let anyone fill it once.
         for col in ('personal_email', 'blood_group', 'hobbies', 'bank_name', 'bank_branch',
-                    'bank_account_name', 'bank_account_number', 'bank_ifsc'):
+                    'bank_account_name', 'bank_account_number', 'bank_ifsc', 'pf_number'):
             val = request.form.get(col, '').strip()
+            if col == 'pf_number':
+                val = val[:40]
             if val and not (user.get(col) or '').strip():
                 update_fields += f', {col} = ?'
                 params.append(val)
