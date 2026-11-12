@@ -1,0 +1,28 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}My Payslips{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:720px;margin:0 auto;">
+    <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">My Payslips</h1>
+    <p style="margin:4px 0 18px;font-size:.86rem;color:var(--gray-500);">🔒 Each payslip opens with a one-time code sent to your WhatsApp. Only you can see your payslips.</p>
+
+    {% if not slips %}
+      <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;padding:28px;text-align:center;color:var(--gray-500);">
+        No payslips yet. They appear here once HR releases the month's payroll.
+      </div>
+    {% else %}
+      {% set ns = namespace(fy='') %}
+      {% for s in slips %}
+        {% if fy_label(s.period) != ns.fy %}
+          {% set ns.fy = fy_label(s.period) %}
+          <div style="font-size:.75rem;font-weight:800;color:var(--gray-500);letter-spacing:.08em;margin:18px 0 8px;">{{ ns.fy }}</div>
+        {% endif %}
+        <a href="{{ url_for('my_payslip_view', slip_id=s.id) }}" style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:14px 18px;margin-bottom:8px;text-decoration:none;color:var(--navy);">
+          <span style="font-weight:700;">{{ period_label(s.period) }}</span>
+          <span style="font-size:.82rem;color:#1e40af;font-weight:600;">🔒 Open</span>
+        </a>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

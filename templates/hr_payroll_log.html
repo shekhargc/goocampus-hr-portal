@@ -1,0 +1,31 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Payslip access log{% endblock %}
+{% block section_content %}
+{% set labels = {'otp_sent':'Code sent','otp_send_failed':'Code send failed','otp_wrong':'Wrong code entered','unlocked':'Unlocked with code','view':'Viewed','download':'Downloaded PDF'} %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:900px;margin:0 auto;">
+    <a href="{{ url_for('hr_payroll_run', run_id=run.id) }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← {{ period_label(run.period) }} payroll</a>
+    <h1 style="margin:8px 0 4px;font-size:1.35rem;font-weight:800;color:var(--navy);">Payslip access log — {{ period_label(run.period) }}</h1>
+    <p style="margin:0 0 16px;font-size:.86rem;color:var(--gray-500);">Every code sent, wrong attempt, unlock, view and download for this month's slips (newest first, IST).</p>
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+        <thead><tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+          <th style="padding:10px 12px;">When</th><th style="padding:10px 12px;">Payslip of</th><th style="padding:10px 12px;">Done by</th><th style="padding:10px 12px;">What</th><th style="padding:10px 12px;">IP</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr style="border-top:1px solid var(--gray-100);">
+            <td style="padding:9px 12px;white-space:nowrap;">{{ r.ist }}</td>
+            <td style="padding:9px 12px;">{{ r.emp_name }}</td>
+            <td style="padding:9px 12px;">{{ r.actor_name }}{% if r.actor_id != r.employee_id %} <span style="color:#b91c1c;font-weight:700;">(not the owner!)</span>{% endif %}</td>
+            <td style="padding:9px 12px;{% if r.action in ('otp_wrong','otp_send_failed') %}color:#b45309;{% endif %}">{{ labels.get(r.action, r.action) }}</td>
+            <td style="padding:9px 12px;font-size:.75rem;color:var(--gray-500);">{{ r.ip }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" style="padding:22px;text-align:center;color:var(--gray-500);">Nobody has opened a slip for this month yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Salary Template{% endblock %}
+{% block section_content %}
+<style>
+  .tp-in{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:.9rem;}
+  .tp-l{display:block;font-size:.76rem;font-weight:700;color:var(--gray-600);margin:10px 0 4px;}
+</style>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1000px;margin:0 auto;">
+    <a href="{{ url_for('hr_payroll') }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← Payroll</a>
+    <h1 style="margin:8px 0 4px;font-size:1.35rem;font-weight:800;color:var(--navy);">Salary Template</h1>
+    <p style="margin:0 0 18px;font-size:.86rem;color:var(--gray-500);">How a monthly gross is split and what is deducted. Each version applies from its start month until a newer one begins — so a mid-year change (like the October PF change) is a new version, and older months keep their rules.</p>
+
+    {% if example %}
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 18px;margin-bottom:18px;font-size:.86rem;color:#1e3a8a;">
+      <b>Example with the current rules — gross ₹{{ inr(example.gross) }}:</b>
+      Basic {{ inr(example.basic) }} · HRA {{ inr(example.hra) }} · Conveyance {{ inr(example.conveyance) }} · LTC {{ inr(example.ltc) }} · Medical {{ inr(example.medical) }} · Other {{ inr(example.other_allowance) }} → PF {{ inr(example.pf) }}
+    </div>
+    {% endif %}
+
+    {% for v in versions %}
+    {% set locked = v.id in used %}
+    <details {% if loop.first %}open{% endif %} style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;margin-bottom:12px;">
+      <summary style="padding:14px 18px;cursor:pointer;font-weight:700;color:var(--navy);">
+        From {{ period_label(v.effective_from) }} {% if loop.first %}<span style="color:#15803d;font-size:.78rem;">● current</span>{% endif %}
+        {% if locked %}<span style="color:var(--gray-500);font-size:.76rem;font-weight:500;"> · used by a finalised payroll (locked)</span>{% endif %}
+        <span style="float:right;font-size:.76rem;color:var(--gray-500);font-weight:500;">updated by {{ v.updated_by_name or '—' }}</span>
+      </summary>
+      <form method="post" style="padding:0 18px 18px;">
+        <input type="hidden" name="rules_id" value="{{ v.id }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 18px;">
+          <div><label class="tp-l">Applies from (month)</label><input class="tp-in" type="month" name="effective_from" value="{{ v.effective_from }}" required></div>
+          {% for k, lbl, kind in fields %}
+          <div {% if k == 'company_address' %}style="grid-column:1/-1;"{% endif %}>
+            <label class="tp-l">{{ lbl }}</label>
+            {% if kind == 'choice' %}
+            <select class="tp-in" name="{{ k }}">
+              {% for cv, cl in choices[k] %}<option value="{{ cv }}" {% if (v[k] or choices[k][0][0]) == cv %}selected{% endif %}>{{ cl }}</option>{% endfor %}
+            </select>
+            {% else %}
+            <input class="tp-in" name="{{ k }}" {% if kind != 'text' %}type="number" step="any"{% endif %}
+                   value="{{ v[k] if v[k] is not none else '' }}">
+            {% endif %}
+          </div>
+          {% endfor %}
+          <div style="grid-column:1/-1;"><label class="tp-l">Notes</label><input class="tp-in" name="notes" value="{{ v.notes or '' }}"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+          {% if not locked %}<button name="mode" value="edit" style="background:#1d4ed8;color:#fff;border:none;border-radius:9px;padding:10px 16px;font-weight:700;cursor:pointer;">Save changes to this version</button>{% endif %}
+          <button name="mode" value="new" style="background:#fff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:9px;padding:10px 16px;font-weight:700;cursor:pointer;" onclick="return confirm('Save as a NEW version starting from the month above? Earlier months keep the old rules.');">Save as new version (from the month above)</button>
+        </div>
+      </form>
+    </details>
+    {% endfor %}
+
+    <div style="font-size:.8rem;color:var(--gray-500);line-height:1.6;margin-top:16px;">
+      <b>How it's calculated:</b> Basic = % of gross (never below the minimum; 0% + minimum = a flat Basic) · HRA = % of Basic or of gross · then Conveyance, LTC, Medical as fixed amounts (only if the gross leaves room) · Other Allowance = whatever is left, so it always adds up to the gross.
+      LOP days reduce every line by paid days ÷ days in the month. PF = % of Basic (+ Other Allowance, if chosen), up to the maximum. PT applies when the full monthly gross is at least the threshold. ESI applies when the full gross is at or below its threshold.
+      Per-person exceptions (a fixed Basic or HRA amount, a different HRA %, no PT, no PF) are set under Employee Salaries.
+    </div>
+  </div>
+</div>
+{% endblock %}

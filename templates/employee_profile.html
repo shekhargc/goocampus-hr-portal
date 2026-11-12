@@ -271,7 +271,11 @@
             <div class="pf-divider"></div>
             <div class="pf-sec">Provident fund</div>
             <div class="field-grid">
-              <div><div class="field-label">PF Number</div><div class="field-value {% if not user.pf_number %}empty{% endif %}">{{ user.pf_number or 'Assigned after 3 months' }}</div></div>
+              <div>
+                <div class="field-label">PF Number / UAN {% if user.pf_number %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                {% if not user.pf_number %}<input type="text" name="pf_number" class="field-input" value="" maxlength="40" placeholder="Your UAN, if you already have one">
+                {% else %}<div class="field-value">{{ user.pf_number }}</div>{% endif %}
+              </div>
               <div><div class="field-label">PF Start Date</div><div class="field-value {% if not user.pf_start_date %}empty{% endif %}">{{ user.pf_start_date|format_date if user.pf_start_date else '—' }}</div></div>
             </div>
           </div>

@@ -76,6 +76,27 @@ monthly (`kra_monthly_ratings` — separate `employee_rating`/`manager_rating` 0
 submit flags) with notes (`kra_monthly_notes`). Report: `/kra/admin/report`, `/kra/report`.
 FY April–March like leave.
 
+## Payroll & Payslips
+`routes/hr_payroll.py` (registered from app.py). **Salary Template** `/hr/payroll/template` (`payroll_rules`,
+versioned by effective month; Oct-2026 rules seeded: Basic 50% of gross min ₹18,500, HRA 50% of Basic,
+Conveyance 1,600, Medical 1,250, Other = balance, PF 12% of Basic+Other max ₹3,000, PT ₹200 if gross ≥ 25,000,
+ESI 0.75% if gross ≤ 21,000). **Employee Salaries** `/hr/payroll/salaries` (`employee_salary`: monthly gross +
+HRA%/no-PT/no-PF exceptions, versioned by effective month). **Monthly run** `/hr/payroll/run/<id>`
+(`payroll_runs` draft→finalised→released, `payslips` one row per employee): LOP = `leave_month_figures().deduction`
+(same as the Monthly Report); every component × paid days ÷ days in month, rounded half-up; admin enters TDS/KLWF/
+advance/other + per-slip overrides (LOP/PT/PF/ESI) in a drawer. Reproduces the Oct-2026 salary Excel to the rupee.
+**My Payslips** `/my-payslips`: only the caller's own RELEASED slips (`WHERE employee_id = me`, else 404); each slip
+unlocks with a WhatsApp OTP stored HMAC-hashed server-side in `payslip_otp` (5 min, 5 tries, single use, 30 s resend
+gap, 6/hour), unlock lasts 10 min; every send/unlock/view/download logged in `payslip_access_log`. Access Master:
+`hr/payroll` **edit** = payroll manager (sees everyone's salary); admins bypass.
+**Bank & PF import** `/hr/payroll/bank-pf-import` (link on Employee Salaries): upload an Excel (EmployeeCode, Name,
+BankAccount, PFAccount(UAN)) → preview → confirm. Fills ONLY empty `employees.bank_account_number` / `pf_number`
+(re-checked in the UPDATE's WHERE), includes ex-employees, matches on emp_code then unique exact name; draft payslips
+with a blank bank/PF pick the number up. Existing different numbers are shown, never overwritten.
+**Payslip-ready email**: on a RELEASED month, ✉ Email employees (side drawer, select all or tick one) →
+`/hr/payroll/run/<id>/notify` emails each person's Work Email (`employees.email`) a link to My Payslips — no figures
+in the email. Every send logged in `payslip_email_log` (sent/failed); the run table shows "emailed <time>".
+
 ## Gotchas
 - FY starts **April**; April accrues 3 leave days, other months 2.
 - LOP days deduct salary but never reduce the leave-type balance.

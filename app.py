@@ -238,6 +238,7 @@ from core.auth import (
     sales_access_required,
 )
 from core.users import get_user, is_manager, get_pending_team_count
+from core import otp_store  # login OTPs kept server-side (security fix 2026-11-12)
 
 
 def get_monthly_alloc(month_num):
@@ -868,7 +869,12 @@ def login_send_otp():
         conn.close()
         return jsonify({'error': 'Please enter your mobile number.'}), 400
     otp_code = str(random.randint(100000, 999999))
-    session['emp_login_otp'] = otp_code
+    # SECURITY (2026-11-12): the session is a browser-readable cookie, so only a
+    # reference goes in it — the code itself is stored hashed on the server.
+    otp_ref, otp_err = otp_store.issue('emp_login', otp_code, num)
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['emp_login_otp'] = otp_ref
     session['emp_login_code'] = code
     session['emp_login_num'] = num
     session['emp_login_time'] = datetime.now().isoformat()
@@ -895,8 +901,9 @@ def login_verify_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if otp != stored:
-        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('emp_login', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     conn = get_db()
     user = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (code,)).fetchone()
     conn.close()
@@ -1424,7 +1431,10 @@ def client_login_send_otp():
     if not acct:
         return jsonify({'error': 'No account found for this mobile number. Please check, or use your password.'}), 404
     otp_code = str(random.randint(100000, 999999))
-    session['client_login_otp'] = otp_code
+    otp_ref, otp_err = otp_store.issue('client_login', otp_code, clean)  # code stays server-side
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['client_login_otp'] = otp_ref
     session['client_login_num'] = clean
     session['client_login_time'] = datetime.now().isoformat()
     ok, err = _send_otp_fast([('whatsapp', lambda: _send_whatsapp_otp(clean, otp_code))])
@@ -1449,8 +1459,9 @@ def client_login_verify_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if otp != stored:
-        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('client_login', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     conn = get_db()
     acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ? AND is_active = 1", (clean,)).fetchone()
     if not acct:
@@ -11682,9 +11693,12 @@ def profile():
         # Onboarding-completion fields — fill only if currently blank (lock once set),
         # so the employee can complete what they left blank without changing set values.
         _ensure_employee_onboarding(conn)
+        # pf_number added 2026-11-12 (founder): new joiners may already have a UAN — let anyone fill it once.
         for col in ('personal_email', 'blood_group', 'hobbies', 'bank_name', 'bank_branch',
-                    'bank_account_name', 'bank_account_number', 'bank_ifsc'):
+                    'bank_account_name', 'bank_account_number', 'bank_ifsc', 'pf_number'):
             val = request.form.get(col, '').strip()
+            if col == 'pf_number':
+                val = val[:40]
             if val and not (user.get(col) or '').strip():
                 update_fields += f', {col} = ?'
                 params.append(val)
@@ -43849,7 +43863,10 @@ def partner_onboard_send_phone_otp():
     if not mobile:
         return jsonify({'error': 'Please enter a valid 10-digit mobile number.'}), 400
     otp_code = str(random.randint(100000, 999999))
-    session['partner_onb_phone_otp'] = otp_code
+    otp_ref, otp_err = otp_store.issue('partner_onb_phone', otp_code, mobile)  # code stays server-side
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['partner_onb_phone_otp'] = otp_ref
     session['partner_onb_phone_num'] = mobile
     session['partner_onb_phone_time'] = datetime.now().isoformat()
     session.pop('partner_onb_phone_ok', None)
@@ -43875,8 +43892,11 @@ def partner_onboard_verify_phone_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if mobile != stored_num or otp != stored:
+    if mobile != stored_num:
         return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('partner_onb_phone', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     session['partner_onb_phone_ok'] = stored_num
     return jsonify({'success': True, 'message': 'Mobile number verified.'})
 
@@ -43908,7 +43928,10 @@ def partner_login_send_otp():
         # 0 = not found, >1 = ambiguous; same message either way.
         return jsonify({'error': 'No partner account found for this mobile number. Try email + password, or contact GooCampus.'}), 404
     otp_code = str(random.randint(100000, 999999))
-    session['partner_login_otp'] = otp_code
+    otp_ref, otp_err = otp_store.issue('partner_login', otp_code, mobile)  # code stays server-side
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['partner_login_otp'] = otp_ref
     session['partner_login_num'] = mobile
     session['partner_login_pid'] = rows[0]['id']
     session['partner_login_time'] = datetime.now().isoformat()
@@ -43935,8 +43958,11 @@ def partner_login_verify_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if mobile != stored_num or otp != stored:
+    if mobile != stored_num:
         return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('partner_login', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     conn = get_db()
     partner = conn.execute("SELECT * FROM partners WHERE id = ? AND status = 'Active'", (pid,)).fetchone()
     conn.close()
@@ -48185,6 +48211,7 @@ ACCESS_SECTION_CATALOG = [
             ('id_cards',         'ID Cards',            'ID card requests + generation'),
             ('letters',          'Letters',             'HR letter templates + generation'),
             ('cash_expenses',    'Cash Expenses',       'Petty-cash ledger — cash received, expenses, per-member balance (edit = management: record cash given + see all)'),
+            ('payroll',          'Payroll & Payslips',  'Salary template, employee salaries, monthly payroll + payslip release — EVERYONE\'s salary (grant edit only to the payroll person)'),
         ],
     },
     # ── KRA ────────────────────────────────────────────────────────────────
@@ -52078,6 +52105,27 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_pool_add':                   _ap('hr', 'cash_pool', 'add'),
     'hr_cash_pool_delete':                _ap('hr', 'cash_pool', 'delete'),
     'hr_cash_import_junaug':              _ap('hr', 'cash_pool'),
+    # Payroll & Payslips (routes/hr_payroll.py). Every admin page needs 'edit' (it shows
+    # everyone's salary); routes ALSO re-check in-route. Employee 'My Payslips' routes are
+    # deliberately NOT mapped: any employee may reach them, and they only ever return the
+    # caller's own released slips (ownership enforced in the query + WhatsApp OTP).
+    'hr_payroll':                         _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_start':                   _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_run':                     _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_recalc':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_status':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_export':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_access_log':              _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_notify':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_slip_view':               _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_slip_save':               _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_template':                _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_salaries':                _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_salary_save':             _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_salary_delete':           _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_exclude':                 _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_bankpf_import':           _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_bankpf_apply':            _ap('hr', 'payroll', 'edit'),
     'hr_cash_clear_import_notes':         _ap('hr', 'cash_pool'),
 
     # ── Company ───────────────────────────────────────────────────────────
@@ -56193,6 +56241,10 @@ register_internal_transfer_completion(app)
 
 from routes.verification_queues import register_verification_queues
 register_verification_queues(app)
+
+# HR › Payroll & Payslips — salary template, monthly payroll, OTP-locked My Payslips (2026-11-12)
+from routes.hr_payroll import register_hr_payroll
+register_hr_payroll(app)
 
 # System Health dashboard — /admin/health (admin only): live green/amber/red
 # board for portal + goocampus.in + jobs site + email/WhatsApp/OTP/storage.

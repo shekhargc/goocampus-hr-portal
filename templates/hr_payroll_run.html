@@ -1,0 +1,203 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Payroll — {{ period_label(run.period) }}{% endblock %}
+{% block section_content %}
+<style>
+  .pr-btn{border:none;border-radius:9px;padding:9px 15px;font-weight:700;cursor:pointer;font-size:.84rem;text-decoration:none;display:inline-block;}
+  .pr-t th{padding:9px 10px;background:var(--gray-50);color:var(--gray-600);font-size:.74rem;text-align:right;white-space:nowrap;position:sticky;top:0;}
+  .pr-t td{padding:9px 10px;border-top:1px solid var(--gray-100);text-align:right;white-space:nowrap;}
+  .pr-t th:first-child,.pr-t td:first-child{text-align:left;}
+  .pr-t tr.row:hover td{background:#f8fafc;}
+  .ovr{color:#b45309;font-weight:700;} .ovr::after{content:' ✎';font-size:.7em;}
+  .dr-bg{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;z-index:900;}
+  .dr{position:fixed;top:0;right:0;height:100vh;width:min(440px,100vw);background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,.15);z-index:901;transform:translateX(100%);transition:transform .2s;overflow-y:auto;}
+  .dr.open{transform:none;} .dr-bg.open{display:block;}
+  .dr label{display:block;font-size:.76rem;font-weight:700;color:var(--gray-600);margin:12px 0 4px;}
+  .dr input[type=number],.dr textarea{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:.92rem;}
+  .dr .auto{font-size:.74rem;color:var(--gray-500);font-weight:500;margin-left:6px;}
+  .dr .kv{display:flex;justify-content:space-between;font-size:.84rem;padding:5px 0;border-bottom:1px dashed var(--gray-100);}
+</style>
+{% set st = run.status %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1280px;margin:0 auto;">
+    <a href="{{ url_for('hr_payroll') }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← All payroll months</a>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:8px 0 16px;">
+      <div>
+        <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">Payroll — {{ period_label(run.period) }}
+          <span style="font-size:.72rem;vertical-align:middle;padding:3px 10px;border-radius:20px;color:#fff;background:{{ {'draft':'#b45309','finalised':'#1d4ed8','released':'#15803d'}[st] }};">{{ st|title }}</span></h1>
+        <p style="margin:4px 0 0;font-size:.84rem;color:var(--gray-500);">
+          {% if st == 'draft' %}Check each person's LOP and add TDS / KLWF / advances (click a row). Directors' TDS comes from their Monthly TDS on Employee Salaries; type anyone else's TDS here when it applies (it isn't copied to next month). Recalculate pulls the latest leave + salaries; your entries are kept.
+          {% elif st == 'finalised' %}Figures are locked. Release to let employees open their slips.
+          {% else %}Released {% if run.released_by_name %}by {{ run.released_by_name }}{% endif %} — employees can open these slips with a WhatsApp OTP. Use ✉ Email employees to tell them (everyone, or one person to test first).{% endif %}
+          Template: {{ fy_label(run.period) }} rules{% if rules %} (from {{ period_label(rules.effective_from) }}){% endif %}.
+        </p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="pr-btn" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);" href="{{ url_for('hr_payroll_export', run_id=run.id) }}">⬇ Excel</a>
+        <a class="pr-btn" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);" href="{{ url_for('hr_payroll_access_log', run_id=run.id) }}">Access log</a>
+        {% if st == 'draft' %}
+          <form method="post" action="{{ url_for('hr_payroll_recalc', run_id=run.id) }}" style="margin:0;"><button class="pr-btn" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);">↻ Recalculate</button></form>
+          <form method="post" action="{{ url_for('hr_payroll_status', run_id=run.id) }}" style="margin:0;" onsubmit="return confirm('Finalise {{ period_label(run.period) }}? Figures will be locked.');"><input type="hidden" name="action" value="finalise"><button class="pr-btn" style="background:#1d4ed8;color:#fff;">Finalise</button></form>
+        {% elif st == 'finalised' %}
+          <form method="post" action="{{ url_for('hr_payroll_status', run_id=run.id) }}" style="margin:0;" onsubmit="return confirm('Release {{ period_label(run.period) }} payslips? Every employee in this list will be able to open their own slip.');"><input type="hidden" name="action" value="release"><button class="pr-btn" style="background:#15803d;color:#fff;">Release to employees</button></form>
+        {% endif %}
+        {% if st == 'released' %}
+          <button type="button" class="pr-btn" style="background:#F58220;color:#fff;" onclick="nfOpen()">✉ Email employees</button>
+        {% endif %}
+        {% if st in ('finalised','released') %}
+          <form method="post" action="{{ url_for('hr_payroll_status', run_id=run.id) }}" style="margin:0;" onsubmit="return confirm('Re-open as draft? {% if st == 'released' %}Employees will NOT see these slips until you release again.{% endif %}');"><input type="hidden" name="action" value="reopen"><button class="pr-btn" style="background:#fff;border:1px solid #fecaca;color:#b91c1c;">Re-open</button></form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if missing %}
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 16px;font-size:.85rem;color:#92400e;margin-bottom:14px;">
+      <b>{{ missing|length }} active employee{{ 's' if missing|length != 1 }} without a salary</b> (not included): {{ missing|map(attribute='name')|join(', ') }}.
+      Add their monthly gross under <a href="{{ url_for('hr_payroll_salaries') }}">Employee Salaries</a>, then Recalculate.
+    </div>
+    {% endif %}
+
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:auto;max-height:calc(100vh - 230px);">
+      <table class="pr-t" style="width:100%;border-collapse:collapse;font-size:.84rem;">
+        <thead><tr>
+          <th>Employee</th><th>Paid / LOP</th><th>Gross</th><th>PF</th><th>PT</th><th>ESI</th><th>TDS</th><th>KLWF</th>
+          <th>Advance</th><th>Other ded.</th><th>Total ded.</th><th>Net pay</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for s in slips %}
+          <tr class="row" id="slip-{{ s.id }}" {% if st == 'draft' %}style="cursor:pointer;" onclick="prOpen({{ s.id }})"{% endif %}>
+            <td><b style="color:var(--navy);">{{ s.emp_name }}</b><div style="font-size:.72rem;color:var(--gray-500);">{{ s.emp_code }}{% if s.notes %} · {{ s.notes }}{% endif %}</div></td>
+            {% set pd = s.paid_days|float %}{% set ld = s.lop_days|float %}
+            <td>{{ (pd|int) if pd == pd|int else pd }} / <span class="{{ 'ovr' if 'lop_days' in s.ov }}">{{ (ld|int) if ld == ld|int else ld }}</span></td>
+            <td>{{ inr(s.gross) }}{% if s.gross|float != s.full_gross|float %}<div style="font-size:.7rem;color:var(--gray-500);">of {{ inr(s.full_gross) }}</div>{% endif %}</td>
+            <td class="{{ 'ovr' if 'pf' in s.ov }}">{{ inr(s.pf) }}</td>
+            <td class="{{ 'ovr' if 'pt' in s.ov }}">{{ inr(s.pt) }}</td>
+            <td class="{{ 'ovr' if 'esi' in s.ov }}">{{ inr(s.esi) }}</td>
+            <td>{{ inr(s.tds) }}</td><td>{{ inr(s.klwf) }}</td><td>{{ inr(s.salary_advance) }}</td><td>{{ inr(s.other_deductions) }}</td>
+            <td>{{ inr(s.total_deductions) }}</td>
+            <td><b>{{ inr(s.net_pay) }}</b></td>
+            <td onclick="event.stopPropagation();">
+              <a href="{{ url_for('hr_payroll_slip_view', slip_id=s.id) }}" style="font-size:.78rem;color:#1e40af;font-weight:600;text-decoration:none;">View slip</a>
+              {% if s.views %}<div style="font-size:.68rem;color:#15803d;">opened {{ s.views }}×</div>{% endif %}
+              {% if s.emailed_ist %}<div style="font-size:.68rem;color:#b45309;">✉ emailed {{ s.emailed_ist }}</div>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="13" style="text-align:center;padding:24px;color:var(--gray-500);">No employees with a salary for this month yet.</td></tr>
+        {% endfor %}
+        </tbody>
+        {% if slips %}
+        <tfoot><tr style="background:var(--gray-50);font-weight:800;">
+          <td>Total ({{ slips|length }})</td><td>LOP {{ '%g' % totals.lop_days }}</td><td>{{ inr(totals.gross) }}</td><td>{{ inr(totals.pf) }}</td><td>{{ inr(totals.pt) }}</td>
+          <td>{{ inr(totals.esi) }}</td><td>{{ inr(totals.tds) }}</td><td>{{ inr(totals.klwf) }}</td><td>{{ inr(totals.salary_advance) }}</td>
+          <td>{{ inr(totals.other_deductions) }}</td><td>{{ inr(totals.total_deductions) }}</td><td>{{ inr(totals.net_pay) }}</td><td></td>
+        </tr></tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <p style="font-size:.76rem;color:var(--gray-500);margin-top:8px;"><span class="ovr">Orange</span> = changed by hand (not the automatic figure). LOP comes from the leave records — the same number as the Monthly Report.</p>
+    {% if st == 'draft' %}
+    <form method="post" action="{{ url_for('hr_payroll_status', run_id=run.id) }}" onsubmit="return confirm('Delete this draft payroll month?');" style="margin-top:14px;">
+      <input type="hidden" name="action" value="delete"><button class="pr-btn" style="background:none;color:#b91c1c;padding:0;font-weight:600;">Delete this draft</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if st == 'released' %}
+<div class="dr-bg" id="nfBg" onclick="nfClose()"></div>
+<div class="dr" id="nfDr">
+  <form method="post" action="{{ url_for('hr_payroll_notify', run_id=run.id) }}" style="padding:22px;" onsubmit="return nfConfirm();">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;color:var(--navy);font-size:1.05rem;">Email: payslip ready</h3>
+      <button type="button" onclick="nfClose()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--gray-500);">×</button>
+    </div>
+    <p style="font-size:.8rem;color:var(--gray-500);margin:6px 0 14px;">Sends to each person's <b>Work Email</b>: "Your payslip for {{ period_label(run.period) }} is ready", with a link to My Payslips. No salary figures are in the email. Tip: tick one person first to test.</p>
+    <label style="display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:700;color:var(--navy);padding:8px 0;border-bottom:1px solid var(--gray-200);margin:0;">
+      <input type="checkbox" id="nfAll" onchange="nfToggleAll(this.checked)"> Select all</label>
+    {% for s in slips %}
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px dashed var(--gray-100);margin:0;font-weight:500;{% if not s.work_email %}opacity:.55;{% endif %}">
+        <input type="checkbox" name="slip_id" value="{{ s.id }}" class="nfChk" {% if not s.work_email %}disabled{% endif %} onchange="nfCount()" style="margin-top:3px;">
+        <span style="flex:1;font-size:.86rem;color:var(--navy);"><b>{{ s.emp_name }}</b>
+          <span style="display:block;font-size:.74rem;color:var(--gray-500);">{{ s.work_email or 'No work email on profile' }}</span>
+          {% if s.emailed_ist %}<span style="display:block;font-size:.7rem;color:#b45309;">Already emailed {{ s.emailed_ist }}</span>{% endif %}</span>
+      </label>
+    {% endfor %}
+    <button type="submit" id="nfBtn" class="pr-btn" style="background:#F58220;color:#fff;width:100%;margin-top:16px;" disabled>Send email</button>
+  </form>
+</div>
+<script>
+  function nfOpen(){ document.getElementById('nfDr').classList.add('open'); document.getElementById('nfBg').classList.add('open'); }
+  function nfClose(){ document.getElementById('nfDr').classList.remove('open'); document.getElementById('nfBg').classList.remove('open'); }
+  function nfBoxes(){ return Array.prototype.filter.call(document.querySelectorAll('.nfChk'), function(c){ return !c.disabled; }); }
+  function nfCount(){ var n = nfBoxes().filter(function(c){ return c.checked; }).length, b = document.getElementById('nfBtn');
+    b.disabled = !n; b.textContent = n ? ('Send email to ' + n + (n === 1 ? ' person' : ' people')) : 'Send email';
+    document.getElementById('nfAll').checked = n && n === nfBoxes().length; }
+  function nfToggleAll(on){ nfBoxes().forEach(function(c){ c.checked = on; }); nfCount(); }
+  function nfConfirm(){ var n = nfBoxes().filter(function(c){ return c.checked; }).length;
+    var b = document.getElementById('nfBtn'); if(!confirm('Send the "payslip ready" email to ' + n + (n === 1 ? ' person' : ' people') + '?')) return false;
+    setTimeout(function(){ b.disabled = true; b.textContent = 'Sending…'; }, 0); return true; }
+</script>
+{% endif %}
+
+{% if st == 'draft' %}
+<div class="dr-bg" id="prBg" onclick="prClose()"></div>
+<div class="dr" id="prDr">
+  <form method="post" id="prForm" style="padding:22px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 id="prName" style="margin:0;font-size:1.1rem;color:var(--navy);"></h3>
+      <button type="button" onclick="prClose()" style="border:none;background:none;font-size:1.4rem;cursor:pointer;color:var(--gray-500);">×</button>
+    </div>
+    <div id="prSub" style="font-size:.8rem;color:var(--gray-500);margin-bottom:10px;"></div>
+    <div id="prEarn" style="background:var(--gray-50);border-radius:10px;padding:8px 12px;margin-bottom:6px;"></div>
+
+    {% for k, lbl, hint in [('lop_days','LOP days','from leave records'),('pt','Professional Tax (₹)','e.g. waive for long leave'),('pf','PF (₹)','auto from template'),('esi','ESI (₹)','auto from template')] %}
+    <label>{{ lbl }} <span class="auto" id="prAuto_{{ k }}"></span></label>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <input type="number" step="0.5" min="0" name="{{ k }}" id="prIn_{{ k }}" style="flex:1;">
+      <label style="margin:0;font-weight:500;font-size:.76rem;white-space:nowrap;"><input type="checkbox" name="auto_{{ k }}" id="prChk_{{ k }}" onchange="prToggle('{{ k }}')"> automatic</label>
+    </div>
+    {% endfor %}
+
+    <div style="border-top:1px solid var(--gray-200);margin-top:16px;padding-top:4px;"></div>
+    {% for k, lbl in manual_fields %}
+    <label>{{ lbl }} (₹)</label><input type="number" step="1" min="0" name="{{ k }}" id="prIn_{{ k }}">
+    {% endfor %}
+    <label>Note (shows in the Excel, not on the slip)</label>
+    <textarea name="notes" id="prIn_notes" rows="2"></textarea>
+    <button type="submit" class="pr-btn" style="background:var(--orange);color:#fff;width:100%;margin-top:18px;padding:12px;">Save &amp; recalculate</button>
+    <p style="font-size:.74rem;color:var(--gray-500);margin-top:8px;">Saving closes this panel and updates the row.</p>
+  </form>
+</div>
+<script>
+  var PR = {
+  {% for s in slips %}
+    {{ s.id }}: {name: {{ s.emp_name|tojson }}, code: {{ (s.emp_code or '')|tojson }}, ov: {{ s.ov|tojson }},
+      lop_days: {{ s.lop_days|float }}, pt: {{ s.pt|float }}, pf: {{ s.pf|float }}, esi: {{ s.esi|float }},
+      tds: {{ s.tds|float }}, klwf: {{ s.klwf|float }}, salary_advance: {{ s.salary_advance|float }}, other_deductions: {{ s.other_deductions|float }},
+      notes: {{ (s.notes or '')|tojson }}, paid: {{ s.paid_days|float }}, elig: {{ s.eligible_days|float }}, dim: {{ s.days_in_month|float }},
+      full: {{ inr(s.full_gross)|tojson }}, earn: [['Basic', {{ inr(s.basic)|tojson }}], ['HRA', {{ inr(s.hra)|tojson }}], ['Conveyance', {{ inr(s.conveyance)|tojson }}], ['LTC', {{ inr(s.ltc)|tojson }}], ['Medical', {{ inr(s.medical)|tojson }}], ['Other Allowance', {{ inr(s.other_allowance)|tojson }}], ['Gross (earned)', {{ inr(s.gross)|tojson }}]]},
+  {% endfor %}
+  };
+  function prToggle(k){ var c=document.getElementById('prChk_'+k), i=document.getElementById('prIn_'+k); i.disabled=c.checked; i.style.opacity=c.checked?.55:1; }
+  function prOpen(id){
+    var s = PR[id]; if(!s) return;
+    document.getElementById('prForm').action = '/hr/payroll/slip/' + id + '/save';
+    document.getElementById('prName').textContent = s.name;
+    document.getElementById('prSub').textContent = (s.code ? s.code + ' · ' : '') + 'Monthly gross ₹' + s.full + ' · ' + s.elig + ' of ' + s.dim + ' days employed · paid ' + s.paid;
+    document.getElementById('prEarn').innerHTML = s.earn.map(function(e){ return '<div class="kv"><span>'+e[0]+'</span><b>₹'+e[1]+'</b></div>'; }).join('');
+    ['lop_days','pt','pf','esi'].forEach(function(k){
+      var manual = Object.prototype.hasOwnProperty.call(s.ov, k);
+      document.getElementById('prIn_'+k).value = s[k];
+      document.getElementById('prChk_'+k).checked = !manual;
+      document.getElementById('prAuto_'+k).textContent = manual ? '(changed by hand)' : '(automatic)';
+      prToggle(k);
+    });
+    ['tds','klwf','salary_advance','other_deductions','notes'].forEach(function(k){ document.getElementById('prIn_'+k).value = s[k] || (k==='notes' ? '' : 0); });
+    document.getElementById('prDr').classList.add('open'); document.getElementById('prBg').classList.add('open');
+  }
+  function prClose(){ document.getElementById('prDr').classList.remove('open'); document.getElementById('prBg').classList.remove('open'); }
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') prClose(); });
+  // When unticking "automatic" the box becomes editable; a ticked box sends auto_<k>=on so the server drops the override.
+</script>
+{% endif %}
+{% endblock %}
