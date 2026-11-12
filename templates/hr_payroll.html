@@ -1,0 +1,58 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Payroll{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1000px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
+      <div>
+        <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">Payroll &amp; Payslips</h1>
+        <p style="margin:4px 0 0;font-size:.86rem;color:var(--gray-500);">Calculate a month → check LOP, add TDS / advances → Finalise → Release. Employees open released slips with a WhatsApp OTP.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="{{ url_for('hr_payroll_salaries') }}" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);padding:10px 16px;border-radius:9px;font-weight:700;text-decoration:none;font-size:.86rem;">Employee Salaries ({{ n_sal }})</a>
+        <a href="{{ url_for('hr_payroll_template') }}" style="background:#fff;border:1px solid var(--gray-200);color:var(--navy);padding:10px 16px;border-radius:9px;font-weight:700;text-decoration:none;font-size:.86rem;">Salary Template</a>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('hr_payroll_start') }}" style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;padding:16px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;">
+      <b style="color:var(--navy);">Run payroll for</b>
+      <select name="period" style="padding:9px 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:.9rem;">
+        {% for m in months %}<option value="{{ m }}" {% if m == default_period %}selected{% endif %}>{{ period_label(m) }}</option>{% endfor %}
+      </select>
+      <button style="background:var(--orange);color:#fff;border:none;border-radius:9px;padding:10px 18px;font-weight:700;cursor:pointer;">Calculate</button>
+      <span style="font-size:.78rem;color:var(--gray-500);">If the month already exists it just opens it.</span>
+    </form>
+
+    {% if n_sal == 0 %}
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 16px;font-size:.86rem;color:#92400e;margin-bottom:16px;">
+      Start by entering each employee's monthly gross under <a href="{{ url_for('hr_payroll_salaries') }}">Employee Salaries</a>. The template then splits it into Basic / HRA / PF etc. automatically.
+    </div>
+    {% endif %}
+
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;font-size:.88rem;">
+        <thead><tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+          <th style="padding:11px 14px;">Month</th><th style="padding:11px 14px;">Status</th>
+          <th style="padding:11px 14px;text-align:right;">People</th><th style="padding:11px 14px;text-align:right;">Total net pay</th>
+          <th style="padding:11px 14px;">Last step</th></tr></thead>
+        <tbody>
+        {% for r in runs %}
+          {% set col = {'draft':'#b45309','finalised':'#1d4ed8','released':'#15803d'}[r.status] %}
+          <tr style="border-top:1px solid var(--gray-100);cursor:pointer;" onclick="location.href='{{ url_for('hr_payroll_run', run_id=r.id) }}'">
+            <td style="padding:11px 14px;font-weight:700;color:var(--navy);">{{ period_label(r.period) }}</td>
+            <td style="padding:11px 14px;"><span style="color:{{ col }};font-weight:700;">● {{ r.status|title }}</span></td>
+            <td style="padding:11px 14px;text-align:right;">{{ r.n }}</td>
+            <td style="padding:11px 14px;text-align:right;">₹{{ inr(r.net or 0) }}</td>
+            <td style="padding:11px 14px;font-size:.8rem;color:var(--gray-500);">
+              {% if r.status == 'released' %}Released by {{ r.released_by_name }}{% elif r.status == 'finalised' %}Finalised by {{ r.finalised_by_name }}{% else %}Created by {{ r.created_by_name }}{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" style="padding:22px;text-align:center;color:var(--gray-500);">No payroll months yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

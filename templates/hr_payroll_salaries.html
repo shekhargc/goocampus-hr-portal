@@ -1,0 +1,99 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Employee Salaries{% endblock %}
+{% block section_content %}
+<style>
+  .sl-t th{padding:10px 12px;background:var(--gray-50);color:var(--gray-600);font-size:.76rem;text-align:left;white-space:nowrap;}
+  .sl-t td{padding:10px 12px;border-top:1px solid var(--gray-100);font-size:.86rem;}
+  .sl-t tr.row{cursor:pointer;} .sl-t tr.row:hover td{background:#f8fafc;}
+  .tag{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:10px;background:#fef3c7;color:#92400e;margin-right:4px;}
+  .dr-bg{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;z-index:900;}
+  .dr{position:fixed;top:0;right:0;height:100vh;width:min(420px,100vw);background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,.15);z-index:901;transform:translateX(100%);transition:transform .2s;overflow-y:auto;}
+  .dr.open{transform:none;} .dr-bg.open{display:block;}
+  .dr label.l{display:block;font-size:.76rem;font-weight:700;color:var(--gray-600);margin:12px 0 4px;}
+  .dr input[type=number],.dr input[type=month],.dr input[type=text]{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--gray-300);border-radius:8px;font-size:.92rem;}
+</style>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1100px;margin:0 auto;">
+    <a href="{{ url_for('hr_payroll') }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← Payroll</a>
+    <h1 style="margin:8px 0 4px;font-size:1.35rem;font-weight:800;color:var(--navy);">Employee Salaries</h1>
+    <p style="margin:0 0 16px;font-size:.86rem;color:var(--gray-500);">Monthly gross for every active employee. An increment = a new entry with the month it starts from; earlier months keep the old salary. Click a row to edit.</p>
+
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:auto;">
+      <table class="sl-t" style="width:100%;border-collapse:collapse;">
+        <thead><tr><th>Employee</th><th>Designation</th><th style="text-align:right;">Monthly gross</th><th>From</th><th>Split (Basic / HRA / Other)</th><th>Exceptions</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr class="row" id="emp-{{ r.emp.id }}" onclick="slOpen({{ r.emp.id }})">
+            <td><b style="color:var(--navy);">{{ r.emp.name }}</b><div style="font-size:.72rem;color:var(--gray-500);">{{ r.emp.emp_code }}</div></td>
+            <td style="font-size:.8rem;color:var(--gray-600);">{{ r.emp.designation or '' }}</td>
+            {% if r.cur %}
+              <td style="text-align:right;font-weight:700;">₹{{ inr(r.cur.monthly_gross) }}</td>
+              <td style="font-size:.8rem;">{{ period_label(r.cur.effective_from) }}{% if r.hist|length > 1 %} <span style="color:var(--gray-500);">({{ r.hist|length }} entries)</span>{% endif %}</td>
+              <td style="font-size:.8rem;color:var(--gray-600);">{% if r.split %}{{ inr(r.split.basic) }} / {{ inr(r.split.hra) }} / {{ inr(r.split.other_allowance) }}{% endif %}</td>
+              <td>{% if r.cur.hra_pct is not none %}<span class="tag">HRA {{ r.cur.hra_pct|float|round(2) }}%</span>{% endif %}{% if r.cur.pt_exempt %}<span class="tag">No PT</span>{% endif %}{% if r.cur.pf_exempt %}<span class="tag">No PF</span>{% endif %}</td>
+            {% else %}
+              <td colspan="4" style="color:#b45309;font-size:.82rem;">No salary yet — click to add</td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="dr-bg" id="slBg" onclick="slClose()"></div>
+<div class="dr" id="slDr">
+  <form method="post" action="{{ url_for('hr_payroll_salary_save') }}" style="padding:22px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 id="slName" style="margin:0;font-size:1.1rem;color:var(--navy);"></h3>
+      <button type="button" onclick="slClose()" style="border:none;background:none;font-size:1.4rem;cursor:pointer;color:var(--gray-500);">×</button>
+    </div>
+    <input type="hidden" name="employee_id" id="slEmp">
+    <label class="l">Applies from (month)</label><input type="month" name="effective_from" id="slEff" required>
+    <div style="font-size:.74rem;color:var(--gray-500);margin-top:4px;">Same month as an existing entry = correct it. A later month = increment.</div>
+    <label class="l">Monthly gross (₹)</label><input type="number" step="1" min="1" name="monthly_gross" id="slGross" required>
+    <label class="l">HRA % of Basic — leave blank to use the template ({{ (rules.hra_pct|float) if rules else 50 }}%)</label><input type="number" step="any" min="0" name="hra_pct" id="slHra" placeholder="template">
+    <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:.86rem;"><input type="checkbox" name="pt_exempt" id="slPt"> No Professional Tax for this person</label>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.86rem;"><input type="checkbox" name="pf_exempt" id="slPf"> No PF for this person</label>
+    <label class="l">Note</label><input type="text" name="notes" id="slNotes" maxlength="300">
+    <button type="submit" style="background:var(--orange);color:#fff;border:none;border-radius:9px;width:100%;margin-top:18px;padding:12px;font-weight:700;cursor:pointer;">Save</button>
+    <div id="slHist" style="margin-top:20px;"></div>
+  </form>
+</div>
+<script>
+  var SL = {
+  {% for r in rows %}
+    {{ r.emp.id }}: {name: {{ r.emp.name|tojson }}, cur: {% if r.cur %}{eff: {{ r.cur.effective_from|tojson }}, gross: {{ r.cur.monthly_gross|float }}, hra: {{ (r.cur.hra_pct|float) if r.cur.hra_pct is not none else 'null' }}, pt: {{ 1 if r.cur.pt_exempt else 0 }}, pf: {{ 1 if r.cur.pf_exempt else 0 }}, notes: {{ (r.cur.notes or '')|tojson }}}{% else %}null{% endif %},
+      hist: [{% for h in r.hist %}{id: {{ h.id }}, eff: {{ h.effective_from|tojson }}, gross: {{ inr(h.monthly_gross)|tojson }}, by: {{ (h.updated_by_name or '')|tojson }}}{{ ',' if not loop.last }}{% endfor %}]},
+  {% endfor %}
+  };
+  var THIS_MONTH = {{ this_month|tojson }};
+  function slOpen(id){
+    var s = SL[id]; if(!s) return;
+    document.getElementById('slName').textContent = s.name;
+    document.getElementById('slEmp').value = id;
+    var c = s.cur || {};
+    document.getElementById('slEff').value = c.eff || THIS_MONTH;
+    document.getElementById('slGross').value = c.gross || '';
+    document.getElementById('slHra').value = (c.hra === null || c.hra === undefined) ? '' : c.hra;
+    document.getElementById('slPt').checked = !!c.pt; document.getElementById('slPf').checked = !!c.pf;
+    document.getElementById('slNotes').value = c.notes || '';
+    var h = s.hist.map(function(x){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:.82rem;padding:6px 0;border-bottom:1px dashed #e5e7eb;">'
+        + '<span>From <b>' + x.eff + '</b> · ₹' + x.gross + (x.by ? ' <span style="color:#94a3b8;">by ' + x.by + '</span>' : '') + '</span>'
+        + '<button type="button" onclick="slDel(' + x.id + ')" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:.78rem;">remove</button></div>';
+    }).join('');
+    document.getElementById('slHist').innerHTML = h ? '<div style="font-size:.76rem;font-weight:700;color:#64748b;margin-bottom:4px;">History</div>' + h : '';
+    document.getElementById('slDr').classList.add('open'); document.getElementById('slBg').classList.add('open');
+    document.getElementById('slGross').focus();
+  }
+  function slClose(){ document.getElementById('slDr').classList.remove('open'); document.getElementById('slBg').classList.remove('open'); }
+  function slDel(id){
+    if(!confirm('Remove this salary entry? Payslips already calculated keep their figures.')) return;
+    var f = document.createElement('form'); f.method = 'post'; f.action = '/hr/payroll/salaries/' + id + '/delete';
+    document.body.appendChild(f); f.submit();
+  }
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') slClose(); });
+</script>
+{% endblock %}

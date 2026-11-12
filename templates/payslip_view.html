@@ -1,0 +1,196 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Payslip — {{ period_label(slip.period) }}{% endblock %}
+{% block section_content %}
+<style>
+  .ps-wrap{padding:24px;background:#f5f7fb;min-height:100vh;}
+  .ps-bar{max-width:820px;margin:0 auto 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .ps-bar a.back{color:#1e40af;font-weight:600;text-decoration:none;font-size:.88rem;}
+  .ps-btn{background:#1e40af;color:#fff;border:none;border-radius:9px;padding:10px 18px;font-weight:700;cursor:pointer;font-size:.88rem;}
+  .ps-btn.ghost{background:#fff;color:#1e40af;border:1px solid #bfdbfe;}
+  .ps-timer{font-size:.8rem;color:#64748b;}
+  /* ── the slip (matches the Oct-2026 blue design) ── */
+  .slip{max-width:820px;margin:0 auto;background:#f8fafc;padding:28px;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;}
+  .slip-head{background:#fff;border:1px solid #bfdbfe;border-radius:14px;padding:18px 22px;display:flex;gap:18px;align-items:center;border-bottom:4px solid #2563eb;}
+  .slip-head img{width:62px;height:auto;}
+  .slip-co{font-size:1.35rem;font-weight:800;color:#1e40af;margin:0 0 4px;}
+  .slip-addr{font-size:.78rem;color:#475569;line-height:1.45;margin:0;}
+  .slip-pill{display:table;margin:22px auto;background:#dbeafe;border:1px solid #bfdbfe;color:#1e40af;border-radius:999px;padding:9px 30px;font-size:.78rem;font-weight:800;letter-spacing:.22em;text-transform:uppercase;}
+  .slip-info{background:#fff;border:1px solid #bfdbfe;border-radius:14px;display:grid;grid-template-columns:1fr 1fr;}
+  .slip-info>div{padding:12px 18px;}
+  .slip-info>div:first-child{border-right:1px solid #dbeafe;}
+  .slip-kv{display:grid;grid-template-columns:44% 56%;padding:7px 0;font-size:.86rem;}
+  .slip-kv span{color:#64748b;} .slip-kv b{font-weight:700;}
+  .slip-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;}
+  .slip-card{background:#fff;border:1px solid #bfdbfe;border-radius:14px;overflow:hidden;}
+  .slip-card h4{margin:0;background:#dbeafe;color:#1e40af;font-size:.74rem;letter-spacing:.18em;padding:13px 18px;font-weight:800;border-bottom:1px solid #bfdbfe;}
+  .slip-row{display:flex;justify-content:space-between;padding:10px 18px;font-size:.9rem;}
+  .slip-row:nth-child(odd){background:#eff6ff;}
+  .slip-row.hd{background:#fff !important;font-size:.74rem;color:#64748b;font-weight:600;border-bottom:1px solid #dbeafe;}
+  .slip-row.tot{background:#dbeafe !important;color:#1e40af;font-weight:800;border-top:2px solid #bfdbfe;}
+  .slip-net{margin-top:18px;background:#0f172a;color:#fff;border-radius:14px;padding:20px 26px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;}
+  .slip-net small{display:block;font-size:.68rem;letter-spacing:.18em;color:#94a3b8;text-transform:uppercase;}
+  .slip-net .amt{font-size:2rem;font-weight:800;}
+  .slip-net .wd{text-align:right;font-size:.95rem;}
+  .slip-leave{margin-top:14px;background:#fff;border:1px solid #bfdbfe;border-radius:12px;padding:10px 18px;font-size:.82rem;color:#334155;display:flex;gap:26px;flex-wrap:wrap;}
+  .slip-foot{text-align:center;font-style:italic;font-size:.78rem;color:#64748b;margin-top:18px;}
+  @media (max-width:640px){ .slip-info,.slip-cols{grid-template-columns:1fr;} .slip-info>div:first-child{border-right:none;border-bottom:1px solid #dbeafe;} .slip{padding:14px;} }
+  /* lock screen */
+  .lock{max-width:440px;margin:40px auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:30px;text-align:center;box-shadow:0 4px 18px rgba(15,23,42,.06);}
+  .lock h2{margin:12px 0 6px;font-size:1.2rem;color:#0f172a;}
+  .lock p{color:#64748b;font-size:.88rem;margin:0 0 18px;}
+  .lock input{width:100%;box-sizing:border-box;font-size:1.4rem;letter-spacing:.5em;text-align:center;padding:12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:12px;}
+  .lock .msg{font-size:.84rem;margin-top:10px;min-height:1.2em;}
+</style>
+
+<div class="ps-wrap">
+  <div class="ps-bar">
+    {% if admin_view %}
+      <a class="back" href="{{ url_for('hr_payroll_run', run_id=slip.run_id) }}">← Back to {{ period_label(slip.period) }} payroll</a>
+      <span class="ps-timer">Admin preview{% if run.status != 'released' %} · not yet visible to the employee ({{ run.status }}){% endif %}</span>
+    {% else %}
+      <a class="back" href="{{ url_for('my_payslips') }}">← My Payslips</a>
+      {% if unlocked %}<span class="ps-timer" id="psTimer"></span>{% endif %}
+    {% endif %}
+    {% if unlocked %}
+    <div style="display:flex;gap:8px;">
+      <button class="ps-btn ghost" type="button" onclick="window.print()">Print</button>
+      <button class="ps-btn" type="button" id="psDl" onclick="psDownload()">⬇ Download PDF</button>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if not unlocked %}
+  <div class="lock">
+    <div style="font-size:2.4rem;">🔒</div>
+    <h2>{{ period_label(slip.period) }} payslip is locked</h2>
+    <p>For your privacy, we'll send a one-time code to your WhatsApp{% if masked %} ({{ masked }}){% endif %}. The code opens this payslip for 10 minutes.</p>
+    <button class="ps-btn" type="button" id="psSend" style="width:100%;" onclick="psSend()">Send code on WhatsApp</button>
+    <div id="psCodeBox" style="display:none;margin-top:18px;">
+      <input id="psCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button class="ps-btn" type="button" style="width:100%;" onclick="psVerify()">Open payslip</button>
+      <button class="ps-btn ghost" type="button" style="width:100%;margin-top:8px;" onclick="psSend()">Resend code</button>
+    </div>
+    <div class="msg" id="psMsg"></div>
+  </div>
+  <script>
+    function psMsg(t, ok){ var m=document.getElementById('psMsg'); m.textContent=t; m.style.color= ok ? '#16a34a' : '#dc2626'; }
+    function psSend(){
+      var b=document.getElementById('psSend'); b.disabled=true; psMsg('Sending…', true);
+      fetch('{{ url_for("my_payslip_send_otp", slip_id=slip.id) }}', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
+        .then(function(r){ return r.json(); }).then(function(d){
+          b.disabled=false;
+          if(d.success){ psMsg(d.message, true); b.style.display='none'; document.getElementById('psCodeBox').style.display='block'; document.getElementById('psCode').focus(); }
+          else psMsg(d.error || 'Could not send the code.');
+        }).catch(function(){ b.disabled=false; psMsg('Network error — please try again.'); });
+    }
+    function psVerify(){
+      var c=document.getElementById('psCode').value.trim();
+      if(c.length!==6){ psMsg('Enter the 6-digit code.'); return; }
+      fetch('{{ url_for("my_payslip_verify_otp", slip_id=slip.id) }}', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({otp:c})})
+        .then(function(r){ return r.json(); }).then(function(d){
+          if(d.success){ psMsg('Opening…', true); location.reload(); } else psMsg(d.error || 'Wrong code.');
+        }).catch(function(){ psMsg('Network error — please try again.'); });
+    }
+    document.addEventListener('keydown', function(e){ if(e.key==='Enter' && document.activeElement && document.activeElement.id==='psCode') psVerify(); });
+  </script>
+  {% else %}
+
+  <div class="slip" id="psSlip">
+    <div class="slip-head">
+      <img src="/static/logo-full.png" alt="GooCampus">
+      <div>
+        <p class="slip-co">{{ rules.company_name or 'GooCampus Edu Solutions Pvt Ltd.' }}</p>
+        <p class="slip-addr">{{ rules.company_address or '' }}</p>
+      </div>
+    </div>
+    <div class="slip-pill">Salary Slip — {{ period_label(slip.period) }}</div>
+
+    <div class="slip-info">
+      <div>
+        <div class="slip-kv"><span>Employee Name</span><b>{{ slip.emp_name }}</b></div>
+        <div class="slip-kv"><span>Designation</span><b>{{ slip.designation or '—' }}</b></div>
+        <div class="slip-kv"><span>Location</span><b>{{ slip.location or '—' }}</b></div>
+        <div class="slip-kv"><span>Bank Account No.</span><b>{{ slip.bank_account or '—' }}</b></div>
+      </div>
+      <div>
+        <div class="slip-kv"><span>Employee ID</span><b>{{ slip.emp_code or '—' }}</b></div>
+        <div class="slip-kv"><span>Pay Period</span><b>{{ period_label(slip.period) }}</b></div>
+        <div class="slip-kv"><span>PF Account No.</span><b>{{ slip.pf_account or '—' }}</b></div>
+        {% set pd = slip.paid_days|float %}{% set ld = slip.lop_days|float %}
+        <div class="slip-kv"><span>Paid Days / LOP</span><b>{{ (pd|int) if pd == pd|int else pd }} / {{ (ld|int) if ld == ld|int else ld }}</b></div>
+      </div>
+    </div>
+
+    <div class="slip-cols">
+      <div class="slip-card">
+        <h4>EARNINGS</h4>
+        <div class="slip-row hd"><span>Component</span><span>Amount (₹)</span></div>
+        <div class="slip-row"><span>Basic Salary</span><span>{{ inr(slip.basic) }}</span></div>
+        <div class="slip-row"><span>HRA</span><span>{{ inr(slip.hra) }}</span></div>
+        <div class="slip-row"><span>Conveyance</span><span>{{ inr(slip.conveyance) }}</span></div>
+        <div class="slip-row"><span>LTC</span><span>{{ inr(slip.ltc) }}</span></div>
+        <div class="slip-row"><span>Medical Allowance</span><span>{{ inr(slip.medical) }}</span></div>
+        <div class="slip-row"><span>Other Allowance</span><span>{{ inr(slip.other_allowance) }}</span></div>
+        <div class="slip-row tot"><span>Gross Salary</span><span>₹{{ inr(slip.gross) }}</span></div>
+      </div>
+      <div class="slip-card">
+        <h4>DEDUCTIONS</h4>
+        <div class="slip-row hd"><span>Component</span><span>Amount (₹)</span></div>
+        <div class="slip-row"><span>Provident Fund (PF)</span><span>{{ inr(slip.pf) }}</span></div>
+        <div class="slip-row"><span>Professional Tax (PT)</span><span>{{ inr(slip.pt) }}</span></div>
+        <div class="slip-row"><span>ESI</span><span>{{ inr(slip.esi) }}</span></div>
+        <div class="slip-row"><span>TDS</span><span>{{ inr(slip.tds) }}</span></div>
+        <div class="slip-row"><span>KLWF</span><span>{{ inr(slip.klwf) }}</span></div>
+        <div class="slip-row"><span>Salary Advance</span><span>{{ inr(slip.salary_advance) }}</span></div>
+        <div class="slip-row"><span>Other Deductions</span><span>{{ inr(slip.other_deductions) }}</span></div>
+        <div class="slip-row tot"><span>Total Deductions</span><span>₹{{ inr(slip.total_deductions) }}</span></div>
+      </div>
+    </div>
+
+    <div class="slip-net">
+      <div><small>Employee Net Pay</small><div class="amt">₹{{ inr(slip.net_pay) }}</div></div>
+      <div class="wd"><small>Amount in Words</small>{{ words }}</div>
+    </div>
+
+    {% set lt = slip.leave_taken|float %}{% set lb = slip.leave_balance|float %}
+    <div class="slip-leave">
+      <span>Leave taken this month: <b>{{ (lt|int) if lt == lt|int else lt }}</b></span>
+      <span>Leave balance for the year:<b>{{ (lb|int) if lb == lb|int else lb }}</b></span>
+    </div>
+
+    <p class="slip-foot">This is a system generated payslip, hence the signature is not required.</p>
+  </div>
+
+  <style>@media print{ .navbar,.section-sidebar,.ps-bar,nav,header,footer{display:none !important;} .ps-wrap{padding:0;background:#fff;} .section-layout{height:auto;margin:0;} .section-main{overflow:visible;} }</style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script>
+    function psDownload(){
+      var name = 'Payslip-{{ slip.period }}-{{ (slip.emp_code or "") | replace(" ", "") }}.pdf';
+      {% if not admin_view %}
+      fetch('{{ url_for("my_payslip_downloaded", slip_id=slip.id) }}', {method:'POST'}).then(function(r){
+        if(r.status===403){ location.reload(); return; }
+        go();
+      }).catch(go);
+      {% else %}go();{% endif %}
+      function go(){
+        if(typeof html2pdf === 'undefined'){ window.print(); return; }
+        html2pdf().set({margin:0, filename:name, image:{type:'jpeg',quality:0.98},
+          html2canvas:{scale:2, useCORS:true, backgroundColor:'#f8fafc'},
+          jsPDF:{unit:'mm', format:'a4', orientation:'portrait'}}).from(document.getElementById('psSlip')).save();
+      }
+    }
+    {% if not admin_view and secs_left %}
+    (function(){
+      var left = {{ secs_left }}, el = document.getElementById('psTimer');
+      function tick(){
+        if(left <= 0){ location.reload(); return; }
+        var m = Math.floor(left/60), s = left%60;
+        el.textContent = 'Locks again in ' + m + ':' + (s<10?'0':'') + s; left--; setTimeout(tick, 1000);
+      }
+      tick();
+    })();
+    {% endif %}
+  </script>
+  {% endif %}
+</div>
+{% endblock %}

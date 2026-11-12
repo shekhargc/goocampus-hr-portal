@@ -128,8 +128,28 @@
         <span class="sec-nav-text">Cash Pool</span>
     </a>
 
+    {% if can_access('hr','payroll','edit') %}
+    <div class="sec-nav-group-label">Payroll</div>
+    <a href="/hr/payroll" class="sec-nav-item" data-tooltip="Payroll — monthly salary run + payslips">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg></span>
+        <span class="sec-nav-text">Payroll</span>
+    </a>
+    <a href="/hr/payroll/salaries" class="sec-nav-item" data-tooltip="Employee Salaries — monthly gross per person">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+        <span class="sec-nav-text">Employee Salaries</span>
+    </a>
+    <a href="/hr/payroll/template" class="sec-nav-item" data-tooltip="Salary Template — FY rules (Basic/HRA/PF/PT)">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
+        <span class="sec-nav-text">Salary Template</span>
+    </a>
+    {% endif %}
+
     {# Self-service — admins/HR staff also apply for their own WFH / travel #}
     <div class="sec-nav-group-label">My Requests</div>
+    <a href="/my-payslips" class="sec-nav-item" data-tooltip="My Payslips (WhatsApp OTP to open)">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>
+        <span class="sec-nav-text">My Payslips</span>
+    </a>
     <a href="/wfh/apply" class="sec-nav-item" data-tooltip="Apply WFH">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
         <span class="sec-nav-text">Apply WFH</span>
@@ -235,6 +255,27 @@
     <a href="/official-travel/approvals" class="sec-nav-item" data-tooltip="Official Travel Approvals">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
         <span class="sec-nav-text">Official Travel Approvals</span>
+    </a>
+    {% endif %}
+
+    <div class="sec-nav-group-label">Payslips</div>
+    <a href="/my-payslips" class="sec-nav-item" data-tooltip="My Payslips (WhatsApp OTP to open)">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></span>
+        <span class="sec-nav-text">My Payslips</span>
+    </a>
+    {% if can_access('hr','payroll','edit') %}
+    <div class="sec-nav-group-label">Payroll</div>
+    <a href="/hr/payroll" class="sec-nav-item" data-tooltip="Payroll — monthly salary run + payslips">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg></span>
+        <span class="sec-nav-text">Payroll</span>
+    </a>
+    <a href="/hr/payroll/salaries" class="sec-nav-item" data-tooltip="Employee Salaries — monthly gross per person">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+        <span class="sec-nav-text">Employee Salaries</span>
+    </a>
+    <a href="/hr/payroll/template" class="sec-nav-item" data-tooltip="Salary Template — FY rules (Basic/HRA/PF/PT)">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
+        <span class="sec-nav-text">Salary Template</span>
     </a>
     {% endif %}
 

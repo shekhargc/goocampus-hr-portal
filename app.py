@@ -48185,6 +48185,7 @@ ACCESS_SECTION_CATALOG = [
             ('id_cards',         'ID Cards',            'ID card requests + generation'),
             ('letters',          'Letters',             'HR letter templates + generation'),
             ('cash_expenses',    'Cash Expenses',       'Petty-cash ledger — cash received, expenses, per-member balance (edit = management: record cash given + see all)'),
+            ('payroll',          'Payroll & Payslips',  'Salary template, employee salaries, monthly payroll + payslip release — EVERYONE\'s salary (grant edit only to the payroll person)'),
         ],
     },
     # ── KRA ────────────────────────────────────────────────────────────────
@@ -52078,6 +52079,23 @@ ACCESS_ROUTE_MAP = {
     'hr_cash_pool_add':                   _ap('hr', 'cash_pool', 'add'),
     'hr_cash_pool_delete':                _ap('hr', 'cash_pool', 'delete'),
     'hr_cash_import_junaug':              _ap('hr', 'cash_pool'),
+    # Payroll & Payslips (routes/hr_payroll.py). Every admin page needs 'edit' (it shows
+    # everyone's salary); routes ALSO re-check in-route. Employee 'My Payslips' routes are
+    # deliberately NOT mapped: any employee may reach them, and they only ever return the
+    # caller's own released slips (ownership enforced in the query + WhatsApp OTP).
+    'hr_payroll':                         _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_start':                   _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_run':                     _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_recalc':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_status':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_export':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_access_log':              _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_slip_view':               _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_slip_save':               _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_template':                _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_salaries':                _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_salary_save':             _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_salary_delete':           _ap('hr', 'payroll', 'edit'),
     'hr_cash_clear_import_notes':         _ap('hr', 'cash_pool'),
 
     # ── Company ───────────────────────────────────────────────────────────
@@ -56193,6 +56211,10 @@ register_internal_transfer_completion(app)
 
 from routes.verification_queues import register_verification_queues
 register_verification_queues(app)
+
+# HR › Payroll & Payslips — salary template, monthly payroll, OTP-locked My Payslips (2026-11-12)
+from routes.hr_payroll import register_hr_payroll
+register_hr_payroll(app)
 
 # System Health dashboard — /admin/health (admin only): live green/amber/red
 # board for portal + goocampus.in + jobs site + email/WhatsApp/OTP/storage.
