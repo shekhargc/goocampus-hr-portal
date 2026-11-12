@@ -93,6 +93,9 @@ gap, 6/hour), unlock lasts 10 min; every send/unlock/view/download logged in `pa
 BankAccount, PFAccount(UAN)) → preview → confirm. Fills ONLY empty `employees.bank_account_number` / `pf_number`
 (re-checked in the UPDATE's WHERE), includes ex-employees, matches on emp_code then unique exact name; draft payslips
 with a blank bank/PF pick the number up. Existing different numbers are shown, never overwritten.
+**Payslip-ready email**: on a RELEASED month, ✉ Email employees (side drawer, select all or tick one) →
+`/hr/payroll/run/<id>/notify` emails each person's Work Email (`employees.email`) a link to My Payslips — no figures
+in the email. Every send logged in `payslip_email_log` (sent/failed); the run table shows "emailed <time>".
 
 ## Gotchas
 - FY starts **April**; April accrues 3 leave days, other months 2.

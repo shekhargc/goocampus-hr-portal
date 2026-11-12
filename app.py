@@ -52113,6 +52113,7 @@ ACCESS_ROUTE_MAP = {
     'hr_payroll_status':                  _ap('hr', 'payroll', 'edit'),
     'hr_payroll_export':                  _ap('hr', 'payroll', 'edit'),
     'hr_payroll_access_log':              _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_notify':                  _ap('hr', 'payroll', 'edit'),
     'hr_payroll_slip_view':               _ap('hr', 'payroll', 'edit'),
     'hr_payroll_slip_save':               _ap('hr', 'payroll', 'edit'),
     'hr_payroll_template':                _ap('hr', 'payroll', 'edit'),

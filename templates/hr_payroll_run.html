@@ -27,7 +27,7 @@
         <p style="margin:4px 0 0;font-size:.84rem;color:var(--gray-500);">
           {% if st == 'draft' %}Check each person's LOP and add TDS / KLWF / advances (click a row). Directors' TDS comes from their Monthly TDS on Employee Salaries; type anyone else's TDS here when it applies (it isn't copied to next month). Recalculate pulls the latest leave + salaries; your entries are kept.
           {% elif st == 'finalised' %}Figures are locked. Release to let employees open their slips.
-          {% else %}Released {% if run.released_by_name %}by {{ run.released_by_name }}{% endif %} — employees can open these slips with a WhatsApp OTP.{% endif %}
+          {% else %}Released {% if run.released_by_name %}by {{ run.released_by_name }}{% endif %} — employees can open these slips with a WhatsApp OTP. Use ✉ Email employees to tell them (everyone, or one person to test first).{% endif %}
           Template: {{ fy_label(run.period) }} rules{% if rules %} (from {{ period_label(rules.effective_from) }}){% endif %}.
         </p>
       </div>
@@ -39,6 +39,9 @@
           <form method="post" action="{{ url_for('hr_payroll_status', run_id=run.id) }}" style="margin:0;" onsubmit="return confirm('Finalise {{ period_label(run.period) }}? Figures will be locked.');"><input type="hidden" name="action" value="finalise"><button class="pr-btn" style="background:#1d4ed8;color:#fff;">Finalise</button></form>
         {% elif st == 'finalised' %}
           <form method="post" action="{{ url_for('hr_payroll_status', run_id=run.id) }}" style="margin:0;" onsubmit="return confirm('Release {{ period_label(run.period) }} payslips? Every employee in this list will be able to open their own slip.');"><input type="hidden" name="action" value="release"><button class="pr-btn" style="background:#15803d;color:#fff;">Release to employees</button></form>
+        {% endif %}
+        {% if st == 'released' %}
+          <button type="button" class="pr-btn" style="background:#F58220;color:#fff;" onclick="nfOpen()">✉ Email employees</button>
         {% endif %}
         {% if st in ('finalised','released') %}
           <form method="post" action="{{ url_for('hr_payroll_status', run_id=run.id) }}" style="margin:0;" onsubmit="return confirm('Re-open as draft? {% if st == 'released' %}Employees will NOT see these slips until you release again.{% endif %}');"><input type="hidden" name="action" value="reopen"><button class="pr-btn" style="background:#fff;border:1px solid #fecaca;color:#b91c1c;">Re-open</button></form>
@@ -75,6 +78,7 @@
             <td onclick="event.stopPropagation();">
               <a href="{{ url_for('hr_payroll_slip_view', slip_id=s.id) }}" style="font-size:.78rem;color:#1e40af;font-weight:600;text-decoration:none;">View slip</a>
               {% if s.views %}<div style="font-size:.68rem;color:#15803d;">opened {{ s.views }}×</div>{% endif %}
+              {% if s.emailed_ist %}<div style="font-size:.68rem;color:#b45309;">✉ emailed {{ s.emailed_ist }}</div>{% endif %}
             </td>
           </tr>
         {% else %}
@@ -98,6 +102,42 @@
     {% endif %}
   </div>
 </div>
+
+{% if st == 'released' %}
+<div class="dr-bg" id="nfBg" onclick="nfClose()"></div>
+<div class="dr" id="nfDr">
+  <form method="post" action="{{ url_for('hr_payroll_notify', run_id=run.id) }}" style="padding:22px;" onsubmit="return nfConfirm();">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;color:var(--navy);font-size:1.05rem;">Email: payslip ready</h3>
+      <button type="button" onclick="nfClose()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--gray-500);">×</button>
+    </div>
+    <p style="font-size:.8rem;color:var(--gray-500);margin:6px 0 14px;">Sends to each person's <b>Work Email</b>: "Your payslip for {{ period_label(run.period) }} is ready", with a link to My Payslips. No salary figures are in the email. Tip: tick one person first to test.</p>
+    <label style="display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:700;color:var(--navy);padding:8px 0;border-bottom:1px solid var(--gray-200);margin:0;">
+      <input type="checkbox" id="nfAll" onchange="nfToggleAll(this.checked)"> Select all</label>
+    {% for s in slips %}
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px dashed var(--gray-100);margin:0;font-weight:500;{% if not s.work_email %}opacity:.55;{% endif %}">
+        <input type="checkbox" name="slip_id" value="{{ s.id }}" class="nfChk" {% if not s.work_email %}disabled{% endif %} onchange="nfCount()" style="margin-top:3px;">
+        <span style="flex:1;font-size:.86rem;color:var(--navy);"><b>{{ s.emp_name }}</b>
+          <span style="display:block;font-size:.74rem;color:var(--gray-500);">{{ s.work_email or 'No work email on profile' }}</span>
+          {% if s.emailed_ist %}<span style="display:block;font-size:.7rem;color:#b45309;">Already emailed {{ s.emailed_ist }}</span>{% endif %}</span>
+      </label>
+    {% endfor %}
+    <button type="submit" id="nfBtn" class="pr-btn" style="background:#F58220;color:#fff;width:100%;margin-top:16px;" disabled>Send email</button>
+  </form>
+</div>
+<script>
+  function nfOpen(){ document.getElementById('nfDr').classList.add('open'); document.getElementById('nfBg').classList.add('open'); }
+  function nfClose(){ document.getElementById('nfDr').classList.remove('open'); document.getElementById('nfBg').classList.remove('open'); }
+  function nfBoxes(){ return Array.prototype.filter.call(document.querySelectorAll('.nfChk'), function(c){ return !c.disabled; }); }
+  function nfCount(){ var n = nfBoxes().filter(function(c){ return c.checked; }).length, b = document.getElementById('nfBtn');
+    b.disabled = !n; b.textContent = n ? ('Send email to ' + n + (n === 1 ? ' person' : ' people')) : 'Send email';
+    document.getElementById('nfAll').checked = n && n === nfBoxes().length; }
+  function nfToggleAll(on){ nfBoxes().forEach(function(c){ c.checked = on; }); nfCount(); }
+  function nfConfirm(){ var n = nfBoxes().filter(function(c){ return c.checked; }).length;
+    var b = document.getElementById('nfBtn'); if(!confirm('Send the "payslip ready" email to ' + n + (n === 1 ? ' person' : ' people') + '?')) return false;
+    setTimeout(function(){ b.disabled = true; b.textContent = 'Sending…'; }, 0); return true; }
+</script>
+{% endif %}
 
 {% if st == 'draft' %}
 <div class="dr-bg" id="prBg" onclick="prClose()"></div>

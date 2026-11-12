@@ -291,6 +291,10 @@ def _ensure(conn):
             id {pk},
             payslip_id INTEGER, employee_id INTEGER, actor_id INTEGER, actor_name TEXT,
             action TEXT, ip TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''',
+        f'''CREATE TABLE IF NOT EXISTS payslip_email_log (
+            id {pk},
+            payslip_id INTEGER NOT NULL, employee_id INTEGER, to_email TEXT, status TEXT,
+            sent_by_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''',
     ]
     try:
         for q in ddl:
@@ -692,6 +696,14 @@ def payroll_run(run_id):
         views = {r['payslip_id']: r['c'] for r in conn.execute(
             "SELECT payslip_id, COUNT(*) AS c FROM payslip_access_log WHERE action IN ('view','download') "
             "AND payslip_id IN (SELECT id FROM payslips WHERE run_id = ?) GROUP BY payslip_id", (run_id,)).fetchall()}
+        emails = {r['id']: (r['email'] or '').strip() for r in conn.execute(
+            "SELECT e.id, e.email FROM employees e WHERE e.id IN (SELECT employee_id FROM payslips WHERE run_id = ?)",
+            (run_id,)).fetchall()}
+        mailed = {}
+        for r in conn.execute("SELECT payslip_id, status, created_at FROM payslip_email_log WHERE payslip_id IN "
+                              "(SELECT id FROM payslips WHERE run_id = ?) ORDER BY id", (run_id,)).fetchall():
+            if r['status'] == 'sent':
+                mailed[r['payslip_id']] = r['created_at']
     finally:
         conn.close()
     for s in slips:
@@ -700,6 +712,9 @@ def payroll_run(run_id):
         except Exception:
             s['ov'] = {}
         s['views'] = views.get(s['id'], 0)
+        s['work_email'] = emails.get(s['employee_id'], '')
+        m = _as_dt(mailed.get(s['id'])) if mailed.get(s['id']) else None
+        s['emailed_ist'] = (m + timedelta(hours=5, minutes=30)).strftime('%d %b, %I:%M %p') if m else ''
     tot_keys = ['gross', 'pf', 'pt', 'esi', 'tds', 'klwf', 'salary_advance', 'other_deductions',
                 'total_deductions', 'net_pay', 'lop_days']
     totals = {k: sum(_f(s.get(k)) for s in slips) for k in tot_keys}
@@ -1485,6 +1500,99 @@ def payroll_bankpf_apply():
     return redirect(url_for('hr_payroll_salaries'))
 
 
+# ── Email employees that their payslip is ready (founder 2026-11-12) ────────────────────────────
+# Only for a RELEASED month (before that the employee couldn't open it). Goes to the Work Email on the
+# employee profile. The email carries NO salary figures — just a link to My Payslips (WhatsApp OTP).
+
+PORTAL_URL = 'https://goocampus.org'
+
+
+def _payslip_ready_html(name, period):
+    first = (str(name or '').split() or ['there'])[0]
+    label = period_label(period)
+    link = f"{PORTAL_URL}/my-payslips"
+    return f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;background:#f5f5f5;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;">
+    <div style="background-color:#1e3a5f;padding:22px;text-align:center;"><h1 style="color:white;margin:0;font-size:22px;">GooCampus Edu Solutions</h1></div>
+    <div style="padding:30px;">
+      <h2 style="color:#1e3a5f;margin-top:0;">Your payslip for {label} is ready</h2>
+      <p style="font-size:16px;">Hello {first},</p>
+      <p>Your salary slip for <strong>{label}</strong> is now available on the GooCampus portal. You can view and download it any time.</p>
+      <div style="text-align:center;margin:28px 0;">
+        <a href="{link}" style="background-color:#F58220;color:white;padding:14px 34px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block;">Open My Payslips</a>
+      </div>
+      <p style="background:#f0f6ff;border-left:4px solid #1e3a5f;padding:12px 16px;border-radius:4px;font-size:14px;">
+      🔒 For your privacy, the payslip opens only after you log in and enter a one-time code sent to your WhatsApp.</p>
+      <p style="font-size:13px;color:#666;">Or copy this link:<br><a href="{link}" style="color:#F58220;">{link}</a></p>
+      <p style="font-size:13px;color:#666;">If anything on your payslip looks wrong, please reply to HR.</p>
+      <p style="margin-top:28px;">Warm regards,<br><strong style="color:#1e3a5f;">The GooCampus HR Team</strong></p>
+    </div>
+    <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
+  </div>
+</body></html>'''
+
+
+def _send_payslip_ready_email(to_email, name, period):
+    try:
+        from email_utils import send_email
+        return bool(send_email([to_email], f"Your payslip for {period_label(period)} is ready — GooCampus",
+                               _payslip_ready_html(name, period), from_address="GooCampus <info@goocampus.in>"))
+    except Exception as e:
+        logging.error(f"payslip email to {to_email}: {e}")
+        return False
+
+
+def payroll_notify(run_id):
+    """Email the ticked employees that their (released) payslip is ready."""
+    user, deny = _require_manager()
+    if deny:
+        return deny
+    ids = set()
+    for v in request.form.getlist('slip_id'):
+        try:
+            ids.add(int(v))
+        except ValueError:
+            pass
+    conn = get_db()
+    try:
+        _ensure(conn)
+        run = conn.execute("SELECT * FROM payroll_runs WHERE id = ?", (run_id,)).fetchone()
+        if not run:
+            abort(404)
+        if run['status'] != 'released':
+            flash('Release the payslips first — employees can only open a released month.', 'error')
+            return redirect(url_for('hr_payroll_run', run_id=run_id))
+        if not ids:
+            flash('Tick at least one employee to email.', 'error')
+            return redirect(url_for('hr_payroll_run', run_id=run_id))
+        rows = [dict(r) for r in conn.execute(
+            "SELECT p.id, p.employee_id, p.emp_name, e.email FROM payslips p JOIN employees e ON e.id = p.employee_id "
+            "WHERE p.run_id = ?", (run_id,)).fetchall()]
+        sent, failed, no_email = [], [], []
+        for r in rows:
+            if r['id'] not in ids:
+                continue
+            to = (r.get('email') or '').strip()
+            if not to or '@' not in to:
+                no_email.append(r['emp_name'])
+                continue
+            ok = _send_payslip_ready_email(to, r['emp_name'], run['period'])
+            (sent if ok else failed).append(r['emp_name'])
+            conn.execute("INSERT INTO payslip_email_log (payslip_id, employee_id, to_email, status, sent_by_name) "
+                         "VALUES (?, ?, ?, ?, ?)", (r['id'], r['employee_id'], to, 'sent' if ok else 'failed',
+                                                    user.get('name') or ''))
+            conn.commit()
+    finally:
+        conn.close()
+    if sent:
+        flash(f"Email sent to {len(sent)} employee(s): {', '.join(sent)}.", 'success')
+    if failed:
+        flash(f"Could not send to: {', '.join(failed)}. Please try again in a minute.", 'error')
+    if no_email:
+        flash(f"No work email on the profile for: {', '.join(no_email)} — add it under Employees, then send again.", 'error')
+    return redirect(url_for('hr_payroll_run', run_id=run_id))
+
+
 def register_hr_payroll(app):
     lr = login_required
     rules = [
@@ -1495,6 +1603,7 @@ def register_hr_payroll(app):
         ('/hr/payroll/run/<int:run_id>/status', 'hr_payroll_status', payroll_status, ['POST']),
         ('/hr/payroll/run/<int:run_id>/export', 'hr_payroll_export', payroll_export, ['GET']),
         ('/hr/payroll/run/<int:run_id>/log', 'hr_payroll_access_log', payroll_access_log, ['GET']),
+        ('/hr/payroll/run/<int:run_id>/notify', 'hr_payroll_notify', payroll_notify, ['POST']),
         ('/hr/payroll/slip/<int:slip_id>', 'hr_payroll_slip_view', payroll_slip_view, ['GET']),
         ('/hr/payroll/slip/<int:slip_id>/save', 'hr_payroll_slip_save', payroll_slip_save, ['POST']),
         ('/hr/payroll/template', 'hr_payroll_template', payroll_template, ['GET', 'POST']),
