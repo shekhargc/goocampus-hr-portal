@@ -56275,4 +56275,9 @@ register_college(app)
 from pg_admin import register_pg_admin
 register_pg_admin(app)
 
+# ── Exam engine (NEET PG mock tests; question import + review at /admin/pg/mocks/*) — 2026-11-13 ──
+# Self-contained in exam_engine/ (own ex_* tables, tenant-aware) so it can move to its own service later.
+from exam_engine import register_exam_engine
+register_exam_engine(app)
+
 # redeploy trigger 2026-07-02 (ensure sales-verification sidebar commit is deployed)

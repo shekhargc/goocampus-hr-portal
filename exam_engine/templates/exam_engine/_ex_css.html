@@ -1,0 +1,39 @@
+<style>
+  .ex-head { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1.1rem; }
+  .ex-head h1 { font-size:1.45rem; font-weight:700; color:var(--navy); margin:0; }
+  .ex-head p { color:var(--gray-500); font-size:0.88rem; margin:0.2rem 0 0; max-width:780px; }
+  .ex-crumb { font-size:0.8rem; color:var(--gray-500); margin-bottom:0.4rem; }
+  .ex-crumb a { color:var(--gray-600); text-decoration:none; } .ex-crumb a:hover { text-decoration:underline; }
+  .ex-btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 0.95rem; border-radius:0.5rem; border:none;
+      font-size:0.86rem; font-weight:600; cursor:pointer; text-decoration:none; line-height:1.2; }
+  .ex-btn-primary { background:var(--orange); color:#fff; } .ex-btn-primary:hover { filter:brightness(0.95); }
+  .ex-btn-green { background:#16a34a; color:#fff; } .ex-btn-red { background:#fff; color:#b91c1c; border:1px solid #fca5a5; }
+  .ex-btn-ghost { background:#fff; color:var(--navy); border:1px solid var(--gray-300); } .ex-btn-ghost:hover { background:var(--gray-100); }
+  .ex-btn[disabled] { opacity:0.45; cursor:not-allowed; }
+  .ex-card { background:#fff; border:1px solid var(--gray-200); border-radius:0.7rem; padding:1rem 1.2rem; margin-bottom:1rem; }
+  .ex-card h2 { font-size:1rem; font-weight:700; color:var(--navy); margin:0 0 0.7rem; }
+  .ex-stats { display:grid; grid-template-columns:repeat(5,1fr); gap:0.8rem; margin-bottom:1rem; }
+  .ex-stat { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.75rem 1rem; text-decoration:none; display:block; }
+  .ex-stat .lbl { font-size:0.72rem; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; }
+  .ex-stat .val { font-size:1.5rem; font-weight:700; color:var(--navy); margin-top:0.1rem; }
+  .ex-stat.on { outline:2px solid var(--orange); }
+  @media (max-width:1000px){ .ex-stats{ grid-template-columns:repeat(2,1fr);} }
+  .ex-table { width:100%; border-collapse:collapse; background:#fff; border-radius:0.6rem; overflow:hidden; border:1px solid var(--gray-200); }
+  .ex-table th { background:var(--navy); color:#fff; text-align:left; padding:0.6rem 0.75rem; font-size:0.74rem; text-transform:uppercase; letter-spacing:0.4px; }
+  .ex-table td { padding:0.55rem 0.75rem; border-top:1px solid var(--gray-100); font-size:0.85rem; vertical-align:top; }
+  .ex-table tr.clickable { cursor:pointer; } .ex-table tr.clickable:hover td { background:#f8fafc; }
+  .chip { display:inline-block; padding:0.12rem 0.5rem; border-radius:1rem; font-size:0.71rem; font-weight:600; margin:0 0.2rem 0.2rem 0; white-space:nowrap; }
+  .chip-green { background:#dcfce7; color:#166534; } .chip-gray { background:var(--gray-100); color:var(--gray-600); }
+  .chip-blue { background:#dbeafe; color:#1e40af; } .chip-amber { background:#fef3c7; color:#92400e; } .chip-red { background:#fee2e2; color:#b91c1c; }
+  .sev-error { color:#b91c1c; } .sev-warn { color:#92400e; } .sev-info { color:#1e40af; }
+  .ex-flag { display:flex; gap:0.5rem; align-items:flex-start; padding:0.4rem 0.6rem; border-radius:0.45rem; font-size:0.85rem; margin-bottom:0.35rem; }
+  .ex-flag.error { background:#fef2f2; color:#991b1b; } .ex-flag.warn { background:#fffbeb; color:#92400e; } .ex-flag.info { background:#eff6ff; color:#1e40af; }
+  .ex-note { background:#f8fafc; border:1px dashed var(--gray-300); border-radius:0.5rem; padding:0.55rem 0.8rem; font-size:0.84rem; color:var(--gray-600); margin-bottom:0.5rem; }
+  .ex-f label { display:block; font-size:0.77rem; font-weight:600; color:var(--navy); margin:0.55rem 0 0.2rem; }
+  .ex-f input[type=text], .ex-f select, .ex-f textarea { width:100%; padding:0.5rem 0.6rem; border:1px solid var(--gray-300); border-radius:0.45rem;
+      font-size:0.88rem; font-family:inherit; box-sizing:border-box; background:#fff; }
+  .ex-f textarea { min-height:70px; resize:vertical; line-height:1.45; }
+  .muted { color:var(--gray-500); font-size:0.82rem; }
+  .ex-bar { display:flex; height:10px; border-radius:5px; overflow:hidden; background:var(--gray-100); }
+  .ex-bar span { display:block; height:100%; }
+</style>

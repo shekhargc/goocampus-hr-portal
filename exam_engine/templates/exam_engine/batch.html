@@ -1,0 +1,128 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Import #{{ b.id }} · {{ b.filename }}{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}{% endblock %}
+
+{% block section_content %}
+<div class="ex-head">
+  <div>
+    <div class="ex-crumb"><a href="{{ url_for('ex_imports') }}">Mock Tests › Question import</a> › Import #{{ b.id }}</div>
+    <h1>{{ b.filename }} <span class="chip chip-gray" style="vertical-align:middle;">{{ b.kind|upper }}</span></h1>
+    <p>Uploaded {{ b.when }} by {{ b.uploaded_by }}{% if b.note %} · {{ b.note }}{% endif %}
+       {% if b.info.pages %} · {{ b.info.pages }} pages{% endif %}</p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+    {% if b.status == 'ready' and can_bulk and counts.ready %}
+    <form method="post" action="{{ url_for('ex_import_approve_clean', bid=b.id) }}"
+          onsubmit="return confirm('Approve all {{ counts.ready }} question(s) that have no problems?');">
+      <button class="ex-btn ex-btn-green">✓ Approve {{ counts.ready }} with no problems</button>
+    </form>
+    {% endif %}
+    {% if not locked %}
+    <form method="post" action="{{ url_for('ex_import_reparse', bid=b.id) }}">
+      <button class="ex-btn ex-btn-ghost" title="Read the file again (e.g. after the reader was improved)">↻ Read again</button>
+    </form>
+    <form method="post" action="{{ url_for('ex_import_discard', bid=b.id) }}"
+          onsubmit="return confirm('Discard this import and all its unreviewed questions? This cannot be undone.');">
+      <button class="ex-btn ex-btn-red">Discard</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+{% if b.status == 'parsing' %}
+  <div class="ex-card" id="parsing">
+    <h2>Reading the file…</h2>
+    <p class="muted">This usually takes a few seconds. The page refreshes by itself.</p>
+  </div>
+  <script>
+    (function poll(){ fetch('{{ url_for('ex_import_batch_status', bid=b.id) }}').then(r => r.json()).then(d => {
+      if (d.status !== 'parsing') location.reload(); else setTimeout(poll, 2000);
+    }).catch(() => setTimeout(poll, 4000)); })();
+  </script>
+{% elif b.status == 'failed' %}
+  <div class="ex-flag error"><b>Couldn't read this file.</b>&nbsp;{{ b.error }}</div>
+{% else %}
+
+  <div class="ex-stats">
+    <a class="ex-stat {{ 'on' if f == 'all' }}" href="?f=all"><div class="lbl">Questions found</div><div class="val">{{ counts.all }}</div></a>
+    <a class="ex-stat {{ 'on' if f == 'errors' }}" href="?f=errors"><div class="lbl">Need fixing</div><div class="val sev-error">{{ counts.errors }}</div></a>
+    <a class="ex-stat {{ 'on' if f == 'ready' }}" href="?f=ready"><div class="lbl">Ready to review</div><div class="val">{{ counts.ready }}</div></a>
+    <a class="ex-stat {{ 'on' if f == 'approved' }}" href="?f=approved"><div class="lbl">Approved</div><div class="val" style="color:#166534;">{{ counts.approved }}</div></a>
+    <a class="ex-stat {{ 'on' if f == 'rejected' }}" href="?f=rejected"><div class="lbl">Rejected</div><div class="val">{{ counts.rejected }}</div></a>
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:1rem;">
+    <div class="ex-card">
+      <h2>Check report</h2>
+      {% for n in b.notes %}<div class="ex-note">{{ n }}</div>{% endfor %}
+      {% if b.summary.missing_numbers %}<div class="ex-flag warn">Question numbers missing from the file: {{ b.summary.missing_numbers|join(', ') }}</div>{% endif %}
+      {% if b.summary.repeated_numbers %}<div class="ex-flag warn">Question numbers used twice: {{ b.summary.repeated_numbers|join(', ') }}</div>{% endif %}
+      {% if b.summary.answer_skew %}<div class="ex-flag warn">{{ b.summary.answer_skew }}</div>{% endif %}
+      {% if flag_rows %}
+        <table class="ex-table" style="margin-top:0.4rem;">
+          <thead><tr><th>Problem</th><th style="width:90px;">Questions</th></tr></thead>
+          <tbody>
+          {% for code, sev, text, n in flag_rows %}
+            <tr class="clickable" onclick="location.href='?f=flag:{{ code }}'">
+              <td><span class="sev-{{ sev }}">{% if sev == 'error' %}●{% elif sev == 'warn' %}▲{% else %}ℹ{% endif %}</span>
+                  {{ text }}</td>
+              <td><b>{{ n }}</b>{% if f == 'flag:' ~ code %} <span class="chip chip-blue">shown</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <p class="muted" style="margin:0.5rem 0 0;"><span class="sev-error">●</span> must be fixed before approval ·
+           <span class="sev-warn">▲</span> worth a look · <span class="sev-info">ℹ</span> fixed automatically. Click a row to see those questions.</p>
+      {% else %}
+        <div class="ex-flag info">No problems found.</div>
+      {% endif %}
+    </div>
+    <div class="ex-card">
+      <h2>Correct answers</h2>
+      {% set ans = b.summary.answers or {} %}{% set tot = b.summary.total or 1 %}
+      {% for L in ['A','B','C','D','?'] %}{% if ans.get(L) %}
+        <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.84rem;margin-bottom:0.25rem;">
+          <span style="width:56px;">{{ 'No answer' if L == '?' else L }}</span>
+          <div class="ex-bar" style="flex:1;"><span style="width:{{ (100 * ans[L] / tot)|round(1) }}%;background:{{ '#ef4444' if L == '?' else '#1e3a8a' }};"></span></div>
+          <span style="width:40px;text-align:right;">{{ ans[L] }}</span>
+        </div>
+      {% endif %}{% endfor %}
+      <h2 style="margin-top:1rem;">Subjects</h2>
+      {% for s, n in (b.summary.subjects or {}).items() %}
+        <div style="display:flex;justify-content:space-between;font-size:0.84rem;border-bottom:1px solid var(--gray-100);padding:0.15rem 0;">
+          <span class="{{ 'sev-error' if s == 'Not set' }}">{{ s }}</span><b>{{ n }}</b></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if b.kind == 'pdf' %}
+    <div class="ex-note">This is a PDF: open each question and compare it with its page before approving (bulk approval is off for PDFs).</div>
+  {% endif %}
+
+  <table class="ex-table">
+    <thead><tr><th style="width:60px;">Q</th><th>Question</th><th style="width:180px;">Subject / topic</th><th style="width:260px;">Problems</th><th style="width:110px;">Status</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr class="clickable" onclick="location.href='{{ url_for('ex_question', qid=r.id) }}'">
+        <td><b>{{ r.source_no or '—' }}</b>{% if r.page_from %}<div class="muted">p.{{ r.page_from }}</div>{% endif %}</td>
+        <td>{{ (r.stem or '(no question text)')[:170] }}{% if (r.stem or '')|length > 170 %}…{% endif %}
+            {% if r.n_images %}<span class="chip chip-blue">🖼 {{ r.n_images }}</span>{% endif %}</td>
+        <td>{% if r.subject %}{{ r.subject }}{% else %}<span class="sev-error">Not set</span>{% endif %}
+            {% if r.topic %}<div class="muted">{{ r.topic }}</div>{% endif %}</td>
+        <td>{% for fl in r.flags if fl.severity != 'info' %}<span class="chip {{ 'chip-red' if fl.severity == 'error' else 'chip-amber' }}" title="{{ fl.message }}">{{ fl.message[:38] }}{% if fl.message|length > 38 %}…{% endif %}</span>{% endfor %}</td>
+        <td>{% if r.status == 'approved' %}<span class="chip chip-green">Approved</span>
+            {% elif r.status == 'rejected' %}<span class="chip chip-gray">Rejected</span>
+            {% elif r.n_errors %}<span class="chip chip-red">Needs fixing</span>
+            {% else %}<span class="chip chip-blue">To review</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No questions in this view.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

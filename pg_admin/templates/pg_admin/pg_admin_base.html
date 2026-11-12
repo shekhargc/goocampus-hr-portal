@@ -32,6 +32,10 @@
     {# ── Admin-only areas (only admins see these) ──────────────────────────── #}
     {% if session.get('is_admin') %}
     <div style="margin:0.9rem 0.9rem 0.45rem;border-top:1px solid rgba(148,163,184,0.25);padding-top:0.65rem;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#94a3b8;">Admin only</div>
+    <a href="/admin/pg/mocks/import" class="sec-nav-item" data-tooltip="Mock Tests · Question import">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+        <span class="sec-nav-text">Mock Tests · Questions</span>
+    </a>
     <a href="/admin/pg/mentors" class="sec-nav-item" data-tooltip="Mentors">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
         <span class="sec-nav-text">Mentors</span>

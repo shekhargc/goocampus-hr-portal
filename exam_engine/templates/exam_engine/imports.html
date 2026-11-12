@@ -1,0 +1,82 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mock Tests · Question import{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}{% endblock %}
+
+{% block section_content %}
+<div class="ex-head">
+  <div>
+    <div class="ex-crumb">Mock Tests</div>
+    <h1>Question import</h1>
+    <p>Upload NEET PG questions as Word, typed PDF or Excel. Every file gets a check report, and each question
+       is reviewed and approved here before it can be used in a mock. Nothing reaches doctors until it is approved.</p>
+  </div>
+  <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_word_template') }}">⬇ Word template</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+<div class="ex-card">
+  <h2>Upload a file</h2>
+  <form method="post" action="{{ url_for('ex_import_upload') }}" enctype="multipart/form-data" class="ex-f"
+        style="display:flex;gap:0.8rem;flex-wrap:wrap;align-items:flex-end;">
+    <div style="flex:1 1 320px;">
+      <label>File (.docx, .pdf or .xlsx — up to {{ max_mb }} MB)</label>
+      <input type="file" name="file" accept=".docx,.pdf,.xlsx" required>
+    </div>
+    <div style="flex:1 1 260px;">
+      <label>Note (optional)</label>
+      <input type="text" name="note" maxlength="500" placeholder="e.g. Grand Test 3 — Section A">
+    </div>
+    <button class="ex-btn ex-btn-primary" type="submit">Upload &amp; check</button>
+  </form>
+  <p class="muted" style="margin:0.7rem 0 0;">
+    <b>Word</b> is best: pictures and diagrams pasted under a question are picked up automatically.
+    <b>PDF</b> must be typed (not scanned); each question is checked against its page before approval.
+    <b>Excel</b> is for text-only questions (columns: Question, A, B, C, D, Answer, Explanation, Subject, Topic).
+    {% if not r2 %}<br><span class="sev-warn">File storage (R2) isn't configured here — files are kept in the database.</span>{% endif %}
+  </p>
+</div>
+
+<div class="ex-card">
+  <h2>Question bank — NEET PG <span class="muted" style="font-weight:400;">· {{ totals.approved }} approved · {{ totals.draft }} waiting for review</span></h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:0.35rem 1.2rem;">
+    {% for s in bank %}
+      <div style="display:flex;justify-content:space-between;font-size:0.84rem;border-bottom:1px solid var(--gray-100);padding:0.2rem 0;">
+        <span>{{ s.name }}</span>
+        <span><b>{{ s.approved }}</b>{% if s.draft %} <span class="muted">+{{ s.draft }}</span>{% endif %}</span>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<h2 style="font-size:1rem;color:var(--navy);margin:1.3rem 0 0.6rem;">Imports</h2>
+{% if batches %}
+<table class="ex-table">
+  <thead><tr><th>#</th><th>File</th><th>Uploaded</th><th>Questions</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for b in batches %}
+    <tr class="clickable" onclick="location.href='{{ url_for('ex_import_batch', bid=b.id) }}'">
+      <td>{{ b.id }}</td>
+      <td><b>{{ b.filename }}</b> <span class="chip chip-gray">{{ b.kind|upper }}</span>
+          {% if b.note %}<div class="muted">{{ b.note }}</div>{% endif %}</td>
+      <td>{{ b.when }}<div class="muted">{{ b.uploaded_by }}</div></td>
+      <td>{% if b.status == 'ready' %}{{ b.total }}
+            <div class="muted">{{ b.approved }} approved{% if b.rejected %} · {{ b.rejected }} rejected{% endif %}</div>
+          {% else %}—{% endif %}</td>
+      <td>
+        {% if b.status == 'parsing' %}<span class="chip chip-blue">Reading…</span>
+        {% elif b.status == 'failed' %}<span class="chip chip-red">Couldn't read</span>
+        {% elif b.approved + b.rejected >= b.total and b.total %}<span class="chip chip-green">All reviewed</span>
+        {% elif b.with_errors %}<span class="chip chip-amber">{{ b.with_errors }} need fixing</span>
+        {% else %}<span class="chip chip-blue">Ready to review</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="ex-note">No imports yet. Download the Word template, fill in a few questions and upload it.</div>
+{% endif %}
+{% endblock %}

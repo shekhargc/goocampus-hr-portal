@@ -1,0 +1,239 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Q{{ q.source_no or q.id }} · review{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}
+<style>
+  .qv-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1rem; align-items:start; }
+  @media (max-width:1100px){ .qv-grid{ grid-template-columns:1fr; } }
+  .qv-stem { font-size:0.98rem; line-height:1.55; color:#0f172a; white-space:pre-line; }
+  .qv-opt { display:flex; gap:0.6rem; padding:0.5rem 0.7rem; border:1px solid var(--gray-200); border-radius:0.45rem; margin-top:0.4rem; font-size:0.92rem; }
+  .qv-opt.correct { border-color:#16a34a; background:#f0fdf4; }
+  .qv-opt b { width:1.2rem; }
+  .qv-img { max-width:100%; max-height:420px; border:1px solid var(--gray-200); border-radius:0.4rem; display:block; margin:0.6rem 0; background:#fff; }
+  .qv-sec h4 { font-size:0.78rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray-500); margin:0.8rem 0 0.2rem; }
+  .qv-sec div { font-size:0.88rem; line-height:1.5; white-space:pre-line; }
+  .qv-desc { background:#fff7ed; border:1px dashed #fdba74; border-radius:0.45rem; padding:0.5rem 0.7rem; font-size:0.84rem; color:#9a3412; margin-bottom:0.6rem; }
+  .pg-wrap { position:relative; display:inline-block; width:100%; user-select:none; cursor:crosshair; }
+  .pg-wrap img { width:100%; display:block; border:1px solid var(--gray-300); border-radius:0.3rem; }
+  .pg-sel { position:absolute; border:2px solid var(--orange); background:rgba(249,115,22,0.12); display:none; pointer-events:none; }
+  .thumbs { display:flex; flex-wrap:wrap; gap:0.6rem; }
+  .thumb { border:1px solid var(--gray-200); border-radius:0.45rem; padding:0.4rem; background:#fff; width:170px; font-size:0.75rem; }
+  .thumb img { width:100%; height:110px; object-fit:contain; background:#f8fafc; }
+  .sticky { position:sticky; top:0.8rem; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="ex-head">
+  <div>
+    <div class="ex-crumb"><a href="{{ url_for('ex_imports') }}">Mock Tests › Question import</a>
+      {% if b %} › <a href="{{ url_for('ex_import_batch', bid=b.id) }}">Import #{{ b.id }} · {{ b.filename }}</a>{% endif %}</div>
+    <h1>Question {{ q.source_no or ('#' ~ q.id) }}
+      {% if q.status == 'approved' %}<span class="chip chip-green">Approved</span>
+      {% elif q.status == 'rejected' %}<span class="chip chip-gray">Rejected</span>
+      {% elif q.n_errors %}<span class="chip chip-red">Needs fixing</span>
+      {% else %}<span class="chip chip-blue">To review</span>{% endif %}
+    </h1>
+    <p>{{ pos }} of {{ total }} in this file · version {{ q.version }}{% if q.page_from %} · PDF page {{ q.page_from }}{% if q.page_to and q.page_to != q.page_from %}–{{ q.page_to }}{% endif %}{% endif %}
+       {% if q.approved_by %} · approved by {{ q.approved_by }}{% endif %}</p>
+  </div>
+  <div style="display:flex;gap:0.4rem;">
+    {% if prev_id %}<a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_question', qid=prev_id) }}">← Previous</a>{% endif %}
+    {% if next_id %}<a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_question', qid=next_id) }}">Next →</a>{% endif %}
+    {% if next_todo %}<a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_question', qid=next_todo) }}">Next to review ⇥</a>{% endif %}
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+<div class="qv-grid">
+  <!-- left: what doctors will see + problems + decision -->
+  <div>
+    <div class="ex-card">
+      <h2>As doctors will see it</h2>
+      {% if q.image_desc %}<div class="qv-desc"><b>Image description in the file (not shown to doctors):</b> {{ q.image_desc }}</div>{% endif %}
+      <div class="qv-stem">{{ q.stem or '(no question text)' }}</div>
+      {% for im in imgs if im.role == 'stem' %}<img class="qv-img" src="{{ url_for('ex_image', iid=im.id) }}" alt="question picture">{% endfor %}
+      {% for L, t in q.options %}
+        <div class="qv-opt {{ 'correct' if L == q.answer }}"><b>{{ L }}.</b><span>{{ t or '(empty)' }}</span>{% if L == q.answer %}<span style="margin-left:auto;color:#16a34a;font-weight:700;">✓ correct</span>{% endif %}</div>
+      {% endfor %}
+      <div class="muted" style="margin-top:0.6rem;">Subject: <b>{{ subject_name or 'not set' }}</b>{% if q.topic %} · Topic: {{ q.topic }}{% endif %}
+        {% if q.tags_raw %} · Tags in file: {{ q.tags_raw }}{% endif %}</div>
+      {% if q.sections or imgs|selectattr('role','equalto','explanation')|list %}
+        <div class="qv-sec" style="border-top:1px solid var(--gray-200);margin-top:0.8rem;">
+          {% for label, text in q.sections %}<h4>{{ label }}</h4><div>{{ text }}</div>{% endfor %}
+          {% for im in imgs if im.role == 'explanation' %}<img class="qv-img" src="{{ url_for('ex_image', iid=im.id) }}" alt="explanation picture">{% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="ex-card">
+      <h2>Problems</h2>
+      {% for fl in q.flags %}
+        <div class="ex-flag {{ fl.severity }}"><span>{% if fl.severity == 'error' %}●{% elif fl.severity == 'warn' %}▲{% else %}ℹ{% endif %}</span><span>{{ fl.message }}</span></div>
+      {% else %}
+        <div class="ex-flag info">No problems found.</div>
+      {% endfor %}
+      {% if q.status == 'rejected' and q.reject_reason %}<div class="ex-note">Rejected: {{ q.reject_reason }}</div>{% endif %}
+
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.8rem;align-items:center;">
+        {% if q.status != 'approved' %}
+        <form method="post" action="{{ url_for('ex_question_status', qid=q.id) }}" style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+          <input type="hidden" name="action" value="approve">
+          {% if b and b.kind == 'pdf' %}
+            <label style="font-size:0.84rem;"><input type="checkbox" name="checked_page" value="1"> I checked it against the PDF page</label>
+          {% endif %}
+          <button class="ex-btn ex-btn-green" {{ 'disabled' if q.n_errors }} title="{{ 'Fix the problems in red first' if q.n_errors else 'Approve and go to the next one' }}">✓ Approve</button>
+        </form>
+        {% endif %}
+        {% if q.status != 'rejected' %}
+        <form method="post" action="{{ url_for('ex_question_status', qid=q.id) }}"
+              onsubmit="var r=prompt('Why reject this question? (optional)');if(r===null)return false;this.reason.value=r;return true;">
+          <input type="hidden" name="action" value="reject"><input type="hidden" name="reason" value="">
+          <button class="ex-btn ex-btn-red">Reject</button>
+        </form>
+        {% endif %}
+        {% if q.status != 'draft' %}
+        <form method="post" action="{{ url_for('ex_question_status', qid=q.id) }}">
+          <input type="hidden" name="action" value="reopen"><button class="ex-btn ex-btn-ghost">Back to review</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- right: the source page (PDF) with crop, pictures, edit form -->
+  <div>
+    {% if pages %}
+    <div class="ex-card">
+      <h2>PDF page{{ 's' if pages|length > 1 }} {{ pages|join(', ') }}</h2>
+      <p class="muted" style="margin:-0.3rem 0 0.6rem;">Compare with the question on the left. To use a picture or diagram from the page,
+         drag a box over it, then click “Add as question picture”.</p>
+      {% for p in pages %}
+        <div class="pg-wrap" data-page="{{ p }}" style="margin-bottom:0.7rem;">
+          <img src="{{ url_for('ex_import_page', bid=b.id, page=p) }}" alt="page {{ p }}" draggable="false" loading="lazy">
+          <div class="pg-sel"></div>
+        </div>
+      {% endfor %}
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <button type="button" class="ex-btn ex-btn-primary" id="cropStem" disabled>Add as question picture</button>
+        <button type="button" class="ex-btn ex-btn-ghost" id="cropExpl" disabled>Add as explanation picture</button>
+        <span class="muted" id="cropMsg"></span>
+      </div>
+    </div>
+    {% elif b %}
+    <div class="ex-note">Imported from {{ b.kind|upper }} ({{ b.filename }}){% if q.source_ref %} · {{ q.source_ref }}{% endif %}. Pictures pasted in the Word file appear on the left.</div>
+    {% endif %}
+
+    <div class="ex-card">
+      <h2>Pictures &amp; diagrams</h2>
+      <div class="thumbs">
+        {% for im in imgs %}
+          <div class="thumb">
+            <img src="{{ url_for('ex_image', iid=im.id) }}" alt="">
+            <div style="margin-top:0.3rem;">{{ 'Question' if im.role == 'stem' else 'Explanation' }} · {{ im.ext|upper }}{% if im.width %} · {{ im.width }}×{{ im.height }}{% endif %}</div>
+            <div class="muted">{{ {'docx':'from Word','pdf_image':'from PDF','crop':'cropped from page','upload':'uploaded'}.get(im.source, im.source) }}</div>
+            <form method="post" action="{{ url_for('ex_image_delete', iid=im.id) }}" onsubmit="return confirm('Remove this picture?');">
+              <button class="ex-btn ex-btn-red" style="padding:0.2rem 0.5rem;font-size:0.75rem;margin-top:0.3rem;">Remove</button>
+            </form>
+          </div>
+        {% else %}
+          <span class="muted">No pictures.</span>
+        {% endfor %}
+      </div>
+      <form method="post" action="{{ url_for('ex_question_image', qid=q.id) }}" enctype="multipart/form-data" class="ex-f"
+            style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;margin-top:0.8rem;">
+        <div><label>Upload a picture (PNG / JPG)</label><input type="file" name="image" accept="image/*" required></div>
+        <div><label>Goes with</label><select name="role"><option value="stem">the question</option><option value="explanation">the explanation</option></select></div>
+        <button class="ex-btn ex-btn-ghost">Upload</button>
+      </form>
+    </div>
+
+    <details class="ex-card" {{ 'open' if q.n_errors or q.status == 'draft' }}>
+      <summary style="cursor:pointer;font-weight:700;color:var(--navy);">Edit this question</summary>
+      <form method="post" action="{{ url_for('ex_question_save', qid=q.id) }}" class="ex-f">
+        <label>Question</label>
+        <textarea name="stem" rows="5">{{ q.stem }}</textarea>
+        {% set opts = dict(q.options) %}
+        {% for L in ['A','B','C','D'] %}
+          <label>Option {{ L }}</label><input type="text" name="opt_{{ L }}" value="{{ opts.get(L, '') }}">
+        {% endfor %}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.7rem;">
+          <div><label>Correct answer</label>
+            <select name="answer"><option value="">—</option>{% for L in ['A','B','C','D'] %}<option {{ 'selected' if q.answer == L }}>{{ L }}</option>{% endfor %}</select></div>
+          <div><label>Subject</label>
+            <select name="subject_id"><option value="">— choose —</option>
+              {% for s in subjects %}<option value="{{ s.id }}" {{ 'selected' if s.id == q.subject_id }}>{{ s.name }}</option>{% endfor %}</select></div>
+          <div><label>Topic</label><input type="text" name="topic" value="{{ q.topic }}"></div>
+        </div>
+        {% if subject_flag and q.lead_tag %}
+          <label style="font-weight:400;font-size:0.82rem;"><input type="checkbox" name="remember_alias" value="1" checked>
+            Remember: file “{{ q.lead_tag }}” under this subject from now on (and update the other “{{ q.lead_tag }}” questions in this file)</label>
+        {% endif %}
+        {% for label, text in q.sections %}
+          <label><input type="text" name="sec_label_{{ loop.index0 }}" value="{{ label }}" style="width:auto;min-width:200px;font-weight:600;"></label>
+          <textarea name="sec_text_{{ loop.index0 }}" rows="4">{{ text }}</textarea>
+        {% endfor %}
+        <label>{% if q.sections %}Add another explanation box{% else %}Explanation{% endif %}
+          <input type="text" name="sec_label_new" value="{{ '' if q.sections else 'Explanation' }}" placeholder="Heading, e.g. Key fact" style="width:auto;min-width:200px;"></label>
+        <textarea name="sec_text_new" rows="3" placeholder="Leave empty to skip"></textarea>
+        {% if q.image_desc %}
+          <label>Image description from the file (team only — not shown to doctors)</label>
+          <textarea name="image_desc" rows="2">{{ q.image_desc }}</textarea>
+        {% else %}<input type="hidden" name="image_desc" value="">{% endif %}
+        <p class="muted">To delete an explanation box, empty its text. {% if q.status == 'approved' %}Saving changes sends the question back for approval.{% endif %}</p>
+        <button class="ex-btn ex-btn-primary">Save changes</button>
+      </form>
+    </details>
+
+    {% if versions %}
+    <details class="ex-card">
+      <summary style="cursor:pointer;font-weight:700;color:var(--navy);">History ({{ versions|length }})</summary>
+      {% for v in versions %}<div class="muted" style="padding:0.2rem 0;">Version {{ v.version }} · {{ v.note }} by {{ v.changed_by }} · {{ v.when }}</div>{% endfor %}
+    </details>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block section_extra_js %}
+<script>
+(function(){
+  var sel = null; // {page, x0,y0,x1,y1} as 0–1 fractions
+  var btnS = document.getElementById('cropStem'), btnE = document.getElementById('cropExpl'), msg = document.getElementById('cropMsg');
+  if (!btnS) return;
+  document.querySelectorAll('.pg-wrap').forEach(function(w){
+    var box = w.querySelector('.pg-sel'), start = null;
+    function pt(e){ var r = w.getBoundingClientRect(); return {x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+                                                              y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))}; }
+    w.addEventListener('mousedown', function(e){
+      document.querySelectorAll('.pg-sel').forEach(function(b){ b.style.display = 'none'; });
+      start = pt(e); sel = null; btnS.disabled = btnE.disabled = true; e.preventDefault();
+    });
+    w.addEventListener('mousemove', function(e){
+      if (!start) return; var p = pt(e);
+      var x0 = Math.min(start.x, p.x), y0 = Math.min(start.y, p.y), x1 = Math.max(start.x, p.x), y1 = Math.max(start.y, p.y);
+      box.style.display = 'block'; box.style.left = (x0*100)+'%'; box.style.top = (y0*100)+'%';
+      box.style.width = ((x1-x0)*100)+'%'; box.style.height = ((y1-y0)*100)+'%';
+      sel = {page: w.dataset.page, x0: x0, y0: y0, x1: x1, y1: y1};
+    });
+    window.addEventListener('mouseup', function(){
+      if (!start) return; start = null;
+      var ok = sel && (sel.x1 - sel.x0) > 0.02 && (sel.y1 - sel.y0) > 0.02;
+      btnS.disabled = btnE.disabled = !ok; msg.textContent = ok ? 'Area selected on page ' + sel.page : '';
+    });
+  });
+  function send(role){
+    if (!sel) return; msg.textContent = 'Cutting…'; btnS.disabled = btnE.disabled = true;
+    var fd = new FormData(); fd.append('page', sel.page); fd.append('role', role);
+    ['x0','y0','x1','y1'].forEach(function(k){ fd.append(k, sel[k]); });
+    fetch('{{ url_for('ex_question_crop', qid=q.id) }}', {method: 'POST', body: fd}).then(function(r){ return r.json(); })
+      .then(function(d){ if (d.ok) location.reload(); else { msg.textContent = d.error || 'Could not crop.'; btnS.disabled = btnE.disabled = false; } })
+      .catch(function(){ msg.textContent = 'Could not crop — try again.'; btnS.disabled = btnE.disabled = false; });
+  }
+  btnS.addEventListener('click', function(){ send('stem'); });
+  btnE.addEventListener('click', function(){ send('explanation'); });
+})();
+</script>
+{% endblock %}
