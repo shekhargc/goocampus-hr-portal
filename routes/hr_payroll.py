@@ -1289,6 +1289,202 @@ def payroll_access_log(run_id):
 
 # ──────────────────────────────── register ────────────────────────────────
 
+# ── Bulk import: bank account + PF (UAN) numbers from an Excel sheet (founder 2026-11-12) ──────────
+# Upload → preview → confirm. It ONLY fills fields that are empty in the portal; a number that is
+# already there is never changed (a different value is shown so HR can fix it by hand). Includes
+# employees who have left. Matches on Employee Code, else on an exact (unique) name.
+
+BANKPF_FIELDS = (('bank', 'bank_account_number', 'Bank account'), ('pf', 'pf_number', 'PF / UAN'))
+_BANKPF_COL = {k: col for k, col, _ in BANKPF_FIELDS}
+
+
+def _cell_text(v):
+    """Excel cell → clean text. Numbers stored as numbers come back without '.0' / spaces."""
+    if v is None:
+        return ''
+    if isinstance(v, bool):
+        return ''
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        return str(int(v)) if v.is_integer() else str(v)
+    return ''.join(str(v).split())
+
+
+def _clean_acct(v):
+    t = _cell_text(v)
+    return t if t and t.isalnum() and len(t) <= 40 else ''
+
+
+def _norm_code(v):
+    return ''.join(str(v or '').split()).upper()
+
+
+def _norm_name(v):
+    return ' '.join(str(v or '').lower().split())
+
+
+def _read_bankpf_sheet(fileobj):
+    """Returns (rows, error). rows = [{code, name, bank, pf, line}]"""
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(fileobj, read_only=True, data_only=True)
+    except Exception:
+        return None, 'Could not read that file. Please upload the Excel (.xlsx) sheet.'
+    ws = wb.worksheets[0]
+    head, out = None, []
+    for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        if head is None:
+            keys = [''.join(ch for ch in str(c or '').lower() if ch.isalnum()) for c in row]
+            idx = {}
+            for j, k in enumerate(keys):
+                if not k:
+                    continue
+                if 'uan' in k or k.startswith('pf'):
+                    idx.setdefault('pf', j)
+                elif 'bank' in k:
+                    idx.setdefault('bank', j)
+                elif 'code' in k or k in ('empid', 'employeeid'):
+                    idx.setdefault('code', j)
+                elif 'name' in k:
+                    idx.setdefault('name', j)
+            if ('code' in idx or 'name' in idx) and ('bank' in idx or 'pf' in idx):
+                head = idx
+            elif i >= 10:
+                break
+            continue
+        get = lambda key: row[head[key]] if key in head and head[key] < len(row) else None
+        rec = dict(code=_norm_code(get('code')), name=' '.join(str(get('name') or '').split()),
+                   bank=_clean_acct(get('bank')), pf=_clean_acct(get('pf')), line=i)
+        if rec['code'] or rec['name']:
+            out.append(rec)
+    if head is None:
+        return None, ('Could not find the columns. The first row needs headings like EmployeeCode, Name, '
+                      'BankAccount and PFAccount(UAN).')
+    return out, None
+
+
+def _bankpf_plan(conn, sheet_rows):
+    emps = [dict(r) for r in conn.execute(
+        "SELECT id, name, emp_code, designation, is_active, bank_account_number, pf_number FROM employees "
+        "ORDER BY is_active DESC, name").fetchall()]
+    emps = [e for e in emps if not _auto_excluded(e)]
+    by_code = {_norm_code(e['emp_code']): e for e in emps if _norm_code(e['emp_code'])}
+    by_name = {}
+    for e in emps:
+        by_name.setdefault(_norm_name(e['name']), []).append(e)
+    plan, unmatched, seen = [], [], set()
+    for r in sheet_rows:
+        e, how = by_code.get(r['code']) if r['code'] else None, 'code'
+        if not e:
+            cands = by_name.get(_norm_name(r['name'])) or []
+            e, how = (cands[0], 'name') if len(cands) == 1 else (None, '')
+        if not e or e['id'] in seen:
+            unmatched.append(dict(r, reason='Already matched above' if e else 'Not found in the portal'))
+            continue
+        seen.add(e['id'])
+        item = dict(emp=e, sheet=r, how=how, fields={})
+        for key, col, _label in BANKPF_FIELDS:
+            cur, new = str(e.get(col) or '').strip(), r[key]
+            if not new:
+                st = 'none'
+            elif not cur:
+                st = 'fill'
+            elif ''.join(cur.split()).upper() == new.upper():
+                st = 'same'
+            else:
+                st = 'differs'
+            item['fields'][key] = dict(cur=cur, new=new, status=st)
+        plan.append(item)
+    still_missing = [e for e in emps if e['id'] not in seen
+                     and (not str(e.get('bank_account_number') or '').strip() or not str(e.get('pf_number') or '').strip())]
+    return plan, unmatched, still_missing
+
+
+def payroll_bankpf_import():
+    """GET: upload form. POST (file): preview of what would be filled."""
+    user, deny = _require_manager()
+    if deny:
+        return deny
+    ctx = dict(user=user, fields=BANKPF_FIELDS, active_section='hr', plan=None)
+    if request.method == 'POST':
+        f = request.files.get('sheet')
+        if not f or not f.filename:
+            flash('Choose the Excel sheet first.', 'error')
+            return redirect(url_for('hr_payroll_bankpf_import'))
+        data = f.read(5 * 1024 * 1024 + 1)
+        if len(data) > 5 * 1024 * 1024:
+            flash('That file is too big (max 5 MB).', 'error')
+            return redirect(url_for('hr_payroll_bankpf_import'))
+        rows, err = _read_bankpf_sheet(io.BytesIO(data))
+        if err:
+            flash(err, 'error')
+            return redirect(url_for('hr_payroll_bankpf_import'))
+        conn = get_db()
+        try:
+            plan, unmatched, still_missing = _bankpf_plan(conn, rows)
+        finally:
+            conn.close()
+        n_fill = sum(1 for p in plan for v in p['fields'].values() if v['status'] == 'fill')
+        n_diff = sum(1 for p in plan for v in p['fields'].values() if v['status'] == 'differs')
+        ctx.update(plan=plan, unmatched=unmatched, still_missing=still_missing, n_fill=n_fill, n_diff=n_diff,
+                   filename=f.filename, n_rows=len(rows))
+    return render_template('hr_payroll_bankpf_import.html', **ctx)
+
+
+def payroll_bankpf_apply():
+    """Fill ONLY empty bank / PF fields. Re-checked at save time: a filled field is never overwritten."""
+    user, deny = _require_manager()
+    if deny:
+        return deny
+    done, skipped = [], 0
+    conn = get_db()
+    try:
+        for item in request.form.getlist('fill'):
+            try:
+                emp_id, key, value = item.split('|', 2)
+                emp_id = int(emp_id)
+            except ValueError:
+                skipped += 1
+                continue
+            col, value = _BANKPF_COL.get(key), _clean_acct(value)
+            if not col or not value:
+                skipped += 1
+                continue
+            cur = conn.execute(f"UPDATE employees SET {col} = ? WHERE id = ? AND ({col} IS NULL OR TRIM({col}) = '')",
+                               (value, emp_id))
+            if getattr(getattr(cur, 'cursor', cur), 'rowcount', 1) == 0:
+                skipped += 1
+                continue
+            # Draft payslips that were made before the number existed pick it up straight away.
+            slip_col = 'bank_account' if key == 'bank' else 'pf_account'
+            try:
+                conn.execute(f"UPDATE payslips SET {slip_col} = ? WHERE employee_id = ? AND "
+                             f"({slip_col} IS NULL OR {slip_col} = '') AND run_id IN "
+                             "(SELECT id FROM payroll_runs WHERE status = 'draft')", (value, emp_id))
+            except Exception as e:
+                logging.warning(f"bankpf draft slip update: {e}")
+            done.append((emp_id, key))
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logging.error(f"bankpf apply: {e}")
+        flash('Could not save — nothing was changed. Please try again.', 'error')
+        return redirect(url_for('hr_payroll_bankpf_import'))
+    finally:
+        conn.close()
+    people = len({d[0] for d in done})
+    msg = f"Added {len(done)} number(s) for {people} employee(s). Numbers already in the portal were not changed."
+    if skipped:
+        msg += f" {skipped} skipped (already filled in the meantime, or not valid)."
+    logging.info(f"bankpf import by {user.get('name')}: {len(done)} filled, {skipped} skipped")
+    flash(msg, 'success')
+    return redirect(url_for('hr_payroll_salaries'))
+
+
 def register_hr_payroll(app):
     lr = login_required
     rules = [
@@ -1306,6 +1502,8 @@ def register_hr_payroll(app):
         ('/hr/payroll/salaries/save', 'hr_payroll_salary_save', payroll_salary_save, ['POST']),
         ('/hr/payroll/salaries/<int:sal_id>/delete', 'hr_payroll_salary_delete', payroll_salary_delete, ['POST']),
         ('/hr/payroll/salaries/exclude', 'hr_payroll_exclude', payroll_exclude, ['POST']),
+        ('/hr/payroll/bank-pf-import', 'hr_payroll_bankpf_import', payroll_bankpf_import, ['GET', 'POST']),
+        ('/hr/payroll/bank-pf-import/apply', 'hr_payroll_bankpf_apply', payroll_bankpf_apply, ['POST']),
         ('/my-payslips', 'my_payslips', my_payslips, ['GET']),
         ('/my-payslips/<int:slip_id>', 'my_payslip_view', my_payslip_view, ['GET']),
         ('/my-payslips/<int:slip_id>/send-otp', 'my_payslip_send_otp', my_payslip_send_otp, ['POST']),

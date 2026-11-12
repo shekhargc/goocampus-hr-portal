@@ -52120,6 +52120,8 @@ ACCESS_ROUTE_MAP = {
     'hr_payroll_salary_save':             _ap('hr', 'payroll', 'edit'),
     'hr_payroll_salary_delete':           _ap('hr', 'payroll', 'edit'),
     'hr_payroll_exclude':                 _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_bankpf_import':           _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_bankpf_apply':            _ap('hr', 'payroll', 'edit'),
     'hr_cash_clear_import_notes':         _ap('hr', 'cash_pool'),
 
     # ── Company ───────────────────────────────────────────────────────────

@@ -89,6 +89,10 @@ advance/other + per-slip overrides (LOP/PT/PF/ESI) in a drawer. Reproduces the O
 unlocks with a WhatsApp OTP stored HMAC-hashed server-side in `payslip_otp` (5 min, 5 tries, single use, 30 s resend
 gap, 6/hour), unlock lasts 10 min; every send/unlock/view/download logged in `payslip_access_log`. Access Master:
 `hr/payroll` **edit** = payroll manager (sees everyone's salary); admins bypass.
+**Bank & PF import** `/hr/payroll/bank-pf-import` (link on Employee Salaries): upload an Excel (EmployeeCode, Name,
+BankAccount, PFAccount(UAN)) → preview → confirm. Fills ONLY empty `employees.bank_account_number` / `pf_number`
+(re-checked in the UPDATE's WHERE), includes ex-employees, matches on emp_code then unique exact name; draft payslips
+with a blank bank/PF pick the number up. Existing different numbers are shown, never overwritten.
 
 ## Gotchas
 - FY starts **April**; April accrues 3 leave days, other months 2.

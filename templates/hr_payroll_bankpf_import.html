@@ -1,0 +1,87 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Import bank & PF numbers{% endblock %}
+{% block section_content %}
+<style>
+  .bp-t{width:100%;border-collapse:collapse;}
+  .bp-t th{padding:9px 12px;background:var(--gray-50);color:var(--gray-600);font-size:.74rem;text-align:left;white-space:nowrap;}
+  .bp-t td{padding:9px 12px;border-top:1px solid var(--gray-100);font-size:.84rem;vertical-align:top;}
+  .st{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:10px;margin-top:3px;}
+  .st-fill{background:#dcfce7;color:#166534;} .st-same{background:#f1f5f9;color:#64748b;}
+  .st-differs{background:#fef3c7;color:#92400e;} .st-none{background:#f1f5f9;color:#94a3b8;}
+  .left{display:inline-block;font-size:.66rem;font-weight:700;padding:1px 6px;border-radius:8px;background:#fee2e2;color:#991b1b;margin-left:4px;}
+  .card{background:#fff;border:1px solid var(--gray-200);border-radius:14px;}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:.82rem;}
+</style>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1100px;margin:0 auto;">
+    <a href="{{ url_for('hr_payroll_salaries') }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← Employee Salaries</a>
+    <h1 style="margin:8px 0 4px;font-size:1.35rem;font-weight:800;color:var(--navy);">Import bank account & PF (UAN) numbers</h1>
+    <p style="margin:0 0 16px;font-size:.86rem;color:var(--gray-500);">Upload the Excel sheet → check the preview → confirm. Only <b>empty</b> fields are filled; a number already in the portal is never changed. Employees who have left are included.</p>
+
+    <form method="post" enctype="multipart/form-data" class="card" style="padding:16px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px;">
+      <input type="file" name="sheet" accept=".xlsx" required style="font-size:.86rem;">
+      <button type="submit" style="background:#1e40af;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer;">Preview</button>
+      <span style="font-size:.76rem;color:var(--gray-500);">Columns: EmployeeCode, Name, BankAccount, PFAccount(UAN). Matched on Employee Code (else exact name).</span>
+    </form>
+
+    {% if plan is not none %}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;font-size:.86rem;">
+        <div class="card" style="padding:10px 14px;"><b>{{ n_rows }}</b> rows in {{ filename }}</div>
+        <div class="card" style="padding:10px 14px;"><b style="color:#166534;">{{ n_fill }}</b> empty fields will be filled</div>
+        <div class="card" style="padding:10px 14px;"><b style="color:#92400e;">{{ n_diff }}</b> different from the portal (kept as is)</div>
+        <div class="card" style="padding:10px 14px;"><b>{{ unmatched|length }}</b> not found</div>
+      </div>
+
+      <form method="post" action="{{ url_for('hr_payroll_bankpf_apply') }}">
+        <div class="card" style="overflow:auto;">
+          <table class="bp-t">
+            <thead><tr><th>Employee</th>{% for k, col, label in fields %}<th>{{ label }} — in portal</th><th>{{ label }} — in sheet</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for p in plan %}
+              <tr>
+                <td><b style="color:var(--navy);">{{ p.emp.name }}</b>{% if not p.emp.is_active %}<span class="left">Left</span>{% endif %}
+                  <div style="font-size:.72rem;color:var(--gray-500);">{{ p.emp.emp_code or '—' }}{% if p.how == 'name' %} · matched by name{% endif %}</div></td>
+                {% for k, col, label in fields %}{% set f = p.fields[k] %}
+                  <td class="mono">{{ f.cur or '—' }}</td>
+                  <td class="mono">{{ f.new or '—' }}<br>
+                    {% if f.status == 'fill' %}<span class="st st-fill">Will be added</span>
+                      <input type="hidden" name="fill" value="{{ p.emp.id }}|{{ k }}|{{ f.new }}">
+                    {% elif f.status == 'same' %}<span class="st st-same">Already there</span>
+                    {% elif f.status == 'differs' %}<span class="st st-differs">Different — not changed</span>
+                    {% else %}<span class="st st-none">Not in sheet</span>{% endif %}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if unmatched %}
+          <h3 style="margin:20px 0 8px;font-size:.95rem;color:var(--navy);">In the sheet but not found in the portal</h3>
+          <div class="card" style="padding:10px 16px;font-size:.84rem;">
+            {% for u in unmatched %}<div style="padding:3px 0;">Row {{ u.line }}: <b>{{ u.name }}</b> <span class="mono">{{ u.code }}</span> — {{ u.reason }}</div>{% endfor %}
+          </div>
+        {% endif %}
+
+        {% if still_missing %}
+          <h3 style="margin:20px 0 8px;font-size:.95rem;color:var(--navy);">Still missing after this sheet (not in the sheet)</h3>
+          <div class="card" style="padding:10px 16px;font-size:.84rem;">
+            {% for e in still_missing %}<div style="padding:3px 0;"><b>{{ e.name }}</b>{% if not e.is_active %}<span class="left">Left</span>{% endif %} <span class="mono">{{ e.emp_code or '' }}</span> —
+              {% if not e.bank_account_number %}no bank account{% endif %}{% if not e.bank_account_number and not e.pf_number %}, {% endif %}{% if not e.pf_number %}no PF / UAN{% endif %}</div>{% endfor %}
+          </div>
+        {% endif %}
+
+        <div style="margin-top:18px;display:flex;gap:12px;align-items:center;">
+          {% if n_fill %}
+            <button type="submit" onclick="return confirm('Add {{ n_fill }} number(s) to empty fields? Numbers already in the portal stay as they are.');"
+              style="background:#166534;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer;">Confirm — add {{ n_fill }} number(s)</button>
+          {% else %}
+            <span style="font-size:.86rem;color:var(--gray-500);">Nothing to add — every matched employee already has these numbers.</span>
+          {% endif %}
+          <a href="{{ url_for('hr_payroll_bankpf_import') }}" style="font-size:.84rem;color:var(--gray-600);">Cancel</a>
+        </div>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

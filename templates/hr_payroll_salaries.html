@@ -16,7 +16,7 @@
   <div style="max-width:1100px;margin:0 auto;">
     <a href="{{ url_for('hr_payroll') }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← Payroll</a>
     <h1 style="margin:8px 0 4px;font-size:1.35rem;font-weight:800;color:var(--navy);">Employee Salaries</h1>
-    <p style="margin:0 0 16px;font-size:.86rem;color:var(--gray-500);">Monthly gross for every active employee. An increment = a new entry with the month it starts from; earlier months keep the old salary. Click a row to edit.</p>
+    <p style="margin:0 0 16px;font-size:.86rem;color:var(--gray-500);">Monthly gross for every active employee. An increment = a new entry with the month it starts from; earlier months keep the old salary. Click a row to edit. <a href="{{ url_for('hr_payroll_bankpf_import') }}" style="color:#1e40af;font-weight:600;">Import bank & PF numbers from Excel →</a></p>
 
     <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:auto;">
       <table class="sl-t" style="width:100%;border-collapse:collapse;">
