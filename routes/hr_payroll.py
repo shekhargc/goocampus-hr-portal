@@ -65,11 +65,13 @@ DEFAULT_ADDRESS = ('138/6, Ground Floor, 10th Main Road Sadashiv Nagar, 6th A Cr
 RULE_FIELDS = [
     ('basic_pct', 'Basic — % of monthly gross', 'pct'),
     ('basic_min', 'Basic — minimum amount (₹)', 'amt'),
-    ('hra_pct', 'HRA — % of Basic', 'pct'),
+    ('hra_pct', 'HRA — %', 'pct'),
+    ('hra_base', 'HRA % is taken of', 'choice'),
     ('conveyance', 'Conveyance (₹ / month)', 'amt'),
     ('medical', 'Medical Allowance (₹ / month)', 'amt'),
     ('ltc', 'LTC (₹ / month)', 'amt'),
-    ('pf_pct', 'PF — % of (Basic + Other Allowance)', 'pct'),
+    ('pf_pct', 'PF — %', 'pct'),
+    ('pf_base', 'PF % is taken of', 'choice'),
     ('pf_cap', 'PF — maximum per month (₹, 0 = no cap)', 'amt'),
     ('pt_amount', 'Professional Tax (₹ / month)', 'amt'),
     ('pt_threshold', 'PT applies when monthly gross is at least (₹)', 'amt'),
@@ -79,10 +81,23 @@ RULE_FIELDS = [
     ('company_name', 'Company name', 'text'),
     ('company_address', 'Company address', 'text'),
 ]
-SEED_RULES = dict(basic_pct=50, basic_min=18500, hra_pct=50, conveyance=1600, medical=1250,
-                  ltc=0, pf_pct=12, pf_cap=3000, pt_amount=200, pt_threshold=25000,
+RULE_CHOICES = {
+    'hra_base': [('basic', 'Basic'), ('gross', 'Monthly gross')],
+    'pf_base': [('basic_other', 'Basic + Other Allowance'), ('basic', 'Basic only')],
+}
+SEED_RULES = dict(basic_pct=50, basic_min=18500, hra_pct=50, hra_base='basic', conveyance=1600, medical=1250,
+                  ltc=0, pf_pct=12, pf_base='basic_other', pf_cap=3000, pt_amount=200, pt_threshold=25000,
                   esi_pct=0.75, esi_threshold=21000, location='Bengaluru',
                   company_name=DEFAULT_COMPANY, company_address=DEFAULT_ADDRESS)
+# Apr–Sep 2026 rules (before the Oct PF change), derived from the April + June 2026 salary
+# statements: Basic flat ₹15,000; HRA 20% of GROSS; PF 12% of Basic only, max ₹1,800.
+# People whose Basic/HRA differed (directors, Robin, Vipin, Gopi, Jeswin S., Poornima, Harish,
+# Praveen, Alfiya, Varsha) are per-person fixed amounts on Employee Salaries.
+SEED_RULES_APR26 = dict(SEED_RULES, basic_pct=0, basic_min=15000, hra_pct=20, hra_base='gross',
+                        pf_base='basic', pf_cap=1800)
+
+# Login accounts that are not real staff (the founder's "Admin" login) never go on payroll.
+AUTO_EXCLUDE_NAMES = {'admin'}
 
 MANUAL_DEDUCTIONS = [('tds', 'TDS'), ('klwf', 'KLWF'), ('salary_advance', 'Salary Advance'),
                      ('other_deductions', 'Other Deductions')]
@@ -269,6 +284,9 @@ def _ensure(conn):
             used INTEGER DEFAULT 0,
             unlocked_until TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''',
+        '''CREATE TABLE IF NOT EXISTS payroll_exclusions (
+            employee_id INTEGER PRIMARY KEY,
+            excluded_by_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''',
         f'''CREATE TABLE IF NOT EXISTS payslip_access_log (
             id {pk},
             payslip_id INTEGER, employee_id INTEGER, actor_id INTEGER, actor_name TEXT,
@@ -278,6 +296,10 @@ def _ensure(conn):
         for q in ddl:
             conn.execute(q)
         conn.commit()
+        for table, col, typ in (('payroll_rules', 'hra_base', 'TEXT'), ('payroll_rules', 'pf_base', 'TEXT'),
+                                ('employee_salary', 'basic_amount', 'NUMERIC(12,2)'),
+                                ('employee_salary', 'hra_amount', 'NUMERIC(12,2)')):
+            _add_col(conn, table, col, typ)
         # Seed the Oct-2026 rules once (derived from the Oct-2026 salary statement).
         has = conn.execute("SELECT 1 FROM payroll_rules LIMIT 1").fetchone()
         if not has:
@@ -285,6 +307,15 @@ def _ensure(conn):
             vals = ['2026-10'] + list(SEED_RULES.values()) + [
                 'Seeded from the Oct-2026 salary statement (Basic 50% of gross, min ₹18,500; '
                 'PF 12% of Basic + Other, max ₹3,000).', 'System']
+            conn.execute(f"INSERT INTO payroll_rules ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
+            conn.commit()
+        # Seed the Apr–Sep 2026 (old PF) rules once — only if no version before Oct exists yet.
+        older = conn.execute("SELECT 1 FROM payroll_rules WHERE effective_from < '2026-10' LIMIT 1").fetchone()
+        if not older:
+            cols = ['effective_from'] + list(SEED_RULES_APR26.keys()) + ['notes', 'updated_by_name']
+            vals = ['2026-04'] + list(SEED_RULES_APR26.values()) + [
+                'Apr–Sep 2026 rules from the April + June 2026 salary statements (Basic ₹15,000; HRA 20% of gross; '
+                'PF 12% of Basic, max ₹1,800). Different Basic/HRA = fixed amounts on Employee Salaries.', 'System']
             conn.execute(f"INSERT INTO payroll_rules ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", vals)
             conn.commit()
         _READY = True
@@ -300,6 +331,21 @@ def _me():
     """Logged-in employee as a plain dict (get_user() may return a DB row object)."""
     u = get_user()
     return dict(u) if u else None
+
+
+def _add_col(conn, table, col, typ):
+    """Additive column (Postgres: IF NOT EXISTS; SQLite: ignore 'duplicate column')."""
+    try:
+        if getattr(conn, 'is_postgres', False):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typ}")
+        else:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def _can_manage(user):
@@ -353,13 +399,28 @@ def salary_for(conn, employee_id, period):
 
 # ──────────────────────────────── calculation ───────────────────────────────
 
-def split_gross(rules, gross, hra_pct=None):
-    """Full-month split of a monthly gross into components (before LOP)."""
+def _set(v):
+    return v is not None and str(v).strip() != ''
+
+
+def split_gross(rules, gross, sal=None):
+    """Full-month split of a monthly gross into components (before LOP).
+    `sal` (the employee_salary row) may carry per-person exceptions: a fixed Basic
+    (basic_amount), a fixed HRA (hra_amount) or a different HRA % (hra_pct)."""
+    sal = sal or {}
     G = rh(gross)
-    basic = min(G, max(rh(G * _f(rules.get('basic_pct')) / 100), rh(rules.get('basic_min'))))
+    if _set(sal.get('basic_amount')):
+        basic = min(G, rh(sal.get('basic_amount')))
+    else:
+        basic = min(G, max(rh(G * _f(rules.get('basic_pct')) / 100), rh(rules.get('basic_min'))))
     rem = G - basic
-    hp = _f(hra_pct, None) if hra_pct not in (None, '') else _f(rules.get('hra_pct'))
-    hra = min(rh(basic * hp / 100), rem); rem -= hra
+    if _set(sal.get('hra_amount')):
+        hra = min(rh(sal.get('hra_amount')), rem)
+    else:
+        hp = _f(sal.get('hra_pct')) if _set(sal.get('hra_pct')) else _f(rules.get('hra_pct'))
+        base = G if (rules.get('hra_base') or 'basic') == 'gross' else basic
+        hra = min(rh(base * hp / 100), rem)
+    rem -= hra
     conv = min(rh(rules.get('conveyance')), rem); rem -= conv
     ltc = min(rh(rules.get('ltc')), rem); rem -= ltc
     med = min(rh(rules.get('medical')), rem); rem -= med
@@ -380,7 +441,7 @@ def compute_slip(rules, salary, days_in_month, eligible_days, lop_days, manual=N
     if 'lop_days' in overrides:
         lop_days = _f(overrides['lop_days'])
     G = rh(salary.get('monthly_gross'))
-    full = split_gross(rules, G, salary.get('hra_pct'))
+    full = split_gross(rules, G, salary)
     paid = max(0.0, _f(eligible_days) - _f(lop_days))
     factor = (paid / float(days_in_month)) if days_in_month else 0.0
     out = {k: rh(v * factor) for k, v in full.items()}
@@ -388,7 +449,8 @@ def compute_slip(rules, salary, days_in_month, eligible_days, lop_days, manual=N
 
     pf = 0
     if not int(salary.get('pf_exempt') or 0) and out['gross'] > 0:
-        pf = rh((out['basic'] + out['other_allowance']) * _f(rules.get('pf_pct')) / 100)
+        pf_wage = out['basic'] if (rules.get('pf_base') or 'basic_other') == 'basic' else out['basic'] + out['other_allowance']
+        pf = rh(pf_wage * _f(rules.get('pf_pct')) / 100)
         cap = rh(rules.get('pf_cap'))
         if cap > 0:
             pf = min(pf, cap)
@@ -464,6 +526,12 @@ def _build_or_refresh_slip(conn, run, emp, rules, salary, user, existing=None):
     dim, elig = eligible_days_for(emp, y, m)
     lop, taken, bal = _leave_figures(emp['id'], y, m)
     manual = {k: (existing or {}).get(k) for k, _ in MANUAL_DEDUCTIONS}
+    if not existing:
+        # TDS usually repeats month to month (directors) — start from the previous month's figure.
+        prev = conn.execute("SELECT tds FROM payslips WHERE employee_id = ? AND period < ? "
+                            "ORDER BY period DESC LIMIT 1", (emp['id'], run['period'])).fetchone()
+        if prev and _f(prev['tds']):
+            manual['tds'] = prev['tds']
     overrides = {}
     if existing and existing.get('overrides'):
         try:
@@ -487,10 +555,31 @@ def _build_or_refresh_slip(conn, run, emp, rules, salary, user, existing=None):
                      list(data.values()))
 
 
-def _payroll_employees(conn):
-    """Active employees (the people on the dashboard) — interns/stipends aren't employees."""
-    return [dict(r) for r in conn.execute(
-        "SELECT * FROM employees WHERE is_active = 1 ORDER BY name").fetchall()]
+def _excluded_ids(conn):
+    try:
+        return {r['employee_id'] for r in conn.execute("SELECT employee_id FROM payroll_exclusions").fetchall()}
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return set()
+
+
+def _auto_excluded(emp):
+    return (str(emp.get('name') or '').strip().lower() in AUTO_EXCLUDE_NAMES
+            or str(emp.get('emp_code') or '').strip().lower() in AUTO_EXCLUDE_NAMES)
+
+
+def _payroll_employees(conn, include_excluded=False):
+    """Active employees (the people on the dashboard) — interns/stipends aren't employees.
+    The admin login account and anyone marked "Not on payroll" are left out."""
+    rows = [dict(r) for r in conn.execute("SELECT * FROM employees WHERE is_active = 1 ORDER BY name").fetchall()]
+    ex = _excluded_ids(conn)
+    for r in rows:
+        r['payroll_excluded'] = r['id'] in ex or _auto_excluded(r)
+        r['payroll_auto_excluded'] = _auto_excluded(r)
+    return rows if include_excluded else [r for r in rows if not r['payroll_excluded']]
 
 
 def _refresh_run(conn, run, user):
@@ -502,6 +591,9 @@ def _refresh_run(conn, run, user):
         "SELECT * FROM payslips WHERE run_id = ?", (run['id'],)).fetchall()}
     missing = []
     y, m = int(run['period'][:4]), int(run['period'][5:7])
+    for emp in _payroll_employees(conn, include_excluded=True):
+        if emp['payroll_excluded'] and emp['id'] in existing:
+            conn.execute("DELETE FROM payslips WHERE id = ?", (existing[emp['id']]['id'],))
     for emp in _payroll_employees(conn):
         sal = salary_for(conn, emp['id'], run['period'])
         if not sal:
@@ -812,7 +904,10 @@ def payroll_template():
             vals = {}
             for k, _, kind in RULE_FIELDS:
                 v = (request.form.get(k) or '').strip()
-                vals[k] = v if kind == 'text' else _f(v)
+                if kind == 'choice':
+                    allowed = [c for c, _ in RULE_CHOICES[k]]
+                    v = v if v in allowed else allowed[0]
+                vals[k] = v if kind in ('text', 'choice') else _f(v)
             mode = request.form.get('mode')
             if mode == 'edit' and request.form.get('rules_id'):
                 rid = int(request.form.get('rules_id'))
@@ -845,7 +940,7 @@ def payroll_template():
         conn.close()
     for v in versions:  # 50.000 → 50, 0.750 → 0.75 for display
         for k, _, kind in RULE_FIELDS:
-            if kind != 'text' and v.get(k) is not None:
+            if kind not in ('text', 'choice') and v.get(k) is not None:
                 v[k] = _num(v[k])
     # Worked example so the founder can sanity-check the rules at a glance.
     example = None
@@ -855,7 +950,7 @@ def payroll_template():
         example = dict(gross=ex_gross, **sp,
                        pf=compute_slip(versions[0], {'monthly_gross': ex_gross}, 30, 30, 0)['pf'])
     return render_template('hr_payroll_template.html', user=user, versions=versions, used=used,
-                           fields=RULE_FIELDS, example=example, inr=inr, period_label=period_label,
+                           fields=RULE_FIELDS, choices=RULE_CHOICES, example=example, inr=inr, period_label=period_label,
                            active_section='hr')
 
 
@@ -868,7 +963,7 @@ def payroll_salaries():
         _ensure(conn)
         period = ist_now().strftime('%Y-%m')
         rules = rules_for(conn, period) or rules_for(conn, '9999-12')
-        emps = _payroll_employees(conn)
+        emps = _payroll_employees(conn, include_excluded=True)
         hist = {}
         for r in conn.execute("SELECT * FROM employee_salary ORDER BY effective_from DESC, id DESC").fetchall():
             hist.setdefault(r['employee_id'], []).append(dict(r))
@@ -878,9 +973,11 @@ def payroll_salaries():
     for e in emps:
         h = hist.get(e['id'], [])
         cur = next((x for x in h if x['effective_from'] <= period), h[-1] if h else None)
-        split = split_gross(rules, cur['monthly_gross'], cur.get('hra_pct')) if (cur and rules) else None
+        split = split_gross(rules, cur['monthly_gross'], cur) if (cur and rules) else None
         rows.append(dict(emp=e, cur=cur, hist=h, split=split))
-    return render_template('hr_payroll_salaries.html', user=user, rows=rows, rules=rules, inr=inr,
+    rows_on = [r for r in rows if not r['emp']['payroll_excluded']]
+    rows_off = [r for r in rows if r['emp']['payroll_excluded']]
+    return render_template('hr_payroll_salaries.html', user=user, rows=rows_on, rows_off=rows_off, rules=rules, inr=inr,
                            period_label=period_label, this_month=period, active_section='hr')
 
 
@@ -903,8 +1000,11 @@ def payroll_salary_save():
     if gross <= 0:
         flash('Enter the monthly gross salary.', 'error')
         return redirect(url_for('hr_payroll_salaries'))
-    hra = (request.form.get('hra_pct') or '').strip()
-    hra = _f(hra) if hra != '' else None
+    def _opt(name):
+        v = (request.form.get(name) or '').strip()
+        return _f(v) if v != '' else None
+    hra = _opt('hra_pct')
+    basic_amt, hra_amt = _opt('basic_amount'), _opt('hra_amount')
     conn = get_db()
     try:
         _ensure(conn)
@@ -913,21 +1013,52 @@ def payroll_salary_save():
             abort(404)
         same = conn.execute("SELECT id FROM employee_salary WHERE employee_id = ? AND effective_from = ?",
                             (emp_id, eff)).fetchone()
-        vals = (gross, hra, 1 if request.form.get('pt_exempt') else 0, 1 if request.form.get('pf_exempt') else 0,
+        vals = (gross, hra, basic_amt, hra_amt, 1 if request.form.get('pt_exempt') else 0,
+                1 if request.form.get('pf_exempt') else 0,
                 (request.form.get('notes') or '').strip()[:300], user.get('name') or '')
         if same:
-            conn.execute("UPDATE employee_salary SET monthly_gross = ?, hra_pct = ?, pt_exempt = ?, pf_exempt = ?, "
-                         "notes = ?, updated_by_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                         vals + (same['id'],))
+            conn.execute("UPDATE employee_salary SET monthly_gross = ?, hra_pct = ?, basic_amount = ?, hra_amount = ?, "
+                         "pt_exempt = ?, pf_exempt = ?, notes = ?, updated_by_name = ?, "
+                         "updated_at = CURRENT_TIMESTAMP WHERE id = ?", vals + (same['id'],))
         else:
-            conn.execute("INSERT INTO employee_salary (monthly_gross, hra_pct, pt_exempt, pf_exempt, notes, "
-                         "updated_by_name, employee_id, effective_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                         vals + (emp_id, eff))
+            conn.execute("INSERT INTO employee_salary (monthly_gross, hra_pct, basic_amount, hra_amount, pt_exempt, "
+                         "pf_exempt, notes, updated_by_name, employee_id, effective_from) "
+                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", vals + (emp_id, eff))
         conn.commit()
     finally:
         conn.close()
     flash(f"Salary saved for {emp['name']} — ₹{inr(gross)} / month from {period_label(eff)}.", 'success')
     return redirect(url_for('hr_payroll_salaries') + f"#emp-{emp_id}")
+
+
+def payroll_exclude():
+    """Mark an employee login as Not on payroll (or put them back)."""
+    user, deny = _require_manager()
+    if deny:
+        return deny
+    try:
+        emp_id = int(request.form.get('employee_id'))
+    except (TypeError, ValueError):
+        abort(400)
+    conn = get_db()
+    try:
+        _ensure(conn)
+        emp = conn.execute("SELECT name FROM employees WHERE id = ?", (emp_id,)).fetchone()
+        if not emp:
+            abort(404)
+        if request.form.get('action') == 'include':
+            conn.execute("DELETE FROM payroll_exclusions WHERE employee_id = ?", (emp_id,))
+            msg = f"{emp['name']} is back on payroll."
+        else:
+            if not conn.execute("SELECT 1 FROM payroll_exclusions WHERE employee_id = ?", (emp_id,)).fetchone():
+                conn.execute("INSERT INTO payroll_exclusions (employee_id, excluded_by_name) VALUES (?, ?)",
+                             (emp_id, user.get('name') or ''))
+            msg = f"{emp['name']} is marked Not on payroll — no salary slip will be made for this login."
+        conn.commit()
+    finally:
+        conn.close()
+    flash(msg, 'success')
+    return redirect(url_for('hr_payroll_salaries'))
 
 
 def payroll_salary_delete(sal_id):
@@ -1172,6 +1303,7 @@ def register_hr_payroll(app):
         ('/hr/payroll/salaries', 'hr_payroll_salaries', payroll_salaries, ['GET']),
         ('/hr/payroll/salaries/save', 'hr_payroll_salary_save', payroll_salary_save, ['POST']),
         ('/hr/payroll/salaries/<int:sal_id>/delete', 'hr_payroll_salary_delete', payroll_salary_delete, ['POST']),
+        ('/hr/payroll/salaries/exclude', 'hr_payroll_exclude', payroll_exclude, ['POST']),
         ('/my-payslips', 'my_payslips', my_payslips, ['GET']),
         ('/my-payslips/<int:slip_id>', 'my_payslip_view', my_payslip_view, ['GET']),
         ('/my-payslips/<int:slip_id>/send-otp', 'my_payslip_send_otp', my_payslip_send_otp, ['POST']),

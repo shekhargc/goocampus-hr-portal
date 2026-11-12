@@ -33,8 +33,14 @@
           {% for k, lbl, kind in fields %}
           <div {% if k == 'company_address' %}style="grid-column:1/-1;"{% endif %}>
             <label class="tp-l">{{ lbl }}</label>
+            {% if kind == 'choice' %}
+            <select class="tp-in" name="{{ k }}">
+              {% for cv, cl in choices[k] %}<option value="{{ cv }}" {% if (v[k] or choices[k][0][0]) == cv %}selected{% endif %}>{{ cl }}</option>{% endfor %}
+            </select>
+            {% else %}
             <input class="tp-in" name="{{ k }}" {% if kind != 'text' %}type="number" step="any"{% endif %}
                    value="{{ v[k] if v[k] is not none else '' }}">
+            {% endif %}
           </div>
           {% endfor %}
           <div style="grid-column:1/-1;"><label class="tp-l">Notes</label><input class="tp-in" name="notes" value="{{ v.notes or '' }}"></div>
@@ -48,9 +54,9 @@
     {% endfor %}
 
     <div style="font-size:.8rem;color:var(--gray-500);line-height:1.6;margin-top:16px;">
-      <b>How it's calculated:</b> Basic = % of gross (never below the minimum) · HRA = % of Basic · then Conveyance, LTC, Medical as fixed amounts (only if the gross leaves room) · Other Allowance = whatever is left, so it always adds up to the gross.
-      LOP days reduce every line by paid days ÷ days in the month. PF = % of (Basic + Other Allowance), up to the maximum. PT applies when the full monthly gross is at least the threshold. ESI applies when the full gross is at or below its threshold.
-      Per-person exceptions (e.g. directors' HRA 40%, no PT, no PF) are set under Employee Salaries.
+      <b>How it's calculated:</b> Basic = % of gross (never below the minimum; 0% + minimum = a flat Basic) · HRA = % of Basic or of gross · then Conveyance, LTC, Medical as fixed amounts (only if the gross leaves room) · Other Allowance = whatever is left, so it always adds up to the gross.
+      LOP days reduce every line by paid days ÷ days in the month. PF = % of Basic (+ Other Allowance, if chosen), up to the maximum. PT applies when the full monthly gross is at least the threshold. ESI applies when the full gross is at or below its threshold.
+      Per-person exceptions (a fixed Basic or HRA amount, a different HRA %, no PT, no PF) are set under Employee Salaries.
     </div>
   </div>
 </div>
