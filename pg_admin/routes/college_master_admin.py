@@ -868,6 +868,8 @@ def college_fees():
     if kind not in ('medical', 'dnb', ''):
         kind = ''
     state = _s(request.args.get('state'))
+    authority = _s(request.args.get('authority'))      # counselling authority the seat belongs to (2026-11-12)
+    ctype = _s(request.args.get('ctype'))              # college / institute type
     quota = _s(request.args.get('quota'))
     category = _s(request.args.get('category'))
     q = _s(request.args.get('q'))
@@ -893,6 +895,10 @@ def college_fees():
         where.append("UPPER(COALESCE(c.degree,'')) NOT LIKE ?"); params.append('%DNB%')
     if state:
         where.append("c.state = ?"); params.append(state)
+    if authority:
+        where.append("c.authority = ?"); params.append(authority)
+    if ctype:
+        where.append("c.institute_type = ?"); params.append(ctype)
     if quota:
         where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(quota)
     if category:
@@ -904,15 +910,16 @@ def college_fees():
     if fy and _FEES.available(conn):
         where.append("f26.id IS NOT NULL" if fy == '2026' else "f26.id IS NULL")
     wsql = " WHERE " + " AND ".join(where)
-    grp = " GROUP BY c.institute, c.course, c.quota, c.category "
+    grp = " GROUP BY c.authority, c.institute, c.course, c.quota, c.category "
     rows, states, quotas, cats, total, priced_seats, fee26 = [], [], [], [], 0, 0, []
+    authorities, ctypes = [], []
     try:
         fee26 = _FEES.summary(conn)
         total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + fj + wsql + grp + ") t",
                              params).fetchone()['n']
         offset = (page - 1) * _FEES_PER_PAGE
         rows = conn.execute(
-            "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
+            "SELECT c.authority AS authority, c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
             f"MAX(c.institute_type) AS institute_type, MAX({eff}) AS fee, MAX({effy}) AS fee_year, "
             "MAX(c.fee) AS fee_2025, " + ("MAX(f26.fee_total)" if _FEES.available(conn) else "NULL") + " AS fee_2026, "
@@ -934,6 +941,12 @@ def college_fees():
         quotas = [r['quota'] for r in conn.execute(
             "SELECT DISTINCT quota FROM pg_cutoffs WHERE COALESCE(quota,'')<>'' AND fee IS NOT NULL AND fee>1 "
             "ORDER BY quota").fetchall()]
+        authorities = [r['authority'] for r in conn.execute(
+            "SELECT DISTINCT authority FROM pg_cutoffs WHERE COALESCE(authority,'')<>'' AND COALESCE(is_reference,0)=0 "
+            "ORDER BY authority").fetchall()]
+        ctypes = [r['institute_type'] for r in conn.execute(
+            "SELECT DISTINCT institute_type FROM pg_cutoffs WHERE COALESCE(institute_type,'')<>'' "
+            "AND COALESCE(is_reference,0)=0 ORDER BY institute_type").fetchall()]
         cats = [r['category'] for r in conn.execute(
             "SELECT DISTINCT category FROM pg_cutoffs WHERE COALESCE(category,'')<>'' AND fee IS NOT NULL AND fee>1 "
             "ORDER BY category").fetchall()]
@@ -944,7 +957,8 @@ def college_fees():
                            priced_seats=priced_seats, states=states, quotas=quotas,
                            categories=cats, kind=kind, state=state, quota=quota,
                            category=category, q=q, sort=sort, page=page, pages=pages,
-                           per_page=_FEES_PER_PAGE, active_section='goocampus_in', fee26=fee26, fy=fy)
+                           per_page=_FEES_PER_PAGE, active_section='goocampus_in', fee26=fee26, fy=fy,
+                           authorities=authorities, authority=authority, ctypes=ctypes, ctype=ctype)
 
 
 # ── Edit a college's master fields (team fills logos / corrects data) ─────────

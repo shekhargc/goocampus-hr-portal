@@ -54,6 +54,20 @@
       </select>
     </div>
     <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Authority</label>
+      <select name="authority" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:200px;">
+        <option value="">All authorities</option>
+        {% for a in authorities %}<option value="{{ a }}" {{ 'selected' if a==authority }}>{{ a }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">College type</label>
+      <select name="ctype" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
+        <option value="">All types</option>
+        {% for ct in ctypes %}<option value="{{ ct }}" {{ 'selected' if ct==ctype }}>{{ ct }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
       <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Quota</label>
       <select name="quota" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
         <option value="">All quotas</option>
@@ -97,7 +111,7 @@
     <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
       {% set hs = 'padding:0.6rem 0.9rem;font-weight:700;color:var(--navy);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.3px;border-bottom:2px solid var(--gray-200);background:var(--gray-50);text-align:left;' %}
       <thead><tr>
-        <th style="{{ hs }}">College</th><th style="{{ hs }}">Course</th>
+        <th style="{{ hs }}">College</th><th style="{{ hs }}">Authority</th><th style="{{ hs }}">College type</th><th style="{{ hs }}">Course</th>
         <th style="{{ hs }}">Quota</th><th style="{{ hs }}">Category</th>
         <th style="{{ hs }}">State</th><th style="{{ hs }}text-align:right;">2025 fee</th><th style="{{ hs }}text-align:right;">2026-27 fee</th>
       </tr></thead>
@@ -106,8 +120,9 @@
         <tr style="border-top:1px solid var(--gray-100);">
           <td style="padding:0.55rem 0.9rem;font-weight:600;color:var(--navy);">
             {% if r.id %}<a href="/admin/pg/college-database/{{ r.id }}" style="color:var(--navy);text-decoration:none;">{{ r.institute }}</a>{% else %}{{ r.institute }}{% endif %}
-            {% if r.institute_type %}<div style="font-size:0.7rem;color:var(--gray-400);font-weight:500;">{{ r.institute_type }}</div>{% endif %}
           </td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-700);white-space:nowrap;">{{ r.authority or '—' }}</td>
+          <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.institute_type or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;color:var(--gray-700);">{{ r.course }}</td>
           <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.quota or '—' }}</td>
           <td style="padding:0.55rem 0.9rem;color:var(--gray-600);">{{ r.category or '—' }}</td>
@@ -128,7 +143,7 @@
             {% else %}<span style="font-size:0.72rem;font-weight:500;color:var(--gray-400);">not yet</span>{% endif %}</td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="padding:2rem;text-align:center;color:var(--gray-400);">No priced seats match these filters.</td></tr>
+        <tr><td colspan="9" style="padding:2rem;text-align:center;color:var(--gray-400);">No priced seats match these filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -136,7 +151,7 @@
 
   <!-- Pagination -->
   {% if pages > 1 %}
-  {% set qs = '&fy=' ~ fy ~ '&kind=' ~ kind ~ '&state=' ~ state ~ '&quota=' ~ quota ~ '&category=' ~ category ~ '&sort=' ~ sort ~ '&q=' ~ q %}
+  {% set qs = '&fy=' ~ fy ~ '&authority=' ~ (authority|urlencode) ~ '&ctype=' ~ (ctype|urlencode) ~ '&kind=' ~ kind ~ '&state=' ~ state ~ '&quota=' ~ quota ~ '&category=' ~ category ~ '&sort=' ~ sort ~ '&q=' ~ q %}
   <div style="display:flex;justify-content:center;align-items:center;gap:0.8rem;margin-top:1.2rem;font-size:0.85rem;">
     {% if page > 1 %}<a href="?page={{ page-1 }}{{ qs }}" style="color:var(--orange);text-decoration:none;font-weight:600;">← Prev</a>{% endif %}
     <span style="color:var(--gray-500);">Page {{ page }} of {{ pages }}</span>
