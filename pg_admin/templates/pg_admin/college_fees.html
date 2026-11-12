@@ -40,43 +40,43 @@
   <form method="GET" style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:1.2rem;">
     <div>
       <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Family</label>
-      <select name="kind" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
+      <select name="kind" class="casc" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;">
         <option value="" {{ 'selected' if not kind }}>All</option>
         <option value="medical" {{ 'selected' if kind=='medical' }}>MD / MS</option>
         <option value="dnb" {{ 'selected' if kind=='dnb' }}>DNB</option>
       </select>
     </div>
     <div>
-      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">State</label>
-      <select name="state" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
-        <option value="">All states</option>
-        {% for s in states %}<option value="{{ s }}" {{ 'selected' if s==state }}>{{ s }}</option>{% endfor %}
-      </select>
-    </div>
-    <div>
       <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Authority</label>
-      <select name="authority" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:200px;">
+      <select name="authority" class="casc" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:200px;">
         <option value="">All authorities</option>
         {% for a in authorities %}<option value="{{ a }}" {{ 'selected' if a==authority }}>{{ a }}</option>{% endfor %}
       </select>
     </div>
     <div>
+      <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">State</label>
+      <select name="state" class="casc" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
+        <option value="">All states</option>
+        {% for s in states %}<option value="{{ s }}" {{ 'selected' if s==state }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
       <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">College type</label>
-      <select name="ctype" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
+      <select name="ctype" class="casc" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
         <option value="">All types</option>
         {% for ct in ctypes %}<option value="{{ ct }}" {{ 'selected' if ct==ctype }}>{{ ct }}</option>{% endfor %}
       </select>
     </div>
     <div>
       <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Quota</label>
-      <select name="quota" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
+      <select name="quota" class="casc" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:180px;">
         <option value="">All quotas</option>
         {% for qv in quotas %}<option value="{{ qv }}" {{ 'selected' if qv==quota }}>{{ qv }}</option>{% endfor %}
       </select>
     </div>
     <div>
       <label style="display:block;font-size:0.68rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;margin-bottom:3px;">Category</label>
-      <select name="category" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:160px;">
+      <select name="category" class="casc" style="padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:7px;font-size:0.85rem;max-width:160px;">
         <option value="">All categories</option>
         {% for cv in categories %}<option value="{{ cv }}" {{ 'selected' if cv==category }}>{{ cv }}</option>{% endfor %}
       </select>
@@ -105,6 +105,24 @@
     <button type="submit" style="background:var(--navy);color:#fff;border:none;border-radius:7px;padding:0.5rem 1.1rem;font-weight:700;font-size:0.85rem;cursor:pointer;">Apply</button>
     <a href="/admin/pg/college-fees" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;padding-bottom:0.5rem;">Reset</a>
   </form>
+  <script>
+  /* Cascading filters (founder 2026-11-12): Family → Authority → State → College type → Quota → Category.
+     Changing one clears every filter below it and reloads, so each dropdown only offers options that exist. */
+  (function () {
+    var order = ['kind', 'authority', 'state', 'ctype', 'quota', 'category'];
+    order.forEach(function (n, i) {
+      var el = document.querySelector('select.casc[name="' + n + '"]');
+      if (!el) return;
+      el.addEventListener('change', function () {
+        order.slice(i + 1).forEach(function (m) {
+          var d = document.querySelector('select.casc[name="' + m + '"]');
+          if (d) d.value = '';
+        });
+        el.form.submit();
+      });
+    });
+  })();
+  </script>
 
   <!-- Table -->
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">

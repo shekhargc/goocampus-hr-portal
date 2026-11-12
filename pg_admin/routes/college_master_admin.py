@@ -887,6 +887,31 @@ def college_fees():
     conn = get_db()
     from pg_admin.data import fees as _FEES          # 2026-27 fee where verified, else 2025 (2026-11-11)
     eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
+    # Cascading filters (founder 2026-11-12): Family → Authority → State → College type → Quota → Category.
+    # Each dropdown lists only the values that exist for the filters chosen ABOVE it; a chosen value that no
+    # longer exists under the upstream choices is dropped (the page JS also clears downstream on change).
+    _kind_sql = {'dnb': ("UPPER(COALESCE(c.degree,'')) LIKE ?", '%DNB%'),
+                 'medical': ("UPPER(COALESCE(c.degree,'')) NOT LIKE ?", '%DNB%')}.get(kind)
+    _casc = [['authority', 'c.authority', authority], ['state', 'c.state', state],
+             ['ctype', 'c.institute_type', ctype], ['quota', 'c.quota', quota], ['category', 'c.category', category]]
+    opts = {}
+    try:
+        for i, (name, col, val) in enumerate(_casc):
+            w, pr = ["COALESCE(c.is_reference,0)=0", f"COALESCE({col},'')<>''"], []
+            if _kind_sql:
+                w.append(_kind_sql[0]); pr.append(_kind_sql[1])
+            for _n, ucol, uval in _casc[:i]:
+                if uval:
+                    w.append(f"{ucol} = ?"); pr.append(uval)
+            opts[name] = [r['v'] for r in conn.execute(
+                f"SELECT DISTINCT {col} AS v FROM pg_cutoffs c WHERE " + " AND ".join(w) + " ORDER BY 1", pr).fetchall()]
+            if val and val not in opts[name]:
+                _casc[i][2] = ''
+    except Exception as e:
+        logging.warning("college_fees options: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    authority, state, ctype, quota, category = (x[2] for x in _casc)
     where = ["COALESCE(c.is_reference,0)=0", f"{eff} IS NOT NULL", f"{eff} > 1"]
     params = []
     if kind == 'dnb':
@@ -900,9 +925,9 @@ def college_fees():
     if ctype:
         where.append("c.institute_type = ?"); params.append(ctype)
     if quota:
-        where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(quota)
+        where.append("c.quota = ?"); params.append(quota)
     if category:
-        where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(category)
+        where.append("c.category = ?"); params.append(category)
     if q:
         fi, pi = smart_name_clause("c.institute", q)
         fc, pc = smart_name_clause("c.course", q)
@@ -935,21 +960,8 @@ def college_fees():
         priced_seats = conn.execute(
             "SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 "
             "AND fee IS NOT NULL AND fee > 1").fetchone()['n']
-        states = [r['state'] for r in conn.execute(
-            "SELECT DISTINCT state FROM pg_cutoffs WHERE COALESCE(state,'')<>'' AND fee IS NOT NULL AND fee>1 "
-            "ORDER BY state").fetchall()]
-        quotas = [r['quota'] for r in conn.execute(
-            "SELECT DISTINCT quota FROM pg_cutoffs WHERE COALESCE(quota,'')<>'' AND fee IS NOT NULL AND fee>1 "
-            "ORDER BY quota").fetchall()]
-        authorities = [r['authority'] for r in conn.execute(
-            "SELECT DISTINCT authority FROM pg_cutoffs WHERE COALESCE(authority,'')<>'' AND COALESCE(is_reference,0)=0 "
-            "ORDER BY authority").fetchall()]
-        ctypes = [r['institute_type'] for r in conn.execute(
-            "SELECT DISTINCT institute_type FROM pg_cutoffs WHERE COALESCE(institute_type,'')<>'' "
-            "AND COALESCE(is_reference,0)=0 ORDER BY institute_type").fetchall()]
-        cats = [r['category'] for r in conn.execute(
-            "SELECT DISTINCT category FROM pg_cutoffs WHERE COALESCE(category,'')<>'' AND fee IS NOT NULL AND fee>1 "
-            "ORDER BY category").fetchall()]
+        states, quotas, cats = opts.get('state', []), opts.get('quota', []), opts.get('category', [])
+        authorities, ctypes = opts.get('authority', []), opts.get('ctype', [])
     finally:
         conn.close()
     pages = max(1, (total + _FEES_PER_PAGE - 1) // _FEES_PER_PAGE)
