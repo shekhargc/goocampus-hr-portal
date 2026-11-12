@@ -5,11 +5,17 @@ The PDF is a SCAN (garbage text layer), 71 lines, one college (GMCH Sector 32). 
 (2026-11-11): Sr No, Category, Rank (= NEET PG All-India rank — runs 299..154,939 in Sr No order) and Course only.
 Application IDs and names are NEVER typed. The file is SHA-pinned so a re-upload (revised list) stops this script.
 Quota / category / course use the 2025 Chandigarh cut-off spellings (State Quota-IP Pool; GEN / SC; OBC_NCL -> OBC).
-Usage: python3 chandigarh.py <Result_2.pdf> <out.json> [--status final]
+
+CORRIGENDUM (Endst. No. GMCH-TA-III(MD/MS-2026)-2026/49017, dated 10.11.2026, inbox 1658, also a scan, typed by hand
+2026-11-12): Sr No 65's SC candidature was cancelled (SC certificate not from UT Chandigarh) and counselling was re-done
+from there, so Sr No 65-71 are re-printed: 65 = "No seat allotted" (row dropped -> 70 seats), 66-71 as in REV. Rows 1-64
+are unchanged. With --corrigendum the body is the revised Round 1 ('revised': true, published_on 10.11.2026).
+Usage: python3 chandigarh.py <Result_2.pdf> <out.json> [--status final] [--corrigendum <corrigendum.pdf>]
 """
 import sys, json, hashlib
 
 SHA = 'ca9849a47909a3b746352db2050ca5c90bfc631314253198730b03cfd0ceac5b'  # Result_2.pdf as of 09.11.2026
+SHA_CORR = 'a9f86d9ed15b12fa227ee1c7f408a334b9787ff83755763f6215be6a4125dd67'  # corrigendum dated 10.11.2026
 G, S, O = 'General', 'SC', 'OBC_NCL'
 C = {'GM': 'MD - General Medicine', 'RD': 'MD - Radio-Diagnosis', 'OG': 'MS - Obstetrics and Gynaecology',
      'PE': 'MD - Paediatrics', 'PS': 'MD - Psychiatry', 'OP': 'MS - Ophthalmology', 'EN': 'MS - ENT (Otorhinolaryngology)',
@@ -37,17 +43,31 @@ L = [(1,G,299,'GM'),(2,G,529,'RD'),(3,G,593,'RD'),(4,G,626,'RD'),(5,G,830,'GM'),
      (62,G,49765,'TM'),(63,G,54499,'MI'),(64,G,57646,'PH'),(65,S,69913,'CM'),(66,G,89815,'FM'),(67,G,105116,'MI'),
      (68,S,107020,'MI'),(69,S,123547,'FM'),(70,G,140706,'BI'),(71,S,154939,'BI')]
 CAT = {G: 'GEN', S: 'SC', O: 'OBC'}
+# corrigendum 10.11.2026: Sr No -> (category "Seat allotted in Category", rank, course key) or None = no seat allotted
+REV = {65: None, 66: (S, 89815, 'CM'), 67: (G, 105116, 'MI'), 68: (S, 107020, 'MI'), 69: (G, 123547, 'FM'),
+       70: (G, 140706, 'BI'), 71: (S, 154939, 'FM')}
 
 args = sys.argv[1:]
 status = 'final'
 if '--status' in args:
     i = args.index('--status'); status = args[i + 1]; del args[i:i + 2]
+corr = None
+if '--corrigendum' in args:
+    i = args.index('--corrigendum'); corr = args[i + 1]; del args[i:i + 2]
 pdf, out = args
 h = hashlib.sha256(open(pdf, 'rb').read()).hexdigest()
 if SHA and h != SHA:
     raise SystemExit(f'PDF changed (sha {h[:12]}) — a revised list: re-type it')
 assert [x[0] for x in L] == list(range(1, 72)), 'Sr No must run 1..71'
 assert all(L[i][2] < L[i + 1][2] for i in range(len(L) - 1)), 'rank must rise with Sr No'
+if corr:
+    hc = hashlib.sha256(open(corr, 'rb').read()).hexdigest()
+    if hc != SHA_CORR:
+        raise SystemExit(f'corrigendum changed (sha {hc[:12]}) — re-type it')
+    for n, v in REV.items():        # the corrigendum re-prints the same candidates (same ranks) from Sr No 65
+        assert L[n - 1][0] == n and (v is None or v[1] == L[n - 1][2]), f'Sr No {n}: rank differs from the first list'
+    L = [x if x[0] not in REV else (x[0],) + REV[x[0]] for x in L if REV.get(x[0], 1) is not None]
+    assert all(L[i][2] < L[i + 1][2] for i in range(len(L) - 1)), 'rank must rise with Sr No'
 inst_raw = 'Govt. Medical College & Hospital, Sector 32, Chandigarh'
 rows = [{'sno': n, 'rank': r, 'rank_ai': r, 'quota_raw': 'State Quota (GMCH-32 first counselling)',
          'quota': 'State Quota-IP Pool', 'institute_raw': inst_raw,
@@ -61,5 +81,14 @@ d = {'authority_code': 'gmch_chd', 'round': 'Round 1', 'round_order': 1, 'status
      'notes': 'Scanned list typed by hand (Sr No, category, rank, course only — no names / application IDs). '
               'rank = NEET PG All-India rank as printed. One college (GMCH-32).',
      'rows': rows}
+if corr:
+    d.update({'revised': True, 'published_on': '2026-11-10',
+              'title': 'List of Selected Candidates in First Counselling (MD/MS 2026), GMCH Sector 32, Chandigarh — revised '
+                       '(corrigendum 10.11.2026)',
+              'source_file_name': 'GMCH-32 Result_2.pdf (09.11.2026) + corrigendum GMCH-TA-III(MD/MS-2026)-2026/49017 '
+                                  '(10.11.2026)',
+              'pdf_name': 'GMCH32-PG-2026-Round1-Selected-revised.pdf',
+              'notes': d['notes'] + ' Revised by the corrigendum of 10.11.2026: Sr No 65 no seat (SC candidature '
+                                    'cancelled), Sr No 66-71 re-allotted; Sr No 1-64 unchanged.'})
 json.dump(d, open(out, 'w'))
-print('rows', len(rows), 'sha', h[:16], {k: sum(1 for x in L if x[1] == k) for k in (G, S, O)})
+print('rows', len(rows), 'sha', h[:16], 'corrigendum' if corr else '', {k: sum(1 for x in L if x[1] == k) for k in (G, S, O)})
