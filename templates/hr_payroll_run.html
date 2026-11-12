@@ -25,7 +25,7 @@
         <h1 style="margin:0;font-size:1.35rem;font-weight:800;color:var(--navy);">Payroll — {{ period_label(run.period) }}
           <span style="font-size:.72rem;vertical-align:middle;padding:3px 10px;border-radius:20px;color:#fff;background:{{ {'draft':'#b45309','finalised':'#1d4ed8','released':'#15803d'}[st] }};">{{ st|title }}</span></h1>
         <p style="margin:4px 0 0;font-size:.84rem;color:var(--gray-500);">
-          {% if st == 'draft' %}Check each person's LOP and add TDS / KLWF / advances (click a row). TDS starts from each person's previous month — change it only if it's different. Recalculate pulls the latest leave + salaries; your entries are kept.
+          {% if st == 'draft' %}Check each person's LOP and add TDS / KLWF / advances (click a row). Directors' TDS comes from their Monthly TDS on Employee Salaries; type anyone else's TDS here when it applies (it isn't copied to next month). Recalculate pulls the latest leave + salaries; your entries are kept.
           {% elif st == 'finalised' %}Figures are locked. Release to let employees open their slips.
           {% else %}Released {% if run.released_by_name %}by {{ run.released_by_name }}{% endif %} — employees can open these slips with a WhatsApp OTP.{% endif %}
           Template: {{ fy_label(run.period) }} rules{% if rules %} (from {{ period_label(rules.effective_from) }}){% endif %}.

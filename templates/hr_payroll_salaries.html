@@ -30,7 +30,7 @@
               <td style="text-align:right;font-weight:700;">₹{{ inr(r.cur.monthly_gross) }}</td>
               <td style="font-size:.8rem;">{{ period_label(r.cur.effective_from) }}{% if r.hist|length > 1 %} <span style="color:var(--gray-500);">({{ r.hist|length }} entries)</span>{% endif %}</td>
               <td style="font-size:.8rem;color:var(--gray-600);">{% if r.split %}{{ inr(r.split.basic) }} / {{ inr(r.split.hra) }} / {{ inr(r.split.other_allowance) }}{% endif %}</td>
-              <td>{% if r.cur.basic_amount is not none %}<span class="tag">Basic ₹{{ inr(r.cur.basic_amount) }}</span>{% endif %}{% if r.cur.hra_amount is not none %}<span class="tag">HRA ₹{{ inr(r.cur.hra_amount) }}</span>{% endif %}{% if r.cur.hra_pct is not none %}<span class="tag">HRA {{ r.cur.hra_pct|float|round(2) }}%</span>{% endif %}{% if r.cur.pt_exempt %}<span class="tag">No PT</span>{% endif %}{% if r.cur.pf_exempt %}<span class="tag">No PF</span>{% endif %}</td>
+              <td>{% if r.cur.basic_amount is not none %}<span class="tag">Basic ₹{{ inr(r.cur.basic_amount) }}</span>{% endif %}{% if r.cur.hra_amount is not none %}<span class="tag">HRA ₹{{ inr(r.cur.hra_amount) }}</span>{% endif %}{% if r.cur.hra_pct is not none %}<span class="tag">HRA {{ r.cur.hra_pct|float|round(2) }}%</span>{% endif %}{% if r.cur.monthly_tds is not none %}<span class="tag" style="background:#e0e7ff;color:#3730a3;">TDS ₹{{ inr(r.cur.monthly_tds) }}/mo</span>{% endif %}{% if r.cur.pt_exempt %}<span class="tag">No PT</span>{% endif %}{% if r.cur.pf_exempt %}<span class="tag">No PF</span>{% endif %}</td>
             {% else %}
               <td colspan="4" style="color:#b45309;font-size:.82rem;">No salary yet — click to add</td>
             {% endif %}
@@ -72,6 +72,7 @@
     <label class="l">Basic — fixed amount (₹)</label><input type="number" step="1" min="0" name="basic_amount" id="slBasic" placeholder="template">
     <label class="l">HRA — fixed amount (₹)</label><input type="number" step="1" min="0" name="hra_amount" id="slHraAmt" placeholder="template">
     <label class="l">HRA — different % (used only if no fixed HRA)</label><input type="number" step="any" min="0" name="hra_pct" id="slHra" placeholder="template">
+    <label class="l">Monthly TDS (₹) — filled into every month this entry covers</label><input type="number" step="1" min="0" name="monthly_tds" id="slTds" placeholder="none">
     <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:.86rem;"><input type="checkbox" name="pt_exempt" id="slPt"> No Professional Tax for this person</label>
     <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:.86rem;"><input type="checkbox" name="pf_exempt" id="slPf"> No PF for this person</label>
     <label class="l">Note</label><input type="text" name="notes" id="slNotes" maxlength="300">
@@ -84,7 +85,7 @@
 <script>
   var SL = {
   {% for r in rows %}
-    {{ r.emp.id }}: {name: {{ r.emp.name|tojson }}, cur: {% if r.cur %}{eff: {{ r.cur.effective_from|tojson }}, gross: {{ r.cur.monthly_gross|float }}, hra: {{ (r.cur.hra_pct|float) if r.cur.hra_pct is not none else 'null' }}, basic: {{ (r.cur.basic_amount|float) if r.cur.basic_amount is not none else 'null' }}, hraAmt: {{ (r.cur.hra_amount|float) if r.cur.hra_amount is not none else 'null' }}, pt: {{ 1 if r.cur.pt_exempt else 0 }}, pf: {{ 1 if r.cur.pf_exempt else 0 }}, notes: {{ (r.cur.notes or '')|tojson }}}{% else %}null{% endif %},
+    {{ r.emp.id }}: {name: {{ r.emp.name|tojson }}, cur: {% if r.cur %}{eff: {{ r.cur.effective_from|tojson }}, gross: {{ r.cur.monthly_gross|float }}, hra: {{ (r.cur.hra_pct|float) if r.cur.hra_pct is not none else 'null' }}, basic: {{ (r.cur.basic_amount|float) if r.cur.basic_amount is not none else 'null' }}, hraAmt: {{ (r.cur.hra_amount|float) if r.cur.hra_amount is not none else 'null' }}, tds: {{ (r.cur.monthly_tds|float) if r.cur.monthly_tds is not none else 'null' }}, pt: {{ 1 if r.cur.pt_exempt else 0 }}, pf: {{ 1 if r.cur.pf_exempt else 0 }}, notes: {{ (r.cur.notes or '')|tojson }}}{% else %}null{% endif %},
       hist: [{% for h in r.hist %}{id: {{ h.id }}, eff: {{ h.effective_from|tojson }}, gross: {{ inr(h.monthly_gross)|tojson }}, by: {{ (h.updated_by_name or '')|tojson }}}{{ ',' if not loop.last }}{% endfor %}]},
   {% endfor %}
   };
@@ -99,6 +100,7 @@
     document.getElementById('slHra').value = (c.hra === null || c.hra === undefined) ? '' : c.hra;
     document.getElementById('slBasic').value = (c.basic === null || c.basic === undefined) ? '' : c.basic;
     document.getElementById('slHraAmt').value = (c.hraAmt === null || c.hraAmt === undefined) ? '' : c.hraAmt;
+    document.getElementById('slTds').value = (c.tds === null || c.tds === undefined) ? '' : c.tds;
     document.getElementById('slPt').checked = !!c.pt; document.getElementById('slPf').checked = !!c.pf;
     document.getElementById('slNotes').value = c.notes || '';
     var h = s.hist.map(function(x){

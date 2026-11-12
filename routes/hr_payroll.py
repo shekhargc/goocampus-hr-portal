@@ -298,7 +298,8 @@ def _ensure(conn):
         conn.commit()
         for table, col, typ in (('payroll_rules', 'hra_base', 'TEXT'), ('payroll_rules', 'pf_base', 'TEXT'),
                                 ('employee_salary', 'basic_amount', 'NUMERIC(12,2)'),
-                                ('employee_salary', 'hra_amount', 'NUMERIC(12,2)')):
+                                ('employee_salary', 'hra_amount', 'NUMERIC(12,2)'),
+                                ('employee_salary', 'monthly_tds', 'NUMERIC(12,2)')):
             _add_col(conn, table, col, typ)
         # Seed the Oct-2026 rules once (derived from the Oct-2026 salary statement).
         has = conn.execute("SELECT 1 FROM payroll_rules LIMIT 1").fetchone()
@@ -526,18 +527,17 @@ def _build_or_refresh_slip(conn, run, emp, rules, salary, user, existing=None):
     dim, elig = eligible_days_for(emp, y, m)
     lop, taken, bal = _leave_figures(emp['id'], y, m)
     manual = {k: (existing or {}).get(k) for k, _ in MANUAL_DEDUCTIONS}
-    if not existing:
-        # TDS usually repeats month to month (directors) — start from the previous month's figure.
-        prev = conn.execute("SELECT tds FROM payslips WHERE employee_id = ? AND period < ? "
-                            "ORDER BY period DESC LIMIT 1", (emp['id'], run['period'])).fetchone()
-        if prev and _f(prev['tds']):
-            manual['tds'] = prev['tds']
     overrides = {}
     if existing and existing.get('overrides'):
         try:
             overrides = json.loads(existing['overrides']) or {}
         except Exception:
             overrides = {}
+    # TDS (founder 2026-11-12): only the directors have a regular TDS — their "Monthly TDS" on the
+    # salary entry repeats for every month that entry covers (e.g. Apr–Sep). Anyone else's TDS is a
+    # one-off typed on that month's slip, and is NOT copied to the next month.
+    if not overrides.get('tds_set') and _set(salary.get('monthly_tds')):
+        manual['tds'] = salary.get('monthly_tds')
     c = compute_slip(rules, salary, dim, elig, lop, manual, overrides)
     ident = dict(emp_name=emp.get('name') or '', emp_code=emp.get('emp_code') or '',
                  designation=emp.get('designation') or '', location=rules.get('location') or 'Bengaluru',
@@ -754,6 +754,8 @@ def payroll_slip_save(slip_id):
             elif (request.form.get(k) or '').strip() != '':
                 ov[k] = _f(request.form.get(k))
         manual = {k: _f(request.form.get(k)) for k, _ in MANUAL_DEDUCTIONS}
+        if abs(manual['tds'] - _f(slip.get('tds'))) > 0.005:
+            ov['tds_set'] = True          # keep this month's TDS even if the salary entry's TDS changes
         conn.execute("UPDATE payslips SET overrides = ?, notes = ?, tds = ?, klwf = ?, salary_advance = ?, "
                      "other_deductions = ? WHERE id = ?",
                      (json.dumps(ov), (request.form.get('notes') or '').strip()[:500],
@@ -1004,7 +1006,7 @@ def payroll_salary_save():
         v = (request.form.get(name) or '').strip()
         return _f(v) if v != '' else None
     hra = _opt('hra_pct')
-    basic_amt, hra_amt = _opt('basic_amount'), _opt('hra_amount')
+    basic_amt, hra_amt, tds_amt = _opt('basic_amount'), _opt('hra_amount'), _opt('monthly_tds')
     conn = get_db()
     try:
         _ensure(conn)
@@ -1013,17 +1015,17 @@ def payroll_salary_save():
             abort(404)
         same = conn.execute("SELECT id FROM employee_salary WHERE employee_id = ? AND effective_from = ?",
                             (emp_id, eff)).fetchone()
-        vals = (gross, hra, basic_amt, hra_amt, 1 if request.form.get('pt_exempt') else 0,
+        vals = (gross, hra, basic_amt, hra_amt, tds_amt, 1 if request.form.get('pt_exempt') else 0,
                 1 if request.form.get('pf_exempt') else 0,
                 (request.form.get('notes') or '').strip()[:300], user.get('name') or '')
         if same:
             conn.execute("UPDATE employee_salary SET monthly_gross = ?, hra_pct = ?, basic_amount = ?, hra_amount = ?, "
-                         "pt_exempt = ?, pf_exempt = ?, notes = ?, updated_by_name = ?, "
+                         "monthly_tds = ?, pt_exempt = ?, pf_exempt = ?, notes = ?, updated_by_name = ?, "
                          "updated_at = CURRENT_TIMESTAMP WHERE id = ?", vals + (same['id'],))
         else:
-            conn.execute("INSERT INTO employee_salary (monthly_gross, hra_pct, basic_amount, hra_amount, pt_exempt, "
-                         "pf_exempt, notes, updated_by_name, employee_id, effective_from) "
-                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", vals + (emp_id, eff))
+            conn.execute("INSERT INTO employee_salary (monthly_gross, hra_pct, basic_amount, hra_amount, monthly_tds, "
+                         "pt_exempt, pf_exempt, notes, updated_by_name, employee_id, effective_from) "
+                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", vals + (emp_id, eff))
         conn.commit()
     finally:
         conn.close()
