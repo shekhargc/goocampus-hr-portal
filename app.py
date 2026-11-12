@@ -238,6 +238,7 @@ from core.auth import (
     sales_access_required,
 )
 from core.users import get_user, is_manager, get_pending_team_count
+from core import otp_store  # login OTPs kept server-side (security fix 2026-11-12)
 
 
 def get_monthly_alloc(month_num):
@@ -868,7 +869,12 @@ def login_send_otp():
         conn.close()
         return jsonify({'error': 'Please enter your mobile number.'}), 400
     otp_code = str(random.randint(100000, 999999))
-    session['emp_login_otp'] = otp_code
+    # SECURITY (2026-11-12): the session is a browser-readable cookie, so only a
+    # reference goes in it — the code itself is stored hashed on the server.
+    otp_ref, otp_err = otp_store.issue('emp_login', otp_code, num)
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['emp_login_otp'] = otp_ref
     session['emp_login_code'] = code
     session['emp_login_num'] = num
     session['emp_login_time'] = datetime.now().isoformat()
@@ -895,8 +901,9 @@ def login_verify_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if otp != stored:
-        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('emp_login', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     conn = get_db()
     user = conn.execute("SELECT * FROM employees WHERE emp_code = ? AND is_active = 1", (code,)).fetchone()
     conn.close()
@@ -1424,7 +1431,10 @@ def client_login_send_otp():
     if not acct:
         return jsonify({'error': 'No account found for this mobile number. Please check, or use your password.'}), 404
     otp_code = str(random.randint(100000, 999999))
-    session['client_login_otp'] = otp_code
+    otp_ref, otp_err = otp_store.issue('client_login', otp_code, clean)  # code stays server-side
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['client_login_otp'] = otp_ref
     session['client_login_num'] = clean
     session['client_login_time'] = datetime.now().isoformat()
     ok, err = _send_otp_fast([('whatsapp', lambda: _send_whatsapp_otp(clean, otp_code))])
@@ -1449,8 +1459,9 @@ def client_login_verify_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if otp != stored:
-        return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('client_login', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     conn = get_db()
     acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ? AND is_active = 1", (clean,)).fetchone()
     if not acct:
@@ -43849,7 +43860,10 @@ def partner_onboard_send_phone_otp():
     if not mobile:
         return jsonify({'error': 'Please enter a valid 10-digit mobile number.'}), 400
     otp_code = str(random.randint(100000, 999999))
-    session['partner_onb_phone_otp'] = otp_code
+    otp_ref, otp_err = otp_store.issue('partner_onb_phone', otp_code, mobile)  # code stays server-side
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['partner_onb_phone_otp'] = otp_ref
     session['partner_onb_phone_num'] = mobile
     session['partner_onb_phone_time'] = datetime.now().isoformat()
     session.pop('partner_onb_phone_ok', None)
@@ -43875,8 +43889,11 @@ def partner_onboard_verify_phone_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if mobile != stored_num or otp != stored:
+    if mobile != stored_num:
         return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('partner_onb_phone', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     session['partner_onb_phone_ok'] = stored_num
     return jsonify({'success': True, 'message': 'Mobile number verified.'})
 
@@ -43908,7 +43925,10 @@ def partner_login_send_otp():
         # 0 = not found, >1 = ambiguous; same message either way.
         return jsonify({'error': 'No partner account found for this mobile number. Try email + password, or contact GooCampus.'}), 404
     otp_code = str(random.randint(100000, 999999))
-    session['partner_login_otp'] = otp_code
+    otp_ref, otp_err = otp_store.issue('partner_login', otp_code, mobile)  # code stays server-side
+    if not otp_ref:
+        return jsonify({'error': otp_err}), 429
+    session['partner_login_otp'] = otp_ref
     session['partner_login_num'] = mobile
     session['partner_login_pid'] = rows[0]['id']
     session['partner_login_time'] = datetime.now().isoformat()
@@ -43935,8 +43955,11 @@ def partner_login_verify_otp():
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
     except Exception:
         pass
-    if mobile != stored_num or otp != stored:
+    if mobile != stored_num:
         return jsonify({'error': 'Invalid OTP. Please check and try again.'}), 400
+    ok_otp, otp_msg = otp_store.check('partner_login', stored, otp)
+    if not ok_otp:
+        return jsonify({'error': otp_msg}), 400
     conn = get_db()
     partner = conn.execute("SELECT * FROM partners WHERE id = ? AND status = 'Active'", (pid,)).fetchone()
     conn.close()
