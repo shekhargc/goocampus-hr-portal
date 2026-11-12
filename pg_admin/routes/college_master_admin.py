@@ -868,9 +868,14 @@ def college_fees():
     if kind not in ('medical', 'dnb', ''):
         kind = ''
     state = _s(request.args.get('state'))
+    authority = _s(request.args.get('authority'))      # counselling authority the seat belongs to (2026-11-12)
+    ctype = _s(request.args.get('ctype'))              # college / institute type
     quota = _s(request.args.get('quota'))
     category = _s(request.args.get('category'))
     q = _s(request.args.get('q'))
+    fy = _s(request.args.get('fy'))          # '' all | '2026' has a 2026-27 fee | '2025' only the 2025 fee
+    if fy not in ('', '2026', '2025'):
+        fy = ''
     sort = _s(request.args.get('sort')) or 'fee_asc'
     order = {'fee_asc': 'fee ASC NULLS LAST, institute ASC',
              'fee_desc': 'fee DESC NULLS LAST, institute ASC',
@@ -879,7 +884,35 @@ def college_fees():
         page = max(1, int(request.args.get('page', 1)))
     except Exception:
         page = 1
-    where = ["COALESCE(c.is_reference,0)=0", "c.fee IS NOT NULL", "c.fee > 1"]
+    conn = get_db()
+    from pg_admin.data import fees as _FEES          # 2026-27 fee where verified, else 2025 (2026-11-11)
+    eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
+    # Cascading filters (founder 2026-11-12): Family → Authority → State → College type → Quota → Category.
+    # Each dropdown lists only the values that exist for the filters chosen ABOVE it; a chosen value that no
+    # longer exists under the upstream choices is dropped (the page JS also clears downstream on change).
+    _kind_sql = {'dnb': ("UPPER(COALESCE(c.degree,'')) LIKE ?", '%DNB%'),
+                 'medical': ("UPPER(COALESCE(c.degree,'')) NOT LIKE ?", '%DNB%')}.get(kind)
+    _casc = [['authority', 'c.authority', authority], ['state', 'c.state', state],
+             ['ctype', 'c.institute_type', ctype], ['quota', 'c.quota', quota], ['category', 'c.category', category]]
+    opts = {}
+    try:
+        for i, (name, col, val) in enumerate(_casc):
+            w, pr = ["COALESCE(c.is_reference,0)=0", f"COALESCE({col},'')<>''"], []
+            if _kind_sql:
+                w.append(_kind_sql[0]); pr.append(_kind_sql[1])
+            for _n, ucol, uval in _casc[:i]:
+                if uval:
+                    w.append(f"{ucol} = ?"); pr.append(uval)
+            opts[name] = [r['v'] for r in conn.execute(
+                f"SELECT DISTINCT {col} AS v FROM pg_cutoffs c WHERE " + " AND ".join(w) + " ORDER BY 1", pr).fetchall()]
+            if val and val not in opts[name]:
+                _casc[i][2] = ''
+    except Exception as e:
+        logging.warning("college_fees options: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    authority, state, ctype, quota, category = (x[2] for x in _casc)
+    where = ["COALESCE(c.is_reference,0)=0", f"{eff} IS NOT NULL", f"{eff} > 1"]
     params = []
     if kind == 'dnb':
         where.append("UPPER(COALESCE(c.degree,'')) LIKE ?"); params.append('%DNB%')
@@ -887,43 +920,48 @@ def college_fees():
         where.append("UPPER(COALESCE(c.degree,'')) NOT LIKE ?"); params.append('%DNB%')
     if state:
         where.append("c.state = ?"); params.append(state)
+    if authority:
+        where.append("c.authority = ?"); params.append(authority)
+    if ctype:
+        where.append("c.institute_type = ?"); params.append(ctype)
     if quota:
-        where.append("LOWER(TRIM(c.quota)) = LOWER(TRIM(?))"); params.append(quota)
+        where.append("c.quota = ?"); params.append(quota)
     if category:
-        where.append("LOWER(TRIM(c.category)) = LOWER(TRIM(?))"); params.append(category)
+        where.append("c.category = ?"); params.append(category)
     if q:
         fi, pi = smart_name_clause("c.institute", q)
         fc, pc = smart_name_clause("c.course", q)
         where.append(f"({fi} OR {fc})"); params.extend(pi + pc)
+    if fy and _FEES.available(conn):
+        where.append("f26.id IS NOT NULL" if fy == '2026' else "f26.id IS NULL")
     wsql = " WHERE " + " AND ".join(where)
-    grp = " GROUP BY c.institute, c.course, c.quota, c.category "
-    conn = get_db()
-    rows, states, quotas, cats, total, priced_seats = [], [], [], [], 0, 0
+    grp = " GROUP BY c.authority, c.institute, c.course, c.quota, c.category "
+    rows, states, quotas, cats, total, priced_seats, fee26 = [], [], [], [], 0, 0, []
+    authorities, ctypes = [], []
     try:
-        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + wsql + grp + ") t",
+        fee26 = _FEES.summary(conn)
+        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + fj + wsql + grp + ") t",
                              params).fetchone()['n']
         offset = (page - 1) * _FEES_PER_PAGE
         rows = conn.execute(
-            "SELECT c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
+            "SELECT c.authority AS authority, c.institute AS institute, c.course AS course, MAX(c.degree) AS degree, "
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
-            "MAX(c.institute_type) AS institute_type, MAX(c.fee) AS fee, MAX(c.year) AS fee_year, "
-            "MAX(a.master_id) AS id FROM pg_cutoffs c "
+            f"MAX(c.institute_type) AS institute_type, MAX({eff}) AS fee, MAX({effy}) AS fee_year, "
+            "MAX(c.fee) AS fee_2025, " + ("MAX(f26.fee_total)" if _FEES.available(conn) else "NULL") + " AS fee_2026, "
+            "MAX(a.master_id) AS id" + _FEES.detail_sql(conn) + " FROM pg_cutoffs c "
             "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
-            + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",
+            + fj + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",
             params + [_FEES_PER_PAGE, offset]).fetchall()
+        rows = [_FEES.present(dict(r)) for r in rows]
+        for r in rows:
+            r['fee_2025'] = float(r['fee_2025']) if r.get('fee_2025') is not None else None
+            r['fee_2026'] = float(r['fee_2026']) if r.get('fee_2026') is not None else None
         # coverage: how many priced seat-rows exist at all (any filter off)
         priced_seats = conn.execute(
             "SELECT COUNT(*) AS n FROM pg_cutoffs WHERE COALESCE(is_reference,0)=0 "
             "AND fee IS NOT NULL AND fee > 1").fetchone()['n']
-        states = [r['state'] for r in conn.execute(
-            "SELECT DISTINCT state FROM pg_cutoffs WHERE COALESCE(state,'')<>'' AND fee IS NOT NULL AND fee>1 "
-            "ORDER BY state").fetchall()]
-        quotas = [r['quota'] for r in conn.execute(
-            "SELECT DISTINCT quota FROM pg_cutoffs WHERE COALESCE(quota,'')<>'' AND fee IS NOT NULL AND fee>1 "
-            "ORDER BY quota").fetchall()]
-        cats = [r['category'] for r in conn.execute(
-            "SELECT DISTINCT category FROM pg_cutoffs WHERE COALESCE(category,'')<>'' AND fee IS NOT NULL AND fee>1 "
-            "ORDER BY category").fetchall()]
+        states, quotas, cats = opts.get('state', []), opts.get('quota', []), opts.get('category', [])
+        authorities, ctypes = opts.get('authority', []), opts.get('ctype', [])
     finally:
         conn.close()
     pages = max(1, (total + _FEES_PER_PAGE - 1) // _FEES_PER_PAGE)
@@ -931,7 +969,8 @@ def college_fees():
                            priced_seats=priced_seats, states=states, quotas=quotas,
                            categories=cats, kind=kind, state=state, quota=quota,
                            category=category, q=q, sort=sort, page=page, pages=pages,
-                           per_page=_FEES_PER_PAGE, active_section='goocampus_in')
+                           per_page=_FEES_PER_PAGE, active_section='goocampus_in', fee26=fee26, fy=fy,
+                           authorities=authorities, authority=authority, ctypes=ctypes, ctype=ctype)
 
 
 # ── Edit a college's master fields (team fills logos / corrects data) ─────────

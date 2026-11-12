@@ -224,8 +224,17 @@ def _matrix_items(conn, combo, specialties, rank, order='rank'):
         where.append("(" + " OR ".join(ors) + ")")
     rows = [dict(r) for r in conn.execute(
         "SELECT s.college_code, s.college_name, s.cutoff_institute, s.cutoff_course, s.course_name, "
-        "s.cutoff_quota, s.category, s.cr_r1, s.cr_r2, s.cr_closing, s.cutoff_fee, s.has_cutoff, s.seats "
+        "s.cutoff_quota, s.quota, s.category, s.cr_r1, s.cr_r2, s.cr_closing, s.cutoff_fee, s.has_cutoff, s.seats, "
+        "s.counselling_body "
         "FROM pg_seat_matrix s WHERE " + " AND ".join(where), params).fetchall()]
+    # the verified 2026-27 fee for the seat when we have it, else the 2025 cut-off fee (founder 2026-11-11)
+    from pg_admin.data import fees as _FEES
+    _fm = _FEES.load_map(conn, {_FEES.seat_matrix_authority(r['counselling_body']) for r in rows})
+    for r in rows:
+        f = _FEES.lookup(_fm, _FEES.seat_matrix_authority(r['counselling_body']), r['college_name'],
+                         r['course_name'], r['quota'], r['category'])
+        if f:
+            r['cutoff_fee'] = f['fee_total']
     cores = [(_spec_core(sp).lower(), i) for i, sp in enumerate(specialties or [])]
 
     def spec_idx(course):

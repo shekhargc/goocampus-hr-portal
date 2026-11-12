@@ -10,6 +10,7 @@ from db import get_db
 from pg_admin.routes.api import (_authorized, _bearer_token, _pg_user_by_token, smart_name_clause,
                                  HIDE_DNB, no_dnb_sql)
 from pg_admin.data import entitlements
+from pg_admin.data import fees as _FEES     # 2026-27 fees where verified, else 2025 (2026-11-11)
 
 _PER_PAGE = 100
 _NORMSQL = "btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
@@ -127,17 +128,18 @@ def api_pg_cutoff_explorer():
         # Annual-fee bound — same fee source (pg_cutoffs.fee) and "real fee > 1" rule as
         # /api/pg/fees. Applied per grouped row via HAVING so total + pagination reflect it;
         # when a bound is set, rows with no real fee are dropped.
+        eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
         having, hparams = [], []
         if fee_min is not None or fee_max is not None:
-            having.append("MAX(c.fee) > 1")
+            having.append(f"MAX({eff}) > 1")
             if fee_min is not None:
-                having.append("MAX(c.fee) >= ?"); hparams.append(fee_min)
+                having.append(f"MAX({eff}) >= ?"); hparams.append(fee_min)
             if fee_max is not None:
-                having.append("MAX(c.fee) <= ?"); hparams.append(fee_max)
+                having.append(f"MAX({eff}) <= ?"); hparams.append(fee_max)
         hsql = (" HAVING " + " AND ".join(having)) if having else ""
         if having:
             total = conn.execute(
-                "SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + wsql + grp + hsql + ") t",
+                "SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + fj + wsql + grp + hsql + ") t",
                 params + hparams).fetchone()['n']
         else:
             total = conn.execute("SELECT COUNT(*) AS n FROM pg_cutoffs c" + wsql, params).fetchone()['n']
@@ -147,9 +149,10 @@ def api_pg_cutoff_explorer():
             "c.institute_type, "
             "c.r1, c.r2, c.r3, c.r4, c.stray, c.closing_rank, "
             "c.r1_ai, c.r2_ai, c.r3_ai, c.r4_ai, c.stray_ai, c.closing_ai, c.rank_basis, "
-            "MAX(c.fee) AS fee, MAX(c.year) AS fee_year, MAX(a.master_id) AS pg_college_id "
+            f"MAX({eff}) AS fee, MAX({effy}) AS fee_year, MAX(a.master_id) AS pg_college_id"
+            + _FEES.detail_sql(conn) + " "
             "FROM pg_cutoffs c "
-            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL}"
+            f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL}" + fj
             + wsql + grp + hsql +
             f" ORDER BY {_RB.ai_sql('closing_rank', 'c')} ASC NULLS LAST, c.institute ASC LIMIT ? OFFSET ?",
             params + hparams + [_PER_PAGE, offset]).fetchall()
@@ -157,9 +160,7 @@ def api_pg_cutoff_explorer():
         _sg_cache = {}
         for r in rows:
             d = _RB.present(dict(r))           # All-India first + state rank for state-rank authorities
-            if d.get('fee') is not None:
-                try: d['fee'] = float(d['fee'])
-                except Exception: d['fee'] = None
+            _FEES.present(d)                   # fee float + fee_label (2026-27 / 2025) + fee_info breakup
             d['fee_period'] = 'year'                 # college fee is annual tuition (founder 2026-10-06)
             _c = d.get('course') or ''
             if _c not in _sg_cache:
@@ -474,9 +475,9 @@ def _generate_round(conn, set_id, rnd, authority, dg, specialties, quota_cats, r
         floor_val = int(rank * 0.7)
     rows = conn.execute(
         f"SELECT c.institute, c.course, c.quota, c.category, MIN({ai}) AS cr, "
-        "MAX(a.master_id) AS master_id, MAX(c.fee) AS fee "
+        f"MAX(a.master_id) AS master_id, MAX({_FEES.eff_fee(conn)}) AS fee "
         "FROM pg_cutoffs c "
-        f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} "
+        f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORMSQL} " + _FEES.join_sql(conn) +
         "WHERE " + " AND ".join(where) +
         " GROUP BY c.institute, c.course, c.quota, c.category" + having,
         params + ([floor_val] if (rank and floor) else [])).fetchall()
@@ -636,11 +637,13 @@ def live_fees(conn, items):
     if insts:
         try:
             ph = ','.join(['?'] * len(insts))
+            eff, effy = _FEES.eff_fee(conn), _FEES.eff_year(conn)
             for r in conn.execute(
-                    "SELECT institute, course, quota, category, MAX(fee) AS fee FROM pg_cutoffs "
-                    f"WHERE COALESCE(is_reference,0)=0 AND TRIM(institute) IN ({ph}) "
-                    "GROUP BY institute, course, quota, category", insts).fetchall():
-                live[_seat_key(r['institute'], r['course'], r['quota'], r['category'])] = r['fee']
+                    f"SELECT c.institute, c.course, c.quota, c.category, MAX({eff}) AS fee, MAX({effy}) AS fee_year"
+                    + _FEES.detail_sql(conn) + " FROM pg_cutoffs c" + _FEES.join_sql(conn) +
+                    f" WHERE COALESCE(c.is_reference,0)=0 AND TRIM(c.institute) IN ({ph}) "
+                    "GROUP BY c.institute, c.course, c.quota, c.category", insts).fetchall():
+                live[_seat_key(r['institute'], r['course'], r['quota'], r['category'])] = dict(r)
         except Exception as e:
             logging.warning("live_fees: %s", e)
             try: conn.rollback()
@@ -649,10 +652,11 @@ def live_fees(conn, items):
     for it in items:
         k = _seat_key(it.get('institute'), it.get('course'), it.get('quota'), it.get('category'))
         if k in live:
-            it['fee'] = live[k]
-        if it.get('fee') is not None:
-            try: it['fee'] = float(it['fee'])
-            except Exception: it['fee'] = None
+            lv = live[k]
+            it['fee'], it['fee_year'] = lv['fee'], lv['fee_year']
+            for c in _FEES.DETAIL:
+                it['fee_' + c] = lv.get('fee_' + c)
+        _FEES.present(it)                       # fee float + fee_label + fee_info (2026-27 breakup)
         it['fee_period'] = 'year'
     return items
 
