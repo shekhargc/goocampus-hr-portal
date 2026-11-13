@@ -146,6 +146,17 @@ def _lookup_full(sheets, title_word, code, name, fields):
     return {}
 
 
+def _nice_full(part, frac):
+    """Full-month amount behind a part-month figure: the roundest number (100s, 50s, 10s) that still gives
+    the statement's figure (±₹1), e.g. 25,651 at 28.5/30 days → 27,000 (not 27,001)."""
+    raw = part / frac
+    for step in (100, 50, 10):
+        c = round(raw / step) * step
+        if c > 0 and abs(round(c * frac) - part) <= 1:
+            return c
+    return round(raw)
+
+
 def parse_statement(data, filename):
     """Returns (dict(period_file, period_sheet, sheet, rows=[...]), error)."""
     try:
@@ -153,10 +164,19 @@ def parse_statement(data, filename):
     except Exception as e:
         logging.warning(f"payroll import read {filename}: {e}")
         return None, f'{filename}: could not read this file (use the .xls / .xlsx salary statement).'
-    sal = [s for s in sheets if s[0].lower().startswith('salary') and 'slip' not in s[0].lower()
-           and s[0].lower().strip() != 'salaries']
+    # The statement sheet = the one whose header has Employee Name + Net Salary + PF / Salary Advance
+    # (whatever the tab is called: "Salary April 26", "April 26 Salary", …). Old helper tabs like
+    # "Salaries" have no PF / advance columns, so they never qualify.
+    def _is_statement(rows):
+        for row in rows[:20]:
+            ks = {_key(c) for c in row}
+            if 'employeename' in ks and 'netsalary' in ks and ({'salaryadvance', 'pf'} & ks):
+                return True
+        return False
+    sal = [s for s in sheets if 'slip' not in s[0].lower() and _is_statement(s[1])]
+    sal.sort(key=lambda s: 0 if 'salary' in s[0].lower() and s[0].lower().strip() != 'salaries' else 1)
     if not sal:
-        return None, f'{filename}: no "Salary <Month>" sheet found.'
+        return None, f'{filename}: no salary statement sheet found (needs Employee Name, PF and Net Salary columns).'
     sname, rows, to_date = sal[0]
     hdr, idx, sheet_date = None, {}, None
     for i, row in enumerate(rows[:20]):
@@ -189,6 +209,12 @@ def parse_statement(data, filename):
         r.update(name=name, code=_code(get('code')), line=i, designation=str(get('designation') or '').strip())
         if 'paid' not in idx or (r['paid'] == 0 and r['gross'] > 0):
             r['paid'] = max(0.0, r['wd'] - r['lop'])
+        elif abs(r['wd'] - r['lop'] - r['paid']) > 0.01 and r['paid'] > 0:
+            # Days don't add up (e.g. May-2026: Working 31, LOP 0, Paid 30). The amounts are worked out on
+            # Paid + LOP days, so use that as the month length.
+            r['days_note'] = (f"Statement's days don't add up (Working {r['wd']:g}, LOP {r['lop']:g}, Paid {r['paid']:g}) "
+                              f"— used a {r['paid'] + r['lop']:g}-day month, which matches its amounts.")
+            r['wd'] = r['paid'] + r['lop']
         # Full-month values (for a new salary entry): the row itself when no LOP, else the Template /
         # Attendance sheet, else scaled back from the paid days.
         # The Template / Attendance tabs are often out of date, so a value from them is used only when it
@@ -207,13 +233,14 @@ def parse_statement(data, filename):
                         full[k] = cand
                         break
                 else:
-                    full[k] = round(r[k] / frac)
+                    full[k] = _nice_full(r[k], frac)
         r['full'] = {k: round(v) for k, v in full.items()}
         out.append(r)
     if not out:
         return None, f'{filename}: the salary sheet has no employee rows.'
     p_file = _period_from_name(filename)
-    p_sheet = sheet_date.strftime('%Y-%m') if sheet_date else _period_from_name(sname)
+    # The tab name ("August 26 salary") is more reliable than the date cell, which is often left from a copy.
+    p_sheet = _period_from_name(sname) or (sheet_date.strftime('%Y-%m') if sheet_date else None)
     return dict(period_file=p_file, period_sheet=p_sheet, sheet=sname, rows=out), None
 
 
@@ -257,7 +284,7 @@ def build_plan(conn, imp):
     rows, seen, issues = [], set(), 0
     for r in data['rows']:
         e, how = _match(emps, r)
-        item = dict(sheet=r, emp=e, how=how, flags=[], notes=[])
+        item = dict(sheet=r, emp=e, how=how, flags=[], notes=[r['days_note']] if r.get('days_note') else [])
         if not e:
             item['flags'].append('Not found in the portal — this row will be skipped.')
             issues += 1
