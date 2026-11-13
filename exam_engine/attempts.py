@@ -384,7 +384,7 @@ def state(conn, a, paper, image_url, now=None):
     pat = paper['pattern']
     sec_left, total_left = remaining(a, now)
     answers = {r['item_id']: dict(r) for r in conn.execute(
-        "SELECT item_id, section_code, chosen, marked, visited, time_ms FROM ex_attempt_answers WHERE attempt_id=?",
+        "SELECT item_id, section_code, chosen, marked, visited, time_ms, client_ts FROM ex_attempt_answers WHERE attempt_id=?",
         (a['id'],)).fetchall()}
     progress = []
     for i, s in enumerate(pat['sections']):
@@ -440,7 +440,7 @@ def state(conn, a, paper, image_url, now=None):
                        for im in snap.get('images') or [] if im.get('role') == 'stem' and im['id'] in img_rows],
             'options': [{'key': k, 'text': opt_text.get(k, '')} for k in keys],
             'response': {'chosen': r.get('chosen'), 'marked': bool(r.get('marked')), 'visited': bool(r.get('visited')),
-                         'time_ms': int(r.get('time_ms') or 0)},
+                         'time_ms': int(r.get('time_ms') or 0), 'client_ts': int(r.get('client_ts') or 0)},
             'palette': palette_state(r) if r else 'not_visited',
         })
     out['current_section'] = {'index': i, 'code': code, 'name': pat['sections'][i]['name'],

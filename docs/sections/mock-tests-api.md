@@ -85,7 +85,7 @@ Call it when the exam page loads or reloads, after a save says `section_changed:
       "stem": "A 28-year-old woman …",          // plain text; keep line breaks (white-space: pre-line)
       "images": [{"url": "https://…", "width": 960, "height": 540}],
       "options": [{"key": "C", "text": "Vagal manoeuvres"}, {"key": "A", "text": "Adenosine"}, …],
-      "response": {"chosen": null, "marked": false, "visited": true, "time_ms": 41200},
+      "response": {"chosen": null, "marked": false, "visited": true, "time_ms": 41200, "client_ts": 1763094605123},
       "palette": "not_answered"}
    ]}}
 ```
