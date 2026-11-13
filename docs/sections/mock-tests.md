@@ -23,7 +23,7 @@ Founder-approved brief: `~/Desktop/Claude Code/NEET_PG_Mock_Platform_Brief.md`.
 3. Question importer: **done**, on staging.
 4. Question bank and paper builder: **done** (see below).
 5. Exam engine: **portal side done**. The goocampus.in exam screen is built by the website session from [mock-tests-api.md](mock-tests-api.md).
-6. Scoring, results and rank.
+6. Scoring, results and rank: **done** (see below).
 7. Packages, payments and the free sample.
 8. Admin dashboard.
 9. Load test and dry run.
@@ -178,3 +178,21 @@ Without R2, the bytes are stored in the row.
 - Shuffle settings (`shuffle_questions`, `shuffle_options`) are on the Exam pattern page; both are off by default.
 - **Load:** a locked paper's questions are cached in memory, keyed by paper + `locked_at`. An autosave is about 3 small queries plus one UPDATE per changed answer.
 - Pictures go out as presigned R2 links when R2 is used, otherwise as signed `/api/pg/mocks/img/<id>?t=…` links (itsdangerous, 6 h).
+
+## Step 6 — results, rank, solutions, predicted NEET rank
+
+- `exam_engine/results.py` builds the result page:
+  - score, accuracy and marks lost to negatives;
+  - rank, percentile, topper and average score;
+  - section, subject and time analysis;
+  - solutions with explanations and "% of doctors who got it right".
+- `exam_engine/neet_curve.py` gives the predicted NEET PG All-India rank from the real NBEMS result (`pg_neet_result`, the latest year): AIR = 1 + candidates who scored more than this score on /720. The range is ±8 marks. Full mocks only, cached for 6 h. It is the engine's only read of a portal table.
+- **Rank rules (founder 2026-11-13):**
+  - Only a doctor's first submitted attempt is ranked (`ex_attempts.is_ranked`).
+  - Retakes are practice; they show where the score would sit.
+  - New mocks allow 3 attempts (`ex_papers.max_attempts`, editable per paper).
+  - Team members (`pg_users.is_team_member`) are never ranked, even on the free sample.
+- **Rank formula:** rank = 1 + ranked attempts with a higher score, so ties share a rank. Percentile = % of ranked attempts with a lower score.
+- **"How everyone did"** (per question and per subject) is aggregated over ranked attempts and cached for 10 min per paper.
+- APIs: `GET /api/pg/mocks/attempts/<id>/result` and `…/solutions[?section=]`, both only after submit. See [mock-tests-api.md](mock-tests-api.md) §7–8.
+- **Future:** once doctors who took mocks also report their real NEET rank, calibrate each paper's difficulty (a marks offset) so the predicted rank tracks reality better.

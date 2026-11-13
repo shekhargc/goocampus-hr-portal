@@ -32,10 +32,10 @@ All times are UTC, in ISO form (`2026-11-14T04:30:00Z`). **Never run the countdo
    "description": "…", "is_free_sample": true,
    "total_questions": 180, "total_minutes": 210, "max_marks": 720, "sections": 5,
    "access":   {"allowed": true, "via": "free_sample", "reason": null},
-   "attempts": {"used": 0, "allowed": 1, "open_attempt_id": null, "last": null}},
+   "attempts": {"used": 0, "allowed": 3, "open_attempt_id": null, "last": null, "ranked": null, "next_is_practice": false}},
   {"id": 13, "title": "Grand Test 1", "kind": "full", …,
    "access":   {"allowed": false, "via": null, "reason": "package_required"},
-   "attempts": {"used": 0, "allowed": 1, "open_attempt_id": null, "last": null}}
+   "attempts": {"used": 0, "allowed": 3, "open_attempt_id": null, "last": null, "ranked": null, "next_is_practice": false}}
 ]}
 ```
 
@@ -46,9 +46,11 @@ What each card shows:
 | Situation | Card shows |
 |---|---|
 | `attempts.open_attempt_id` is set | **Resume** (time is running) |
-| `attempts.last` is set and `used >= allowed` | **View result**: score / max_score |
-| `access.allowed` is true | **Start** |
+| `attempts.last` is set | **View result**: score / max_score (`last.ranked` false means a practice attempt) |
+| `access.allowed` is true and `used < allowed` | **Start**, or **Retake (practice)** when `next_is_practice` is true |
 | `access.reason == "package_required"` | Locked, with **Unlock with a package** (the store arrives in step 7) |
+
+**Rank rule:** only a doctor's **first** submitted attempt counts for rank. Retakes (3 attempts per mock by default) are practice: they show the score and where it would sit, but don't join the ranking. `attempts.ranked` is the ranked attempt.
 
 `kind` is one of `full`, `subject` or `mini`.
 
@@ -102,10 +104,10 @@ Call it when the exam page loads or reloads, after a save says `section_changed:
 | `answered_marked` | purple with a green tick, and it **is** scored |
 
   Compute the palette from your local `response` as the doctor works; the server value is the starting point.
-- When `status` is `"submitted"`, there's no `current_section`. Instead there's a `result` (step 6 makes the result page richer):
+- When `status` is `"submitted"`, there's no `current_section`. Instead there's a short `result`; open the full result page (section 7) from it:
 
 ```json
-"result": {"score": 412, "max_score": 720, "correct": 115, "wrong": 48, "unattempted": 17, "submitted_at": "…"}
+"result": {"ranked": true, "score": 412, "max_score": 720, "correct": 115, "wrong": 48, "unattempted": 17, "submitted_at": "…"}
 ```
 
 ## 4. `POST /api/pg/mocks/attempts/<attempt_id>/save`: autosave
@@ -150,6 +152,57 @@ This finishes the current section early. The body may carry the last `responses`
 The body may carry the final `responses` and `events`. The attempt is submitted (`submit_reason: "doctor"`), scored, and the state with `result` is returned. **Always confirm first**, showing the counts: "You have answered 140, marked 12, not visited 8. Submit?" If time runs out, the server submits by itself (`submit_reason: "time_up"`), **even if the doctor is offline**. A background job does it within about 2 minutes.
 
 ---
+
+## 7. `GET /api/pg/mocks/attempts/<attempt_id>/result`: the result page
+
+Available after submit only; before that it returns 409 `not_submitted`.
+
+```json
+{"ok": true,
+ "attempt": {"id": 881, "attempt_no": 1, "ranked": true, "submit_reason": "time_up", "duration_seconds": 12600, …},
+ "paper": {"id": 12, "title": "…", "kind": "full", "total_questions": 180, "max_marks": 720, "marking": {…}},
+ "score": {"score": 450, "max_score": 720, "correct": 120, "wrong": 30, "unattempted": 30, "attempted": 150,
+           "accuracy": 80.0, "marks_lost_to_negative": 30},
+ "rank": {"ranked": true, "rank": 186, "out_of": 2000, "percentile": 90.7, "topper_score": 612, "average_score": 351.4,
+          "note": "Among 2000 doctors who have taken this mock so far — updates as more take it."},
+ "predicted_neet": {"air": 2626, "air_best": 2407, "air_worst": 2864, "score_720": 450, "year": 2026,
+                    "candidates": 270000, "note": "Based on the real NEET PG 2026 result … use it as a guide."},
+ "sections": [{"code": "A", "name": "Section A", "questions": 36, "correct": 25, "wrong": 6, "unattempted": 5,
+               "score": 94, "time_seconds": 2400}, …],
+ "subjects": [{"subject": "Medicine", "questions": 18, "attempted": 16, "correct": 13, "wrong": 3, "score": 49,
+               "max": 72, "accuracy": 81.3, "average_score_all": 38.2, "time_seconds": 1210}, …],
+ "time": {"total_seconds": 11800, "average_per_question_seconds": 78.7, "average_on_correct_seconds": 70.1,
+          "average_on_wrong_seconds": 96.4,
+          "slowest": [{"item_id": 5521, "section": "B", "number": 14, "seconds": 410, "result": "wrong"}]}}
+```
+
+- **Rank:** "Rank 186 of 2,000 · Percentile 90.7". It is live and changes as more doctors take the mock; tied scores share a rank.
+- **Practice attempt** (`rank.ranked` false): show "Practice attempt, not ranked", the position it *would* have (`rank.rank`), and a link to the ranked attempt (`rank.ranked_attempt`). Team dry runs are labelled in `rank.note`.
+- **Predicted NEET PG rank:** full mocks only. It is `null` for subject and mini tests, or when there's no NBEMS data. Show "Predicted All-India rank ≈ 2,626 (range 2,407 – 2,864)" with the note, and a **See colleges you can get** button. That button opens the goocampus.in **College Predictor with this rank (`air`) prefilled**. This is our edge, so make it prominent.
+- **Subject table:** compare `score` with `average_score_all` (the average of all ranked takers) and highlight strong and weak subjects.
+
+## 8. `GET /api/pg/mocks/attempts/<attempt_id>/solutions[?section=C]`: solutions
+
+Available after submit only.
+
+```json
+{"ok": true, "attempt_id": 881, "section": null, "questions": [
+  {"item_id": 5521, "section": "A", "number": 1, "stem": "…", "images": [{"url": "…"}],
+   "options": [{"key": "C", "text": "…"}, …],      // the order the doctor saw
+   "correct": "C", "chosen": "A", "marked": false, "result": "wrong", "marks": -1, "time_seconds": 52,
+   "subject": "Medicine", "topic": "Cardiology",
+   "explanation": [{"title": "How to solve", "text": "…"}, {"title": "Key fact", "text": "…"}],
+   "explanation_images": [{"url": "…"}],
+   "everyone": {"takers": 2000, "percent_attempted": 91.2, "percent_correct": 63.5}}, …]}
+```
+
+For each question, show:
+- the doctor's choice, in red if wrong;
+- the correct option, in green;
+- the explanation boxes and pictures;
+- "63% of doctors got this right".
+
+Offer filters: All · Wrong · Skipped · Marked · by section or subject. Use `?section=` to load one section at a time on slow networks.
 
 ## The exam screen: required behaviour (NBEMS computer-based-test look)
 
@@ -196,7 +249,8 @@ The body may carry the final `responses` and `events`. The attempt is submitted 
 | **My Mocks**: dashboard tile + list page | `GET /api/pg/mocks` | Tile: the free sample's Start / Resume, plus "N mocks in your package" (step 7). |
 | **Free sample entry**: a public "Try a free NEET PG mock" card / landing | login → `GET /api/pg/mocks` → the free sample | One full 180-question mock with full results. |
 | **Instructions → Exam screen** | `start`, state, `save`, `next-section`, `submit` | As above. |
-| **Result**, basic for now | state `result` | Step 6 adds rank, percentile, subject-wise analysis, solutions, predicted NEET rank and colleges. |
+| **Result** | `GET …/result` | Score card, rank and percentile, predicted NEET rank → College Predictor, section / subject / time analysis. |
+| **Solutions** | `GET …/solutions` | Every question with the explanation and "% of doctors got it right". |
 | **Package store** | step 7 | Packages: Starter 5 mocks ₹999 · Standard 15 + 19 subject tests ₹2,499 · Pro 30 + subject + mini ₹3,999 (incl. GST). |
 
 **Testing:** on staging, make a team account (`pg_users.is_team_member = 1`). It can take every published mock. Normal accounts can take only the free sample until packages are wired in step 7.
