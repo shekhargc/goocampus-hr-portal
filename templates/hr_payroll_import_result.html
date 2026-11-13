@@ -1,0 +1,42 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Salary statements loaded{% endblock %}
+{% block section_content %}
+<style>
+  .card{background:#fff;border:1px solid var(--gray-200);border-radius:14px;margin-bottom:16px;overflow:hidden;}
+  .rs-t{width:100%;border-collapse:collapse;}
+  .rs-t th{padding:8px 10px;background:var(--gray-50);color:var(--gray-600);font-size:.72rem;text-align:left;}
+  .rs-t td{padding:8px 10px;border-top:1px solid var(--gray-100);font-size:.82rem;vertical-align:top;}
+  .r{text-align:right !important;}
+</style>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1100px;margin:0 auto;">
+    <a href="{{ url_for('hr_payroll') }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← Payroll</a>
+    <h1 style="margin:8px 0 4px;font-size:1.35rem;font-weight:800;color:var(--navy);">Salary statements loaded</h1>
+    <p style="margin:0 0 16px;font-size:.86rem;color:var(--gray-500);">Each month below is a <b>draft</b>. Open it, check the rows marked ⚠, then Finalise. Nothing was released to employees.</p>
+    {% for r in results %}
+    {% set bad = r.rows|selectattr('flags')|list %}
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--gray-200);">
+        <div><b style="color:var(--navy);font-size:1rem;">{{ r.label }}</b> <span style="font-size:.78rem;color:var(--gray-500);">{{ r.filename }}</span>
+          <div style="font-size:.82rem;color:var(--gray-600);">{{ r.status }}</div></div>
+        {% if r.run_id %}<a href="{{ url_for('hr_payroll_run', run_id=r.run_id) }}" style="background:#1e40af;color:#fff;padding:8px 14px;border-radius:8px;font-weight:700;text-decoration:none;font-size:.82rem;">Open {{ r.label }} →</a>{% endif %}
+      </div>
+      {% if bad %}
+      <table class="rs-t">
+        <thead><tr><th>Needs a look</th><th class="r">Net — statement</th><th class="r">Net — portal</th></tr></thead>
+        <tbody>
+        {% for row in bad %}
+          <tr><td><b>{{ row.name }}</b>{% for f in row.flags %}<div style="color:#b45309;font-size:.76rem;">⚠ {{ f }}</div>{% endfor %}</td>
+            <td class="r">{{ inr(row.sheet_net) }}</td><td class="r">{% if row.net is defined %}{{ inr(row.net) }}{% else %}—{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% elif r.rows %}
+      <div style="padding:10px 18px;font-size:.84rem;color:#166534;">✓ Every row matches the statement to the rupee.</div>
+      {% endif %}
+      {% if r.left_out %}<div style="padding:8px 18px;font-size:.78rem;color:var(--gray-600);border-top:1px solid var(--gray-100);">Left out (not in the statement): {{ r.left_out|join(', ') }}.</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
