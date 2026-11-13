@@ -96,6 +96,15 @@ with a blank bank/PF pick the number up. Existing different numbers are shown, n
 **Payslip-ready email**: on a RELEASED month, ✉ Email employees (side drawer, select all or tick one) →
 `/hr/payroll/run/<id>/notify` emails each person's Work Email (`employees.email`) a link to My Payslips — no figures
 in the email. Every send logged in `payslip_email_log` (sent/failed); the run table shows "emailed <time>".
+**Import past salary statements** `/hr/payroll/import` (`routes/hr_payroll_import.py`): upload the monthly
+statement .xls/.xlsx (several at once) → preview → load as DRAFT. Month comes from the file name (flagged if the sheet
+inside says otherwise — e.g. the Aug-2026 file's sheet is labelled July). Per month: exactly the statement's people
+(`payroll_run_people` add/skip — ex-employees included), a salary entry added only where none exists (notes start
+"From the salary statement"; hand-made entries are never changed, only flagged), advance/other/KLWF/TDS copied
+(`tds_set`), paid days → `lop_days` override, statement day count → `days_in_month` override (May-2026 sheet = 30
+days), PF/PT/ESI overridden only where they differ. Result page lists every net/gross/LOP mismatch. Finalised or
+released months are never touched. The Template/Attendance tabs in those files are stale — only used if they explain
+the statement row.
 
 ## Gotchas
 - FY starts **April**; April accrues 3 leave days, other months 2.

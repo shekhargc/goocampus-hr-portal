@@ -1,0 +1,95 @@
+{% extends "hr_sidebar_base.html" %}
+{% block title %}Import salary statements{% endblock %}
+{% block section_content %}
+<style>
+  .card{background:#fff;border:1px solid var(--gray-200);border-radius:14px;}
+  .im-t{width:100%;border-collapse:collapse;}
+  .im-t th{padding:8px 10px;background:var(--gray-50);color:var(--gray-600);font-size:.72rem;text-align:left;white-space:nowrap;}
+  .im-t td{padding:8px 10px;border-top:1px solid var(--gray-100);font-size:.82rem;vertical-align:top;}
+  .im-t td.r,.im-t th.r{text-align:right;}
+  .fl{color:#b45309;font-size:.76rem;margin-top:2px;} .nt{color:var(--gray-500);font-size:.74rem;margin-top:2px;}
+  .left{display:inline-block;font-size:.64rem;font-weight:700;padding:1px 6px;border-radius:8px;background:#fee2e2;color:#991b1b;margin-left:4px;}
+  .pill{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:10px;}
+</style>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1200px;margin:0 auto;">
+    <a href="{{ url_for('hr_payroll') }}" style="font-size:.84rem;color:#1e40af;text-decoration:none;font-weight:600;">← Payroll</a>
+    <h1 style="margin:8px 0 4px;font-size:1.35rem;font-weight:800;color:var(--navy);">Import past salary statements</h1>
+    <p style="margin:0 0 16px;font-size:.86rem;color:var(--gray-500);">Upload the monthly salary statement Excel files (you can pick several). Each month is loaded as a <b>draft</b> with the statement's advances, TDS, other deductions and paid days — you then check and finalise each month yourself. Finalised or released months are never changed.</p>
+
+    <form method="post" action="{{ url_for('hr_payroll_import') }}" enctype="multipart/form-data" class="card" style="padding:16px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;">
+      <input type="file" name="statements" accept=".xls,.xlsx" multiple required style="font-size:.86rem;">
+      <button type="submit" style="background:#1e40af;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer;">Preview</button>
+      <span style="font-size:.76rem;color:var(--gray-500);">Reads the "Salary &lt;Month&gt;" sheet. Nothing is saved until you confirm.</span>
+    </form>
+
+    {% if plans %}
+    <form method="post" action="{{ url_for('hr_payroll_import_apply') }}" id="applyForm">
+      <input type="hidden" name="ids" value="{{ ids }}">
+      {% for p in plans %}
+      {% set locked = p.run and p.run.status != 'draft' %}
+      <div class="card" style="margin-bottom:18px;overflow:hidden;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--gray-200);">
+          <label style="display:flex;align-items:center;gap:10px;font-weight:800;color:var(--navy);font-size:1rem;margin:0;">
+            <input type="checkbox" name="imp_id" value="{{ p.imp.id }}" {% if not locked and p.rules %}checked{% else %}disabled{% endif %}>
+            {{ period_label(p.period) }}
+            <span style="font-weight:500;font-size:.78rem;color:var(--gray-500);">{{ p.imp.filename }} · sheet "{{ p.data.sheet }}"</span>
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            {% if not p.run %}<span class="pill" style="background:#e0e7ff;color:#3730a3;">New draft will be created</span>
+            {% elif p.run.status == 'draft' %}<span class="pill" style="background:#fef3c7;color:#92400e;">Draft exists — will be updated</span>
+            {% else %}<span class="pill" style="background:#dcfce7;color:#166534;">Already {{ p.run.status }} — not changed</span>{% endif %}
+            {% if not p.rules %}<span class="pill" style="background:#fee2e2;color:#991b1b;">No salary template for this month</span>{% endif %}
+            {% if p.issues %}<span class="pill" style="background:#ffedd5;color:#9a3412;">{{ p.issues }} to check</span>{% endif %}
+          </div>
+        </div>
+        {% if p.conflict %}
+        <div style="background:#fff7ed;border-bottom:1px solid #fed7aa;padding:10px 18px;font-size:.84rem;color:#9a3412;">
+          ⚠ The file name says <b>{{ period_label(p.data.period_file) }}</b> but the sheet inside says <b>{{ period_label(p.data.period_sheet) }}</b>. Loading into <b>{{ period_label(p.period) }}</b> —
+          change it if that's wrong:
+        </div>
+        {% endif %}
+        <div style="padding:8px 18px;border-bottom:1px solid var(--gray-100);font-size:.8rem;color:var(--gray-600);display:flex;gap:8px;align-items:center;">
+          Month:
+          <select form="m{{ p.imp.id }}" name="period" onchange="document.getElementById('m{{ p.imp.id }}').submit()" style="padding:4px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:.8rem;">
+            {% for m in months %}<option value="{{ m }}" {% if m == p.period %}selected{% endif %}>{{ period_label(m) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="overflow:auto;">
+        <table class="im-t">
+          <thead><tr><th>Employee</th><th class="r">Paid days</th><th class="r">LOP (leave records → used)</th><th class="r">Gross</th><th class="r">Advance</th><th class="r">Other ded.</th><th class="r">TDS</th><th class="r">PF</th><th class="r">PT</th><th class="r">Net (statement)</th></tr></thead>
+          <tbody>
+          {% for it in p.rows %}{% set s = it.sheet %}
+            <tr>
+              <td><b style="color:var(--navy);">{{ it.emp.name if it.emp else s.name }}</b>{% if it.emp and not it.emp.is_active %}<span class="left">Left</span>{% endif %}
+                <div class="nt">{% if it.emp %}{{ it.emp.emp_code }}{% if it.how != 'code' %} · matched by {{ it.how }} ("{{ s.name }}"){% endif %}{% else %}row {{ s.line }}{% endif %}</div>
+                {% for f in it.flags %}<div class="fl">⚠ {{ f }}</div>{% endfor %}
+                {% for n in it.notes %}<div class="nt">• {{ n }}</div>{% endfor %}</td>
+              <td class="r">{{ fmt(s.paid) }} / {{ fmt(s.wd) }}</td>
+              <td class="r">{% if it.emp %}{{ fmt(it.lop_portal) }} → <b>{{ fmt(it.lop_use) }}</b>{% endif %}</td>
+              <td class="r">{{ inr(s.gross) }}</td><td class="r">{{ inr(s.salary_advance) }}</td><td class="r">{{ inr(s.other_deductions) }}</td>
+              <td class="r">{{ inr(s.tds) }}</td><td class="r">{{ inr(s.pf) }}</td><td class="r">{{ inr(s.pt) }}</td><td class="r"><b>{{ inr(s.net_pay) }}</b></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% if p.left_out %}
+        <div style="padding:10px 18px;font-size:.8rem;color:var(--gray-600);border-top:1px solid var(--gray-100);">
+          On the portal's payroll but <b>not in this statement</b> — will be left out of {{ period_label(p.period) }}: {% for e in p.left_out %}{{ e.name }}{% if not loop.last %}, {% endif %}{% endfor %}.
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <div style="display:flex;gap:12px;align-items:center;margin-top:6px;">
+        <button type="submit" onclick="return confirm('Load the ticked months as DRAFT payroll? Finalised months are not touched.');" style="background:#166534;color:#fff;border:none;border-radius:8px;padding:11px 20px;font-weight:700;cursor:pointer;">Load ticked months as drafts</button>
+        <a href="{{ url_for('hr_payroll_import') }}" style="font-size:.84rem;color:var(--gray-600);">Cancel</a>
+      </div>
+    </form>
+    {% for p in plans %}
+      <form id="m{{ p.imp.id }}" method="post" action="{{ url_for('hr_payroll_import_month', imp_id=p.imp.id) }}" style="display:none;"><input type="hidden" name="ids" value="{{ ids }}"></form>
+    {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

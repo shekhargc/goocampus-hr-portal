@@ -52117,6 +52117,10 @@ ACCESS_ROUTE_MAP = {
     'hr_payroll_export':                  _ap('hr', 'payroll', 'edit'),
     'hr_payroll_access_log':              _ap('hr', 'payroll', 'edit'),
     'hr_payroll_notify':                  _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_import':                 _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_import_preview':         _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_import_month':           _ap('hr', 'payroll', 'edit'),
+    'hr_payroll_import_apply':           _ap('hr', 'payroll', 'edit'),
     'hr_payroll_slip_view':               _ap('hr', 'payroll', 'edit'),
     'hr_payroll_slip_save':               _ap('hr', 'payroll', 'edit'),
     'hr_payroll_template':                _ap('hr', 'payroll', 'edit'),
@@ -56245,6 +56249,8 @@ register_verification_queues(app)
 # HR › Payroll & Payslips — salary template, monthly payroll, OTP-locked My Payslips (2026-11-12)
 from routes.hr_payroll import register_hr_payroll
 register_hr_payroll(app)
+from routes.hr_payroll_import import register_hr_payroll_import
+register_hr_payroll_import(app)
 
 # System Health dashboard — /admin/health (admin only): live green/amber/red
 # board for portal + goocampus.in + jobs site + email/WhatsApp/OTP/storage.

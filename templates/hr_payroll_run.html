@@ -56,6 +56,11 @@
     </div>
     {% endif %}
 
+    {% if left_out %}
+    <div style="background:#f8fafc;border:1px solid var(--gray-200);border-radius:12px;padding:10px 16px;font-size:.82rem;color:var(--gray-600);margin-bottom:14px;">
+      Left out this month (not in the imported salary statement): {% for e in left_out %}{{ e.name }}{% if not loop.last %}, {% endif %}{% endfor %}.
+    </div>
+    {% endif %}
     <div style="background:#fff;border:1px solid var(--gray-200);border-radius:14px;overflow:auto;max-height:calc(100vh - 230px);">
       <table class="pr-t" style="width:100%;border-collapse:collapse;font-size:.84rem;">
         <thead><tr>

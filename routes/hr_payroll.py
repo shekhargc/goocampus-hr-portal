@@ -295,6 +295,15 @@ def _ensure(conn):
             id {pk},
             payslip_id INTEGER NOT NULL, employee_id INTEGER, to_email TEXT, status TEXT,
             sent_by_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''',
+        # Per-month list from an imported salary statement: 'add' = include (e.g. an ex-employee who was
+        # paid that month), 'skip' = leave out (on the portal but not paid that month).
+        '''CREATE TABLE IF NOT EXISTS payroll_run_people (
+            run_id INTEGER NOT NULL, employee_id INTEGER NOT NULL, mode TEXT NOT NULL,
+            PRIMARY KEY (run_id, employee_id))''',
+        f'''CREATE TABLE IF NOT EXISTS payroll_imports (
+            id {pk},
+            period TEXT, filename TEXT, data TEXT, result TEXT, created_by_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, applied_at TIMESTAMP, applied_by_name TEXT)''',
     ]
     try:
         for q in ddl:
@@ -525,6 +534,12 @@ SLIP_NUM_COLS = ['days_in_month', 'eligible_days', 'lop_days', 'paid_days', 'ful
                  'klwf', 'salary_advance', 'other_deductions', 'total_deductions', 'net_pay']
 
 
+def _month_days(dim, elig, statement_days):
+    """Use the statement's day count: a full month becomes that many days; a part month is capped."""
+    sd = int(_f(statement_days))
+    return sd, (sd if elig >= dim else min(elig, sd))
+
+
 def _build_or_refresh_slip(conn, run, emp, rules, salary, user, existing=None):
     """Compute + upsert one employee's slip in a DRAFT run, keeping admin-entered values."""
     y, m = int(run['period'][:4]), int(run['period'][5:7])
@@ -537,6 +552,9 @@ def _build_or_refresh_slip(conn, run, emp, rules, salary, user, existing=None):
             overrides = json.loads(existing['overrides']) or {}
         except Exception:
             overrides = {}
+    # An imported salary statement may count the month as e.g. 30 days when it has 31 (May 2026).
+    if _f(overrides.get('days_in_month')) > 0:
+        dim, elig = _month_days(dim, elig, overrides['days_in_month'])
     # TDS (founder 2026-11-12): only the directors have a regular TDS — their "Monthly TDS" on the
     # salary entry repeats for every month that entry covers (e.g. Apr–Sep). Anyone else's TDS is a
     # one-off typed on that month's slip, and is NOT copied to the next month.
@@ -586,6 +604,33 @@ def _payroll_employees(conn, include_excluded=False):
     return rows if include_excluded else [r for r in rows if not r['payroll_excluded']]
 
 
+def _run_people(conn, run_id):
+    """{employee_id: 'add'|'skip'} for this month (from an imported salary statement)."""
+    try:
+        return {r['employee_id']: r['mode'] for r in conn.execute(
+            "SELECT employee_id, mode FROM payroll_run_people WHERE run_id = ?", (run_id,)).fetchall()}
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return {}
+
+
+def _run_employees(conn, run):
+    """Who gets a slip this month: active payroll employees, plus anyone the month's salary statement
+    added (e.g. an ex-employee), minus anyone it left out."""
+    people = _run_people(conn, run['id'])
+    emps = [e for e in _payroll_employees(conn) if people.get(e['id']) != 'skip']
+    have = {e['id'] for e in emps}
+    add_ids = [eid for eid, mode in people.items() if mode == 'add' and eid not in have]
+    for eid in add_ids:
+        r = conn.execute("SELECT * FROM employees WHERE id = ?", (eid,)).fetchone()
+        if r:
+            emps.append(dict(r))
+    return emps, people
+
+
 def _refresh_run(conn, run, user):
     """(Re)compute every eligible employee's slip in a draft run. Returns missing-salary list."""
     rules = rules_for(conn, run['period'])
@@ -595,15 +640,25 @@ def _refresh_run(conn, run, user):
         "SELECT * FROM payslips WHERE run_id = ?", (run['id'],)).fetchall()}
     missing = []
     y, m = int(run['period'][:4]), int(run['period'][5:7])
-    for emp in _payroll_employees(conn, include_excluded=True):
-        if emp['payroll_excluded'] and emp['id'] in existing:
-            conn.execute("DELETE FROM payslips WHERE id = ?", (existing[emp['id']]['id'],))
-    for emp in _payroll_employees(conn):
+    emps, people = _run_employees(conn, run)
+    keep = {e['id'] for e in emps}
+    excluded = _excluded_ids(conn)
+    for eid, slip in existing.items():
+        if eid in keep:
+            continue
+        r = conn.execute("SELECT * FROM employees WHERE id = ?", (eid,)).fetchone()
+        r = dict(r) if r else None
+        if r and people.get(eid) != 'skip' and eid not in excluded and not _auto_excluded(r):
+            emps.append(r)          # someone who has since left keeps (and refreshes) this month's slip
+            keep.add(eid)
+        else:
+            conn.execute("DELETE FROM payslips WHERE id = ?", (slip['id'],))
+    for emp in emps:
         sal = salary_for(conn, emp['id'], run['period'])
         if not sal:
             missing.append(emp)
             continue
-        if eligible_days_for(emp, y, m)[1] <= 0 and emp['id'] not in existing:
+        if eligible_days_for(emp, y, m)[1] <= 0 and emp['id'] not in existing and people.get(emp['id']) != 'add':
             continue  # joined after this month
         _build_or_refresh_slip(conn, run, emp, rules, sal, user, existing.get(emp['id']))
     conn.commit()
@@ -692,6 +747,12 @@ def payroll_run(run_id):
         slips = [dict(r) for r in conn.execute(
             "SELECT * FROM payslips WHERE run_id = ? ORDER BY emp_name", (run_id,)).fetchall()]
         missing = _missing_salary(conn, run['period']) if run['status'] == 'draft' else []
+        left_out = [dict(r) for r in conn.execute(
+            "SELECT e.name, e.emp_code FROM payroll_run_people p JOIN employees e ON e.id = p.employee_id "
+            "WHERE p.run_id = ? AND p.mode = 'skip' ORDER BY e.name", (run_id,)).fetchall()]
+        skip_ids = {r['employee_id'] for r in conn.execute(
+            "SELECT employee_id FROM payroll_run_people WHERE run_id = ? AND mode = 'skip'", (run_id,)).fetchall()}
+        missing = [e for e in missing if e['id'] not in skip_ids]
         rules = rules_for(conn, run['period'])
         views = {r['payslip_id']: r['c'] for r in conn.execute(
             "SELECT payslip_id, COUNT(*) AS c FROM payslip_access_log WHERE action IN ('view','download') "
@@ -719,7 +780,7 @@ def payroll_run(run_id):
                 'total_deductions', 'net_pay', 'lop_days']
     totals = {k: sum(_f(s.get(k)) for s in slips) for k in tot_keys}
     return render_template('hr_payroll_run.html', user=user, run=run, slips=slips, totals=totals,
-                           missing=missing, rules=rules, period_label=period_label, fy_label=fy_label,
+                           missing=missing, left_out=left_out, rules=rules, period_label=period_label, fy_label=fy_label,
                            inr=inr, manual_fields=MANUAL_DEDUCTIONS, active_section='hr')
 
 
@@ -814,6 +875,7 @@ def payroll_status(run_id):
             msg = f'{label} re-opened as draft — employees can no longer see these slips until you release again.'
         elif action == 'delete' and st == 'draft':
             conn.execute("DELETE FROM payslips WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM payroll_run_people WHERE run_id = ?", (run_id,))
             conn.execute("DELETE FROM payroll_runs WHERE id = ?", (run_id,))
             conn.commit()
             flash(f'Draft payroll for {label} deleted.', 'success')
