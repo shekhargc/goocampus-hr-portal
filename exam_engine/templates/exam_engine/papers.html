@@ -1,0 +1,56 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mock Tests · Papers{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}{% endblock %}
+
+{% block section_content %}
+{% set tab = 'ex_papers' %}{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <h1>Papers</h1>
+    <p>A paper is one mock: full mock (5 sections × 36, like NEET PG), a subject test, or a mini test. Fill it from
+       approved questions, <b>lock</b> it (questions are frozen), then <b>publish</b> it.
+       {{ approved }} approved question(s) are available.</p>
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+<div class="ex-card">
+  <h2>New paper</h2>
+  <form method="post" action="{{ url_for('ex_paper_create') }}" class="ex-f" style="display:flex;gap:0.8rem;flex-wrap:wrap;align-items:flex-end;">
+    <div style="flex:2 1 240px;"><label>Name</label><input type="text" name="title" maxlength="200" placeholder="e.g. Grand Test 1" required></div>
+    <div style="flex:1 1 200px;"><label>Type</label>
+      <select name="kind" id="kindSel" onchange="document.getElementById('subjWrap').style.display=this.value==='subject'?'':'none'">
+        <option value="full">Full mock — {{ cfg.total_questions }} questions, {{ cfg.total_minutes }} min</option>
+        <option value="subject">Subject test — {{ (cfg.subject_test or {}).questions }} questions, {{ (cfg.subject_test or {}).minutes }} min</option>
+        <option value="mini">Mini test — {{ (cfg.mini_test or {}).questions }} questions, {{ (cfg.mini_test or {}).minutes }} min</option>
+      </select></div>
+    <div style="flex:1 1 180px;display:none;" id="subjWrap"><label>Subject</label>
+      <select name="subject_id"><option value="">— choose —</option>{% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    <button class="ex-btn ex-btn-primary">Create</button>
+  </form>
+  <p class="muted" style="margin:0.6rem 0 0;">Sizes and timings come from the <a href="{{ url_for('ex_pattern') }}">exam pattern</a>.</p>
+</div>
+
+{% if rows %}
+<table class="ex-table">
+  <thead><tr><th>Paper</th><th style="width:150px;">Type</th><th style="width:150px;">Questions</th><th style="width:180px;">Last change</th><th style="width:120px;">Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="clickable" onclick="location.href='{{ url_for('ex_paper', pid=r.id) }}'">
+      <td><b>{{ r.title }}</b>{% if r.is_free_sample %} <span class="chip chip-amber">Free sample</span>{% endif %}
+          {% if r.description %}<div class="muted">{{ r.description[:120] }}</div>{% endif %}</td>
+      <td>{{ kind_label[r.kind] }}{% if r.subject %}<div class="muted">{{ r.subject }}</div>{% endif %}</td>
+      <td>{{ r.n_items }} / {{ r.total }}<div class="muted">{{ r.minutes }} min</div></td>
+      <td>{{ r.when }}</td>
+      <td><span class="chip {{ {'draft':'chip-blue','locked':'chip-amber','published':'chip-green','retired':'chip-gray'}[r.status] }}">{{ status_label[r.status] }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="ex-note">No papers yet. Approve some questions in the import screens, then create “Grand Test 1” above.</div>
+{% endif %}
+{% endblock %}

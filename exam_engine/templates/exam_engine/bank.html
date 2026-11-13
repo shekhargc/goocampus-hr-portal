@@ -1,0 +1,65 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mock Tests · Question bank{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}{% endblock %}
+
+{% block section_content %}
+{% set tab = 'ex_bank' %}{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <h1>Question bank</h1>
+    <p>{{ counts.get('approved', 0) }} approved · {{ counts.get('draft', 0) }} waiting for review · {{ counts.get('rejected', 0) }} rejected.
+       Only approved questions with no problems can go into a paper.</p>
+  </div>
+  <form method="post" action="{{ url_for('ex_question_new') }}"><button class="ex-btn ex-btn-primary">+ Type a question</button></form>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+<form method="get" class="ex-card ex-f" style="display:flex;gap:0.7rem;flex-wrap:wrap;align-items:flex-end;">
+  <div style="flex:2 1 220px;"><label>Search the question / options</label><input type="text" name="q" value="{{ f.q }}" placeholder="e.g. acetazolamide"></div>
+  <div style="flex:1 1 160px;"><label>Subject</label>
+    <select name="subject"><option value="">All subjects</option><option value="none" {{ 'selected' if f.subject == 'none' }}>Not set</option>
+      {% for s in subjects %}<option value="{{ s.id }}" {{ 'selected' if f.subject == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div style="flex:1 1 140px;"><label>Topic</label><input type="text" name="topic" value="{{ f.topic }}" placeholder="e.g. Cardiology"></div>
+  <div style="flex:1 1 130px;"><label>Status</label>
+    <select name="status">{% for v, l in [('approved','Approved'),('draft','To review'),('rejected','Rejected'),('all','All')] %}
+      <option value="{{ v }}" {{ 'selected' if f.status == v }}>{{ l }}</option>{% endfor %}</select></div>
+  <div style="flex:1 1 140px;"><label>In papers</label>
+    <select name="used"><option value="">Any</option><option value="unused" {{ 'selected' if f.used == 'unused' }}>Not used yet</option>
+      <option value="used" {{ 'selected' if f.used == 'used' }}>Used</option></select></div>
+  <label style="font-weight:400;font-size:0.84rem;margin-bottom:0.5rem;"><input type="checkbox" name="img" value="1" {{ 'checked' if f.img == '1' }}> With picture</label>
+  <button class="ex-btn ex-btn-ghost">Filter</button>
+</form>
+
+<p class="muted">{{ total }} question(s){% if total > per %} · page {{ page }}{% endif %}</p>
+<table class="ex-table">
+  <thead><tr><th style="width:60px;">#</th><th>Question</th><th style="width:190px;">Subject / topic</th><th style="width:80px;">Answer</th><th style="width:110px;">In papers</th><th style="width:110px;">Status</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="clickable" onclick="location.href='{{ url_for('ex_question', qid=r.id) }}'">
+      <td>{{ r.id }}{% if r.version > 1 %}<div class="muted">v{{ r.version }}</div>{% endif %}</td>
+      <td>{{ (r.stem or '(empty)')[:180] }}{% if (r.stem or '')|length > 180 %}…{% endif %}
+          {% if r.n_images %}<span class="chip chip-blue">🖼 {{ r.n_images }}</span>{% endif %}</td>
+      <td>{% if r.subject %}{{ r.subject }}{% else %}<span class="sev-error">Not set</span>{% endif %}{% if r.topic %}<div class="muted">{{ r.topic }}</div>{% endif %}</td>
+      <td>{{ r.answer or '—' }}</td>
+      <td>{{ r.n_used or '—' }}</td>
+      <td>{% if r.status == 'approved' %}<span class="chip chip-green">Approved</span>
+          {% elif r.status == 'rejected' %}<span class="chip chip-gray">Rejected</span>
+          {% elif r.n_errors %}<span class="chip chip-red">Needs fixing</span>
+          {% else %}<span class="chip chip-blue">To review</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No questions match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if total > per %}
+  {% set qs = request.args.to_dict() %}
+  <div style="display:flex;gap:0.5rem;margin-top:0.8rem;">
+    {% if page > 1 %}{% set _ = qs.update({'page': page - 1}) %}<a class="ex-btn ex-btn-ghost" href="?{{ qs|urlencode }}">← Previous</a>{% endif %}
+    {% if page * per < total %}{% set _ = qs.update({'page': page + 1}) %}<a class="ex-btn ex-btn-ghost" href="?{{ qs|urlencode }}">Next →</a>{% endif %}
+  </div>
+{% endif %}
+{% endblock %}

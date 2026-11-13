@@ -369,9 +369,11 @@ def question_view(qid):
         if b and b['kind'] == 'pdf' and q.get('page_from'):
             pages = list(range(int(q['page_from']), int(q.get('page_to') or q['page_from']) + 1))[:4]
         subject_flag = any(f['code'] in ('subject_unmapped', 'subject_guessed') for f in q['flags'])
+        from exam_engine import papers as _papers
+        used_in = _papers.usage(conn, [qid]).get(qid, [])
         return render_template('exam_engine/question.html', q=q, b=b, subjects=subj, imgs=imgs,
                                prev_id=prev_id, next_id=next_id, next_todo=next_todo, pos=pos, total=total,
-                               versions=versions, pages=pages, subject_flag=subject_flag,
+                               versions=versions, pages=pages, subject_flag=subject_flag, used_in=used_in,
                                status_label=STATUS_LABEL,
                                subject_name={s['id']: s['name'] for s in subj}.get(q.get('subject_id'), ''))
     finally:
@@ -565,6 +567,14 @@ def image_delete(iid):
         return _deny()
     conn = get_db()
     try:
+        r = conn.execute("SELECT question_id FROM ex_question_images WHERE id=?", (iid,)).fetchone()
+        if not r:
+            abort(404)
+        from exam_engine import papers as _papers
+        if _papers.image_in_frozen_paper(conn, iid, r['question_id']):
+            flash('This picture is shown in a locked or published paper, so it can\'t be removed. '
+                  'Unlock that paper first, or add a new picture instead.', 'error')
+            return redirect(url_for('ex_question', qid=r['question_id']))
         qid = store.delete_image(conn, iid)
         if not qid:
             abort(404)

@@ -20,8 +20,8 @@ Founder-approved brief: `~/Desktop/Claude Code/NEET_PG_Mock_Platform_Brief.md`.
 ## Build order (from the brief)
 1. Competitor research and packages: **done**.
 2. Decisions: **done**. Launch date still to come.
-3. Question importer: **this module, step 3**.
-4. Question bank and paper builder.
+3. Question importer: **done**, on staging.
+4. Question bank and paper builder: **done** (see below).
 5. Exam player (NBEMS style).
 6. Scoring, results and rank.
 7. Packages, payments and the free sample.
@@ -101,3 +101,45 @@ File-level notes: missing or repeated question numbers, how the correct answers 
 Without R2, the bytes are stored in the row.
 
 **Not done yet:** the AI route for PDFs in other layouts or scanned PDFs (the brief's "AI splits the PDF"). It will be added once a real file needs it. Typed PDFs in a labelled layout don't need AI.
+
+## Step 4 — question bank and papers
+
+**Screens**
+- `/admin/pg/mocks/bank`:
+  - search and filter: subject, topic, status, used or unused, has a picture;
+  - "Type a question" creates a blank draft and opens it in the review screen.
+- `/admin/pg/mocks/papers`: create a paper:
+  - **Full mock**: the pattern's 5 × 36 questions, 42 minutes per section.
+  - **Subject test**: 60 questions, 70 minutes, one subject.
+  - **Mini test**: 30 questions, 35 minutes.
+  - The subject-test and mini-test sizes are editable defaults.
+- `/admin/pg/mocks/papers/<id>` is the builder:
+  - Sections with numbered slots; move a question up, down or to another section; remove it.
+  - Picker: search approved questions and add the ticked ones to a section.
+  - **Auto-fill** follows the subject mix (or the test's own subject). It prefers questions not used in any other paper, can top up from other subjects when one runs short, and spreads subjects round-robin across the sections.
+  - The "Ready to lock?" panel shows what blocks locking and what's worth a look. It blocks on:
+    - a section not full;
+    - a question no longer approved;
+    - the same question twice.
+
+    It warns about:
+    - a subject mix off by 3 or more;
+    - answer-letter skew;
+    - questions reused from other locked or published papers.
+- `/admin/pg/mocks/papers/<id>/preview`: the whole paper as doctors will see it, with or without answers, printable.
+- `/admin/pg/mocks/pattern`: the exam pattern as settings:
+  - sections, minutes, marking, options;
+  - section rules (no going back, each section runs its full time);
+  - subject-test and mini-test sizes;
+  - the subject mix for auto-fill.
+
+  Saving creates a new version. Each paper copies the pattern when it is created, so later changes never alter an existing paper.
+
+**Paper lifecycle** (`ex_papers.status`): draft → locked → published → retired.
+- **Lock**: every question is frozen into `ex_paper_items.snapshot_json` (text, options, answer, explanation, subject, picture ids, question version). Later bank edits don't change the paper; the builder marks such questions "edited in bank since".
+- A picture inside a frozen copy can't be deleted from its question.
+- **Unlock**: only while locked, never once published, and never after doctors have attempted it (`attempts_count`, which reads `ex_attempts` once Step 5 adds it).
+- Only a draft paper can be deleted.
+- Exactly one full mock can be the **free sample** (`is_free_sample`).
+
+**Default subject mix**: `tables.BLUEPRINT_PER_200`, scaled to 180. It is an approximation of recent papers, for the team to adjust on the Pattern page.

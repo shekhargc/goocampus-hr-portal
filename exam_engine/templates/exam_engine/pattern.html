@@ -1,0 +1,80 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mock Tests · Exam pattern{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}
+<style> .num { width:90px !important; } .grid3 { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:0.4rem 1.2rem; } @media (max-width:900px){ .grid3{ grid-template-columns:1fr; } } </style>
+{% endblock %}
+
+{% block section_content %}
+{% set tab = 'ex_pattern' %}{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <h1>Exam pattern — {{ cfg.name }}</h1>
+    <p>NBEMS changes the pattern, so it is kept here as settings. Saving creates a new version: <b>new papers</b> use it;
+       papers already created keep the pattern they were made with.</p>
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+<form method="post" action="{{ url_for('ex_pattern_save') }}" class="ex-f">
+  <div class="ex-card">
+    <h2>Full mock</h2>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <div><label>Name</label><input type="text" name="name" value="{{ cfg.name }}" style="width:220px;"></div>
+      <div><label>Sections</label><input type="text" class="num" name="n_sections" value="{{ cfg.sections|length }}"></div>
+      <div><label>Options per question</label><input type="text" class="num" name="options" value="{{ cfg.options_per_question }}"></div>
+      <div><label>Marks: correct (+)</label><input type="text" class="num" name="mark_correct" value="{{ cfg.marking.correct }}"></div>
+      <div><label>Marks: wrong (−)</label><input type="text" class="num" name="mark_wrong" value="{{ -cfg.marking.wrong }}"></div>
+    </div>
+    <table class="ex-table" style="margin-top:0.8rem;max-width:520px;">
+      <thead><tr><th>Section</th><th>Questions</th><th>Minutes</th></tr></thead>
+      <tbody>
+      {% for s in cfg.sections %}
+        <tr><td>{{ s.name }}</td><td><input type="text" class="num" name="sec_q_{{ loop.index0 }}" value="{{ s.questions }}"></td>
+            <td><input type="text" class="num" name="sec_m_{{ loop.index0 }}" value="{{ s.minutes }}"></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted">Total now: {{ cfg.total_questions }} questions · {{ cfg.total_minutes }} minutes · {{ cfg.max_marks }} marks.
+       To add a section, raise “Sections”, save, then fill in its numbers.</p>
+    <label style="font-weight:400;"><input type="checkbox" name="section_lock" value="1" {{ 'checked' if cfg.section_lock }}> A closed section can't be reopened</label>
+    <label style="font-weight:400;"><input type="checkbox" name="section_runs_full_time" value="1" {{ 'checked' if cfg.section_runs_full_time }}> Each section runs its full time (finishing early doesn't open the next one)</label>
+  </div>
+
+  <div class="ex-card">
+    <h2>Subject tests and mini tests</h2>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <div><label>Subject test: questions</label><input type="text" class="num" name="st_q" value="{{ (cfg.subject_test or {}).questions }}"></div>
+      <div><label>Subject test: minutes</label><input type="text" class="num" name="st_m" value="{{ (cfg.subject_test or {}).minutes }}"></div>
+      <div><label>Mini test: questions</label><input type="text" class="num" name="mt_q" value="{{ (cfg.mini_test or {}).questions }}"></div>
+      <div><label>Mini test: minutes</label><input type="text" class="num" name="mt_m" value="{{ (cfg.mini_test or {}).minutes }}"></div>
+    </div>
+    <p class="muted">These are starting values (1 section each) — change them to what you want to sell.</p>
+  </div>
+
+  <div class="ex-card">
+    <h2>Subject mix for auto-fill <span class="muted" style="font-weight:400;">· adds up to {{ (cfg.blueprint or {}).values()|sum }}</span></h2>
+    <p class="muted" style="margin-top:-0.3rem;">{{ cfg.blueprint_note or '' }} Questions per full mock. Auto-fill scales it to the paper size.</p>
+    <div class="grid3">
+      {% for s in subjects %}
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--gray-100);padding:0.2rem 0;">
+          <span style="font-size:0.86rem;">{{ s.name }}</span>
+          <input type="text" class="num" name="bp_{{ s.id }}" value="{{ (cfg.blueprint or {}).get(s.name, 0) }}" style="width:70px !important;">
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="ex-card">
+    <label>Source of these numbers</label><input type="text" name="source" value="{{ cfg.source }}">
+    <button class="ex-btn ex-btn-primary" style="margin-top:0.8rem;">Save as a new version</button>
+  </div>
+</form>
+
+<div class="ex-card">
+  <h2>Versions</h2>
+  {% for h in hist %}<div class="muted" style="padding:0.15rem 0;">Version {{ h.version }} · {{ h.name }}{% if h.is_active %} · <b style="color:#166534;">in use</b>{% endif %}{% if h.updated_by %} · by {{ h.updated_by }}{% endif %} · {{ h.when }}</div>{% endfor %}
+</div>
+{% endblock %}

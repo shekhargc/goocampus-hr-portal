@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ p.title }} — preview</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color:#0f172a; background:#f1f5f9; margin:0; }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 16px 60px; }
+  header { background:#0f1b33; color:#fff; padding:16px 20px; border-radius:10px; margin-bottom:18px; }
+  header h1 { margin:0; font-size:1.3rem; } header p { margin:4px 0 0; color:#cbd5e1; font-size:0.88rem; }
+  .bar { display:flex; gap:10px; margin-bottom:14px; font-size:0.88rem; } .bar a { color:#1e40af; }
+  h2 { font-size:1.05rem; margin:26px 0 10px; color:#0f1b33; border-bottom:2px solid #0f1b33; padding-bottom:4px; }
+  .q { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:14px 16px; margin-bottom:12px; page-break-inside:avoid; }
+  .q .num { font-weight:700; color:#0f1b33; margin-right:6px; }
+  .stem { white-space:pre-line; line-height:1.5; }
+  .q img { max-width:100%; max-height:380px; display:block; margin:10px 0; border:1px solid #e2e8f0; border-radius:4px; }
+  .opt { padding:5px 8px; margin-top:4px; border-radius:5px; }
+  .opt.ok { background:#dcfce7; font-weight:600; }
+  .meta { font-size:0.78rem; color:#64748b; margin-top:8px; }
+  details { margin-top:8px; font-size:0.86rem; } details div { white-space:pre-line; margin:4px 0 8px; }
+  @media print { body { background:#fff; } .bar { display:none; } .q { border-color:#ccc; } }
+</style></head>
+<body><div class="wrap">
+  <header>
+    <h1>{{ p.title }}</h1>
+    <p>{{ p.pattern.total_questions }} questions · {{ p.pattern.total_minutes }} minutes · +{{ p.pattern.marking.correct }} / {{ p.pattern.marking.wrong }} ·
+       status: {{ p.status }}{% if not p.frozen %} (draft — shows the current bank version){% endif %}</p>
+  </header>
+  <div class="bar">
+    {% if show_answers %}<a href="?answers=0">Hide answers &amp; explanations</a>{% else %}<a href="?answers=1">Show answers &amp; explanations</a>{% endif %}
+    <a href="#" onclick="window.print();return false;">Print / save as PDF</a>
+  </div>
+  {% set ns = namespace(n=0) %}
+  {% for code, s in secs.items() %}
+    <h2>{{ s.spec.name }} · {{ s.spec.minutes }} minutes · {{ s.qs|length }} of {{ s.spec.questions }}</h2>
+    {% for r in s.qs %}{% set ns.n = ns.n + 1 %}
+      <div class="q">
+        <div class="stem"><span class="num">Q{{ ns.n }}.</span>{{ r.stem }}</div>
+        {% for im in r.images if im.role == 'stem' %}<img src="{{ url_for('ex_image', iid=im.id) }}" alt="">{% endfor %}
+        {% for L, t in r.options %}<div class="opt {{ 'ok' if show_answers and L == r.answer }}">{{ L }}. {{ t }}</div>{% endfor %}
+        {% if show_answers %}
+          <div class="meta">Answer {{ r.answer }} · {{ r.subject or 'no subject' }}{% if r.topic %} / {{ r.topic }}{% endif %} · bank #{{ r.question_id }}</div>
+          {% if r.sections or (r.images|selectattr('role','equalto','explanation')|list) %}
+          <details><summary>Explanation</summary>
+            {% for label, text in r.sections %}<b>{{ label }}</b><div>{{ text }}</div>{% endfor %}
+            {% for im in r.images if im.role == 'explanation' %}<img src="{{ url_for('ex_image', iid=im.id) }}" alt="">{% endfor %}
+          </details>{% endif %}
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endfor %}
+</div></body></html>

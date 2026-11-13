@@ -25,3 +25,5 @@ def register_exam_engine(app):
     except Exception as e:
         logging.error(f'exam_engine boot ensure_exam_tables: {e}')
     admin.register_routes(app)
+    from exam_engine import admin_papers
+    admin_papers.register_routes(app)

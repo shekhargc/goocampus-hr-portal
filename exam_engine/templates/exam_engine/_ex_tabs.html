@@ -1,0 +1,6 @@
+<div style="display:flex;gap:0.3rem;margin-bottom:1rem;border-bottom:1px solid var(--gray-200);flex-wrap:wrap;">
+  {% for ep, label in [('ex_imports', 'Import'), ('ex_bank', 'Question bank'), ('ex_papers', 'Papers'), ('ex_pattern', 'Exam pattern')] %}
+    <a href="{{ url_for(ep) }}" style="padding:0.5rem 0.9rem;font-size:0.87rem;font-weight:600;text-decoration:none;
+       color:{{ 'var(--orange)' if tab == ep else 'var(--gray-600)' }};border-bottom:2px solid {{ 'var(--orange)' if tab == ep else 'transparent' }};margin-bottom:-1px;">{{ label }}</a>
+  {% endfor %}
+</div>

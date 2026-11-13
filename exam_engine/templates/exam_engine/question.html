@@ -187,6 +187,15 @@
       </form>
     </details>
 
+    {% if used_in %}
+    <div class="ex-card">
+      <h2>Used in papers</h2>
+      {% for u in used_in %}<div style="font-size:0.86rem;padding:0.15rem 0;"><a href="{{ url_for('ex_paper', pid=u.paper_id) }}">{{ u.title }}</a>
+        <span class="chip {{ 'chip-green' if u.status == 'published' else ('chip-blue' if u.status == 'locked' else 'chip-gray') }}">{{ u.status|capitalize }}</span></div>{% endfor %}
+      {% if used_in|selectattr('status','in',['locked','published'])|list %}<p class="muted" style="margin:0.4rem 0 0;">Locked and published papers keep the version they were locked with — edits here won't change them.</p>{% endif %}
+    </div>
+    {% endif %}
+
     {% if versions %}
     <details class="ex-card">
       <summary style="cursor:pointer;font-weight:700;color:var(--navy);">History ({{ versions|length }})</summary>

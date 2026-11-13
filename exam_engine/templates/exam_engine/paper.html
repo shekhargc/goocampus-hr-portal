@@ -1,0 +1,185 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}{{ p.title }} · paper{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}
+<style>
+  .sec-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
+  .sec-head h2 { margin:0; }
+  .it { display:flex; gap:0.6rem; align-items:flex-start; padding:0.45rem 0.2rem; border-top:1px solid var(--gray-100); font-size:0.85rem; }
+  .it .n { width:2rem; font-weight:700; color:var(--navy); }
+  .it .t { flex:1; min-width:0; }
+  .it .acts { display:flex; gap:0.2rem; flex-shrink:0; }
+  .it .acts button { border:1px solid var(--gray-300); background:#fff; border-radius:0.35rem; padding:0.1rem 0.4rem; font-size:0.75rem; cursor:pointer; }
+  .it .acts button:hover { background:var(--gray-100); }
+  .pick-row { display:flex; gap:0.6rem; align-items:flex-start; padding:0.4rem 0; border-top:1px solid var(--gray-100); font-size:0.85rem; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+{% set tab = 'ex_papers' %}{% include "exam_engine/_ex_tabs.html" %}
+{% set total_need = p.pattern.total_questions %}
+<div class="ex-head">
+  <div>
+    <div class="ex-crumb"><a href="{{ url_for('ex_papers') }}">Papers</a> › {{ p.title }}</div>
+    <h1>{{ p.title }}
+      <span class="chip {{ {'draft':'chip-blue','locked':'chip-amber','published':'chip-green','retired':'chip-gray'}[p.status] }}" style="vertical-align:middle;">{{ status_label[p.status] }}</span>
+      {% if p.is_free_sample %}<span class="chip chip-amber" style="vertical-align:middle;">Free sample</span>{% endif %}</h1>
+    <p>{{ kind_label[p.kind] }}{% if subject_name %} · {{ subject_name }}{% endif %} · {{ rows|length }} / {{ total_need }} questions ·
+       {{ p.pattern.sections|length }} section{{ 's' if p.pattern.sections|length > 1 }} · {{ p.pattern.total_minutes }} min ·
+       +{{ p.pattern.marking.correct }} / {{ p.pattern.marking.wrong }} · max {{ p.pattern.max_marks }} marks
+       {% if p.locked_at %} · locked by {{ p.locked_by }}{% endif %}{% if attempts %} · {{ attempts }} attempt(s){% endif %}</p>
+  </div>
+  <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+    <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_paper_preview', pid=p.id) }}" target="_blank">Preview ↗</a>
+    {% if p.status == 'draft' %}
+      <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}" onsubmit="return confirm('Lock this paper? Every question will be frozen as it is now.');">
+        <input type="hidden" name="action" value="lock"><button class="ex-btn ex-btn-green" {{ 'disabled' if errors }} title="{{ errors|join(' ') if errors else 'Freeze the questions' }}">🔒 Lock</button></form>
+    {% elif p.status == 'locked' %}
+      <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}" onsubmit="return confirm('Publish this paper?');">
+        <input type="hidden" name="action" value="publish"><button class="ex-btn ex-btn-green">Publish</button></form>
+      <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}">
+        <input type="hidden" name="action" value="unlock"><button class="ex-btn ex-btn-ghost">Unlock</button></form>
+    {% elif p.status == 'published' %}
+      <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}" onsubmit="return confirm('Unpublish? Doctors won\'t be able to start it.');">
+        <input type="hidden" name="action" value="unpublish"><button class="ex-btn ex-btn-ghost">Unpublish</button></form>
+      <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}" onsubmit="return confirm('Retire this paper? It will be hidden from doctors.');">
+        <input type="hidden" name="action" value="retire"><button class="ex-btn ex-btn-red">Retire</button></form>
+    {% elif p.status == 'retired' %}
+      <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}"><input type="hidden" name="action" value="restore"><button class="ex-btn ex-btn-ghost">Restore</button></form>
+    {% endif %}
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:1rem;align-items:start;">
+  <div>
+    {% if not p.frozen %}
+    <div class="ex-card">
+      <h2>Fill the paper</h2>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+        <form method="post" action="{{ url_for('ex_paper_edit', pid=p.id) }}" style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+          <input type="hidden" name="action" value="autofill">
+          <button class="ex-btn ex-btn-primary" {{ 'disabled' if rows|length >= total_need }}>⚡ Auto-fill empty slots</button>
+          <label style="font-size:0.82rem;"><input type="checkbox" name="any_subject" value="1"> if a subject runs short, use other subjects</label>
+        </form>
+        <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_paper', pid=p.id, pick=1) }}#picker">Pick questions by hand</a>
+        {% if rows %}<form method="post" action="{{ url_for('ex_paper_edit', pid=p.id) }}" onsubmit="return confirm('Remove all questions from this paper?');">
+          <input type="hidden" name="action" value="clear"><button class="ex-btn ex-btn-red">Empty the paper</button></form>{% endif %}
+      </div>
+      <p class="muted" style="margin:0.6rem 0 0;">Auto-fill follows the subject mix on the right{% if p.kind == 'subject' %} (all {{ subject_name }}){% endif %},
+         prefers questions not used in any other paper, and spreads subjects across the sections. {{ approved }} approved question(s) in the bank.</p>
+    </div>
+    {% endif %}
+
+    {% if picker %}
+    <div class="ex-card" id="picker">
+      <h2>Pick questions</h2>
+      <form method="get" class="ex-f" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;">
+        <input type="hidden" name="pick" value="1">
+        <div style="flex:2 1 180px;"><label>Search</label><input type="text" name="q" value="{{ picker.f.q }}"></div>
+        <div style="flex:1 1 150px;"><label>Subject</label><select name="subject"><option value="">All</option>
+          {% for s in subjects %}<option value="{{ s.id }}" {{ 'selected' if picker.f.subject == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></div>
+        <div style="flex:1 1 130px;"><label>Topic</label><input type="text" name="topic" value="{{ picker.f.topic }}"></div>
+        <label style="font-size:0.82rem;font-weight:400;margin-bottom:0.5rem;"><input type="checkbox" name="unused" value="1" {{ 'checked' if picker.f.unused }}> Not used yet</label>
+        <label style="font-size:0.82rem;font-weight:400;margin-bottom:0.5rem;"><input type="checkbox" name="img" value="1" {{ 'checked' if picker.f.img }}> With picture</label>
+        <button class="ex-btn ex-btn-ghost">Search</button>
+      </form>
+      <form method="post" action="{{ url_for('ex_paper_edit', pid=p.id) }}" style="margin-top:0.6rem;">
+        <input type="hidden" name="action" value="add">
+        <input type="hidden" name="back" value="{{ request.full_path }}#picker">
+        {% for c in picker.rows %}
+          <label class="pick-row"><input type="checkbox" name="qid" value="{{ c.id }}">
+            <span style="flex:1;">{{ c.stem[:200] }}{% if c.stem|length > 200 %}…{% endif %}
+              {% if c.n_images %}<span class="chip chip-blue">🖼</span>{% endif %}
+              <span class="muted">· #{{ c.id }} · {{ c.subject or 'no subject' }}{% if c.topic %} / {{ c.topic }}{% endif %}{% if c.n_used %} · in {{ c.n_used }} paper(s){% endif %}</span></span>
+            <a href="{{ url_for('ex_question', qid=c.id) }}" target="_blank" class="muted" onclick="event.stopPropagation();">open ↗</a></label>
+        {% else %}
+          <div class="muted">No approved questions match (or all are already in this paper).</div>
+        {% endfor %}
+        {% if picker.rows %}
+        <div style="display:flex;gap:0.6rem;align-items:center;margin-top:0.6rem;" class="ex-f">
+          <span class="muted">Add ticked questions to</span>
+          <select name="section" style="width:auto;"><option value="">first free slots</option>
+            {% for code, s in secs.items() %}<option value="{{ code }}">{{ s.spec.name }} ({{ s.qs|length }}/{{ s.spec.questions }})</option>{% endfor %}</select>
+          <button class="ex-btn ex-btn-primary">Add</button>
+        </div>{% endif %}
+      </form>
+    </div>
+    {% endif %}
+
+    {% for code, s in secs.items() %}
+    <div class="ex-card">
+      <div class="sec-head">
+        <h2>{{ s.spec.name }} <span class="muted" style="font-weight:400;">· {{ s.spec.minutes }} min</span></h2>
+        <span class="chip {{ 'chip-green' if s.qs|length == s.spec.questions else 'chip-amber' }}">{{ s.qs|length }} / {{ s.spec.questions }}</span>
+      </div>
+      {% for r in s.qs %}
+        <div class="it">
+          <span class="n">{{ r.position }}</span>
+          <div class="t">
+            <a href="{{ url_for('ex_question', qid=r.question_id) }}" style="color:inherit;text-decoration:none;">{{ (r.stem or '')[:160] }}{% if (r.stem or '')|length > 160 %}…{% endif %}</a>
+            {% if r.n_images %}<span class="chip chip-blue">🖼</span>{% endif %}
+            <div class="muted">#{{ r.question_id }} · {{ r.subject or 'no subject' }}{% if r.topic %} / {{ r.topic }}{% endif %} · answer {{ r.answer }}
+              {% if not p.frozen and (r.status != 'approved' or r.n_errors) %}<span class="chip chip-red">no longer approved</span>{% endif %}
+              {% if p.frozen and r.snap and r.version and r.question_version and r.version > r.question_version %}<span class="chip chip-gray" title="The bank copy was edited after locking; this paper keeps v{{ r.question_version }}">edited in bank since</span>{% endif %}
+              {% if used.get(r.question_id) %}<span class="chip chip-gray" title="{{ used[r.question_id]|map(attribute='title')|join(', ') }}">also in {{ used[r.question_id]|length }} other</span>{% endif %}</div>
+          </div>
+          {% if not p.frozen %}
+          <form method="post" action="{{ url_for('ex_paper_edit', pid=p.id) }}" class="acts">
+            <input type="hidden" name="item_id" value="{{ r.item_id }}">
+            <button name="action" value="up" title="Move up">↑</button><button name="action" value="down" title="Move down">↓</button>
+            {% if secs|length > 1 %}<select name="move_to" onchange="this.form.submit()" style="font-size:0.75rem;border:1px solid var(--gray-300);border-radius:0.35rem;">
+              <option value="">move to…</option>{% for c2, s2 in secs.items() if c2 != code %}<option value="to:{{ c2 }}">{{ s2.spec.name }}</option>{% endfor %}</select>{% endif %}
+            <button name="action" value="remove" title="Remove from paper" style="color:#b91c1c;">✕</button>
+          </form>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="muted">Empty.</div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div>
+    <div class="ex-card">
+      <h2>Ready to lock?</h2>
+      {% for e in errors %}<div class="ex-flag error">● {{ e }}</div>{% endfor %}
+      {% for n in notes %}<div class="ex-flag warn">▲ {{ n }}</div>{% endfor %}
+      {% if not errors and not p.frozen %}<div class="ex-flag info">✓ Every section is full and every question is approved — you can lock it.</div>{% endif %}
+      {% if p.frozen %}<div class="ex-flag info">🔒 Locked: these are frozen copies. Edits in the bank don't change this paper{% if p.status == 'locked' %} — unlock it to refresh{% endif %}.</div>{% endif %}
+    </div>
+
+    <div class="ex-card">
+      <h2>Subject mix</h2>
+      {% if mix %}
+      <table style="width:100%;font-size:0.84rem;border-collapse:collapse;">
+        <tr class="muted"><td></td><td style="text-align:right;">In paper</td><td style="text-align:right;">Pattern</td></tr>
+        {% for name, have, want in mix %}
+          <tr style="border-top:1px solid var(--gray-100);"><td>{{ name }}</td>
+            <td style="text-align:right;font-weight:700;{{ 'color:#b91c1c;' if want is not none and (have - want)|abs >= 3 }}">{{ have }}</td>
+            <td style="text-align:right;" class="muted">{{ want if want is not none else '—' }}</td></tr>
+        {% endfor %}
+      </table>
+      {% else %}<div class="muted">No questions yet.</div>{% endif %}
+    </div>
+
+    <div class="ex-card">
+      <h2>Details</h2>
+      <form method="post" action="{{ url_for('ex_paper_settings', pid=p.id) }}" class="ex-f">
+        <label>Name</label><input type="text" name="title" value="{{ p.title }}" maxlength="200">
+        <label>Description (shown to doctors later)</label><textarea name="description" rows="2">{{ p.description }}</textarea>
+        <label>Display order</label><input type="text" name="sort_order" value="{{ p.sort_order or 0 }}">
+        {% if p.kind == 'full' %}<label style="font-weight:400;"><input type="checkbox" name="is_free_sample" value="1" {{ 'checked' if p.is_free_sample }}> This is the <b>free sample mock</b> (only one paper can be)</label>{% endif %}
+        <button class="ex-btn ex-btn-ghost" style="margin-top:0.6rem;">Save details</button>
+      </form>
+      {% if p.status == 'draft' %}
+      <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}" onsubmit="return confirm('Delete this draft paper? Its questions stay in the bank.');" style="margin-top:0.8rem;">
+        <input type="hidden" name="action" value="delete"><button class="ex-btn ex-btn-red">Delete paper</button></form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
