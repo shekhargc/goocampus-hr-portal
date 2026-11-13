@@ -24,7 +24,7 @@ Founder-approved brief: `~/Desktop/Claude Code/NEET_PG_Mock_Platform_Brief.md`.
 4. Question bank and paper builder: **done** (see below).
 5. Exam engine: **portal side done**. The goocampus.in exam screen is built by the website session from [mock-tests-api.md](mock-tests-api.md).
 6. Scoring, results and rank: **done** (see below).
-7. Packages, payments and the free sample.
+7. Packages, payments and the free sample: **done** (see below).
 8. Admin dashboard.
 9. Load test and dry run.
 
@@ -196,3 +196,21 @@ Without R2, the bytes are stored in the row.
 - **"How everyone did"** (per question and per subject) is aggregated over ranked attempts and cached for 10 min per paper.
 - APIs: `GET /api/pg/mocks/attempts/<id>/result` and `…/solutions[?section=]`, both only after submit. See [mock-tests-api.md](mock-tests-api.md) §7–8.
 - **Future:** once doctors who took mocks also report their real NEET rank, calibrate each paper's difficulty (a marks offset) so the predicted rank tracks reality better.
+
+## Step 7 — mock packages + payments
+
+**Why the packages are separate.** Mock packages are **not** pg_plans or pg_subscriptions. The portal treats a doctor's newest active subscription as *the* plan, and granting a counselling plan (a PGCP invite or an admin grant) cancels the other active subscriptions. A mock package stored there would knock out, or be knocked out by, a counselling plan.
+
+**Tables**
+
+| Table | Holds |
+|---|---|
+| `ex_packages` | Starter ₹999 / 5 full mocks · Standard ₹2,499 / 15 + subject tests (recommended) · Pro ₹3,999 / 30 + subject + mini. Prices incl. GST. `valid_until` defaults to 2027-09-30 (to confirm with the founder). |
+| `ex_orders` | Razorpay orders: list price, upgrade credit, coupon discount, payable, and the GST inside it (payable − payable/1.18). |
+| `ex_package_purchases` | Grants: source `razorpay`, `coupon_free` or `admin_grant`, plus the access date. |
+
+**How it works**
+- `exam_engine/packages.py`: entitlement (the union of the doctor's live purchases), quote (upgrade = pay the difference; coupons via `pg_admin/data/coupons.py`, "all plans" coupons only) and grant.
+- `exam_engine/access.py` checks, in order: team → free sample → full mock position ≤ the package's N → subject/mini flags.
+- `exam_engine/store_api.py` holds `/api/pg/mocks/packages*`. It uses the portal's Razorpay keys (`_razorpay_creds`) and HMAC-verifies the signature. Verify is idempotent: an `UPDATE … WHERE status <> 'paid' RETURNING` claims the order once.
+- Admin `/admin/pg/mocks/packages`: edit packages, see sales and revenue, give a package by mobile (with a reason), and turn a purchase off (e.g. after a refund).

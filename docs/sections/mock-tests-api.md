@@ -204,6 +204,54 @@ For each question, show:
 
 Offer filters: All · Wrong · Skipped · Marked · by section or subject. Use `?section=` to load one section at a time on slow networks.
 
+## 9. Package store (step 7)
+
+Prices **include GST**. Packages are separate from the counselling plans: a doctor can hold both, and buying one never changes the other. Use the same Razorpay Checkout JS as the counselling checkout, but with **these** endpoints.
+
+- **`GET /api/pg/mocks/packages`** returns the store cards:
+
+```json
+{"ok": true, "packages": [
+  {"code": "starter", "name": "Starter", "tagline": "5 full NEET PG mocks", "price": 999, "price_note": "incl. GST",
+   "full_mocks": 5, "subject_tests": false, "mini_tests": false, "valid_until": "2027-09-30", "recommended": false,
+   "owned": true, "included_in_yours": true, "your_price": null, "upgrade_credit": 0},
+  {"code": "standard", "name": "Standard", …, "recommended": true, "owned": false, "your_price": 1500, "upgrade_credit": 999},
+  {"code": "pro", …}],
+ "mine": {"full_mocks": 5, "subject_tests": false, "mini_tests": false,
+          "packages": [{"code": "starter", "name": "Starter", "valid_until": "2027-09-30", "source": "razorpay"}]}}
+```
+
+  - `owned` or `included_in_yours` → show "You have this" (no Buy button).
+  - Otherwise show **Buy for ₹`your_price`**. When `upgrade_credit` > 0, add "₹999 credited for your Starter package". **Upgrades cost only the difference.**
+- **`POST /api/pg/mocks/packages/<code>/quote {coupon_code?}`** prices a coupon without using it:
+
+```json
+{"ok": true, "amount": 999, "upgrade_credit": 0, "discount": 99.9, "payable": 899.1, "gst_included": 137.15, "gst_rate": 18,
+ "coupon_code": "MOCK10", "valid_until": "2027-09-30"}
+```
+
+  Errors are 400: `invalid_coupon` with a message to show, or `already_owned`. Only coupons that apply to "all plans" work for mock packages; plan-specific coupons are for counselling.
+- **`POST /api/pg/mocks/packages/<code>/order {coupon_code?}`** creates the order:
+
+```json
+{"ok": true, "order_id": "order_…", "amount": 99900, "currency": "INR", "key_id": "rzp_…",
+ "name": "GooCampus NEET PG Mocks — Starter",
+ "breakdown": {"amount": 999, "upgrade_credit": 0, "discount": 0, "payable": 999, "gst_included": 152.39},
+ "prefill": {"name": "…", "email": "…", "contact": "…"}}
+```
+
+  Open Razorpay Checkout with `key_id`, `order_id` and `amount`. If the price is ₹0 (a 100% coupon), you instead get `{"ok": true, "free": true, "purchase_id": 12, "package": "pro"}`: it is unlocked already, so skip Checkout.
+- **`POST /api/pg/mocks/packages/verify {razorpay_order_id, razorpay_payment_id, razorpay_signature}`** returns `{"ok": true, "purchase_id": 12, "package": "starter"}` and unlocks the package. It is idempotent: a repeat call returns `already: true`. Then reload `GET /api/pg/mocks`, because the newly unlocked mocks show `access.allowed: true`.
+
+**What a package unlocks:**
+- **Full mocks:** the first N published full mocks in the team's display order. Starter 5, Standard 15, Pro 30. The free sample is extra.
+- **Subject tests:** Standard and Pro.
+- **Mini tests:** Pro only.
+
+A locked mock's `access.reason` is either `package_required` (the doctor has no package) or `upgrade_required` (their package doesn't cover this mock). Use it to show "Unlock with a package" or "Upgrade to unlock". Access ends on the package's `valid_until` (IST). After that date, an attempt the doctor already started can still be resumed, and results stay visible.
+
+Errors: `payments_not_configured` 503, `gateway_error` 502, `signature_mismatch` 400, `order_mismatch` 403.
+
 ## The exam screen: required behaviour (NBEMS computer-based-test look)
 
 1. **Instructions page first.** Show the exam pattern (5 sections × 36 questions, 42 minutes each, +4 / −1, no going back to a closed section) and the palette legend, then an "I have read the instructions" tick and **Start**. Call `start` only on Start.
@@ -251,6 +299,6 @@ Offer filters: All · Wrong · Skipped · Marked · by section or subject. Use `
 | **Instructions → Exam screen** | `start`, state, `save`, `next-section`, `submit` | As above. |
 | **Result** | `GET …/result` | Score card, rank and percentile, predicted NEET rank → College Predictor, section / subject / time analysis. |
 | **Solutions** | `GET …/solutions` | Every question with the explanation and "% of doctors got it right". |
-| **Package store** | step 7 | Packages: Starter 5 mocks ₹999 · Standard 15 + 19 subject tests ₹2,499 · Pro 30 + subject + mini ₹3,999 (incl. GST). |
+| **Package store** | §9 | Cards from `GET …/packages`, a coupon box (quote), Razorpay Checkout (order → verify). Shown on the website and the dashboard; locked mocks link here. |
 
 **Testing:** on staging, make a team account (`pg_users.is_team_member = 1`). It can take every published mock. Normal accounts can take only the free sample until packages are wired in step 7.

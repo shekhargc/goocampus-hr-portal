@@ -323,6 +323,72 @@ def ensure_exam_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_attev_a ON ex_attempt_events (attempt_id, kind)")
+
+        # ── Step 7: mock packages (separate from counselling plans — a doctor can hold both) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ex_packages (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL DEFAULT 1,
+            exam_code TEXT NOT NULL DEFAULT 'neet_pg',
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            tagline TEXT DEFAULT '',
+            price NUMERIC(12,2) NOT NULL,          -- what the doctor pays, GST INCLUDED (founder 2026-11-13)
+            full_mocks INTEGER NOT NULL DEFAULT 0, -- unlocks the first N full mocks (display order), free sample apart
+            subject_tests BOOLEAN NOT NULL DEFAULT FALSE,
+            mini_tests BOOLEAN NOT NULL DEFAULT FALSE,
+            valid_until DATE,                      -- access ends after this day (IST)
+            is_active INTEGER NOT NULL DEFAULT 1,
+            is_recommended INTEGER NOT NULL DEFAULT 0,
+            sort_order INTEGER DEFAULT 0,
+            updated_by TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (tenant_id, exam_code, code)
+        )''')
+        for code, name, tag, price, n, subj, mini, rec, so in (
+                ('starter', 'Starter', '5 full NEET PG mocks', 999, 5, False, False, 0, 1),
+                ('standard', 'Standard', '15 full mocks + 19 subject tests', 2499, 15, True, False, 1, 2),
+                ('pro', 'Pro', '30 full mocks + subject tests + mini tests', 3999, 30, True, True, 0, 3)):
+            conn.execute("INSERT INTO ex_packages (tenant_id, exam_code, code, name, tagline, price, full_mocks, "
+                         "subject_tests, mini_tests, valid_until, is_recommended, sort_order) "
+                         "VALUES (?, 'neet_pg', ?, ?, ?, ?, ?, ?, ?, '2027-09-30', ?, ?) "
+                         "ON CONFLICT (tenant_id, exam_code, code) DO NOTHING",
+                         (TENANT_GOOCAMPUS_IN, code, name, tag, price, n, subj, mini, rec, so))
+        conn.execute('''CREATE TABLE IF NOT EXISTS ex_orders (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL DEFAULT 1,
+            user_id INTEGER NOT NULL,
+            package_id INTEGER NOT NULL,
+            razorpay_order_id TEXT UNIQUE,
+            amount NUMERIC(12,2) NOT NULL,         -- list price (incl. GST)
+            credit NUMERIC(12,2) DEFAULT 0,        -- upgrade credit for a package already bought
+            discount NUMERIC(12,2) DEFAULT 0,      -- coupon
+            payable NUMERIC(12,2) NOT NULL,        -- charged (incl. GST)
+            gst_included NUMERIC(12,2) DEFAULT 0,  -- the GST inside `payable` (payable - payable/1.18)
+            coupon_code TEXT DEFAULT '',
+            coupon_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'created',  -- created | paid | failed
+            razorpay_payment_id TEXT DEFAULT '',
+            purchase_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_orders_user ON ex_orders (user_id, status)")
+        conn.execute('''CREATE TABLE IF NOT EXISTS ex_package_purchases (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL DEFAULT 1,
+            user_id INTEGER NOT NULL,
+            package_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',  -- active | cancelled
+            source TEXT NOT NULL,                   -- razorpay | coupon_free | admin_grant
+            price_paid NUMERIC(12,2) DEFAULT 0,
+            order_id INTEGER,
+            valid_until DATE,
+            notes TEXT DEFAULT '',
+            granted_by TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            cancelled_at TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_pp_user ON ex_package_purchases (user_id, status)")
         conn.commit()
     except Exception as e:
         logging.error(f"ensure_exam_tables: {e}")

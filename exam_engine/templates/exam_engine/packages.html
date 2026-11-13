@@ -1,0 +1,90 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mock Tests · Packages{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}
+<style> .pk { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:1rem; } @media (max-width:1100px){ .pk{ grid-template-columns:1fr; } }
+  .num { width:110px !important; } </style>
+{% endblock %}
+
+{% block section_content %}
+{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <h1>Mock packages</h1>
+    <p>What doctors buy on goocampus.in. Prices <b>include GST</b>. A package unlocks the first N full mocks (in the
+       Papers display order — the free sample is extra), plus subject / mini tests if ticked. Counselling plans are separate
+       and never affected.</p>
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, m in messages %}
+  <div class="ex-flag {{ 'error' if cat == 'error' else 'info' }}">{{ m }}</div>
+{% endfor %}{% endwith %}
+
+<div class="ex-stats" style="grid-template-columns:repeat(4,1fr);">
+  <div class="ex-stat"><div class="lbl">Packages sold</div><div class="val">{{ totals.sold }}</div></div>
+  <div class="ex-stat"><div class="lbl">Revenue (incl. GST)</div><div class="val">₹{{ '{:,.0f}'.format(totals.revenue) }}</div></div>
+  <div class="ex-stat"><div class="lbl">Doctors with a package</div><div class="val">{{ totals.buyers }}</div></div>
+  <div class="ex-stat"><div class="lbl">Checkouts not finished (2 days)</div><div class="val">{{ totals.pending }}</div></div>
+</div>
+
+<div class="pk">
+  {% for p in packages %}{% set s = sales.get(p.id, {}) %}
+  <form method="post" action="{{ url_for('ex_package_save', pkg_id=p.id) }}" class="ex-card ex-f">
+    <h2>{{ p.name }} {% if p.is_recommended %}<span class="chip chip-amber">Recommended</span>{% endif %}
+        {% if not p.is_active %}<span class="chip chip-gray">Hidden</span>{% endif %}</h2>
+    <p class="muted" style="margin:-0.4rem 0 0.4rem;">{{ s.n or 0 }} active ({{ s.grants or 0 }} given free) · ₹{{ '{:,.0f}'.format(s.revenue or 0) }}</p>
+    <label>Name</label><input type="text" name="name" value="{{ p.name }}">
+    <label>One-line description</label><input type="text" name="tagline" value="{{ p.tagline }}">
+    <div style="display:flex;gap:0.8rem;">
+      <div><label>Price ₹ (incl. GST)</label><input type="text" class="num" name="price" value="{{ '%.0f' % p.price }}"></div>
+      <div><label>Full mocks</label><input type="text" class="num" name="full_mocks" value="{{ p.full_mocks }}"></div>
+    </div>
+    <label>Access until</label><input type="text" class="num" name="valid_until" value="{{ p.valid_until or '' }}" placeholder="YYYY-MM-DD" style="width:140px !important;">
+    <label style="font-weight:400;"><input type="checkbox" name="subject_tests" value="1" {{ 'checked' if p.subject_tests }}> All subject tests</label>
+    <label style="font-weight:400;"><input type="checkbox" name="mini_tests" value="1" {{ 'checked' if p.mini_tests }}> All mini tests</label>
+    <label style="font-weight:400;"><input type="checkbox" name="is_recommended" value="1" {{ 'checked' if p.is_recommended }}> Show as recommended</label>
+    <label style="font-weight:400;"><input type="checkbox" name="is_active" value="1" {{ 'checked' if p.is_active }}> On sale</label>
+    <button class="ex-btn ex-btn-primary" style="margin-top:0.6rem;">Save {{ p.name }}</button>
+  </form>
+  {% endfor %}
+</div>
+
+<div class="ex-card">
+  <h2>Give a package to a doctor (no charge)</h2>
+  <form method="post" action="{{ url_for('ex_package_grant') }}" class="ex-f" style="display:flex;gap:0.7rem;flex-wrap:wrap;align-items:flex-end;">
+    <div><label>Doctor's mobile</label><input type="text" name="mobile" placeholder="10 digits" style="width:160px;"></div>
+    <div><label>Package</label><select name="package_id">{% for p in packages %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+    <div style="flex:1 1 220px;"><label>Reason</label><input type="text" name="note" placeholder="e.g. scholarship, refund replacement"></div>
+    <button class="ex-btn ex-btn-ghost">Give package</button>
+  </form>
+  <p class="muted" style="margin:0.5rem 0 0;">The doctor must have logged in on goocampus.in at least once.</p>
+</div>
+
+<div class="ex-head" style="margin-top:1.2rem;"><h2 style="font-size:1rem;color:var(--navy);margin:0;">Purchases</h2>
+  <form method="get" class="ex-f" style="display:flex;gap:0.5rem;"><input type="text" name="q" value="{{ q }}" placeholder="Search name or mobile" style="width:220px;"><button class="ex-btn ex-btn-ghost">Search</button></form></div>
+<table class="ex-table">
+  <thead><tr><th>Doctor</th><th>Package</th><th>Paid</th><th>How</th><th>Access until</th><th>Date</th><th></th></tr></thead>
+  <tbody>
+  {% for r in purchases %}
+    <tr>
+      <td><b>{{ r.doctor }}</b><div class="muted">{{ r.mobile or '' }}</div></td>
+      <td>{{ r.package_name }}</td>
+      <td>₹{{ '{:,.0f}'.format(r.price_paid or 0) }}{% if r.coupon_code %}<div class="muted">coupon {{ r.coupon_code }} −₹{{ '%.0f' % (r.discount or 0) }}</div>{% endif %}
+          {% if r.credit %}<div class="muted">upgrade credit −₹{{ '%.0f' % r.credit }}</div>{% endif %}</td>
+      <td>{{ {'razorpay': 'Online payment', 'coupon_free': 'Free with coupon', 'admin_grant': 'Given by team'}.get(r.source, r.source) }}
+          {% if r.razorpay_payment_id %}<div class="muted">{{ r.razorpay_payment_id }}</div>{% endif %}
+          {% if r.notes %}<div class="muted">{{ r.notes }}</div>{% endif %}</td>
+      <td>{{ r.valid_until or '—' }}</td>
+      <td>{{ r.when }}</td>
+      <td>{% if r.status == 'active' %}
+            <form method="post" action="{{ url_for('ex_purchase_cancel', purchase_id=r.id) }}"
+                  onsubmit="var x=prompt('Why turn this package off? (e.g. refunded)');if(x===null)return false;this.reason.value=x;return true;">
+              <input type="hidden" name="reason" value=""><button class="ex-btn ex-btn-red" style="padding:0.25rem 0.6rem;font-size:0.78rem;">Turn off</button></form>
+          {% else %}<span class="chip chip-gray">Cancelled</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">No purchases yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

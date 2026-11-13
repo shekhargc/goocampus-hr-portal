@@ -95,9 +95,10 @@ def api_mocks_list():
         for r in conn.execute("SELECT id, paper_id, status, score, max_score, submitted_at, started_at, deadline_at, is_ranked "
                               "FROM ex_attempts WHERE user_id=? ORDER BY id", (user['id'],)).fetchall():
             mine.setdefault(r['paper_id'], []).append(dict(r))
+        ctx = access.context(conn, user, TENANT_GOOCAMPUS_IN, EXAM_CODE)
         out = []
         for p in papers:
-            ok, via, reason = access.can_take(conn, user, p)
+            ok, via, reason = access.can_take(conn, user, p, ctx)
             atts = mine.get(p['id'], [])
             open_a = next((x for x in atts if x['status'] == 'in_progress'), None)
             done = [x for x in atts if x['status'] == 'submitted']
@@ -119,7 +120,10 @@ def api_mocks_list():
                              'ranked': ({'attempt_id': ranked['id'], 'score': ranked['score']} if ranked else None),
                              'next_is_practice': bool(done) and not open_a},
             })
-        return jsonify({'ok': True, 'mocks': out})
+        ent = ctx['ent']
+        return jsonify({'ok': True, 'mocks': out,
+                        'my_package': {'full_mocks': ent['full_mocks'], 'subject_tests': ent['subject_tests'],
+                                       'mini_tests': ent['mini_tests'], 'packages': ent['packages']}})
     finally:
         _close(conn)
 
