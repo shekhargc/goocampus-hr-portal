@@ -25,5 +25,7 @@ def register_exam_engine(app):
     except Exception as e:
         logging.error(f'exam_engine boot ensure_exam_tables: {e}')
     admin.register_routes(app)
-    from exam_engine import admin_papers
+    from exam_engine import admin_papers, doctor_api, attempts
     admin_papers.register_routes(app)
+    doctor_api.register_routes(app)
+    attempts.start_sweeper()          # submits attempts whose time ran out while the doctor was away

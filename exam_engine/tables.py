@@ -33,6 +33,8 @@ NEET_PG_2026 = {
     'section_runs_full_time': True,    # finishing early does not open the next section
     'marked_unanswered_scores': 0,     # "marked for review" without an answer = unattempted
     'language': 'English',
+    'shuffle_questions': False,        # each doctor gets the section's questions in a different order
+    'shuffle_options': False,          # … and the four options in a different order
 }
 
 
@@ -99,7 +101,8 @@ def ensure_exam_tables():
                 cfg = json.loads(r['config_json'] or '{}')
             except Exception:
                 continue
-            missing = {k: NEET_PG_2026[k] for k in ('blueprint', 'blueprint_note', 'subject_test', 'mini_test')
+            missing = {k: NEET_PG_2026[k] for k in ('blueprint', 'blueprint_note', 'subject_test', 'mini_test',
+                                                     'shuffle_questions', 'shuffle_options')
                        if k not in cfg}
             if missing:
                 cfg.update(missing)
@@ -263,6 +266,60 @@ def ensure_exam_tables():
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_pitems_p ON ex_paper_items (paper_id, section_code, position)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_pitems_q ON ex_paper_items (question_id)")
+        conn.execute("ALTER TABLE ex_papers ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT 1")
+
+        # ── Step 5: attempts (the clock runs on the server; answers autosave here) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ex_attempts (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL DEFAULT 1,
+            exam_code TEXT NOT NULL DEFAULT 'neet_pg',
+            paper_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,              -- goocampus.in doctor (pg_users.id); no FK — engine stays portable
+            attempt_no INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'in_progress',   -- in_progress | submitted
+            submit_reason TEXT DEFAULT '',         -- doctor | time_up
+            access TEXT DEFAULT '',                -- free_sample | team | package
+            started_at TIMESTAMP NOT NULL,
+            deadline_at TIMESTAMP,                 -- when the whole paper ends (UTC)
+            cur_section INTEGER NOT NULL DEFAULT 0,
+            sections_json TEXT NOT NULL,           -- [{code, started_at, ends_at, closed_at, close_reason}]
+            order_json TEXT DEFAULT '{}',          -- question order per section + option order (if shuffling)
+            last_seen_at TIMESTAMP,
+            submitted_at TIMESTAMP,
+            n_correct INTEGER, n_wrong INTEGER, n_unattempted INTEGER, score INTEGER, max_score INTEGER,
+            client_info TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_att_user ON ex_attempts (user_id, paper_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_att_open ON ex_attempts (status, deadline_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_att_paper ON ex_attempts (paper_id, status)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_ex_att_open ON ex_attempts (user_id, paper_id) "
+                     "WHERE status = 'in_progress'")
+        conn.execute('''CREATE TABLE IF NOT EXISTS ex_attempt_answers (
+            attempt_id INTEGER NOT NULL,
+            item_id INTEGER NOT NULL,              -- ex_paper_items.id
+            question_id INTEGER NOT NULL,
+            section_code TEXT NOT NULL,
+            subject TEXT DEFAULT '',
+            chosen TEXT,                           -- original option letter (NULL = not answered)
+            marked BOOLEAN NOT NULL DEFAULT FALSE,
+            visited BOOLEAN NOT NULL DEFAULT FALSE,
+            time_ms INTEGER NOT NULL DEFAULT 0,
+            client_ts BIGINT NOT NULL DEFAULT 0,   -- newest save wins (any device)
+            is_correct BOOLEAN,                    -- set when the attempt is submitted
+            marks INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (attempt_id, item_id)
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS ex_attempt_events (
+            id SERIAL PRIMARY KEY,
+            attempt_id INTEGER NOT NULL,
+            kind TEXT NOT NULL,                    -- tab_hidden | fullscreen_exit | resumed | offline | section_closed …
+            detail TEXT DEFAULT '',
+            client_ts BIGINT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_attev_a ON ex_attempt_events (attempt_id, kind)")
         conn.commit()
     except Exception as e:
         logging.error(f"ensure_exam_tables: {e}")

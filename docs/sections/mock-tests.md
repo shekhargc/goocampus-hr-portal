@@ -22,7 +22,7 @@ Founder-approved brief: `~/Desktop/Claude Code/NEET_PG_Mock_Platform_Brief.md`.
 2. Decisions: **done**. Launch date still to come.
 3. Question importer: **done**, on staging.
 4. Question bank and paper builder: **done** (see below).
-5. Exam player (NBEMS style).
+5. Exam engine: **portal side done**. The goocampus.in exam screen is built by the website session from [mock-tests-api.md](mock-tests-api.md).
 6. Scoring, results and rank.
 7. Packages, payments and the free sample.
 8. Admin dashboard.
@@ -143,3 +143,38 @@ Without R2, the bytes are stored in the row.
 - Exactly one full mock can be the **free sample** (`is_free_sample`).
 
 **Default subject mix**: `tables.BLUEPRINT_PER_200`, scaled to 180. It is an approximation of recent papers, for the team to adjust on the Pattern page.
+
+## Step 5 — exam engine (portal side)
+
+- `exam_engine/attempts.py` holds the server clock, autosave, section changes, submission and scoring.
+- `exam_engine/doctor_api.py` holds the `/api/pg/mocks/*` endpoints. They use the same X-PG-Key + Bearer token as every other goocampus.in call.
+- `exam_engine/access.py` decides who may take a paper:
+  - the free sample: everyone;
+  - team members: every published paper;
+  - everyone else: a package (wired in step 7).
+
+**Tables**
+
+| Table | Holds |
+|---|---|
+| `ex_attempts` | One per doctor × paper attempt. The `sections_json` clock, `order_json` (question/option shuffle), the score. |
+| `ex_attempt_answers` | One row per question per attempt: chosen original option key, marked, visited, time_ms, client_ts (newest wins), and is_correct + marks after submit. |
+| `ex_attempt_events` | Malpractice flags and lifecycle events (started, resumed, section_closed, submitted). Flags only; nothing is ever disqualified. |
+
+**Clock rules**
+- Each section opens when the previous one closes, even if the doctor is away.
+- A closed section is never reopened, and its questions are not sent again.
+- NEET PG sections run their full time (`section_runs_full_time`). Subject and mini tests may finish early.
+- Saves up to `GRACE_SECONDS = 20` after a close still count.
+- When the paper ends, the next request submits it; otherwise the APScheduler `sweep()` does, every 2 minutes in every web process. This is idempotent: `UPDATE … WHERE status='in_progress'`.
+
+**Scoring**
+- +4 / −1 / 0 from the paper's own pattern.
+- "Answered & marked" is scored; "marked" without an answer scores 0.
+- Shuffling is stored per attempt; answers are always stored as the original option key.
+
+**Other**
+- `max_attempts` per paper defaults to 1 and can be edited on the paper's Details card.
+- Shuffle settings (`shuffle_questions`, `shuffle_options`) are on the Exam pattern page; both are off by default.
+- **Load:** a locked paper's questions are cached in memory, keyed by paper + `locked_at`. An autosave is about 3 small queries plus one UPDATE per changed answer.
+- Pictures go out as presigned R2 links when R2 is used, otherwise as signed `/api/pg/mocks/img/<id>?t=…` links (itsdangerous, 6 h).

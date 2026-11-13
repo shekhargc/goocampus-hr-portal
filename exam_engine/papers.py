@@ -22,7 +22,8 @@ STATUS_LABEL = {'draft': 'Draft', 'locked': 'Locked', 'published': 'Published', 
 def pattern_for(kind, cfg):
     """The section layout a new paper of this kind gets, copied from the exam pattern settings."""
     base = {k: cfg.get(k) for k in ('options_per_question', 'marking', 'section_lock', 'section_runs_full_time',
-                                    'marked_unanswered_scores', 'language') if k in cfg}
+                                    'marked_unanswered_scores', 'language', 'shuffle_questions', 'shuffle_options')
+            if k in cfg}
     if kind == 'full':
         sections = [dict(s) for s in cfg.get('sections') or []]
     else:

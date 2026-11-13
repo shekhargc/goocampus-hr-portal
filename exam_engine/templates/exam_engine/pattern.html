@@ -41,6 +41,8 @@
        To add a section, raise “Sections”, save, then fill in its numbers.</p>
     <label style="font-weight:400;"><input type="checkbox" name="section_lock" value="1" {{ 'checked' if cfg.section_lock }}> A closed section can't be reopened</label>
     <label style="font-weight:400;"><input type="checkbox" name="section_runs_full_time" value="1" {{ 'checked' if cfg.section_runs_full_time }}> Each section runs its full time (finishing early doesn't open the next one)</label>
+    <label style="font-weight:400;"><input type="checkbox" name="shuffle_questions" value="1" {{ 'checked' if cfg.shuffle_questions }}> Shuffle the order of questions within each section for every doctor</label>
+    <label style="font-weight:400;"><input type="checkbox" name="shuffle_options" value="1" {{ 'checked' if cfg.shuffle_options }}> Shuffle the order of the four options for every doctor</label>
   </div>
 
   <div class="ex-card">

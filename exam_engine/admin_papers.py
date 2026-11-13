@@ -298,6 +298,10 @@ def paper_settings(pid):
         desc = (f.get('description') or '').strip()[:1000]
         free = 1 if f.get('is_free_sample') else 0
         try:
+            max_attempts = max(1, min(10, int(f.get('max_attempts') or p.get('max_attempts') or 1)))
+        except ValueError:
+            max_attempts = p.get('max_attempts') or 1
+        try:
             sort_order = int(f.get('sort_order') or 0)
         except ValueError:
             sort_order = p.get('sort_order') or 0
@@ -307,8 +311,8 @@ def paper_settings(pid):
         if free:
             conn.execute("UPDATE ex_papers SET is_free_sample=0 WHERE tenant_id=? AND exam_code=? AND id <> ?",
                          (p['tenant_id'], p['exam_code'], pid))
-        conn.execute("UPDATE ex_papers SET title=?, description=?, is_free_sample=?, sort_order=?, "
-                     "updated_at=CURRENT_TIMESTAMP WHERE id=?", (title, desc, free, sort_order, pid))
+        conn.execute("UPDATE ex_papers SET title=?, description=?, is_free_sample=?, sort_order=?, max_attempts=?, "
+                     "updated_at=CURRENT_TIMESTAMP WHERE id=?", (title, desc, free, sort_order, max_attempts, pid))
         conn.commit()
         flash('Saved.' + (' This is now the free sample mock.' if free and not p['is_free_sample'] else ''), 'success')
         return redirect(url_for('ex_paper', pid=pid))
@@ -439,6 +443,8 @@ def pattern_save():
         new['options_per_question'] = num('options', 4, 2, 6)
         new['section_lock'] = bool(f.get('section_lock'))
         new['section_runs_full_time'] = bool(f.get('section_runs_full_time'))
+        new['shuffle_questions'] = bool(f.get('shuffle_questions'))
+        new['shuffle_options'] = bool(f.get('shuffle_options'))
         new['subject_test'] = {'questions': num('st_q', 60, 1, 500), 'minutes': num('st_m', 70, 1, 600)}
         new['mini_test'] = {'questions': num('mt_q', 30, 1, 500), 'minutes': num('mt_m', 35, 1, 600)}
         bp = {}
