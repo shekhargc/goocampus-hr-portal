@@ -156,8 +156,8 @@ def paper_create():
         cfg = store.pattern(conn, EXAM_CODE, TENANT_GOOCAMPUS_IN)
         pat = papers.pattern_for(kind, cfg)
         pid = conn.execute(
-            "INSERT INTO ex_papers (tenant_id, exam_code, title, kind, subject_id, description, pattern_json, created_by) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            "INSERT INTO ex_papers (tenant_id, exam_code, title, kind, subject_id, description, pattern_json, created_by, "
+            "max_attempts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3) RETURNING id",
             (TENANT_GOOCAMPUS_IN, EXAM_CODE, title, kind, subject_id if kind == 'subject' else None,
              (request.form.get('description') or '').strip()[:1000], json.dumps(pat), _who(user))).fetchone()['id']
         conn.commit()

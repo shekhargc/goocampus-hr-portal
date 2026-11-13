@@ -293,6 +293,9 @@ def ensure_exam_tables():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_att_user ON ex_attempts (user_id, paper_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_att_open ON ex_attempts (status, deadline_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_att_paper ON ex_attempts (paper_id, status)")
+        # Step 6: only a doctor's FIRST submitted attempt counts for rank; retakes are practice (founder 2026-11-13)
+        conn.execute("ALTER TABLE ex_attempts ADD COLUMN IF NOT EXISTS is_ranked BOOLEAN NOT NULL DEFAULT FALSE")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_att_rank ON ex_attempts (paper_id, is_ranked, score)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_ex_att_open ON ex_attempts (user_id, paper_id) "
                      "WHERE status = 'in_progress'")
         conn.execute('''CREATE TABLE IF NOT EXISTS ex_attempt_answers (

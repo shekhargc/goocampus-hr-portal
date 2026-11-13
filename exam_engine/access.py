@@ -15,12 +15,13 @@ def can_take(conn, user, paper):
     """→ (allowed, via, reason). via: free_sample | team | package."""
     if paper.get('status') != 'published':
         return False, None, 'not_published'
-    if paper.get('is_free_sample'):
-        return True, 'free_sample', None
     try:
+        # team first: their dry runs (even on the free sample) must never enter the doctors' ranking
         if int(user.get('is_team_member') or 0) == 1:
             return True, 'team', None
     except (TypeError, ValueError):
         pass
+    if paper.get('is_free_sample'):
+        return True, 'free_sample', None
     # Step 7: packages (pg_plans / entitlements) decide here.
     return False, None, 'package_required'

@@ -282,6 +282,12 @@ def finalize(conn, a, paper, reason, at=None):
     if not r:
         return False
     a['status'], a['submit_reason'], a['submitted_at'] = 'submitted', reason, at
+    # the doctor's first submitted attempt is the ranked one; retakes are practice; team dry runs never rank
+    ranked = a.get('access') != 'team' and not conn.execute(
+        "SELECT 1 FROM ex_attempts WHERE user_id=? AND paper_id=? AND is_ranked AND id <> ? LIMIT 1",
+        (a['user_id'], a['paper_id'], a['id'])).fetchone()
+    conn.execute("UPDATE ex_attempts SET is_ranked=? WHERE id=?", (bool(ranked), a['id']))
+    a['is_ranked'] = bool(ranked)
     log_event(conn, a['id'], 'submitted', reason)
     score(conn, a, paper)
     return True
@@ -403,7 +409,7 @@ def state(conn, a, paper, image_url, now=None):
         'total_remaining_seconds': total_left,
     }
     if a['status'] != 'in_progress':
-        out['result'] = {'score': a.get('score'), 'max_score': a.get('max_score'), 'correct': a.get('n_correct'),
+        out['result'] = {'ranked': bool(a.get('is_ranked')), 'score': a.get('score'), 'max_score': a.get('max_score'), 'correct': a.get('n_correct'),
                          'wrong': a.get('n_wrong'), 'unattempted': a.get('n_unattempted'),
                          'submitted_at': _iso(a.get('submitted_at'))}
         return out

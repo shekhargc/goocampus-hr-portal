@@ -16,7 +16,7 @@ from flask import request, jsonify, Response, abort, current_app, redirect
 
 from db import get_db
 from core import storage
-from exam_engine import attempts as A, papers as P, access
+from exam_engine import attempts as A, papers as P, access, results as R
 from exam_engine.tables import TENANT_GOOCAMPUS_IN
 
 EXAM_CODE = 'neet_pg'
@@ -92,7 +92,7 @@ def api_mocks_list():
             "SELECT id FROM ex_papers WHERE tenant_id=? AND exam_code=? AND status='published' "
             "ORDER BY is_free_sample DESC, sort_order, id", (TENANT_GOOCAMPUS_IN, EXAM_CODE)).fetchall()]
         mine = {}
-        for r in conn.execute("SELECT id, paper_id, status, score, max_score, submitted_at, started_at, deadline_at "
+        for r in conn.execute("SELECT id, paper_id, status, score, max_score, submitted_at, started_at, deadline_at, is_ranked "
                               "FROM ex_attempts WHERE user_id=? ORDER BY id", (user['id'],)).fetchall():
             mine.setdefault(r['paper_id'], []).append(dict(r))
         out = []
@@ -102,6 +102,7 @@ def api_mocks_list():
             open_a = next((x for x in atts if x['status'] == 'in_progress'), None)
             done = [x for x in atts if x['status'] == 'submitted']
             last = done[-1] if done else None
+            ranked = next((x for x in done if x['is_ranked']), None)
             pat = p['pattern']
             out.append({
                 'id': p['id'], 'title': p['title'], 'kind': p['kind'], 'kind_label': P.KIND_LABEL.get(p['kind']),
@@ -113,7 +114,10 @@ def api_mocks_list():
                 'attempts': {'used': len(atts), 'allowed': int(p.get('max_attempts') or 1),
                              'open_attempt_id': open_a['id'] if open_a else None,
                              'last': ({'attempt_id': last['id'], 'score': last['score'], 'max_score': last['max_score'],
-                                       'submitted_at': A._iso(last['submitted_at'])} if last else None)},
+                                       'ranked': bool(last['is_ranked']), 'submitted_at': A._iso(last['submitted_at'])}
+                                      if last else None),
+                             'ranked': ({'attempt_id': ranked['id'], 'score': ranked['score']} if ranked else None),
+                             'next_is_practice': bool(done) and not open_a},
             })
         return jsonify({'ok': True, 'mocks': out})
     finally:
@@ -254,6 +258,44 @@ def api_attempt_submit(aid):
         _close(conn)
 
 
+def api_attempt_result(aid):
+    conn = get_db()
+    try:
+        user, err = _doctor(conn)
+        if err:
+            return err
+        a, p, err = _own_attempt(conn, aid, user)
+        if err:
+            return err
+        A.advance(conn, a, p)
+        conn.commit()
+        if a['status'] != 'submitted':
+            return _err('not_submitted', 'The result is ready once the mock is submitted.', 409)
+        return jsonify({'ok': True, **R.result(conn, a, p)})
+    finally:
+        _close(conn)
+
+
+def api_attempt_solutions(aid):
+    conn = get_db()
+    try:
+        user, err = _doctor(conn)
+        if err:
+            return err
+        a, p, err = _own_attempt(conn, aid, user)
+        if err:
+            return err
+        A.advance(conn, a, p)
+        conn.commit()
+        if a['status'] != 'submitted':
+            return _err('not_submitted', 'Solutions open once the mock is submitted.', 409)
+        sec = (request.args.get('section') or '').strip().upper() or None
+        return jsonify({'ok': True, 'attempt_id': aid, 'section': sec,
+                        'questions': R.solutions(conn, a, p, _image_url_maker(aid), sec)})
+    finally:
+        _close(conn)
+
+
 def api_question_image(iid):
     """Signed picture link handed out inside an attempt's state (used when the picture isn't in R2)."""
     from itsdangerous import BadSignature, SignatureExpired
@@ -288,4 +330,6 @@ def register_routes(app):
     r('/api/pg/mocks/attempts/<int:aid>/save', 'api_ex_attempt_save', api_attempt_save, methods=['POST'])
     r('/api/pg/mocks/attempts/<int:aid>/next-section', 'api_ex_attempt_next', api_attempt_next_section, methods=['POST'])
     r('/api/pg/mocks/attempts/<int:aid>/submit', 'api_ex_attempt_submit', api_attempt_submit, methods=['POST'])
+    r('/api/pg/mocks/attempts/<int:aid>/result', 'api_ex_attempt_result', api_attempt_result, methods=['GET'])
+    r('/api/pg/mocks/attempts/<int:aid>/solutions', 'api_ex_attempt_solutions', api_attempt_solutions, methods=['GET'])
     r('/api/pg/mocks/img/<int:iid>', 'api_ex_question_image', api_question_image, methods=['GET'])

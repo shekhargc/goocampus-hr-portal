@@ -172,7 +172,7 @@
         <label>Name</label><input type="text" name="title" value="{{ p.title }}" maxlength="200">
         <label>Description (shown to doctors later)</label><textarea name="description" rows="2">{{ p.description }}</textarea>
         <label>Display order</label><input type="text" name="sort_order" value="{{ p.sort_order or 0 }}">
-        <label>Attempts allowed per doctor</label><input type="text" name="max_attempts" value="{{ p.max_attempts or 1 }}">
+        <label>Attempts allowed per doctor <span class="muted" style="font-weight:400;">(only the first counts for rank; the rest are practice)</span></label><input type="text" name="max_attempts" value="{{ p.max_attempts or 1 }}">
         {% if p.kind == 'full' %}<label style="font-weight:400;"><input type="checkbox" name="is_free_sample" value="1" {{ 'checked' if p.is_free_sample }}> This is the <b>free sample mock</b> (only one paper can be)</label>{% endif %}
         <button class="ex-btn ex-btn-ghost" style="margin-top:0.6rem;">Save details</button>
       </form>
