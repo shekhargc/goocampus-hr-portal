@@ -1072,8 +1072,42 @@ def payroll_salaries():
         rows.append(dict(emp=e, cur=cur, hist=h, split=split))
     rows_on = [r for r in rows if not r['emp']['payroll_excluded']]
     rows_off = [r for r in rows if r['emp']['payroll_excluded']]
-    return render_template('hr_payroll_salaries.html', user=user, rows=rows_on, rows_off=rows_off, rules=rules, inr=inr,
-                           period_label=period_label, this_month=period, active_section='hr')
+    # Ex-employees (founder 2026-11-13): their past months need a salary too. Listed with their last
+    # working day; a new entry defaults to April of that financial year (or the joining month if later).
+    rows_left = []
+    conn = get_db()
+    try:
+        excluded = _excluded_ids(conn)
+        left = [dict(r) for r in conn.execute(
+            "SELECT * FROM employees WHERE is_active = 0 OR is_active IS NULL ORDER BY name").fetchall()]
+        rules_at = {}
+        for e in left:
+            lwd = _parse_date(e.get('last_working_day'))
+            mo = lwd.strftime('%Y-%m') if lwd else period
+            if mo not in rules_at:
+                rules_at[mo] = rules_for(conn, mo) or rules
+    finally:
+        conn.close()
+    for e in left:
+        if e['id'] in excluded or _auto_excluded(e):
+            continue
+        h = hist.get(e['id'], [])
+        lwd = _parse_date(e.get('last_working_day'))
+        if not lwd and not h:
+            continue                      # long-gone logins with no dates and no salary: nothing to do
+        upto = lwd.strftime('%Y-%m') if lwd else period
+        cur = next((x for x in h if x['effective_from'] <= upto), h[-1] if h else None)
+        r_at = rules_at.get(upto) or rules
+        split = split_gross(r_at, cur['monthly_gross'], cur) if (cur and r_at) else None
+        ref = lwd or ist_now().date()
+        fy_start = f"{ref.year if ref.month >= 4 else ref.year - 1}-04"
+        j = _parse_date(e.get('joining_date'))
+        dflt = max(fy_start, j.strftime('%Y-%m')) if j else fy_start
+        e['lwd_label'] = lwd.strftime('%d %b %Y') if lwd else ''
+        rows_left.append(dict(emp=e, cur=cur, hist=h, split=split, default_eff=min(dflt, upto)))
+    rows_left.sort(key=lambda r: (r['emp'].get('last_working_day') or ''), reverse=True)
+    return render_template('hr_payroll_salaries.html', user=user, rows=rows_on, rows_off=rows_off, rows_left=rows_left,
+                           rules=rules, inr=inr, period_label=period_label, this_month=period, active_section='hr')
 
 
 def payroll_salary_save():
