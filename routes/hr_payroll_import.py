@@ -346,8 +346,7 @@ def build_plan(conn, imp):
         if not int(e.get('is_active') or 0):
             item['notes'].append('Ex-employee — added to this month.')
         rows.append(item)
-    on_payroll = P._payroll_employees(conn)
-    left_out = [e for e in on_payroll if e['id'] not in seen and P.eligible_days_for(e, y, m)[1] > 0]
+    left_out = [e for e in P._month_employees(conn, period) if e['id'] not in seen]
     return dict(imp=imp, data=data, period=period, run=run, rules=rules, rows=rows, left_out=left_out,
                 issues=issues, conflict=(data.get('period_file') and data.get('period_sheet')
                                          and data['period_file'] != data['period_sheet']))
@@ -500,7 +499,7 @@ def _apply_one(conn, imp, user):
     ids = {it['emp']['id'] for it in matched}
     for eid in ids:
         conn.execute("INSERT INTO payroll_run_people (run_id, employee_id, mode) VALUES (?, ?, 'add')", (run['id'], eid))
-    for e in P._payroll_employees(conn):
+    for e in P._month_employees(conn, period):
         if e['id'] not in ids:
             conn.execute("INSERT INTO payroll_run_people (run_id, employee_id, mode) VALUES (?, ?, 'skip')",
                          (run['id'], e['id']))

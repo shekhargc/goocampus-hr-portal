@@ -617,11 +617,30 @@ def _run_people(conn, run_id):
         return {}
 
 
+def _month_employees(conn, period):
+    """Everyone employed during this month (founder 2026-11-13): today's payroll employees who had joined
+    by then, plus ex-employees whose Last working day is in or after this month. Someone who joined
+    after the month, or left before it, is not part of it. An ex-employee with no Last working day on
+    their profile can't be placed in a month, so they are left out (set the date to include them)."""
+    y, m = int(period[:4]), int(period[5:7])
+    out = [e for e in _payroll_employees(conn) if eligible_days_for(e, y, m)[1] > 0]
+    have = {e['id'] for e in out}
+    excluded = _excluded_ids(conn)
+    for r in conn.execute("SELECT * FROM employees WHERE is_active = 0 OR is_active IS NULL ORDER BY name").fetchall():
+        e = dict(r)
+        if e['id'] in have or e['id'] in excluded or _auto_excluded(e) or not _parse_date(e.get('last_working_day')):
+            continue
+        if eligible_days_for(e, y, m)[1] > 0:
+            e['payroll_excluded'], e['payroll_auto_excluded'], e['has_left'] = False, False, True
+            out.append(e)
+    return out
+
+
 def _run_employees(conn, run):
-    """Who gets a slip this month: active payroll employees, plus anyone the month's salary statement
-    added (e.g. an ex-employee), minus anyone it left out."""
+    """Who gets a slip this month: everyone employed that month (incl. ex-employees who left during or
+    after it), plus anyone the month's salary statement added, minus anyone it left out."""
     people = _run_people(conn, run['id'])
-    emps = [e for e in _payroll_employees(conn) if people.get(e['id']) != 'skip']
+    emps = [e for e in _month_employees(conn, run['period']) if people.get(e['id']) != 'skip']
     have = {e['id'] for e in emps}
     add_ids = [eid for eid, mode in people.items() if mode == 'add' and eid not in have]
     for eid in add_ids:
@@ -666,11 +685,8 @@ def _refresh_run(conn, run, user):
 
 
 def _missing_salary(conn, period):
-    out = []
-    for emp in _payroll_employees(conn):
-        if not salary_for(conn, emp['id'], period):
-            out.append(emp)
-    return out
+    """People employed this month (see _month_employees) who have no salary entry for it."""
+    return [e for e in _month_employees(conn, period) if not salary_for(conn, e['id'], period)]
 
 
 # ───────────────────────────── admin: runs ──────────────────────────────
