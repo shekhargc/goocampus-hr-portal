@@ -371,9 +371,13 @@ def question_view(qid):
         subject_flag = any(f['code'] in ('subject_unmapped', 'subject_guessed') for f in q['flags'])
         from exam_engine import papers as _papers
         used_in = _papers.usage(conn, [qid]).get(qid, [])
+        is_blank = not (q['stem'] or '').strip() and not any((t or '').strip() for _, t in q['options']) \
+            and q['version'] == 1
+        can_delete = not q.get('batch_id') and q['status'] != 'approved' and not used_in
         return render_template('exam_engine/question.html', q=q, b=b, subjects=subj, imgs=imgs,
                                prev_id=prev_id, next_id=next_id, next_todo=next_todo, pos=pos, total=total,
                                versions=versions, pages=pages, subject_flag=subject_flag, used_in=used_in,
+                               is_blank=is_blank, can_delete=can_delete,
                                status_label=STATUS_LABEL,
                                subject_name={s['id']: s['name'] for s in subj}.get(q.get('subject_id'), ''))
     finally:
@@ -495,6 +499,32 @@ def question_status(qid):
             _, _, go_next, _, _ = _neighbours(conn, q)
         flash(msg, 'success')
         return redirect(url_for('ex_question', qid=go_next) if go_next else url_for('ex_question', qid=qid))
+    finally:
+        _close(conn)
+
+
+@login_required
+def question_delete(qid):
+    """Deletes a hand-typed question that isn't approved or used in a paper (imported ones are rejected instead)."""
+    user = _admin()
+    if not user:
+        return _deny()
+    conn = get_db()
+    try:
+        q = store.load_question(conn, qid)
+        if not q:
+            abort(404)
+        used = conn.execute("SELECT COUNT(*) AS n FROM ex_paper_items WHERE question_id=?", (qid,)).fetchone()['n']
+        if q.get('batch_id') or q['status'] == 'approved' or used:
+            flash('Only a typed question that isn\'t approved or in a paper can be deleted — reject it instead.', 'error')
+            return redirect(url_for('ex_question', qid=qid))
+        for i in store.images_for(conn, qid):
+            store.delete_image(conn, i['id'])
+        conn.execute("DELETE FROM ex_question_versions WHERE question_id=?", (qid,))
+        conn.execute("DELETE FROM ex_questions WHERE id=?", (qid,))
+        conn.commit()
+        flash(f'Question #{qid} deleted.', 'success')
+        return redirect(url_for('ex_bank', status='draft'))
     finally:
         _close(conn)
 
@@ -631,6 +661,7 @@ def register_routes(app):
     r('/admin/pg/mocks/q/<int:qid>/save', 'ex_question_save', question_save, methods=['POST'])
     r('/admin/pg/mocks/q/<int:qid>/status', 'ex_question_status', question_status, methods=['POST'])
     r('/admin/pg/mocks/q/<int:qid>/image', 'ex_question_image', question_image_upload, methods=['POST'])
+    r('/admin/pg/mocks/q/<int:qid>/delete', 'ex_question_delete', question_delete, methods=['POST'])
     r('/admin/pg/mocks/q/<int:qid>/crop', 'ex_question_crop', question_crop, methods=['POST'])
     r('/admin/pg/mocks/img/<int:iid>', 'ex_image', image_serve, methods=['GET'])
     r('/admin/pg/mocks/img/<int:iid>/delete', 'ex_image_delete', image_delete, methods=['POST'])

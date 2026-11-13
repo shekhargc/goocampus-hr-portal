@@ -25,7 +25,7 @@
 {% block section_content %}
 <div class="ex-head">
   <div>
-    <div class="ex-crumb"><a href="{{ url_for('ex_imports') }}">Mock Tests › Question import</a>
+    <div class="ex-crumb">{% if b %}<a href="{{ url_for('ex_imports') }}">Mock Tests › Question import</a>{% else %}<a href="{{ url_for('ex_bank') }}">Mock Tests › Question bank</a>{% endif %}
       {% if b %} › <a href="{{ url_for('ex_import_batch', bid=b.id) }}">Import #{{ b.id }} · {{ b.filename }}</a>{% endif %}</div>
     <h1>Question {{ q.source_no or ('#' ~ q.id) }}
       {% if q.status == 'approved' %}<span class="chip chip-green">Approved</span>
@@ -33,7 +33,7 @@
       {% elif q.n_errors %}<span class="chip chip-red">Needs fixing</span>
       {% else %}<span class="chip chip-blue">To review</span>{% endif %}
     </h1>
-    <p>{{ pos }} of {{ total }} in this file · version {{ q.version }}{% if q.page_from %} · PDF page {{ q.page_from }}{% if q.page_to and q.page_to != q.page_from %}–{{ q.page_to }}{% endif %}{% endif %}
+    <p>{% if b %}{{ pos }} of {{ total }} in this file{% else %}Typed in by hand{% endif %} · version {{ q.version }}{% if q.page_from %} · PDF page {{ q.page_from }}{% if q.page_to and q.page_to != q.page_from %}–{{ q.page_to }}{% endif %}{% endif %}
        {% if q.approved_by %} · approved by {{ q.approved_by }}{% endif %}</p>
   </div>
   <div style="display:flex;gap:0.4rem;">
@@ -70,11 +70,16 @@
 
     <div class="ex-card">
       <h2>Problems</h2>
+      {% if is_blank %}
+        <div class="ex-flag info">Type the question, the four options, the correct answer and the subject in the form
+          on the right, then click <b>Save changes</b>. It's checked when you save, and can be approved once nothing is red.</div>
+      {% else %}
       {% for fl in q.flags %}
         <div class="ex-flag {{ fl.severity }}"><span>{% if fl.severity == 'error' %}●{% elif fl.severity == 'warn' %}▲{% else %}ℹ{% endif %}</span><span>{{ fl.message }}</span></div>
       {% else %}
         <div class="ex-flag info">No problems found.</div>
       {% endfor %}
+      {% endif %}
       {% if q.status == 'rejected' and q.reject_reason %}<div class="ex-note">Rejected: {{ q.reject_reason }}</div>{% endif %}
 
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.8rem;align-items:center;">
@@ -92,6 +97,11 @@
               onsubmit="var r=prompt('Why reject this question? (optional)');if(r===null)return false;this.reason.value=r;return true;">
           <input type="hidden" name="action" value="reject"><input type="hidden" name="reason" value="">
           <button class="ex-btn ex-btn-red">Reject</button>
+        </form>
+        {% endif %}
+        {% if can_delete %}
+        <form method="post" action="{{ url_for('ex_question_delete', qid=q.id) }}" onsubmit="return confirm('Delete this typed question? This cannot be undone.');">
+          <button class="ex-btn ex-btn-ghost">Delete</button>
         </form>
         {% endif %}
         {% if q.status != 'draft' %}
@@ -175,8 +185,12 @@
           <label><input type="text" name="sec_label_{{ loop.index0 }}" value="{{ label }}" style="width:auto;min-width:200px;font-weight:600;"></label>
           <textarea name="sec_text_{{ loop.index0 }}" rows="4">{{ text }}</textarea>
         {% endfor %}
-        <label>{% if q.sections %}Add another explanation box{% else %}Explanation{% endif %}
-          <input type="text" name="sec_label_new" value="{{ '' if q.sections else 'Explanation' }}" placeholder="Heading, e.g. Key fact" style="width:auto;min-width:200px;"></label>
+        {% if q.sections %}
+        <label>Add another explanation box
+          <input type="text" name="sec_label_new" value="" placeholder="Heading, e.g. Key fact" style="width:auto;min-width:200px;"></label>
+        {% else %}
+        <label>Explanation</label><input type="hidden" name="sec_label_new" value="Explanation">
+        {% endif %}
         <textarea name="sec_text_new" rows="3" placeholder="Leave empty to skip"></textarea>
         {% if q.image_desc %}
           <label>Image description from the file (team only — not shown to doctors)</label>
