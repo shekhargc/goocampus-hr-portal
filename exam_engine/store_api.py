@@ -35,6 +35,20 @@ def _body():
 
 
 def api_packages():
+    """With a doctor token: their prices (upgrade credit) and what they own. With only the X-PG-Key (the public
+    goocampus.in landing page, logged-out visitors): the plain cards — owned false, your_price = price."""
+    from pg_admin.routes.api import _authorized, _bearer_token
+    if _authorized() and not _bearer_token():
+        conn = get_db()
+        try:
+            out = []
+            for p in K.all_packages(conn, TENANT_GOOCAMPUS_IN, EXAM_CODE):
+                v = K.public_view(p)
+                v.update({'your_price': v['price'], 'upgrade_credit': 0, 'included_in_yours': False})
+                out.append(v)
+            return jsonify({'ok': True, 'packages': out, 'mine': None, 'public': True})
+        finally:
+            _close(conn)
     conn = get_db()
     try:
         user, err = _doctor(conn)

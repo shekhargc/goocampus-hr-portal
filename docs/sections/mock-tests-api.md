@@ -221,6 +221,7 @@ Prices **include GST**. Packages are separate from the counselling plans: a doct
           "packages": [{"code": "starter", "name": "Starter", "valid_until": "2027-09-30", "source": "razorpay"}]}}
 ```
 
+  - **Logged-out visitors** (the public landing page): call it with the X-PG-Key and **no** Bearer token. You get the same cards with `owned: false`, `your_price` = `price`, `upgrade_credit: 0`, `mine: null` and `public: true`. It's safe to cache for an hour. Buy → login first.
   - `owned` or `included_in_yours` → show "You have this" (no Buy button).
   - Otherwise show **Buy for ₹`your_price`**. When `upgrade_credit` > 0, add "₹999 credited for your Starter package". **Upgrades cost only the difference.**
 - **`POST /api/pg/mocks/packages/<code>/quote {coupon_code?}`** prices a coupon without using it:
