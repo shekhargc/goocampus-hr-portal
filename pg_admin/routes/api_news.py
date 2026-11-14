@@ -265,7 +265,7 @@ def api_pg_news_deadlines():
                  'verification_start': 'verification', 'verification_end': 'verification',
                  'choice_filling_start': 'choice_filling', 'choice_filling_end': 'choice_filling',
                  'payment_last_date': 'payment', 'reporting_last_date': 'reporting', 'result_date': 'result'}
-        out, seen = [], set()
+        out, seen, seen_steps = [], set(), set()
         headings = {r['id']: r['heading'] for r in rows}
         # 1) Counselling Calendar first — it carries the ROUND (and time) for every step, across
         #    all rounds of a notice. (founder + website session 2026-10-09)
@@ -284,6 +284,8 @@ def api_pg_news_deadlines():
                     if not d or not (today <= d <= until):
                         continue
                     seen.add(((st or 'ALL').lower(), d.isoformat(), r['event']))
+                    if r['round']:   # the calendar owns this round's step → an older news date for it is stale
+                        seen_steps.add(((st or 'ALL').lower(), r['round'], r['event']))
                     if r['event'] == 'registration' and kind != 'start':
                         # the news "fee payment last date" is the same deadline as registration closing
                         seen.add(((st or 'ALL').lower(), d.isoformat(), 'payment'))
@@ -317,6 +319,11 @@ def api_pg_news_deadlines():
                 st = r['state'] or ''
                 key = ((st if r['scope'] == 'state' else 'ALL').lower(), d.isoformat(), _base.get(field, field))
                 if key in seen:
+                    continue
+                # the calendar already dates this round's step (e.g. MCC Round 2 result moved 14 → 17 Nov) — the
+                # news' own older date must not show as a second deadline (2026-11-14)
+                _rnd = (v or {}).get('round')
+                if _rnd and (key[0], _rnd, key[2]) in seen_steps:
                     continue
                 seen.add(key)
                 out.append({'date': d.isoformat(), 'field': field,
@@ -487,8 +494,13 @@ def add_template(code, st):
                               'status': 'awaited', 'expected': True, 'news_id': None, 'revised': None})
         steps.sort(key=lambda i: STEP_ORDER.index(i['step']) if i['step'] in STEP_ORDER else 99)
         if cur:
-            # a round whose dated steps are all over but which still has awaited steps isn't finished
-            done_but_waiting = cur['status'] == 'done' and any(i['status'] == 'awaited' for i in steps)
+            # a round whose dated steps are all over but which still has awaited steps isn't finished — unless a
+            # LATER round has already started (then those steps were never going to get dates; 2026-11-14:
+            # Assam / Goa / Punjab showed "Round 1 · live" while Round 2 registration was open)
+            later_started = any(o['status'] in ('live', 'done') for k2, o in have.items()
+                                if rorder.get(k2, 50) > rorder.get(rnd, 50))
+            done_but_waiting = (cur['status'] == 'done' and not later_started
+                                and any(i['status'] == 'awaited' for i in steps))
             rounds.append({**cur, 'steps': steps, 'status': 'live' if done_but_waiting else cur['status']})
         else:
             rounds.append({'round': rnd, 'status': 'awaited', 'start': None, 'end': None, 'live_step': None,
