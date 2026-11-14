@@ -30,4 +30,6 @@ def register_exam_engine(app):
     store_api.register_routes(app)          # before doctor_api: /api/pg/mocks/packages/* are fixed paths
     doctor_api.register_routes(app)
     admin_packages.register_routes(app)
+    from exam_engine import admin_dashboard
+    admin_dashboard.register_routes(app)
     attempts.start_sweeper()          # submits attempts whose time ran out while the doctor was away

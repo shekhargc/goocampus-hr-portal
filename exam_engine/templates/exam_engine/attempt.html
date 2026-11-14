@@ -1,0 +1,80 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Attempt #{{ a.id }}{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}{% endblock %}
+
+{% block section_content %}
+{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <div class="ex-crumb"><a href="{{ url_for('ex_dashboard') }}">Dashboard</a> › <a href="{{ url_for('ex_attempts') }}">Attempts</a> › #{{ a.id }}</div>
+    <h1>{{ doctor }} — {{ p.title }}</h1>
+    <p>{{ u.mobile or '' }}{% if u.email %} · {{ u.email }}{% endif %} · attempt {{ a.attempt_no }}
+       {% if a.access == 'team' %}· <b>team dry run (not ranked)</b>{% elif a.is_ranked %}· <b>ranked</b>{% elif a.status == 'submitted' %}· practice (not ranked){% endif %}
+       · started {{ started }}{% if a.submitted_at %} · {{ 'time ran out' if a.submit_reason == 'time_up' else 'submitted' }} {{ submitted }}{% endif %}</p>
+  </div>
+  <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_paper_analytics', pid=p.id) }}">Mock analytics →</a>
+</div>
+
+{% if res and res.live %}
+  <div class="ex-card"><h2>In progress</h2>
+    <p>Now in Section {{ res.section }} · {{ res.section_left }} left in this section · {{ res.total_left }} left overall · {{ res.answered }} answered so far.</p></div>
+{% elif res %}
+  <div class="ex-stats">
+    <div class="ex-stat"><div class="lbl">Score</div><div class="val">{{ res.score.score }} <span class="muted" style="font-size:0.9rem;">/ {{ res.score.max_score }}</span></div></div>
+    <div class="ex-stat"><div class="lbl">Right · wrong · skipped</div><div class="val" style="font-size:1.2rem;">{{ res.score.correct }} · {{ res.score.wrong }} · {{ res.score.unattempted }}</div></div>
+    <div class="ex-stat"><div class="lbl">{{ 'Rank' if res.rank.ranked else 'Would rank' }}</div><div class="val">{{ res.rank.rank or '—' }}<span class="muted" style="font-size:0.9rem;"> / {{ res.rank.out_of }}</span></div><div class="muted">percentile {{ res.rank.percentile if res.rank.percentile is not none else '—' }}</div></div>
+    <div class="ex-stat"><div class="lbl">Predicted NEET rank</div><div class="val">{% if res.predicted_neet %}{{ '{:,}'.format(res.predicted_neet.air) }}{% else %}—{% endif %}</div>
+      {% if res.predicted_neet %}<div class="muted">{{ '{:,}'.format(res.predicted_neet.air_best) }}–{{ '{:,}'.format(res.predicted_neet.air_worst) }}</div>{% endif %}</div>
+    <div class="ex-stat"><div class="lbl">Time used</div><div class="val" style="font-size:1.2rem;">{{ fmt(res.time.total_seconds) }}</div><div class="muted">accuracy {{ res.score.accuracy or '—' }}%</div></div>
+  </div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem;align-items:start;">
+  <div class="ex-card">
+    <h2>Flags <span class="muted" style="font-weight:400;">· information only</span></h2>
+    {% for label, n in flag_counts.items() %}<div class="ex-flag warn">▲ {{ label }} — {{ n }} time{{ 's' if n > 1 }}</div>
+    {% else %}<div class="ex-flag info">No flags.</div>{% endfor %}
+    <h2 style="margin-top:1rem;">Timeline</h2>
+    <div style="max-height:320px;overflow:auto;">
+    {% for e in events %}<div style="font-size:0.82rem;padding:0.15rem 0;border-bottom:1px solid var(--gray-100);">
+      <span class="muted">{{ e.when }}</span> · {% if e.flag %}<b class="sev-warn">{{ e.label }}</b>{% else %}{{ e.label }}{% endif %}{% if e.detail %} <span class="muted">({{ e.detail[:80] }})</span>{% endif %}</div>{% endfor %}
+    </div>
+  </div>
+  {% if res and not res.live %}
+  <div class="ex-card">
+    <h2>By subject</h2>
+    <table style="width:100%;font-size:0.84rem;border-collapse:collapse;">
+      <tr class="muted"><td>Subject</td><td style="text-align:right;">Score</td><td style="text-align:right;">Avg of all</td><td style="text-align:right;">Accuracy</td></tr>
+      {% for s in res.subjects %}<tr style="border-top:1px solid var(--gray-100);"><td>{{ s.subject }}</td>
+        <td style="text-align:right;font-weight:700;">{{ s.score }} / {{ s.max }}</td>
+        <td style="text-align:right;" class="muted">{{ s.average_score_all if s.average_score_all is not none else '—' }}</td>
+        <td style="text-align:right;">{{ s.accuracy if s.accuracy is not none else '—' }}{{ '%' if s.accuracy is not none }}</td></tr>{% endfor %}
+    </table>
+    <h2 style="margin-top:1rem;">By section</h2>
+    {% for s in res.sections %}<div style="font-size:0.84rem;">{{ s.name }}: <b>{{ s.score }}</b> · {{ s.correct }} right, {{ s.wrong }} wrong, {{ s.unattempted }} skipped · {{ fmt(s.time_seconds) }}</div>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if answers %}
+<div class="ex-card">
+  <h2>Answers</h2>
+  <table class="ex-table">
+    <thead><tr><th>Q</th><th>Question</th><th>Subject</th><th>Chose</th><th>Correct</th><th>Result</th><th>Time</th></tr></thead>
+    <tbody>
+    {% for q in answers %}
+      <tr>
+        <td>{{ q.section }}{{ q.number }}</td>
+        <td>{{ q.stem[:110] }}{% if q.stem|length > 110 %}…{% endif %}</td>
+        <td>{{ q.subject }}</td>
+        <td>{{ q.chosen or '—' }}{% if q.marked %} <span class="chip chip-blue">marked</span>{% endif %}</td>
+        <td>{{ q.correct }}</td>
+        <td>{% if q.result == 'correct' %}<span class="chip chip-green">+{{ q.marks }}</span>{% elif q.result == 'wrong' %}<span class="chip chip-red">{{ q.marks }}</span>{% else %}<span class="chip chip-gray">0</span>{% endif %}</td>
+        <td>{{ q.time_seconds }}s</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

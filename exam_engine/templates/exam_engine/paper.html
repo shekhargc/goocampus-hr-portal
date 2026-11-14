@@ -30,6 +30,7 @@
   </div>
   <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
     <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_paper_preview', pid=p.id) }}" target="_blank">Preview ↗</a>
+    {% if p.status != 'draft' %}<a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_paper_analytics', pid=p.id) }}">Analytics</a>{% endif %}
     {% if p.status == 'draft' %}
       <form method="post" action="{{ url_for('ex_paper_status', pid=p.id) }}" onsubmit="return confirm('Lock this paper? Every question will be frozen as it is now.');">
         <input type="hidden" name="action" value="lock"><button class="ex-btn ex-btn-green" {{ 'disabled' if errors }} title="{{ errors|join(' ') if errors else 'Freeze the questions' }}">🔒 Lock</button></form>

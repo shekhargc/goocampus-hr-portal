@@ -25,7 +25,7 @@ Founder-approved brief: `~/Desktop/Claude Code/NEET_PG_Mock_Platform_Brief.md`.
 5. Exam engine: **portal side done**. The goocampus.in exam screen is built by the website session from [mock-tests-api.md](mock-tests-api.md).
 6. Scoring, results and rank: **done** (see below).
 7. Packages, payments and the free sample: **done** (see below).
-8. Admin dashboard.
+8. Admin dashboard: **done** (see below).
 9. Load test and dry run.
 
 ## Step 3 — question import (`/admin/pg/mocks/import`, admin only)
@@ -214,3 +214,21 @@ Without R2, the bytes are stored in the row.
 - `exam_engine/access.py` checks, in order: team → free sample → full mock position ≤ the package's N → subject/mini flags.
 - `exam_engine/store_api.py` holds `/api/pg/mocks/packages*`. It uses the portal's Razorpay keys (`_razorpay_creds`) and HMAC-verifies the signature. Verify is idempotent: an `UPDATE … WHERE status <> 'paid' RETURNING` claims the order once.
 - Admin `/admin/pg/mocks/packages`: edit packages, see sales and revenue, give a package by mobile (with a reason), and turn a purchase off (e.g. after a refund).
+
+## Step 8 — admin dashboard (`exam_engine/admin_dashboard.py`, admin only)
+
+| Screen | Shows |
+|---|---|
+| `/admin/pg/mocks` **Dashboard** | Doctors who took a mock · attempts · live now · finished today / 7 days · **free sample → package conversion** · packages sold · revenue · approved questions · mocks published. Each mock's ranked takers, practice attempts, live now, average and top score. The latest attempts. Team dry runs are excluded. |
+| `/admin/pg/mocks/attempts` | Every attempt. Filters: doctor, mock, status, ranked/practice, only flagged. **CSV export.** |
+| `/admin/pg/mocks/attempts/<id>` | One attempt: score, rank (or "would rank"), predicted NEET rank, time, flag counts (left the tab, left full screen, offline… information only), full timeline, subject and section breakdown, every answer. A live attempt shows its section and time left. |
+| `/admin/pg/mocks/papers/<id>/analytics` | Score spread (histogram), average / median / top / lowest, subject averages, every question's % right, % tried, most-chosen option, average time and strong-minus-weak (top 27 % vs bottom 27 %). Also **Questions to check**. |
+
+A question lands in **Questions to check** when, with at least 10 ranked attempts:
+- under 15 % got it right; or
+- strong doctors did worse than weak ones; or
+- most doctors chose the same option other than the key.
+
+All three usually point to a wrong answer key.
+
+Doctor names show as "Dr. <name>" (`dr()`; a name like "Drishti" still gets the title).

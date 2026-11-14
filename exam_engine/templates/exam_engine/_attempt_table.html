@@ -1,0 +1,21 @@
+{% set rows = rows if rows is defined else recent %}
+<table class="ex-table">
+  <thead><tr><th>Doctor</th><th>Mock</th><th>Started</th><th>Status</th><th>Score</th><th>Rank</th><th>Flags</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="clickable" onclick="location.href='{{ url_for('ex_attempt', aid=r.id) }}'">
+      <td><b>{{ r.doctor }}</b><div class="muted">{{ r.mobile or '' }}</div></td>
+      <td>{{ r.paper_title }}<div class="muted">attempt {{ r.attempt_no }}{% if r.access == 'team' %} · team dry run{% elif not r.is_ranked and r.status == 'submitted' %} · practice{% endif %}</div></td>
+      <td>{{ r.started }}</td>
+      <td>{% if r.status == 'in_progress' %}<span class="chip chip-blue">In progress</span>
+          {% elif r.submit_reason == 'time_up' %}<span class="chip chip-gray">Time up</span>
+          {% else %}<span class="chip chip-green">Submitted</span>{% endif %}</td>
+      <td>{% if r.score is not none %}<b>{{ r.score }}</b> / {{ r.max_score }}{% else %}—{% endif %}</td>
+      <td>{% if r.rank and r.is_ranked %}{{ r.rank }} / {{ r.out_of }}{% elif r.rank %}<span class="muted">≈{{ r.rank }}</span>{% else %}—{% endif %}</td>
+      <td>{% if r.n_flags %}<span class="chip chip-amber">{{ r.n_flags }}</span>{% else %}—{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">No attempts yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

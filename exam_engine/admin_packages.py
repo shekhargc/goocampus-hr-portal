@@ -36,8 +36,8 @@ def packages_admin():
         purchases = [dict(r) for r in conn.execute(sql + " ORDER BY pp.id DESC LIMIT 200", tuple(params)).fetchall()]
         for r in purchases:
             r['when'] = store.now_ist_str(r['created_at'])
-            nm = (r.get('doctor_name') or '').strip()
-            r['doctor'] = ('Dr. ' + nm if nm and not nm.lower().startswith('dr') else nm) or f"#{r['user_id']}"
+            from exam_engine.admin_dashboard import dr
+            r['doctor'] = dr(r.get('doctor_name'), f"#{r['user_id']}")
         pending = conn.execute("SELECT COUNT(*) AS n FROM ex_orders WHERE tenant_id=? AND status='created' "
                                "AND created_at > CURRENT_TIMESTAMP - INTERVAL '2 days'", (TENANT_GOOCAMPUS_IN,)).fetchone()['n']
         totals = {'buyers': len({r['user_id'] for r in purchases if r['status'] == 'active'}),

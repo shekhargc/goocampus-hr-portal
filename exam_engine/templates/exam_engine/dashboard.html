@@ -1,0 +1,58 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mock Tests · Dashboard{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}{% endblock %}
+
+{% block section_content %}
+{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <h1>Mock Tests — dashboard</h1>
+    <p>Doctors' activity on goocampus.in (team dry runs not counted). Rank, average and top scores use each doctor's
+       first (ranked) attempt only.</p>
+  </div>
+  <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_attempts') }}">All attempts →</a>
+</div>
+
+<div class="ex-stats">
+  <div class="ex-stat"><div class="lbl">Doctors who took a mock</div><div class="val">{{ k.takers or 0 }}</div></div>
+  <div class="ex-stat"><div class="lbl">Attempts (all time)</div><div class="val">{{ k.attempts or 0 }}</div></div>
+  <div class="ex-stat"><div class="lbl">Taking a mock now</div><div class="val" style="color:#1e40af;">{{ k.live or 0 }}</div></div>
+  <div class="ex-stat"><div class="lbl">Finished today · 7 days</div><div class="val">{{ k.day or 0 }} · {{ k.week or 0 }}</div></div>
+  <div class="ex-stat"><div class="lbl">Free sample → bought</div>
+    <div class="val">{% if conversion is not none %}{{ conversion }}%{% else %}—{% endif %}</div>
+    <div class="muted">{{ free_bought }} of {{ free_takers }} free-sample takers</div></div>
+</div>
+<div class="ex-stats" style="grid-template-columns:repeat(4,1fr);">
+  <a class="ex-stat" href="{{ url_for('ex_packages') }}"><div class="lbl">Packages sold</div><div class="val">{{ sales.n or 0 }}</div><div class="muted">{{ sales.buyers or 0 }} doctors</div></a>
+  <a class="ex-stat" href="{{ url_for('ex_packages') }}"><div class="lbl">Revenue (incl. GST)</div><div class="val">₹{{ '{:,.0f}'.format(sales.revenue or 0) }}</div><div class="muted">₹{{ '{:,.0f}'.format(sales_week) }} in 7 days</div></a>
+  <a class="ex-stat" href="{{ url_for('ex_bank') }}"><div class="lbl">Approved questions</div><div class="val">{{ bank.approved or 0 }}</div><div class="muted">{{ bank.draft or 0 }} waiting for review</div></a>
+  <a class="ex-stat" href="{{ url_for('ex_papers') }}"><div class="lbl">Mocks published</div><div class="val">{{ papers|selectattr('status','equalto','published')|list|length }}</div><div class="muted">{{ papers|length }} locked or published</div></a>
+</div>
+
+<div class="ex-card">
+  <h2>Mocks</h2>
+  {% if papers %}
+  <table class="ex-table">
+    <thead><tr><th>Mock</th><th>Status</th><th>Ranked takers</th><th>Practice</th><th>Live now</th><th>Average</th><th>Top</th><th></th></tr></thead>
+    <tbody>
+    {% for p in papers %}
+      <tr>
+        <td><b>{{ p.title }}</b>{% if p.is_free_sample %} <span class="chip chip-amber">Free sample</span>{% endif %}<div class="muted">{{ kind_label[p.kind] }}</div></td>
+        <td><span class="chip {{ {'locked':'chip-amber','published':'chip-green','retired':'chip-gray'}.get(p.status,'chip-blue') }}">{{ p.status|capitalize }}</span></td>
+        <td>{{ p.ranked }}</td><td>{{ p.practice }}</td><td>{{ p.live }}</td>
+        <td>{% if p.avg_score is not none %}{{ '%.0f' % p.avg_score }} / {{ p.max_score }}{% else %}—{% endif %}</td>
+        <td>{{ p.top_score if p.top_score is not none else '—' }}</td>
+        <td><a class="ex-btn ex-btn-ghost" style="padding:0.3rem 0.6rem;font-size:0.78rem;" href="{{ url_for('ex_paper_analytics', pid=p.id) }}">Analytics</a>
+            <a class="ex-btn ex-btn-ghost" style="padding:0.3rem 0.6rem;font-size:0.78rem;" href="{{ url_for('ex_attempts', paper=p.id) }}">Attempts</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="ex-note">No mock is locked or published yet — build one in Papers.</div>{% endif %}
+</div>
+
+<div class="ex-card">
+  <h2>Latest attempts</h2>
+  {% include "exam_engine/_attempt_table.html" with context %}
+</div>
+{% endblock %}

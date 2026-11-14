@@ -1,0 +1,83 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}{{ p.title }} · analytics{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}
+<style> .hist { display:flex; align-items:flex-end; gap:6px; height:160px; padding:0 0.2rem; }
+  .hist div { flex:1; background:#1e3a8a; border-radius:4px 4px 0 0; position:relative; min-height:2px; }
+  .hist span { position:absolute; top:-1.2rem; left:0; right:0; text-align:center; font-size:0.72rem; color:var(--gray-600); }
+  .hist-x { display:flex; gap:6px; padding:0 0.2rem; } .hist-x div { flex:1; text-align:center; font-size:0.68rem; color:var(--gray-500); } </style>
+{% endblock %}
+
+{% block section_content %}
+{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <div class="ex-crumb"><a href="{{ url_for('ex_dashboard') }}">Dashboard</a> › {{ p.title }}</div>
+    <h1>{{ p.title }} — analytics</h1>
+    <p>Based on {{ summary.n }} ranked attempt{{ 's' if summary.n != 1 }} (each doctor's first){% if practice %} · {{ practice }} practice attempt{{ 's' if practice != 1 }} not counted{% endif %}{% if live %} · {{ live }} in progress now{% endif %}.</p>
+  </div>
+  <div style="display:flex;gap:0.4rem;">
+    <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_attempts', paper=p.id) }}">Attempts</a>
+    <a class="ex-btn ex-btn-ghost" href="{{ url_for('ex_paper', pid=p.id) }}">Paper</a>
+  </div>
+</div>
+
+<div class="ex-stats">
+  <div class="ex-stat"><div class="lbl">Ranked takers</div><div class="val">{{ summary.n }}</div></div>
+  <div class="ex-stat"><div class="lbl">Average</div><div class="val">{{ summary.avg if summary.avg is not none else '—' }}</div><div class="muted">of {{ mx }}</div></div>
+  <div class="ex-stat"><div class="lbl">Median</div><div class="val">{{ summary.median if summary.median is not none else '—' }}</div></div>
+  <div class="ex-stat"><div class="lbl">Top</div><div class="val">{{ summary.top if summary.top is not none else '—' }}</div></div>
+  <div class="ex-stat"><div class="lbl">Lowest</div><div class="val">{{ summary.low if summary.low is not none else '—' }}</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:1rem;align-items:start;">
+  <div class="ex-card">
+    <h2>Score spread</h2>
+    {% if summary.n %}
+    <div class="hist" style="margin-top:1.4rem;">{% for b in bins %}<div style="height:{{ (100 * b.n / peak)|round(0) }}%;" title="{{ b.from }}–{{ b.to }}: {{ b.n }}"><span>{{ b.n or '' }}</span></div>{% endfor %}</div>
+    <div class="hist-x">{% for b in bins %}<div>{{ b.from }}</div>{% endfor %}</div>
+    {% else %}<div class="muted">No ranked attempts yet.</div>{% endif %}
+  </div>
+  <div class="ex-card">
+    <h2>By subject <span class="muted" style="font-weight:400;">· average marks per doctor</span></h2>
+    {% for name, s in subj.items() %}<div style="display:flex;justify-content:space-between;font-size:0.84rem;border-bottom:1px solid var(--gray-100);padding:0.15rem 0;">
+      <span>{{ name }} <span class="muted">({{ s.per_taker_q }} q)</span></span><span><b>{{ s.avg }}</b> <span class="muted">· {{ s.pct }}% right</span></span></div>
+    {% else %}<div class="muted">—</div>{% endfor %}
+  </div>
+</div>
+
+<div class="ex-card">
+  <h2>Questions to check {% if to_check %}<span class="chip chip-amber">{{ to_check|length }}</span>{% endif %}</h2>
+  <p class="muted" style="margin-top:-0.3rem;">Flagged when very few got it right, when strong doctors did worse than weak ones, or when most doctors
+     chose the same other option — often a wrong answer key or an unclear question. Needs at least 10 ranked attempts.</p>
+  {% for r in to_check %}
+    <div class="ex-flag warn" style="justify-content:space-between;">
+      <span><b>{{ r.section }}{{ r.position }}</b> · {{ r.stem }}… <span class="muted">({{ r.subject }}; key {{ r.answer }})</span> — {{ r.check }}</span>
+      <a href="{{ url_for('ex_question', qid=r.question_id) }}" style="white-space:nowrap;">open ↗</a>
+    </div>
+  {% else %}
+    <div class="ex-flag info">{{ 'Nothing to check.' if summary.n >= 10 else 'Not enough attempts yet.' }}</div>
+  {% endfor %}
+</div>
+
+<div class="ex-card">
+  <h2>Every question</h2>
+  <table class="ex-table">
+    <thead><tr><th>Q</th><th>Question</th><th>Subject</th><th>Key</th><th>% right</th><th>% tried</th><th>Most chosen</th><th>Avg time</th><th>Strong − weak</th></tr></thead>
+    <tbody>
+    {% for r in qrows %}
+      <tr class="clickable" onclick="location.href='{{ url_for('ex_question', qid=r.question_id) }}'">
+        <td>{{ r.section }}{{ r.position }}</td>
+        <td>{{ r.stem }}…</td>
+        <td>{{ r.subject }}</td>
+        <td>{{ r.answer }}</td>
+        <td>{% if r.pct_correct is defined %}<b style="color:{{ '#b91c1c' if r.pct_correct < 15 else ('#166534' if r.pct_correct > 70 else 'inherit') }};">{{ r.pct_correct }}%</b>{% else %}—{% endif %}</td>
+        <td>{{ r.pct_attempted ~ '%' if r.pct_attempted is defined else '—' }}</td>
+        <td>{% if r.top_choice %}{{ r.top_choice }} <span class="muted">({{ '%.0f' % r.top_choice_pct }}%)</span>{% else %}—{% endif %}</td>
+        <td>{{ (r.avg_secs ~ 's') if r.avg_secs is defined else '—' }}</td>
+        <td>{% if r.disc is defined and r.disc is not none %}<span style="color:{{ '#b91c1c' if r.disc < 0 else 'inherit' }};">{{ r.disc }}</span>{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

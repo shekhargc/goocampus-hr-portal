@@ -1,0 +1,31 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Mock Tests · Attempts{% endblock %}
+{% block section_extra_css %}{% include "exam_engine/_ex_css.html" %}{% endblock %}
+
+{% block section_content %}
+{% include "exam_engine/_ex_tabs.html" %}
+<div class="ex-head">
+  <div>
+    <div class="ex-crumb"><a href="{{ url_for('ex_dashboard') }}">Dashboard</a> › Attempts</div>
+    <h1>Attempts</h1>
+    <p>Every mock attempt. "Flags" are tab switches, leaving full screen, going offline and similar — for information only;
+       nobody is disqualified automatically.</p>
+  </div>
+  <a class="ex-btn ex-btn-ghost" href="?{{ request.query_string.decode() }}&csv=1">⬇ Download CSV</a>
+</div>
+
+<form method="get" class="ex-card ex-f" style="display:flex;gap:0.7rem;flex-wrap:wrap;align-items:flex-end;">
+  <div style="flex:2 1 200px;"><label>Doctor (name or mobile)</label><input type="text" name="q" value="{{ f.q }}"></div>
+  <div style="flex:1 1 180px;"><label>Mock</label><select name="paper"><option value="">All mocks</option>
+    {% for p in papers %}<option value="{{ p.id }}" {{ 'selected' if f.paper == p.id|string }}>{{ p.title }}</option>{% endfor %}</select></div>
+  <div style="flex:1 1 130px;"><label>Status</label><select name="status">
+    {% for v, l in [('', 'Any'), ('in_progress', 'In progress'), ('submitted', 'Submitted')] %}<option value="{{ v }}" {{ 'selected' if f.status == v }}>{{ l }}</option>{% endfor %}</select></div>
+  <div style="flex:1 1 130px;"><label>Ranked</label><select name="ranked">
+    {% for v, l in [('', 'Any'), ('1', 'Ranked (first attempt)'), ('0', 'Practice / team')] %}<option value="{{ v }}" {{ 'selected' if f.ranked == v }}>{{ l }}</option>{% endfor %}</select></div>
+  <label style="font-weight:400;font-size:0.84rem;margin-bottom:0.5rem;"><input type="checkbox" name="flagged" value="1" {{ 'checked' if f.flagged == '1' }}> Only with flags</label>
+  <button class="ex-btn ex-btn-ghost">Filter</button>
+</form>
+
+<p class="muted">{{ rows|length }} attempt(s){% if rows|length >= 300 %} — showing the latest 300; download the CSV for all{% endif %}</p>
+{% include "exam_engine/_attempt_table.html" %}
+{% endblock %}
