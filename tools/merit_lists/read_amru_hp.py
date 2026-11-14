@@ -26,6 +26,7 @@ QUOTA = {'HP Quota - Direct': 'HP Direct', 'HP Quota In- service': 'In-service',
          'NRI Quota': 'NRI'}
 RCATS = {'General', 'SC', 'ST', 'EWS', 'OBC', 'Single Girl child', 'Physically Handicapped', 'NRI'}
 MCATS = {'General', 'SC', 'ST', 'OBC', 'Physically Handicapped', 'Physically Handicappe d', 'NRI', ''}
+RCAT_NORM = {'Economicaly Weaker Sections': 'EWS', 'Economically Weaker Sections': 'EWS'}   # revised final 12.11 spelling
 HEAD_KEYS = ['Sr', 'Merit', 'Applicat', 'Full', 'Admission', 'Reservation', 'ROLL', 'Score', 'Rank', 'Incentiv',
              'Incenti', 'Score', 'Manageme', 'NRI']
 
@@ -37,13 +38,22 @@ def main():
     out = sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv else DEFAULT_OUT
     d = fitz.open(path)
     notice = ' '.join(d[0].get_text().split())
-    for need in ('Atal Medical & Research University', 'Provisional Merit list of MD/MS/DNB 1st round', 'NEET PG 2026'):
+    # 12.11.2026: 'Revised Final Merit list' (notice ...-7099) - same table, stored under the SAME list_name
+    stage = 'revised_final' if 'Revised Final Merit list of MD/MS/DNB 1st round' in notice else 'provisional'
+    for need in ('Atal Medical & Research University',
+                 'Revised Final Merit list of MD/MS/DNB 1st round' if stage == 'revised_final'
+                 else 'Provisional Merit list of MD/MS/DNB 1st round'):
         if need not in notice:
             raise SystemExit('covering notice changed: missing ' + need)
+    if not re.search(r'NEET PG-? ?2026', notice):
+        raise SystemExit('covering notice changed: missing NEET PG 2026')
     m = re.search(r'Dated:\s*(\d{2})\.(\d{2})\.(\d{4})', notice)
     published = f'{m.group(3)}-{m.group(2)}-{m.group(1)}' if m else ''
     t2 = ' '.join(d[1].get_text().split())
-    if 'Provisional Merit list of MD/MS/DNB 1st Round Counselling 2026' not in t2 or 'Released Date : 07-Nov-2026' not in t2:
+    if stage == 'revised_final':
+        if 'Revised Final Merit list of MD/MS/DNB 1st Round Counselling 2026' not in t2 or '12-Nov-2026' not in t2:
+            raise SystemExit('page 2 title changed')
+    elif 'Provisional Merit list of MD/MS/DNB 1st Round Counselling 2026' not in t2 or 'Released Date : 07-Nov-2026' not in t2:
         raise SystemExit('page 2 title changed')
     recs, text_rolls, head_seen, zero_word = [], 0, False, 0
     for p in d:
@@ -57,20 +67,23 @@ def main():
                     raise SystemExit(f'p{p.number + 1}: table with {len(c)} columns')
                 if not INT.match(c[0]):
                     if c[0].startswith('Sr'):
-                        if not all(k in c[i] for i, k in enumerate(HEAD_KEYS)):
+                        if not all(k in c[i].replace(' ', '') for i, k in enumerate(HEAD_KEYS)):   # line breaks differ per file
                             raise SystemExit(f'p{p.number + 1}: column headings changed')
                         head_seen = True
                     elif any(c[1:]) or not (c[0] == '' or 'Atal Medical' in c[0] or 'Provisional Merit' in c[0]
-                                            or 'Released Date' in c[0]):
-                        raise SystemExit(f'p{p.number + 1}: unexpected non-data row')
+                                            or 'Final Merit' in c[0] or 'Released Date' in c[0] or 'Report Date' in c[0]):
+                        hint = c[0][:70] if re.search(r'Merit|Universit|Date|2026', c[0]) else f'<{len(c[0])} chars>'
+                        raise SystemExit(f'p{p.number + 1}: unexpected non-data row ({sum(1 for x in c if x)} cells; '
+                                         f'first: {hint})')
                     continue
                 where = f'p{p.number + 1} sr {c[0]}'
                 if c[1] != c[0]:
                     raise SystemExit(f'{where}: Sr No != Merit No')
                 if c[4] not in QUOTA:
                     raise SystemExit(f'{where}: unknown quota')
+                c[5] = RCAT_NORM.get(c[5], c[5])
                 if c[5] not in RCATS or c[12] not in MCATS:
-                    raise SystemExit(f'{where}: unknown category')
+                    raise SystemExit(f'{where}: unknown category {c[5]!r} / {c[12]!r}')
                 if not ROLL.match(c[6]) or not INT.match(c[7]) or not INT.match(c[8]):
                     raise SystemExit(f'{where}: roll / NEET score / AIR not numeric')
                 if c[9] not in ('Yes', 'No') or c[13] not in ('Yes', 'No'):
@@ -124,13 +137,19 @@ def main():
         'nri_sponsored_yes': sum(1 for r in recs if r['nri_sp']),
         'nbems_check': 'not done locally (NBEMS file not on this Mac) - the ingest counts air_mismatch by roll',
     }
-    notes = ("AMRU HP MD/MS/DNB 1st round provisional merit list (notice 129/2026-27-6994, 07.11.2026). One common "
+    if stage == 'revised_final':
+        notes = ("AMRU HP MD/MS/DNB 1st round REVISED FINAL merit list (notice 129/2026-27-7099, 12.11.2026), replaces "
+                 "the provisional list of 07.11 under the same list name. One common merit list for all quotas; quota "
+                 "per row (HP Direct / In-service / Management / NRI). state_rank = merit no.; score = NEET score + "
+                 "service incentive; AIR printed for every row.")
+    else:
+      notes = ("AMRU HP MD/MS/DNB 1st round provisional merit list (notice 129/2026-27-6994, 07.11.2026). One common "
              "merit list for all quotas; quota per row (HP Direct / In-service / Management / NRI). state_rank = merit "
              "no.; score = NEET score + service incentive; AIR printed for every row. Discrepancies till 11 AM 08.11.2026.")
     obj = {'authority_code': 'amru_hp', 'list_name': 'MD/MS/DNB 1st Round Provisional Merit List',
            'published_on': published, 'source_file_name': os.path.basename(path), 'notes': notes,
            'row_count': len(rows), 'checks': checks, 'rows': rows}
-    fp = os.path.join(out, 'amru_hp_r1_provisional.json')
+    fp = os.path.join(out, f'amru_hp_r1_{stage}.json')
     with open(fp, 'w') as f:
         json.dump(obj, f, indent=1, ensure_ascii=False)
     print(fp)

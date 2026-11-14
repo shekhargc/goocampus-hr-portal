@@ -1,7 +1,8 @@
 """Puducherry CENTAC "Draft Merit list of PG NEET Medical (M.D./M.S.) courses (2026 - 2027)" -> rank-bridge rows.
 
 Usage: /usr/bin/python3 read_centac_py.py <list.pdf> [<list.pdf> ...] [--out DIR]
-  Detects the list from the title line above the table:
+  Draft or Final list (title 'Draft Merit list' / 'Final Merit list'; final -> centac_gq_final.json etc., same
+  list_name so it replaces the draft). Detects the list from the title line above the table:
    'GOVERNMENT QUOTA - U.T. - OVERALL' -> centac_gq_draft.json  (quota 'GQ')
    'MANAGEMENT QUOTA - OVERALL'        -> centac_mq_draft.json  (quota 'MQ')
   Any other title (the FF / PwD / ESM / Telugu-minority sub-lists, the 'applied' list) -> SystemExit: the
@@ -30,7 +31,7 @@ KINDS = {
         head='SL NO APP NO NAME NEET ROLL NO NEET PERCENTILE NEET ALL INDIA RANK RESIDENCE CATEGORY',
         cols={'sl': (25, 60), 'app': (60, 115), 'name': (115, 340), 'roll': (340, 420), 'score': (420, 520),
               'air': (520, 640), 'res': (640, 720), 'cat': (720, 842)},
-        cats={'GENERAL', 'OBC', 'MBC', 'SC', 'ST', 'EBC', 'BCM', 'BT'}, subs={'FF', 'ESM', 'TELUGU', 'PwD'}),
+        cats={'GENERAL', 'OBC', 'MBC', 'SC', 'ST', 'EBC', 'BCM', 'BT'}, subs={'FF', 'ESM', 'TELUGU', 'PwD', 'PWD', 'MSP'}),   # final list prints PWD
     'MANAGEMENT QUOTA - OVERALL': dict(
         short='mq_draft', quota='MQ', list_name='PG Medical (MD/MS) Draft Merit List - Management Quota (overall)',
         head='SL NO APP NO NAME NEET ROLL NO NEET PERCENTILE NEET ALL INDIA RANK AIQ CATEGORY',
@@ -61,7 +62,13 @@ def read(path, out):
     published = f'{m.group(4)}-{m.group(3)}-{m.group(2)}'
     top = ' '.join(w[4] for w in p0 if w[1] < hy[0][1] - 20)
     # 10-11-2026 REVISED draft list drops the '(2026 - 2027)' from the title — same list, replaces the draft
-    if 'Draft Merit list of PG NEET Medical (M.D./M.S.) courses' not in top:
+    # 12-11-2026 FINAL list: same layout, title 'Final Merit list ...' - stored under the SAME list_name (replaces
+    # the revised draft); output file / notes say final
+    if 'Draft Merit list of PG NEET Medical (M.D./M.S.) courses' in top:
+        stage = 'draft'
+    elif 'Final Merit list of PG NEET Medical (M.D./M.S.) courses' in top:
+        stage = 'final'
+    else:
         raise SystemExit('page title changed')
     recs, text_rolls, markers, ended = [], 0, collections.Counter(), False
     for p in d:
@@ -107,7 +114,7 @@ def read(path, out):
             cat = ''.join(g['cat'])
             parts = cat.split('/')
             if not parts[0] in K['cats'] or len(parts) > 2 or (len(parts) == 2 and parts[1] not in K['subs']):
-                raise SystemExit(f'{where}: unknown category')
+                raise SystemExit(f'{where}: unknown category {cat!r}')
             for mk in '#$&':
                 if any(t.endswith(mk) for t in g['name']):
                     markers[mk] += 1
@@ -150,13 +157,18 @@ def read(path, out):
     }
     which = ('Government Quota UT overall (category as printed, sub-category after /: FF / ESM / TELUGU / PwD)'
              if K['quota'] == 'GQ' else 'Management Quota overall (AIQ category)')
-    notes = ("CENTAC Puducherry PG Medical (MD/MS) 2026-27 draft merit list, " + which + "; state_rank = SL NO; AIR "
-             "printed for every row. Objections till 5 PM 09-11-2026. Sub-lists (FF/PwD/ESM/Telugu MQ) are subsets "
-             "of GQ-ALL / MQ-ALL.")
+    if stage == 'final':
+        notes = ("CENTAC Puducherry PG Medical (MD/MS) 2026-27 FINAL merit list (12-11-2026, notice "
+                 "CENTAC/PGM/2026/06), " + which + "; state_rank = SL NO; AIR printed for every row. Replaces the "
+                 "revised draft of 10-11-2026 under the same list name. Sub-lists are subsets of GQ-ALL / MQ-ALL.")
+    else:
+        notes = ("CENTAC Puducherry PG Medical (MD/MS) 2026-27 draft merit list, " + which + "; state_rank = SL NO; "
+                 "AIR printed for every row. Objections till 5 PM 09-11-2026. Sub-lists (FF/PwD/ESM/Telugu MQ) are "
+                 "subsets of GQ-ALL / MQ-ALL.")
     obj = {'authority_code': 'centac', 'list_name': K['list_name'], 'published_on': published,
            'source_file_name': os.path.basename(path), 'notes': notes, 'row_count': len(rows), 'checks': checks,
            'rows': rows}
-    fp = os.path.join(out, f"centac_{K['short']}.json")
+    fp = os.path.join(out, f"centac_{K['short'].replace('_draft', '_' + stage)}.json")
     with open(fp, 'w') as f:
         json.dump(obj, f, indent=1, ensure_ascii=False)
     print(fp)
