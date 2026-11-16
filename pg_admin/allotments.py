@@ -103,7 +103,7 @@ def _state_rank_label(r):
     st = (_authorities().get(code) or ('', ''))[1] or 'State'
     q = (r.get('quota_raw') or '').strip()
     if (code, q) in OTHER_LIST_RANKS:
-        return f'{st} {q} merit rank'          # e.g. "Tamil Nadu MQ merit rank" — not the TN (GQ) rank
+        return other_list_label(code, r)       # e.g. "Tamil Nadu MQ merit rank" / "RIMS Open merit rank"
     return f'{st} rank'
 
 
@@ -132,7 +132,25 @@ def short_tag(code):
 # Result rows whose `rank` is on a DIFFERENT state merit list than the authority's main one (Tamil Nadu's
 # Management Quota / NRI rows carry the MQ merit rank, not the GQ rank; 2026-11-05) — used by the results API's
 # rank_is_state_merit flag. (Matching itself is on the All-India rank only since 2026-11-09.)
-OTHER_LIST_RANKS = {('dmer_tn', 'MQ'), ('dmer_tn', 'NRI')}
+# Manipur (2026-11-16): ranks restart in each of the 9 seat-pool merit lists (RIMS / JNIMS / SAHS × open, in-service,
+# institutional, management) — a pool rank is never a state-wide rank. quota_raw names the pool's list.
+MANIPUR_POOLS = {'RIMS_OPEN (merit list Annexure A)', 'NON_RIMS_OPEN (merit list Annexure B)',
+                 'RIMS_IN_SERVICE (merit list Annexure C)', 'JNIMS_DIRECT (merit list Annexure D)',
+                 'JNIMS_INSTITUTIONAL_PREFERENCE (merit list Annexure E)', 'JNIMS_IN_SERVICE (merit list Annexure F)',
+                 'SAHS_DIRECT (merit list Annexure G)', 'SAHS_IN_SERVICE (merit list Annexure H)',
+                 'SAHS_MGMT (merit list Annexure I)'}
+POOL_RANK_AUTHS = {'dhs_manipur'}        # rank label = the seat pool's own list ("RIMS Open merit rank")
+OTHER_LIST_RANKS = {('dmer_tn', 'MQ'), ('dmer_tn', 'NRI')} | {('dhs_manipur', q) for q in MANIPUR_POOLS}
+
+
+def other_list_label(code, r):
+    """Label of a rank taken from another (non state-wide) list, e.g. 'Tamil Nadu MQ merit rank',
+    'RIMS Open merit rank' (Manipur pools)."""
+    q = (r.get('quota_raw') or '').strip()
+    if code in POOL_RANK_AUTHS:
+        return f"{r.get('quota') or q} merit rank"
+    st = (_authorities().get(code) or ('', ''))[1] or 'State'
+    return f'{st} {q} merit rank'
 
 
 def _short_round(rnd):
