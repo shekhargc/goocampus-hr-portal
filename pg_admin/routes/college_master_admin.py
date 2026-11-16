@@ -887,6 +887,8 @@ def college_fees():
     conn = get_db()
     from pg_admin.data import fees as _FEES          # 2026-27 fee where verified, else 2025 (2026-11-11)
     eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
+    # every fee, cut-off or not (founder 2026-11-16): 2025 cut-off seat types + 2026-27 fees with no cut-off row
+    src = _FEES.source_sql(conn)
     # Cascading filters (founder 2026-11-12): Family → Authority → State → College type → Quota → Category.
     # Each dropdown lists only the values that exist for the filters chosen ABOVE it; a chosen value that no
     # longer exists under the upstream choices is dropped (the page JS also clears downstream on change).
@@ -904,7 +906,7 @@ def college_fees():
                 if uval:
                     w.append(f"{ucol} = ?"); pr.append(uval)
             opts[name] = [r['v'] for r in conn.execute(
-                f"SELECT DISTINCT {col} AS v FROM pg_cutoffs c WHERE " + " AND ".join(w) + " ORDER BY 1", pr).fetchall()]
+                f"SELECT DISTINCT {col} AS v FROM {src} c WHERE " + " AND ".join(w) + " ORDER BY 1", pr).fetchall()]
             if val and val not in opts[name]:
                 _casc[i][2] = ''
     except Exception as e:
@@ -940,7 +942,7 @@ def college_fees():
     authorities, ctypes = [], []
     try:
         fee26 = _FEES.summary(conn)
-        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + fj + wsql + grp + ") t",
+        total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM " + src + " c" + fj + wsql + grp + ") t",
                              params).fetchone()['n']
         offset = (page - 1) * _FEES_PER_PAGE
         rows = conn.execute(
@@ -948,7 +950,7 @@ def college_fees():
             "c.quota AS quota, c.category AS category, MAX(c.state) AS state, "
             f"MAX(c.institute_type) AS institute_type, MAX({eff}) AS fee, MAX({effy}) AS fee_year, "
             "MAX(c.fee) AS fee_2025, " + ("MAX(f26.fee_total)" if _FEES.available(conn) else "NULL") + " AS fee_2026, "
-            "MAX(a.master_id) AS id" + _FEES.detail_sql(conn) + " FROM pg_cutoffs c "
+            "MAX(a.master_id) AS id" + _FEES.detail_sql(conn) + " FROM " + src + " c "
             "LEFT JOIN pg_college_alias a ON a.alias_key = btrim(regexp_replace(lower(c.institute), '[^a-z0-9]+', ' ', 'g'))"
             + fj + wsql + grp + " ORDER BY " + order + " LIMIT ? OFFSET ?",
             params + [_FEES_PER_PAGE, offset]).fetchall()

@@ -415,6 +415,7 @@ def api_pg_fees():
     try:
         from pg_admin.data import fees as _FEES       # 2026-27 fee where verified, else 2025 (2026-11-11)
         eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
+        src = _FEES.source_sql(conn)     # + 2026-27 fees with no 2025 cut-off seat type (2026-11-16)
         where, params = _fee_where(f, eff)
         wsql = " WHERE " + " AND ".join(where)
         having, hparams = [], []
@@ -428,7 +429,7 @@ def api_pg_fees():
                  'fee_asc': "fee ASC NULLS LAST"}.get(sort, "fee ASC NULLS LAST")
         grp = " GROUP BY c.institute, c.course, c.quota, c.category "
         total = conn.execute(
-            "SELECT COUNT(*) AS n FROM (SELECT 1 FROM pg_cutoffs c" + fj + wsql + grp + hsql + ") t",
+            "SELECT COUNT(*) AS n FROM (SELECT 1 FROM " + src + " c" + fj + wsql + grp + hsql + ") t",
             params + hparams).fetchone()['n']
         offset = (page - 1) * _PER_PAGE
         rows = conn.execute(
@@ -437,7 +438,7 @@ def api_pg_fees():
             "MAX(c.institute_type) AS institute_type, MAX(c.seat_type) AS seat_type, "
             f"MAX({eff}) AS fee, MAX({effy}) AS fee_year, MAX(a.master_id) AS id"
             + _FEES.detail_sql(conn) + " "
-            "FROM pg_cutoffs c "
+            "FROM " + src + " c "
             f"LEFT JOIN pg_college_alias a ON a.alias_key = {_NORM}" + fj
             + wsql + grp + hsql + f" ORDER BY {order}, institute ASC LIMIT ? OFFSET ?",
             params + hparams + [_PER_PAGE, offset]).fetchall()
@@ -465,7 +466,8 @@ def api_pg_fees_facets():
     if not _authorized():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     fam = (request.args.get('family') or '').strip()
-    base = ["COALESCE(is_reference,0)=0", "fee IS NOT NULL", "fee > 1"]
+    # a 2026-only fee row (fee NULL, year 2026) counts as priced too (2026-11-16)
+    base = ["COALESCE(is_reference,0)=0", "(fee > 1 OR year = 2026)"]
     params = []
     if fam in ('medical', 'dnb'):
         base.append("UPPER(COALESCE(degree,'')) " + ("LIKE ?" if fam == 'dnb' else "NOT LIKE ?"))
@@ -474,12 +476,14 @@ def api_pg_fees_facets():
         base.append(no_dnb_sql())
     wsql = " WHERE " + " AND ".join(base)
     conn = get_db()
+    from pg_admin.data import fees as _FEES
+    src = _FEES.source_sql(conn)
     out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': [],
            'college_types': [], 'authorities': []}
     try:
         def distinct(col):
             return [r[col] for r in conn.execute(
-                f"SELECT DISTINCT {col} FROM pg_cutoffs" + wsql
+                f"SELECT DISTINCT {col} FROM " + src + " src" + wsql
                 + f" AND COALESCE({col},'')<>'' ORDER BY {col}", params).fetchall()]
         out['states'] = distinct('state')
         out['courses'] = distinct('course')
@@ -526,7 +530,7 @@ def api_pg_fees_college(college_id):
                      **{k: r[k] for k in r.keys() if k.startswith('fee_') and k != 'fee_year'}}) for r in conn.execute(
                 "SELECT c.course AS course, MAX(c.degree) AS degree, c.quota AS quota, "
                 f"c.category AS category, MAX({eff}) AS fee, MAX({effy}) AS fee_year"
-                + _FEES.detail_sql(conn) + " FROM pg_cutoffs c" + fj +
+                + _FEES.detail_sql(conn) + " FROM " + _FEES.source_sql(conn) + " c" + fj +
                 f" WHERE c.institute IN ({ph}) AND COALESCE(c.is_reference,0)=0 "
                 f"AND {eff} IS NOT NULL AND {eff} > 1" + extra +
                 " GROUP BY c.course, c.quota, c.category ORDER BY c.course, c.quota, c.category",

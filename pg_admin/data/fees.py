@@ -102,6 +102,33 @@ def eff_year(conn, alias='c'):
             if available(conn) else f"{alias}.year")
 
 
+_SRC_COLS = "institute, course, degree, quota, category, state, institute_type, seat_type, authority, is_reference, fee, year, degree_group"
+
+
+def source_sql(conn):
+    """The rows a FEE screen lists (founder 2026-11-16: "in College Fees, show every fee whether or not there is a
+    cut-off"): every 2025 cut-off seat type (pg_cutoffs) PLUS every verified 2026-27 fee whose seat type has no
+    2025 cut-off row (e.g. Karnataka In-service / NRI / some Management lines — Subbaiah MS Ortho Management
+    ₹49.15 L). Use as `FROM {source_sql(conn)} c` instead of `FROM pg_cutoffs c` — same columns; the extra rows
+    carry fee NULL + year 2026, so eff_fee() / eff_year() / join_sql() give them their 2026 fee. Predictor and
+    cut-off explorer keep reading pg_cutoffs only (cut-off seat types). Falls back to pg_cutoffs when there is
+    no fee store."""
+    if not available(conn):
+        return "pg_cutoffs"
+    return ("(SELECT " + _SRC_COLS + " FROM pg_cutoffs UNION ALL "
+            "SELECT f.institute, f.course, split_part(f.course, ' - ', 1) AS degree, f.quota, f.category, "
+            "COALESCE(m.st, CASE WHEN f.authority <> 'MCC (All India)' THEN f.authority END) AS state, "
+            "m.it AS institute_type, NULL AS seat_type, f.authority, 0 AS is_reference, NULL::numeric AS fee, "
+            f"{FEE_YEAR} AS year, NULL AS degree_group "
+            f"FROM pg_fees f "
+            "LEFT JOIN (SELECT DISTINCT authority, " + KEY_SQL('institute') + " AS i, " + KEY_SQL('course') +
+            " AS co, " + KEY_SQL('quota') + " AS qu FROM pg_cutoffs) k ON k.authority = f.authority "
+            "AND k.i = f.inst_key AND k.co = f.course_key AND k.qu = f.quota_key "
+            "LEFT JOIN (SELECT institute, MAX(state) AS st, MAX(institute_type) AS it FROM pg_cutoffs "
+            "GROUP BY institute) m ON m.institute = f.institute "
+            f"WHERE f.fee_year = {FEE_YEAR} AND k.authority IS NULL)")
+
+
 DETAIL = ('tuition', 'other_fee', 'other_label', 'note', 'source', 'source_date', 'prev_fee', 'prev_source')
 
 
