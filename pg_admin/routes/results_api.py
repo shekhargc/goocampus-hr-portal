@@ -543,12 +543,114 @@ def api_results():
         conn.close()
 
 
+FACET_DIMS = (('quotas', 'quota', 'r.quota'), ('categories', 'category', 'r.allotted_category'),
+              ('courses', 'course', 'r.course'), ('states', 'state', 'r.state'),
+              ('college_types', 'college_type', 'r.college_type'))
+FACET_LISTS = ('allotments', 'colleges', 'cutoffs', 'leftover')
+
+
+def _facet_sel(a):
+    """The doctor's current dropdown choices {dim: value} (only the ones set)."""
+    return {d: _s(a.get(d)) for _, d, _c in FACET_DIMS if _s(a.get(d))}
+
+
+def _facet_rows(rows, sel, field=None):
+    """Standard faceting over row dicts: each dimension's counts apply every OTHER chosen filter, not its own
+    (so a doctor can still switch within one dropdown). The chosen value is always listed (0 if nothing left)."""
+    field = field or {}
+    out = {}
+    for key, d, _c in FACET_DIMS:
+        f = field.get(d, d)
+        cnt = Counter()
+        for r in rows:
+            if all(r.get(field.get(o, o)) == v for o, v in sel.items() if o != d):
+                v = r.get(f)
+                if v not in (None, ''):
+                    cnt[v] += 1
+        if sel.get(d) and sel[d] not in cnt:
+            cnt[sel[d]] = 0
+        out[key] = [[v, cnt[v]] for v in sorted(cnt)]
+    return out
+
+
+def _leftover_rows(conn, auth, year, rd):
+    """Every seat type of the authority's current seat matrix with seats still left after this round (no filters)."""
+    from pg_admin.routes.api_seat_matrix import _NO_DNB
+    from pg_admin.routes.api import HIDE_DNB
+    no_dnb = _NO_DNB.replace('course_name', 'm.course_name').replace("COALESCE(section", "COALESCE(m.section")
+    seats = defaultdict(int)
+    meta = {}
+    for m in conn.execute(
+            "SELECT m.cutoff_institute AS i, m.cutoff_course AS c, m.cutoff_quota AS q, m.cutoff_category AS k, "
+            "m.state, m.institute_type, SUM(m.seats) AS s FROM pg_seat_matrix m JOIN pg_seat_matrix_source s "
+            "ON s.counselling_body=m.counselling_body AND s.academic_year=m.academic_year "
+            "WHERE m.authority_code=? AND m.academic_year=? AND COALESCE(s.superseded,0)=0 "
+            "AND COALESCE(m.cutoff_institute,'')<>'' " + (f"AND {no_dnb} " if HIDE_DNB else "") +
+            "GROUP BY 1,2,3,4,5,6", [auth, year]).fetchall():
+        k = (m['i'], m['c'], _qn(m['q']), m['k'])
+        seats[k] += int(m['s'] or 0)
+        meta[k] = (m['state'] or '', _college_type(m['institute_type']))
+    # seats taken in this round and every earlier one (a later round lists only its own allotments)
+    taken = defaultdict(int)
+    for r in conn.execute(
+            "SELECT r.institute, r.course, r.quota, r.allotted_category, COUNT(*) AS n FROM pg_results r "
+            "JOIN pg_results_source s ON s.authority_code=r.authority_code AND s.academic_year=r.academic_year "
+            "AND s.round=r.round WHERE r.authority_code=? AND r.academic_year=? AND s.round_order<=? "
+            "AND COALESCE(r.institute,'')<>'' GROUP BY 1,2,3,4",
+            [auth, year, int(rd['round_order'] or 1)]).fetchall():
+        taken[(r['institute'], r['course'], _qn(r['quota']), r['allotted_category'])] += int(r['n'])
+    rows = []
+    for k, s in seats.items():
+        left = s - taken.get(k, 0)
+        if left <= 0:
+            continue
+        st, ct = meta[k]
+        rows.append({'institute': k[0], 'course': k[1], 'quota': k[2], 'category': k[3], 'state': st,
+                     'college_type': ct, 'seats': s, 'allotted': taken.get(k, 0), 'left': left})
+    return rows, seats, taken
+
+
+def _allot_conds(a, auth, year, rnd):
+    """WHERE pieces of the allotments list (/api/pg/results) WITHOUT the dropdown dimensions: round, program,
+    q, rank (+ rank_list rule), air, rank_from / rank_to."""
+    conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _program(a)
+    params = [auth, year, rnd]
+    rank, rf, rt, air = _int(a.get('rank')), _int(a.get('rank_from')), _int(a.get('rank_to')), _int(a.get('air'))
+    if rank:
+        conds.append("r.rank = ?"); params.append(rank)
+        if _s(a.get('rank_list')) != 'all':
+            other = [q for c, q in OTHER_LIST_RANKS if c == auth]
+            if other:
+                conds.append("COALESCE(trim(r.quota_raw),'') <> ALL(?)"); params.append(other)
+    if air:
+        conds.append("COALESCE(r.rank_ai, r.rank) = ?"); params.append(air)
+    if rf:
+        conds.append("r.rank >= ?"); params.append(rf)
+    if rt:
+        conds.append("r.rank <= ?"); params.append(rt)
+    _filters({'q': a.get('q')}, conds, params)
+    return conds, params
+
+
 def api_results_facets():
+    """GET /api/pg/results/facets?authority=&round=  → dropdown values with counts for one round.
+    Interrelated dropdowns (2026-11-13): pass the doctor's current choices and the list being viewed —
+      &list=allotments (default) | colleges | cutoffs | leftover
+      &q= &course= &quota= &category= &state= &college_type=
+      allotments: &rank= &air= &rank_from= &rank_to= (same meaning as /api/pg/results)
+      cutoffs:    &trend= &compare_group=compared|new &rank= (open at that rank) &program=dnb
+    Each dimension's counts apply every OTHER choice, not its own (standard faceting). Counts are in the list's
+    units: allotment rows / colleges / seat types (cutoffs, leftover). Same shape as before: quotas, categories,
+    courses, states, college_types as [value, count]; totals (round-wide, unchanged) + matched (all choices
+    applied) + list. With no list and no choices the answer is exactly the old one."""
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
     a = request.args
     auth, year = _s(a.get('authority')) or 'mcc', _s(a.get('year')) or YEAR
+    lst = _s(a.get('list')).lower()
+    lst = lst if lst in FACET_LISTS else 'allotments'
+    sel = _facet_sel(a)
     conn = get_db()
     try:
         rd = _pick_round(conn, auth, year, _s(a.get('round')))
@@ -556,16 +658,53 @@ def api_results_facets():
             return jsonify({'ok': True, 'round': None})
         base = " AND ".join(["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _program(a))
         p = [auth, year, rd['round']]
-        out = {'ok': True, 'round': rd}
-        for key, col in (('quotas', 'r.quota'), ('categories', 'r.allotted_category'), ('courses', 'r.course'),
-                         ('states', 'r.state'), ('college_types', 'r.college_type')):
-            out[key] = [[x['v'], x['n']] for x in conn.execute(
-                f"SELECT {col} AS v, COUNT(*) AS n FROM pg_results r WHERE {base} AND COALESCE({col},'')<>'' "
-                f"GROUP BY {col} ORDER BY {col}", p).fetchall()]
+        out = {'ok': True, 'round': rd, 'list': lst}
+        if lst in ('allotments', 'colleges'):
+            conds, params = _allot_conds(a, auth, year, rd['round'])
+            what = ("COUNT(DISTINCT CASE WHEN r.section='dnb' THEN r.institute_raw "
+                    "ELSE COALESCE(NULLIF(r.institute,''), r.institute_raw) END)") if lst == 'colleges' else "COUNT(*)"
+            for key, d, col in FACET_DIMS:
+                c2, p2 = list(conds), list(params)
+                for _k, o, ocol in FACET_DIMS:
+                    if o != d and sel.get(o):
+                        c2.append(f"{ocol} = ?"); p2.append(sel[o])
+                cnt = {x['v']: x['n'] for x in conn.execute(
+                    f"SELECT {col} AS v, {what} AS n FROM pg_results r WHERE {' AND '.join(c2)} "
+                    f"AND COALESCE({col},'')<>'' GROUP BY {col}", p2).fetchall()}
+                if sel.get(d) and sel[d] not in cnt:
+                    cnt[sel[d]] = 0
+                out[key] = [[v, cnt[v]] for v in sorted(cnt)]
+            c2, p2 = list(conds), list(params)
+            for _k, o, ocol in FACET_DIMS:
+                if sel.get(o):
+                    c2.append(f"{ocol} = ?"); p2.append(sel[o])
+            out['matched'] = conn.execute(f"SELECT {what} AS n FROM pg_results r WHERE {' AND '.join(c2)}",
+                                          p2).fetchone()['n']
+        elif lst == 'cutoffs':
+            dnb = _s(a.get('program')).lower() == 'dnb'
+            a2 = {'q': a.get('q'), 'program': a.get('program')}
+            rows = _dnb_closing_rows(conn, auth, year, rd, a2) if dnb else _closing_rows(conn, auth, year, rd, a2)
+            trend, rank, grp = _s(a.get('trend')), _int(a.get('rank')), _s(a.get('compare_group'))
+            rows = [r for r in rows if (not trend or r['trend'] == trend) and (not rank or r['closing'] >= rank)
+                    and (not grp or r['compare_group'] == grp)]
+            out.update(_facet_rows(rows, sel))
+            out['matched'] = sum(1 for r in rows if all(r.get(d) == v for d, v in sel.items()))
+        else:                                                   # leftover
+            rows, _seats, _taken = _leftover_rows(conn, auth, year, rd)
+            q = NM.norm(_s(a.get('q')))
+            if q:
+                rows = [r for r in rows if all(w in NM.norm(r['institute']) for w in q.split())]
+            out.update(_facet_rows(rows, sel))
+            out['matched'] = sum(1 for r in rows if all(r.get(d) == v for d, v in sel.items()))
         t = conn.execute(f"SELECT COUNT(*) AS n, MIN(rank) AS lo, MAX(rank) AS hi, COUNT(DISTINCT institute_raw) AS c "
                          f"FROM pg_results r WHERE {base}", p).fetchone()
         out['totals'] = {'allotted': t['n'], 'first_rank': t['lo'], 'last_rank': t['hi'], 'colleges': t['c']}
         return jsonify(out)
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_results_facets: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
 
@@ -937,7 +1076,8 @@ def api_results_cutoffs():
             rows = [r for r in rows if r['trend'] == trend]
         if rank:
             rows = [r for r in rows if r['closing'] >= rank]
-        group_counts = dict(Counter(r['compare_group'] for r in rows))     # for the tab badges
+        group_counts = {'compared': 0, 'new': 0}                       # for the tab badges (0 sent explicitly)
+        group_counts.update(Counter(r['compare_group'] for r in rows))
         reason_counts = dict(Counter(r['compare'] for r in rows))
         grp, cmp_ = _s(a.get('compare_group')), _s(a.get('compare'))
         if grp:                                   # compared | new
@@ -1037,43 +1177,14 @@ def api_results_leftover():
         rd = _pick_round(conn, auth, year, _s(a.get('round')))
         if not rd:
             return jsonify({'ok': True, 'round': None, 'rows': []})
-        from pg_admin.routes.api_seat_matrix import _NO_DNB
-        from pg_admin.routes.api import HIDE_DNB
-        no_dnb = _NO_DNB.replace('course_name', 'm.course_name').replace("COALESCE(section", "COALESCE(m.section")
-        seats = defaultdict(int)
-        meta = {}
-        for m in conn.execute(
-                "SELECT m.cutoff_institute AS i, m.cutoff_course AS c, m.cutoff_quota AS q, m.cutoff_category AS k, "
-                "m.state, m.institute_type, SUM(m.seats) AS s FROM pg_seat_matrix m JOIN pg_seat_matrix_source s "
-                "ON s.counselling_body=m.counselling_body AND s.academic_year=m.academic_year "
-                "WHERE m.authority_code=? AND m.academic_year=? AND COALESCE(s.superseded,0)=0 "
-                "AND COALESCE(m.cutoff_institute,'')<>'' " + (f"AND {no_dnb} " if HIDE_DNB else "") +
-                "GROUP BY 1,2,3,4,5,6", [auth, year]).fetchall():
-            k = (m['i'], m['c'], _qn(m['q']), m['k'])
-            seats[k] += int(m['s'] or 0)
-            meta[k] = (m['state'] or '', _college_type(m['institute_type']))
-        # seats taken in this round and every earlier one (a later round lists only its own allotments)
-        taken = defaultdict(int)
-        for r in conn.execute(
-                "SELECT r.institute, r.course, r.quota, r.allotted_category, COUNT(*) AS n FROM pg_results r "
-                "JOIN pg_results_source s ON s.authority_code=r.authority_code AND s.academic_year=r.academic_year "
-                "AND s.round=r.round WHERE r.authority_code=? AND r.academic_year=? AND s.round_order<=? "
-                "AND COALESCE(r.institute,'')<>'' GROUP BY 1,2,3,4",
-                [auth, year, int(rd['round_order'] or 1)]).fetchall():
-            taken[(r['institute'], r['course'], _qn(r['quota']), r['allotted_category'])] += int(r['n'])
+        allrows, seats, taken = _leftover_rows(conn, auth, year, rd)
         f = {k: _s(a.get(k)) for k in ('course', 'quota', 'category', 'state', 'college_type')}
         q = NM.norm(_s(a.get('q')))
         rows = []
-        for k, s in seats.items():
-            st, ct = meta[k]
-            left = s - taken.get(k, 0)
-            if left <= 0:
+        for row in allrows:
+            if any(f[x] and row[x] != f[x] for x in f):
                 continue
-            row = {'institute': k[0], 'course': k[1], 'quota': k[2], 'category': k[3], 'state': st,
-                   'college_type': ct, 'seats': s, 'allotted': taken.get(k, 0), 'left': left}
-            if any(f[x] and row[{'category': 'category'}.get(x, x)] != f[x] for x in f):
-                continue
-            if q and not all(w in NM.norm(k[0]) for w in q.split()):
+            if q and not all(w in NM.norm(row['institute']) for w in q.split()):
                 continue
             rows.append(row)
         rows.sort(key=lambda r: (r['state'], r['institute'], r['course'], r['quota'], r['category']))

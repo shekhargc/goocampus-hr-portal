@@ -1,7 +1,9 @@
 """Telangana KNRUHS "MEDICAL PG DEGREE/DIPLOMA ADMISSIONS UNDER COMPETENT AUTHORITY QUOTA FOR THE AY 2026-27 -
 PROVISIONAL MERIT LIST OF REGISTERED CANDIDATES" -> rank-bridge rows.
 
-Usage: /usr/bin/python3 read_knruhs_tg.py <merit.pdf> [--out DIR]   (writes knruhs_cq_provisional.json)
+Usage: /usr/bin/python3 read_knruhs_tg.py <merit.pdf> [--addendum <addendum.pdf>] [--out DIR]
+  (writes knruhs_cq_provisional.json, or knruhs_cq_final.json for the FINAL merit list of 13.11.2026 - same
+  list_name, so it replaces the provisional list; --addendum adds the 'ADDENDUM TO MERIT LIST' rows)
 
 Columns printed: S.No, Rank (NEET PG AIR), Roll No, Score, Name of the Candidate, Gender, Category, Local, Minority,
 Service, Remarks. Read ONLY S.No, Rank, Roll No, Score, Category, Local, Minority, Service and whether a remark is
@@ -20,6 +22,13 @@ INT = re.compile(r'^\d+$')
 CATS = {'OC', 'BCA', 'BCB', 'BCC', 'BCD', 'BCE', 'SC1', 'SC2', 'SC3', 'ST', 'EWS'}
 HEAD = ['S.No', 'Rank', 'Roll', 'No', 'Score', 'Name', 'of', 'the', 'Candidate', 'Gender', 'Category', 'Local',
         'Minority', 'Service', 'Remarks']
+# FINAL merit list of 13.11.2026 (102 pages): same columns, 'Local' printed as 'Local Area', columns further left
+HEAD_FINAL = HEAD[:12] + ['Area'] + HEAD[12:]
+HX = {'provisional': (('Gender', 460), ('Category', 502), ('Local', 550), ('Minority', 582), ('Service', 629), ('Remarks', 699)),
+      'final': (('Gender', 440), ('Category', 478), ('Local', 524), ('Minority', 577), ('Service', 621), ('Remarks', 694))}
+COLS_FINAL = {'sno': (15, 48), 'rank': (48, 85), 'score': (145, 175), 'gender': (435, 472), 'cat': (472, 520),
+              'local': (520, 570), 'min': (570, 615), 'serv': (615, 650), 'rem': (650, 792)}
+ADD_HEAD = ['S.NO', 'NEET', 'RANK', 'NEET', 'ROLL', 'NO', 'NAME', 'OF', 'THE', 'CANDIDATE', 'CATEGORY', 'REMARKS']
 # column x-ranges (page is 792 x 612 landscape); checked against the header words on every page
 COLS = {'sno': (15, 50), 'rank': (48, 85), 'score': (145, 175), 'gender': (460, 495), 'cat': (495, 548),
         'local': (548, 578), 'min': (578, 628), 'serv': (628, 660), 'rem': (660, 792)}
@@ -32,16 +41,57 @@ def col(x):
     return None
 
 
+def read_addendum(path):
+    """'ADDENDUM TO MERIT LIST' (13.11.2026, 1 page): S.NO, NEET RANK, NEET ROLL NO, NAME, CATEGORY, REMARKS
+    ('CONSIDERED AS PER COURT ORDERS'). No state rank / score / local / service printed. Name never read."""
+    d = fitz.open(path)
+    if d.page_count != 1:
+        raise SystemExit('addendum: expected 1 page')
+    p = d[0]
+    t = ' '.join(p.get_text().split()).upper()
+    for need in ('KALOJI NARAYANA RAO UNIVERSITY', 'COMPETENT AUTHORITY QUOTA', 'AY 2026-27', 'ADDENDUM TO MERIT LIST'):
+        if need not in t:
+            raise SystemExit('addendum title changed: missing ' + need)
+    m = re.search(r'DATE\s*:\s*(\d{2})\.(\d{2})\.(\d{4})', t)
+    ws = p.get_text('words')
+    hy = [w for w in ws if w[4] == 'S.NO']
+    if len(hy) != 1 or [w[4] for w in sorted([w for w in ws if abs(w[1] - hy[0][1]) < 3], key=lambda w: w[0])] != ADD_HEAD:
+        raise SystemExit('addendum: column headings changed')
+    anchors = sorted([w for w in ws if ROLL.match(w[4])], key=lambda w: w[1])
+    if len(anchors) != len(re.findall(r'(?<!\d)2666\d{7}(?!\d)', p.get_text())):
+        raise SystemExit('addendum: roll outside the table')
+    out = []
+    for i, a in enumerate(anchors):
+        line = sorted([w for w in ws if abs(w[1] - a[1]) < 3], key=lambda w: w[0])
+        left = [w for w in line if w[0] < a[0]]
+        sno = [w for w in ws if w[0] < 120 and abs(w[1] - a[1]) < 3.5 and INT.match(w[4])]   # S.No sits ~1pt lower
+        rank = [w for w in left if 150 < w[0] < 260 and INT.match(w[4])]
+        cat = [w for w in line if 470 <= w[0] < 530]
+        rem = ' '.join(w[4] for w in line if w[0] >= 530)
+        if len(sno) != 1 or int(sno[0][4]) != i + 1 or len(rank) != 1 or len(cat) != 1 or cat[0][4] not in CATS:
+            raise SystemExit(f'addendum row {i + 1}: shape')
+        if rem != 'CONSIDERED AS PER COURT ORDERS':
+            raise SystemExit(f'addendum row {i + 1}: unexpected remark')
+        out.append({'roll': a[4], 'air': int(rank[0][4]), 'cat': cat[0][4]})
+    return out, (f'{m.group(3)}-{m.group(2)}-{m.group(1)}' if m else '')
+
+
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     path = sys.argv[1]
     out = sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv else DEFAULT_OUT
+    addendum = sys.argv[sys.argv.index('--addendum') + 1] if '--addendum' in sys.argv else None
     d = fitz.open(path)
     title = ' '.join(d[0].get_text().split()).upper()
-    for need in ('KALOJI NARAYANA RAO UNIVERSITY', 'COMPETENT AUTHORITY QUOTA', 'AY 2026-27', 'PROVISIONAL MERIT LIST'):
+    stage = 'final' if 'FINAL MERIT LIST OF CANDIDATES' in title else 'provisional'
+    for need in ('KALOJI NARAYANA RAO UNIVERSITY', 'COMPETENT AUTHORITY QUOTA', 'AY 2026-27',
+                 'FINAL MERIT LIST' if stage == 'final' else 'PROVISIONAL MERIT LIST'):
         if need not in title:
             raise SystemExit('title changed: missing ' + need)
+    global COLS
+    if stage == 'final':
+        COLS = COLS_FINAL
     last = ' '.join(d[-1].get_text().split())
     m = re.search(r'Date\s*:\s*(\d{2})\.(\d{2})\.(\d{4})', last, re.I)
     published = f'{m.group(3)}-{m.group(2)}-{m.group(1)}' if m else ''
@@ -54,10 +104,10 @@ def main():
         if len(hy) != 1:
             raise SystemExit(f'p{p.number + 1}: header row not found')
         hdr = sorted([w for w in ws if abs(w[1] - hy[0][1]) < 3], key=lambda w: w[0])
-        if [w[4] for w in hdr] != HEAD:
+        if [w[4] for w in hdr] != (HEAD_FINAL if stage == 'final' else HEAD):
             raise SystemExit(f'p{p.number + 1}: column headings changed')
         hx = {w[4]: w[0] for w in hdr}
-        for k, x in (('Gender', 460), ('Category', 502), ('Local', 550), ('Minority', 582), ('Service', 629), ('Remarks', 699)):
+        for k, x in HX[stage]:
             if abs(hx[k] - x) > 4:
                 raise SystemExit(f'p{p.number + 1}: column {k} moved')
         anchors = sorted([w for w in ws if ROLL.match(w[4]) and 80 <= w[0] < 100], key=lambda w: w[1])
@@ -80,7 +130,11 @@ def main():
                     g[c].append(w[4])
             wrapped = [w for w in band if abs(w[1] - a[1]) >= 3]
             if any(col(w[0]) not in ('rem',) for w in wrapped):
-                raise SystemExit(f'p{p.number + 1} row {i + 1}: wrapped text outside Remarks')
+                if stage == 'final' and all(col(w[0]) in ('rem', 'local') for w in wrapped):
+                    pass    # final list wraps some Local Area values too - checked below
+                else:
+                    raise SystemExit(f'p{p.number + 1} row {i + 1}: wrapped text outside Remarks '
+                                     f'{sorted({(col(w[0]), round(w[0]), round(w[1] - a[1])) for w in wrapped if col(w[0]) != "rem"})}')
             where = f'p{p.number + 1} row {i + 1}'
             for k in ('sno', 'rank', 'score'):
                 if len(g[k]) != 1 or not INT.match(g[k][0]):
@@ -119,7 +173,7 @@ def main():
     air_dup = [k for k, v in collections.Counter(r['air'] for r in rows).items() if v > 1]
     checks = {
         'page_count': d.page_count, 'row_count': len(rows), 'rolls_in_pdf_text': text_rolls,
-        'printed_total_expected': 3518, 'state_rank_1_to_n': True,
+        'printed_total_expected': 3518 if stage == 'provisional' else 'none printed (final)', 'state_rank_1_to_n': True,
         'state_rank_source': "printed 'S.No' (list printed in merit order)",
         'air_source': "printed 'Rank' column (NEET PG AIR)", 'air_printed': sum(1 for r in rows if r['air']),
         'air_blank': sum(1 for r in rows if not r['air']), 'air_duplicates': air_dup[:20],
@@ -135,15 +189,39 @@ def main():
     }
     if hc_remarks != checks['local_dash']:
         raise SystemExit("High Court remarks != Local '-' rows")
-    if len(rows) != checks['printed_total_expected']:
+    if stage == 'provisional' and len(rows) != 3518:
         raise SystemExit(f'row count {len(rows)} != 3518 announced')
-    notes = ("KNRUHS CQ MD/MS + PG Diploma 2026-27 provisional merit list of registered candidates. state_rank = S.No; "
+    list_name = 'PG Medical CQ Provisional Merit List (MD/MS + PG Diploma)'     # final keeps the same list_name
+    if addendum:
+        add, add_date = read_addendum(addendum)
+        known = {r['roll'] for r in rows}
+        if any(a['roll'] in known for a in add):
+            raise SystemExit('addendum candidate already in the merit list')
+        placed = []
+        for a in add:
+            before = [r for r in rows if r['air'] < a['air']]        # the list runs in AIR order
+            n = max(r['state_rank'] for r in before) if before else 1
+            rows.append({'roll': a['roll'], 'air': a['air'], 'state_rank': n, 'score': None, 'category': a['cat'],
+                         'quota': ''})
+            placed.append({'air': a['air'], 'category': a['cat'], 'stored_state_rank': n})
+        rows.sort(key=lambda r: (r['state_rank'], r['air']))
+        checks['addendum'] = {'file': os.path.basename(addendum), 'date': add_date, 'rows': len(add), 'placed': placed,
+                              'how': "no state rank printed: stored with the S.No of the last list row above its AIR "
+                                     "(like an 'n-A' insertion); score / service not printed -> score empty, quota ''"}
+        checks['row_count'] = len(rows)
+    if stage == 'final':
+        notes = ("KNRUHS CQ MD/MS + PG Diploma 2026-27 FINAL merit list (13.11.2026)" + (" + addendum of 13.11.2026 (2 "
+                 "candidates considered as per court orders; no state rank printed - stored at the S.No above their AIR)"
+                 if addendum else "") + ". Replaces the provisional list of 07.11 under the same list name. state_rank "
+                 "= S.No; AIR printed for every row; in-service (Service 'S') rows quota 'In-service'.")
+    else:
+      notes = ("KNRUHS CQ MD/MS + PG Diploma 2026-27 provisional merit list of registered candidates. state_rank = S.No; "
              "AIR printed for every row; in-service (Service 'S') rows quota 'In-service'. Local '-' rows are the "
              "non-local candidates listed 'as per the directions of the Hon'ble High Court'. Grievances till 4 PM 09.11.2026.")
-    obj = {'authority_code': 'knruhs', 'list_name': 'PG Medical CQ Provisional Merit List (MD/MS + PG Diploma)',
+    obj = {'authority_code': 'knruhs', 'list_name': list_name,
            'published_on': published, 'source_file_name': os.path.basename(path), 'notes': notes,
            'row_count': len(rows), 'checks': checks, 'rows': rows}
-    fp = os.path.join(out, 'knruhs_cq_provisional.json')
+    fp = os.path.join(out, f'knruhs_cq_{stage}.json')
     with open(fp, 'w') as f:
         json.dump(obj, f, indent=1, ensure_ascii=False)
     print(fp)

@@ -270,3 +270,26 @@ every course = its (N), both TOTAL lines (all 12 columns) and the horizontal box
 Known PDF inconsistency: the p3 SVMC sheet swaps the Govt/minority split for 12 courses vs p2 + p4-5 (same totals);
 p2 + p4-5 agree cell for cell and are used, the differences are printed. 2026-27: 395 printed, 358 stored
 (Govt 197, Management 95, Telugu Minority 66); 351 linked to a 2025 cut-off.
+
+## Jharkhand Round 2 vacancies (`jharkhand_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/jharkhand_round2.py <vacancy.pdf> <round1_rows.json> <cutoffs2025.json> <out.json>
+Body "Jharkhand — Round 2 — State Counselling" (round_no 2, list_type vacancy → superseded=2; the Round 1 body is never
+touched), authority `jceceb`. Source: "Provisional Vacant Seat Matrix for Second Round of NEET (PG)-2026" (first seen
+13.11.2026). Same table as Round 1 + "Vacancy For 2nd Round" (→ State Quota rows) and "In Service" (→ In-service Quota
+rows); COLLEGES / COURSES are read from jharkhand.py. new_in_round = Round-2 "50% State Quota Seats" − Round 1 seats of
+the same college + course (round1_rows.json = the stored Round 1 body, MD/MS + DNB, from seatmatrix-dump rowsof=).
+Checks: headings, Sl. No., every institute's Total line (3 columns), vacancy ≤ seats, new seats ≤ vacancy.
+2026: 66 State Quota + 2 In-service (Sadar Hospital DNB Pathology) = 68 vacancies; the matrix column is 155 vs 129 in
+Round 1 (26 new seats: RIMS Ranchi 17, SNMMCH Dhanbad 9).
+
+## Telangana (`telangana.py`)
+    /usr/bin/python3 tools/seat_matrix/telangana.py <min_ns.pdf> <min_s.pdf> <ns_clin.pdf> <s_clin.pdf> <s_nonclin.pdf> <ns_nonclin.pdf> <cutoffs2025.json> <out.json>
+Body "Telangana — State Counselling", authority `knruhs`, section `state`, codes `TS-<STANDARD-NAME>`. KNRUHS Phase 1
+Competent Authority quota matrix (13.11.2026), six PDFs merged into one stored file. Non-minority files: one page per
+course, college × 37 columns (OC / BC A-E / BC POOL / SC 1-3 / ST × _G / _F / _PH_G / _PH_F) + a NET GROUP summary
+page; minority sheet (Deccan, Shadan, Dr. VRK Women's, Ayaan × GEN / FEM / GEN_PH / FEM_PH, no totals). Quotas: State
+Quota / In-service Quota, minority → "(Muslim Minority)"; bridged to 2025 'Govt Quota - Non Service-Local' / 'Govt
+Quota - Service-Local' (exact). Categories in 2025 KNRUHS wording (OPEN-GEN, BCA-FEM, SC2-GEN-PHO, BC-POOL,
+MIN-GEN-MSM …), category_code = PDF column. Checks: titles, headings, S.No, every printed number read, summary page =
+course pages (every course × column). 2026 Phase 1: 1,910 seats (State 1,427 + In-service 383 + minority 76 + 24),
+47 colleges (13 new district GMCs); 1,902 MD/MS + 8 diploma.

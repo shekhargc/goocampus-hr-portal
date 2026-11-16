@@ -263,3 +263,22 @@ seats; DNB → `DNB Quota`, section dnb. 2026 Round 1 provisional (04.11.2026): 
 2026 upgraded Round 1 (08.11.2026): 372 seats — direct 195 (49 kept, 131 same seat, 8 upgraded, 7 fresh), in-service
 177 (131 kept, 46 same seat); 9 R-1 choice-1 direct candidates gone; 2 seats left (SCB Gen Med UR-GC, VIMSAR Comm Med
 UR-PwD); 121 college × course groups / 322 cells within the matrix; rank_ai 364/372 (7 fresh + the A116 line empty).
+
+## Uttar Pradesh (`uttar_pradesh.py`)
+    /usr/bin/python3 tools/results/uttar_pradesh.py fetch <cache.json> --merit-mdms <UP merit MD/MS/Diploma R1.pdf> --merit-dnb <UP merit DNB R1.pdf>
+    /usr/bin/python3 tools/results/uttar_pradesh.py build <cache.json> <out.json> [--round "Round 1"] [--status final]
+DGME UP publishes **no allotment PDF**: upneet.gov.in → Allotted Candidate List → Allotted and Vacant Seat → MDMS /
+DNB stream → "Institute Wise Allotted Candidates Round- 1" (one ASP.NET page per institute: branch, serial, round,
+allotted category, roll, name, father's name, rank, date, left institute / course). `fetch` walks every institute of
+both streams (sequential, 1.5 s apart, ~110 requests) and writes a cache **without** names / father's names / rolls —
+the roll is used in memory only to find the candidate on the UP Round 1 state merit lists (same parsing as
+tools/merit_lists/read_dmetup.py). `rank` = merit-list SrNo (state merit rank), `rank_ai` = NEET AIR from that line.
+Quota: Govt. → Government Quota (BS/SS/SG in-service categories → Government Quota-Inservice), Private → Private
+Quota, "(MUSLIM / JAIN MINORITY)" institute codes → Private Quota-Minority, Post-MBBS DNB → DNB Quota (section dnb).
+Category UROP→UR, BCOP→BC, SCOP→SC, EWOP→EWS, STOP→ST, xxPH→xx-PH (2025 UP spellings). College / course names from
+tools/seat_matrix/uttar_pradesh.py. DNB-stream rows rank on the separate DNB merit list → quota_raw `DNB list …`.
+2026 Round 1 (allotment dated 02.11.2026, no provisional/final label printed; loaded as final): 2,904 allotted —
+MD/MS stream 2,832 (2,815 MD/MS + 17 diploma; page Rank = state merit rank on all lines), DNB stream 72 (43 DNB +
+29 Post-MBBS diploma; page Rank = AIR on all lines); Private 1,767 · Government 971 · Minority 115 · DNB 43 ·
+In-service 8; every roll on the merit list (rank_ai 2,904/2,904); reserved seats all to matching categories;
+1,093 college × course × quota × category groups all within the 2026 seat matrix (2,861 of 4,062 seats).
