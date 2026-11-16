@@ -531,6 +531,9 @@ def api_results():
             r['program'] = 'dnb' if r.get('section') == 'dnb' else 'mdms'
             r['course_name'] = r['course'] or r['course_raw']
             r['rank_is_state_merit'] = auth != 'mcc' and (auth, (r.get('quota_raw') or '').strip()) not in OTHER_LIST_RANKS
+            if (auth, (r.get('quota_raw') or '').strip()) in OTHER_LIST_RANKS:   # rank from another list (2026-11-16)
+                from pg_admin.allotments import other_list_label
+                r['state_rank_label'] = other_list_label(auth, r)
             out.append(r)
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'rows': out, 'total_matched': total,
                         'page': page, 'page_size': size, 'total_pages': (total + size - 1) // size})
