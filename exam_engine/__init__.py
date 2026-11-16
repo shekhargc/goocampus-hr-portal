@@ -32,4 +32,18 @@ def register_exam_engine(app):
     admin_packages.register_routes(app)
     from exam_engine import admin_dashboard
     admin_dashboard.register_routes(app)
+
+    @app.after_request
+    def _ex_no_store(resp):
+        """Doctor-specific exam data (attempts, answers, results, packages owned) must never be stored by a
+        shared cache. Only the logged-out package cards may be cached by goocampus.in itself."""
+        try:
+            from flask import request
+            p = request.path or ''
+            if p.startswith('/api/pg/mocks') and not p.startswith('/api/pg/mocks/img/'):
+                if not (p == '/api/pg/mocks/packages' and not request.headers.get('Authorization')):
+                    resp.headers['Cache-Control'] = 'private, no-store'
+        except Exception:
+            pass
+        return resp
     attempts.start_sweeper()          # submits attempts whose time ran out while the doctor was away

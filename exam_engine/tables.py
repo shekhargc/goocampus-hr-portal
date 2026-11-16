@@ -66,9 +66,35 @@ NEET_PG_2026['subject_test'] = {'questions': 60, 'minutes': 70}
 NEET_PG_2026['mini_test'] = {'questions': 30, 'minutes': 35}
 
 
+# Bump when any DDL / seed below changes. Boot does one SELECT when the database is already at (or past) this
+# version — no DDL, no table locks — so restarts and deploys never pause doctors' autosaves, and the two web
+# processes starting together can't deadlock (load test 2026-11-16). Staging (newer) and live (older) share the
+# database: an older process sees a higher version and skips, which is safe because every change is additive.
+SCHEMA_VERSION = 8
+
+
+def _schema_version(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS ex_meta (key TEXT PRIMARY KEY, value TEXT)")
+    r = conn.execute("SELECT value FROM ex_meta WHERE key='schema_version'").fetchone()
+    try:
+        return int(r['value']) if r else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 def ensure_exam_tables():
     conn = get_db()
     try:
+        if _schema_version(conn) >= SCHEMA_VERSION:
+            conn.commit()
+            return
+        conn.commit()
+        # one process at a time; never wait long for a table lock while doctors are mid-exam
+        conn.execute("SELECT pg_advisory_xact_lock(74210001)")
+        conn.execute("SET LOCAL lock_timeout = '5s'")
+        if _schema_version(conn) >= SCHEMA_VERSION:      # the other process just did it
+            conn.commit()
+            return
         conn.execute('''CREATE TABLE IF NOT EXISTS ex_tenants (
             id INTEGER PRIMARY KEY,
             code TEXT UNIQUE NOT NULL,
@@ -389,6 +415,8 @@ def ensure_exam_tables():
             cancelled_at TIMESTAMP
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ex_pp_user ON ex_package_purchases (user_id, status)")
+        conn.execute("INSERT INTO ex_meta (key, value) VALUES ('schema_version', ?) "
+                     "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (str(SCHEMA_VERSION),))
         conn.commit()
     except Exception as e:
         logging.error(f"ensure_exam_tables: {e}")

@@ -26,7 +26,7 @@ Founder-approved brief: `~/Desktop/Claude Code/NEET_PG_Mock_Platform_Brief.md`.
 6. Scoring, results and rank: **done** (see below).
 7. Packages, payments and the free sample: **done** (see below).
 8. Admin dashboard: **done** (see below).
-9. Load test and dry run.
+9. Load test and dry run: **load test done** ([mock-tests-load-test.md](mock-tests-load-test.md)). The team dry run plan is in [mock-tests-dry-run.md](mock-tests-dry-run.md).
 
 ## Step 3 — question import (`/admin/pg/mocks/import`, admin only)
 
