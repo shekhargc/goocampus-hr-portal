@@ -147,6 +147,18 @@ def _f(v):
         return None
 
 
+def _includes(flat, total):
+    """What the 2026-27 figure covers, per row (2026-11-17: RUHS shows tuition + admission + yearly academic fees;
+    NIMS / Sudha tuition only; KA tuition + RGUHS admission fee; TN self-financing = notified group fee)."""
+    tail = ' Hostel and other college charges are not included.'
+    lbl, tu, oth = flat.get('other_label'), _f(flat.get('tuition')), _f(flat.get('other_fee'))
+    if lbl and oth:
+        return f'Tuition + {lbl}, as printed by the authority.' + tail
+    if tu is not None and total is not None and abs(tu - total) < 1:
+        return 'Tuition only, as printed by the authority — no other fees printed.' + tail
+    return 'Fee as printed by the authority.' + tail
+
+
 def present(d, fee_field='fee', year_field='fee_year'):
     """Tidy one output row: fee as float, fee_year, fee_label ('2026-27' / '2025'), and fee_info (the breakup +
     source) for a 2026 fee. Pops the flat fee_<detail> columns."""
@@ -166,8 +178,7 @@ def present(d, fee_field='fee', year_field='fee_year'):
             'other_label': flat['other_label'] or None, 'note': flat['note'] or None,
             'source': flat['source'] or None, 'source_date': flat['source_date'] or None,
             'prev_fee': _f(flat['prev_fee']), 'prev_source': flat['prev_source'] or None,
-            'includes': 'Tuition + admission/university fee as printed by the authority. Hostel and other '
-                        'college charges are not included.'}
+            'includes': _includes(flat, d[fee_field])}
     else:
         d['fee_label'] = str(yr) if (yr and d[fee_field] is not None) else None
         d['fee_info'] = None
