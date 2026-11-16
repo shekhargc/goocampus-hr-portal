@@ -208,9 +208,12 @@ def lookup(fmap, authority, institute, course, quota, category=''):
 
 
 def attach(conn, rows, authority=None, inst='institute', course='course', quota='quota', category='category',
-           fee_field='fee', year_field='fee_year', base_year=2025, fmap=None):
+           fee_field='fee', year_field='fee_year', base_year=2025, fmap=None, alt=None):
     """Overlay the 2026 fee on each row dict in place (rows keep their 2025 fee when there is none).
-    authority: a fixed authority name, or None to read row['authority']."""
+    authority: a fixed authority name, or None to read row['authority'].
+    alt: optional (inst, course, quota) field names tried when the first names find no fee — the seat matrix
+    passes its 2025 cut-off bridge names, so a fee stored once under the cut-off spelling also reaches a
+    seat-matrix line spelled differently (Rajasthan 'All India Quota' vs 'All India Quota-Non Service')."""
     if not rows:
         return rows
     if fmap is None:
@@ -219,6 +222,9 @@ def attach(conn, rows, authority=None, inst='institute', course='course', quota=
     for r in rows:
         f = lookup(fmap, authority or r.get('authority'), r.get(inst), r.get(course), r.get(quota),
                    r.get(category) or '')
+        if not f and alt and r.get(alt[0]):
+            f = lookup(fmap, authority or r.get('authority'), r.get(alt[0]), r.get(alt[1]) or r.get(course),
+                       r.get(alt[2]) or r.get(quota), r.get(category) or '')
         if f:
             r[fee_field] = f['fee_total']
             r[year_field] = FEE_YEAR

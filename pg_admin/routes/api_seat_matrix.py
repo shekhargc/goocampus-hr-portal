@@ -233,7 +233,8 @@ def api_pg_seat_matrix():
             r['fee'] = r.get('cutoff_fee')
             r['fee_year'] = 2025 if r.get('cutoff_fee') is not None else None
         _FEES.attach(conn, out, authority=_FEES.seat_matrix_authority(body), inst='college_name',
-                     course='course_name', quota='quota', category='category')
+                     course='course_name', quota='quota', category='category',
+                     alt=('cutoff_institute', 'cutoff_course', 'cutoff_quota'))
         for r in out:
             r.pop('cutoff_quota', None)
         return jsonify({
