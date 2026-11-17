@@ -46,6 +46,7 @@ KINDS = {'welcome': 'Welcome (name + state added)',
          'incomplete_24h': 'Profile reminder · 24 hours',
          'enquiry': 'Enquiry → dashboard',
          'daily': 'Daily counselling update',
+         'campaign': 'Group send',
          'test': 'Test send'}
 
 
@@ -156,8 +157,9 @@ def welcome_name(name):
     return n
 
 
-def send_template(to, template, placeholders=None):
-    """Send one Infobip WhatsApp template. Returns (ok, response_text). Tries each language code."""
+def send_template(to, template, placeholders=None, sender=None, langs=None):
+    """Send one Infobip WhatsApp template. Returns (ok, response_text). Tries each language code.
+    `sender` = the WhatsApp number the template was approved on (register's sender column; default SENDER)."""
     key = os.environ.get('INFOBIP_API_KEY', '')
     base = os.environ.get('INFOBIP_BASE_URL', '')
     if not key or not base:
@@ -166,8 +168,8 @@ def send_template(to, template, placeholders=None):
     url = f"https://{base}/whatsapp/1/message/template"
     headers = {"Authorization": f"App {key}", "Content-Type": "application/json"}
     last = ''
-    for lang in LANGS:
-        payload = {"messages": [{"from": SENDER, "to": to, "content": {
+    for lang in (langs or LANGS):
+        payload = {"messages": [{"from": sender or SENDER, "to": to, "content": {
             "templateName": template, "language": lang,
             "templateData": {"body": {"placeholders": list(placeholders or [])}}}}]}
         try:
@@ -232,9 +234,14 @@ def run():
         rows = conn.execute(base + "AND " + has_both + " AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days' "
                             "AND NOT EXISTS (SELECT 1 FROM pg_wa_nudge_log l WHERE l.user_id = pg_users.id "
                             "AND l.kind = 'welcome') ORDER BY id LIMIT 200", (start,)).fetchall()
+        from pg_admin import wa_campaigns as wc
+        aud = wc.get_aud(conn, 'welcome')
+        cats = wc.categories(conn, [u['id'] for u in rows]) if rows else {}
         for u in rows:
             name, state = welcome_name(u.get('name')), clean_placeholder(u.get('state'))
             if not name or not state:
+                continue
+            if not wc.aud_allows(aud, cats.get(u['id'], 'free'), u.get('state')):
                 continue
             res = _deliver(conn, u, 'welcome', WELCOME_TPL, [name, state])
             summary['welcome' if res == 'sent' else 'failed'] += res in ('sent', 'failed')
@@ -242,6 +249,8 @@ def run():
         # 2. Reminders — FREE doctors still missing name or state.
         windows = (('incomplete_1h', "INTERVAL '60 minutes'", "INTERVAL '23 hours'"),
                    ('incomplete_24h', "INTERVAL '24 hours'", "INTERVAL '48 hours'"))
+        if not wc.get_aud(conn, 'incomplete')['types']:
+            windows = ()                     # "who gets it" = nobody → reminder off
         for kind, older_than, newer_than in windows:
             rows = conn.execute(
                 base + "AND NOT (" + has_both + ") "
@@ -275,9 +284,13 @@ def enquiry_run(conn):
     if not start:
         return 0, 0
     leads = []
-    for sql in ("SELECT lead_name AS name, phone FROM sales_leads WHERE COALESCE(is_inquiry,0) = 1 "
+    from pg_admin import wa_campaigns as wc
+    srcs = wc.get_aud(conn, 'enquiry')['sources']
+    for src, sql in zip(('website', 'mgmt'), ("SELECT lead_name AS name, phone FROM sales_leads WHERE COALESCE(is_inquiry,0) = 1 "
                 "AND source = 'NEET PG Website (goocampus.in)' AND created_at >= ?::timestamp ORDER BY id LIMIT 200",
-                "SELECT name, phone FROM pg_mgmt_inquiries WHERE created_at >= ?::timestamp ORDER BY id LIMIT 200"):
+                "SELECT name, phone FROM pg_mgmt_inquiries WHERE created_at >= ?::timestamp ORDER BY id LIMIT 200")):
+        if src not in srcs:
+            continue
         try:
             leads += [dict(r) for r in conn.execute(sql, (start,)).fetchall()]
         except Exception as e:
@@ -320,8 +333,13 @@ def daily_plan(conn, day=None):
         "AND COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0) = 0 "
         "AND COALESCE((to_jsonb(pg_users)->>'desk_access')::int,0) = 0 "
         "AND TRIM(COALESCE(name,'')) <> '' AND COALESCE(mobile,'') <> '' ORDER BY id").fetchall()
+    from pg_admin import wa_campaigns as wc
+    aud = wc.get_aud(conn, 'daily')
+    cats = wc.categories(conn)
     out = []
     for d in docs:
+        if not wc.aud_allows(aud, cats.get(d['id'], 'free'), d.get('state')):
+            continue
         st = states.get(d['id'], set())
         mine = [n for n in news if n['scope'] == 'all_india' or (n['state'] or '').strip().lower() in st]
         if not mine:
@@ -397,6 +415,8 @@ def scheduled_run():
     conn = get_db()
     try:
         ensure_tables(conn)
+        from pg_admin import wa_campaigns as wc
+        wc.resume_stalled(conn)              # group sends whose runner died (deploy / restart)
         signup, enquiry = is_enabled(conn), is_enabled(conn, 'enquiry')
         if not (signup or enquiry):
             return
@@ -448,6 +468,7 @@ def admin_page():
     conn = get_db()
     rows, counts, on, start = [], {}, False, ''
     switches, optouts, today_plan = {}, 0, None
+    auds, aud_labels = {}, {}
     try:
         ensure_tables(conn)
         on, start = is_enabled(conn), since(conn)
@@ -461,9 +482,12 @@ def admin_page():
         except Exception:
             conn.rollback()
             today_plan = None
+        from pg_admin import wa_campaigns as wc
+        auds = {m: wc.get_aud(conn, m) for m in wc.AUTO_MSGS}
+        aud_labels = {m: wc.aud_label(m, a) for m, a in auds.items()}
         rows = conn.execute(
             "SELECT l.*, u.name AS doctor_name FROM pg_wa_nudge_log l LEFT JOIN pg_users u ON u.id = l.user_id "
-            "ORDER BY l.id DESC LIMIT 60").fetchall()
+            "WHERE l.kind NOT LIKE ? ORDER BY l.id DESC LIMIT 60", ('campaign:%',)).fetchall()
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -474,8 +498,19 @@ def admin_page():
                            kinds=KINDS, kind_label=kind_label, can_edit=bool(admin.get('is_admin')),
                            welcome_tpl=WELCOME_TPL, incomplete_tpl=INCOMPLETE_TPL, enquiry_tpl=ENQUIRY_TPL,
                            daily_tpl=DAILY_TPL, template_ids=TEMPLATE_IDS, switches=switches, optouts=optouts,
-                           today_plan=today_plan, inbound_ready=bool(os.environ.get('PG_WA_INBOUND_KEY')),
+                           today_plan=today_plan, auds=auds, aud_labels=aud_labels,
+                           states=_states(), enq_sources=_enq_sources(), inbound_ready=bool(os.environ.get('PG_WA_INBOUND_KEY')),
                            active='wa', active_section='goocampus_in')
+
+
+def _states():
+    from pg_admin.routes.users_admin import _canonical_states
+    return _canonical_states()
+
+
+def _enq_sources():
+    from pg_admin import wa_campaigns as wc
+    return wc.ENQ_SOURCES
 
 
 def admin_toggle():
@@ -614,5 +649,7 @@ def register(app):
     app.add_url_rule('/admin/pg/users/whatsapp/optout', 'pg_wa_nudges_optout', login_required(admin_optout),
                      methods=['POST'])
     app.add_url_rule('/api/wa/inbound', 'pg_wa_inbound', inbound, methods=['POST'])
+    from pg_admin import wa_campaigns
+    wa_campaigns.register(app)
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
         start_scheduler()     # every 10 min; no-op unless switched ON + live service

@@ -1,0 +1,160 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}WhatsApp · Send to a group{% endblock %}
+
+{% block section_content %}
+<style>
+  .ws-card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1.1rem 1.2rem; margin-bottom:1.1rem; }
+  .ws-h { font-weight:700; color:var(--navy); margin-bottom:0.55rem; font-size:1rem; }
+  .ws-sub { color:var(--gray-500); font-size:0.76rem; }
+  .ws-in { padding:0.45rem 0.6rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; font-family:inherit; }
+  .ws-btn { padding:0.55rem 1.1rem; border-radius:8px; border:none; font-weight:700; cursor:pointer; font-size:0.86rem; }
+  .ws-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:0.8rem 1rem; }
+  .ws-grid label.l { display:block; font-size:0.74rem; font-weight:700; color:var(--gray-600); margin-bottom:0.2rem; }
+  .ws-grid select, .ws-grid input { width:100%; }
+  .ws-chk label { font-size:0.84rem; margin-right:0.9rem; white-space:nowrap; }
+  .ws-msg { white-space:pre-line; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:0.75rem 0.9rem; font-size:0.85rem; color:#14532d; }
+  .ws-table { width:100%; border-collapse:collapse; }
+  .ws-table th { background:var(--navy); color:#fff; font-size:0.72rem; text-transform:uppercase; text-align:left; padding:0.5rem 0.65rem; }
+  .ws-table td { padding:0.5rem 0.65rem; border-top:1px solid var(--gray-200); font-size:0.82rem; vertical-align:top; }
+  .ws-pill { display:inline-block; padding:1px 9px; border-radius:11px; font-size:0.72rem; font-weight:700; }
+  .ws-var { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:0.45rem; }
+</style>
+<div style="max-width:1200px;margin:0 auto;padding:1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">Registered Doctors</h1>
+  <p style="color:var(--gray-500);font-size:0.9rem;margin:0 0 1rem;">
+    📣 Send one approved WhatsApp template to a whole group of doctors. <a href="{{ url_for('pg_wa_nudges') }}">← back to the automatic messages</a>
+  </p>
+  {% with counts = {} %}{% include "pg_admin/_users_tabs.html" %}{% endwith %}
+
+  {% if is_staging %}
+  <div class="ws-card" style="background:#fffbeb;border:1px solid #fde68a;">This is <b>staging</b>: you can preview and send yourself a test, but the real group send only works on goocampus.org (live).</div>
+  {% endif %}
+
+  <form method="post" id="wsForm">
+    <div class="ws-card">
+      <div class="ws-h">1 · Which template</div>
+      <select name="template" class="ws-in" style="min-width:320px;" onchange="document.getElementById('wsAction').value='';this.form.submit();">
+        <option value="">— pick an approved template —</option>
+        {% for t in tpls %}<option value="{{ t.name }}" {{ 'selected' if tpl and tpl.name == t.name }}>{{ t.name }}{% if t.purpose %} — {{ t.purpose[:70] }}{% endif %}</option>{% endfor %}
+      </select>
+      <div class="ws-sub" style="margin-top:0.35rem;">Only templates marked APPROVED in WhatsApp → Templates appear here. A new approval? Add it there first.</div>
+      {% if tpl %}
+        <div class="ws-sub" style="margin:0.6rem 0 0.3rem;">{{ tpl.category or '' }} · sender {{ tpl.sender or '15558246314' }} · language {{ tpl.language or 'en' }}{% if tpl.buttons %} · buttons: {{ tpl.buttons }}{% endif %}</div>
+        <div class="ws-msg">{{ tpl.body_text }}</div>
+        {% if tpl.nvars %}
+        <div style="margin-top:0.8rem;font-weight:700;font-size:0.85rem;color:var(--navy);">What goes into each blank</div>
+        {% for v in range(1, tpl.nvars + 1) %}
+          {% set cur = vars_[v-1] if vars_|length >= v else {'src': ('name' if v == 1 else 'fixed'), 'text': ''} %}
+          <div class="ws-var">
+            <b style="width:48px;">{{ '{{' }}{{ v }}{{ '}}' }}</b>
+            <select name="v{{ v }}_src" class="ws-in">
+              {% for k, lbl in var_sources %}<option value="{{ k }}" {{ 'selected' if cur.src == k }}>{{ lbl }}</option>{% endfor %}
+            </select>
+            <input name="v{{ v }}_text" class="ws-in" style="flex:1;min-width:220px;" placeholder="Fixed text (only if 'Fixed text' is chosen)" value="{{ cur.text }}">
+          </div>
+        {% endfor %}
+        <div class="ws-sub">"Doctor name" leaves out doctors with no name; "Home state" leaves out doctors with no state.</div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <div class="ws-card">
+      <div class="ws-h">2 · Who gets it</div>
+      <div class="ws-chk" style="margin-bottom:0.7rem;">
+        {% for k, lbl in types %}<label><input type="checkbox" name="types" value="{{ k }}" {{ 'checked' if k in (f.types or []) }}> {{ lbl }}</label>{% endfor %}
+      </div>
+      <div class="ws-grid">
+        <div><label class="l">Home state (none = all · Ctrl / ⌘-click for several)</label>
+          <select name="states" multiple class="ws-in" style="min-height:130px;">
+            {% for st in states %}<option value="{{ st }}" {{ 'selected' if st in (f.states or []) }}>{{ st }}</option>{% endfor %}
+          </select></div>
+        <div>
+          <label class="l">Signed up</label>
+          <select name="reg" class="ws-in"><option value="">Any time</option>
+            {% for k, v in reg_windows.items() %}<option value="{{ k }}" {{ 'selected' if f.reg == k }}>{{ v[0] }}</option>{% endfor %}</select>
+          <label class="l" style="margin-top:0.5rem;">…or between dates</label>
+          <div style="display:flex;gap:0.4rem;"><input type="date" name="reg_from" class="ws-in" value="{{ f.reg_from }}"><input type="date" name="reg_to" class="ws-in" value="{{ f.reg_to }}"></div>
+        </div>
+        <div>
+          <label class="l">Profile</label>
+          <select name="prof" class="ws-in"><option value="">Any</option>
+            {% for k, v in prof_filters.items() %}<option value="{{ k }}" {{ 'selected' if f.prof == k }}>{{ v[0] }}</option>{% endfor %}</select>
+          <label class="l" style="margin-top:0.5rem;">NEET-PG qualified</label>
+          <select name="qual" class="ws-in"><option value="">Any</option>
+            {% for k, v in qual_labels.items() %}<option value="{{ k }}" {{ 'selected' if f.qual == k }}>{{ v }}</option>{% endfor %}</select>
+        </div>
+        <div>
+          <label class="l">Seat allotment</label>
+          <select name="allot" class="ws-in"><option value="">Any</option>
+            <option value="yes" {{ 'selected' if f.allot == 'yes' }}>Seat allotted</option>
+            <option value="no" {{ 'selected' if f.allot == 'no' }}>No seat yet (rank entered)</option>
+            <option value="norank" {{ 'selected' if f.allot == 'norank' }}>No rank entered</option></select>
+          <label class="l" style="margin-top:0.5rem;">Lead / follow-up status</label>
+          <select name="lead" class="ws-in"><option value="">Any</option>
+            {% for s in lead_statuses %}<option value="{{ s }}" {{ 'selected' if f.lead == s }}>{{ s }}</option>{% endfor %}</select>
+        </div>
+      </div>
+      <div class="ws-chk" style="margin-top:0.7rem;"><label><input type="checkbox" name="skip_got" value="1" {{ 'checked' if f.skip_got }}> Leave out doctors who already got this template</label></div>
+      <div class="ws-sub" style="margin-top:0.3rem;">Always left out: blocked accounts, numbers that aren't Indian mobiles, the same number twice, and anyone who replied STOP / "Stop updates".</div>
+      <input type="hidden" name="action" id="wsAction" value="preview">
+      <div style="margin-top:0.8rem;"><button class="ws-btn" style="background:var(--navy);color:#fff;" onclick="document.getElementById('wsAction').value='preview';">See who gets it →</button></div>
+    </div>
+
+    {% if preview is not none %}
+    <div class="ws-card" style="border:2px solid {{ '#16a34a' if preview else '#dc2626' }};">
+      <div class="ws-h">3 · Check and send</div>
+      <div style="font-size:1.25rem;font-weight:800;color:var(--navy);">{{ preview }} doctor{{ '' if preview == 1 else 's' }} will get it</div>
+      <div class="ws-sub" style="margin:0.2rem 0 0.6rem;">
+        Left out: {{ skipped.get('already_got', 0) }} already got it · {{ skipped.get('stopped', 0) }} said STOP ·
+        {{ skipped.get('bad_number', 0) }} no valid mobile · {{ skipped.get('duplicate_number', 0) }} same number twice.
+        {% if preview > max_per_send %}<b style="color:#b91c1c;">Only the first {{ max_per_send }} are sent in one go.</b>{% endif %}
+      </div>
+      {% if msg %}<div class="ws-sub" style="margin-bottom:0.25rem;">The message the first doctor gets:</div><div class="ws-msg">{{ msg }}</div>{% endif %}
+      {% if sample %}
+      <div class="ws-sub" style="margin:0.6rem 0 0.25rem;">First {{ sample|length }}:</div>
+      <div style="font-size:0.82rem;">{% for d in sample %}<a href="/admin/pg/users/{{ d.id }}">{{ d.name|dr_name if d.name else '(no name)' }}</a> <span class="ws-sub">{{ d.cat }}{% if d.state %} · {{ d.state }}{% endif %}</span>{{ ' · ' if not loop.last }}{% endfor %}</div>
+      {% endif %}
+      {% if can_send %}
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-top:0.9rem;">
+        <input name="test_mobile" class="ws-in" placeholder="Your 10-digit mobile" maxlength="14">
+        <button class="ws-btn" style="background:#e5e7eb;color:#374151;" onclick="document.getElementById('wsAction').value='test';">Send me a test first</button>
+        {% if preview %}
+        <input type="hidden" name="confirm_n" value="{{ preview if preview <= max_per_send else max_per_send }}">
+        <button class="ws-btn" style="background:#16a34a;color:#fff;margin-left:auto;"
+                onclick="document.getElementById('wsAction').value='send';return confirm('Send {{ tpl.name if tpl else '' }} to {{ preview if preview <= max_per_send else max_per_send }} doctors now on WhatsApp? This cannot be undone.');">
+          Send to {{ preview if preview <= max_per_send else max_per_send }} doctors</button>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </form>
+
+  <h3 style="color:var(--navy);margin:1.2rem 0 0.5rem;font-size:1rem;">Group sends</h3>
+  <div class="ws-card" style="padding:0;overflow-x:auto;">
+  <table class="ws-table">
+    <thead><tr><th>When (IST)</th><th>Template</th><th>Who</th><th>Progress</th><th>By</th><th></th></tr></thead>
+    <tbody>
+    {% for c in camps %}
+      <tr id="camp-{{ c.id }}">
+        <td>{{ c.created_at|format_datetime }}</td>
+        <td><b>{{ c.template }}</b></td>
+        <td class="ws-sub" style="max-width:340px;">{{ c.audience_label }}</td>
+        <td>{{ c.sent }} sent of {{ c.total }}{% if c.failed %} · <span style="color:#b91c1c;">{{ c.failed }} failed</span>{% endif %}{% if c.skipped %} · {{ c.skipped }} skipped{% endif %}<br>
+          {% if c.status == 'sending' %}<span class="ws-pill" style="background:#dbeafe;color:#1e40af;">sending…</span>
+          {% elif c.status == 'done' %}<span class="ws-pill" style="background:#dcfce7;color:#166534;">done</span>
+          {% else %}<span class="ws-pill" style="background:#e5e7eb;color:#374151;">{{ c.status }}</span>{% endif %}</td>
+        <td class="ws-sub">{{ c.created_by }}</td>
+        <td>{% if c.status == 'sending' and can_send %}
+          <form method="post" action="{{ url_for('pg_wa_send_stop', cid=c.id) }}" onsubmit="return confirm('Stop this send? Doctors not yet sent will not get it.');">
+            <button class="ws-btn" style="background:#991b1b;color:#fff;padding:0.35rem 0.7rem;">Stop</button></form>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="ws-sub" style="text-align:center;padding:1.2rem;">No group sends yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if camps and camps|selectattr('status', 'equalto', 'sending')|list %}<script>setTimeout(function(){ location.href = location.pathname; }, 15000);</script>{% endif %}
+</div>
+{% endblock %}
