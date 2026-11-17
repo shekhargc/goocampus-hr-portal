@@ -1,0 +1,106 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Registered Doctors · WhatsApp{% endblock %}
+
+{% block section_content %}
+<style>
+  .wn-card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1.1rem 1.2rem; margin-bottom:1.1rem; }
+  .wn-table { width:100%; border-collapse:collapse; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .wn-table th { background:var(--navy); color:#fff; font-size:0.72rem; text-transform:uppercase; letter-spacing:.03em; text-align:left; padding:0.55rem 0.7rem; }
+  .wn-table td { padding:0.55rem 0.7rem; border-top:1px solid var(--gray-200); font-size:0.83rem; vertical-align:top; }
+  .wn-pill { display:inline-block; padding:1px 9px; border-radius:11px; font-size:0.72rem; font-weight:700; }
+  .wn-sub { color:var(--gray-500); font-size:0.76rem; }
+  .wn-btn { padding:0.5rem 1rem; border-radius:8px; border:none; font-weight:700; cursor:pointer; font-size:0.85rem; }
+  .wn-in { padding:0.45rem 0.6rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; }
+  .wn-msg { white-space:pre-line; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:0.7rem 0.85rem; font-size:0.83rem; color:#14532d; }
+</style>
+<div style="max-width:1200px;margin:0 auto;padding:1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">Registered Doctors</h1>
+  <p style="color:var(--gray-500);font-size:0.9rem;margin:0 0 1rem;">
+    Automatic WhatsApp messages to <b>new</b> goocampus.in sign-ups (approved utility templates). Existing doctors are never messaged by this.
+  </p>
+  {% with counts = {} %}{% include "pg_admin/_users_tabs.html" %}{% endwith %}
+
+  <div class="wn-card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:1.05rem;font-weight:700;color:var(--navy);">
+        Status: {% if on %}<span class="wn-pill" style="background:#dcfce7;color:#166534;">ON</span>{% else %}<span class="wn-pill" style="background:#fee2e2;color:#991b1b;">OFF</span>{% endif %}
+      </div>
+      <div class="wn-sub">
+        {% if start %}Doctors who signed up after {{ start|format_datetime }} are included.{% else %}When switched on, only doctors who sign up from that moment are included.{% endif %}
+        Checks every 10 minutes on the live site. Team / Counselling-Desk accounts never get these.
+      </div>
+    </div>
+    {% if can_edit %}
+    <form method="post" action="{{ url_for('pg_wa_nudges_toggle') }}">
+      <input type="hidden" name="on" value="{{ '0' if on else '1' }}">
+      <button class="wn-btn" style="background:{{ '#991b1b' if on else '#166534' }};color:#fff;"
+              onclick="return confirm('{{ 'Switch OFF the WhatsApp sign-up messages?' if on else 'Switch ON? New sign-ups from now on will get these WhatsApp messages.' }}');">
+        {{ 'Switch OFF' if on else 'Switch ON' }}</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.1rem;">
+    <div class="wn-card">
+      <div style="font-weight:700;color:var(--navy);">1 · Welcome <span class="wn-sub">{{ welcome_tpl }} · id {{ template_ids[welcome_tpl] }}</span></div>
+      <div class="wn-sub" style="margin:0.3rem 0 0.6rem;">Sent once, as soon as a new doctor has added their name and state.</div>
+      <div class="wn-msg">Hi Dr. <b>{name}</b>, thank you for registering on goocampus.in.
+
+Your NEET PG dashboard is ready. Counselling news, deadlines, results and documents for <b>{state}</b> and MCC will appear there as soon as they are released.
+
+Log in any time with your mobile number and OTP.</div>
+      <div class="wn-sub" style="margin-top:0.5rem;">Sent: {{ (counts.get('welcome') or {}).get('sent', 0) }} · failed: {{ (counts.get('welcome') or {}).get('failed', 0) }}</div>
+    </div>
+    <div class="wn-card">
+      <div style="font-weight:700;color:var(--navy);">2 · Profile reminder <span class="wn-sub">{{ incomplete_tpl }} · id {{ template_ids[incomplete_tpl] }}</span></div>
+      <div class="wn-sub" style="margin:0.3rem 0 0.6rem;">Free doctors only, if name or state is still missing — 1 hour after sign-up, and once more at 24 hours (max 2).</div>
+      <div class="wn-msg">Your GooCampus.in dashboard is ready and your mobile number is verified.
+
+Please complete your profile by adding your name and state to access the complete dashboard.
+
+It takes less than a minute.</div>
+      <div class="wn-sub" style="margin-top:0.5rem;">
+        1 hour — sent: {{ (counts.get('incomplete_1h') or {}).get('sent', 0) }} · failed: {{ (counts.get('incomplete_1h') or {}).get('failed', 0) }}<br>
+        24 hours — sent: {{ (counts.get('incomplete_24h') or {}).get('sent', 0) }} · failed: {{ (counts.get('incomplete_24h') or {}).get('failed', 0) }}
+      </div>
+    </div>
+  </div>
+
+  {% if can_edit %}
+  <div class="wn-card">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:0.5rem;">Send a test to your own phone</div>
+    <form method="post" action="{{ url_for('pg_wa_nudges_test') }}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <select name="template" class="wn-in">
+        <option value="{{ welcome_tpl }}">1 · Welcome</option>
+        <option value="{{ incomplete_tpl }}">2 · Profile reminder</option>
+      </select>
+      <input name="mobile" class="wn-in" placeholder="10-digit mobile" maxlength="14" required>
+      <input name="name" class="wn-in" placeholder="Name (welcome)" value="Test">
+      <input name="state" class="wn-in" placeholder="State (welcome)" value="Karnataka">
+      <button class="wn-btn" style="background:var(--orange);color:#fff;">Send test</button>
+    </form>
+    <div class="wn-sub" style="margin-top:0.4rem;">Sends one message right now, even while switched off. The provider's reply shows at the top of the page.</div>
+  </div>
+  {% endif %}
+
+  <h3 style="color:var(--navy);margin:1.2rem 0 0.5rem;font-size:1rem;">Recent messages</h3>
+  <table class="wn-table">
+    <thead><tr><th>When (IST)</th><th>Doctor</th><th>Message</th><th>Mobile</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.created_at|format_datetime }}</td>
+        <td>{% if r.user_id %}<a href="/admin/pg/users/{{ r.user_id }}">{{ r.doctor_name|dr_name if r.doctor_name else '(name pending)' }}</a>{% else %}<span class="wn-sub">test by {{ r.sent_by }}</span>{% endif %}</td>
+        <td>{{ kinds.get(r.kind, r.kind) }}</td>
+        <td>…{{ r.mobile }}</td>
+        <td>{% if r.status == 'sent' %}<span class="wn-pill" style="background:#dcfce7;color:#166534;">sent</span>
+            {% elif r.status == 'failed' %}<span class="wn-pill" style="background:#fee2e2;color:#991b1b;" title="{{ r.response }}">failed</span>
+            {% else %}<span class="wn-pill" style="background:#e5e7eb;color:#374151;">{{ r.status }}</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="wn-sub" style="text-align:center;padding:1.2rem;">No messages yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
