@@ -1830,11 +1830,32 @@ def api_pg_checkout_verify():
         conn.execute("UPDATE pg_orders SET status='paid', razorpay_payment_id=?, subscription_id=?, "
                      "paid_at=CURRENT_TIMESTAMP WHERE id=?", (pid, sub_id, order['id']))
         # Consume the paid-session upgrade credit used on this order (once; same transaction).
+        _credit_conflict = None
         if order.get('session_booking_id') and float(order.get('session_credit') or 0) > 0:
-            conn.execute("UPDATE pg_session_bookings SET credit_used_order_id = ?, credit_used_at = CURRENT_TIMESTAMP, "
-                         "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credit_used_order_id IS NULL",
-                         (oid, order['session_booking_id']))
+            _cu = conn.execute("UPDATE pg_session_bookings SET credit_used_order_id = ?, credit_used_at = CURRENT_TIMESTAMP, "
+                               "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credit_used_order_id IS NULL "
+                               "RETURNING id", (oid, order['session_booking_id'])).fetchone()
+            if not _cu:
+                # Rare double use: two plan checkouts opened with the credit and BOTH paid. The doctor has
+                # paid, so the plan still activates — but flag it on the booking log for the team to settle.
+                _prev = conn.execute("SELECT credit_used_order_id FROM pg_session_bookings WHERE id = ?",
+                                     (order['session_booking_id'],)).fetchone()
+                if _prev and str(_prev['credit_used_order_id'] or '') != str(oid):
+                    logging.error("session credit used twice: booking %s, orders %s + %s",
+                                  order['session_booking_id'], _prev['credit_used_order_id'], oid)
+                    _credit_conflict = (order['session_booking_id'], _prev['credit_used_order_id'])
         conn.commit()
+        # Logged only AFTER the payment is committed, so a logging hiccup can never undo it.
+        if _credit_conflict:
+            try:
+                from pg_admin.routes import session_api as _sess
+                _sess._log(conn, _credit_conflict[0], 'credit_conflict', _credit_conflict[1], oid,
+                           'system', 'plan-verify')
+                conn.commit()
+            except Exception as _le:
+                try: conn.rollback()
+                except Exception: pass
+                logging.warning("credit conflict log: %s", _le)
         # One pathway: a paid counselling plan (PGCP Starter/Standard/Premium) enters the
         # SAME onboarding flow as a team invite. Guarded — payment is already locked above,
         # so a hiccup here must never fail the confirmation. (founder 2026-09-25)
