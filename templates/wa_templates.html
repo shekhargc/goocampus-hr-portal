@@ -3,50 +3,63 @@
 
 {% block section_extra_css %}
 <style>
-    .wa-tpl { max-width: 1200px; }
+    .wa-tpl { max-width: 1280px; }
     .wa-tpl h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 0.35rem; }
-    .wa-tpl .subtitle { font-size: 0.88rem; color: var(--gray-500); margin-bottom: 1.5rem; }
-    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+    .wa-tpl .subtitle { font-size: 0.88rem; color: var(--gray-500); margin-bottom: 1.2rem; max-width: 900px; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
     .sync-btn {
         display: inline-flex; align-items: center; gap: 0.4rem;
         background: var(--orange); color: white; border: none; padding: 8px 16px;
         border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
     }
     .sync-btn:hover { background: var(--orange-dark); }
-    .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
-    .tpl-card {
-        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.75rem;
-        padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    .tpl-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-    .tpl-name { font-size: 0.95rem; font-weight: 700; color: var(--navy); }
-    .tpl-status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+    .ghost-btn { background: #fff; color: var(--navy); border: 1px solid var(--gray-300); padding: 7px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+    .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1rem; }
+    .tpl-card { background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.75rem; padding: 1.15rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; flex-direction: column; }
+    .tpl-card-header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .tpl-name { font-size: 0.95rem; font-weight: 700; color: var(--navy); word-break: break-all; }
+    .tpl-status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
     .tpl-APPROVED { background: #D1FAE5; color: #065F46; }
     .tpl-PENDING { background: #FEF3C7; color: #92400E; }
     .tpl-REJECTED { background: #FEE2E2; color: #991B1B; }
-    .tpl-meta { font-size: 0.75rem; color: var(--gray-400); margin-bottom: 0.75rem; }
-    .tpl-body {
-        background: #F9FAFB; border-radius: 6px; padding: 0.75rem;
-        font-size: 0.82rem; color: var(--gray-600); line-height: 1.5;
-        max-height: 120px; overflow-y: auto;
-    }
+    .tpl-PAUSED, .tpl-DISABLED { background: #E5E7EB; color: #374151; }
+    .tpl-meta { font-size: 0.74rem; color: var(--gray-500); margin-bottom: 0.6rem; line-height: 1.5; }
+    .tpl-body { background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 0.7rem 0.8rem; font-size: 0.82rem; color: #14532D; line-height: 1.5; white-space: pre-line; }
+    .tpl-btns { font-size: 0.74rem; color: #166534; margin-top: 0.35rem; }
+    .tpl-dl { margin: 0.75rem 0 0; font-size: 0.8rem; }
+    .tpl-dl dt { font-weight: 700; color: var(--navy); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .03em; margin-top: 0.45rem; }
+    .tpl-dl dd { margin: 0.1rem 0 0; color: var(--gray-700); }
+    .tpl-missing { color: #b45309; font-style: italic; }
+    .tpl-edit { margin-top: auto; padding-top: 0.75rem; text-align: right; }
     .empty-state { text-align: center; padding: 3rem; color: var(--gray-400); }
+    /* drawer */
+    .drw-bg { position: fixed; inset: 0; background: rgba(15,23,42,.35); display: none; z-index: 900; }
+    .drw { position: fixed; top: 0; right: 0; height: 100vh; width: min(560px, 100vw); background: #fff; box-shadow: -8px 0 24px rgba(0,0,0,.15); transform: translateX(105%); transition: transform .2s; z-index: 901; overflow-y: auto; padding: 1.2rem 1.4rem 2rem; }
+    .drw.open { transform: none; } .drw-bg.open { display: block; }
+    .drw h2 { font-size: 1.1rem; color: var(--navy); margin: 0 0 0.8rem; }
+    .drw label { display: block; font-size: 0.74rem; font-weight: 700; color: var(--gray-600); margin: 0.65rem 0 0.2rem; }
+    .drw input, .drw textarea, .drw select { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--gray-300); border-radius: 7px; font-size: 0.85rem; font-family: inherit; }
+    .drw textarea { min-height: 70px; }
+    .drw .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    .drw .acts { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 </style>
 {% endblock %}
 
 {% block section_content %}
 <div class="wa-tpl">
     <h1>Templates</h1>
-    <p class="subtitle">WhatsApp Business message templates synced from Infobip</p>
+    <p class="subtitle">Every approved WhatsApp template, what it is for, where the portal uses it, what triggers it and what each {{ '{{n}}' }} means.
+       Infobip's template sync is not enabled for our key, so when Meta approves a new template, add it here with <b>＋ Add approved template</b>.</p>
 
     <div class="top-bar">
-        <span style="font-size:0.82rem;color:var(--gray-400);">{{ templates|length }} template{{ 's' if templates|length != 1 }}</span>
-        <form action="/whatsapp/templates/sync" method="POST" style="display:inline;">
-            <button type="submit" class="sync-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-                Sync from Infobip
-            </button>
-        </form>
+        <span style="font-size:0.82rem;color:var(--gray-500);">{{ templates|length }} template{{ 's' if templates|length != 1 }} ·
+          {{ templates|selectattr('status', 'equalto', 'APPROVED')|list|length }} approved</span>
+        <div style="display:flex;gap:0.5rem;">
+            <button type="button" class="sync-btn" onclick="tplOpen(null)">＋ Add approved template</button>
+            <form action="/whatsapp/templates/sync" method="POST" style="display:inline;">
+                <button type="submit" class="ghost-btn">Sync from Infobip</button>
+            </form>
+        </div>
     </div>
 
     {% if templates %}
@@ -58,23 +71,86 @@
                 <span class="tpl-status tpl-{{ t.status or 'PENDING' }}">{{ t.status or 'PENDING' }}</span>
             </div>
             <div class="tpl-meta">
-                {{ t.language or 'en' }} &middot; {{ t.category or '—' }}
-                {% if t.synced_at %} &middot; Synced: {{ t.synced_at|format_date }}{% endif %}
+                {{ t.category or '—' }} · {{ t.language or 'en' }}
+                {% if t.infobip_template_id %} · ID {{ t.infobip_template_id }}{% endif %}
+                · Sender {{ t.sender or '15558246314' }}
+                {% if t.approved_on %} · Approved {{ t.approved_on }}{% endif %}
             </div>
-            {% if t.header_text %}
-            <div style="font-size:0.78rem;font-weight:600;color:var(--navy);margin-bottom:0.35rem;">{{ t.header_text }}</div>
-            {% endif %}
+            {% if t.header_text %}<div style="font-size:0.8rem;font-weight:700;color:var(--navy);margin-bottom:0.3rem;">{{ t.header_text }}</div>{% endif %}
             <div class="tpl-body">{{ t.body_text or '(empty)' }}</div>
-            {% if t.footer_text %}
-            <div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.35rem;">{{ t.footer_text }}</div>
-            {% endif %}
+            {% if t.footer_text %}<div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.3rem;">{{ t.footer_text }}</div>{% endif %}
+            {% if t.buttons %}<div class="tpl-btns">🔘 {{ t.buttons }}</div>{% endif %}
+            <dl class="tpl-dl">
+                <dt>Purpose</dt><dd>{% if t.purpose %}{{ t.purpose }}{% else %}<span class="tpl-missing">not filled in yet</span>{% endif %}</dd>
+                <dt>Used in</dt><dd>{% if t.used_in %}{{ t.used_in }}{% else %}<span class="tpl-missing">not filled in yet</span>{% endif %}</dd>
+                <dt>When it is sent</dt><dd>{% if t.trigger_text %}{{ t.trigger_text }}{% else %}<span class="tpl-missing">not filled in yet</span>{% endif %}</dd>
+                <dt>Variables</dt><dd>{{ t.variables or '—' }}</dd>
+                {% if t.notes %}<dt>Notes</dt><dd>{{ t.notes }}</dd>{% endif %}
+            </dl>
+            <div class="tpl-edit">
+                {% if t.updated_by %}<span style="font-size:0.7rem;color:var(--gray-400);margin-right:0.5rem;">edited by {{ t.updated_by }}</span>{% endif %}
+                <button type="button" class="ghost-btn" onclick='tplOpen({{ {
+                    "id": t.id, "name": t.name, "language": t.language, "category": t.category, "status": t.status,
+                    "header_text": t.header_text, "body_text": t.body_text, "footer_text": t.footer_text,
+                    "buttons": t.buttons, "infobip_template_id": t.infobip_template_id, "sender": t.sender,
+                    "purpose": t.purpose, "used_in": t.used_in, "trigger_text": t.trigger_text,
+                    "variables": t.variables, "approved_on": t.approved_on, "notes": t.notes}|tojson|forceescape }})'>Edit details</button>
+            </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state">
-        <p>No templates synced yet. Click "Sync from Infobip" to pull your WhatsApp Business templates.</p>
-    </div>
+    <div class="empty-state"><p>No templates yet. Use "＋ Add approved template".</p></div>
     {% endif %}
 </div>
+
+<div class="drw-bg" id="tplBg" onclick="tplClose()"></div>
+<div class="drw" id="tplDrw" role="dialog" aria-modal="true" aria-labelledby="tplTitle">
+  <h2 id="tplTitle">Template</h2>
+  <form method="POST" action="/whatsapp/templates/save" id="tplForm">
+    <input type="hidden" name="id">
+    <div class="row2">
+      <div><label>Template name (exactly as approved)</label><input name="name" required></div>
+      <div><label>Infobip / Meta template ID</label><input name="infobip_template_id"></div>
+    </div>
+    <div class="row2">
+      <div><label>Status</label><select name="status"><option>APPROVED</option><option>PENDING</option><option>REJECTED</option><option>PAUSED</option></select></div>
+      <div><label>Category</label><select name="category"><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select></div>
+    </div>
+    <div class="row2">
+      <div><label>Language code</label><input name="language" placeholder="en"></div>
+      <div><label>Sender (WhatsApp number)</label><input name="sender" placeholder="15558246314"></div>
+    </div>
+    <label>Header (optional)</label><input name="header_text">
+    <label>Approved message text (with {{ '{{1}}' }}, {{ '{{2}}' }} …)</label><textarea name="body_text" required style="min-height:120px;"></textarea>
+    <label>Footer (optional)</label><input name="footer_text">
+    <label>Buttons</label><input name="buttons" placeholder="URL button: Click Here · Quick reply: Stop updates">
+    <label>Approved on</label><input name="approved_on" placeholder="YYYY-MM-DD">
+    <label>Purpose — what is it for?</label><textarea name="purpose"></textarea>
+    <label>Used in — which part of the portal sends it</label><textarea name="used_in"></textarea>
+    <label>When it is sent (trigger)</label><textarea name="trigger_text"></textarea>
+    <label>Variables — what each {{ '{{n}}' }} means</label><textarea name="variables"></textarea>
+    <label>Notes</label><textarea name="notes"></textarea>
+    <div class="acts">
+      <button type="button" class="ghost-btn" onclick="tplClose()">Cancel</button>
+      <button type="submit" class="sync-btn">Save</button>
+    </div>
+  </form>
+</div>
+<script>
+function tplOpen(t) {
+  const f = document.getElementById('tplForm');
+  f.reset();
+  document.getElementById('tplTitle').textContent = t ? 'Edit template details' : 'Add an approved template';
+  f.elements['id'].value = t ? t.id : '';
+  if (t) { for (const k in t) { if (k !== 'id' && f.elements[k]) f.elements[k].value = t[k] || (k === 'status' ? 'APPROVED' : ''); } }
+  document.getElementById('tplBg').classList.add('open');
+  document.getElementById('tplDrw').classList.add('open');
+}
+function tplClose() {
+  document.getElementById('tplBg').classList.remove('open');
+  document.getElementById('tplDrw').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') tplClose(); });
+</script>
 {% endblock %}
