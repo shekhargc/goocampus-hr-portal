@@ -4,6 +4,13 @@
                             …for {{2}} and MCC…". Sent ONCE when a new doctor has a name + state.
   2. gc_profile_incomplete (id 1952329065742254) — no variables. Sent to a new FREE doctor whose name or
                             state is still missing 1 hour after sign-up, and once more at 24 hours. Max 2.
+  3. gc_enquiry_account    (id 1118950867607827) — "Hi Dr. {{1}}, thank you for your enquiry…". Sent ONCE per
+                            mobile to a website enquiry (Sales → Inquiries from goocampus.in, or a Management /
+                            NRI call-back) made after its own switch-on. (2026-11-17)
+  4. gc_daily_account_update (id 39934717086143575) — "Dr. {{1}}, {{2}} new update(s) for {{3}} were posted…
+                            Latest: {{4}}". 8 pm IST, at most once a day, only to doctors whose MCC / state news
+                            was posted that day. Quick reply "Stop updates" (or STOP) → never again (pg_wa_optout,
+                            via the Infobip inbound webhook /api/wa/inbound?k=PG_WA_INBOUND_KEY). (2026-11-17)
 
 Rules
 - OFF until an admin switches it on (Registered Doctors → 💬 WhatsApp). Only accounts created AFTER the
@@ -23,18 +30,40 @@ logger = logging.getLogger(__name__)
 
 WELCOME_TPL = 'welcometogoocampus'
 INCOMPLETE_TPL = 'gc_profile_incomplete'
-TEMPLATE_IDS = {WELCOME_TPL: '1413956730516058', INCOMPLETE_TPL: '1952329065742254'}
+ENQUIRY_TPL = 'gc_enquiry_account'
+DAILY_TPL = 'gc_daily_account_update'
+TEMPLATE_IDS = {WELCOME_TPL: '1413956730516058', INCOMPLETE_TPL: '1952329065742254',
+                ENQUIRY_TPL: '1118950867607827', DAILY_TPL: '39934717086143575'}
 SENDER = os.environ.get('PG_WA_SENDER') or '15558246314'
 LANGS = ('en', 'en_US', 'en_GB')          # tried in order until Infobip accepts the template
 KV_ON, KV_SINCE = 'wa_nudges', 'wa_nudges_since'
+# Each message group has its own ON/OFF switch (+ a start line for the enquiry message).
+SWITCHES = {'signup': ('wa_nudges', 'wa_nudges_since'),
+            'enquiry': ('wa_enquiry', 'wa_enquiry_since'),
+            'daily': ('wa_daily', 'wa_daily_since')}
 KINDS = {'welcome': 'Welcome (name + state added)',
          'incomplete_1h': 'Profile reminder · 1 hour',
          'incomplete_24h': 'Profile reminder · 24 hours',
+         'enquiry': 'Enquiry → dashboard',
+         'daily': 'Daily counselling update',
          'test': 'Test send'}
 
 
+def kind_label(kind):
+    k = (kind or '').split(':', 1)[0]
+    return KINDS.get(k, kind)
+
+
 # ── tables / setting ────────────────────────────────────────────────────────
+_TABLES = {'done': False}
+
+
 def ensure_tables(conn):
+    """Small tables only; once per process (2026-11-17 outage lesson: never DDL on every call)."""
+    if _TABLES['done']:
+        return
+    conn.execute('''CREATE TABLE IF NOT EXISTS pg_wa_optout (mobile10 TEXT PRIMARY KEY, source TEXT DEFAULT '',
+                    note TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS pg_kv (key TEXT PRIMARY KEY, value TEXT DEFAULT '',
                     updated_by TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     conn.execute('''CREATE TABLE IF NOT EXISTS pg_wa_nudge_log (
@@ -43,6 +72,7 @@ def ensure_tables(conn):
         sent_by TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (user_id, kind))''')
     conn.commit()
+    _TABLES['done'] = True
 
 
 def _kv(conn, key):
@@ -54,25 +84,51 @@ def _kv(conn, key):
         return ''
 
 
-def is_enabled(conn):
-    return _kv(conn, KV_ON) == 'on'
+def is_enabled(conn, group='signup'):
+    return _kv(conn, SWITCHES[group][0]) == 'on'
 
 
-def since(conn):
-    return _kv(conn, KV_SINCE)
+def since(conn, group='signup'):
+    return _kv(conn, SWITCHES[group][1])
 
 
-def set_enabled(conn, on, who):
+def set_enabled(conn, on, who, group='signup'):
     ensure_tables(conn)
+    k_on, k_since = SWITCHES[group]
     conn.execute("INSERT INTO pg_kv (key, value, updated_by, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
                  "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, "
-                 "updated_at = CURRENT_TIMESTAMP", (KV_ON, 'on' if on else 'off', who))
-    if on and not since(conn):
-        # First switch-on fixes the start line: only doctors who sign up from now on are messaged.
+                 "updated_at = CURRENT_TIMESTAMP", (k_on, 'on' if on else 'off', who))
+    if on and not since(conn, group):
+        # First switch-on fixes the start line: only sign-ups / enquiries from now on are messaged.
         conn.execute("INSERT INTO pg_kv (key, value, updated_by, updated_at) "
                      "VALUES (?, to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'), ?, CURRENT_TIMESTAMP) "
-                     "ON CONFLICT (key) DO NOTHING", (KV_SINCE, who))
+                     "ON CONFLICT (key) DO NOTHING", (k_since, who))
     conn.commit()
+
+
+def opted_out(conn, mobile):
+    m10 = re.sub(r'\D', '', str(mobile or ''))[-10:]
+    if not m10:
+        return False
+    try:
+        return bool(conn.execute("SELECT 1 FROM pg_wa_optout WHERE mobile10 = ?", (m10,)).fetchone())
+    except Exception:
+        conn.rollback()
+        return False
+
+
+def set_optout(conn, mobile, out, source='admin', note=''):
+    m10 = re.sub(r'\D', '', str(mobile or ''))[-10:]
+    if len(m10) != 10:
+        return False
+    ensure_tables(conn)
+    if out:
+        conn.execute("INSERT INTO pg_wa_optout (mobile10, source, note) VALUES (?, ?, ?) "
+                     "ON CONFLICT (mobile10) DO NOTHING", (m10, source, (note or '')[:200]))
+    else:
+        conn.execute("DELETE FROM pg_wa_optout WHERE mobile10 = ?", (m10,))
+    conn.commit()
+    return True
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -211,6 +267,129 @@ def run():
         conn.close()
 
 
+def enquiry_run(conn):
+    """Website enquiries made after the enquiry switch-on → one gc_enquiry_account per mobile, ever.
+    Sources: Sales → Inquiries rows from goocampus.in + Management / NRI call-backs."""
+    sent = failed = 0
+    start = since(conn, 'enquiry')
+    if not start:
+        return 0, 0
+    leads = []
+    for sql in ("SELECT lead_name AS name, phone FROM sales_leads WHERE COALESCE(is_inquiry,0) = 1 "
+                "AND source = 'NEET PG Website (goocampus.in)' AND created_at >= ?::timestamp ORDER BY id LIMIT 200",
+                "SELECT name, phone FROM pg_mgmt_inquiries WHERE created_at >= ?::timestamp ORDER BY id LIMIT 200"):
+        try:
+            leads += [dict(r) for r in conn.execute(sql, (start,)).fetchall()]
+        except Exception as e:
+            conn.rollback()
+            logger.warning("wa enquiry source: %s", e)
+    seen = set()
+    for ld in leads:
+        to = mobile_to(ld.get('phone'))
+        if not to or to in seen:
+            continue
+        seen.add(to)
+        name = welcome_name(ld.get('name'))
+        if not name or opted_out(conn, to):
+            continue
+        res = _deliver(conn, {'id': 0, 'mobile': to}, 'enquiry:' + to[-10:], ENQUIRY_TPL, [name])
+        sent += res == 'sent'
+        failed += res == 'failed'
+    return sent, failed
+
+
+def _ist_today():
+    from datetime import datetime, timedelta
+    return (datetime.utcnow() + timedelta(hours=5, minutes=30)).date()
+
+
+def daily_plan(conn, day=None):
+    """[(doctor_row, count, label, latest_heading)] for news POSTED on `day` (IST, default today):
+    MCC / All-India items for everyone + each doctor's own states (home, counselling states, follows)."""
+    from pg_admin.deadline_reminders import _doctor_states
+    day = day or _ist_today()
+    news = [dict(r) for r in conn.execute(
+        "SELECT id, scope, COALESCE(state,'') AS state, heading, created_at FROM pg_news "
+        "WHERE COALESCE(is_published, TRUE) AND (to_jsonb(pg_news)->>'deleted_at') IS NULL "
+        "AND (created_at + INTERVAL '330 minutes')::date = ? ORDER BY created_at DESC", (day,)).fetchall()]
+    if not news:
+        return []
+    states = _doctor_states(conn)
+    docs = conn.execute(
+        "SELECT * FROM pg_users WHERE COALESCE(is_blocked,0) = 0 "
+        "AND COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0) = 0 "
+        "AND COALESCE((to_jsonb(pg_users)->>'desk_access')::int,0) = 0 "
+        "AND TRIM(COALESCE(name,'')) <> '' AND COALESCE(mobile,'') <> '' ORDER BY id").fetchall()
+    out = []
+    for d in docs:
+        st = states.get(d['id'], set())
+        mine = [n for n in news if n['scope'] == 'all_india' or (n['state'] or '').strip().lower() in st]
+        if not mine:
+            continue
+        labels = []
+        if any(n['scope'] == 'all_india' for n in mine):
+            labels.append('MCC')
+        for n in mine:
+            if n['scope'] != 'all_india' and n['state'] and n['state'] not in labels:
+                labels.append(n['state'])
+        label = ' & '.join(labels[:3]) + (' + more' if len(labels) > 3 else '')
+        out.append((dict(d), len(mine), label, mine[0]['heading']))
+    return out
+
+
+def daily_run():
+    """8 pm IST: one daily update per doctor with news today. Claimed per (doctor, day) — never twice."""
+    summary = {'daily': 0, 'failed': 0, 'skipped': 0}
+    conn = get_db()
+    try:
+        ensure_tables(conn)
+        day = _ist_today()
+        for d, n, label, latest in daily_plan(conn, day):
+            if opted_out(conn, d.get('mobile')):
+                summary['skipped'] += 1
+                continue
+            ph = [welcome_name(d.get('name')), str(n), clean_placeholder(label, 60), clean_placeholder(latest, 120)]
+            res = _deliver(conn, d, 'daily:' + day.isoformat(), DAILY_TPL, ph)
+            if res == 'sent':
+                summary['daily'] += 1
+            elif res == 'failed':
+                summary['failed'] += 1
+        logger.info("wa daily: %s", summary)
+        return summary
+    except Exception as e:
+        logger.error("wa daily run: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        summary['error'] = str(e)[:200]
+        return summary
+    finally:
+        conn.close()
+
+
+def scheduled_daily():
+    """Cron 20:00 IST — live service only, switched on, one process at a time."""
+    if (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
+        return
+    conn = get_db()
+    try:
+        ensure_tables(conn)
+        if not is_enabled(conn, 'daily'):
+            return
+        if not conn.execute("SELECT pg_try_advisory_lock(hashtext('pg_wa_daily')) AS ok").fetchone()['ok']:
+            return
+        try:
+            daily_run()
+        finally:
+            conn.execute("SELECT pg_advisory_unlock(hashtext('pg_wa_daily'))")
+            conn.commit()
+    except Exception as e:
+        logger.error("wa daily scheduled: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+
+
 def scheduled_run():
     """Every 10 minutes: live service only, switched on, one process at a time."""
     if (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
@@ -218,13 +397,19 @@ def scheduled_run():
     conn = get_db()
     try:
         ensure_tables(conn)
-        if not is_enabled(conn):
+        signup, enquiry = is_enabled(conn), is_enabled(conn, 'enquiry')
+        if not (signup or enquiry):
             return
         got = conn.execute("SELECT pg_try_advisory_lock(hashtext('pg_wa_nudges')) AS ok").fetchone()['ok']
         if not got:
             return
         try:
-            run()
+            if signup:
+                run()
+            if enquiry:
+                s_, f_ = enquiry_run(conn)
+                if s_ or f_:
+                    logger.info("wa enquiry: sent %s failed %s", s_, f_)
         finally:
             conn.execute("SELECT pg_advisory_unlock(hashtext('pg_wa_nudges'))")
             conn.commit()
@@ -242,6 +427,8 @@ def start_scheduler():
         sch = BackgroundScheduler()
         sch.add_job(scheduled_run, 'interval', minutes=10, id='pg_wa_nudges',
                     coalesce=True, max_instances=1, misfire_grace_time=600)
+        sch.add_job(scheduled_daily, 'cron', hour=14, minute=30, id='pg_wa_daily',      # 20:00 IST
+                    coalesce=True, max_instances=1, misfire_grace_time=1800)
         sch.start()
     except Exception as e:
         logger.warning("wa nudge scheduler: %s", e)
@@ -260,11 +447,20 @@ def admin_page():
         flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
     conn = get_db()
     rows, counts, on, start = [], {}, False, ''
+    switches, optouts, today_plan = {}, 0, None
     try:
         ensure_tables(conn)
         on, start = is_enabled(conn), since(conn)
-        for r in conn.execute("SELECT kind, status, COUNT(*) AS n FROM pg_wa_nudge_log GROUP BY kind, status").fetchall():
-            counts.setdefault(r['kind'], {})[r['status']] = r['n']
+        switches = {g: {'on': is_enabled(conn, g), 'since': since(conn, g)} for g in SWITCHES}
+        for r in conn.execute("SELECT split_part(kind, ':', 1) AS k, status, COUNT(*) AS n FROM pg_wa_nudge_log "
+                              "GROUP BY 1, status").fetchall():
+            counts.setdefault(r['k'], {})[r['status']] = r['n']
+        optouts = conn.execute("SELECT COUNT(*) AS n FROM pg_wa_optout").fetchone()['n']
+        try:
+            today_plan = len(daily_plan(conn))
+        except Exception:
+            conn.rollback()
+            today_plan = None
         rows = conn.execute(
             "SELECT l.*, u.name AS doctor_name FROM pg_wa_nudge_log l LEFT JOIN pg_users u ON u.id = l.user_id "
             "ORDER BY l.id DESC LIMIT 60").fetchall()
@@ -275,8 +471,10 @@ def admin_page():
     finally:
         conn.close()
     return render_template('pg_admin/wa_nudges.html', rows=rows, counts=counts, on=on, start=start,
-                           kinds=KINDS, can_edit=bool(admin.get('is_admin')), welcome_tpl=WELCOME_TPL,
-                           incomplete_tpl=INCOMPLETE_TPL, template_ids=TEMPLATE_IDS,
+                           kinds=KINDS, kind_label=kind_label, can_edit=bool(admin.get('is_admin')),
+                           welcome_tpl=WELCOME_TPL, incomplete_tpl=INCOMPLETE_TPL, enquiry_tpl=ENQUIRY_TPL,
+                           daily_tpl=DAILY_TPL, template_ids=TEMPLATE_IDS, switches=switches, optouts=optouts,
+                           today_plan=today_plan, inbound_ready=bool(os.environ.get('PG_WA_INBOUND_KEY')),
                            active='wa', active_section='goocampus_in')
 
 
@@ -287,11 +485,14 @@ def admin_toggle():
         flash('Only an admin can switch the WhatsApp messages on or off.', 'error')
         return redirect(url_for('pg_wa_nudges'))
     on = request.form.get('on') == '1'
+    group = request.form.get('group') or 'signup'
+    if group not in SWITCHES:
+        group = 'signup'
+    names = {'signup': 'sign-up messages', 'enquiry': 'enquiry message', 'daily': 'daily counselling update'}
     conn = get_db()
     try:
-        set_enabled(conn, on, admin.get('name') or admin.get('emp_code') or 'admin')
-        flash('WhatsApp sign-up messages are ON — new sign-ups from now on.' if on
-              else 'WhatsApp sign-up messages are OFF.', 'success')
+        set_enabled(conn, on, admin.get('name') or admin.get('emp_code') or 'admin', group)
+        flash(f"WhatsApp {names[group]}: {'ON' if on else 'OFF'}.", 'success')
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -317,6 +518,13 @@ def admin_test():
               clean_placeholder(request.form.get('state') or 'Karnataka')]
     elif tpl == INCOMPLETE_TPL:
         ph = []
+    elif tpl == ENQUIRY_TPL:
+        ph = [welcome_name(request.form.get('name') or 'Test') or 'Test']
+    elif tpl == DAILY_TPL:
+        ph = [welcome_name(request.form.get('name') or 'Test') or 'Test', '3',
+              clean_placeholder((request.form.get('state') or 'Karnataka')) and
+              ('MCC & ' + clean_placeholder(request.form.get('state') or 'Karnataka')),
+              'MCC Round 2 result kept on hold — Madras High Court order (17 Nov)']
     else:
         flash('Pick a message.', 'error'); return redirect(url_for('pg_wa_nudges'))
     ok, resp = send_template(to, tpl, ph)
@@ -339,6 +547,50 @@ def admin_test():
     return redirect(url_for('pg_wa_nudges'))
 
 
+def inbound():
+    """POST /api/wa/inbound?k=<PG_WA_INBOUND_KEY> — Infobip WhatsApp inbound messages (set this URL in Infobip).
+    'Stop updates' (quick-reply button) or a message STOP → this number never gets the daily update again."""
+    from flask import request, jsonify
+    key = os.environ.get('PG_WA_INBOUND_KEY') or ''
+    if not key or request.args.get('k') != key:
+        return jsonify({'ok': False}), 401
+    data = request.get_json(silent=True) or {}
+    stopped = 0
+    conn = get_db()
+    try:
+        for m in data.get('results') or []:
+            msg = m.get('message') or {}
+            vals = [str(msg.get(k) or '').strip().lower() for k in ('text', 'payload', 'title')]
+            hit = next((v for v in vals if re.fullmatch(r'(stop|stop updates?|unsubscribe)[.! ]*', v)), '')
+            if hit and m.get('from'):
+                stopped += set_optout(conn, m.get('from'), True, 'whatsapp', hit[:40])
+    except Exception as e:
+        logger.error("wa inbound: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'stopped': stopped})
+
+
+def admin_optout():
+    """Admin marks a number as opted out of the daily update (or back in)."""
+    from flask import request, redirect, url_for, flash
+    admin = _admin()
+    if not admin or not admin.get('is_admin'):
+        flash('Only an admin can change this.', 'error'); return redirect(url_for('pg_wa_nudges'))
+    out = request.form.get('out') == '1'
+    conn = get_db()
+    try:
+        ok = set_optout(conn, request.form.get('mobile'), out, 'admin',
+                        admin.get('name') or admin.get('emp_code') or 'admin')
+        flash(('Stopped daily updates for that number.' if out else 'Daily updates allowed again for that number.')
+              if ok else 'Enter a 10-digit mobile number.', 'success' if ok else 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_wa_nudges'))
+
+
 def register(app):
     from core.auth import login_required
     app.add_url_rule('/admin/pg/users/whatsapp', 'pg_wa_nudges', login_required(admin_page), methods=['GET'])
@@ -346,5 +598,8 @@ def register(app):
                      methods=['POST'])
     app.add_url_rule('/admin/pg/users/whatsapp/test', 'pg_wa_nudges_test', login_required(admin_test),
                      methods=['POST'])
+    app.add_url_rule('/admin/pg/users/whatsapp/optout', 'pg_wa_nudges_optout', login_required(admin_optout),
+                     methods=['POST'])
+    app.add_url_rule('/api/wa/inbound', 'pg_wa_inbound', inbound, methods=['POST'])
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
         start_scheduler()     # every 10 min; no-op unless switched ON + live service

@@ -16,14 +16,14 @@
 <div style="max-width:1200px;margin:0 auto;padding:1.5rem;">
   <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">Registered Doctors</h1>
   <p style="color:var(--gray-500);font-size:0.9rem;margin:0 0 1rem;">
-    Automatic WhatsApp messages to <b>new</b> goocampus.in sign-ups (approved utility templates). Existing doctors are never messaged by this.
+    Automatic WhatsApp messages (Meta-approved utility templates). Each group has its own ON/OFF switch and starts OFF.
   </p>
   {% with counts = {} %}{% include "pg_admin/_users_tabs.html" %}{% endwith %}
 
   <div class="wn-card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
     <div>
       <div style="font-size:1.05rem;font-weight:700;color:var(--navy);">
-        Status: {% if on %}<span class="wn-pill" style="background:#dcfce7;color:#166534;">ON</span>{% else %}<span class="wn-pill" style="background:#fee2e2;color:#991b1b;">OFF</span>{% endif %}
+        Sign-up messages (1 + 2): {% if on %}<span class="wn-pill" style="background:#dcfce7;color:#166534;">ON</span>{% else %}<span class="wn-pill" style="background:#fee2e2;color:#991b1b;">OFF</span>{% endif %}
       </div>
       <div class="wn-sub">
         {% if start %}Doctors who signed up after {{ start|format_datetime }} are included.{% else %}When switched on, only doctors who sign up from that moment are included.{% endif %}
@@ -32,7 +32,7 @@
     </div>
     {% if can_edit %}
     <form method="post" action="{{ url_for('pg_wa_nudges_toggle') }}">
-      <input type="hidden" name="on" value="{{ '0' if on else '1' }}">
+      <input type="hidden" name="on" value="{{ '0' if on else '1' }}"><input type="hidden" name="group" value="signup">
       <button class="wn-btn" style="background:{{ '#991b1b' if on else '#166534' }};color:#fff;"
               onclick="return confirm('{{ 'Switch OFF the WhatsApp sign-up messages?' if on else 'Switch ON? New sign-ups from now on will get these WhatsApp messages.' }}');">
         {{ 'Switch OFF' if on else 'Switch ON' }}</button>
@@ -66,6 +66,55 @@ It takes less than a minute.</div>
     </div>
   </div>
 
+  {% macro sw(group, title, note) %}
+  {% set st = switches.get(group) or {} %}
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:0.8rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+    <div style="font-weight:700;color:var(--navy);">{{ title }} ·
+      {% if st.on %}<span class="wn-pill" style="background:#dcfce7;color:#166534;">ON</span>{% else %}<span class="wn-pill" style="background:#fee2e2;color:#991b1b;">OFF</span>{% endif %}
+      <div class="wn-sub" style="font-weight:400;">{{ note }}{% if st.since %} Switched on first: {{ st.since }} (UTC).{% endif %}</div></div>
+    {% if can_edit %}
+    <form method="post" action="{{ url_for('pg_wa_nudges_toggle') }}">
+      <input type="hidden" name="group" value="{{ group }}"><input type="hidden" name="on" value="{{ '0' if st.on else '1' }}">
+      <button class="wn-btn" style="background:{{ '#991b1b' if st.on else '#166534' }};color:#fff;"
+              onclick="return confirm('{{ 'Switch OFF?' if st.on else 'Switch ON?' }}');">{{ 'Switch OFF' if st.on else 'Switch ON' }}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endmacro %}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.1rem;">
+    <div class="wn-card">
+      {{ sw('enquiry', '3 · Enquiry → dashboard', 'Once per mobile, to website enquiries (Sales → Inquiries from goocampus.in + Management / NRI call-backs) made after switch-on. Checked every 10 minutes.') }}
+      <div class="wn-sub" style="margin-bottom:0.4rem;">{{ enquiry_tpl }} · id {{ template_ids[enquiry_tpl] }}</div>
+      <div class="wn-msg">Hi Dr. <b>{name}</b>, thank you for your enquiry with GooCampus. Our team will call you shortly.
+
+Log in into your dashboard to get daily counselling updates.</div>
+      <div class="wn-sub" style="margin-top:0.5rem;">Sent: {{ (counts.get('enquiry') or {}).get('sent', 0) }} · failed: {{ (counts.get('enquiry') or {}).get('failed', 0) }}</div>
+    </div>
+    <div class="wn-card">
+      {{ sw('daily', '4 · Daily counselling update', '8:00 pm IST, at most once a day, to registered doctors (not team / Desk) whose MCC or state news was posted that day. No news → no message.') }}
+      <div class="wn-sub" style="margin-bottom:0.4rem;">{{ daily_tpl }} · id {{ template_ids[daily_tpl] }}</div>
+      <div class="wn-msg">Dr. <b>{name}</b>, <b>{count}</b> new update(s) for <b>{MCC &amp; state}</b> were posted on your personalised goocampus.in dashboard today.
+
+Latest: <b>{latest heading}</b>
+
+Log in to see the dates, documents and what you need to do next.</div>
+      <div class="wn-sub" style="margin-top:0.5rem;">
+        Would go to <b>{{ today_plan if today_plan is not none else '?' }}</b> doctors for today's news ·
+        sent: {{ (counts.get('daily') or {}).get('sent', 0) }} · failed: {{ (counts.get('daily') or {}).get('failed', 0) }} ·
+        stopped by doctors: {{ optouts }}<br>
+        "Stop updates" replies: {% if inbound_ready %}<span style="color:#166534;font-weight:700;">ready</span> — Infobip inbound URL: https://goocampus.org/api/wa/inbound?k=… (the key in PG_WA_INBOUND_KEY){% else %}<span style="color:#991b1b;font-weight:700;">not set up</span> — add PG_WA_INBOUND_KEY on Render, then set the inbound URL in Infobip{% endif %}
+      </div>
+      {% if can_edit %}
+      <form method="post" action="{{ url_for('pg_wa_nudges_optout') }}" style="display:flex;gap:0.4rem;margin-top:0.6rem;flex-wrap:wrap;">
+        <input name="mobile" class="wn-in" placeholder="10-digit mobile" maxlength="14" required>
+        <button class="wn-btn" name="out" value="1" style="background:#991b1b;color:#fff;">Stop daily updates</button>
+        <button class="wn-btn" name="out" value="0" style="background:#e5e7eb;color:#374151;">Allow again</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
   {% if can_edit %}
   <div class="wn-card">
     <div style="font-weight:700;color:var(--navy);margin-bottom:0.5rem;">Send a test to your own phone</div>
@@ -73,6 +122,8 @@ It takes less than a minute.</div>
       <select name="template" class="wn-in">
         <option value="{{ welcome_tpl }}">1 · Welcome</option>
         <option value="{{ incomplete_tpl }}">2 · Profile reminder</option>
+        <option value="{{ enquiry_tpl }}">3 · Enquiry → dashboard</option>
+        <option value="{{ daily_tpl }}">4 · Daily counselling update (sample)</option>
       </select>
       <input name="mobile" class="wn-in" placeholder="10-digit mobile" maxlength="14" required>
       <input name="name" class="wn-in" placeholder="Name (welcome)" value="Test">
@@ -90,8 +141,8 @@ It takes less than a minute.</div>
     {% for r in rows %}
       <tr>
         <td>{{ r.created_at|format_datetime }}</td>
-        <td>{% if r.user_id %}<a href="/admin/pg/users/{{ r.user_id }}">{{ r.doctor_name|dr_name if r.doctor_name else '(name pending)' }}</a>{% else %}<span class="wn-sub">test by {{ r.sent_by }}</span>{% endif %}</td>
-        <td>{{ kinds.get(r.kind, r.kind) }}</td>
+        <td>{% if r.user_id %}<a href="/admin/pg/users/{{ r.user_id }}">{{ r.doctor_name|dr_name if r.doctor_name else '(name pending)' }}</a>{% elif r.kind and r.kind.startswith('enquiry') %}<span class="wn-sub">website enquiry</span>{% else %}<span class="wn-sub">test by {{ r.sent_by }}</span>{% endif %}</td>
+        <td>{{ kind_label(r.kind) }}</td>
         <td>…{{ r.mobile }}</td>
         <td>{% if r.status == 'sent' %}<span class="wn-pill" style="background:#dcfce7;color:#166534;">sent</span>
             {% elif r.status == 'failed' %}<span class="wn-pill" style="background:#fee2e2;color:#991b1b;" title="{{ r.response }}">failed</span>
