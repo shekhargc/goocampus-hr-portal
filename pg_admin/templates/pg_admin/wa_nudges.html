@@ -11,6 +11,10 @@
   .wn-sub { color:var(--gray-500); font-size:0.76rem; }
   .wn-btn { padding:0.5rem 1rem; border-radius:8px; border:none; font-weight:700; cursor:pointer; font-size:0.85rem; }
   .wn-in { padding:0.45rem 0.6rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; }
+  .wn-aud { margin-top:0.7rem; border-top:1px dashed var(--gray-200); padding-top:0.6rem; }
+  .wn-aud summary { cursor:pointer; font-size:0.8rem; font-weight:700; color:var(--navy); }
+  .wn-aud label { font-size:0.8rem; margin-right:0.7rem; white-space:nowrap; }
+  .wn-aud select[multiple] { width:100%; min-height:120px; margin-top:0.4rem; }
   .wn-msg { white-space:pre-line; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:0.7rem 0.85rem; font-size:0.83rem; color:#14532d; }
 </style>
 <div style="max-width:1200px;margin:0 auto;padding:1.5rem;">
@@ -19,6 +23,43 @@
     Automatic WhatsApp messages (Meta-approved utility templates). Each group has its own ON/OFF switch and starts OFF.
   </p>
   {% with counts = {} %}{% include "pg_admin/_users_tabs.html" %}{% endwith %}
+
+  <div class="wn-card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;border:2px solid var(--orange);">
+    <div>
+      <div style="font-size:1.05rem;font-weight:700;color:var(--navy);">📣 Send a template to a group</div>
+      <div class="wn-sub">Pick any approved template, choose who gets it (Free / Paid / Internal, states, sign-up dates, NEET qualified, seat allotted, lead status…), see the count and the real message, then send. No need to open doctors one by one.</div>
+    </div>
+    <a href="{{ url_for('pg_wa_send') }}" class="wn-btn" style="background:var(--orange);color:#fff;text-decoration:none;">Open group send →</a>
+  </div>
+
+  {% macro aud_form(msg) %}
+  {% set a = auds.get(msg) or {} %}
+  <details class="wn-aud" id="aud-{{ msg }}">
+    <summary>👥 Who gets it: <span style="font-weight:400;">{{ aud_labels.get(msg, '') }}</span>{% if can_edit %} · change{% endif %}</summary>
+    {% if can_edit %}
+    <form method="post" action="{{ url_for('pg_wa_audience') }}" style="margin-top:0.5rem;">
+      <input type="hidden" name="msg" value="{{ msg }}">
+      {% if msg == 'enquiry' %}
+        {% for k, lbl in enq_sources %}<label><input type="checkbox" name="sources" value="{{ k }}" {{ 'checked' if k in (a.sources or []) }}> {{ lbl }}</label><br>{% endfor %}
+      {% elif msg == 'incomplete' %}
+        <label><input type="checkbox" name="types" value="free" {{ 'checked' if 'free' in (a.types or []) }}> Free doctors (untick = don't send the reminder)</label>
+        <div class="wn-sub">Paid / Internal doctors fill the onboarding form instead, so they never get this one.</div>
+      {% else %}
+        <div>
+          <label><input type="checkbox" name="types" value="free" {{ 'checked' if 'free' in (a.types or []) }}> Free</label>
+          <label><input type="checkbox" name="types" value="paid" {{ 'checked' if 'paid' in (a.types or []) }}> Paid</label>
+          <label><input type="checkbox" name="types" value="internal" {{ 'checked' if 'internal' in (a.types or []) }}> Internal</label>
+        </div>
+        <div class="wn-sub" style="margin-top:0.3rem;">Home states — choose none for all states (Ctrl / ⌘-click to pick several):</div>
+        <select name="states" multiple class="wn-in">
+          {% for st in states %}<option value="{{ st }}" {{ 'selected' if st in (a.states or []) }}>{{ st }}</option>{% endfor %}
+        </select>
+      {% endif %}
+      <div style="margin-top:0.5rem;"><button class="wn-btn" style="background:var(--navy);color:#fff;">Save who gets it</button></div>
+    </form>
+    {% endif %}
+  </details>
+  {% endmacro %}
 
   <div class="wn-card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
     <div>
@@ -50,6 +91,7 @@ Your NEET PG dashboard is ready. Counselling news, deadlines, results and docume
 
 Log in any time with your mobile number and OTP.</div>
       <div class="wn-sub" style="margin-top:0.5rem;">Sent: {{ (counts.get('welcome') or {}).get('sent', 0) }} · failed: {{ (counts.get('welcome') or {}).get('failed', 0) }}</div>
+      {{ aud_form('welcome') }}
     </div>
     <div class="wn-card">
       <div style="font-weight:700;color:var(--navy);">2 · Profile reminder <span class="wn-sub">{{ incomplete_tpl }} · id {{ template_ids[incomplete_tpl] }}</span></div>
@@ -63,6 +105,7 @@ It takes less than a minute.</div>
         1 hour — sent: {{ (counts.get('incomplete_1h') or {}).get('sent', 0) }} · failed: {{ (counts.get('incomplete_1h') or {}).get('failed', 0) }}<br>
         24 hours — sent: {{ (counts.get('incomplete_24h') or {}).get('sent', 0) }} · failed: {{ (counts.get('incomplete_24h') or {}).get('failed', 0) }}
       </div>
+      {{ aud_form('incomplete') }}
     </div>
   </div>
 
@@ -90,6 +133,7 @@ It takes less than a minute.</div>
 
 Log in into your dashboard to get daily counselling updates.</div>
       <div class="wn-sub" style="margin-top:0.5rem;">Sent: {{ (counts.get('enquiry') or {}).get('sent', 0) }} · failed: {{ (counts.get('enquiry') or {}).get('failed', 0) }}</div>
+      {{ aud_form('enquiry') }}
     </div>
     <div class="wn-card">
       {{ sw('daily', '4 · Daily counselling update', '8:00 pm IST, at most once a day, to registered doctors (not team / Desk) whose MCC or state news was posted that day. No news → no message.') }}
@@ -112,6 +156,7 @@ Log in to see the dates, documents and what you need to do next.</div>
         <button class="wn-btn" name="out" value="0" style="background:#e5e7eb;color:#374151;">Allow again</button>
       </form>
       {% endif %}
+      {{ aud_form('daily') }}
     </div>
   </div>
 
