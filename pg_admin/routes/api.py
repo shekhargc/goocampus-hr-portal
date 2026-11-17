@@ -139,12 +139,13 @@ def api_pg_otp_verify():
         # Match by the LAST 10 DIGITS (tolerant of a stored +91/country code) and reuse
         # the OLDEST account, so an existing record isn't missed → no duplicate signup.
         user = conn.execute(
-            "SELECT id, name, COALESCE(state,'') AS state, neet_pg_rank, neet_pg_score FROM pg_users "
+            "SELECT id, name, COALESCE(state,'') AS state, neet_pg_rank, neet_pg_score, created_at FROM pg_users "
             "WHERE RIGHT(regexp_replace(COALESCE(mobile,''), '\\D', '', 'g'), 10) = ? "
             "ORDER BY id ASC LIMIT 1", (mobile,)).fetchone()
         is_new = not bool(user)          # account created this call
-        ustate, urank, uscore = '', None, None
+        ustate, urank, uscore, ucreated = '', None, None, None
         if user:
+            ucreated = user['created_at']
             uid, uname, ustate = user['id'], (user['name'] or ''), user['state']
             urank, uscore = user['neet_pg_rank'], user['neet_pg_score']
             # If the site now sends a name and we don't have one, capture it.
@@ -187,9 +188,10 @@ def api_pg_otp_verify():
     # onboarded = name + home/domicile state (unchanged meaning). profile_complete/missing = what the
     # College Predictor needs (state + rank + score); name_missing = gentle nudge only. (2026-10-19)
     onboarded = bool((uname or '').strip()) and bool((ustate or '').strip())
-    missing = profile_missing({'name': uname, 'state': ustate, 'neet_pg_rank': urank, 'neet_pg_score': uscore})
+    _u = {'name': uname, 'state': ustate, 'neet_pg_rank': urank, 'neet_pg_score': uscore, 'created_at': ucreated}
+    missing = profile_missing(_u)
     return jsonify({'ok': True, 'token': token, 'is_new': is_new, 'onboarded': onboarded,
-                    'profile_complete': not missing, 'missing': missing,
+                    'profile_complete': profile_complete_for(_u, missing), 'missing': missing,
                     'name_missing': not (uname or '').strip(),
                     'user': {'id': uid, 'name': uname, 'mobile': mobile}})
 
@@ -1212,7 +1214,7 @@ def api_pg_entitlements():
         ent = entitlements.summary(conn, uid)
         missing, name_missing = [], False
         if uid:
-            _pr = conn.execute("SELECT name, state, neet_pg_rank, neet_pg_score FROM pg_users WHERE id = ?", (uid,)).fetchone()
+            _pr = conn.execute("SELECT name, state, neet_pg_rank, neet_pg_score, created_at FROM pg_users WHERE id = ?", (uid,)).fetchone()
             _pr = dict(_pr) if _pr else {}
             missing = profile_missing(_pr)
             name_missing = not (_pr.get('name') or '').strip()
@@ -1223,7 +1225,7 @@ def api_pg_entitlements():
         return jsonify({'ok': True, 'logged_in': bool(uid),
                         'entitlements': ent,
                         'plan': ent.get('plan'), 'features': ent.get('features'),
-                        'profile_complete': bool(uid) and not missing, 'missing': missing,
+                        'profile_complete': bool(uid) and profile_complete_for(_pr, missing), 'missing': missing,
                         'name_missing': name_missing})
     except Exception as e:
         try: conn.rollback()
@@ -1361,6 +1363,53 @@ def profile_missing(row):
     return out
 
 
+# Accounts created BEFORE this moment (UTC) keep the old rule: name + state on file = complete, so
+# doctors who already gave their details are never pushed to add a rank (founder 2026-11-17). Rank is
+# part of "complete" only for accounts created from here on. Set at go-live.
+PROFILE_RANK_REQUIRED_FROM = datetime(2026, 11, 17, 18, 30)     # = 18 Nov 2026 00:00 IST
+
+
+def profile_complete_for(row, missing=None):
+    """The pop-up's "complete": name + state (+ NEET-PG rank for accounts created on/after
+    PROFILE_RANK_REQUIRED_FROM). `missing` still lists the rank for everyone (Predictor prompt)."""
+    row = row or {}
+    missing = profile_missing(row) if missing is None else missing
+    need = ['name', 'state']
+    created = row.get('created_at')
+    if isinstance(created, str):
+        try: created = datetime.strptime(created[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
+        except Exception: created = None
+    if created is None or getattr(created, 'replace', None) and created.replace(tzinfo=None) >= PROFILE_RANK_REQUIRED_FROM:
+        need.append('neet_pg_rank')
+    return not any(k in missing for k in need)
+
+
+def profile_gate_applies(conn, row):
+    """The dashboard profile pop-up is ONLY for free doctors (founder 2026-11-17). Never for team /
+    Counselling-Desk accounts, paid plans (Starter/Standard/Premium, incl. granted), or anyone with a
+    PGCP invitation (paid or internal) — they fill the full onboarding form instead. Any error → False."""
+    try:
+        row = row or {}
+        if int(row.get('is_team_member') or 0) or int(row.get('desk_access') or 0):
+            return False
+        from pg_admin.data import entitlements as _ent
+        plan, _sub = _ent.effective_plan(conn, row.get('id'))
+        code = ((plan or {}).get('code') or '').lower()
+        if any(t in code for t in ('starter', 'standard', 'premium')):
+            return False
+        m10 = ''.join(ch for ch in str(row.get('mobile') or '') if ch.isdigit())[-10:]
+        if m10 and conn.execute(
+                "SELECT 1 FROM pg_pgcp_invitations WHERE status <> 'cancelled' AND "
+                "RIGHT(regexp_replace(COALESCE(mobile,''),'[^0-9]','','g'),10) = ? LIMIT 1", (m10,)).fetchone():
+            return False
+        return True
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.warning("profile_gate_applies: %s", e)
+        return False
+
+
 def _pg_user_by_token(conn, token):
     row = conn.execute(
         "SELECT * FROM pg_users WHERE session_token = ? "
@@ -1469,7 +1518,9 @@ def api_pg_profile():
                             # sign-up time (UTC ISO) — the website's 5-minute "profile becomes mandatory" clock
                             'registered_at': (_reg.isoformat() + ('' if _reg.tzinfo else 'Z'))
                                              if hasattr(_reg, 'isoformat') else (str(_reg) if _reg else None),
-                            'profile_complete': not _miss, 'missing': _miss,
+                            # profile_gate: show the pop-up at all (free doctors only); profile_complete: its rule
+                            'profile_gate': profile_gate_applies(conn, row),
+                            'profile_complete': profile_complete_for(row, _miss), 'missing': _miss,
                             'name_missing': not (row.get('name') or '').strip()})
 
         # POST — save the doctor's edits.
@@ -1504,7 +1555,7 @@ def api_pg_profile():
             params.append(val)
         if not sets:
             _miss = profile_missing(row)
-            return jsonify({'ok': True, 'updated': 0, 'profile_complete': not _miss, 'missing': _miss,
+            return jsonify({'ok': True, 'updated': 0, 'profile_complete': profile_complete_for(row, _miss), 'missing': _miss,
                             'name_missing': not (row.get('name') or '').strip()})
         params.append(row['id'])
         # The doctor typing their own All-India rank (Edit Profile / the predictor's rank prompt) IS a confirmation —
@@ -1532,10 +1583,10 @@ def api_pg_profile():
                     conn.commit()
             except Exception:
                 conn.rollback()
-        _after = conn.execute("SELECT name, state, neet_pg_rank, neet_pg_score FROM pg_users WHERE id = ?", (row['id'],)).fetchone()
+        _after = conn.execute("SELECT name, state, neet_pg_rank, neet_pg_score, created_at FROM pg_users WHERE id = ?", (row['id'],)).fetchone()
         _after = dict(_after) if _after else {}
         _miss = profile_missing(_after)
-        return jsonify({'ok': True, 'updated': len(sets), 'profile_complete': not _miss, 'missing': _miss,
+        return jsonify({'ok': True, 'updated': len(sets), 'profile_complete': profile_complete_for(_after, _miss), 'missing': _miss,
                         'name_missing': not (_after.get('name') or '').strip()})
     except Exception as e:
         try: conn.rollback()
