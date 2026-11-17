@@ -31,17 +31,30 @@ KNOWN = [
                      'doctor. Not team / Counselling Desk.',
      'variables': '{{1}} = doctor name (without "Dr.") · {{2}} = home state',
      'approved_on': '2026-11-17'},
-    {'name': 'gc_profile_incomplete', 'language': 'en', 'category': 'UTILITY', 'status': 'APPROVED',
-     'infobip_template_id': '1952329065742254', 'sender': DEFAULT_SENDER,
-     'body_text': 'Your GooCampus.in dashboard is ready and your mobile number is verified. Please complete your '
-                  'profile by adding your name and state to access the complete dashboard. It takes less than a minute.',
+    {'name': 'gc_profile_incomplete_v2', 'language': 'en', 'category': 'UTILITY', 'status': 'APPROVED',
+     'infobip_template_id': '1064689406591742', 'sender': DEFAULT_SENDER,
+     'body_text': 'Dear Doctor,\n\nThank you for registering with GooCampus.\n\nYour GooCampus.in dashboard is ready and '
+                  'your mobile number is verified.\n\nPlease complete your profile by adding your name and state to '
+                  'access the complete dashboard.\n\nIt takes less than a minute.',
      'buttons': 'URL button: Click Here',
      'purpose': 'Remind a new doctor (free or invited) to add name + state so the full dashboard opens.',
      'used_in': 'goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 2, sign-up switch)',
      'trigger_text': 'Automatic: any new doctor (free or invited) still missing name or state 15 minutes after '
                      'sign-up, and again at 24 hours (max 2). Team / Desk accounts never get it.',
      'variables': 'none',
-     'approved_on': '2026-11-17'},
+     'approved_on': '2026-11-18',
+     'notes': 'Replaces gc_profile_incomplete (id 1952329065742254) — adds "Dear Doctor," and the thank-you line.'},
+    {'name': 'gc_profile_incomplete', 'language': 'en', 'category': 'UTILITY', 'status': 'APPROVED',
+     'infobip_template_id': '1952329065742254', 'sender': DEFAULT_SENDER,
+     'body_text': 'Your GooCampus.in dashboard is ready and your mobile number is verified. Please complete your '
+                  'profile by adding your name and state to access the complete dashboard. It takes less than a minute.',
+     'buttons': 'URL button: Click Here',
+     'purpose': 'Old version of the profile reminder (no greeting). Not used any more.',
+     'used_in': 'Nothing — replaced by gc_profile_incomplete_v2 on 2026-11-18',
+     'trigger_text': 'Not sent any more.',
+     'variables': 'none',
+     'approved_on': '2026-11-17',
+     'notes': 'Retired 2026-11-18: replaced by gc_profile_incomplete_v2 (adds "Dear Doctor,").'},
     {'name': 'gc_enquiry_account', 'language': 'en', 'category': 'UTILITY', 'status': 'APPROVED',
      'infobip_template_id': '1118950867607827', 'sender': DEFAULT_SENDER,
      'body_text': 'Hi Dr. {{1}}, thank you for your enquiry with GooCampus. Our team will call you shortly.\n\n'
@@ -69,13 +82,19 @@ KNOWN = [
 ]
 # Texts this module seeded earlier that were later corrected (founder 2026-11-17 night). A row still holding the
 # OLD seeded text (i.e. never edited by the team) is moved to the new KNOWN text; any team edit is left alone.
-OLD_SEED = {
-    'welcometogoocampus': {'trigger_text': 'Automatic, every 10 min: doctors who signed up after the switch-on and have '
-                                           'added name + state (within 7 days). Once per doctor. Not team / Counselling Desk.'},
-    'gc_profile_incomplete': {
-        'purpose': 'Remind a new FREE doctor to add name + state so the full dashboard opens.',
-        'trigger_text': 'Automatic: free doctors still missing name or state 1 hour after sign-up, and again at 24 '
-                        'hours (max 2). Paid / invited / team / Desk accounts never get it.'},
+OLD_SEED = {          # name → {column: [old seeded texts]} — any of them is replaced by the KNOWN text
+    'welcometogoocampus': {'trigger_text': [
+        'Automatic, every 10 min: doctors who signed up after the switch-on and have added name + state (within 7 '
+        'days). Once per doctor. Not team / Counselling Desk.']},
+    'gc_profile_incomplete': {          # retired 2026-11-18 → v2
+        'purpose': ['Remind a new FREE doctor to add name + state so the full dashboard opens.',
+                    'Remind a new doctor (free or invited) to add name + state so the full dashboard opens.'],
+        'used_in': ['goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 2, sign-up switch)'],
+        'trigger_text': [
+            'Automatic: free doctors still missing name or state 1 hour after sign-up, and again at 24 hours (max 2). '
+            'Paid / invited / team / Desk accounts never get it.',
+            'Automatic: any new doctor (free or invited) still missing name or state 15 minutes after sign-up, and '
+            'again at 24 hours (max 2). Team / Desk accounts never get it.']},
 }
 # Purposes for older templates (filled only where empty).
 KNOWN_PURPOSE = {
@@ -118,9 +137,10 @@ def prepare(conn):
                                  [v for _, v in sets] + [row['id']])
         known = {t['name']: t for t in KNOWN}
         for name, cols in OLD_SEED.items():
-            for c, old in cols.items():
-                conn.execute(f"UPDATE wa_templates SET {c} = ? WHERE name = ? AND {c} = ?",
-                             (known[name][c], name, old))
+            for c, olds in cols.items():
+                for old in olds:
+                    conn.execute(f"UPDATE wa_templates SET {c} = ? WHERE name = ? AND {c} = ?",
+                                 (known[name][c], name, old))
         for name, (purpose, used, trig, var) in KNOWN_PURPOSE.items():
             conn.execute("UPDATE wa_templates SET purpose = COALESCE(NULLIF(purpose,''), ?), "
                          "used_in = COALESCE(NULLIF(used_in,''), ?), trigger_text = COALESCE(NULLIF(trigger_text,''), ?), "

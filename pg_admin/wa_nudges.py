@@ -2,7 +2,8 @@
 
   1. welcometogoocampus   (Infobip/Meta id 1413956730516058) — "Hi Dr. {{1}}, thank you for registering…
                             …for {{2}} and MCC…". Sent ONCE when a new doctor has a name + state.
-  2. gc_profile_incomplete (id 1952329065742254) — no variables. Sent to a new doctor (free OR invited/paid —
+  2. gc_profile_incomplete_v2 (id 1064689406591742; replaced gc_profile_incomplete 1952329065742254 on 2026-11-18,
+                            founder: add "Dear Doctor," + "Thank you for registering with GooCampus.") — no variables. Sent to a new doctor (free OR invited/paid —
                             founder 2026-11-17) whose name or state is still missing 15 minutes after sign-up, and
                             once more at 24 hours. Max 2. ("Who gets it" can narrow it to Free / Paid / Internal.)
   (old rule, before 2026-11-17 night: FREE doctors only, first reminder at 1 hour) — sent to a new FREE doctor whose name or
@@ -32,10 +33,10 @@ from db import get_db
 logger = logging.getLogger(__name__)
 
 WELCOME_TPL = 'welcometogoocampus'
-INCOMPLETE_TPL = 'gc_profile_incomplete'
+INCOMPLETE_TPL = 'gc_profile_incomplete_v2'      # "Dear Doctor, Thank you for registering…" (2026-11-18; v1 retired)
 ENQUIRY_TPL = 'gc_enquiry_account'
 DAILY_TPL = 'gc_daily_account_update'
-TEMPLATE_IDS = {WELCOME_TPL: '1413956730516058', INCOMPLETE_TPL: '1952329065742254',
+TEMPLATE_IDS = {WELCOME_TPL: '1413956730516058', INCOMPLETE_TPL: '1064689406591742',
                 ENQUIRY_TPL: '1118950867607827', DAILY_TPL: '39934717086143575'}
 SENDER = os.environ.get('PG_WA_SENDER') or '15558246314'
 LANGS = ('en', 'en_US', 'en_GB')          # tried in order until Infobip accepts the template
