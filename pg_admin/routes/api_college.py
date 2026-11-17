@@ -484,6 +484,7 @@ def _api_pg_fees_facets_raw():
     out = {'ok': True, 'states': [], 'courses': [], 'quotas': [], 'categories': [],
            'college_types': [], 'authorities': []}
     try:
+        conn.execute("SET LOCAL enable_nestloop = off")   # 2026-11-17: same slow-plan fix as the fee list
         def distinct(col):
             return [r[col] for r in conn.execute(
                 f"SELECT DISTINCT {col} FROM " + src + " src" + wsql
@@ -495,6 +496,7 @@ def _api_pg_fees_facets_raw():
         out['college_types'] = distinct('institute_type')
         out['authorities'] = distinct('authority')
     except Exception as e:
+        out['ok'] = False            # never cache a half-filled answer
         logging.error("api_pg_fees_facets: %s", e)
     finally:
         conn.close()
