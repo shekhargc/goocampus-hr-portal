@@ -161,7 +161,17 @@ def get_db():
             raise ImportError("psycopg2-binary is required for PostgreSQL support. "
                             "Install it with: pip install psycopg2-binary")
 
-        conn = psycopg2.connect(database_url)
+        # Outage guard (2026-11-17): public goocampus.in reads (GET /api/pg/...) get a 25 s statement timeout, so a
+        # slow query is cancelled by Postgres instead of running past gunicorn's 30 s worker timeout — a killed
+        # worker leaves its query running on the shared DB, and the pile-up froze live + staging.
+        opts = None
+        try:
+            from flask import request, has_request_context
+            if has_request_context() and request.method == 'GET' and request.path.startswith('/api/pg/'):
+                opts = '-c statement_timeout=25000'
+        except Exception:
+            opts = None
+        conn = psycopg2.connect(database_url, options=opts) if opts else psycopg2.connect(database_url)
         # Set cursor factory to return dicts
         conn.cursor_factory = RealDictCursor
         return DatabaseConnection(conn, is_postgres=True)
