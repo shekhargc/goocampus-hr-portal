@@ -132,11 +132,41 @@ _ROW = ('sno', 'rank', 'quota_raw', 'quota', 'institute_raw', 'course_raw', 'sec
         'allotted_category_raw', 'candidate_category', 'remarks')
 
 
+ROUND_STATUSES = ('fresh', 'upgraded', 'retained')
+ROUND_STATUS_LABEL = {'fresh': 'Fresh allotment in {round}', 'upgraded': 'Upgraded in {round}',
+                      'retained': 'Retained {prev} seat'}
+NOT_RETAINED = "COALESCE(r.round_status,'') <> 'retained'"   # rows that took a seat IN this round
+
+
+def round_status_label(status, rnd, prev_round=''):
+    """'Upgraded in Round 2' / 'Fresh allotment in Round 2' / 'Retained Round 1 seat' ('' when not set)."""
+    t = ROUND_STATUS_LABEL.get(status or '')
+    return t.format(round=rnd or 'this round', prev=prev_round or 'earlier') if t else ''
+
+
+def _fill_retained(conn, auth, year, rnd):
+    """A 'retained' row keeps the earlier-round seat; the authority prints no category for it → copy category,
+    standard names, state and type from that earlier row (same rank + same seat as published)."""
+    conn.execute(
+        "UPDATE pg_results r SET allotted_category=p.allotted_category, allotted_category_raw=p.allotted_category_raw, "
+        "candidate_category=COALESCE(NULLIF(r.candidate_category,''), p.candidate_category), "
+        "institute=COALESCE(NULLIF(r.institute,''), p.institute), course=COALESCE(NULLIF(r.course,''), p.course), "
+        "state=COALESCE(NULLIF(r.state,''), p.state), college_type=COALESCE(NULLIF(r.college_type,''), p.college_type) "
+        "FROM pg_results p WHERE r.authority_code=? AND r.academic_year=? AND r.round=? AND r.round_status='retained' "
+        "AND COALESCE(r.allotted_category,'')='' AND p.authority_code=r.authority_code AND p.academic_year=r.academic_year "
+        "AND p.round<>r.round AND p.rank=r.rank AND p.institute_raw=r.institute_raw AND p.course_raw=r.course_raw "
+        "AND COALESCE(p.allotted_category,'')<>''", [auth, year, rnd])
+
+
 def api_results_ingest():
     """POST /api/pg/results/ingest (X-News-Key)
     {authority_code, year, round, round_order, status: provisional|final, title, published_on,
      source_file_name, pdf_name, pdf_b64, notes, rows:[{sno, rank, quota_raw, quota, institute_raw,
-     course_raw, section, allotted_category, allotted_category_raw, candidate_category, remarks}]}
+     course_raw, section, allotted_category, allotted_category_raw, candidate_category, remarks
+     [, round_status: fresh|upgraded|retained, round_status_raw, prev_quota_raw, prev_quota, prev_institute_raw,
+       prev_course_raw, prev_course, prev_remarks]}]}
+    Round 2+ (tools/results/mcc_r2.py): a 'retained' row prints no category → filled from the earlier round's row of
+    the same rank + seat when the round is finished.
     Replaces that one (authority, year, round). Big lists go in parts so no request runs long:
     mode 'start' (clears the round, inserts its rows) → 'append' … → 'finish' (rows optional; saves the
     source row + PDF, counts taken from what is stored). No mode = all in one call."""
@@ -170,8 +200,10 @@ def api_results_ingest():
         for kind, raw_f, std_f in (('college', 'institute_raw', 'institute'), ('course', 'course_raw', 'course')):
             for raw, std in {(_s(r.get(raw_f)), _s(r.get(std_f))) for r in listed if _s(r.get(std_f)) and _s(r.get(raw_f))}:
                 NM.teach(conn, kind, raw, std, auth)
-        colleges = NM.resolve(conn, 'college', [_s(r.get('institute_raw')) for r in listed], auth)
-        courses = NM.resolve(conn, 'course', [_s(r.get('course_raw')) for r in listed], auth)
+        colleges = NM.resolve(conn, 'college', [_s(r.get('institute_raw')) for r in listed] +
+                              [_s(r.get('prev_institute_raw')) for r in listed if _s(r.get('prev_institute_raw'))], auth)
+        courses = NM.resolve(conn, 'course', [_s(r.get('course_raw')) for r in listed] +
+                             [_s(r.get('prev_course_raw')) for r in listed if _s(r.get('prev_course_raw'))], auth)
         info = _college_info(conn, {v['std'] for v in colleges.values() if v['std']})
         old = conn.execute("SELECT status, row_count, is_revised FROM pg_results_source WHERE authority_code=? AND academic_year=? "
                            "AND round=?", [auth, year, rnd]).fetchone()
@@ -185,21 +217,32 @@ def api_results_ingest():
             course = _s(r.get('course')) if dnb else (courses.get(cr) or {}).get('std', '')
             st, ct = info.get(inst, ('', ''))
             matched += 1 if (inst and course) or dnb else 0
+            pir, pcr = _s(r.get('prev_institute_raw')), _s(r.get('prev_course_raw'))
+            pinst = '' if (dnb or not pir) else (colleges.get(pir) or {}).get('std', '')
+            pcourse = _s(r.get('prev_course')) if dnb else ((courses.get(pcr) or {}).get('std', '') if pcr else '')
+            rs = _s(r.get('round_status')).lower()
             batch.append([auth, year, rnd, _int(r.get('sno')), _int(r.get('rank')), _int(r.get('rank_ai')),
                           _s(r.get('quota_raw')),
                           _s(r.get('quota')), ir, inst, st, ct, cr, course, _s(r.get('section')) or 'mdms',
                           _s(r.get('allotted_category')), _s(r.get('allotted_category_raw')),
-                          _s(r.get('candidate_category')), _s(r.get('remarks'))])
+                          _s(r.get('candidate_category')), _s(r.get('remarks')),
+                          rs if rs in ROUND_STATUSES else '', _s(r.get('round_status_raw')),
+                          _s(r.get('prev_quota_raw')), _s(r.get('prev_quota')), pir, pinst, pcr, pcourse,
+                          _s(r.get('prev_remarks'))])
         if batch:
             conn.execute_batch(
                 "INSERT INTO pg_results (authority_code, academic_year, round, sno, rank, rank_ai, quota_raw, quota, "
                 "institute_raw, institute, state, college_type, course_raw, course, section, allotted_category, "
-                "allotted_category_raw, candidate_category, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "allotted_category_raw, candidate_category, remarks, round_status, round_status_raw, prev_quota_raw, "
+                "prev_quota, prev_institute_raw, prev_institute, prev_course_raw, prev_course, prev_remarks) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 batch, page_size=1000)
         if mode in ('start', 'append'):
             conn.commit()
             return jsonify({'ok': True, 'mode': mode, 'rows': len(rows), 'matched_rows': matched,
                             'colleges_to_review': sorted({k for k, v in colleges.items() if v['status'] != 'ok'})})
+        if mode in ('all', 'finish'):
+            _fill_retained(conn, auth, year, rnd)
         if mode == 'finish':        # counts from everything stored for this round
             t = conn.execute("SELECT COUNT(*) AS n, SUM(CASE WHEN section='dnb' OR (COALESCE(institute,'')<>'' AND "
                              "COALESCE(course,'')<>'') THEN 1 ELSE 0 END) AS m FROM pg_results WHERE authority_code=? "
@@ -295,6 +338,40 @@ def _pick_round(conn, auth, year, rnd):
     else:
         r = conn.execute(q + " ORDER BY round_order DESC LIMIT 1", [auth, year]).fetchone()
     return dict(r) if r else None
+
+
+SEAT_STATUS_COLS = ("r.round_status, r.round_status_raw, r.prev_quota, r.prev_quota_raw, r.prev_institute, "
+                    "r.prev_institute_raw, r.prev_course, r.prev_course_raw")
+
+
+def _prev_round_name(conn, auth, year, rd):
+    """Name of the round before this one for the authority ('Round 1'), '' for its first round."""
+    try:
+        r = conn.execute("SELECT round FROM pg_results_source WHERE authority_code=? AND academic_year=? "
+                         "AND round_order < ? ORDER BY round_order DESC LIMIT 1",
+                         [auth, year, int(rd.get('round_order') or 1)]).fetchone()
+        return r['round'] if r else ''
+    except Exception:
+        conn.rollback()
+        return ''
+
+
+def _seat_status(r, rnd, prev_round):
+    """Round 2+ fields on an allotment row: round_status (fresh|upgraded|retained|''), round_status_label,
+    prev_college / prev_course / prev_quota (the earlier seat, upgraded rows only). Drops the raw prev_* columns."""
+    st = r.get('round_status') or ''
+    r['round_status'] = st
+    r['round_status_label'] = round_status_label(st, rnd, prev_round)
+    pi = r.pop('prev_institute', '') or ''
+    pir = r.pop('prev_institute_raw', '') or ''
+    pc, pcr = r.pop('prev_course', '') or '', r.pop('prev_course_raw', '') or ''
+    pq, pqr = r.pop('prev_quota', '') or '', r.pop('prev_quota_raw', '') or ''
+    up = st == 'upgraded' and bool(pir)
+    r['prev_college'] = (pir if r.get('section') == 'dnb' else (pi or pir)) if up else ''
+    r['prev_course'] = (pc or pcr) if up else ''
+    r['prev_quota'] = (pq or pqr) if up else ''
+    r['prev_round'] = prev_round if up else ''
+    return r
 
 
 def _filters(a, conds, params):
@@ -521,12 +598,15 @@ def api_results():
         total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_results r WHERE {where}", params).fetchone()['n']
         rows = conn.execute(
             f"SELECT r.sno, r.rank, r.rank_ai, r.quota, r.quota_raw, r.institute, r.institute_raw, r.state, r.college_type, "
-            f"r.course, r.course_raw, r.section, r.allotted_category, r.candidate_category, r.remarks FROM pg_results r "
+            f"r.course, r.course_raw, r.section, r.allotted_category, r.candidate_category, r.remarks, {SEAT_STATUS_COLS} "
+            f"FROM pg_results r "
             f"WHERE {where} ORDER BY r.rank ASC NULLS LAST, r.sno LIMIT {size} OFFSET {(page - 1) * size}",
             params).fetchall()
+        prev_round = _prev_round_name(conn, auth, year, rd)
         out = []
         for r in rows:
             r = dict(r)
+            _seat_status(r, rd['round'], prev_round)
             r['college'] = _display_college(r)       # standard name, else as published (DNB: before the first comma)
             r['program'] = 'dnb' if r.get('section') == 'dnb' else 'mdms'
             r['course_name'] = r['course'] or r['course_raw']
@@ -577,30 +657,51 @@ def _facet_rows(rows, sel, field=None):
 
 
 def _leftover_rows(conn, auth, year, rd):
-    """Every seat type of the authority's current seat matrix with seats still left after this round (no filters)."""
+    """Every seat type with seats still left after this round (no filters) → (rows, seats, taken).
+    Round 1: the authority's current full seat matrix minus every seat allotted so far.
+    Round 2+ (2026-11-17): THAT round's own seat list (the vacancy list published for the round, stored as a
+    later-round list: pg_seat_matrix_source superseded=2, round_no=N — it already holds the seats added for the
+    round, new_in_round) minus the seats taken IN that round (fresh + upgraded; a doctor who kept the earlier seat
+    takes nothing from the list). No seat list for that round yet → no rows (the response says seat_list=False)."""
     from pg_admin.routes.api_seat_matrix import _NO_DNB
     from pg_admin.routes.api import HIDE_DNB
     no_dnb = _NO_DNB.replace('course_name', 'm.course_name').replace("COALESCE(section", "COALESCE(m.section")
-    seats = defaultdict(int)
+    rnd_no = int(rd.get('round_order') or 1)
+    later = rnd_no >= 2
+    seats, added = defaultdict(int), defaultdict(int)
     meta = {}
-    for m in conn.execute(
+    if later:
+        src_cond = ("COALESCE(s.superseded,0)=2 AND COALESCE(s.round_no,1)=? AND "
+                    "COALESCE(NULLIF(m.authority_code,''), s.authority_code)=? ")
+        src_params = [rnd_no, auth]
+        new_col = "SUM(COALESCE(m.new_in_round,0))"
+    else:
+        src_cond, src_params, new_col = "COALESCE(s.superseded,0)=0 AND m.authority_code=? ", [auth], "0"
+    try:
+        found = conn.execute(
             "SELECT m.cutoff_institute AS i, m.cutoff_course AS c, m.cutoff_quota AS q, m.cutoff_category AS k, "
-            "m.state, m.institute_type, SUM(m.seats) AS s FROM pg_seat_matrix m JOIN pg_seat_matrix_source s "
-            "ON s.counselling_body=m.counselling_body AND s.academic_year=m.academic_year "
-            "WHERE m.authority_code=? AND m.academic_year=? AND COALESCE(s.superseded,0)=0 "
-            "AND COALESCE(m.cutoff_institute,'')<>'' " + (f"AND {no_dnb} " if HIDE_DNB else "") +
-            "GROUP BY 1,2,3,4,5,6", [auth, year]).fetchall():
+            f"m.state, m.institute_type, SUM(m.seats) AS s, {new_col} AS n FROM pg_seat_matrix m "
+            "JOIN pg_seat_matrix_source s ON s.counselling_body=m.counselling_body AND s.academic_year=m.academic_year "
+            "WHERE " + src_cond + "AND m.academic_year=? AND COALESCE(m.cutoff_institute,'')<>'' " +
+            (f"AND {no_dnb} " if HIDE_DNB else "") + "GROUP BY 1,2,3,4,5,6", src_params + [year]).fetchall()
+    except Exception as e:                    # round columns missing on an old DB → no later-round list
+        conn.rollback()
+        logging.warning("_leftover_rows: %s", e)
+        found = []
+    for m in found:
         k = (m['i'], m['c'], _qn(m['q']), m['k'])
         seats[k] += int(m['s'] or 0)
+        added[k] += int(m['n'] or 0)
         meta[k] = (m['state'] or '', _college_type(m['institute_type']))
-    # seats taken in this round and every earlier one (a later round lists only its own allotments)
     taken = defaultdict(int)
+    # round 1: seats taken in this round and every earlier one; later rounds: only seats taken IN the round
+    rq = ("s.round_order=? AND " + NOT_RETAINED) if later else "s.round_order<=?"
     for r in conn.execute(
             "SELECT r.institute, r.course, r.quota, r.allotted_category, COUNT(*) AS n FROM pg_results r "
             "JOIN pg_results_source s ON s.authority_code=r.authority_code AND s.academic_year=r.academic_year "
-            "AND s.round=r.round WHERE r.authority_code=? AND r.academic_year=? AND s.round_order<=? "
+            f"AND s.round=r.round WHERE r.authority_code=? AND r.academic_year=? AND {rq} "
             "AND COALESCE(r.institute,'')<>'' GROUP BY 1,2,3,4",
-            [auth, year, int(rd['round_order'] or 1)]).fetchall():
+            [auth, year, rnd_no]).fetchall():
         taken[(r['institute'], r['course'], _qn(r['quota']), r['allotted_category'])] += int(r['n'])
     rows = []
     for k, s in seats.items():
@@ -608,8 +709,11 @@ def _leftover_rows(conn, auth, year, rd):
         if left <= 0:
             continue
         st, ct = meta[k]
-        rows.append({'institute': k[0], 'course': k[1], 'quota': k[2], 'category': k[3], 'state': st,
-                     'college_type': ct, 'seats': s, 'allotted': taken.get(k, 0), 'left': left})
+        row = {'institute': k[0], 'course': k[1], 'quota': k[2], 'category': k[3], 'state': st,
+               'college_type': ct, 'seats': s, 'allotted': taken.get(k, 0), 'left': left}
+        if later:
+            row['added_seats'] = added.get(k, 0)      # seats newly added for this round (part of `seats`)
+        rows.append(row)
     return rows, seats, taken
 
 
@@ -699,9 +803,14 @@ def api_results_facets():
                 rows = [r for r in rows if all(w in NM.norm(r['institute']) for w in q.split())]
             out.update(_facet_rows(rows, sel))
             out['matched'] = sum(1 for r in rows if all(r.get(d) == v for d, v in sel.items()))
-        t = conn.execute(f"SELECT COUNT(*) AS n, MIN(rank) AS lo, MAX(rank) AS hi, COUNT(DISTINCT institute_raw) AS c "
+        t = conn.execute(f"SELECT COUNT(*) AS n, MIN(rank) AS lo, MAX(rank) AS hi, COUNT(DISTINCT institute_raw) AS c, "
+                         f"SUM(CASE WHEN r.round_status='retained' THEN 1 ELSE 0 END) AS kept, "
+                         f"SUM(CASE WHEN r.round_status='upgraded' THEN 1 ELSE 0 END) AS up, "
+                         f"SUM(CASE WHEN r.round_status='fresh' THEN 1 ELSE 0 END) AS fr "
                          f"FROM pg_results r WHERE {base}", p).fetchone()
-        out['totals'] = {'allotted': t['n'], 'first_rank': t['lo'], 'last_rank': t['hi'], 'colleges': t['c']}
+        out['totals'] = {'allotted': t['n'], 'first_rank': t['lo'], 'last_rank': t['hi'], 'colleges': t['c'],
+                         # Round 2+: of `allotted`, how many kept the earlier seat / moved / got a first seat
+                         'retained': int(t['kept'] or 0), 'upgraded': int(t['up'] or 0), 'fresh': int(t['fr'] or 0)}
         return jsonify(out)
     except Exception as e:
         try: conn.rollback()
@@ -732,13 +841,16 @@ def api_results_rank():
         rows = conn.execute(
             "SELECT r.authority_code, r.round, s.round_order, s.status, s.published_on, r.section, r.quota, r.institute, "
             "r.institute_raw, r.state, r.college_type, r.course, r.course_raw, r.allotted_category, "
-            "r.candidate_category, r.remarks FROM pg_results r JOIN pg_results_source s ON s.authority_code=r.authority_code "
+            "r.candidate_category, r.remarks, r.academic_year, " + SEAT_STATUS_COLS + " FROM pg_results r "
+            "JOIN pg_results_source s ON s.authority_code=r.authority_code "
             "AND s.academic_year=r.academic_year AND s.round=r.round WHERE COALESCE(r.rank_ai, r.rank)=? "
             "AND COALESCE(s.is_hidden,0)=0 "
             "ORDER BY s.round_order DESC", [rank]).fetchall()
         out = []
         for r in rows:
             r = dict(r)
+            _seat_status(r, r['round'], _prev_round_name(conn, r['authority_code'], r['academic_year'],
+                                                          {'round': r['round'], 'round_order': r['round_order']}))
             r['college'] = _display_college(r)
             r['course_name'] = r['course'] or r['course_raw']
             r['program'] = 'dnb' if r.get('section') == 'dnb' else 'mdms'
@@ -763,7 +875,8 @@ def api_results_colleges():
         rd = _pick_round(conn, auth, year, _s(a.get('round')))
         if not rd:
             return jsonify({'ok': True, 'round': None, 'rows': []})
-        conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?"] + _program(a)
+        # seats taken IN this round (a Round 2 doctor who kept the Round 1 seat is not a Round 2 allotment here)
+        conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", NOT_RETAINED] + _program(a)
         params = [auth, year, rd['round']]
         _filters(a, conds, params)
         g = {}
@@ -824,7 +937,7 @@ def _closing_rows(conn, auth, year, rd, a):
     closing rank of the same round."""
     rk = _cmp_rank(auth)
     conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.course,'')<>''",
-             f"{rk} IS NOT NULL"] + _hide_dnb()
+             f"{rk} IS NOT NULL", NOT_RETAINED] + _hide_dnb()     # closing = seats allotted IN this round
     params = [auth, year, rd['round']]
     _filters(a, conds, params)
     # a college without a standard name only counts when the team CONFIRMED it is not in our list (a genuinely
@@ -1014,7 +1127,7 @@ def _dnb_closing_rows(conn, auth, year, rd, a):
     """DNB 2026 opening/closing per hospital × course × quota × category for this round — information only, no
     2025 comparison (we hold no 2025 DNB cut-offs). Hospitals stay as published (never matched to our college list);
     rank = AIR. Never used by the predictor / lists / rankings. (founder 2026-11-11)"""
-    conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.section,'')='dnb'",
+    conds = ["r.authority_code=?", "r.academic_year=?", "r.round=?", "COALESCE(r.section,'')='dnb'", NOT_RETAINED,
              "COALESCE(r.rank_ai, r.rank) IS NOT NULL"]
     params = [auth, year, rd['round']]
     a2 = {k: v for k, v in a.items() if k not in ('course', 'state')}    # state is derived below
@@ -1169,7 +1282,9 @@ def api_results_trends():
 
 def api_results_leftover():
     """GET /api/pg/results/leftover?authority=&round=&q=&course=&quota=&category=&state=&college_type=
-    → seats in the authority's current seat matrix minus seats allotted up to this round."""
+    → round 1: seats in the authority's current seat matrix minus seats allotted up to this round;
+    round 2+: that round's seat list (vacancy list incl. added seats; rows carry added_seats) minus seats allotted
+    IN that round (seat_basis, seat_list)."""
     if not _auth():
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     _ensure()
@@ -1193,12 +1308,18 @@ def api_results_leftover():
         rows.sort(key=lambda r: (r['state'], r['institute'], r['course'], r['quota'], r['category']))
         page = max(1, _int(a.get('page')) or 1)
         size = min(500, max(1, _int(a.get('page_size')) or 100))
+        later = int(rd.get('round_order') or 1) >= 2
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'seats_in_matrix': sum(seats.values()),
+                        # Round 2+: the seats come from that round's own seat list (vacancy list incl. added seats)
+                        'seat_basis': 'round_seat_list' if later else 'seat_matrix', 'seat_list': bool(seats),
                         'seats_allotted': sum(min(taken.get(k, 0), s) for k, s in seats.items()),
                         'seats_left': sum(r['left'] for r in rows), 'rows': rows[(page - 1) * size: page * size],
                         'total_matched': len(rows), 'page': page, 'total_pages': (len(rows) + size - 1) // size,
-                        'note': 'Seat matrix minus seats allotted so far. Seats freed by resignations / non-joining '
-                                'are not in this count until the authority publishes them.'})
+                        'note': ((f"{rd['round']} seat list (vacant + added seats) minus seats allotted in "
+                                  f"{rd['round']}." if seats else
+                                  f"The {rd['round']} seat list is not published yet.") if later else
+                                 'Seat matrix minus seats allotted so far. Seats freed by resignations / non-joining '
+                                 'are not in this count until the authority publishes them.')})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass

@@ -200,7 +200,8 @@
           <tbody>{% for a in allots %}
             <tr style="{{ 'opacity:0.5;' if a.verdict == 'not_me' }}">
               <td><b>{{ 'MCC' if a.authority_code == 'mcc' else a.authority_name }}</b> · {{ a.round }}<div style="font-size:0.72rem;color:var(--gray-400);">{{ a.status }}{% if a.program == 'dnb' %} · DNB{% endif %}</div></td>
-              <td style="font-size:0.8rem;">{{ a.college }}</td>
+              <td style="font-size:0.8rem;">{{ a.college }}
+                {% if a.round_status %}<div style="margin-top:2px;"><span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:1px 8px;border-radius:999px;{{ 'background:#dbeafe;color:#1e40af;' if a.round_status == 'upgraded' else ('background:#f3f4f6;color:#374151;' if a.round_status == 'retained' else 'background:#dcfce7;color:#166534;') }}">{{ {'upgraded': 'Upgraded in ' ~ a.round, 'retained': 'Retained earlier seat', 'fresh': 'Fresh allotment in ' ~ a.round}[a.round_status] }}</span>{% if a.prev_college %} <span style="color:var(--gray-500);">from {{ a.prev_college }} · {{ a.prev_course }}</span>{% endif %}</div>{% endif %}</td>
               <td style="font-size:0.8rem;">{{ a.course }}<div style="color:var(--gray-500);">{{ a.quota }} · {{ a.allotted_category }}</div></td>
               <td style="font-size:0.78rem;">{% set air = a.rank if a.authority_code == 'mcc' else a.rank_ai %}AIR {{ '{:,}'.format(air) if air else '—' }}{% if a.authority_code != 'mcc' and a.rank and a.rank != a.rank_ai %}<div style="color:var(--gray-500);">State rank {{ '{:,}'.format(a.rank) }}</div>{% endif %}
                 {% if a.verdict == 'confirmed' %}<div style="color:#16a34a;">✔ confirmed · {{ a.marked_by }}</div>{% elif a.verdict == 'not_me' %}<div style="color:#b91c1c;">✖ not this doctor · {{ a.marked_by }}</div>{% endif %}</td>

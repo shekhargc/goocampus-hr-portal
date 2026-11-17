@@ -91,6 +91,14 @@ def _row(r, auths, mark=None):
            'allotted_category': r['allotted_category'], 'candidate_category': r['candidate_category'],
            'verdict': (mark or {}).get('verdict') or '', 'marked_by': (mark or {}).get('marked_by') or '',
            'marked_via': (mark or {}).get('via') or ''}
+    # Round 2+ (2026-11-17): fresh | upgraded | retained ('' = round 1 / not stated); the earlier seat when upgraded
+    st = r.get('round_status') or ''
+    up = st == 'upgraded' and bool(r.get('prev_institute_raw'))
+    out['round_status'] = st
+    out['prev_college'] = ((r.get('prev_institute_raw') if sec == 'dnb' else (r.get('prev_institute') or
+                                                                              r.get('prev_institute_raw'))) or '') if up else ''
+    out['prev_course'] = (r.get('prev_course') or r.get('prev_course_raw') or '') if up else ''
+    out['prev_quota'] = (r.get('prev_quota') or r.get('prev_quota_raw') or '') if up else ''
     out['label'] = f"{_short_auth(r['authority_code'], name)} {_short_round(r['round'])} · {out['course']}"
     return out
 
@@ -184,9 +192,13 @@ def for_users(conn, users, include_not_me=True):
             by_air.setdefault(rk, []).append(u['id'])
     if not by_air:
         return out
+    # Round 2+ fields read through to_jsonb so a DB that hasn't run the new ALTERs yet (Render cold start) still works
+    j = "COALESCE(to_jsonb(pg_results)->>'{0}','') AS {0}"
     cols = ("SELECT authority_code, academic_year, round, rank, rank_ai, section, institute, institute_raw, state, "
-            "college_type, course, course_raw, quota, quota_raw, allotted_category, candidate_category "
-            "FROM pg_results WHERE authority_code = ? AND ")
+            "college_type, course, course_raw, quota, quota_raw, allotted_category, candidate_category, " +
+            ", ".join(j.format(c) for c in ('round_status', 'prev_institute', 'prev_institute_raw', 'prev_course',
+                                            'prev_course_raw', 'prev_quota', 'prev_quota_raw')) +
+            " FROM pg_results WHERE authority_code = ? AND ")
     for code in codes:
         rows = conn.execute(cols + ("rank = ANY(?)" if code == 'mcc' else "rank_ai = ANY(?)"),
                             [code, list(by_air)]).fetchall()
@@ -215,7 +227,10 @@ def latest(allots):
 
 
 def grouped(allots):
-    """Doctor dashboard shape: {mdms: [{authority_code, authority_name, rounds:[…]}], dnb: [...]}."""
+    """Doctor dashboard shape: {mdms: [{authority_code, authority_name, rounds:[…]}], dnb: [...]}.
+    rounds are NEWEST FIRST (2026-11-17); each carries is_current (the newest round = the seat the doctor holds now),
+    change ('Upgraded in Round 2 (from Round 1)' / 'Retained Round 1 seat' / 'Fresh allotment in Round 2' when the
+    authority says so, else 'Same seat as Round 1' / 'Changed from Round 1') and round_status_label."""
     out = {'mdms': [], 'dnb': []}
     for prog in ('mdms', 'dnb'):
         by = {}
@@ -229,13 +244,27 @@ def grouped(allots):
             g['rounds'].sort(key=lambda a: int(a['round_order'] or 0))
             prev = None
             for a in g['rounds']:          # what changed since the previous round
-                if prev is None:
+                st = a.get('round_status') or ''
+                pr = prev['round'] if prev else 'earlier'
+                a['round_status_label'] = {'upgraded': f"Upgraded in {a['round']}",
+                                           'retained': f"Retained {pr} seat",
+                                           'fresh': f"Fresh allotment in {a['round']}"}.get(st, '')
+                if st == 'upgraded':
+                    a['change'] = f"Upgraded in {a['round']}" + (f" (from {prev['round']})" if prev else '')
+                elif st == 'retained':
+                    a['change'] = f"Retained {pr} seat"
+                elif st == 'fresh':
+                    a['change'] = f"Fresh allotment in {a['round']}"
+                elif prev is None:
                     a['change'] = ''
                 elif (prev['college'], prev['course']) == (a['college'], a['course']):
                     a['change'] = 'Same seat as ' + prev['round']
                 else:
                     a['change'] = 'Changed from ' + prev['round']
                 prev = a
+            for a in g['rounds']:
+                a['is_current'] = a is prev
+            g['rounds'].reverse()          # newest first
         out[prog] = sorted(by.values(), key=lambda g: (g['authority_code'] != 'mcc', g['authority_name']))
     return out
 

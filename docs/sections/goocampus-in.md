@@ -113,6 +113,22 @@ sequenceDiagram
 | `pg_coupons` / `pg_coupon_redemptions` | Coupon rules + the redemption ledger |
 | `pg_usage_items` | One row per distinct thing consumed (period-bucketed quotas) |
 
+## Counselling results — rounds (Round 2 support 2026-11-17)
+
+- `pg_results` / `pg_results_source` hold every published allotment list, one round per (authority, year, round);
+  `round_order` sorts them, and every read API defaults to the authority's latest round.
+- **Round 2+:** MCC prints both rounds on one line → `tools/results/mcc_r2.py` (Round 1 stays `mcc.py`, which now
+  exposes `map_seat()`). Rows carry `round_status` = `fresh` | `upgraded` | `retained` (+ `round_status_raw`, and for
+  upgraded rows `prev_*` = the earlier seat). Retained rows get their category from the earlier round's row on ingest.
+- Retained rows show in the allotment list, rank lookup and My Allotments, but NOT in that round's closing ranks,
+  college list or seats taken (`NOT_RETAINED` in `pg_admin/routes/results_api.py`).
+- **Seats left, Round 2+:** that round's own seat list (later-round list: `pg_seat_matrix_source.superseded=2`,
+  `round_no=N`, includes added seats → `added_seats` per row) minus seats taken IN that round; response
+  `seat_basis` / `seat_list`. Round 1 unchanged.
+- **My Allotments / Desk / admin profile:** each allotment has `round_status`, `prev_college`, `prev_course`,
+  `prev_quota`; grouped rounds are newest first with `is_current`, `change`, `round_status_label`.
+- 2025-vs-2026 analysis compares Round N with the 2025 Round N column (`ROUND_COL`).
+
 ## Related
 
 - Admin screens + engine: [goocampus.in commercial](../../MAP.md) rows and
