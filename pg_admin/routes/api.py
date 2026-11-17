@@ -187,7 +187,7 @@ def api_pg_otp_verify():
     # onboarded = name + home/domicile state (unchanged meaning). profile_complete/missing = what the
     # College Predictor needs (state + rank + score); name_missing = gentle nudge only. (2026-10-19)
     onboarded = bool((uname or '').strip()) and bool((ustate or '').strip())
-    missing = profile_missing({'state': ustate, 'neet_pg_rank': urank, 'neet_pg_score': uscore})
+    missing = profile_missing({'name': uname, 'state': ustate, 'neet_pg_rank': urank, 'neet_pg_score': uscore})
     return jsonify({'ok': True, 'token': token, 'is_new': is_new, 'onboarded': onboarded,
                     'profile_complete': not missing, 'missing': missing,
                     'name_missing': not (uname or '').strip(),
@@ -1315,7 +1315,7 @@ def _bearer_token():
 # dynamically — add a field here (and its pg_users column) and it auto-appears on
 # goocampus.in with no change on their side. 'editable': False = show read-only.
 PG_PROFILE_BLUEPRINT = [
-    {'key': 'name',              'label': 'Full Name',                 'type': 'text',   'editable': True},
+    {'key': 'name',              'label': 'Full Name',                 'type': 'text',   'editable': True,  'required': True},
     {'key': 'state',             'label': 'Home / Domicile State',     'type': 'text',   'editable': True,  'required': True},
     {'key': 'neet_pg_year',      'label': 'NEET-PG Year',              'type': 'text',   'editable': True},
     {'key': 'neet_pg_score',     'label': 'NEET-PG Score',             'type': 'number', 'editable': True},
@@ -1337,7 +1337,10 @@ _RANK_LOCKED = ('neet_pg_rank', 'neet_pg_score', 'home_state_rank')
 # first login — no dashboard without it (news, access, choice entry depend on it). NEET-PG RANK is
 # mandatory only when the doctor opens the College Predictor. Score and name are optional (name gets
 # a gentle nudge via "name_missing").
-PROFILE_REQUIRED = ('state', 'neet_pg_rank')
+# Founder 2026-11-17 (supersedes the above): "dashboard first, then profile" — the dashboard opens
+# right after OTP; a profile pop-up then asks NAME + DOMICILE STATE + NEET-PG RANK (+ score, optional)
+# and becomes mandatory ~5 min after sign-up (registered_at). profile_complete = all of these on file.
+PROFILE_REQUIRED = ('name', 'state', 'neet_pg_rank')
 
 
 def profile_missing(row):
@@ -1461,7 +1464,11 @@ def api_pg_profile():
                 v = row.get(f['key'])
                 values[f['key']] = '' if v is None else v
             _miss = profile_missing(row)
+            _reg = row.get('created_at')
             return jsonify({'ok': True, 'fields': fields, 'values': values, 'rank_confirmed': _locked,
+                            # sign-up time (UTC ISO) — the website's 5-minute "profile becomes mandatory" clock
+                            'registered_at': (_reg.isoformat() + ('' if _reg.tzinfo else 'Z'))
+                                             if hasattr(_reg, 'isoformat') else (str(_reg) if _reg else None),
                             'profile_complete': not _miss, 'missing': _miss,
                             'name_missing': not (row.get('name') or '').strip()})
 
