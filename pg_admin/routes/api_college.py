@@ -413,6 +413,9 @@ def _api_pg_fees_raw():
     page = _page()
     conn = get_db()
     try:
+        # 2026-11-17: with the medical filter (degree NOT LIKE '%DNB%') Postgres under-estimated the rows and chose
+        # nested loops over the normalised-name joins (>25 s, cancelled); hash joins answer in a few seconds.
+        conn.execute("SET LOCAL enable_nestloop = off")
         from pg_admin.data import fees as _FEES       # 2026-27 fee where verified, else 2025 (2026-11-11)
         eff, effy, fj = _FEES.eff_fee(conn), _FEES.eff_year(conn), _FEES.join_sql(conn)
         src = _FEES.source_sql(conn)     # + 2026-27 fees with no 2025 cut-off seat type (2026-11-16)

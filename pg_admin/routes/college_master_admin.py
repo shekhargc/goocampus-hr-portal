@@ -942,6 +942,7 @@ def college_fees():
     authorities, ctypes = [], []
     try:
         fee26 = _FEES.summary(conn)
+        conn.execute("SET LOCAL enable_nestloop = off")   # 2026-11-17: medical filter → nested-loop plan, >25 s
         total = conn.execute("SELECT COUNT(*) AS n FROM (SELECT 1 FROM " + src + " c" + fj + wsql + grp + ") t",
                              params).fetchone()['n']
         offset = (page - 1) * _FEES_PER_PAGE
