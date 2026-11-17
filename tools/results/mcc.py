@@ -3,12 +3,10 @@ Reads the official PDF (one line per allotted seat: SNo, Rank, Allotted Quota, A
 Allotted Category, Candidate Category, [Remarks — provisional lists only]), maps quota / category / course to the names used in the
 2025 cut-offs, and checks the serial numbers run 1..N with none missing. College names are matched on the
 portal through the name memory. Run with /usr/bin/python3 (PyMuPDF):
-    mcc.py <result.pdf> <out.json>            (add --cache <raw.json> to reuse an earlier read)"""
+    mcc.py <result.pdf> <out.json>            (add --cache <raw.json> to reuse an earlier read)
+Round 2 and later rounds print BOTH rounds side by side → tools/results/mcc_r2.py (reuses the maps below)."""
 import json, re, sys, collections
 import fitz
-
-PDF, OUT = sys.argv[1], sys.argv[2]
-CACHE = sys.argv[sys.argv.index('--cache') + 1] if '--cache' in sys.argv else None
 
 QUOTA = {'All India': 'All India Quota', 'Self-Financed Merit Seat': 'Management/Paid Seats Quota',
          'Non-Resident Indian': 'NRI Quota', 'Delhi University Quota': 'Delhi University Quota',
@@ -69,21 +67,17 @@ def read(pdf):
     return out
 
 
-raw = json.load(open(CACHE)) if CACHE else read(PDF)
-if CACHE is not None and not raw:
-    raise SystemExit('empty cache')
-sn = sorted(int(r[0]) for r in raw)
-if sn != list(range(1, len(sn) + 1)):
-    raise SystemExit(f'serial numbers are not 1..{len(sn)} — rows missing or read twice')
-rows, unknown = [], collections.Counter()
-for r in raw:
-    sno, rank, quota, inst, course, acat, ccat, rem = r
+def map_seat(quota, course, acat, unknown):
+    """MCC wording → (quota, course, section, allotted_category) in our standard names, or None (counted in unknown).
+    acat may be '' (Round 2 'retained' rows print no category for the Round 1 seat)."""
     if quota not in QUOTA:
-        unknown['quota: ' + quota] += 1; continue
-    base, pwd = re.fullmatch(r'(Open|OBC|SC|ST|EWS)( PwD)?', acat).groups() if re.fullmatch(
-        r'(Open|OBC|SC|ST|EWS)( PwD)?', acat) else (None, None)
-    if not base:
-        unknown['category: ' + acat] += 1; continue
+        unknown['quota: ' + quota] += 1; return None
+    cat = ''
+    if acat:
+        m = re.fullmatch(r'(Open|OBC|SC|ST|EWS)( PwD)?', acat)
+        if not m:
+            unknown['category: ' + acat] += 1; return None
+        cat = CATEGORY[m.group(1)] + (' PwD' if m.group(2) else '')
     if course.startswith('(NBEMS'):
         dip = course.startswith('(NBEMS-DIPLOMA)')
         title = course.split(')', 1)[1].strip().title().replace('Otorhinolaryngolo Gy', 'Otorhinolaryngology')
@@ -92,17 +86,40 @@ for r in raw:
         std = COURSES[course]
         section = 'diploma' if std.startswith('Diploma') else 'mdms'
     else:
-        unknown['course: ' + course] += 1; continue
-    if not rank.isdigit():
-        unknown['rank: ' + rank] += 1; continue
-    rows.append({'sno': int(sno), 'rank': int(rank), 'quota_raw': quota, 'quota': QUOTA[quota], 'institute_raw': inst,
-                 'course_raw': course, 'course': std, 'section': 'dnb' if quota == 'DNB Quota' else section,
-                 'allotted_category': CATEGORY[base] + (' PwD' if pwd else ''), 'allotted_category_raw': acat,
-                 'candidate_category': ccat, 'remarks': rem})
-if unknown:
-    raise SystemExit(f'unknown values (add them to the maps): {dict(unknown)}')
-json.dump({'rows': rows}, open(OUT, 'w'), ensure_ascii=False)
-print('rows', len(rows), '| by section', dict(collections.Counter(r['section'] for r in rows)))
-print('by quota', dict(collections.Counter(r['quota'] for r in rows)))
-print('by allotted category', dict(collections.Counter(r['allotted_category'] for r in rows)))
-print('colleges', len({r['institute_raw'] for r in rows}), '| ranks', min(r['rank'] for r in rows), '-', max(r['rank'] for r in rows))
+        unknown['course: ' + course] += 1; return None
+    return QUOTA[quota], std, ('dnb' if quota == 'DNB Quota' else section), cat
+
+
+def main():
+    PDF, OUT = sys.argv[1], sys.argv[2]
+    CACHE = sys.argv[sys.argv.index('--cache') + 1] if '--cache' in sys.argv else None
+    raw = json.load(open(CACHE)) if CACHE else read(PDF)
+    if CACHE is not None and not raw:
+        raise SystemExit('empty cache')
+    sn = sorted(int(r[0]) for r in raw)
+    if sn != list(range(1, len(sn) + 1)):
+        raise SystemExit(f'serial numbers are not 1..{len(sn)} — rows missing or read twice')
+    rows, unknown = [], collections.Counter()
+    for r in raw:
+        sno, rank, quota, inst, course, acat, ccat, rem = r
+        m = map_seat(quota, course, acat, unknown)
+        if not m:
+            continue
+        if not rank.isdigit():
+            unknown['rank: ' + rank] += 1; continue
+        q, std, section, cat = m
+        rows.append({'sno': int(sno), 'rank': int(rank), 'quota_raw': quota, 'quota': q, 'institute_raw': inst,
+                     'course_raw': course, 'course': std, 'section': section,
+                     'allotted_category': cat, 'allotted_category_raw': acat,
+                     'candidate_category': ccat, 'remarks': rem})
+    if unknown:
+        raise SystemExit(f'unknown values (add them to the maps): {dict(unknown)}')
+    json.dump({'rows': rows}, open(OUT, 'w'), ensure_ascii=False)
+    print('rows', len(rows), '| by section', dict(collections.Counter(r['section'] for r in rows)))
+    print('by quota', dict(collections.Counter(r['quota'] for r in rows)))
+    print('by allotted category', dict(collections.Counter(r['allotted_category'] for r in rows)))
+    print('colleges', len({r['institute_raw'] for r in rows}), '| ranks', min(r['rank'] for r in rows), '-', max(r['rank'] for r in rows))
+
+
+if __name__ == '__main__':
+    main()

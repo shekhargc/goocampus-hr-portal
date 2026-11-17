@@ -11,6 +11,7 @@
   pg_results_source     — one row per (authority, year, round): status provisional / final, the
                           official PDF, counts, and what a final list replaced.
 Rounds are kept separately; a final list replaces the provisional list of the SAME round only.
+From Round 2 a row also says fresh / upgraded / retained (round_status) and, when upgraded, the earlier seat (prev_*).
 """
 import logging
 from db import get_db
@@ -70,6 +71,15 @@ def ensure_results_tables():
         conn.execute("ALTER TABLE pg_results ADD COLUMN IF NOT EXISTS rank_ai INTEGER")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_rank_ai ON pg_results (rank_ai)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_inst ON pg_results (institute, course)")
+        # Round 2+ (2026-11-17): MCC prints both rounds on one line. round_status = what happened to the doctor in
+        # THIS round: fresh (first seat) | upgraded (moved; prev_* = the earlier seat) | retained (kept the earlier
+        # seat — counted in the allotment list + My Allotments, but NOT in this round's closing ranks / seats taken).
+        # '' = round 1 / a list that doesn't say. round_status_raw = the authority's own words ("Upgraded" …).
+        for col in ("round_status TEXT DEFAULT ''", "round_status_raw TEXT DEFAULT ''",
+                    "prev_quota_raw TEXT DEFAULT ''", "prev_quota TEXT DEFAULT ''",
+                    "prev_institute_raw TEXT DEFAULT ''", "prev_institute TEXT DEFAULT ''",
+                    "prev_course_raw TEXT DEFAULT ''", "prev_course TEXT DEFAULT ''", "prev_remarks TEXT DEFAULT ''"):
+            conn.execute(f"ALTER TABLE pg_results ADD COLUMN IF NOT EXISTS {col}")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_results_source (
             id SERIAL PRIMARY KEY,
