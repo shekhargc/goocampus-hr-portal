@@ -46,12 +46,21 @@ def norm_round(v):
     return ''
 
 
+_CAL_READY = {'done': False}
+
+
 def ensure_calendar_table(conn=None):
+    """Once per process (2026-11-17 outage fix): /api/pg/news/deadlines, /calendar and /counselling-status call this
+    on every dashboard page — each ALTER/CREATE INDEX took an exclusive lock on pg_counselling_events and helped jam
+    the shared DB. lock_timeout: never wait on a busy table."""
+    if _CAL_READY['done']:
+        return
     own = conn is None
     if own:
         from db import get_db
         conn = get_db()
     try:
+        conn.execute("SET LOCAL lock_timeout = '3s'")
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_counselling_events (
             id SERIAL PRIMARY KEY,
             authority_code TEXT NOT NULL DEFAULT '',
@@ -85,7 +94,9 @@ def ensure_calendar_table(conn=None):
             inbox_id INTEGER, notice_date DATE, changed_by TEXT DEFAULT '', note TEXT DEFAULT '',
             changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         conn.commit()
+        _CAL_READY['done'] = True
     except Exception as e:
+        _CAL_READY['done'] = True        # one attempt per process — never retry DDL on every request
         logging.warning("ensure_calendar_table: %s", e)
         try: conn.rollback()
         except Exception: pass
