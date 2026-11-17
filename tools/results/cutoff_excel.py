@@ -7,7 +7,7 @@ Sheets
   Read me          — source, rules, counts
   MD-MS & Diploma  — closing ranks (non-DNB)
   DNB              — closing ranks (DNB quota), hospital names exactly as published
-  All allotments   — one line per seat held (rank + seat, no names)
+  (founder 2026-11-17: no All-allotments sheet; every sheet starts with a S.No column)
 
 Rules
   * Closing rank = highest (worst) rank allotted in THIS round for that college/course/quota/category;
@@ -94,12 +94,12 @@ readme['A1'].font = Font(bold=True, size=14, color='1E3A8A')
 readme.column_dimensions['A'].width = 26
 readme.column_dimensions['B'].width = 110
 
-hdr = ['College / Institute', 'Course', 'Quota', 'Allotted category', 'Opening rank', 'Closing rank',
+hdr = ['S.No', 'College / Institute', 'Course', 'Quota', 'Allotted category', 'Opening rank', 'Closing rank',
        'Seats allotted this round']
 if later_round:
     hdr += ['Fresh', 'Upgraded', 'Retained (kept earlier seat)', 'Seats held after round']
 hdr += ['Full name + address as published']
-wid = [55, 42, 30, 18, 13, 13, 14] + ([9, 11, 16, 14] if later_round else []) + [90]
+wid = [7, 55, 42, 30, 18, 13, 13, 14] + ([9, 11, 16, 14] if later_round else []) + [90]
 for dnb, name in ((False, 'MD-MS & Diploma'), (True, 'DNB')):
     data = []
     for k in sorted((k for k in groups if k[0] == dnb), key=lambda k: (k[1], k[2], k[3], k[4])):
@@ -108,20 +108,9 @@ for dnb, name in ((False, 'MD-MS & Diploma'), (True, 'DNB')):
         line = [short(k[1]), k[2], k[3], k[4], min(rk) if rk else None, max(rk) if rk else None, len(rk)]
         if later_round:
             line += [g['fresh'], g['upgraded'], g['retained'], g['held']]
-        data.append(line + [k[1]])
+        data.append([len(data) + 1] + line + [k[1]])
     sheet(wb.create_sheet(name), hdr, data, wid)
 
-ah = ['Rank', 'Quota', 'College / Institute', 'Course', 'Allotted category', 'Candidate category']
-if later_round:
-    ah += ['Status this round', 'Earlier seat — college', 'Earlier seat — course']
-ad = []
-for r in sorted(rows, key=lambda r: r['rank']):
-    line = [r['rank'], r['quota'], short(r['institute_raw']), r['course'], r.get('allotted_category') or '',
-            r.get('candidate_category') or '']
-    if later_round:
-        line += [r.get('round_status') or '', short(r.get('prev_institute_raw')), r.get('prev_course') or '']
-    ad.append(line)
-sheet(wb.create_sheet('All allotments'), ah, ad, [10, 30, 60, 42, 16, 16] + ([14, 50, 36] if later_round else []))
 wb.save(OUT)
 print(f'{OUT}: {len(rows)} seats, {sum(1 for k in groups if not k[0])} MD/MS+Diploma lines, '
       f'{sum(1 for k in groups if k[0])} DNB lines')
