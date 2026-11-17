@@ -12,8 +12,8 @@
                             mobile to a website enquiry (Sales → Inquiries from goocampus.in, or a Management /
                             NRI call-back) made after its own switch-on. (2026-11-17)
   4. gc_daily_account_update (id 39934717086143575) — "Dr. {{1}}, {{2}} new update(s) for {{3}} were posted…
-                            Latest: {{4}}". 8 pm IST, at most once a day, only to doctors whose MCC / state news
-                            was posted that day. Quick reply "Stop updates" (or STOP) → never again (pg_wa_optout,
+                            Latest: {{4}}". Since 2026-11-18: after EACH publish batch (15 quiet minutes after the
+                            last item), max 3 a day, only to doctors whose MCC / state is in that batch (was: 8 pm digest). Quick reply "Stop updates" (or STOP) → never again (pg_wa_optout,
                             via the Infobip inbound webhook /api/wa/inbound?k=PG_WA_INBOUND_KEY). (2026-11-17)
 
 Rules
@@ -48,6 +48,7 @@ SWITCHES = {'signup': ('wa_nudges', 'wa_nudges_since'),
 KINDS = {'welcome': 'Welcome (name + state added)',
          'incomplete_1h': 'Profile reminder · first (15 min)',
          'incomplete_24h': 'Profile reminder · 24 hours',
+         'incomplete_72h': 'Profile reminder · 72 hours',
          'enquiry': 'Enquiry → dashboard',
          'daily': 'Daily counselling update',
          'campaign': 'Group send',
@@ -76,6 +77,8 @@ def ensure_tables(conn):
         mobile TEXT DEFAULT '', status TEXT DEFAULT 'sending', response TEXT DEFAULT '',
         sent_by TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (user_id, kind))''')
+    conn.execute("CREATE TABLE IF NOT EXISTS pg_wa_news_done (news_id INTEGER PRIMARY KEY, batch TEXT DEFAULT '', "
+                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.commit()
     _TABLES['done'] = True
 
@@ -220,7 +223,7 @@ def _deliver(conn, user, kind, template, placeholders):
 # ── the sweep ───────────────────────────────────────────────────────────────
 def run():
     """One pass: welcome messages + 1h / 24h profile reminders for doctors created after switch-on."""
-    summary = {'welcome': 0, 'incomplete_1h': 0, 'incomplete_24h': 0, 'failed': 0}
+    summary = {'welcome': 0, 'incomplete_1h': 0, 'incomplete_24h': 0, 'incomplete_72h': 0, 'failed': 0}
     conn = get_db()
     try:
         ensure_tables(conn)
@@ -252,7 +255,8 @@ def run():
         # 2. Reminders — FREE doctors still missing name or state.
         # kind 'incomplete_1h' kept as the log key (history continuity) — the first reminder now goes at 15 min.
         windows = (('incomplete_1h', "INTERVAL '15 minutes'", "INTERVAL '23 hours'"),
-                   ('incomplete_24h', "INTERVAL '24 hours'", "INTERVAL '48 hours'"))
+                   ('incomplete_24h', "INTERVAL '24 hours'", "INTERVAL '48 hours'"),
+                   ('incomplete_72h', "INTERVAL '72 hours'", "INTERVAL '96 hours'"))     # founder 2026-11-18
         aud_inc = wc.get_aud(conn, 'incomplete')
         if not aud_inc['types']:
             windows = ()                     # "who gets it" = nobody → reminder off
@@ -323,14 +327,20 @@ def _ist_today():
 
 
 def daily_plan(conn, day=None):
-    """[(doctor_row, count, label, latest_heading)] for news POSTED on `day` (IST, default today):
-    MCC / All-India items for everyone + each doctor's own states (home, counselling states, follows)."""
-    from pg_admin.deadline_reminders import _doctor_states
+    """[(doctor_row, count, label, latest_heading)] for news POSTED on `day` (IST, default today) — used for the
+    page's "today's audience" number."""
     day = day or _ist_today()
     news = [dict(r) for r in conn.execute(
         "SELECT id, scope, COALESCE(state,'') AS state, heading, created_at FROM pg_news "
         "WHERE COALESCE(is_published, TRUE) AND (to_jsonb(pg_news)->>'deleted_at') IS NULL "
         "AND (created_at + INTERVAL '330 minutes')::date = ? ORDER BY created_at DESC", (day,)).fetchall()]
+    return plan_for_news(conn, news)
+
+
+def plan_for_news(conn, news):
+    """[(doctor_row, count, label, latest_heading)] for a list of news items (newest first):
+    MCC / All-India items for everyone + each doctor's own states (home, counselling states, follows)."""
+    from pg_admin.deadline_reminders import _doctor_states
     if not news:
         return []
     states = _doctor_states(conn)
@@ -390,6 +400,58 @@ def daily_run():
         conn.close()
 
 
+NEWS_QUIET_MIN = 15      # a "bulk publish" is over when nothing new was published for this many minutes
+NEWS_MAX_PER_DAY = 3     # at most this many news updates per doctor per IST day
+
+
+def news_batch_run(conn):
+    """Founder 2026-11-18: "every time I publish news in bulk — if I do it twice or thrice, send it."
+    Every 10 min: news published (after the switch-on, last 24 h) that no WhatsApp went out for yet. Once nothing new
+    has been published for NEWS_QUIET_MIN minutes, the whole batch = ONE message per doctor whose MCC / state is in it
+    (gc_daily_account_update; {{2}} = items in this batch). Max NEWS_MAX_PER_DAY a day per doctor; STOP respected."""
+    ensure_tables(conn)
+    start = since(conn, 'daily')
+    if not start:
+        return {}
+    news = [dict(r) for r in conn.execute(
+        "SELECT id, scope, COALESCE(state,'') AS state, heading, COALESCE(published_at, created_at) AS pub FROM pg_news n "
+        "WHERE COALESCE(is_published, TRUE) AND (to_jsonb(n)->>'deleted_at') IS NULL "
+        "AND COALESCE(published_at, created_at) >= ?::timestamp "
+        "AND COALESCE(published_at, created_at) >= CURRENT_TIMESTAMP - INTERVAL '24 hours' "
+        "AND COALESCE(published_at, created_at) <= CURRENT_TIMESTAMP "
+        "AND NOT EXISTS (SELECT 1 FROM pg_wa_news_done d WHERE d.news_id = n.id) "
+        "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", (start,)).fetchall()]
+    if not news:
+        return {}
+    quiet = conn.execute("SELECT ?::timestamp <= CURRENT_TIMESTAMP - INTERVAL '%d minutes' AS ok" % NEWS_QUIET_MIN,
+                         (news[0]['pub'],)).fetchone()['ok']
+    if not quiet:
+        return {'waiting': len(news)}            # still publishing — wait for the batch to finish
+    batch = 'b%d' % max(n['id'] for n in news)
+    for n in news:
+        conn.execute("INSERT INTO pg_wa_news_done (news_id, batch) VALUES (?, ?) ON CONFLICT (news_id) DO NOTHING",
+                     (n['id'], batch))
+    conn.commit()
+    summary = {'sent': 0, 'failed': 0, 'skipped': 0, 'capped': 0}
+    day_start = conn.execute("SELECT (date_trunc('day', CURRENT_TIMESTAMP + INTERVAL '330 minutes') "
+                             "- INTERVAL '330 minutes') AS t").fetchone()['t']
+    for d, cnt, label, latest in plan_for_news(conn, news):
+        if opted_out(conn, d.get('mobile')):
+            summary['skipped'] += 1
+            continue
+        today_n = conn.execute("SELECT COUNT(*) AS n FROM pg_wa_nudge_log WHERE user_id = ? AND kind LIKE ? "
+                               "AND status = 'sent' AND created_at >= ?", (d['id'], 'daily:%', day_start)).fetchone()['n']
+        if today_n >= NEWS_MAX_PER_DAY:
+            summary['capped'] += 1
+            continue
+        ph = [welcome_name(d.get('name')), str(cnt), clean_placeholder(label, 60), clean_placeholder(latest, 120)]
+        res = _deliver(conn, d, 'daily:' + batch, DAILY_TPL, ph)
+        if res in ('sent', 'failed'):
+            summary[res] += 1
+    logger.info("wa news batch %s (%s items): %s", batch, len(news), summary)
+    return summary
+
+
 def scheduled_daily():
     """Cron 20:00 IST — live service only, switched on, one process at a time."""
     if (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
@@ -424,7 +486,8 @@ def scheduled_run():
         from pg_admin import wa_campaigns as wc
         wc.resume_stalled(conn)              # group sends whose runner died (deploy / restart)
         signup, enquiry = is_enabled(conn), is_enabled(conn, 'enquiry')
-        if not (signup or enquiry):
+        news_on = is_enabled(conn, 'daily')
+        if not (signup or enquiry or news_on):
             return
         got = conn.execute("SELECT pg_try_advisory_lock(hashtext('pg_wa_nudges')) AS ok").fetchone()['ok']
         if not got:
@@ -436,6 +499,8 @@ def scheduled_run():
                 s_, f_ = enquiry_run(conn)
                 if s_ or f_:
                     logger.info("wa enquiry: sent %s failed %s", s_, f_)
+            if news_on:
+                news_batch_run(conn)
         finally:
             conn.execute("SELECT pg_advisory_unlock(hashtext('pg_wa_nudges'))")
             conn.commit()
@@ -453,8 +518,7 @@ def start_scheduler():
         sch = BackgroundScheduler()
         sch.add_job(scheduled_run, 'interval', minutes=10, id='pg_wa_nudges',
                     coalesce=True, max_instances=1, misfire_grace_time=600)
-        sch.add_job(scheduled_daily, 'cron', hour=14, minute=30, id='pg_wa_daily',      # 20:00 IST
-                    coalesce=True, max_instances=1, misfire_grace_time=1800)
+        # (8 pm IST daily digest retired 2026-11-18 — news updates now go per publish batch, see news_batch_run)
         sch.start()
     except Exception as e:
         logger.warning("wa nudge scheduler: %s", e)
