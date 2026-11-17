@@ -25,6 +25,11 @@ HEAD = ['Sr No', 'Merit No.', 'Application No.', 'Name Of Student', 'Institute N
         'Admission Type of Application', 'Category of Application', 'Admission Type', 'Category']
 QUOTA = {'HP Quota - Direct': 'State Quota', 'HP Quota In- service': 'State Quota-Inservice',
          'Management Quota': 'Management Quota'}
+# Final list (17.11.2026) prints these labels, but the columns hold the SAME data in the SAME order as the provisional
+# list (candidate quota, candidate category, seat quota, seat category) — checked: seat quota / seat category counts equal
+# the provisional's 90/49/29 and 136/17/11/3/1, and every row agrees with the merit list's quota + category.
+HEAD_FINAL = ['Sr No', 'Merit No.', 'Institute Name', 'Degree', 'Applied Quota', 'Allotted Quota', 'Admitted Quota',
+              'Applied Category']
 MQUOTA = {'HP Quota - Direct': 'HP Direct', 'HP Quota In- service': 'In-service', 'Management Quota': 'Management'}
 CAT = {'General': 'GEN', 'SC': 'SC', 'ST': 'ST', 'EWS': 'EWS', 'Physically Handicapped': 'GEN-PH',
        'Single Girl child': 'Single Girl Child'}
@@ -48,7 +53,9 @@ SHEET = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'pg
 def cell(x):
     s = ' '.join((x or '').split())
     s = s.replace('Otorhinolaryngolo gy', 'Otorhinolaryngology').replace('Handicapp ed', 'Handicapped')
-    s = s.replace('Economica ly', 'Economicaly')
+    s = s.replace('Economica ly', 'Economicaly').replace('Manageme nt', 'Management')
+    if s == 'HP Quota In-service':          # final list spelling
+        s = 'HP Quota In- service'
     return CAT_NORM.get(s, s)
 
 
@@ -77,8 +84,10 @@ def main():
                 if len(r) != 10:
                     raise SystemExit(f'p{p.number + 1}: {len(r)} columns')
                 c = [cell(x) for x in r]
+                if not any(c[1:]) and not INT.match(c[0]):
+                    continue    # Final list (17.11): the notice text runs into a table on page 2 (column 1 only)
                 if c[0] == 'Sr No':
-                    if [c[0], c[1], c[4], c[5], c[6], c[7], c[8], c[9]] != [HEAD[0], HEAD[1]] + HEAD[4:]:
+                    if [c[0], c[1], c[4], c[5], c[6], c[7], c[8], c[9]] not in ([HEAD[0], HEAD[1]] + HEAD[4:], HEAD_FINAL):
                         raise SystemExit('header changed')
                     continue
                 where = f'p{p.number + 1} sr {c[0] if INT.match(c[0]) else "?"}'
@@ -118,8 +127,11 @@ def main():
     body = {'authority_code': 'amru_hp', 'round': 'Round 1', 'round_order': 1, 'status': status,
             'title': f'AMRU HP PG MD/MS/DNB 2026 — {status.title()} Seat Allocation List, 1st Round',
             'published_on': checks['notice_date'], 'source_file_name': os.path.basename(pdf),
-            'notes': ('AMRU Himachal Pradesh 1st round seat allocation (notice 129/2026-27-7190, 16.11.2026; objections by '
-                      '11 AM 17.11.2026; last HP Direct seat at IGMC Shimla and RPGMC Tanda held for Single Girl Child). '
+            'notes': (('AMRU Himachal Pradesh 1st round FINAL seat allocation (notice dated 17.11.2026; report to the allotted '
+                       'institute by 18.11.2026; last HP Direct seat at IGMC Shimla and RPGMC Tanda held for Single Girl Child). '
+                       if status == 'final' else
+                       'AMRU Himachal Pradesh 1st round seat allocation (notice 129/2026-27-7190, 16.11.2026; objections by '
+                       '11 AM 17.11.2026; last HP Direct seat at IGMC Shimla and RPGMC Tanda held for Single Girl Child). ') +
                       'rank = Merit No. of the revised final merit list (12.11.2026), rank_ai = that list\'s AIR. quota = '
                       'seat Admission Type (2025 spelling); remarks give the candidate\'s own type when it differs. '
                       'No DNB seats in this list. No application numbers or names stored.'),
