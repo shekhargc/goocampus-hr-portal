@@ -42,8 +42,12 @@
       {% if msg == 'enquiry' %}
         {% for k, lbl in enq_sources %}<label><input type="checkbox" name="sources" value="{{ k }}" {{ 'checked' if k in (a.sources or []) }}> {{ lbl }}</label><br>{% endfor %}
       {% elif msg == 'incomplete' %}
-        <label><input type="checkbox" name="types" value="free" {{ 'checked' if 'free' in (a.types or []) }}> Free doctors (untick = don't send the reminder)</label>
-        <div class="wn-sub">Paid / Internal doctors fill the onboarding form instead, so they never get this one.</div>
+        <div>
+          <label><input type="checkbox" name="types" value="free" {{ 'checked' if 'free' in (a.types or []) }}> Free</label>
+          <label><input type="checkbox" name="types" value="paid" {{ 'checked' if 'paid' in (a.types or []) }}> Paid</label>
+          <label><input type="checkbox" name="types" value="internal" {{ 'checked' if 'internal' in (a.types or []) }}> Internal</label>
+        </div>
+        <div class="wn-sub">Untick all = don't send the reminder. No state choice here — the state is what's missing.</div>
       {% else %}
         <div>
           <label><input type="checkbox" name="types" value="free" {{ 'checked' if 'free' in (a.types or []) }}> Free</label>
@@ -95,14 +99,14 @@ Log in any time with your mobile number and OTP.</div>
     </div>
     <div class="wn-card">
       <div style="font-weight:700;color:var(--navy);">2 · Profile reminder <span class="wn-sub">{{ incomplete_tpl }} · id {{ template_ids[incomplete_tpl] }}</span></div>
-      <div class="wn-sub" style="margin:0.3rem 0 0.6rem;">Free doctors only, if name or state is still missing — 1 hour after sign-up, and once more at 24 hours (max 2).</div>
+      <div class="wn-sub" style="margin:0.3rem 0 0.6rem;">Every new doctor (free or invited) whose name or state is still missing — 15 minutes after sign-up, and once more at 24 hours (max 2). Doctors who add both in the first 15 minutes get only the Welcome.</div>
       <div class="wn-msg">Your GooCampus.in dashboard is ready and your mobile number is verified.
 
 Please complete your profile by adding your name and state to access the complete dashboard.
 
 It takes less than a minute.</div>
       <div class="wn-sub" style="margin-top:0.5rem;">
-        1 hour — sent: {{ (counts.get('incomplete_1h') or {}).get('sent', 0) }} · failed: {{ (counts.get('incomplete_1h') or {}).get('failed', 0) }}<br>
+        15 minutes — sent: {{ (counts.get('incomplete_1h') or {}).get('sent', 0) }} · failed: {{ (counts.get('incomplete_1h') or {}).get('failed', 0) }}<br>
         24 hours — sent: {{ (counts.get('incomplete_24h') or {}).get('sent', 0) }} · failed: {{ (counts.get('incomplete_24h') or {}).get('failed', 0) }}
       </div>
       {{ aud_form('incomplete') }}

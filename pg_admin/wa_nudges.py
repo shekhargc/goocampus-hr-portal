@@ -2,7 +2,10 @@
 
   1. welcometogoocampus   (Infobip/Meta id 1413956730516058) — "Hi Dr. {{1}}, thank you for registering…
                             …for {{2}} and MCC…". Sent ONCE when a new doctor has a name + state.
-  2. gc_profile_incomplete (id 1952329065742254) — no variables. Sent to a new FREE doctor whose name or
+  2. gc_profile_incomplete (id 1952329065742254) — no variables. Sent to a new doctor (free OR invited/paid —
+                            founder 2026-11-17) whose name or state is still missing 15 minutes after sign-up, and
+                            once more at 24 hours. Max 2. ("Who gets it" can narrow it to Free / Paid / Internal.)
+  (old rule, before 2026-11-17 night: FREE doctors only, first reminder at 1 hour) — sent to a new FREE doctor whose name or
                             state is still missing 1 hour after sign-up, and once more at 24 hours. Max 2.
   3. gc_enquiry_account    (id 1118950867607827) — "Hi Dr. {{1}}, thank you for your enquiry…". Sent ONCE per
                             mobile to a website enquiry (Sales → Inquiries from goocampus.in, or a Management /
@@ -42,7 +45,7 @@ SWITCHES = {'signup': ('wa_nudges', 'wa_nudges_since'),
             'enquiry': ('wa_enquiry', 'wa_enquiry_since'),
             'daily': ('wa_daily', 'wa_daily_since')}
 KINDS = {'welcome': 'Welcome (name + state added)',
-         'incomplete_1h': 'Profile reminder · 1 hour',
+         'incomplete_1h': 'Profile reminder · first (15 min)',
          'incomplete_24h': 'Profile reminder · 24 hours',
          'enquiry': 'Enquiry → dashboard',
          'daily': 'Daily counselling update',
@@ -223,7 +226,6 @@ def run():
         start = since(conn)
         if not start:
             return summary
-        from pg_admin.routes.api import profile_gate_applies
         base = ("SELECT * FROM pg_users WHERE created_at >= ?::timestamp "
                 "AND COALESCE(is_blocked,0) = 0 "
                 "AND COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0) = 0 "
@@ -247,9 +249,11 @@ def run():
             summary['welcome' if res == 'sent' else 'failed'] += res in ('sent', 'failed')
 
         # 2. Reminders — FREE doctors still missing name or state.
-        windows = (('incomplete_1h', "INTERVAL '60 minutes'", "INTERVAL '23 hours'"),
+        # kind 'incomplete_1h' kept as the log key (history continuity) — the first reminder now goes at 15 min.
+        windows = (('incomplete_1h', "INTERVAL '15 minutes'", "INTERVAL '23 hours'"),
                    ('incomplete_24h', "INTERVAL '24 hours'", "INTERVAL '48 hours'"))
-        if not wc.get_aud(conn, 'incomplete')['types']:
+        aud_inc = wc.get_aud(conn, 'incomplete')
+        if not aud_inc['types']:
             windows = ()                     # "who gets it" = nobody → reminder off
         for kind, older_than, newer_than in windows:
             rows = conn.execute(
@@ -258,8 +262,9 @@ def run():
                 f"AND created_at >= CURRENT_TIMESTAMP - {newer_than} "
                 "AND NOT EXISTS (SELECT 1 FROM pg_wa_nudge_log l WHERE l.user_id = pg_users.id AND l.kind = ?) "
                 "ORDER BY id LIMIT 200", (start, kind)).fetchall()
+            cats_inc = wc.categories(conn, [u['id'] for u in rows]) if rows else {}
             for u in rows:
-                if not profile_gate_applies(conn, u):
+                if not wc.aud_allows(aud_inc, cats_inc.get(u['id'], 'free'), ''):
                     continue
                 res = _deliver(conn, u, kind, INCOMPLETE_TPL, [])
                 summary[kind if res == 'sent' else 'failed'] += res in ('sent', 'failed')
