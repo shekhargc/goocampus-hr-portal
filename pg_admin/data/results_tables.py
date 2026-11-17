@@ -17,9 +17,20 @@ import logging
 from db import get_db
 
 
+_ENSURED = {'done': False}
+
+
 def ensure_results_tables():
+    """Create / migrate the results tables ONCE per process (2026-11-17 outage fix: this ran on every results
+    request — each ALTER TABLE takes an exclusive lock on pg_results, and with website traffic the lock queue
+    jammed the shared DB so live + staging stopped answering). lock_timeout: never wait on a busy table."""
+    if _ENSURED['done']:
+        return
     conn = get_db()
     try:
+        conn.execute("SET LOCAL lock_timeout = '3s'")
+        have = {r['column_name'] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'pg_results'").fetchall()}
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_name_memory (
             id SERIAL PRIMARY KEY,
             kind TEXT NOT NULL DEFAULT 'college',     -- college | course
@@ -68,7 +79,8 @@ def ensure_results_tables():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_rank ON pg_results (rank)")
         # State lists print TWO ranks: `rank` = the state merit rank (My Allotments matches home_state_rank),
         # `rank_ai` = the NEET-PG All-India rank (2025 cut-offs + "my NEET rank" lookup). NULL for MCC. (2026-10-30)
-        conn.execute("ALTER TABLE pg_results ADD COLUMN IF NOT EXISTS rank_ai INTEGER")
+        if 'rank_ai' not in have:
+            conn.execute("ALTER TABLE pg_results ADD COLUMN IF NOT EXISTS rank_ai INTEGER")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_rank_ai ON pg_results (rank_ai)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_results_inst ON pg_results (institute, course)")
         # Round 2+ (2026-11-17): MCC prints both rounds on one line. round_status = what happened to the doctor in
@@ -79,7 +91,8 @@ def ensure_results_tables():
                     "prev_quota_raw TEXT DEFAULT ''", "prev_quota TEXT DEFAULT ''",
                     "prev_institute_raw TEXT DEFAULT ''", "prev_institute TEXT DEFAULT ''",
                     "prev_course_raw TEXT DEFAULT ''", "prev_course TEXT DEFAULT ''", "prev_remarks TEXT DEFAULT ''"):
-            conn.execute(f"ALTER TABLE pg_results ADD COLUMN IF NOT EXISTS {col}")
+            if col.split()[0] not in have:
+                conn.execute(f"ALTER TABLE pg_results ADD COLUMN IF NOT EXISTS {col}")
 
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_results_source (
             id SERIAL PRIMARY KEY,
@@ -117,10 +130,12 @@ def ensure_results_tables():
                      "academic_year='2026-27' AND round='Round 1' AND status='provisional' THEN 1 ELSE 0 END "
                      "WHERE is_revised IS NULL")
         conn.commit()
+        _ENSURED['done'] = True
         logging.info("pg_results + pg_name_memory tables ensured")
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
+        _ENSURED['done'] = True        # one attempt per process — never retry DDL on every request
         logging.error(f"ensure_results_tables: {e}")
     finally:
         try: conn.close()
