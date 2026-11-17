@@ -547,6 +547,23 @@ def admin_test():
     return redirect(url_for('pg_wa_nudges'))
 
 
+_STOP_RE = re.compile(r'(stop|stop updates?|unsubscribe)[.! ]*')
+
+
+def handle_inbound(conn, from_phone, msg, text=''):
+    """One inbound WhatsApp message: 'Stop updates' (button) / STOP → opted out of the daily update.
+    Used by /api/wa/inbound AND the existing /whatsapp/webhook (whichever URL Infobip posts to)."""
+    if not from_phone:
+        return 0
+    vals = [str((msg or {}).get(k) or '').strip().lower() for k in ('text', 'payload', 'title')] + [
+        str(text or '').strip().lower()]
+    hit = next((v for v in vals if v and _STOP_RE.fullmatch(v)), '')
+    if not hit:
+        return 0
+    ensure_tables(conn)
+    return 1 if set_optout(conn, from_phone, True, 'whatsapp', hit[:40]) else 0
+
+
 def inbound():
     """POST /api/wa/inbound?k=<PG_WA_INBOUND_KEY> — Infobip WhatsApp inbound messages (set this URL in Infobip).
     'Stop updates' (quick-reply button) or a message STOP → this number never gets the daily update again."""
@@ -559,11 +576,7 @@ def inbound():
     conn = get_db()
     try:
         for m in data.get('results') or []:
-            msg = m.get('message') or {}
-            vals = [str(msg.get(k) or '').strip().lower() for k in ('text', 'payload', 'title')]
-            hit = next((v for v in vals if re.fullmatch(r'(stop|stop updates?|unsubscribe)[.! ]*', v)), '')
-            if hit and m.get('from'):
-                stopped += set_optout(conn, m.get('from'), True, 'whatsapp', hit[:40])
+            stopped += handle_inbound(conn, m.get('from'), m.get('message') or {})
     except Exception as e:
         logger.error("wa inbound: %s", e)
         try: conn.rollback()

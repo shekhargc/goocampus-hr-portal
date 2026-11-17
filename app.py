@@ -54927,11 +54927,27 @@ def wa_campaign_send(campaign_id):
 @admin_required
 def wa_templates_list():
     conn = get_db()
-    templates = conn.execute("SELECT * FROM wa_templates ORDER BY created_at DESC").fetchall()
+    # Template register (founder 2026-11-17): purpose / where used / trigger / variables / approved details.
+    from pg_admin import wa_registry as _war
+    _war.prepare(conn)
+    templates = conn.execute("SELECT * FROM wa_templates ORDER BY (COALESCE(status,'')<>'APPROVED'), "
+                             "(COALESCE(purpose,'')=''), name").fetchall()
     return render_template('wa_templates.html',
         active_section='whatsapp',
         templates=templates
     )
+
+
+@app.route('/whatsapp/templates/save', methods=['POST'])
+@admin_required
+def wa_templates_save():
+    """Add an approved template, or edit one's details (the register drawer)."""
+    from pg_admin import wa_registry as _war
+    u = get_user()
+    tid = request.form.get('id', type=int)
+    ok, msg = _war.save(request.form, (u['name'] if u else '') or 'admin', tid)
+    flash(msg, 'success' if ok else 'error')
+    return redirect(url_for('wa_templates_list'))
 
 
 @app.route('/whatsapp/templates/sync', methods=['POST'])
@@ -55430,6 +55446,12 @@ def wa_webhook():
                 text = r['message']['text']
             elif r.get('content', {}).get('text'):
                 text = r['content']['text']
+            # "Stop updates" quick reply / STOP → no more daily counselling updates (2026-11-17)
+            try:
+                from pg_admin import wa_nudges as _wan
+                _wan.handle_inbound(conn, from_phone, r.get('message') or {}, text)
+            except Exception as _se:
+                logging.warning("wa_webhook stop: %s", _se)
 
             if from_phone:
                 contact = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (from_phone,)).fetchone()
