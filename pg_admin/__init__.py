@@ -727,3 +727,6 @@ def register_pg_admin(app):
     # Registered Doctors → 💳 Paid Sessions tab. (founder 2026-11-17)
     from pg_admin.routes import session_api as _session_api
     _session_api.register(app)
+    # goocampus.in sign-up WhatsApp messages (welcome + profile reminder), OFF until switched on.
+    from pg_admin import wa_nudges as _wa_nudges
+    _wa_nudges.register(app)
