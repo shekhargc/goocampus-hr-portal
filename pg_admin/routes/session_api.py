@@ -296,19 +296,25 @@ def alerts_enabled():
 
 
 def alert_recipients(conn):
-    """PG_SESSION_ALERT_EMAILS (comma list) if set, else the Counselling-Desk team accounts' emails."""
-    env = [e.strip() for e in (os.environ.get('PG_SESSION_ALERT_EMAILS') or '').split(',') if '@' in e]
-    if env:
-        return env
+    """Counselling-Desk team accounts' emails (Ashwini) PLUS any extra addresses in
+    PG_SESSION_ALERT_EMAILS (comma list, e.g. the founder). De-duplicated."""
+    out, seen = [], set()
+    def _add(e):
+        e = (e or '').strip()
+        if '@' in e and e.lower() not in seen:
+            seen.add(e.lower()); out.append(e)
     try:
         rows = conn.execute("SELECT email FROM pg_users WHERE COALESCE((to_jsonb(pg_users)->>'desk_access')::int,0) = 1 "
                             "AND COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0) = 1 "
                             "AND POSITION('@' IN COALESCE(email,'')) > 0").fetchall()
-        return [r['email'] for r in rows]
+        for r in rows:
+            _add(r['email'])
     except Exception:
         try: conn.rollback()
         except Exception: pass
-        return []
+    for e in (os.environ.get('PG_SESSION_ALERT_EMAILS') or '').split(','):
+        _add(e)
+    return out
 
 
 def send_booking_alert(conn, booking, doctor):

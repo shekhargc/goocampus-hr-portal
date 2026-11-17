@@ -44,8 +44,8 @@ from the reduced inclusive payable (gst = payable × g/(100+g)). Consumed only w
 Example: plan ₹9,999 + 18% = ₹11,798.82 → credit ₹4,999 → payable ₹6,799.82 (taxable ₹5,762.56 + GST ₹1,037.26).
 
 ## Alerts
-Booking alert email (admin + Ashwini) is OFF unless `PG_SESSION_ALERTS=1`. Recipients: `PG_SESSION_ALERT_EMAILS`
-(comma list) or, if unset, the Counselling-Desk team accounts' emails.
+Booking alert email (admin + Ashwini) is OFF unless `PG_SESSION_ALERTS=1`. Recipients: the Counselling-Desk team
+accounts' emails (Ashwini) PLUS any extra addresses in `PG_SESSION_ALERT_EMAILS` (comma list, e.g. the founder), de-duplicated.
 
 ## Access
 Admin tab = admin or the Access Master grant goocampus.in → Registered Doctors (view; edit to save).
