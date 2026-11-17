@@ -50,6 +50,8 @@ for r in rows:
     if competes(r):
         g['ranks'].append(r['rank'])
 
+short = lambda n: (n or '').split(',')[0].strip()   # MCC prints "Name, City,Address" — name = before the first comma
+
 HEAD_FILL = PatternFill('solid', fgColor='1E3A8A')
 HEAD_FONT = Font(bold=True, color='FFFFFF')
 
@@ -96,16 +98,17 @@ hdr = ['College / Institute', 'Course', 'Quota', 'Allotted category', 'Opening r
        'Seats allotted this round']
 if later_round:
     hdr += ['Fresh', 'Upgraded', 'Retained (kept earlier seat)', 'Seats held after round']
-wid = [60, 42, 30, 18, 13, 13, 14] + ([9, 11, 16, 14] if later_round else [])
+hdr += ['Full name + address as published']
+wid = [55, 42, 30, 18, 13, 13, 14] + ([9, 11, 16, 14] if later_round else []) + [90]
 for dnb, name in ((False, 'MD-MS & Diploma'), (True, 'DNB')):
     data = []
     for k in sorted((k for k in groups if k[0] == dnb), key=lambda k: (k[1], k[2], k[3], k[4])):
         g = groups[k]
         rk = g['ranks']
-        line = [k[1], k[2], k[3], k[4], min(rk) if rk else None, max(rk) if rk else None, len(rk)]
+        line = [short(k[1]), k[2], k[3], k[4], min(rk) if rk else None, max(rk) if rk else None, len(rk)]
         if later_round:
             line += [g['fresh'], g['upgraded'], g['retained'], g['held']]
-        data.append(line)
+        data.append(line + [k[1]])
     sheet(wb.create_sheet(name), hdr, data, wid)
 
 ah = ['Rank', 'Quota', 'College / Institute', 'Course', 'Allotted category', 'Candidate category']
@@ -113,10 +116,10 @@ if later_round:
     ah += ['Status this round', 'Earlier seat — college', 'Earlier seat — course']
 ad = []
 for r in sorted(rows, key=lambda r: r['rank']):
-    line = [r['rank'], r['quota'], r['institute_raw'], r['course'], r.get('allotted_category') or '',
+    line = [r['rank'], r['quota'], short(r['institute_raw']), r['course'], r.get('allotted_category') or '',
             r.get('candidate_category') or '']
     if later_round:
-        line += [r.get('round_status') or '', r.get('prev_institute_raw') or '', r.get('prev_course') or '']
+        line += [r.get('round_status') or '', short(r.get('prev_institute_raw')), r.get('prev_course') or '']
     ad.append(line)
 sheet(wb.create_sheet('All allotments'), ah, ad, [10, 30, 60, 42, 16, 16] + ([14, 50, 36] if later_round else []))
 wb.save(OUT)
