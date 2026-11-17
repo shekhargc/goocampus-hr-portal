@@ -566,6 +566,15 @@ def users_stage(stage):
                            groups=groups, total=total, counts=counts, active_section='goocampus_in')
 
 
+def _paid_sessions_for(doctor):
+    """₹4,999 paid counselling-session bookings of this doctor (profile panel). Never raises."""
+    try:
+        from pg_admin.routes.session_api import for_user
+        return for_user((doctor or {}).get('id'))
+    except Exception:
+        return []
+
+
 @login_required
 def user_detail(user_id):
     """One doctor: profile, plan history, and what they've actually used."""
@@ -803,6 +812,7 @@ def user_detail(user_id):
                            back_url=back_url,
                            fu_thread=fu_thread, fu_state=fu_state, fu_statuses=fu_statuses,
                            fu_time_slots=fu_time_slots,
+                           paid_sessions=_paid_sessions_for(doctor),
                            active_section='goocampus_in')
 
 

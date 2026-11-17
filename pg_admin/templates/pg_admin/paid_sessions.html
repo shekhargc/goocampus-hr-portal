@@ -1,0 +1,110 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Registered Doctors · Paid Sessions{% endblock %}
+
+{% block section_content %}
+<style>
+  .ps-table { width:100%; border-collapse:collapse; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .ps-table th { background:var(--navy); color:#fff; font-size:0.72rem; text-transform:uppercase; letter-spacing:.03em; text-align:left; padding:0.6rem 0.7rem; }
+  .ps-table td { padding:0.6rem 0.7rem; border-top:1px solid var(--gray-200); font-size:0.84rem; vertical-align:top; }
+  .ps-pill { display:inline-block; padding:1px 9px; border-radius:11px; font-size:0.72rem; font-weight:700; white-space:nowrap; }
+  .ps-sub { color:var(--gray-500); font-size:0.74rem; }
+  .ps-filter a { display:inline-block; padding:0.25rem 0.7rem; border-radius:14px; border:1px solid var(--gray-200); font-size:0.78rem; text-decoration:none; color:var(--gray-600); margin:0 0.25rem 0.4rem 0; background:#fff; }
+  .ps-filter a.on { background:var(--navy); color:#fff; border-color:var(--navy); }
+  #psDrawer { position:fixed; top:0; right:-480px; width:440px; max-width:94vw; height:100vh; background:#fff; box-shadow:-6px 0 24px rgba(15,27,51,.18); z-index:1000; transition:right .25s; overflow-y:auto; }
+  #psDrawer.open { right:0; }
+  #psShade { display:none; position:fixed; inset:0; background:rgba(15,27,51,.35); z-index:999; }
+  #psShade.open { display:block; }
+  #psDrawer .f { margin-bottom:0.9rem; }
+  #psDrawer label { display:block; font-size:0.74rem; font-weight:700; color:var(--gray-600); margin-bottom:0.25rem; }
+  #psDrawer input, #psDrawer select, #psDrawer textarea { width:100%; padding:0.5rem 0.6rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.86rem; box-sizing:border-box; }
+</style>
+<div style="max-width:1200px;margin:0 auto;padding:1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">Registered Doctors</h1>
+  <p style="color:var(--gray-500);font-size:0.9rem;margin:0 0 1rem;">
+    Paid 1-on-1 Counselling Sessions — ₹{{ '{:,.0f}'.format(price) }} incl. GST (₹{{ '%.2f'|format(base_gst[0]) }} + GST ₹{{ '%.2f'|format(base_gst[1]) }}), free doctors only.
+    Call within 3 days to fix a time · full refund if we can't schedule within 3 days · no refund once held · no seat guarantee.
+  </p>
+
+  {% set active = 'sessions' %}{% set counts = {'sessions': (counts.get('paid', 0) + counts.get('scheduled', 0))} %}
+  {% include "pg_admin/_users_tabs.html" %}
+
+  <div class="ps-filter">
+    <a href="/admin/pg/users/paid-sessions" class="{{ 'on' if not status }}">All paid</a>
+    {% for s in statuses if s != 'created' %}
+      <a href="/admin/pg/users/paid-sessions?status={{ s }}" class="{{ 'on' if status == s }}">{{ status_labels[s] }}</a>
+    {% endfor %}
+    <a href="/admin/pg/users/paid-sessions?status=created" class="{{ 'on' if status == 'created' }}" title="Checkout opened but payment not completed">Unfinished checkouts</a>
+  </div>
+
+  {% if rows %}
+  <table class="ps-table">
+    <thead><tr><th>#</th><th>Doctor</th><th>Rank / state</th><th>Chose</th><th>Status</th><th>Paid</th><th>Session</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><a href="/admin/pg/users/{{ r.doctor_id }}" style="font-weight:700;color:var(--navy);">{{ r.doctor_name }}</a>
+            <div class="ps-sub">{{ r.mobile }}</div></td>
+        <td>{% if r.rank %}Rank {{ '{:,}'.format(r.rank) }}{% else %}—{% endif %}<div class="ps-sub">{{ r.state or '—' }}</div></td>
+        <td>{{ r.kind_label }}{% if r.round_note %}<div class="ps-sub">{{ r.round_note }}</div>{% endif %}</td>
+        <td><span class="ps-pill" style="background:{{ {'paid':'#fef9c3','scheduled':'#e0f2fe','completed':'#dcfce7','refunded':'#fee2e2','cancelled':'#f1f5f9','created':'#f1f5f9'}[r.status] }};">{{ r.status_label }}</span>
+            {% if r.credit_used %}<div class="ps-sub">upgrade credit used</div>{% endif %}</td>
+        <td>{{ r.paid_at_ist or '—' }}<div class="ps-sub">₹{{ '%.2f'|format(r.amount) }}{% if r.payment_ref %} · {{ r.payment_ref }}{% endif %}</div></td>
+        <td>{{ r.scheduled_at_ist or '—' }}<div class="ps-sub">{{ r.assigned_to }}</div></td>
+        <td style="max-width:220px;">{{ r.team_notes or '' }}</td>
+        <td>{% if r.status != 'created' %}<button type="button" class="btn btn-sm btn-primary" onclick='psOpen({{ r|tojson }})'>Edit</button>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:2.5rem;text-align:center;color:var(--gray-400);">
+    No paid sessions{% if status %} with this status{% endif %} yet.
+  </div>
+  {% endif %}
+</div>
+
+<div id="psShade" onclick="psClose()"></div>
+<div id="psDrawer">
+  <form id="psForm" method="POST" style="padding:1.4rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <h3 style="margin:0;color:var(--navy);font-size:1.05rem;">Paid session</h3>
+      <button type="button" onclick="psClose()" style="border:none;background:none;font-size:1.3rem;cursor:pointer;">×</button>
+    </div>
+    <div id="psWho" style="font-size:0.86rem;margin-bottom:1rem;"></div>
+    <div class="f"><label>Session date &amp; time (IST)</label><input type="datetime-local" name="scheduled_at" id="psWhen">
+      <small class="ps-sub">Setting a time on a "Paid — to schedule" booking marks it Scheduled.</small></div>
+    <div class="f"><label>Status</label>
+      <select name="status" id="psStatus">
+        {% for s in statuses if s != 'created' %}
+          {% if s != 'refunded' or can_refund %}<option value="{{ s }}">{{ status_labels[s] }}</option>{% endif %}
+        {% endfor %}
+      </select>
+      {% if not can_refund %}<small class="ps-sub">Refunds can only be marked by an admin.</small>{% else %}<small class="ps-sub">"Refunded" only records it — issue the refund in the Razorpay dashboard.</small>{% endif %}</div>
+    <div class="f"><label>Counsellor</label><input name="assigned_to" id="psWhoAssigned"></div>
+    <div class="f"><label>Team notes</label><textarea name="team_notes" id="psNotes" rows="4" placeholder="Call outcome, what was discussed…"></textarea></div>
+    <button class="btn btn-primary" type="submit"><i class="fa-solid fa-check"></i> Save</button>
+    <button class="btn" type="button" onclick="psClose()">Cancel</button>
+  </form>
+</div>
+<script>
+function psOpen(r) {
+  var f = document.getElementById('psForm');
+  f.action = '/admin/pg/users/paid-sessions/' + r.id + '/update{{ ('?status=' ~ status) if status else '' }}';
+  document.getElementById('psWho').innerHTML = '<b>' + (r.doctor_name || '') + '</b> · ' + (r.mobile || '') +
+      '<div class="ps-sub">' + (r.kind_label || '') + (r.round_note ? ' — ' + r.round_note : '') + ' · paid ' + (r.paid_at_ist || '') + '</div>';
+  document.getElementById('psWhen').value = r.scheduled_input || '';
+  var st = document.getElementById('psStatus');
+  st.value = r.status;
+  if (st.value !== r.status) { var o = document.createElement('option'); o.value = r.status; o.textContent = r.status_label; st.appendChild(o); st.value = r.status; }
+  document.getElementById('psWhoAssigned').value = r.assigned_to || '';
+  document.getElementById('psNotes').value = r.team_notes || '';
+  document.getElementById('psDrawer').classList.add('open');
+  document.getElementById('psShade').classList.add('open');
+}
+function psClose() {
+  document.getElementById('psDrawer').classList.remove('open');
+  document.getElementById('psShade').classList.remove('open');
+}
+</script>
+{% endblock %}

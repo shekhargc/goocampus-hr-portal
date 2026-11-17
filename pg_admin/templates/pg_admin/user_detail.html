@@ -167,6 +167,26 @@
         </div>
       </form>
 
+      {% if paid_sessions %}
+      <div class="card" id="paid-sessions" style="border-top:3px solid #16a34a;">
+        <h3><i class="fa-solid fa-credit-card"></i> Paid session (₹4,999) <span class="n">{{ paid_sessions|length }}</span></h3>
+        {% for s in paid_sessions %}
+        <div style="font-size:0.84rem;padding:0.45rem 0;{{ 'border-top:1px dashed var(--gray-200);' if not loop.first }}">
+          <b>{{ s.kind_label }}</b>{% if s.round_note %} · <span style="color:var(--gray-500);">{{ s.round_note }}</span>{% endif %}
+          <span style="display:inline-block;margin-left:0.4rem;padding:1px 8px;border-radius:10px;font-size:0.72rem;font-weight:700;background:{{ '#fef9c3' if s.status=='paid' else ('#e0f2fe' if s.status=='scheduled' else ('#dcfce7' if s.status=='completed' else '#fee2e2')) }};">{{ s.status_label }}</span>
+          <div style="color:var(--gray-500);font-size:0.76rem;margin-top:0.2rem;">
+            Paid {{ s.paid_at_ist or '—' }} IST · ₹{{ '%.2f'|format(s.amount) }} incl. GST
+            {% if s.scheduled_at_ist %} · Session {{ s.scheduled_at_ist }} IST{% endif %}
+            · with {{ s.assigned_to }}
+            {% if s.credit_used %} · upgrade credit used{% elif s.credit_until_ist and s.status in ('paid','scheduled','completed') %} · ₹4,999 upgrade credit till {{ s.credit_until_ist }}{% endif %}
+          </div>
+          {% if s.team_notes %}<div style="font-size:0.76rem;color:var(--gray-600);margin-top:0.2rem;">📝 {{ s.team_notes }}</div>{% endif %}
+        </div>
+        {% endfor %}
+        <a href="/admin/pg/users/paid-sessions" style="font-size:0.78rem;">Manage in 💳 Paid Sessions →</a>
+      </div>
+      {% endif %}
+
       <div class="card" id="allotments">
         <h3><i class="fa-solid fa-graduation-cap"></i> Seat allotments <span class="n">{{ allots|length }}</span></h3>
         {% if rank_st %}<p style="font-size:0.8rem;color:var(--gray-500);margin:0 0 0.6rem;">
