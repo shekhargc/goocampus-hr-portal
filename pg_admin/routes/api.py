@@ -1631,6 +1631,12 @@ def _ensure_pg_orders(conn):
             conn.execute("ALTER TABLE pg_orders ADD COLUMN IF NOT EXISTS gst NUMERIC(12,2) DEFAULT 0")
         except Exception:
             conn.rollback()
+        try:
+            # ₹4,999 paid-session upgrade credit (founder 2026-11-17) — see session_api.
+            conn.execute("ALTER TABLE pg_orders ADD COLUMN IF NOT EXISTS session_credit NUMERIC(12,2) DEFAULT 0")
+            conn.execute("ALTER TABLE pg_orders ADD COLUMN IF NOT EXISTS session_booking_id INTEGER")
+        except Exception:
+            conn.rollback()
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1711,6 +1717,27 @@ def api_pg_checkout_create_order():
             conn.commit()
             return jsonify({'ok': True, 'free': True, 'subscription_id': sub_id, 'plan_id': plan['id']})
 
+        # Paid-session upgrade credit (founder 2026-11-17): a FREE doctor who paid ₹4,999 for a
+        # counselling session gets ₹4,999 off ONE Starter/Standard/Premium checkout within 30 days.
+        # Applied to the FINAL GST-inclusive payable (never below ₹1); GST is re-derived from the
+        # reduced payable. Marked used only when this order is verified (api_pg_checkout_verify).
+        taxable_before = taxable
+        session_credit, session_booking_id = 0.0, None
+        try:
+            from pg_admin.routes import session_api as _sess
+            if _sess.plan_takes_credit(plan):
+                _cr = _sess.available_credit(conn, uid)
+                _amt = _sess.credit_for(payable, _cr['amount']) if _cr else 0.0
+                if _amt > 0:
+                    _payable = round(payable - _amt, 2)
+                    _taxable, _gst = _sess.regrossed(_payable, gst_pct)
+                    session_credit, session_booking_id = _amt, _cr['booking_id']
+                    payable, taxable, gst = _payable, _taxable, _gst
+        except Exception as _ce:
+            try: conn.rollback()
+            except Exception: pass
+            logging.warning("checkout session credit: %s", _ce)
+
         paise = int(round(payable * 100))
         import requests as _rq
         try:
@@ -1729,15 +1756,20 @@ def api_pg_checkout_create_order():
         order = rr.json()
         conn.execute(
             "INSERT INTO pg_orders (razorpay_order_id, user_id, plan_id, amount, discount, "
-            " gst, payable, coupon_code, coupon_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')",
-            (order['id'], uid, plan_id, amount, discount, gst, payable, coupon_code, coupon_id))
+            " gst, payable, coupon_code, coupon_id, status, session_credit, session_booking_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?)",
+            (order['id'], uid, plan_id, amount, discount, gst, payable, coupon_code, coupon_id,
+             session_credit, session_booking_id))
         conn.commit()
         return jsonify({'ok': True, 'order_id': order['id'], 'amount': paise,
                         'currency': order.get('currency', 'INR'), 'key_id': key_id,
                         'plan_name': plan.get('name') or '',
                         'breakdown': {'base': amount, 'discount': discount,
                                       'taxable': taxable, 'gst_percent': gst_pct,
-                                      'gst': gst, 'payable': payable},
+                                      'gst': gst, 'payable': payable,
+                                      # session credit (GST-inclusive); taxable/gst above are AFTER it
+                                      'session_credit': session_credit,
+                                      'taxable_before_credit': taxable_before},
                         'prefill': {'name': user.get('name') or '',
                                     'email': user.get('email') or '',
                                     'contact': user.get('mobile') or ''}})
@@ -1797,7 +1829,33 @@ def api_pg_checkout_verify():
                               discount_amount=order.get('discount'), code=order.get('coupon_code') or '')
         conn.execute("UPDATE pg_orders SET status='paid', razorpay_payment_id=?, subscription_id=?, "
                      "paid_at=CURRENT_TIMESTAMP WHERE id=?", (pid, sub_id, order['id']))
+        # Consume the paid-session upgrade credit used on this order (once; same transaction).
+        _credit_conflict = None
+        if order.get('session_booking_id') and float(order.get('session_credit') or 0) > 0:
+            _cu = conn.execute("UPDATE pg_session_bookings SET credit_used_order_id = ?, credit_used_at = CURRENT_TIMESTAMP, "
+                               "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credit_used_order_id IS NULL "
+                               "RETURNING id", (oid, order['session_booking_id'])).fetchone()
+            if not _cu:
+                # Rare double use: two plan checkouts opened with the credit and BOTH paid. The doctor has
+                # paid, so the plan still activates — but flag it on the booking log for the team to settle.
+                _prev = conn.execute("SELECT credit_used_order_id FROM pg_session_bookings WHERE id = ?",
+                                     (order['session_booking_id'],)).fetchone()
+                if _prev and str(_prev['credit_used_order_id'] or '') != str(oid):
+                    logging.error("session credit used twice: booking %s, orders %s + %s",
+                                  order['session_booking_id'], _prev['credit_used_order_id'], oid)
+                    _credit_conflict = (order['session_booking_id'], _prev['credit_used_order_id'])
         conn.commit()
+        # Logged only AFTER the payment is committed, so a logging hiccup can never undo it.
+        if _credit_conflict:
+            try:
+                from pg_admin.routes import session_api as _sess
+                _sess._log(conn, _credit_conflict[0], 'credit_conflict', _credit_conflict[1], oid,
+                           'system', 'plan-verify')
+                conn.commit()
+            except Exception as _le:
+                try: conn.rollback()
+                except Exception: pass
+                logging.warning("credit conflict log: %s", _le)
         # One pathway: a paid counselling plan (PGCP Starter/Standard/Premium) enters the
         # SAME onboarding flow as a team invite. Guarded — payment is already locked above,
         # so a hiccup here must never fail the confirmation. (founder 2026-09-25)

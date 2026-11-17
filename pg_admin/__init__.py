@@ -723,3 +723,7 @@ def register_pg_admin(app):
                      api.admin_pg_pay_test_verify, methods=['POST'])
     app.add_url_rule('/api/pg/checkout/verify', 'api_pg_checkout_verify',
                      api.api_pg_checkout_verify, methods=['POST'])
+    # Paid 1-on-1 Counselling Session (₹4,999 incl. GST) for FREE doctors: doctor + Desk APIs,
+    # Registered Doctors → 💳 Paid Sessions tab. (founder 2026-11-17)
+    from pg_admin.routes import session_api as _session_api
+    _session_api.register(app)
