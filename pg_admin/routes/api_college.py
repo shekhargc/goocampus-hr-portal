@@ -397,7 +397,7 @@ def _int_arg(name):
         return None
 
 
-def api_pg_fees():
+def _api_pg_fees_raw():
     """GET /api/pg/fees — course-vs-college fee structure by quota/category.
 
     One row per (college × course × quota × category) with its fee, so a doctor can
@@ -460,7 +460,7 @@ def api_pg_fees():
                     'page': page, 'pages': pages, 'per_page': _PER_PAGE})
 
 
-def api_pg_fees_facets():
+def _api_pg_fees_facets_raw():
     """GET /api/pg/fees/facets?family= → distinct states/courses/quotas/categories that
     have priced seats, to populate the explorer's filter dropdowns."""
     if not _authorized():
@@ -632,3 +632,81 @@ def api_pg_college_favorite_delete(master_id):
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
+
+
+# ── Fee screens: per-worker cache + start-up warm (2026-11-17) ───────────────────
+# College Fees runs several heavy queries (2025 cut-offs ∪ 2026-27 fee store, normalised-name joins, 6 facet
+# DISTINCTs). On a busy day that passed goocampus.in's 15 s limit and the page showed nothing. Answers are now kept
+# per worker for 15 min, keyed by the query + the cut-off and fee-store versions (an upload changes the key), and
+# each worker prepares the default view shortly after it starts.
+_FEE_TTL = 900
+_FEE_VER = {'at': 0.0, 'v': None}
+
+
+def _fees_version(conn):
+    import time as _t
+    from pg_admin import perf as _perf
+    if _FEE_VER['v'] is None or _t.time() - _FEE_VER['at'] > 30:
+        try:
+            r = conn.execute("SELECT COUNT(*) AS n, COALESCE(MAX(id),0) AS m FROM pg_fees").fetchone()
+            fv = f"{r['n']}:{r['m']}"
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            fv = 'none'
+        _FEE_VER.update(at=_t.time(), v=fv + '|' + str(_perf.cutoffs_version(conn)))
+    return _FEE_VER['v']
+
+
+def _fee_cached(kind, raw):
+    if not _authorized():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    from pg_admin import perf as _perf
+    conn = get_db()
+    try:
+        ver = _fees_version(conn)
+    finally:
+        try: conn.close()
+        except Exception: pass
+    key = ('fees', kind, ver, tuple(sorted(request.args.items(multi=True))))
+    hit = _perf.cache_get(key)
+    if hit is not None:
+        return jsonify(hit)
+    resp = raw()
+    try:
+        r = resp[0] if isinstance(resp, tuple) else resp
+        code = resp[1] if isinstance(resp, tuple) and len(resp) > 1 else getattr(r, 'status_code', 200)
+        data = r.get_json(silent=True) if code == 200 else None
+        if data and data.get('ok', True) is not False:
+            _perf.cache_set(key, data, ttl=_FEE_TTL)
+    except Exception as e:
+        logging.warning("fees cache: %s", e)
+    return resp
+
+
+def api_pg_fees():
+    """GET /api/pg/fees — see _api_pg_fees_raw; cached per worker (15 min, version-keyed)."""
+    return _fee_cached('list', _api_pg_fees_raw)
+
+
+def api_pg_fees_facets():
+    """GET /api/pg/fees/facets — see _api_pg_fees_facets_raw; cached per worker (15 min, version-keyed)."""
+    return _fee_cached('facets', _api_pg_fees_facets_raw)
+
+
+def warm_fee_cache(app, delay=45):
+    """Prepare the default College Fees view (list + facets, medical) once per worker, a little after start-up.
+    Two internal calls per worker — never a page walk."""
+    import threading
+
+    def _go():
+        try:
+            with app.test_client() as tc:
+                for path, qs in (('/api/pg/fees/facets', {'family': 'medical'}),
+                                 ('/api/pg/fees', {'family': 'medical', 'sort': 'fee_asc'})):
+                    tc.get(path, query_string=qs, environ_base={'pg.internal_check': True})
+        except Exception as e:
+            logging.warning("warm_fee_cache: %s", e)
+    t = threading.Timer(delay, _go)
+    t.daemon = True
+    t.start()

@@ -386,6 +386,9 @@ def register_pg_admin(app):
                      api_college.api_pg_fees_facets, methods=['GET'])
     app.add_url_rule('/api/pg/fees/<int:college_id>', 'api_pg_fees_college',
                      api_college.api_pg_fees_college, methods=['GET'])
+    # College Fees default view prepared per worker after start-up (2026-11-17: heavy fee queries passed the
+    # website's 15 s limit and the page showed nothing). Two internal calls per worker, cached 15 min.
+    api_college.warm_fee_cache(app)
     # Doctor's saved colleges (star), shared across College DB / Stipend / Predictor
     app.add_url_rule('/api/pg/college-favorites', 'api_pg_college_favorites',
                      api_college.api_pg_college_favorites, methods=['GET', 'POST'])
