@@ -4,7 +4,8 @@ I need an option to decide what template to whom to send").
 Two parts, both on Registered Doctors → 💬 WhatsApp:
 
 1. WHO GETS each AUTOMATIC message (pg_kv 'wa_aud_<msg>', JSON). Welcome + Daily update: doctor type
-   (Free / Paid / Internal) + home states (none chosen = every state). Profile reminder: Free only, or off.
+   (Free / Paid / Internal) + home states (none chosen = every state). Profile reminder: Free / Paid / Internal
+   (no states — their state is what's missing).
    Enquiry: which enquiry sources (website enquiries / Management-NRI call-backs). The default (nothing saved)
    is exactly the old behaviour, so saving nothing changes nothing.
 
@@ -67,7 +68,7 @@ def get_aud(conn, msg):
     if msg == 'enquiry':
         src = a.get('sources')
         return {'sources': [s for s in src if s in dict(ENQ_SOURCES)] if isinstance(src, list) else ['website', 'mgmt']}
-    allowed = ['free'] if msg == 'incomplete' else ['free', 'paid', 'internal']
+    allowed = ['free', 'paid', 'internal']
     t = a.get('types')
     types = [x for x in t if x in allowed] if isinstance(t, list) else list(allowed)
     st = a.get('states') if isinstance(a.get('states'), list) else []
@@ -406,7 +407,7 @@ def admin_audience():
     if msg == 'enquiry':
         aud = {'sources': [s for s in request.form.getlist('sources') if s in dict(ENQ_SOURCES)]}
     else:
-        allowed = ['free'] if msg == 'incomplete' else ['free', 'paid', 'internal']
+        allowed = ['free', 'paid', 'internal']
         aud = {'types': [t for t in request.form.getlist('types') if t in allowed],
                'states': [] if msg == 'incomplete' else [s for s in request.form.getlist('states') if s]}
     conn = get_db()

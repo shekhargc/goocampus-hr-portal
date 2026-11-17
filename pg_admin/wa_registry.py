@@ -26,8 +26,9 @@ KNOWN = [
      'buttons': 'URL button: Click Here',
      'purpose': 'Welcome a new goocampus.in doctor once their profile has a name and state.',
      'used_in': 'goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 1, sign-up switch)',
-     'trigger_text': 'Automatic, every 10 min: doctors who signed up after the switch-on and have added name + state '
-                     '(within 7 days). Once per doctor. Not team / Counselling Desk.',
+     'trigger_text': 'Automatic, every 10 min: anyone registering for the first time — free OR paid by invitation — '
+                     'once they have added name + state (within 7 days of sign-up, after the switch-on). Once per '
+                     'doctor. Not team / Counselling Desk.',
      'variables': '{{1}} = doctor name (without "Dr.") · {{2}} = home state',
      'approved_on': '2026-11-17'},
     {'name': 'gc_profile_incomplete', 'language': 'en', 'category': 'UTILITY', 'status': 'APPROVED',
@@ -35,10 +36,10 @@ KNOWN = [
      'body_text': 'Your GooCampus.in dashboard is ready and your mobile number is verified. Please complete your '
                   'profile by adding your name and state to access the complete dashboard. It takes less than a minute.',
      'buttons': 'URL button: Click Here',
-     'purpose': 'Remind a new FREE doctor to add name + state so the full dashboard opens.',
+     'purpose': 'Remind a new doctor (free or invited) to add name + state so the full dashboard opens.',
      'used_in': 'goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 2, sign-up switch)',
-     'trigger_text': 'Automatic: free doctors still missing name or state 1 hour after sign-up, and again at 24 hours '
-                     '(max 2). Paid / invited / team / Desk accounts never get it.',
+     'trigger_text': 'Automatic: any new doctor (free or invited) still missing name or state 15 minutes after '
+                     'sign-up, and again at 24 hours (max 2). Team / Desk accounts never get it.',
      'variables': 'none',
      'approved_on': '2026-11-17'},
     {'name': 'gc_enquiry_account', 'language': 'en', 'category': 'UTILITY', 'status': 'APPROVED',
@@ -66,6 +67,16 @@ KNOWN = [
                   '{{4}} = latest update heading',
      'approved_on': '2026-11-17'},
 ]
+# Texts this module seeded earlier that were later corrected (founder 2026-11-17 night). A row still holding the
+# OLD seeded text (i.e. never edited by the team) is moved to the new KNOWN text; any team edit is left alone.
+OLD_SEED = {
+    'welcometogoocampus': {'trigger_text': 'Automatic, every 10 min: doctors who signed up after the switch-on and have '
+                                           'added name + state (within 7 days). Once per doctor. Not team / Counselling Desk.'},
+    'gc_profile_incomplete': {
+        'purpose': 'Remind a new FREE doctor to add name + state so the full dashboard opens.',
+        'trigger_text': 'Automatic: free doctors still missing name or state 1 hour after sign-up, and again at 24 '
+                        'hours (max 2). Paid / invited / team / Desk accounts never get it.'},
+}
 # Purposes for older templates (filled only where empty).
 KNOWN_PURPOSE = {
     'communitylink2': ('Invite NEET PG doctors to the GooCampus NEET PG WhatsApp community.',
@@ -105,6 +116,11 @@ def prepare(conn):
                 if sets:
                     conn.execute("UPDATE wa_templates SET " + ', '.join(f"{c} = ?" for c, _ in sets) + " WHERE id = ?",
                                  [v for _, v in sets] + [row['id']])
+        known = {t['name']: t for t in KNOWN}
+        for name, cols in OLD_SEED.items():
+            for c, old in cols.items():
+                conn.execute(f"UPDATE wa_templates SET {c} = ? WHERE name = ? AND {c} = ?",
+                             (known[name][c], name, old))
         for name, (purpose, used, trig, var) in KNOWN_PURPOSE.items():
             conn.execute("UPDATE wa_templates SET purpose = COALESCE(NULLIF(purpose,''), ?), "
                          "used_in = COALESCE(NULLIF(used_in,''), ?), trigger_text = COALESCE(NULLIF(trigger_text,''), ?), "
