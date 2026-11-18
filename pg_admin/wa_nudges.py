@@ -40,6 +40,10 @@ DAILY_TPL = 'gc_daily_account_update'
 TEMPLATE_IDS = {WELCOME_TPL: '1413956730516058', INCOMPLETE_TPL: '1064689406591742',
                 ENQUIRY_TPL: '1118950867607827', DAILY_TPL: '39934717086143575'}
 SENDER = os.environ.get('PG_WA_SENDER') or '15558246314'
+# Buttons that Infobip needs a value for on EVERY send (quick replies + dynamic URLs), in template order.
+# 2026-11-18: gc_daily_account_update went out without one → every message "Failed to match template parameters
+# (code 7008)" — the "Stop updates" quick reply needs its payload. The payload comes back on a tap → STOP handling.
+TEMPLATE_BUTTONS = {'gc_daily_account_update': [{"type": "QUICK_REPLY", "parameter": "stop updates"}]}
 LANGS = ('en', 'en_US', 'en_GB')          # tried in order until Infobip accepts the template
 KV_ON, KV_SINCE = 'wa_nudges', 'wa_nudges_since'
 # Each message group has its own ON/OFF switch (+ a start line for the enquiry message).
@@ -180,9 +184,11 @@ def send_template(to, template, placeholders=None, sender=None, langs=None):
     headers = {"Authorization": f"App {key}", "Content-Type": "application/json"}
     last = ''
     for lang in (langs or LANGS):
+        tdata = {"body": {"placeholders": list(placeholders or [])}}
+        if TEMPLATE_BUTTONS.get(template):
+            tdata["buttons"] = TEMPLATE_BUTTONS[template]
         msg = {"from": sender or SENDER, "to": to, "content": {
-            "templateName": template, "language": lang,
-            "templateData": {"body": {"placeholders": list(placeholders or [])}}}}
+            "templateName": template, "language": lang, "templateData": tdata}}
         try:                      # Infobip posts the delivery report back here (WhatsApp → Delivery report)
             from pg_admin.wa_delivery import notify_url
             msg["notifyUrl"] = notify_url()
@@ -411,18 +417,21 @@ def daily_run():
 NEWS_MAX_PER_DAY = 3     # at most this many news updates per doctor per IST day
 
 
-def _send_news(conn, news, batch, ref=''):
+def _send_news(conn, news, batch, ref='', only_users=None, cap=True):
     """One WhatsApp per doctor whose MCC / state is in `news` (gc_daily_account_update). Max NEWS_MAX_PER_DAY a day."""
     summary = {'sent': 0, 'failed': 0, 'skipped': 0, 'capped': 0}
     day_start = conn.execute("SELECT (date_trunc('day', CURRENT_TIMESTAMP + INTERVAL '330 minutes') "
                              "- INTERVAL '330 minutes') AS t").fetchone()['t']
     for d, cnt, label, latest in plan_for_news(conn, news):
+        if only_users is not None and d['id'] not in only_users:
+            continue
         if opted_out(conn, d.get('mobile')):
             summary['skipped'] += 1
             continue
         today_n = conn.execute("SELECT COUNT(*) AS n FROM pg_wa_nudge_log WHERE user_id = ? AND kind LIKE ? "
-                               "AND status = 'sent' AND created_at >= ?", (d['id'], 'daily:%', day_start)).fetchone()['n']
-        if today_n >= NEWS_MAX_PER_DAY:
+                               "AND status = 'sent' AND COALESCE(dlr, '') <> 'failed' AND created_at >= ?",
+                               (d['id'], 'daily:%', day_start)).fetchone()['n']
+        if cap and today_n >= NEWS_MAX_PER_DAY:
             summary['capped'] += 1
             continue
         ph = [welcome_name(d.get('name')), str(cnt), clean_placeholder(label, 60), clean_placeholder(latest, 120)]
@@ -488,16 +497,68 @@ def admin_digest_whatsapp(bid):
         ids = [int(x) for x in ((r or {}).get('news_ids') or '').split(',') if x.strip().isdigit()]
     finally:
         conn.close()
+    from flask import request
+    resend = request.form.get('resend') == '1'
     if not on:
         flash('The WhatsApp News update switch is OFF (Registered Doctors → 💬 WhatsApp).', 'error')
     elif not ids:
         flash('No updates found for that email.', 'error')
     elif (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
         flash('Staging never sends WhatsApp — do this on goocampus.org.', 'error')
+    elif resend:
+        import threading
+        threading.Thread(target=resend_news_batch, args=(ids, f'Combined email #{bid}'), daemon=True).start()
+        flash(f'Re-sending the WhatsApp for combined email #{bid} to everyone it did not reach (not marked '
+              f'Delivered / Read). Check WhatsApp → Delivery report in a few minutes.', 'success')
     else:
         trigger_news_send(ids, f'Combined email #{bid}')
         flash(f'WhatsApp news update for combined email #{bid} is going out in the background.', 'success')
     return redirect(url_for('pg_news_admin'))
+
+
+def resend_news_batch(news_ids, ref=''):
+    """Founder 2026-11-18: combined email #14's WhatsApp all failed (code 7008, missing button value). Re-send the same
+    update to every doctor in that batch whose message is NOT Delivered / Read. New log key per retry, so each retry is
+    itself once-only; the daily cap is skipped (it replaces a message that never arrived)."""
+    ids = sorted({int(i) for i in news_ids if str(i).isdigit()})
+    if not ids:
+        return {}
+    conn = get_db()
+    try:
+        ensure_tables(conn)
+        rows = conn.execute("SELECT batch FROM pg_wa_news_done WHERE news_id IN (" + ','.join(['?'] * len(ids)) + ")",
+                            tuple(ids)).fetchall()
+        batches = sorted({r['batch'] for r in rows if r['batch']})
+        kinds = ['daily:' + b for b in batches]
+        if not kinds:
+            return {}
+        ph_k = ','.join(['?'] * len(kinds))
+        # everyone who was in the batch (original or earlier retries) …
+        tried = conn.execute(f"SELECT DISTINCT user_id FROM pg_wa_nudge_log WHERE user_id IS NOT NULL AND "
+                             f"(kind IN ({ph_k}) OR " + ' OR '.join(['kind LIKE ?'] * len(kinds)) + ")",
+                             tuple(kinds) + tuple(k + ':r%' for k in kinds)).fetchall()
+        # … minus those it reached
+        reached = conn.execute(f"SELECT DISTINCT user_id FROM pg_wa_nudge_log WHERE user_id IS NOT NULL AND "
+                               f"dlr IN ('delivered', 'read') AND (kind IN ({ph_k}) OR " +
+                               ' OR '.join(['kind LIKE ?'] * len(kinds)) + ")",
+                               tuple(kinds) + tuple(k + ':r%' for k in kinds)).fetchall()
+        todo = {r['user_id'] for r in tried} - {r['user_id'] for r in reached}
+        if not todo:
+            return {}
+        n_prev = conn.execute(f"SELECT COUNT(DISTINCT kind) AS n FROM pg_wa_nudge_log WHERE " +
+                              ' OR '.join(['kind LIKE ?'] * len(kinds)), tuple(k + ':r%' for k in kinds)).fetchone()['n']
+        news = [dict(r) for r in conn.execute(
+            "SELECT id, scope, COALESCE(state,'') AS state, heading FROM pg_news n WHERE id IN (" +
+            ','.join(['?'] * len(ids)) + ") AND COALESCE(is_published, TRUE) AND (to_jsonb(n)->>'deleted_at') IS NULL "
+            "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", tuple(ids)).fetchall()]
+        return _send_news(conn, news, f"{batches[-1]}:r{n_prev + 1}", ref + ' (re-send)', only_users=todo, cap=False)
+    except Exception as e:
+        logger.error("wa news resend %s: %s", ids, e)
+        try: conn.rollback()
+        except Exception: pass
+        return {}
+    finally:
+        conn.close()
 
 
 def trigger_news_send(news_ids, ref=''):
