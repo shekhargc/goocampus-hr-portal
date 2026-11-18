@@ -85,6 +85,8 @@ def ensure_tables(conn):
     conn.commit()
     from pg_admin import wa_delivery
     wa_delivery.ensure(conn)                 # msg_id / delivery columns (once per process)
+    conn.execute("CREATE TABLE IF NOT EXISTS pg_wa_news_hold (news_id INTEGER PRIMARY KEY, ref TEXT DEFAULT '', "
+                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS pg_wa_news_done (news_id INTEGER PRIMARY KEY, batch TEXT DEFAULT '', "
                  "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.commit()
@@ -442,7 +444,26 @@ def _send_news(conn, news, batch, ref='', only_users=None, cap=True):
     return summary
 
 
-def news_send_for(news_ids, ref=''):
+EVENING_IST = '7:30 pm'
+
+
+def _ist_day_start_sql():
+    return "(date_trunc('day', CURRENT_TIMESTAMP + INTERVAL '330 minutes') - INTERVAL '330 minutes')"
+
+
+def sent_today(conn):
+    """Has a news WhatsApp already gone out today (IST)? (any claimed batch except held ones)"""
+    return bool(conn.execute("SELECT 1 FROM pg_wa_news_done WHERE created_at >= " + _ist_day_start_sql() +
+                             " LIMIT 1").fetchone())
+
+
+def held_ids(conn):
+    return [r['news_id'] for r in conn.execute(
+        "SELECT h.news_id FROM pg_wa_news_hold h WHERE NOT EXISTS (SELECT 1 FROM pg_wa_news_done d "
+        "WHERE d.news_id = h.news_id) ORDER BY h.news_id").fetchall()]
+
+
+def news_send_for(news_ids, ref='', force=False):
     """Founder 2026-11-18: the WhatsApp news update goes WITH the email — when "Send combined email now" (all its
     updates) or a single update's email send is pressed. Not for "Send to team" tests. Each news item is claimed in
     pg_wa_news_done first, so the same update never goes on WhatsApp twice. Live service + News switch ON only."""
@@ -456,6 +477,16 @@ def news_send_for(news_ids, ref=''):
         ensure_tables(conn)
         if not is_enabled(conn, 'daily'):
             return {}
+        # Founder 2026-11-18: the FIRST news of the day goes on WhatsApp at once; anything after that is HELD and
+        # goes as one combined WhatsApp at 7:30 pm (Meta caps a 2nd/3rd marketing message the same day).
+        if not force and sent_today(conn):
+            for nid in ids:
+                conn.execute("INSERT INTO pg_wa_news_hold (news_id, ref) VALUES (?, ?) ON CONFLICT (news_id) DO NOTHING",
+                             (nid, ref or ''))
+            conn.commit()
+            logger.info("wa news %s held for the %s evening update", ids, EVENING_IST)
+            return {'held': len(ids)}
+        ids = sorted(set(ids) | set(held_ids(conn)))      # anything still held (e.g. published after 7:30 pm) goes too
         claimed = []
         for nid in ids:
             r = conn.execute("INSERT INTO pg_wa_news_done (news_id, batch) VALUES (?, ?) ON CONFLICT (news_id) "
@@ -511,7 +542,7 @@ def admin_digest_whatsapp(bid):
         flash(f'Re-sending the WhatsApp for combined email #{bid} to everyone it did not reach (not marked '
               f'Delivered / Read). Check WhatsApp → Delivery report in a few minutes.', 'success')
     else:
-        trigger_news_send(ids, f'Combined email #{bid}')
+        trigger_news_send(ids, f'Combined email #{bid}', force=True)       # pressed by hand = send now
         flash(f'WhatsApp news update for combined email #{bid} is going out in the background.', 'success')
     return redirect(url_for('pg_news_admin'))
 
@@ -582,11 +613,53 @@ def resend_news_batch(news_ids, ref=''):
         conn.close()
 
 
-def trigger_news_send(news_ids, ref=''):
+def evening_run():
+    """7:30 pm IST: everything held today → ONE combined news WhatsApp per doctor (live, News switch ON)."""
+    if (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
+        return {}
+    conn = get_db()
+    try:
+        ensure_tables(conn)
+        if not is_enabled(conn, 'daily'):
+            return {}
+        if not conn.execute("SELECT pg_try_advisory_lock(hashtext('pg_wa_evening')) AS ok").fetchone()['ok']:
+            return {}
+        try:
+            ids = held_ids(conn)
+            if not ids:
+                return {}
+            batch = 'v' + _ist_today().strftime('%Y%m%d')
+            claimed = [r['news_id'] for r in [conn.execute(
+                "INSERT INTO pg_wa_news_done (news_id, batch) VALUES (?, ?) ON CONFLICT (news_id) DO NOTHING "
+                "RETURNING news_id", (nid, batch)).fetchone() for nid in ids] if r]
+            conn.commit()
+            if not claimed:
+                return {}
+            news = [dict(r) for r in conn.execute(
+                "SELECT id, scope, COALESCE(state,'') AS state, heading FROM pg_news n WHERE id IN (" +
+                ','.join(['?'] * len(claimed)) + ") AND COALESCE(is_published, TRUE) "
+                "AND (to_jsonb(n)->>'deleted_at') IS NULL "
+                "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", tuple(claimed)).fetchall()]
+            if not news:
+                return {}
+            return _send_news(conn, news, batch, 'Evening update ' + _ist_today().strftime('%d %b'))
+        finally:
+            conn.execute("SELECT pg_advisory_unlock(hashtext('pg_wa_evening'))")
+            conn.commit()
+    except Exception as e:
+        logger.error("wa evening run: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+        return {}
+    finally:
+        conn.close()
+
+
+def trigger_news_send(news_ids, ref='', force=False):
     """Background thread so the email button returns at once."""
     import threading
     try:
-        threading.Thread(target=news_send_for, args=(list(news_ids or []), ref), daemon=True,
+        threading.Thread(target=news_send_for, args=(list(news_ids or []), ref, force), daemon=True,
                          name='wa-news-send').start()
     except Exception as e:
         logger.error("wa news trigger: %s", e)
@@ -661,7 +734,9 @@ def start_scheduler():
         sch = BackgroundScheduler()
         sch.add_job(scheduled_run, 'interval', minutes=10, id='pg_wa_nudges',
                     coalesce=True, max_instances=1, misfire_grace_time=600)
-        # (8 pm IST daily digest retired 2026-11-18 — news updates now go WITH the news email, see news_send_for)
+        # 7:30 pm IST: held news (published after the day's first WhatsApp) → one combined WhatsApp (2026-11-18)
+        sch.add_job(evening_run, 'cron', hour=14, minute=0, id='pg_wa_evening',
+                    coalesce=True, max_instances=1, misfire_grace_time=3600)
         sch.start()
     except Exception as e:
         logger.warning("wa nudge scheduler: %s", e)

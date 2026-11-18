@@ -111,6 +111,10 @@ def summary(conn):
             done = conn.execute("SELECT COUNT(*) AS n FROM pg_wa_news_done WHERE news_id IN (" +
                                 ','.join(['?'] * len(ids)) + ")", tuple(ids)).fetchone()['n'] if ids else 0
             last['wa_done'] = bool(ids) and done >= len(ids)
+            held = conn.execute("SELECT COUNT(*) AS n FROM pg_wa_news_hold h WHERE h.news_id IN (" +
+                                ','.join(['?'] * len(ids)) + ") AND NOT EXISTS (SELECT 1 FROM pg_wa_news_done d "
+                                "WHERE d.news_id = h.news_id)", tuple(ids)).fetchone()['n'] if ids else 0
+            last['wa_held'] = held
         except Exception:
             conn.rollback()
             last['wa_done'] = None
