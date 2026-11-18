@@ -737,3 +737,6 @@ def register_pg_admin(app):
     # goocampus.in sign-up WhatsApp messages (welcome + profile reminder), OFF until switched on.
     from pg_admin import wa_nudges as _wa_nudges
     _wa_nudges.register(app)
+    # International dashboard: country pathways + secure paid e-book reader (founder 2026-11-18).
+    from pg_admin import ebooks as _ebooks
+    _ebooks.register(app)
