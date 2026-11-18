@@ -188,11 +188,11 @@ def _status_of(row):
 def report_page():
     from flask import request, render_template
     from pg_admin import wa_nudges as w
-    f = {k: (request.args.get(k) or '').strip() for k in ('template', 'type', 'status', 'from', 'to', 'q')}
+    f = {k: (request.args.get(k) or '').strip() for k in ('template', 'type', 'status', 'from', 'to', 'q', 'batch')}
     for k in ('from', 'to'):
         if f[k] and not re.fullmatch(r'\d{4}-\d{2}-\d{2}', f[k]):
             f[k] = ''
-    rows, summary, templates, groups = [], [], [], []
+    rows, summary, templates, groups, batches = [], [], [], [], []
     conn = get_db()
     try:
         w.ensure_tables(conn)
@@ -253,6 +253,38 @@ def report_page():
                 conn.rollback()
                 logger.warning("wa report quick: %s", e)
         rows.sort(key=lambda r: r['created_at'] or 0, reverse=True)
+        # SENDS ("batches", founder 2026-11-18): one line per send of a template — Combined email #14, #15, a group
+        # send, … — re-sends folded into their original send. Click one → the whole page shows just that send.
+        for r in rows:
+            r['batch'] = _batch_key(r)
+        binfo = {}
+        for r in rows:
+            b = binfo.setdefault(r['batch'], {'key': r['batch'], 'template': r['template'], 'label': '', 'first': None,
+                                              'last': None, 'rows': []})
+            b['rows'].append(r)
+            ref = (r.get('ref') or '').replace(' (re-send)', '').strip()
+            if ref and not b['label']:
+                b['label'] = ref
+            t = r.get('created_at')
+            if t and (b['first'] is None or t < b['first']):
+                b['first'] = t
+            if t and (b['last'] is None or t > b['last']):
+                b['last'] = t
+        rank_ = {'read': 5, 'delivered': 4, 'waiting': 3, 'failed': 2, 'not_sent': 1}
+        for b in binfo.values():
+            bestb = {}
+            for r in b['rows']:
+                k = r.get('user_id') or ('m', r.get('mobile'), r.get('kind') if not r.get('user_id') else '')
+                if rank_[r['st']] > rank_.get(bestb.get(k), 0):
+                    bestb[k] = r['st']
+            b.update(people=len(bestb), attempts=len(b['rows']), resends=sum(1 for r in b['rows'] if ':r' in (r.get('kind') or '')),
+                     **{st: sum(1 for v in bestb.values() if v == st) for st in rank_})
+            b['label'] = b['label'] or _batch_label(b['key'], b['rows'][0], w)
+            del b['rows']
+        if f['template'] or f['batch']:
+            batches = sorted(binfo.values(), key=lambda b: str(b['first'] or ''), reverse=True)
+        if f['batch']:
+            rows = [r for r in rows if r['batch'] == f['batch']]
         # PEOPLE, not attempts (founder 2026-11-18): each person counts once per template with their BEST result
         # across all attempts (a failed first try + a delivered re-send = delivered).
         rank = {'read': 5, 'delivered': 4, 'waiting': 3, 'failed': 2, 'not_sent': 1}
@@ -327,9 +359,36 @@ def report_page():
         conn.close()
     shown = rows[:1500]
     return render_template('wa_delivery.html', rows=shown, total=len(rows), summary=summary, templates=templates, f=f,
-                           status_choices=STATUS_CHOICES, type_choices=TYPE_CHOICES, groups=groups,
+                           status_choices=STATUS_CHOICES, type_choices=TYPE_CHOICES, groups=groups, batches=batches,
                            totals={k: sum(t.get(k, 0) for t in summary) for k in ('total', 'delivered', 'read', 'failed',
                                                                                    'waiting', 'not_sent', 'attempts')})
+
+
+def _batch_key(r):
+    kind = r.get('kind') or ''
+    if r.get('src') == 'quick':
+        return 'quick:' + (r.get('what') or 'Quick Send')
+    if kind.startswith('daily:'):
+        parts = kind.split(':')
+        return 'daily:' + (parts[1] if len(parts) > 1 else '')
+    if kind.startswith('campaign:'):
+        return kind.split(':')[0] + ':' + kind.split(':')[1]
+    if kind.startswith('enquiry'):
+        return 'enquiry'
+    if kind.startswith('incomplete'):
+        return kind                    # 15-min / 24-h / 72-h reminders as separate lines
+    return kind.split(':')[0] or 'other'
+
+
+def _batch_label(key, r, w):
+    if key.startswith('quick:'):
+        return key[6:]
+    if key.startswith('daily:'):
+        return 'News update ' + key[6:]
+    if key.startswith('campaign:'):
+        return 'Group send #' + key.split(':')[1]
+    return {'enquiry': 'Enquiry thank-you (all)', 'welcome': 'Welcome (all sign-ups)', 'test': 'Test sends'}.get(
+        key, w.kind_label(key))
 
 
 def _what(r, w):

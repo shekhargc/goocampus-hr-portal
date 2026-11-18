@@ -45,6 +45,32 @@
         <div class="wd-kpi"><b style="color:#64748b;">{{ totals.attempts }}</b><span>attempts in all ({{ totals.attempts - totals.total }} repeats / re-sends)</span></div>
     </div>
 
+    {% if batches %}
+    <div class="wd-sub" style="margin-bottom:0.35rem;font-weight:700;color:var(--navy);">SENDS{% if f.template %} OF {{ f.template }}{% endif %} — one line per send (re-sends folded in); click one to see only that send</div>
+    <div class="wd-card">
+        <table class="wd-t">
+            <thead><tr><th>S.No</th><th>Send</th><th>When (IST)</th><th class="wd-num">People</th><th class="wd-num">✓✓ Got it</th><th class="wd-num">Read</th><th class="wd-num">Did not get it</th><th class="wd-num">No report yet</th><th class="wd-num">Attempts</th></tr></thead>
+            <tbody>
+            {% for b in batches %}
+            <tr style="{{ 'background:#fff7ed;' if f.batch == b.key }}">
+                <td>{{ loop.index }}</td>
+                <td><a href="?template={{ b.template|urlencode }}&batch={{ b.key|urlencode }}" style="font-weight:700;color:var(--navy);">{{ b.label }}</a>
+                    {% if b.resends %}<div class="wd-sub">incl. {{ b.resends }} re-send{{ '' if b.resends == 1 else 's' }}</div>{% endif %}</td>
+                <td class="wd-sub" style="white-space:nowrap;">{{ b.first|format_datetime if b.first else '' }}</td>
+                <td class="wd-num">{{ b.people }}</td>
+                <td class="wd-num" style="color:#166534;font-weight:700;">{{ b.delivered + b.read }}{% if b.people %} <span class="wd-sub">{{ ((b.delivered + b.read) * 100 / b.people)|round|int }}%</span>{% endif %}</td>
+                <td class="wd-num" style="color:#1e40af;">{{ b.read }}</td>
+                <td class="wd-num" style="color:#991b1b;">{{ b.failed + b.not_sent }}</td>
+                <td class="wd-num">{{ b.waiting }}</td>
+                <td class="wd-num wd-sub">{{ b.attempts }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% if f.batch %}<div style="padding:0.5rem 0.8rem;"><a href="?template={{ f.template|urlencode }}" class="wd-sub">← all sends of {{ f.template or 'all templates' }}</a></div>{% endif %}
+    </div>
+    {% endif %}
+
     {% if groups %}
     <div class="wd-card">
         <table class="wd-t">
@@ -77,6 +103,7 @@
         <label class="wd-sub">From <input type="date" name="from" value="{{ f['from'] }}"></label>
         <label class="wd-sub">to <input type="date" name="to" value="{{ f.to }}"></label>
         <input type="search" name="q" value="{{ f.q }}" placeholder="Doctor name, last 4 digits, or 'Combined email #14'" style="min-width:260px;">
+        {% if f.batch %}<input type="hidden" name="batch" value="{{ f.batch }}">{% endif %}
         <button class="wd-btn">Show</button>
         <a href="/whatsapp/delivery" class="wd-sub" style="margin-left:0.3rem;">Clear</a>
     </form>
