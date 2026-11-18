@@ -310,3 +310,20 @@ MD/MS colleges in (B): Talcher (PMP), Phulbani (SLS), Sundargarh (GMCH), Keonjha
 BFUHS Public Notice 03/607 (18.11.2026): 42 newly approved seats (GGS Faridkot 16, Dr. B.R. Ambedkar SIMS Mohali 16 —
 AIQ / State Quota with IP / SC / BC; Adesh Bathinda 10 — General Merit / Open Merit). A checked RECORD only: Punjab has
 no seat-matrix body loaded yet; use it as new_in_round when the Punjab matrix is loaded. 17 seats are AIQ (MCC), 25 state.
+
+## Karnataka Round 2 vacant seats (`karnataka_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/karnataka_round2.py <round2.pdf> <cutoffs2025.json> <out.json>
+KEA "PROVISIONAL SECOND ROUND SEAT MATRIX" (18.11.2026): one table per college × course(seat type) line in KEA allotment
+codes (1G … STH, 67 columns + Total). Separate body "Karnataka — Round 2 — State Counselling" (round_no 2, list_type
+vacancy) — the Round 1 body is untouched. Codes map to Round 1's quota / category labels (S1-S4 = SC-A / SC-B / SC-C /
+SC-C (20%) per the PDF footer, …H = KK, P… = PwD, MNG = OTH(Q)); COLLEGES / COURSES are read from karnataka.py.
+Checks: line = Total, each college's lines = its Total line (column by column), every column = Grand Total. 2026: 2,583
+seats, 65 colleges; no line above its Round 1 seats.
+
+## Telangana Management Quota (`telangana_mq.py`)
+    /usr/bin/python3 tools/seat_matrix/telangana_mq.py <mq_phase1.pdf> <cutoffs2025.json> <out.json>
+KNRUHS "ADMISSIONS UNDER MANAGEMENT QUOTA … SEAT MATRIX FOR FIRST PHASE" (18.11.2026). Own body "Telangana — Management
+Quota" (the Competent Authority body has no MQ seats). 4 colleges per page × MQ1 L / MQ1 UR / MQ2 / MQ3 → Management
+Quota-(Cat-B) MQ1-Local / MQ1-UR, NRI Quota-(Cat-C) MQ2-UR, Institutional Quota-(Cat-C) MQ3-UR (-MSM at the 4 Muslim
+minority colleges), 2025 KNRUHS wording. No totals printed: every printed number must be a parsed cell. 2026: 977 seats,
+23 colleges.
