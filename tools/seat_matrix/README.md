@@ -339,3 +339,18 @@ tools/results/punjab.py (2025 college-family quotas). There is NO Punjab Round 1
 published one as a file. 2026: 401 vacant + 25 added = 426 seats, 29 colleges (Round 2 on hold, MCC Notice 10).
 Note: the vacancy link on the BFUHS page has no ".pdf" ending in the href — the fetcher missed it; it is archived
 (inbox 1815).
+
+## Andhra Pradesh CQ Round 1 (`andhra_pradesh_cq.py`)
+Dr NTRUHS PG (Medical) Competent Authority Quota seat matrix 2026-27, from
+https://drntr.uhsap.in/index/pgmedicalseatmatrix2026 (18 PDFs, archived as inbox 1797-1814). The page has one seat
+matrix plus one NET GROUP file for each of AU / SVU / SWI, in Non-Service and Service. Minority has a matrix only.
+**Always use the REVISED AU files** (memo dated 11-11-2026, MD Radio-Diagnosis). The matrix has 42 category columns,
+and a blank cell counts as 0. Quota is `Govt Quota - <Non Service|Service>-<AU|SVU|SWI>-<Local|APUR>`, keyed by seat
+area. SWI seats are all APUR. Minority seats are MIN-G-MSM inside the AU/SVU quotas. SC_POOL/BC_POOL seats become
+SC-POOL/BC-POOL; they have no cut-off link and are filled by any SC/BC sub-group on merit.
+**NET GROUP** gives course × category totals for each file. It equals the printed `<course> Total` rows, so it is a
+cross-check, not extra seats. The reader asserts both checks; an all-zero NET GROUP line equals an absent course.
+`--allot cells.json` checks Round 1 allotments against the matrix. In Phase-I the fit is exact at
+college × course × area × S/NS. It is not exact per category, because the lists print the candidate's category on
+OC/pool seats. 2026-27: 1,947 seats / 1,827 rows / 36 colleges. Body `Andhra Pradesh — State Counselling` (MQ is
+its own body).
