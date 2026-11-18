@@ -62,6 +62,16 @@ def ensure(conn):
         conn.execute("UPDATE pg_wa_nudge_log SET msg_id = substring(response from '\"messageId\"\\s*:\\s*\"([^\"]+)\"') "
                      "WHERE msg_id IS NULL AND status IN ('sent', 'failed') AND response LIKE ?", ('%messageId%',))
         conn.commit()
+        # Founder-approved 2026-11-18: combined email #14's first WhatsApp (11:04–11:06 IST) was rejected by WhatsApp
+        # (code 7008, missing "Stop updates" button value — confirmed in Infobip's logs) before reports were wired up.
+        # Mark exactly those rows Failed so the report's totals are true. Idempotent (only rows still without a report).
+        conn.execute("UPDATE pg_wa_nudge_log SET dlr = 'failed', dlr_at = CURRENT_TIMESTAMP, dlr_reason = ? "
+                     "WHERE template = 'gc_daily_account_update' AND dlr IS NULL AND status = 'sent' "
+                     "AND kind LIKE ? AND kind NOT LIKE ? "
+                     "AND created_at >= '2026-11-18 05:25:00' AND created_at < '2026-11-18 05:45:00'",
+                     ('Undeliverable: code 7008 — template button value missing (fixed 11:20; re-sent)',
+                      'daily:e%', '%:r%'))
+        conn.commit()
         _READY['done'] = True          # only once the columns really exist (a lock timeout retries next time)
     except Exception as e:
         logger.warning("wa_delivery.ensure: %s", e)
