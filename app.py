@@ -55420,6 +55420,15 @@ def wa_webhook():
         if not msg_id:
             continue
 
+        # goocampus.in automatic / group-send WhatsApps (WhatsApp → Delivery report), 2026-11-18
+        try:
+            from pg_admin import wa_delivery as _wad
+            _wad.handle_report(conn, r)
+        except Exception as _de:
+            logging.warning("wa_webhook delivery: %s", _de)
+            try: conn.rollback()
+            except Exception: pass
+
         # Delivery report
         status_obj = r.get('status', {})
         group_name = status_obj.get('groupName', '').upper()

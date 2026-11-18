@@ -1,0 +1,107 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}WhatsApp Delivery Report - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .wd { max-width: 1400px; }
+    .wd h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 0.3rem; }
+    .wd .subtitle { font-size: 0.86rem; color: var(--gray-500); margin-bottom: 1rem; max-width: 980px; }
+    .wd-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
+    .wd-kpi { background: #fff; border: 1px solid var(--gray-200); border-radius: 10px; padding: 0.7rem 0.9rem; }
+    .wd-kpi b { display: block; font-size: 1.35rem; color: var(--navy); }
+    .wd-kpi span { font-size: 0.74rem; color: var(--gray-500); }
+    .wd-f { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.9rem; }
+    .wd-f select, .wd-f input { padding: 0.42rem 0.55rem; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 0.83rem; font-family: inherit; }
+    .wd-btn { background: var(--navy); color: #fff; border: none; padding: 0.45rem 0.9rem; border-radius: 8px; font-weight: 700; font-size: 0.82rem; cursor: pointer; }
+    .wd-card { background: #fff; border: 1px solid var(--gray-200); border-radius: 12px; overflow-x: auto; margin-bottom: 1.1rem; }
+    .wd-t { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .wd-t th { background: var(--gray-50); color: var(--gray-600); text-align: left; padding: 0.55rem 0.7rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+    .wd-t td { padding: 0.5rem 0.7rem; border-top: 1px solid var(--gray-100); vertical-align: top; }
+    .wd-pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+    .st-delivered { background: #dcfce7; color: #166534; }
+    .st-read { background: #dbeafe; color: #1e40af; }
+    .st-failed, .st-not_sent { background: #fee2e2; color: #991b1b; }
+    .st-waiting { background: #f1f5f9; color: #475569; }
+    .wd-sub { color: var(--gray-500); font-size: 0.74rem; }
+    .wd-num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="wd">
+    <h1>Delivery report</h1>
+    <p class="subtitle">Every WhatsApp the portal sent: which template, what it was for (welcome, profile reminder, enquiry, a news email, a group send, a test, Quick Send),
+       and whether it reached the phone. <b>✓✓ Delivered</b> = on the doctor's phone · <b>Read</b> = opened (only when WhatsApp reports it) ·
+       <b>Failed</b> = WhatsApp couldn't deliver (reason shown) · <b>No report yet</b> = accepted, waiting for WhatsApp's answer.
+       Reports usually arrive within a minute; a backup check runs every 10 minutes.</p>
+
+    <div class="wd-kpis">
+        <div class="wd-kpi"><b>{{ totals.total }}</b><span>messages (these filters)</span></div>
+        <div class="wd-kpi"><b style="color:#166534;">{{ totals.delivered + totals.read }}</b><span>✓✓ delivered{% if totals.total %} · {{ ((totals.delivered + totals.read) * 100 / totals.total)|round|int }}%{% endif %}</span></div>
+        <div class="wd-kpi"><b style="color:#1e40af;">{{ totals.read }}</b><span>read</span></div>
+        <div class="wd-kpi"><b style="color:#991b1b;">{{ totals.failed + totals.not_sent }}</b><span>failed / not sent</span></div>
+        <div class="wd-kpi"><b style="color:#475569;">{{ totals.waiting }}</b><span>no report yet</span></div>
+    </div>
+
+    <form class="wd-f" method="get">
+        <select name="template"><option value="">All templates</option>
+            {% for t in templates %}<option value="{{ t }}" {{ 'selected' if f.template == t }}>{{ t }}</option>{% endfor %}</select>
+        <select name="type"><option value="">All message types</option>
+            {% for k, l in type_choices %}<option value="{{ k }}" {{ 'selected' if f.type == k }}>{{ l }}</option>{% endfor %}</select>
+        <select name="status"><option value="">Any status</option>
+            {% for k, l in status_choices %}<option value="{{ k }}" {{ 'selected' if f.status == k }}>{{ l }}</option>{% endfor %}</select>
+        <label class="wd-sub">From <input type="date" name="from" value="{{ f['from'] }}"></label>
+        <label class="wd-sub">to <input type="date" name="to" value="{{ f.to }}"></label>
+        <input type="search" name="q" value="{{ f.q }}" placeholder="Doctor name, last 4 digits, or 'Combined email #14'" style="min-width:260px;">
+        <button class="wd-btn">Show</button>
+        <a href="/whatsapp/delivery" class="wd-sub" style="margin-left:0.3rem;">Clear</a>
+    </form>
+
+    {% if summary %}
+    <div class="wd-card">
+        <table class="wd-t">
+            <thead><tr><th>S.No</th><th>Template</th><th class="wd-num">Sent</th><th class="wd-num">✓✓ Delivered</th><th class="wd-num">Read</th><th class="wd-num">Failed</th><th class="wd-num">Not sent</th><th class="wd-num">No report yet</th></tr></thead>
+            <tbody>
+            {% for t in summary %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td><a href="?template={{ t.template|urlencode }}{% if f.type %}&type={{ f.type }}{% endif %}" style="font-weight:700;color:var(--navy);">{{ t.template }}</a></td>
+                <td class="wd-num">{{ t.total }}</td>
+                <td class="wd-num" style="color:#166534;font-weight:700;">{{ t.delivered + t.read }}</td>
+                <td class="wd-num" style="color:#1e40af;">{{ t.read }}</td>
+                <td class="wd-num" style="color:#991b1b;">{{ t.failed }}</td>
+                <td class="wd-num" style="color:#991b1b;">{{ t.not_sent }}</td>
+                <td class="wd-num">{{ t.waiting }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <div class="wd-sub" style="margin-bottom:0.4rem;">{{ total }} message{{ '' if total == 1 else 's' }}{% if total > rows|length %} — newest {{ rows|length }} shown, narrow the filters to see older ones{% endif %}.</div>
+    <div class="wd-card">
+        <table class="wd-t">
+            <thead><tr><th>S.No</th><th>Sent (IST)</th><th>Template</th><th>Message</th><th>To</th><th>Mobile</th><th>Status</th><th>Delivered</th><th>Read</th><th>Reason</th></tr></thead>
+            <tbody>
+            {% for r in rows %}
+            <tr>
+                <td class="wd-sub">{{ loop.index }}</td>
+                <td style="white-space:nowrap;">{{ r.created_at|format_datetime }}</td>
+                <td style="font-weight:600;">{{ r.template }}</td>
+                <td>{{ r.what }}</td>
+                <td>{% if r.user_id %}<a href="/admin/pg/users/{{ r.user_id }}">{{ r.who|dr_name if r.who else '(name pending)' }}</a>{% else %}{{ r.who or '—' }}{% endif %}</td>
+                <td class="wd-sub">…{{ r.mobile }}</td>
+                <td><span class="wd-pill st-{{ r.st }}">{{ {'delivered': '✓✓ Delivered', 'read': '✓✓ Read', 'failed': 'Failed', 'waiting': 'No report yet', 'not_sent': 'Not sent'}[r.st] }}</span></td>
+                <td class="wd-sub" style="white-space:nowrap;">{{ r.delivered_at|format_datetime if r.delivered_at else '' }}</td>
+                <td class="wd-sub" style="white-space:nowrap;">{{ r.read_at|format_datetime if r.read_at else '' }}</td>
+                <td class="wd-sub" style="max-width:280px;">{% if r.st == 'not_sent' and r.response %}{{ r.response[:160] }}{% else %}{{ r.dlr_reason or '' }}{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" class="wd-sub" style="text-align:center;padding:1.4rem;">No WhatsApp messages match these filters.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
