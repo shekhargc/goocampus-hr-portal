@@ -516,6 +516,20 @@ def admin_digest_whatsapp(bid):
     return redirect(url_for('pg_news_admin'))
 
 
+def expire_stuck(conn):
+    """A message claimed ('sending') but never finished — the server restarted mid-send — is marked NOT sent after
+    10 minutes, so the report is honest and a re-send / group-send resume picks that person up again."""
+    try:
+        conn.execute("UPDATE pg_wa_nudge_log SET status = 'failed', "
+                     "response = 'Interrupted by a server restart before sending — never sent' "
+                     "WHERE status = 'sending' AND created_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes'")
+        conn.commit()
+    except Exception as e:
+        logger.warning("wa expire_stuck: %s", e)
+        try: conn.rollback()
+        except Exception: pass
+
+
 def resend_news_batch(news_ids, ref=''):
     """Founder 2026-11-18: combined email #14's WhatsApp all failed (code 7008, missing button value). Re-send the same
     update to every doctor in that batch whose message is NOT Delivered / Read. New log key per retry, so each retry is
@@ -526,6 +540,7 @@ def resend_news_batch(news_ids, ref=''):
     conn = get_db()
     try:
         ensure_tables(conn)
+        expire_stuck(conn)
         rows = conn.execute("SELECT batch FROM pg_wa_news_done WHERE news_id IN (" + ','.join(['?'] * len(ids)) + ")",
                             tuple(ids)).fetchall()
         batches = sorted({r['batch'] for r in rows if r['batch']})
@@ -545,7 +560,7 @@ def resend_news_batch(news_ids, ref=''):
         # … minus anyone already re-sent (a retry that stopped half-way — e.g. a deploy restart — is RESUMED, never
         # repeated: nobody gets a third message; a re-send WhatsApp itself failed is not hammered again).
         retried = conn.execute("SELECT DISTINCT user_id FROM pg_wa_nudge_log WHERE user_id IS NOT NULL AND "
-                               "status IN ('sent', 'sending') AND (" + ' OR '.join(['kind LIKE ?'] * len(kinds)) + ")",
+                               "status = 'sent' AND (" + ' OR '.join(['kind LIKE ?'] * len(kinds)) + ")",
                                tuple(k + ':r%' for k in kinds)).fetchall()
         todo = ({r['user_id'] for r in tried} - {r['user_id'] for r in reached}) - {r['user_id'] for r in retried}
         if not todo:
@@ -556,8 +571,8 @@ def resend_news_batch(news_ids, ref=''):
             "SELECT id, scope, COALESCE(state,'') AS state, heading FROM pg_news n WHERE id IN (" +
             ','.join(['?'] * len(ids)) + ") AND COALESCE(is_published, TRUE) AND (to_jsonb(n)->>'deleted_at') IS NULL "
             "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", tuple(ids)).fetchall()]
-        # Same retry key while one is unfinished (resume), so the log shows one re-send per batch.
-        return _send_news(conn, news, f"{batches[-1]}:r{max(n_prev, 1)}", ref + ' (re-send)', only_users=todo, cap=False)
+        # A fresh key per press (a person never re-sent before has no row under it; anyone already re-sent is excluded).
+        return _send_news(conn, news, f"{batches[-1]}:r{n_prev + 1}", ref + ' (re-send)', only_users=todo, cap=False)
     except Exception as e:
         logger.error("wa news resend %s: %s", ids, e)
         try: conn.rollback()
@@ -609,6 +624,7 @@ def scheduled_run():
     try:
         ensure_tables(conn)
         from pg_admin import wa_campaigns as wc
+        expire_stuck(conn)                   # claimed but never sent (server restart mid-send)
         wc.resume_stalled(conn)              # group sends whose runner died (deploy / restart)
         try:
             from pg_admin import wa_delivery

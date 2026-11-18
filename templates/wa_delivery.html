@@ -35,13 +35,37 @@
        <b>Failed</b> = WhatsApp couldn't deliver (reason shown) · <b>No report yet</b> = accepted, waiting for WhatsApp's answer.
        Reports usually arrive within a minute; a backup check runs every 10 minutes.</p>
 
+    <div class="wd-sub" style="margin-bottom:0.35rem;font-weight:700;color:var(--navy);">PEOPLE — each person counted once, with their best result (a failed try + a delivered re-send = delivered){% if not f.template %} · per template{% endif %}</div>
     <div class="wd-kpis">
-        <div class="wd-kpi"><b>{{ totals.total }}</b><span>messages (these filters)</span></div>
-        <div class="wd-kpi"><b style="color:#166534;">{{ totals.delivered + totals.read }}</b><span>✓✓ delivered{% if totals.total %} · {{ ((totals.delivered + totals.read) * 100 / totals.total)|round|int }}%{% endif %}</span></div>
-        <div class="wd-kpi"><b style="color:#1e40af;">{{ totals.read }}</b><span>read</span></div>
-        <div class="wd-kpi"><b style="color:#991b1b;">{{ totals.failed + totals.not_sent }}</b><span>failed / not sent</span></div>
+        <div class="wd-kpi"><b>{{ totals.total }}</b><span>people messaged</span></div>
+        <div class="wd-kpi"><b style="color:#166534;">{{ totals.delivered + totals.read }}</b><span>✓✓ got it{% if totals.total %} · {{ ((totals.delivered + totals.read) * 100 / totals.total)|round|int }}%{% endif %}</span></div>
+        <div class="wd-kpi"><b style="color:#1e40af;">{{ totals.read }}</b><span>read it</span></div>
+        <div class="wd-kpi"><b style="color:#991b1b;">{{ totals.failed + totals.not_sent }}</b><span>did NOT get it (failed / not sent)</span></div>
         <div class="wd-kpi"><b style="color:#475569;">{{ totals.waiting }}</b><span>no report yet</span></div>
+        <div class="wd-kpi"><b style="color:#64748b;">{{ totals.attempts }}</b><span>attempts in all ({{ totals.attempts - totals.total }} repeats / re-sends)</span></div>
     </div>
+
+    {% if groups %}
+    <div class="wd-card">
+        <table class="wd-t">
+            <thead><tr><th>S.No</th><th>Who</th><th class="wd-num">People</th><th class="wd-num">✓✓ Got it</th><th class="wd-num">Read</th><th class="wd-num">Did not get it</th><th class="wd-num">No report yet</th></tr></thead>
+            <tbody>
+            {% for g in groups %}
+            <tr><td>{{ loop.index }}</td><td style="font-weight:600;">{{ g.label }}</td><td class="wd-num">{{ g.total }}</td>
+                <td class="wd-num" style="color:#166534;font-weight:700;">{{ g.delivered + g.read }}</td>
+                <td class="wd-num" style="color:#1e40af;">{{ g.read }}</td>
+                <td class="wd-num" style="color:#991b1b;">{{ g.failed + g.not_sent }}</td>
+                <td class="wd-num">{{ g.waiting }}</td></tr>
+            {% endfor %}
+            <tr style="background:var(--gray-50);font-weight:700;"><td></td><td>Total</td><td class="wd-num">{{ groups|sum(attribute='total') }}</td>
+                <td class="wd-num" style="color:#166534;">{{ groups|sum(attribute='delivered') + groups|sum(attribute='read') }}</td>
+                <td class="wd-num" style="color:#1e40af;">{{ groups|sum(attribute='read') }}</td>
+                <td class="wd-num" style="color:#991b1b;">{{ groups|sum(attribute='failed') + groups|sum(attribute='not_sent') }}</td>
+                <td class="wd-num">{{ groups|sum(attribute='waiting') }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 
     <form class="wd-f" method="get">
         <select name="template"><option value="">All templates</option>
@@ -60,7 +84,7 @@
     {% if summary %}
     <div class="wd-card">
         <table class="wd-t">
-            <thead><tr><th>S.No</th><th>Template</th><th class="wd-num">Sent</th><th class="wd-num">✓✓ Delivered</th><th class="wd-num">Read</th><th class="wd-num">Failed</th><th class="wd-num">Not sent</th><th class="wd-num">No report yet</th></tr></thead>
+            <thead><tr><th>S.No</th><th>Template</th><th class="wd-num">People</th><th class="wd-num">✓✓ Got it</th><th class="wd-num">Read</th><th class="wd-num">Failed</th><th class="wd-num">Not sent</th><th class="wd-num">No report yet</th><th class="wd-num">Attempts</th></tr></thead>
             <tbody>
             {% for t in summary %}
             <tr>
@@ -73,6 +97,7 @@
                 <td class="wd-num" style="color:#991b1b;">{{ t.failed }}</td>
                 <td class="wd-num" style="color:#991b1b;">{{ t.not_sent }}</td>
                 <td class="wd-num">{{ t.waiting }}</td>
+                <td class="wd-num wd-sub">{{ t.attempts }}</td>
             </tr>
             {% endfor %}
             </tbody>
@@ -80,6 +105,7 @@
     </div>
     {% endif %}
 
+    <div class="wd-sub" style="margin-bottom:0.4rem;font-weight:700;color:var(--navy);">EVERY ATTEMPT (including repeats / re-sends)</div>
     <div class="wd-sub" style="margin-bottom:0.4rem;">{{ total }} message{{ '' if total == 1 else 's' }}{% if total > rows|length %} — newest {{ rows|length }} shown, narrow the filters to see older ones{% endif %}.</div>
     <div class="wd-card">
         <table class="wd-t">

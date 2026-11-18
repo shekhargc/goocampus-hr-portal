@@ -192,7 +192,7 @@ def report_page():
     for k in ('from', 'to'):
         if f[k] and not re.fullmatch(r'\d{4}-\d{2}-\d{2}', f[k]):
             f[k] = ''
-    rows, summary, templates = [], [], []
+    rows, summary, templates, groups = [], [], [], []
     conn = get_db()
     try:
         w.ensure_tables(conn)
@@ -216,7 +216,7 @@ def report_page():
                     "SELECT l.id, l.created_at, l.template, l.kind, l.ref, l.mobile, l.status, l.response, l.dlr, l.dlr_reason, "
                     "l.delivered_at, l.read_at, l.user_id, l.sent_by, u.name AS doctor_name "
                     f"FROM pg_wa_nudge_log l LEFT JOIN pg_users u ON u.id = l.user_id WHERE {where} "
-                    "ORDER BY l.id DESC LIMIT 3000", tuple(params)).fetchall():
+                    "ORDER BY l.id DESC LIMIT 20000", tuple(params)).fetchall():
                 r = dict(r)
                 r['what'] = _what(r, w)
                 r['st'] = _status_of(r)
@@ -253,15 +253,50 @@ def report_page():
                 conn.rollback()
                 logger.warning("wa report quick: %s", e)
         rows.sort(key=lambda r: r['created_at'] or 0, reverse=True)
+        # PEOPLE, not attempts (founder 2026-11-18): each person counts once per template with their BEST result
+        # across all attempts (a failed first try + a delivered re-send = delivered).
+        rank = {'read': 5, 'delivered': 4, 'waiting': 3, 'failed': 2, 'not_sent': 1}
+        cats = {}
+        try:
+            from pg_admin.wa_campaigns import categories
+            uids = {r['user_id'] for r in rows if r.get('user_id')}
+            cats = categories(conn, list(uids)) if uids else {}
+        except Exception:
+            conn.rollback()
+        best, attempts, grp = {}, {}, {}
+        for r in rows:
+            uid = r.get('user_id')
+            if uid:
+                key = ('u', uid)
+                grp[key] = cats.get(uid, 'free')
+            else:
+                kind = r.get('kind') or ''
+                g = 'test' if kind == 'test' else ('enquiry' if kind.startswith('enquiry') else 'other')
+                key = (g, r.get('mobile') or r.get('id'))
+                grp[key] = g
+            tk = (r['template'], key)
+            attempts[tk] = attempts.get(tk, 0) + 1
+            if rank[r['st']] > rank.get(best.get(tk), 0):
+                best[tk] = r['st']
+        by = {}
+        for (tpl, key), st in best.items():
+            t = by.setdefault(tpl, {'template': tpl, 'total': 0, 'delivered': 0, 'read': 0, 'failed': 0,
+                                    'waiting': 0, 'not_sent': 0, 'attempts': 0})
+            t['total'] += 1
+            t[st] += 1
+            t['attempts'] += attempts[(tpl, key)]
+        group_names = (('free', 'Free doctors'), ('paid', 'Paid doctors'), ('internal', 'Internal doctors'),
+                       ('team', 'Team members'), ('enquiry', 'Website enquirers'), ('test', 'Test sends'),
+                       ('other', 'Quick Send / others'))
+        groups = {g: {'label': l, 'total': 0, 'delivered': 0, 'read': 0, 'failed': 0, 'waiting': 0, 'not_sent': 0}
+                  for g, l in group_names}
+        for (tpl, key), st in best.items():
+            g = groups[grp.get(key, 'other')]
+            g['total'] += 1
+            g[st] += 1
+        groups = [g for g in groups.values() if g['total']]
         if f['status']:
             rows = [r for r in rows if r['st'] == f['status']]
-        # Totals per template (for the current filters)
-        by = {}
-        for r in rows:
-            t = by.setdefault(r['template'], {'template': r['template'], 'total': 0, 'delivered': 0, 'read': 0,
-                                              'failed': 0, 'waiting': 0, 'not_sent': 0})
-            t['total'] += 1
-            t[r['st']] += 1
         # Every APPROVED template is listed, even before its first send (founder 2026-11-18).
         approved = []
         try:
@@ -275,7 +310,7 @@ def report_page():
             for a in approved:
                 if (not f['template'] or f['template'] == a['name']) and a['name'] not in by:
                     by[a['name']] = {'template': a['name'], 'total': 0, 'delivered': 0, 'read': 0, 'failed': 0,
-                                     'waiting': 0, 'not_sent': 0}
+                                     'waiting': 0, 'not_sent': 0, 'attempts': 0}
         for t in by.values():
             t['purpose'] = purpose.get(t['template'], '')
             t['approved'] = t['template'] in purpose
@@ -292,9 +327,9 @@ def report_page():
         conn.close()
     shown = rows[:1500]
     return render_template('wa_delivery.html', rows=shown, total=len(rows), summary=summary, templates=templates, f=f,
-                           status_choices=STATUS_CHOICES, type_choices=TYPE_CHOICES,
-                           totals={k: sum(t[k] for t in summary) for k in ('total', 'delivered', 'read', 'failed',
-                                                                            'waiting', 'not_sent')})
+                           status_choices=STATUS_CHOICES, type_choices=TYPE_CHOICES, groups=groups,
+                           totals={k: sum(t.get(k, 0) for t in summary) for k in ('total', 'delivered', 'read', 'failed',
+                                                                                   'waiting', 'not_sent', 'attempts')})
 
 
 def _what(r, w):
