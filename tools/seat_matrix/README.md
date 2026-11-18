@@ -293,3 +293,20 @@ Quota - Service-Local' (exact). Categories in 2025 KNRUHS wording (OPEN-GEN, BCA
 MIN-GEN-MSM …), category_code = PDF column. Checks: titles, headings, S.No, every printed number read, summary page =
 course pages (every course × column). 2026 Phase 1: 1,910 seats (State 1,427 + In-service 383 + minority 76 + 24),
 47 colleges (13 new district GMCs); 1,902 MD/MS + 8 diploma.
+
+## Odisha Round 2 (`odisha_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/odisha_round2.py <vacant.pdf> <added.pdf> <cutoffs2025.json> <out.json> [--r1 <round1_dump.json>]
+Body "Odisha — Round 2 — State Counselling" (authority `ojee`, round_no 2, list_type vacancy) = (A) the "Vacant Seats
+(MD/MS/DNB) after Round-1 admission" list (18.11.2026, text layer, one line per college × subject × category: seats |
+admitted | vacant; lines printed 0 = virtual vacancy, not stored) + (B) No. 97 "Provisional seat matrix Round-2 — newly
+added seats only" (scanned, transcribed; stored as `new_in_round`). (A) covers exactly the Round 1 seats (232 direct +
+231 in-service + 18 DNB), so (B) is not inside it. Checks: seats = admitted + vacant per line, section ALL TOTALs, every
+vacant line vs the loaded Round 1 body (`--r1`, staging seatmatrix-dump), added cells vs category lists, rows vs Total,
+columns vs TOTAL. 2026-27: 266 vacant (Direct 156, In-service 103, DNB 7) + 159 added (80 + 79) = 425 seats. New 2026
+MD/MS colleges in (B): Talcher (PMP), Phulbani (SLS), Sundargarh (GMCH), Keonjhar (DD) — names to confirm with the College DB.
+
+## Punjab added seats Round 2 (`punjab_added_r2.py`)
+    /usr/bin/python3 tools/seat_matrix/punjab_added_r2.py <bfuhs_notice.pdf> <out.json>
+BFUHS Public Notice 03/607 (18.11.2026): 42 newly approved seats (GGS Faridkot 16, Dr. B.R. Ambedkar SIMS Mohali 16 —
+AIQ / State Quota with IP / SC / BC; Adesh Bathinda 10 — General Merit / Open Merit). A checked RECORD only: Punjab has
+no seat-matrix body loaded yet; use it as new_in_round when the Punjab matrix is loaded. 17 seats are AIQ (MCC), 25 state.
