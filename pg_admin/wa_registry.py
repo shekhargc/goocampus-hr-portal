@@ -73,10 +73,10 @@ KNOWN = [
      'buttons': 'URL button: Click Here · Quick reply: Stop updates',
      'purpose': 'News alert: tell a doctor how many new counselling updates for their MCC / state were just posted.',
      'used_in': 'goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 4, daily switch)',
-     'trigger_text': 'Automatic, WITH the news email: when "Send combined email now" (or a single update\'s email send) '
-                     'is pressed, one message to registered doctors AND team members (name + mobile; untick Team in '
-                     '"Who gets it" to leave the team out) whose MCC or state is in those updates — max 3 a day. Not '
-                     'for "Send to team" tests. "Stop updates" / STOP → never again.',
+     'trigger_text': 'Automatic, WITH the news email: the FIRST news email of the day sends at once; news emailed later that '
+                     'day is held and goes as ONE combined message at 7:30 pm (max 2 a day). To registered doctors AND '
+                     'team members (untick Team in "Who gets it" to leave the team out) whose MCC or state is in those '
+                     'updates. Not for "Send to team" tests. "Stop updates" / STOP → never again.',
      'variables': '{{1}} = doctor name · {{2}} = number of updates today · {{3}} = "MCC & <state>" · '
                   '{{4}} = latest update heading',
      'approved_on': '2026-11-17'},
@@ -97,6 +97,10 @@ OLD_SEED = {          # name → {column: [old seeded texts]} — any of them is
     'gc_daily_account_update': {'purpose': [
         'Evening digest: tell a doctor how many counselling updates for their MCC / state were posted today.'],
         'trigger_text': [
+        'Automatic, WITH the news email: when "Send combined email now" (or a single update\'s email send) is pressed, '
+        'one message to registered doctors AND team members (name + mobile; untick Team in "Who gets it" to leave the '
+        'team out) whose MCC or state is in those updates — max 3 a day. Not for "Send to team" tests. "Stop updates" '
+        '/ STOP → never again.',
         'Automatic, after every news publish batch (once nothing new was published for 15 minutes): one message per '
         'batch to registered doctors AND team members (name + mobile; untick Team in "Who gets it" to leave the team '
         'out) whose MCC or state is in it — 2–3 batches a day = 2–3 messages, max 3 a day. "Stop updates" / STOP → '

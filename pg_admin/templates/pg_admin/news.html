@@ -237,9 +237,15 @@ Result | 24 Oct | 14 Nov | 4 Dec"
         <input type="hidden" name="resend" value="1">
         <button type="submit" style="background:none;border:0;color:#b45309;font-weight:700;cursor:pointer;font-size:0.76rem;padding:0;">↻ Re-send to those it didn't reach</button>
       </form>
+      {% elif digest.last.wa_held %}
+      <span style="color:#b45309;font-weight:600;margin-left:6px;">💬 WhatsApp held for the 7:30 pm evening update</span>
+      <form method="POST" action="/admin/pg/news/digest/{{ digest.last.id }}/whatsapp" style="display:inline;margin-left:6px;"
+            onsubmit="return confirm('Send the WhatsApp for combined email #{{ digest.last.id }} NOW instead of at 7:30 pm? (A 2nd WhatsApp the same day is often blocked by WhatsApp for some doctors.)');">
+        <button type="submit" style="background:none;border:0;color:#16a34a;font-weight:700;cursor:pointer;font-size:0.76rem;padding:0;">send now instead</button>
+      </form>
       {% elif digest.last.wa_done is not none %}
       <form method="POST" action="/admin/pg/news/digest/{{ digest.last.id }}/whatsapp" style="display:inline;margin-left:6px;"
-            onsubmit="return confirm('Send the WhatsApp news update for combined email #{{ digest.last.id }} now? Each doctor gets it once (max 3 a day).');">
+            onsubmit="return confirm('Send the WhatsApp news update for combined email #{{ digest.last.id }} now? Each doctor gets it once.');">
         <button type="submit" style="background:none;border:0;color:#16a34a;font-weight:700;cursor:pointer;font-size:0.76rem;padding:0;">💬 Send WhatsApp for this email</button>
       </form>{% endif %}</div>
     {% endif %}
