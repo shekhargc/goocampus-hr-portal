@@ -55,7 +55,7 @@ KINDS = {'welcome': 'Welcome (name + state added)',
          'incomplete_24h': 'Profile reminder · 24 hours',
          'incomplete_72h': 'Profile reminder · 72 hours',
          'enquiry': 'Enquiry → dashboard',
-         'daily': 'Daily counselling update',
+         'daily': 'News update',
          'campaign': 'Group send',
          'test': 'Test send'}
 
