@@ -549,6 +549,36 @@ def admin_grant():
     return redirect(url_for('pg_ebooks_admin', book=code))
 
 
+def admin_preview():
+    """GET /admin/pg/ebooks/preview?code=uae&chapter=1&page=1 — admin sees a page exactly as a doctor would
+    (watermarked with the admin's own name), to check the reader output. Not cached, not logged."""
+    from flask import Response, abort
+    from core import storage
+    a = _admin()
+    if not a:
+        abort(403)
+    code = (request.args.get('code') or 'uae').strip()
+    try:
+        ch, pg = int(request.args.get('chapter') or 1), int(request.args.get('page') or 1)
+    except ValueError:
+        abort(400)
+    conn = get_db()
+    try:
+        ensure(conn)
+        row = conn.execute("SELECT image_key FROM pg_ebook_pages WHERE ebook_code = ? AND chapter_no = ? AND page_no = ?",
+                           (code, ch, pg)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        abort(404)
+    src = storage.download_bytes(row['image_key'])
+    if not src:
+        abort(503)
+    mob = re.sub(r'\D', '', str(a.get('mobile') or a.get('phone') or ''))
+    img = _watermark(src, _wm_name({'name': a.get('name')}), ('Mob xx' + mob[-4:]) if mob else 'Admin preview')
+    return Response(img, mimetype='image/webp', headers={'Cache-Control': 'no-store'})
+
+
 def register(app):
     from core.auth import login_required
     app.add_url_rule('/api/pg/ebooks', 'api_pg_ebooks', api_list, methods=['GET'])
@@ -562,3 +592,4 @@ def register(app):
     app.add_url_rule('/admin/pg/ebooks/chapter', 'pg_ebooks_save_chapter', login_required(admin_save_chapter),
                      methods=['POST'])
     app.add_url_rule('/admin/pg/ebooks/grant', 'pg_ebooks_grant', login_required(admin_grant), methods=['POST'])
+    app.add_url_rule('/admin/pg/ebooks/preview', 'pg_ebooks_preview', login_required(admin_preview), methods=['GET'])

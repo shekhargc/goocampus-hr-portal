@@ -74,7 +74,7 @@
             </div>
           </form>
         </td>
-        <td>{{ c.page_count }}</td>
+        <td>{{ c.page_count }}<div><a href="{{ url_for('pg_ebooks_preview', code=book, chapter=c.chapter_no, page=1) }}" target="_blank" class="eb-sub">preview →</a></div></td>
       </tr>
       {% endfor %}
       </tbody>
