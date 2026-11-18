@@ -18,6 +18,22 @@
   <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">E-books & International Pathways</h1>
   <p class="eb-sub" style="font-size:0.88rem;margin:0 0 1rem;">Country guides sold inside the goocampus.in International dashboard. Doctors read them page by page in the dashboard; every page carries a faint watermark with their name and last 4 mobile digits; the PDF is never sent. The chapters are also the steps of each country's pathway map.</p>
 
+  <div class="eb-card" style="border:2px solid {{ '#16a34a' if intl_mode == 'all' else ('#f59e0b' if intl_mode == 'pilot' else '#9ca3af') }};">
+    <div class="eb-h">Who sees the International dashboard on goocampus.in</div>
+    <form method="post" action="{{ url_for('pg_ebooks_gate') }}" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start;"
+          onsubmit="return this.mode.value !== 'all' || confirm('Open the International dashboard to EVERY doctor?');">
+      <div>
+        <label style="display:block;"><input type="radio" name="mode" value="pilot" {{ 'checked' if intl_mode == 'pilot' }}> <b>Only pilot numbers</b> (testing)</label>
+        <label style="display:block;"><input type="radio" name="mode" value="all" {{ 'checked' if intl_mode == 'all' }}> <b>Everyone</b></label>
+        <label style="display:block;"><input type="radio" name="mode" value="off" {{ 'checked' if intl_mode == 'off' }}> Nobody (hidden)</label>
+      </div>
+      <label class="eb-sub" style="flex:1;min-width:240px;">Pilot mobile numbers (one per line or comma-separated)<br>
+        <textarea class="eb-in" name="pilots" style="width:100%;min-height:70px;">{{ intl_pilots|join('\n') }}</textarea></label>
+      <div><button class="eb-btn">Save</button></div>
+    </form>
+    <div class="eb-sub" style="margin-top:0.4rem;">Pilot numbers also see books not yet switched on (so you can check them first). Everyone else sees no International section at all until this is set to Everyone.</div>
+  </div>
+
   <div class="eb-card">
     <div class="eb-h">Books &amp; prices</div>
     <table class="eb-t">

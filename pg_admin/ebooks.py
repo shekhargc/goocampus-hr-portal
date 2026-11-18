@@ -126,6 +126,42 @@ def _money(book):
     return base, gst, round(base + gst, 2)
 
 
+# ── who sees the International dashboard (founder 2026-11-18: pilot on live for his own number first) ──
+MODES = ('pilot', 'all', 'off')
+DEFAULT_PILOT = '9611996500'
+
+
+def _kv(conn, key, default=''):
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS pg_kv (key TEXT PRIMARY KEY, value TEXT DEFAULT '', "
+                     "updated_by TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        r = conn.execute("SELECT value FROM pg_kv WHERE key = ?", (key,)).fetchone()
+        return r['value'] if r and r['value'] is not None else default
+    except Exception:
+        conn.rollback()
+        return default
+
+
+def _set_kv(conn, key, value, who):
+    conn.execute("INSERT INTO pg_kv (key, value, updated_by, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
+                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, "
+                 "updated_at = CURRENT_TIMESTAMP", (key, value, who))
+
+
+def gate_settings(conn):
+    mode = _kv(conn, 'intl_mode', 'pilot')
+    pilots = [m for m in re.split(r'[\s,;]+', _kv(conn, 'intl_pilot', DEFAULT_PILOT)) if m]
+    return (mode if mode in MODES else 'pilot'), [re.sub(r'\D', '', m)[-10:] for m in pilots]
+
+
+def gate(conn, u):
+    """(enabled, is_pilot) for this doctor. 'pilot' = only listed mobiles; 'all' = everyone; 'off' = nobody."""
+    mode, pilots = gate_settings(conn)
+    m10 = re.sub(r'\D', '', str(u.get('mobile') or ''))[-10:]
+    is_pilot = bool(m10) and m10 in pilots
+    return (mode == 'all' or (mode == 'pilot' and is_pilot)), (is_pilot and mode != 'off')
+
+
 # ── doctor APIs (X-PG-Key + doctor Bearer token, same as the rest of /api/pg) ─
 def _doctor(conn):
     from pg_admin.routes.api import _authorized, _bearer_token, _pg_user_by_token
@@ -147,8 +183,14 @@ def api_list():
         u, err = _doctor(conn)
         if err:
             return err
+        enabled, is_pilot = gate(conn, u)
+        if not enabled:                     # International dashboard not open to this doctor → hide it entirely
+            return jsonify({'ok': True, 'enabled': False, 'ebooks': []})
         have = owned(conn, u['id'])
-        books = [dict(r) for r in conn.execute("SELECT * FROM pg_ebooks WHERE is_active ORDER BY sort_order, id").fetchall()]
+        # pilot doctors also see books not yet switched on for everyone (if they have chapters / are the bundle)
+        books = [dict(r) for r in conn.execute(
+            "SELECT * FROM pg_ebooks b WHERE is_active OR (? AND (is_bundle OR EXISTS (SELECT 1 FROM pg_ebook_chapters c "
+            "WHERE c.ebook_code = b.code))) ORDER BY sort_order, id", (bool(is_pilot),)).fetchall()]
         chs = {}
         for r in conn.execute("SELECT ebook_code, chapter_no, title, page_count, summary, service_tag, is_step "
                               "FROM pg_ebook_chapters ORDER BY ebook_code, chapter_no").fetchall():
@@ -179,7 +221,7 @@ def api_list():
                 item['progress'] = prog.get(b['code'], {})
                 item['last_read'] = last.get(b['code'])          # {chapter, page} of the page opened most recently
             out.append(item)
-        return jsonify({'ok': True, 'ebooks': out})
+        return jsonify({'ok': True, 'enabled': True, 'pilot': bool(is_pilot), 'ebooks': out})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -202,8 +244,9 @@ def api_create_order():
         u, err = _doctor(conn)
         if err:
             return err
+        enabled, is_pilot = gate(conn, u)
         book = _book(conn, code)
-        if not book or not book['is_active']:
+        if not enabled or not book or not (book['is_active'] or is_pilot):
             return jsonify({'ok': False, 'error': 'not_found'}), 404
         base, gst, payable = _money(book)
         if payable <= 0:
@@ -339,6 +382,8 @@ def api_page():
         u, err = _doctor(conn)
         if err:
             return err
+        if not gate(conn, u)[0]:
+            return jsonify({'ok': False, 'error': 'not_found'}), 404
         if code not in owned(conn, u['id']):
             return jsonify({'ok': False, 'error': 'not_owned'}), 403
         row = conn.execute("SELECT image_key FROM pg_ebook_pages WHERE ebook_code = ? AND chapter_no = ? AND page_no = ?",
@@ -473,8 +518,13 @@ def admin_page():
             "WHERE o.status = 'paid' ORDER BY o.id DESC LIMIT 200").fetchall()]
     finally:
         conn.close()
+    conn = get_db()
+    try:
+        mode, pilots = gate_settings(conn)
+    finally:
+        conn.close()
     return render_template('pg_admin/ebooks.html', books=books, chapters=chapters, access=access, orders=orders,
-                           book=code, active_section='goocampus_in')
+                           book=code, intl_mode=mode, intl_pilots=pilots, active_section='goocampus_in')
 
 
 def admin_save_book():
@@ -524,6 +574,27 @@ def admin_save_chapter():
     finally:
         conn.close()
     return redirect(url_for('pg_ebooks_admin', book=code) + '#ch' + str(f.get('chapter_no') or ''))
+
+
+def admin_save_gate():
+    from flask import redirect, url_for, flash
+    a = _admin()
+    if not a:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    mode = request.form.get('mode') if request.form.get('mode') in MODES else 'pilot'
+    pilots = [re.sub(r'\D', '', m)[-10:] for m in re.split(r'[\s,;]+', request.form.get('pilots') or '') if m]
+    pilots = [m for m in pilots if len(m) == 10]
+    conn = get_db()
+    try:
+        _set_kv(conn, 'intl_mode', mode, a.get('name') or 'admin')
+        _set_kv(conn, 'intl_pilot', ','.join(dict.fromkeys(pilots)), a.get('name') or 'admin')
+        conn.commit()
+        flash({'pilot': f'International dashboard: only {len(pilots)} pilot number(s) see it.',
+               'all': 'International dashboard: open to EVERY doctor.',
+               'off': 'International dashboard: hidden from everyone.'}[mode], 'success')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_ebooks_admin'))
 
 
 def admin_grant():
@@ -594,4 +665,5 @@ def register(app):
     app.add_url_rule('/admin/pg/ebooks/chapter', 'pg_ebooks_save_chapter', login_required(admin_save_chapter),
                      methods=['POST'])
     app.add_url_rule('/admin/pg/ebooks/grant', 'pg_ebooks_grant', login_required(admin_grant), methods=['POST'])
+    app.add_url_rule('/admin/pg/ebooks/gate', 'pg_ebooks_gate', login_required(admin_save_gate), methods=['POST'])
     app.add_url_rule('/admin/pg/ebooks/preview', 'pg_ebooks_preview', login_required(admin_preview), methods=['GET'])
