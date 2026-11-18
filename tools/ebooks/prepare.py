@@ -22,7 +22,10 @@ WIDTH = 1400
 
 
 def _cfg():
-    return json.load(open(os.path.expanduser('~/.goocampus/news_ingest.json')))
+    c = json.load(open(os.path.expanduser('~/.goocampus/news_ingest.json')))
+    if '--portal' in sys.argv:                       # e.g. the staging service before the feature is live
+        c['portal'] = sys.argv[sys.argv.index('--portal') + 1]
+    return c
 
 
 def _post(cfg, path, body):
