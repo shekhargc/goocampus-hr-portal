@@ -227,6 +227,20 @@ def api_list():
                 item['chapters'] = chs.get(b['code'], [])
                 item['pages'] = sum(c['pages'] for c in item['chapters'])
                 item['progress'] = prog.get(b['code'], {})
+                # Course-style (founder 2026-11-18): a chapter is finished once its last page was opened; the next
+                # chapter unlocks only after the previous one is finished (chapter 1 is always open).
+                pr, prev_done, read_pages = prog.get(b['code'], {}), True, 0
+                for c in item['chapters']:
+                    mp = min((pr.get(c['no']) or {}).get('max_page', 0), c['pages'] or 0)
+                    c['read_pages'] = mp
+                    c['percent'] = round(100 * mp / c['pages']) if c['pages'] else 0
+                    c['completed'] = bool(c['pages']) and mp >= c['pages']
+                    c['locked'] = not prev_done
+                    prev_done = c['completed']
+                    read_pages += mp
+                item['read_pages'] = read_pages
+                item['percent'] = round(100 * read_pages / item['pages']) if item['pages'] else 0
+                item['next_chapter'] = next((c['no'] for c in item['chapters'] if not c['completed'] and not c['locked']), None)
                 item['last_read'] = last.get(b['code'])          # {chapter, page} of the page opened most recently
             out.append(item)
         return jsonify({'ok': True, 'enabled': True, 'pilot': bool(is_pilot), 'ebooks': out})
@@ -398,6 +412,18 @@ def api_page():
                            (code, ch, pg)).fetchone()
         n = conn.execute("SELECT page_count FROM pg_ebook_chapters WHERE ebook_code = ? AND chapter_no = ?",
                          (code, ch)).fetchone()
+        # chapters in order: the previous chapter must be finished (its last page opened)
+        prev = conn.execute("SELECT c.chapter_no, c.page_count, COALESCE(p.max_page, 0) AS mp FROM pg_ebook_chapters c "
+                            "LEFT JOIN pg_ebook_progress p ON p.user_id = ? AND p.ebook_code = c.ebook_code AND "
+                            "p.chapter_no = c.chapter_no WHERE c.ebook_code = ? AND c.chapter_no < ? "
+                            "ORDER BY c.chapter_no DESC LIMIT 1", (u['id'], code, ch)).fetchone()
+        if prev and prev['page_count'] and prev['mp'] < prev['page_count']:
+            return jsonify({'ok': False, 'error': 'chapter_locked', 'finish_chapter': prev['chapter_no']}), 403
+        # pages in order too: no jumping past the furthest page read + 1
+        mine = conn.execute("SELECT max_page FROM pg_ebook_progress WHERE user_id = ? AND ebook_code = ? AND chapter_no = ?",
+                            (u['id'], code, ch)).fetchone()
+        if pg > (mine['max_page'] if mine else 0) + 1:
+            return jsonify({'ok': False, 'error': 'page_locked', 'next_page': (mine['max_page'] if mine else 0) + 1}), 403
         if not row:
             return jsonify({'ok': False, 'error': 'page_not_found'}), 404
         mobile = re.sub(r'\D', '', str(u.get('mobile') or ''))
@@ -529,10 +555,14 @@ def admin_page():
     conn = get_db()
     try:
         mode, pilots = gate_settings(conn, fresh=True)
+        from pg_admin import pathway_planner as PP
+        stages = PP.stages_for_admin(conn, code)
     finally:
         conn.close()
+    from pg_admin.pathway_planner import ROUTES
     return render_template('pg_admin/ebooks.html', books=books, chapters=chapters, access=access, orders=orders,
-                           book=code, intl_mode=mode, intl_pilots=pilots, active_section='goocampus_in')
+                           book=code, intl_mode=mode, intl_pilots=pilots, stages=stages, routes=ROUTES,
+                           active_section='goocampus_in')
 
 
 def admin_save_book():
@@ -664,6 +694,8 @@ def admin_preview():
 
 def register(app):
     from core.auth import login_required
+    from pg_admin import pathway_planner
+    pathway_planner.register(app)
     app.add_url_rule('/api/pg/ebooks', 'api_pg_ebooks', api_list, methods=['GET'])
     app.add_url_rule('/api/pg/ebooks/create-order', 'api_pg_ebooks_order', api_create_order, methods=['POST'])
     app.add_url_rule('/api/pg/ebooks/verify', 'api_pg_ebooks_verify', api_verify, methods=['POST'])
