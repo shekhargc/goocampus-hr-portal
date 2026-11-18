@@ -28,7 +28,7 @@ KNOWN = [
      'used_in': 'goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 1, sign-up switch)',
      'trigger_text': 'Automatic, every 10 min: anyone registering for the first time — free OR paid by invitation — '
                      'once they have added name + state (within 7 days of sign-up, after the switch-on). Once per '
-                     'doctor. Not team / Counselling Desk.',
+                     'doctor. Team members only if Team is ticked in "Who gets it".',
      'variables': '{{1}} = doctor name (without "Dr.") · {{2}} = home state',
      'approved_on': '2026-11-17'},
     {'name': 'gc_profile_incomplete_v2', 'language': 'en', 'category': 'UTILITY', 'status': 'APPROVED',
@@ -40,7 +40,7 @@ KNOWN = [
      'purpose': 'Remind a new doctor (free or invited) to add name + state so the full dashboard opens.',
      'used_in': 'goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 2, sign-up switch)',
      'trigger_text': 'Automatic: any new doctor (free or invited) still missing name or state 15 minutes after '
-                     'sign-up, again at 24 hours and at 72 hours (max 3). Team / Desk accounts never get it.',
+                     'sign-up, again at 24 hours and at 72 hours (max 3). Team members only if Team is ticked.',
      'variables': 'none',
      'approved_on': '2026-11-18',
      'notes': 'Replaces gc_profile_incomplete (id 1952329065742254) — adds "Dear Doctor," and the thank-you line.'},
@@ -74,8 +74,9 @@ KNOWN = [
      'purpose': 'News alert: tell a doctor how many new counselling updates for their MCC / state were just posted.',
      'used_in': 'goocampus.in Admin → Registered Doctors → 💬 WhatsApp (message 4, daily switch)',
      'trigger_text': 'Automatic, after every news publish batch (once nothing new was published for 15 minutes): one '
-                     'message per batch to registered doctors (name + mobile, not team / Desk) whose MCC or state is in '
-                     'it — 2–3 batches a day = 2–3 messages, max 3 a day. "Stop updates" / STOP → never again.',
+                     'message per batch to registered doctors AND team members (name + mobile; untick Team in "Who gets '
+                     'it" to leave the team out) whose MCC or state is in it — 2–3 batches a day = 2–3 messages, max 3 '
+                     'a day. "Stop updates" / STOP → never again.',
      'variables': '{{1}} = doctor name · {{2}} = number of updates today · {{3}} = "MCC & <state>" · '
                   '{{4}} = latest update heading',
      'approved_on': '2026-11-17'},
@@ -84,14 +85,21 @@ KNOWN = [
 # OLD seeded text (i.e. never edited by the team) is moved to the new KNOWN text; any team edit is left alone.
 OLD_SEED = {          # name → {column: [old seeded texts]} — any of them is replaced by the KNOWN text
     'welcometogoocampus': {'trigger_text': [
+        'Automatic, every 10 min: anyone registering for the first time — free OR paid by invitation — once they have '
+        'added name + state (within 7 days of sign-up, after the switch-on). Once per doctor. Not team / Counselling Desk.',
         'Automatic, every 10 min: doctors who signed up after the switch-on and have added name + state (within 7 '
         'days). Once per doctor. Not team / Counselling Desk.']},
     'gc_profile_incomplete_v2': {'trigger_text': [
+        'Automatic: any new doctor (free or invited) still missing name or state 15 minutes after sign-up, again at '
+        '24 hours and at 72 hours (max 3). Team / Desk accounts never get it.',
         'Automatic: any new doctor (free or invited) still missing name or state 15 minutes after sign-up, and '
         'again at 24 hours (max 2). Team / Desk accounts never get it.']},
     'gc_daily_account_update': {'purpose': [
         'Evening digest: tell a doctor how many counselling updates for their MCC / state were posted today.'],
         'trigger_text': [
+        'Automatic, after every news publish batch (once nothing new was published for 15 minutes): one message per '
+        'batch to registered doctors (name + mobile, not team / Desk) whose MCC or state is in it — 2–3 batches a day = '
+        '2–3 messages, max 3 a day. "Stop updates" / STOP → never again.',
         'Automatic at 8:00 pm IST, at most once a day, to all registered doctors (name + mobile, not team / Desk) '
         'whose MCC or state news was posted that day. No news → no message. "Stop updates" / STOP → never again.']},
     'gc_profile_incomplete': {          # retired 2026-11-18 → v2

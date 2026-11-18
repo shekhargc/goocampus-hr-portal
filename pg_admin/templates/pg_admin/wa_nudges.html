@@ -46,6 +46,7 @@
           <label><input type="checkbox" name="types" value="free" {{ 'checked' if 'free' in (a.types or []) }}> Free</label>
           <label><input type="checkbox" name="types" value="paid" {{ 'checked' if 'paid' in (a.types or []) }}> Paid</label>
           <label><input type="checkbox" name="types" value="internal" {{ 'checked' if 'internal' in (a.types or []) }}> Internal</label>
+          <label><input type="checkbox" name="types" value="team" {{ 'checked' if 'team' in (a.types or []) }}> Team</label>
         </div>
         <div class="wn-sub">Untick all = don't send the reminder. No state choice here — the state is what's missing.</div>
       {% else %}
@@ -53,6 +54,7 @@
           <label><input type="checkbox" name="types" value="free" {{ 'checked' if 'free' in (a.types or []) }}> Free</label>
           <label><input type="checkbox" name="types" value="paid" {{ 'checked' if 'paid' in (a.types or []) }}> Paid</label>
           <label><input type="checkbox" name="types" value="internal" {{ 'checked' if 'internal' in (a.types or []) }}> Internal</label>
+          <label><input type="checkbox" name="types" value="team" {{ 'checked' if 'team' in (a.types or []) }}> Team</label>
         </div>
         <div class="wn-sub" style="margin-top:0.3rem;">Home states — choose none for all states (Ctrl / ⌘-click to pick several):</div>
         <select name="states" multiple class="wn-in">
@@ -72,7 +74,7 @@
       </div>
       <div class="wn-sub">
         {% if start %}Doctors who signed up after {{ start|format_datetime }} are included.{% else %}When switched on, only doctors who sign up from that moment are included.{% endif %}
-        Checks every 10 minutes on the live site. Team / Counselling-Desk accounts never get these.
+        Checks every 10 minutes on the live site. Team members get these only if you tick Team under "Who gets it".
       </div>
     </div>
     {% if can_edit %}
@@ -145,7 +147,7 @@ Log in into your dashboard to get daily counselling updates.</div>
       {{ aud_form('enquiry') }}
     </div>
     <div class="wn-card">
-      {{ sw('daily', '4 · News update', 'Every time you publish news: once nothing new has been published for 15 minutes, the whole batch goes as ONE message to doctors whose MCC or state is in it. Publish 2–3 times a day → they get 2–3 messages (max 3 a day). Not team / Desk.') }}
+      {{ sw('daily', '4 · News update', 'Every time you publish news: once nothing new has been published for 15 minutes, the whole batch goes as ONE message to doctors whose MCC or state is in it. Publish 2–3 times a day → they get 2–3 messages (max 3 a day). Team members get it too unless you untick Team.') }}
       <div class="wn-sub" style="margin-bottom:0.4rem;">{{ daily_tpl }} · id {{ template_ids[daily_tpl] }}</div>
       <div class="wn-msg">Dr. <b>{name}</b>, <b>{count}</b> new update(s) for <b>{MCC &amp; state}</b> were posted on your personalised goocampus.in dashboard today.
 

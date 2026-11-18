@@ -232,8 +232,7 @@ def run():
             return summary
         base = ("SELECT * FROM pg_users WHERE created_at >= ?::timestamp "
                 "AND COALESCE(is_blocked,0) = 0 "
-                "AND COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0) = 0 "
-                "AND COALESCE((to_jsonb(pg_users)->>'desk_access')::int,0) = 0 ")
+                "")      # team / Desk now decided by each message's "Who gets it" (Team tick box), 2026-11-18
         has_both = "TRIM(COALESCE(name,'')) <> '' AND TRIM(COALESCE(state,'')) <> ''"
 
         # 1. Welcome — name + state present, signed up in the last 7 days, not yet welcomed.
@@ -346,8 +345,6 @@ def plan_for_news(conn, news):
     states = _doctor_states(conn)
     docs = conn.execute(
         "SELECT * FROM pg_users WHERE COALESCE(is_blocked,0) = 0 "
-        "AND COALESCE((to_jsonb(pg_users)->>'is_team_member')::int,0) = 0 "
-        "AND COALESCE((to_jsonb(pg_users)->>'desk_access')::int,0) = 0 "
         "AND TRIM(COALESCE(name,'')) <> '' AND COALESCE(mobile,'') <> '' ORDER BY id").fetchall()
     from pg_admin import wa_campaigns as wc
     aud = wc.get_aud(conn, 'daily')
