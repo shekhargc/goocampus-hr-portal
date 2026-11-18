@@ -78,6 +78,9 @@ def ensure_tables(conn):
         mobile TEXT DEFAULT '', status TEXT DEFAULT 'sending', response TEXT DEFAULT '',
         sent_by TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (user_id, kind))''')
+    conn.commit()
+    from pg_admin import wa_delivery
+    wa_delivery.ensure(conn)                 # msg_id / delivery columns (once per process)
     conn.execute("CREATE TABLE IF NOT EXISTS pg_wa_news_done (news_id INTEGER PRIMARY KEY, batch TEXT DEFAULT '', "
                  "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.commit()
@@ -177,9 +180,15 @@ def send_template(to, template, placeholders=None, sender=None, langs=None):
     headers = {"Authorization": f"App {key}", "Content-Type": "application/json"}
     last = ''
     for lang in (langs or LANGS):
-        payload = {"messages": [{"from": sender or SENDER, "to": to, "content": {
+        msg = {"from": sender or SENDER, "to": to, "content": {
             "templateName": template, "language": lang,
-            "templateData": {"body": {"placeholders": list(placeholders or [])}}}}]}
+            "templateData": {"body": {"placeholders": list(placeholders or [])}}}}
+        try:                      # Infobip posts the delivery report back here (WhatsApp → Delivery report)
+            from pg_admin.wa_delivery import notify_url
+            msg["notifyUrl"] = notify_url()
+        except Exception:
+            pass
+        payload = {"messages": [msg]}
         try:
             r = _rq.post(url, json=payload, headers=headers, timeout=15)
         except Exception as e:
@@ -193,25 +202,26 @@ def send_template(to, template, placeholders=None, sender=None, langs=None):
     return False, last
 
 
-def _claim(conn, user_id, kind, template, to, who='system'):
-    row = conn.execute("INSERT INTO pg_wa_nudge_log (user_id, kind, template, mobile, status, sent_by) "
-                       "VALUES (?, ?, ?, ?, 'sending', ?) ON CONFLICT (user_id, kind) DO NOTHING RETURNING id",
-                       (user_id, kind, template, to[-4:] if to else '', who)).fetchone()
+def _claim(conn, user_id, kind, template, to, who='system', ref=''):
+    row = conn.execute("INSERT INTO pg_wa_nudge_log (user_id, kind, template, mobile, status, sent_by, ref) "
+                       "VALUES (?, ?, ?, ?, 'sending', ?, ?) ON CONFLICT (user_id, kind) DO NOTHING RETURNING id",
+                       (user_id, kind, template, to[-4:] if to else '', who, ref or None)).fetchone()
     conn.commit()
     return row['id'] if row else None
 
 
 def _finish(conn, log_id, ok, resp):
-    conn.execute("UPDATE pg_wa_nudge_log SET status = ?, response = ? WHERE id = ?",
-                 ('sent' if ok else 'failed', (resp or '')[:900], log_id))
+    from pg_admin.wa_delivery import msg_id_from
+    conn.execute("UPDATE pg_wa_nudge_log SET status = ?, response = ?, msg_id = ? WHERE id = ?",
+                 ('sent' if ok else 'failed', (resp or '')[:900], msg_id_from(resp) or None, log_id))
     conn.commit()
 
 
-def _deliver(conn, user, kind, template, placeholders):
+def _deliver(conn, user, kind, template, placeholders, ref=''):
     to = mobile_to(user.get('mobile'))
     if not to:
         return 'skipped'
-    log_id = _claim(conn, user['id'], kind, template, to)
+    log_id = _claim(conn, user['id'], kind, template, to, ref=ref)
     if not log_id:
         return 'already'
     ok, resp = send_template(to, template, placeholders)
@@ -401,7 +411,7 @@ def daily_run():
 NEWS_MAX_PER_DAY = 3     # at most this many news updates per doctor per IST day
 
 
-def _send_news(conn, news, batch):
+def _send_news(conn, news, batch, ref=''):
     """One WhatsApp per doctor whose MCC / state is in `news` (gc_daily_account_update). Max NEWS_MAX_PER_DAY a day."""
     summary = {'sent': 0, 'failed': 0, 'skipped': 0, 'capped': 0}
     day_start = conn.execute("SELECT (date_trunc('day', CURRENT_TIMESTAMP + INTERVAL '330 minutes') "
@@ -416,14 +426,14 @@ def _send_news(conn, news, batch):
             summary['capped'] += 1
             continue
         ph = [welcome_name(d.get('name')), str(cnt), clean_placeholder(label, 60), clean_placeholder(latest, 120)]
-        res = _deliver(conn, d, 'daily:' + batch, DAILY_TPL, ph)
+        res = _deliver(conn, d, 'daily:' + batch, DAILY_TPL, ph, ref=ref)
         if res in ('sent', 'failed'):
             summary[res] += 1
     logger.info("wa news %s (%s items): %s", batch, len(news), summary)
     return summary
 
 
-def news_send_for(news_ids):
+def news_send_for(news_ids, ref=''):
     """Founder 2026-11-18: the WhatsApp news update goes WITH the email — when "Send combined email now" (all its
     updates) or a single update's email send is pressed. Not for "Send to team" tests. Each news item is claimed in
     pg_wa_news_done first, so the same update never goes on WhatsApp twice. Live service + News switch ON only."""
@@ -453,7 +463,7 @@ def news_send_for(news_ids):
             "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", tuple(claimed)).fetchall()]
         if not news:
             return {}
-        return _send_news(conn, news, 'e%d' % max(claimed))
+        return _send_news(conn, news, 'e%d' % max(claimed), ref)
     except Exception as e:
         logger.error("wa news_send_for %s: %s", ids, e)
         try: conn.rollback()
@@ -485,16 +495,16 @@ def admin_digest_whatsapp(bid):
     elif (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
         flash('Staging never sends WhatsApp — do this on goocampus.org.', 'error')
     else:
-        trigger_news_send(ids)
+        trigger_news_send(ids, f'Combined email #{bid}')
         flash(f'WhatsApp news update for combined email #{bid} is going out in the background.', 'success')
     return redirect(url_for('pg_news_admin'))
 
 
-def trigger_news_send(news_ids):
+def trigger_news_send(news_ids, ref=''):
     """Background thread so the email button returns at once."""
     import threading
     try:
-        threading.Thread(target=news_send_for, args=(list(news_ids or []),), daemon=True,
+        threading.Thread(target=news_send_for, args=(list(news_ids or []), ref), daemon=True,
                          name='wa-news-send').start()
     except Exception as e:
         logger.error("wa news trigger: %s", e)
@@ -533,6 +543,11 @@ def scheduled_run():
         ensure_tables(conn)
         from pg_admin import wa_campaigns as wc
         wc.resume_stalled(conn)              # group sends whose runner died (deploy / restart)
+        try:
+            from pg_admin import wa_delivery
+            wa_delivery.pull_reports(conn)   # delivery reports Infobip couldn't push (backup)
+        except Exception as _de:
+            logger.warning("wa dlr pull: %s", _de)
         signup, enquiry = is_enabled(conn), is_enabled(conn, 'enquiry')
         if not (signup or enquiry):
             return
@@ -681,10 +696,11 @@ def admin_test():
     conn = get_db()
     try:
         ensure_tables(conn)
-        conn.execute("INSERT INTO pg_wa_nudge_log (user_id, kind, template, mobile, status, response, sent_by) "
-                     "VALUES (NULL, 'test', ?, ?, ?, ?, ?)",
+        from pg_admin.wa_delivery import msg_id_from
+        conn.execute("INSERT INTO pg_wa_nudge_log (user_id, kind, template, mobile, status, response, sent_by, msg_id) "
+                     "VALUES (NULL, 'test', ?, ?, ?, ?, ?, ?)",
                      (tpl, to[-4:], 'sent' if ok else 'failed', resp[:900],
-                      admin.get('name') or admin.get('emp_code') or 'admin'))
+                      admin.get('name') or admin.get('emp_code') or 'admin', msg_id_from(resp) or None))
         conn.commit()
     except Exception as e:
         try: conn.rollback()
@@ -766,7 +782,8 @@ def register(app):
     app.add_url_rule('/api/wa/inbound', 'pg_wa_inbound', inbound, methods=['POST'])
     app.add_url_rule('/admin/pg/news/digest/<int:bid>/whatsapp', 'pg_news_digest_whatsapp',
                      login_required(admin_digest_whatsapp), methods=['POST'])
-    from pg_admin import wa_campaigns
+    from pg_admin import wa_campaigns, wa_delivery
     wa_campaigns.register(app)
+    wa_delivery.register(app)
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
         start_scheduler()     # every 10 min; no-op unless switched ON + live service

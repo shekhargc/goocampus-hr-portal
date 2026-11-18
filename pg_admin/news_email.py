@@ -481,7 +481,7 @@ def trigger_news_blast(news_id, audience=None):
     if audience != 'team':     # WhatsApp news update goes with the email, never with a team test (2026-11-18)
         try:
             from pg_admin import wa_nudges
-            wa_nudges.trigger_news_send([news_id])
+            wa_nudges.trigger_news_send([news_id], f'News #{news_id} email')
         except Exception as e:
             logger.error("news blast %s: WhatsApp trigger failed: %s", news_id, e)
 

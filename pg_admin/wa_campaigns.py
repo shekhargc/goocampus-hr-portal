@@ -290,9 +290,9 @@ def create(conn, tpl, vars_, f, docs, who):
          filters_label(f), len(docs), who)).fetchone()['id']
     kind = f'campaign:{cid}'
     for d in docs:
-        conn.execute("INSERT INTO pg_wa_nudge_log (user_id, kind, template, mobile, status, sent_by) "
-                     "VALUES (?, ?, ?, ?, 'queued', ?) ON CONFLICT (user_id, kind) DO NOTHING",
-                     (d['id'], kind, tpl['name'], d['to'][-4:], who))
+        conn.execute("INSERT INTO pg_wa_nudge_log (user_id, kind, template, mobile, status, sent_by, ref) "
+                     "VALUES (?, ?, ?, ?, 'queued', ?, ?) ON CONFLICT (user_id, kind) DO NOTHING",
+                     (d['id'], kind, tpl['name'], d['to'][-4:], who, f'Group send #{cid}'))
     conn.commit()
     return cid
 
@@ -481,9 +481,11 @@ def send_page():
                         vars_, docs[0] if docs else {'name': 'Test', 'state': 'Karnataka'}),
                         sender=tpl.get('sender') or None,
                         langs=tuple(dict.fromkeys([tpl.get('language') or 'en'] + list(w.LANGS))))
+                    from pg_admin.wa_delivery import msg_id_from
                     conn.execute("INSERT INTO pg_wa_nudge_log (user_id, kind, template, mobile, status, response, "
-                                 "sent_by) VALUES (NULL, 'test', ?, ?, ?, ?, ?)",
-                                 (tpl['name'], to[-4:], 'sent' if ok else 'failed', resp[:900], _who(a)))
+                                 "sent_by, msg_id) VALUES (NULL, 'test', ?, ?, ?, ?, ?, ?)",
+                                 (tpl['name'], to[-4:], 'sent' if ok else 'failed', resp[:900], _who(a),
+                                  msg_id_from(resp) or None))
                     conn.commit()
                     flash(('Test accepted — check your phone. ' if ok else 'Test FAILED: ') + resp[:250],
                           'success' if ok else 'error')
