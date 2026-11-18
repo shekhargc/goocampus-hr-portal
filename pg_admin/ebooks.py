@@ -155,10 +155,11 @@ def api_list():
             chs.setdefault(r['ebook_code'], []).append({'no': r['chapter_no'], 'title': r['title'],
                                                         'pages': r['page_count'], 'summary': r['summary'] or '',
                                                         'service_tag': r['service_tag'] or '', 'is_step': bool(r['is_step'])})
-        prog = {}
+        prog, last = {}, {}
         for r in conn.execute("SELECT ebook_code, chapter_no, page_no, max_page, updated_at FROM pg_ebook_progress "
-                              "WHERE user_id = ?", (u['id'],)).fetchall():
+                              "WHERE user_id = ? ORDER BY updated_at", (u['id'],)).fetchall():
             prog.setdefault(r['ebook_code'], {})[r['chapter_no']] = {'page': r['page_no'], 'max_page': r['max_page']}
+            last[r['ebook_code']] = {'chapter': r['chapter_no'], 'page': r['page_no']}     # newest wins
         out = []
         for b in books:
             base, gst, payable = _money(b)
@@ -176,6 +177,7 @@ def api_list():
                 item['chapters'] = chs.get(b['code'], [])
                 item['pages'] = sum(c['pages'] for c in item['chapters'])
                 item['progress'] = prog.get(b['code'], {})
+                item['last_read'] = last.get(b['code'])          # {chapter, page} of the page opened most recently
             out.append(item)
         return jsonify({'ok': True, 'ebooks': out})
     except Exception as e:
