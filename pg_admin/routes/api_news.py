@@ -9,6 +9,7 @@ The "add a state" picker only offers states that actually have published news.
 X-PG-Key guards the reads; the follow endpoints ALSO need the doctor's Bearer token.
 The PDF stream is public.
 """
+import re
 import logging
 from flask import request, jsonify, Response
 from db import get_db
@@ -528,6 +529,15 @@ def counselling_status(conn, code, today=None, headings=None):
     rows = CAL.events_for(conn, [code])
     rorder = {r: i for i, r in enumerate(CAL.ROUNDS)}
     steps = {}
+    # ON HOLD (2026-11-18, MCC Round 2 result stayed by the Madras High Court): a calendar step whose label says
+    # "on hold" is flagged explicitly — on_hold + hold_reason on the step, the round and next_deadline, and the
+    # headline says so — so the website keys off a flag, not words. Reason = text in brackets, else the note.
+    holds = {}
+    for r in rows:
+        lab = r.get('label') or ''
+        if 'on hold' in lab.lower():
+            m = re.search(r'\(([^)]+)\)', lab)
+            holds[(r['round'] or '', r['event'])] = (m.group(1) if m else (r.get('note') or '')[:80]).strip()
     for r in rows:
         if r['event'] not in STEP_ORDER:
             continue
@@ -550,7 +560,10 @@ def counselling_status(conn, code, today=None, headings=None):
         item = {'round': rnd or None, 'step': ev, 'label': CAL.EVENT_LABELS.get(ev, ev),
                 'bar_label': BAR_STEPS.get(ev), 'start': v['start'].isoformat(), 'end': v['end'].isoformat(),
                 'time': CAL.short_time(v['time'])[0], 'note': CAL.short_time(v['time'])[1],
-                'status': st, 'news_id': v['news_id'], 'revised': v['revised']}
+                'status': st, 'news_id': v['news_id'], 'revised': v['revised'],
+                'on_hold': (rnd, ev) in holds, 'hold_reason': holds.get((rnd, ev)) or None}
+        rh = next((holds[k] for k in holds if k[0] == rnd and k[1] != ev), None)
+        item['subject_to_hold'] = rh if (rh and not item['on_hold'] and st != 'done') else None
         rounds.setdefault(rnd, []).append(item)
         flat.append(item)
     out_rounds = []
@@ -563,15 +576,20 @@ def counselling_status(conn, code, today=None, headings=None):
         else:
             rst = 'live'
         live_bar = next((i['bar_label'] for i in its if i['status'] == 'live' and i['bar_label']), None)
+        rhold = next((i for i in its if i['on_hold']), None)
         out_rounds.append({'round': rnd or 'General', 'status': rst, 'start': min(i['start'] for i in its),
-                           'end': max(i['end'] for i in its), 'live_step': live_bar, 'steps': its})
+                           'end': max(i['end'] for i in its), 'live_step': live_bar, 'steps': its,
+                           'on_hold': bool(rhold), 'hold_step': rhold['step'] if rhold else None,
+                           'hold_reason': rhold['hold_reason'] if rhold else None})
     flat.sort(key=lambda i: (i['start'], STEP_ORDER.index(i['step'])))
     live = [i for i in flat if i['status'] == 'live']
     nxt = next((i for i in flat if i['status'] == 'upcoming'), None)
     current = live[0] if live else None
     dl = min((i for i in flat if i['status'] in ('live', 'upcoming')), key=lambda i: i['end'], default=None)
     next_deadline = ({'date': dl['end'], 'label': dl['label'], 'round': dl['round'], 'time': dl['time'], 'note': dl['note'],
-                      'news_id': dl['news_id'], 'heading': headings.get(dl['news_id'], '')} if dl else None)
+                      'news_id': dl['news_id'], 'heading': headings.get(dl['news_id'], ''),
+                      'on_hold': dl['on_hold'], 'subject_to_hold': dl['subject_to_hold'],
+                      'hold_reason': dl['hold_reason'] or dl['subject_to_hold']} if dl else None)
     from datetime import date as _date
     if current:
         headline = (f"{current['round'] + ': ' if current['round'] else ''}{current['label']} open"
@@ -579,6 +597,18 @@ def counselling_status(conn, code, today=None, headings=None):
     elif nxt:
         headline = (f"Next: {nxt['round'] + ' ' if nxt['round'] else ''}{nxt['label'].lower()}"
                     f" from {_fmt_d(_date.fromisoformat(nxt['start']))}")
+    # A step on hold in a round that isn't finished leads the headline.
+    hold = next((i for i in flat if i['on_hold'] and any(j['round'] == i['round'] and j['status'] != 'done'
+                                                         for j in flat)), None)
+    if hold:
+        rest = next((j for j in flat if j['round'] == hold['round'] and j['status'] in ('live', 'upcoming')
+                     and not j['on_hold']), None)
+        headline = f"{hold['round'] + ' ' if hold['round'] else ''}{hold['label'].lower()} on hold" + (
+            f" ({hold['hold_reason']})" if hold['hold_reason'] else '')
+        if rest:
+            more = f" · {rest['label'].lower()} from {_fmt_d(_date.fromisoformat(rest['start']))} subject to it"
+            if len(headline + more) <= 90:
+                headline += more
     done = sum(1 for i in flat if i['status'] == 'done')
     # 'completed' only once a FINAL round (Mop-up / Stray) is published and every step is done — dates
     # all passed with just registration / verification, or only Round 1-2 out, is NOT the end of
@@ -596,7 +626,8 @@ def counselling_status(conn, code, today=None, headings=None):
             last = max((i['round'] for i in alloc), key=lambda r: rorder.get(r, 50))
             headline = f'{last} completed — next round dates awaited'
     return {'status': status, 'stage': current or nxt, 'headline': headline[:90], 'next_deadline': next_deadline,
-            'progress': round(100 * done / len(flat)) if flat else 0, 'rounds': out_rounds}
+            'progress': round(100 * done / len(flat)) if flat else 0, 'rounds': out_rounds,
+            'on_hold': [{'round': i['round'], 'step': i['step'], 'reason': i['hold_reason']} for i in flat if i['on_hold']]}
 
 
 def _authority_order(codes):
