@@ -282,3 +282,20 @@ MD/MS stream 2,832 (2,815 MD/MS + 17 diploma; page Rank = state merit rank on al
 29 Post-MBBS diploma; page Rank = AIR on all lines); Private 1,767 · Government 971 · Minority 115 · DNB 43 ·
 In-service 8; every roll on the merit list (rank_ai 2,904/2,904); reserved seats all to matching categories;
 1,093 college × course × quota × category groups all within the 2026 seat matrix (2,861 of 4,062 seats).
+
+## Andhra Pradesh — Management Quota (`andhra_pradesh_mq.py`)
+    /usr/bin/python3 tools/results/andhra_pradesh_mq.py <allotment.pdf> <out.json> [--seat-matrix <ap_seat_matrix_dump.json>] [--published YYYY-MM-DD]
+Dr NTRUHS "College wise Final Allotment List of PG (Medical) Admissions, Management Quota Phase-I 2026-27" (inbox 1776):
+one table per college, 12 columns, one row per allotted candidate. Stored as its own round **'Round 1 (Management Quota)'**
+(round_order 1), next to CQ non-service 'Round 1' and CQ in-service 'Round 1 (In-service)'.
+- **No personal data:** name, roll and gender are never output or printed.
+- `rank` = `rank_ai` = printed NEET AIR (MQ merit is the NEET rank).
+- Allotment Details `APLC - GM - S1B --- 8` → college code / course code / seat category (trailing number not stored).
+  Quota + category in the 2025 AP spellings, same as `tools/seat_matrix/andhra_pradesh_mq.py`: S-1A / S-1B / S-1 / CA-SF →
+  `Management Quota-(Cat-B)`, S-2 / CA-NRI → `NRI Quota-(Cat-C)`, S-3 → `Institutional Quota-(Cat-C)`;
+  `candidate_category` = caste category (+ "(Muslim minority)"), `remarks` = local area (AP / Others).
+- Checks: 12 columns, every college code matches its heading, branch name matches the course code, S.No 1..n per college,
+  NEET ranks in merit order per college, rolls in the PDF text = rows, courses in specialty_sheet.json; `--seat-matrix`
+  (staging seatmatrix-dump of "Andhra Pradesh — State Counselling") — no college × course × seat category over its MQ seats.
+2026 Phase-I final (17.11.2026): 503 allotted (all MD/MS) in 23 colleges — Cat-B 430 (S-1B 350, S-1A 58, CA-SF 22),
+NRI S-2 62, Institutional S-3 11; MQ seat matrix 938 → 53.6% filled; none over the matrix.
