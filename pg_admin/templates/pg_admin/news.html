@@ -24,8 +24,14 @@
   {% endwith %}
 
   <!-- ── Post ── -->
-  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:20px;margin-bottom:22px;max-width:860px;">
-    <h2 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:var(--navy);">Post an update</h2>
+  {# Collapsible (founder 2026-11-18): closed after posting so Posted updates sit higher; opens itself when an
+     inbox / archive draft is loaded or Edit is pressed. #}
+  <details id="postCard" {{ 'open' if prefill }} style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;padding:16px 20px;margin-bottom:22px;max-width:860px;">
+    <summary style="cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+      <h2 style="margin:0;font-size:1.05rem;font-weight:700;color:var(--navy);">✏️ Post an update</h2>
+      <span class="postToggle" style="font-size:0.8rem;font-weight:600;color:var(--orange,#ea580c);"></span>
+    </summary>
+    <style>#postCard summary::-webkit-details-marker{display:none} #postCard .postToggle::after{content:'Open ▾'} #postCard[open] .postToggle::after{content:'Close ▴'} #postCard[open] summary{margin-bottom:14px}</style>
     <form id="newsForm" method="POST" action="{{ url_for('pg_news_save') }}" enctype="multipart/form-data">
       <input type="hidden" name="news_id" value="{{ prefill.news_id if prefill and prefill.news_id else '' }}">
       <input type="hidden" name="inbox_id" value="{{ prefill.inbox_id if prefill else '' }}">
@@ -172,7 +178,7 @@ Result | 24 Oct | 14 Nov | 4 Dec"
         Post update
       </button>
     </form>
-  </div>
+  </details>
 
   <!-- ── Combined email (founder 2026-11-03) ── -->
   {% if digest %}
@@ -223,18 +229,45 @@ Result | 24 Oct | 14 Nov | 4 Dec"
     {% endif %}
     {% if digest.last %}
     <div style="margin-top:10px;font-size:0.76rem;color:var(--gray-500);">Last combined email #{{ digest.last.id }}: {{ digest.last.created_at|format_datetime }}{% if digest.last.created_by %} by {{ digest.last.created_by }}{% endif %} —
-      {% if digest.last.status == 'sent' %}sent to {{ digest.last.sent }} people{% if digest.last.failed %} ({{ digest.last.failed }} failed){% endif %}{% else %}sending… {{ digest.last.sent }} of {{ digest.last.recipients }} so far{% endif %}.</div>
+      {% if digest.last.status == 'sent' %}sent to {{ digest.last.sent }} people{% if digest.last.failed %} ({{ digest.last.failed }} failed){% endif %}{% else %}sending… {{ digest.last.sent }} of {{ digest.last.recipients }} so far (the count updates every 50 emails){% endif %}.
+      {% if digest.last.wa_done %}<span style="color:#166534;font-weight:600;margin-left:6px;">💬 WhatsApp sent</span>
+      {% elif digest.last.wa_done is not none %}
+      <form method="POST" action="/admin/pg/news/digest/{{ digest.last.id }}/whatsapp" style="display:inline;margin-left:6px;"
+            onsubmit="return confirm('Send the WhatsApp news update for combined email #{{ digest.last.id }} now? Each doctor gets it once (max 3 a day).');">
+        <button type="submit" style="background:none;border:0;color:#16a34a;font-weight:700;cursor:pointer;font-size:0.76rem;padding:0;">💬 Send WhatsApp for this email</button>
+      </form>{% endif %}</div>
     {% endif %}
   </div>
   {% endif %}
 
   <!-- ── Posted ── -->
-  <h2 style="margin:0 0 12px;font-size:1.05rem;font-weight:700;color:var(--navy);">Posted updates</h2>
+  <h2 style="margin:0 0 10px;font-size:1.05rem;font-weight:700;color:var(--navy);">Posted updates
+    <span id="pnCount" style="font-size:0.8rem;font-weight:600;color:var(--gray-500);margin-left:6px;">{{ items|length }} posted</span></h2>
   {% if items %}
+  {% set _scopes = items|map(attribute='state')|select|unique|sort %}
+  {% set _auths = items|map(attribute='body_label')|select|unique|sort %}
+  <div id="pnFilters" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+    <input id="pnQ" type="search" placeholder="🔍 Search heading…" style="flex:1;min-width:220px;padding:7px 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;">
+    <select id="pnScope" style="padding:7px 8px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;">
+      <option value="">All scopes</option><option value="All India">All India</option>
+      {% for s_ in _scopes %}<option value="{{ s_ }}">{{ s_ }}</option>{% endfor %}
+    </select>
+    <select id="pnAuth" style="padding:7px 8px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;">
+      <option value="">All authorities</option>
+      {% for a_ in _auths %}<option value="{{ a_ }}">{{ a_ }}</option>{% endfor %}
+    </select>
+    <select id="pnStatus" style="padding:7px 8px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;">
+      <option value="">Live + hidden</option><option value="live">Live only</option><option value="hidden">Hidden only</option>
+    </select>
+    <label style="font-size:0.78rem;color:var(--gray-600);">Posted from <input id="pnFrom" type="date" style="padding:5px 6px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.82rem;"></label>
+    <label style="font-size:0.78rem;color:var(--gray-600);">to <input id="pnTo" type="date" style="padding:5px 6px;border:1px solid var(--gray-300);border-radius:8px;font-size:0.82rem;"></label>
+    <button type="button" id="pnClear" style="background:none;border:1px solid var(--gray-300);border-radius:8px;padding:6px 10px;font-size:0.8rem;cursor:pointer;">Clear</button>
+  </div>
   <div style="background:#fff;border:1px solid var(--gray-200);border-radius:12px;overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
+    <table id="pnTable" style="width:100%;border-collapse:collapse;font-size:0.86rem;">
       <thead>
         <tr style="background:var(--gray-50);text-align:left;color:var(--gray-600);">
+          <th style="padding:10px 10px;width:42px;">S.No</th>
           <th style="padding:10px 14px;">Scope</th>
           <th style="padding:10px 14px;">Authority</th>
           <th style="padding:10px 14px;">Heading</th>
@@ -247,7 +280,11 @@ Result | 24 Oct | 14 Nov | 4 Dec"
       </thead>
       <tbody>
         {% for it in items %}
-        <tr style="border-top:1px solid var(--gray-100);">
+        <tr class="pnRow" style="border-top:1px solid var(--gray-100);"
+            data-scope="{{ 'All India' if it.scope == 'all_india' else (it.state or '') }}" data-auth="{{ it.body_label or '' }}"
+            data-head="{{ (it.heading or '')|lower }}" data-live="{{ 'live' if it.is_published else 'hidden' }}"
+            data-posted="{{ it.posted_ist or '' }}">
+          <td class="pnNo" style="padding:10px 10px;color:var(--gray-500);font-weight:600;">{{ loop.index }}</td>
           <td style="padding:10px 14px;">{{ 'All India' if it.scope == 'all_india' else it.state }}</td>
           <td style="padding:10px 14px;font-weight:600;color:var(--navy);">{{ it.body_label }}</td>
           <td style="padding:10px 14px;min-width:240px;">{{ it.heading }}
@@ -420,10 +457,32 @@ function newsTest(id){
       try { var tt = JSON.parse(btn.dataset.ktimes||'{}'); for (var k2 in tt) set('kdt_'+k2, tt[k2]); } catch(e) {}
       setAlert(false);  // editing → don't re-blast unless the user ticks it back on
       document.getElementById('editingBanner').style.display='block';
+      var pc = document.getElementById('postCard'); if (pc) pc.open = true;
       submitLabel('Save changes');
       f.scrollIntoView({behavior:'smooth',block:'start'});
     });
   });
+})();
+// Posted updates: search + filters + S.No that renumbers (founder 2026-11-18)
+(function(){
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#pnTable .pnRow'));
+  if (!rows.length) return;
+  var q=document.getElementById('pnQ'), sc=document.getElementById('pnScope'), au=document.getElementById('pnAuth'),
+      st=document.getElementById('pnStatus'), fr=document.getElementById('pnFrom'), to=document.getElementById('pnTo'),
+      cnt=document.getElementById('pnCount');
+  function run(){
+    var words=(q.value||'').toLowerCase().split(/\s+/).filter(Boolean), n=0;
+    rows.forEach(function(r){
+      var d=r.dataset, ok=words.every(function(w){ return d.head.indexOf(w)>=0; })
+        && (!sc.value || d.scope===sc.value) && (!au.value || d.auth===au.value) && (!st.value || d.live===st.value)
+        && (!fr.value || (d.posted && d.posted>=fr.value)) && (!to.value || (d.posted && d.posted<=to.value));
+      r.style.display = ok ? '' : 'none';
+      if (ok) { n++; r.querySelector('.pnNo').textContent = n; }
+    });
+    cnt.textContent = n===rows.length ? rows.length+' posted' : 'showing '+n+' of '+rows.length;
+  }
+  [q,sc,au,st,fr,to].forEach(function(el){ el.addEventListener('input',run); el.addEventListener('change',run); });
+  document.getElementById('pnClear').addEventListener('click',function(){ q.value=sc.value=au.value=st.value=fr.value=to.value=''; run(); });
 })();
 </script>
 {% endblock %}

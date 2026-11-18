@@ -478,6 +478,12 @@ def trigger_news_blast(news_id, audience=None):
         t.start()
     except Exception as e:
         logger.error("news blast: could not start thread: %s", e)
+    if audience != 'team':     # WhatsApp news update goes with the email, never with a team test (2026-11-18)
+        try:
+            from pg_admin import wa_nudges
+            wa_nudges.trigger_news_send([news_id])
+        except Exception as e:
+            logger.error("news blast %s: WhatsApp trigger failed: %s", news_id, e)
 
 
 def _audience(news):

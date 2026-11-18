@@ -12,8 +12,9 @@
                             mobile to a website enquiry (Sales → Inquiries from goocampus.in, or a Management /
                             NRI call-back) made after its own switch-on. (2026-11-17)
   4. gc_daily_account_update (id 39934717086143575) — "Dr. {{1}}, {{2}} new update(s) for {{3}} were posted…
-                            Latest: {{4}}". Since 2026-11-18: after EACH publish batch (15 quiet minutes after the
-                            last item), max 3 a day, only to doctors whose MCC / state is in that batch (was: 8 pm digest). Quick reply "Stop updates" (or STOP) → never again (pg_wa_optout,
+                            Latest: {{4}}". Since 2026-11-18: sent WITH the news email — "Send combined email now"
+                            or a single update's email send (not "Send to team") — max 3 a day, only to doctors whose
+                            MCC / state is in those updates (was: 8 pm digest, then briefly 15 min after publishing). Quick reply "Stop updates" (or STOP) → never again (pg_wa_optout,
                             via the Infobip inbound webhook /api/wa/inbound?k=PG_WA_INBOUND_KEY). (2026-11-17)
 
 Rules
@@ -397,38 +398,11 @@ def daily_run():
         conn.close()
 
 
-NEWS_QUIET_MIN = 15      # a "bulk publish" is over when nothing new was published for this many minutes
 NEWS_MAX_PER_DAY = 3     # at most this many news updates per doctor per IST day
 
 
-def news_batch_run(conn):
-    """Founder 2026-11-18: "every time I publish news in bulk — if I do it twice or thrice, send it."
-    Every 10 min: news published (after the switch-on, last 24 h) that no WhatsApp went out for yet. Once nothing new
-    has been published for NEWS_QUIET_MIN minutes, the whole batch = ONE message per doctor whose MCC / state is in it
-    (gc_daily_account_update; {{2}} = items in this batch). Max NEWS_MAX_PER_DAY a day per doctor; STOP respected."""
-    ensure_tables(conn)
-    start = since(conn, 'daily')
-    if not start:
-        return {}
-    news = [dict(r) for r in conn.execute(
-        "SELECT id, scope, COALESCE(state,'') AS state, heading, COALESCE(published_at, created_at) AS pub FROM pg_news n "
-        "WHERE COALESCE(is_published, TRUE) AND (to_jsonb(n)->>'deleted_at') IS NULL "
-        "AND COALESCE(published_at, created_at) >= ?::timestamp "
-        "AND COALESCE(published_at, created_at) >= CURRENT_TIMESTAMP - INTERVAL '24 hours' "
-        "AND COALESCE(published_at, created_at) <= CURRENT_TIMESTAMP "
-        "AND NOT EXISTS (SELECT 1 FROM pg_wa_news_done d WHERE d.news_id = n.id) "
-        "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", (start,)).fetchall()]
-    if not news:
-        return {}
-    quiet = conn.execute("SELECT ?::timestamp <= CURRENT_TIMESTAMP - INTERVAL '%d minutes' AS ok" % NEWS_QUIET_MIN,
-                         (news[0]['pub'],)).fetchone()['ok']
-    if not quiet:
-        return {'waiting': len(news)}            # still publishing — wait for the batch to finish
-    batch = 'b%d' % max(n['id'] for n in news)
-    for n in news:
-        conn.execute("INSERT INTO pg_wa_news_done (news_id, batch) VALUES (?, ?) ON CONFLICT (news_id) DO NOTHING",
-                     (n['id'], batch))
-    conn.commit()
+def _send_news(conn, news, batch):
+    """One WhatsApp per doctor whose MCC / state is in `news` (gc_daily_account_update). Max NEWS_MAX_PER_DAY a day."""
     summary = {'sent': 0, 'failed': 0, 'skipped': 0, 'capped': 0}
     day_start = conn.execute("SELECT (date_trunc('day', CURRENT_TIMESTAMP + INTERVAL '330 minutes') "
                              "- INTERVAL '330 minutes') AS t").fetchone()['t']
@@ -445,8 +419,85 @@ def news_batch_run(conn):
         res = _deliver(conn, d, 'daily:' + batch, DAILY_TPL, ph)
         if res in ('sent', 'failed'):
             summary[res] += 1
-    logger.info("wa news batch %s (%s items): %s", batch, len(news), summary)
+    logger.info("wa news %s (%s items): %s", batch, len(news), summary)
     return summary
+
+
+def news_send_for(news_ids):
+    """Founder 2026-11-18: the WhatsApp news update goes WITH the email — when "Send combined email now" (all its
+    updates) or a single update's email send is pressed. Not for "Send to team" tests. Each news item is claimed in
+    pg_wa_news_done first, so the same update never goes on WhatsApp twice. Live service + News switch ON only."""
+    if (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
+        return {}
+    ids = sorted({int(i) for i in (news_ids or []) if str(i).isdigit()})
+    if not ids:
+        return {}
+    conn = get_db()
+    try:
+        ensure_tables(conn)
+        if not is_enabled(conn, 'daily'):
+            return {}
+        claimed = []
+        for nid in ids:
+            r = conn.execute("INSERT INTO pg_wa_news_done (news_id, batch) VALUES (?, ?) ON CONFLICT (news_id) "
+                             "DO NOTHING RETURNING news_id", (nid, 'e%d' % max(ids))).fetchone()
+            if r:
+                claimed.append(nid)
+        conn.commit()
+        if not claimed:
+            return {}
+        news = [dict(r) for r in conn.execute(
+            "SELECT id, scope, COALESCE(state,'') AS state, heading FROM pg_news n WHERE id IN (" +
+            ','.join(['?'] * len(claimed)) + ") AND COALESCE(is_published, TRUE) "
+            "AND (to_jsonb(n)->>'deleted_at') IS NULL "
+            "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", tuple(claimed)).fetchall()]
+        if not news:
+            return {}
+        return _send_news(conn, news, 'e%d' % max(claimed))
+    except Exception as e:
+        logger.error("wa news_send_for %s: %s", ids, e)
+        try: conn.rollback()
+        except Exception: pass
+        return {}
+    finally:
+        conn.close()
+
+
+def admin_digest_whatsapp(bid):
+    """POST /admin/pg/news/digest/<bid>/whatsapp — WhatsApp for an already-sent combined email (e.g. one sent before
+    the WhatsApp went with the email). Same claim rule: an update never goes on WhatsApp twice."""
+    from flask import redirect, url_for, flash
+    from pg_admin.routes.users_admin import _require_admin
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    conn = get_db()
+    try:
+        ensure_tables(conn)
+        on = is_enabled(conn, 'daily')
+        r = conn.execute("SELECT news_ids FROM pg_news_digest_batches WHERE id = ?", (bid,)).fetchone()
+        ids = [int(x) for x in ((r or {}).get('news_ids') or '').split(',') if x.strip().isdigit()]
+    finally:
+        conn.close()
+    if not on:
+        flash('The WhatsApp News update switch is OFF (Registered Doctors → 💬 WhatsApp).', 'error')
+    elif not ids:
+        flash('No updates found for that email.', 'error')
+    elif (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
+        flash('Staging never sends WhatsApp — do this on goocampus.org.', 'error')
+    else:
+        trigger_news_send(ids)
+        flash(f'WhatsApp news update for combined email #{bid} is going out in the background.', 'success')
+    return redirect(url_for('pg_news_admin'))
+
+
+def trigger_news_send(news_ids):
+    """Background thread so the email button returns at once."""
+    import threading
+    try:
+        threading.Thread(target=news_send_for, args=(list(news_ids or []),), daemon=True,
+                         name='wa-news-send').start()
+    except Exception as e:
+        logger.error("wa news trigger: %s", e)
 
 
 def scheduled_daily():
@@ -483,8 +534,7 @@ def scheduled_run():
         from pg_admin import wa_campaigns as wc
         wc.resume_stalled(conn)              # group sends whose runner died (deploy / restart)
         signup, enquiry = is_enabled(conn), is_enabled(conn, 'enquiry')
-        news_on = is_enabled(conn, 'daily')
-        if not (signup or enquiry or news_on):
+        if not (signup or enquiry):
             return
         got = conn.execute("SELECT pg_try_advisory_lock(hashtext('pg_wa_nudges')) AS ok").fetchone()['ok']
         if not got:
@@ -496,8 +546,6 @@ def scheduled_run():
                 s_, f_ = enquiry_run(conn)
                 if s_ or f_:
                     logger.info("wa enquiry: sent %s failed %s", s_, f_)
-            if news_on:
-                news_batch_run(conn)
         finally:
             conn.execute("SELECT pg_advisory_unlock(hashtext('pg_wa_nudges'))")
             conn.commit()
@@ -515,7 +563,7 @@ def start_scheduler():
         sch = BackgroundScheduler()
         sch.add_job(scheduled_run, 'interval', minutes=10, id='pg_wa_nudges',
                     coalesce=True, max_instances=1, misfire_grace_time=600)
-        # (8 pm IST daily digest retired 2026-11-18 — news updates now go per publish batch, see news_batch_run)
+        # (8 pm IST daily digest retired 2026-11-18 — news updates now go WITH the news email, see news_send_for)
         sch.start()
     except Exception as e:
         logger.warning("wa nudge scheduler: %s", e)
@@ -716,6 +764,8 @@ def register(app):
     app.add_url_rule('/admin/pg/users/whatsapp/optout', 'pg_wa_nudges_optout', login_required(admin_optout),
                      methods=['POST'])
     app.add_url_rule('/api/wa/inbound', 'pg_wa_inbound', inbound, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/digest/<int:bid>/whatsapp', 'pg_news_digest_whatsapp',
+                     login_required(admin_digest_whatsapp), methods=['POST'])
     from pg_admin import wa_campaigns
     wa_campaigns.register(app)
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
