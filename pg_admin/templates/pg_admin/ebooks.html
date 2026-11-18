@@ -100,6 +100,42 @@
     {% endif %}
   </div>
 
+  <div class="eb-card" id="stages">
+    <div class="eb-h">Pathway Planner stages · {{ book|upper }}</div>
+    <div class="eb-sub" style="margin-bottom:0.6rem;">The doctor's checklist for this country, in order. Route decides who sees a stage: All, GP (MBBS), Specialist (Indian MD/MS/DNB) or Residency. Your edits are never overwritten by a re-import.</div>
+    {% for st in stages %}
+    <details style="border-top:1px solid var(--gray-100);padding:0.45rem 0;" {{ 'open' if not st.title }}>
+      <summary style="cursor:pointer;font-size:0.86rem;"><b>{{ st.stage_no }}.</b> {{ st.title }} <span class="eb-pill" style="background:#eef2ff;color:#3730a3;">{{ routes.get(st.route, 'All routes') if st.route != 'all' else 'All routes' }}</span>{% if not st.is_active %} <span class="eb-pill" style="background:#e5e7eb;color:#374151;">hidden</span>{% endif %}{% if st.admin_edited %} <span class="eb-sub">edited by {{ st.updated_by }}</span>{% endif %}</summary>
+      <form method="post" action="{{ url_for('pg_pathway_save_stage') }}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.45rem;margin-top:0.4rem;">
+        <input type="hidden" name="id" value="{{ st.id }}"><input type="hidden" name="country" value="{{ book }}">
+        <label class="eb-sub">Title<br><input class="eb-in" name="title" value="{{ st.title }}" style="width:100%;"></label>
+        <label class="eb-sub">Route<br><select class="eb-in" name="route"><option value="all" {{ 'selected' if st.route == 'all' }}>All routes</option>{% for k, v in routes.items() %}<option value="{{ k }}" {{ 'selected' if st.route == k }}>{{ v }}</option>{% endfor %}</select></label>
+        <label class="eb-sub">Book chapter no.<br><input class="eb-in" name="chapter_no" value="{{ st.chapter_no or '' }}"></label>
+        <label class="eb-sub" style="grid-column:1/-1;">What this stage is<br><textarea class="eb-in" name="what" style="width:100%;min-height:48px;">{{ st.what }}</textarea></label>
+        <label class="eb-sub" style="grid-column:1/-1;">Documents / items needed (comma-separated)<br><input class="eb-in" name="needs" value="{{ st.needs_text }}" style="width:100%;"></label>
+        <label class="eb-sub">Typical time<br><input class="eb-in" name="typical_time" value="{{ st.typical_time or '' }}"></label>
+        <label class="eb-sub">Typical cost<br><input class="eb-in" name="typical_cost" value="{{ st.typical_cost or '' }}"></label>
+        <label class="eb-sub">GooCampus can do this<br><input class="eb-in" name="service_tag" value="{{ st.service_tag or '' }}"></label>
+        <label class="eb-sub"><input type="checkbox" name="is_active" value="1" {{ 'checked' if st.is_active }}> show to doctors</label>
+        <div><button class="eb-btn">Save stage</button></div>
+      </form>
+    </details>
+    {% else %}
+    <div class="eb-sub">No stages yet for this country.</div>
+    {% endfor %}
+    <details style="margin-top:0.6rem;"><summary class="eb-sub" style="cursor:pointer;">＋ Add a stage at the end</summary>
+      <form method="post" action="{{ url_for('pg_pathway_save_stage') }}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.45rem;margin-top:0.4rem;">
+        <input type="hidden" name="country" value="{{ book }}"><input type="hidden" name="is_active" value="1">
+        <label class="eb-sub">Title<br><input class="eb-in" name="title" required style="width:100%;"></label>
+        <label class="eb-sub">Route<br><select class="eb-in" name="route"><option value="all">All routes</option>{% for k, v in routes.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+        <label class="eb-sub">Book chapter no.<br><input class="eb-in" name="chapter_no"></label>
+        <label class="eb-sub" style="grid-column:1/-1;">What this stage is<br><textarea class="eb-in" name="what" style="width:100%;min-height:48px;"></textarea></label>
+        <label class="eb-sub" style="grid-column:1/-1;">Documents / items needed (comma-separated)<br><input class="eb-in" name="needs" style="width:100%;"></label>
+        <div><button class="eb-btn">Add stage</button></div>
+      </form>
+    </details>
+  </div>
+
   <div class="eb-card">
     <div class="eb-h">Give access by hand</div>
     <form method="post" action="{{ url_for('pg_ebooks_grant') }}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;" onsubmit="return confirm('Give this doctor access?');">
