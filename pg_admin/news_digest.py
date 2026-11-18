@@ -143,6 +143,11 @@ def start(actor):
     finally:
         conn.close()
     threading.Thread(target=_send_batch, args=(bid,), daemon=True, name=f'pg-news-digest-{bid}').start()
+    try:                       # WhatsApp news update goes with the email (founder 2026-11-18)
+        from pg_admin import wa_nudges
+        wa_nudges.trigger_news_send(claimed)
+    except Exception as e:
+        logger.error("news digest #%s: WhatsApp trigger failed: %s", bid, e)
     return bid, len(claimed), n
 
 

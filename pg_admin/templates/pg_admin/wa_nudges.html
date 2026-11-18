@@ -147,7 +147,7 @@ Log in into your dashboard to get daily counselling updates.</div>
       {{ aud_form('enquiry') }}
     </div>
     <div class="wn-card">
-      {{ sw('daily', '4 · News update', 'Every time you publish news: once nothing new has been published for 15 minutes, the whole batch goes as ONE message to doctors whose MCC or state is in it. Publish 2–3 times a day → they get 2–3 messages (max 3 a day). Team members get it too unless you untick Team.') }}
+      {{ sw('daily', '4 · News update', 'Goes WITH the news email: the moment you press “Send combined email now” (or a single update’s email send), ONE WhatsApp per doctor whose MCC or state is in those updates. 2–3 emails a day → 2–3 messages (max 3 a day). “Send to team” tests never trigger it. Team members get it too unless you untick Team.') }}
       <div class="wn-sub" style="margin-bottom:0.4rem;">{{ daily_tpl }} · id {{ template_ids[daily_tpl] }}</div>
       <div class="wn-msg">Dr. <b>{name}</b>, <b>{count}</b> new update(s) for <b>{MCC &amp; state}</b> were posted on your personalised goocampus.in dashboard today.
 
