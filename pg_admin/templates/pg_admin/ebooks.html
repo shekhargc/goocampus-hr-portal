@@ -1,0 +1,129 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}E-books & Pathways{% endblock %}
+
+{% block section_content %}
+<style>
+  .eb-card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1.1rem 1.2rem; margin-bottom:1.1rem; }
+  .eb-h { font-weight:700; color:var(--navy); font-size:1rem; margin-bottom:0.6rem; }
+  .eb-sub { color:var(--gray-500); font-size:0.76rem; }
+  .eb-in { padding:0.42rem 0.55rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.84rem; font-family:inherit; }
+  .eb-btn { padding:0.45rem 0.95rem; border-radius:8px; border:none; font-weight:700; cursor:pointer; font-size:0.83rem; background:var(--navy); color:#fff; }
+  .eb-t { width:100%; border-collapse:collapse; font-size:0.83rem; }
+  .eb-t th { background:var(--gray-50); color:var(--gray-600); text-align:left; padding:0.5rem 0.65rem; font-size:0.72rem; text-transform:uppercase; }
+  .eb-t td { padding:0.5rem 0.65rem; border-top:1px solid var(--gray-100); vertical-align:top; }
+  .eb-pill { display:inline-block; padding:1px 9px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+  .eb-tabs a { display:inline-block; padding:0.45rem 0.9rem; border-radius:9px 9px 0 0; font-weight:700; font-size:0.84rem; text-decoration:none; border:1px solid var(--gray-200); border-bottom:none; margin-right:3px; }
+</style>
+<div style="max-width:1200px;margin:0 auto;padding:1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">E-books & International Pathways</h1>
+  <p class="eb-sub" style="font-size:0.88rem;margin:0 0 1rem;">Country guides sold inside the goocampus.in International dashboard. Doctors read them page by page in the dashboard; every page carries a faint watermark with their name and last 4 mobile digits; the PDF is never sent. The chapters are also the steps of each country's pathway map.</p>
+
+  <div class="eb-card" style="border:2px solid {{ '#16a34a' if intl_mode == 'all' else ('#f59e0b' if intl_mode == 'pilot' else '#9ca3af') }};">
+    <div class="eb-h">Who sees the International dashboard on goocampus.in</div>
+    <form method="post" action="{{ url_for('pg_ebooks_gate') }}" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start;"
+          onsubmit="return this.mode.value !== 'all' || confirm('Open the International dashboard to EVERY doctor?');">
+      <div>
+        <label style="display:block;"><input type="radio" name="mode" value="pilot" {{ 'checked' if intl_mode == 'pilot' }}> <b>Only pilot numbers</b> (testing)</label>
+        <label style="display:block;"><input type="radio" name="mode" value="all" {{ 'checked' if intl_mode == 'all' }}> <b>Everyone</b></label>
+        <label style="display:block;"><input type="radio" name="mode" value="off" {{ 'checked' if intl_mode == 'off' }}> Nobody (hidden)</label>
+      </div>
+      <label class="eb-sub" style="flex:1;min-width:240px;">Pilot mobile numbers (one per line or comma-separated)<br>
+        <textarea class="eb-in" name="pilots" style="width:100%;min-height:70px;">{{ intl_pilots|join('\n') }}</textarea></label>
+      <div><button class="eb-btn">Save</button></div>
+    </form>
+    <div class="eb-sub" style="margin-top:0.4rem;">Pilot numbers also see books not yet switched on (so you can check them first). Everyone else sees no International section at all until this is set to Everyone.</div>
+  </div>
+
+  <div class="eb-card">
+    <div class="eb-h">Books &amp; prices</div>
+    <table class="eb-t">
+      <thead><tr><th>S.No</th><th>Book</th><th>Chapters / pages</th><th>Price (+GST)</th><th>Validity</th><th>Readers now</th><th>On sale</th></tr></thead>
+      <tbody>
+      {% for b in books %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><b>{{ b.title }}</b>{% if b.is_bundle %}<div class="eb-sub">bundle: {{ b.bundle_codes }}</div>{% else %} <a href="?book={{ b.code }}" class="eb-sub">chapters →</a>{% endif %}</td>
+        <td>{% if b.is_bundle %}—{% else %}{{ b.chapters_n.n }} / {{ b.chapters_n.p }}{% endif %}</td>
+        <td>₹{{ '%.0f'|format(b.money[0]) }} + {{ '%.0f'|format(b.gst_percent) }}% = <b>₹{{ '%.0f'|format(b.money[2]) }}</b></td>
+        <td>{{ b.validity_days }} days</td>
+        <td>{{ b.buyers }}</td>
+        <td>{% if b.is_active and b.money[0] > 0 %}<span class="eb-pill" style="background:#dcfce7;color:#166534;">on sale</span>{% elif b.is_active %}<span class="eb-pill" style="background:#fef3c7;color:#92400e;">active, no price</span>{% else %}<span class="eb-pill" style="background:#e5e7eb;color:#374151;">hidden</span>{% endif %}</td>
+      </tr>
+      <tr><td></td><td colspan="6">
+        <details><summary class="eb-sub" style="cursor:pointer;">edit</summary>
+        <form method="post" action="{{ url_for('pg_ebooks_save_book') }}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.5rem;margin-top:0.5rem;">
+          <input type="hidden" name="code" value="{{ b.code }}">
+          <label class="eb-sub">Title<br><input class="eb-in" name="title" value="{{ b.title }}" style="width:100%;"></label>
+          <label class="eb-sub">Subtitle<br><input class="eb-in" name="subtitle" value="{{ b.subtitle or '' }}" style="width:100%;"></label>
+          <label class="eb-sub">Price ₹ (before GST)<br><input class="eb-in" name="price" value="{{ '%.0f'|format(b.price or 0) }}"></label>
+          <label class="eb-sub">GST %<br><input class="eb-in" name="gst_percent" value="{{ '%.0f'|format(b.gst_percent or 18) }}"></label>
+          <label class="eb-sub">Validity (days)<br><input class="eb-in" name="validity_days" value="{{ b.validity_days }}"></label>
+          <label class="eb-sub" style="grid-column:1/-1;">Short description (shown on the card)<br><textarea class="eb-in" name="blurb" style="width:100%;min-height:60px;">{{ b.blurb or '' }}</textarea></label>
+          <label class="eb-sub"><input type="checkbox" name="is_active" value="1" {{ 'checked' if b.is_active }}> Show in the International dashboard</label>
+          <div><button class="eb-btn">Save</button></div>
+        </form></details>
+      </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="eb-card">
+    <div class="eb-h">Chapters = pathway steps · {{ book|upper }}</div>
+    <div class="eb-tabs" style="margin-bottom:0.6rem;">{% for b in books if not b.is_bundle %}<a href="?book={{ b.code }}" style="background:{{ '#fff7ed' if b.code == book else '#fff' }};color:var(--navy);">{{ b.country }}</a>{% endfor %}</div>
+    {% if chapters %}
+    <table class="eb-t">
+      <thead><tr><th>Ch.</th><th>Title, summary on the pathway map, "GooCampus can do this" tag</th><th>Pages</th></tr></thead>
+      <tbody>
+      {% for c in chapters %}
+      <tr id="ch{{ c.chapter_no }}">
+        <td>{{ c.chapter_no }}</td>
+        <td>
+          <form method="post" action="{{ url_for('pg_ebooks_save_chapter') }}" style="display:grid;gap:0.35rem;">
+            <input type="hidden" name="code" value="{{ book }}"><input type="hidden" name="chapter_no" value="{{ c.chapter_no }}">
+            <input class="eb-in" name="title" value="{{ c.title }}">
+            <textarea class="eb-in" name="summary" placeholder="2–3 lines shown free on the pathway map" style="min-height:52px;">{{ c.summary or '' }}</textarea>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+              <input class="eb-in" name="service_tag" value="{{ c.service_tag or '' }}" placeholder="GooCampus can do this… (e.g. DataFlow verification)" style="flex:1;min-width:220px;">
+              <label class="eb-sub"><input type="checkbox" name="is_step" value="1" {{ 'checked' if c.is_step }}> show as a pathway step</label>
+              <button class="eb-btn" style="padding:0.35rem 0.8rem;">Save</button>
+            </div>
+          </form>
+        </td>
+        <td>{{ c.page_count }}<div><a href="{{ url_for('pg_ebooks_preview', code=book, chapter=c.chapter_no, page=1) }}" target="_blank" class="eb-sub">preview →</a></div></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="eb-sub">No chapters loaded for this book yet (prepared on the Mac with tools/ebooks/prepare.py).</div>
+    {% endif %}
+  </div>
+
+  <div class="eb-card">
+    <div class="eb-h">Give access by hand</div>
+    <form method="post" action="{{ url_for('pg_ebooks_grant') }}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;" onsubmit="return confirm('Give this doctor access?');">
+      <select name="code" class="eb-in">{% for b in books %}<option value="{{ b.code }}">{{ b.title }}</option>{% endfor %}</select>
+      <input name="mobile" class="eb-in" placeholder="Doctor's 10-digit mobile" required>
+      <button class="eb-btn">Give access</button>
+      <span class="eb-sub">For a doctor who paid another way. Adds the book's validity from today (or from their current end date).</span>
+    </form>
+  </div>
+
+  <div class="eb-card">
+    <div class="eb-h">Readers</div>
+    <table class="eb-t">
+      <thead><tr><th>S.No</th><th>Doctor</th><th>Book</th><th>How</th><th>From</th><th>Until</th><th>Pages read</th><th>Last read</th></tr></thead>
+      <tbody>
+      {% for a in access %}
+      <tr><td>{{ loop.index }}</td><td><a href="/admin/pg/users/{{ a.user_id }}">{{ a.name|dr_name if a.name else a.user_id }}</a></td><td>{{ a.ebook_code }}</td>
+          <td>{{ a.source }}{% if a.granted_by %} · {{ a.granted_by }}{% endif %}</td><td>{{ a.starts_at|format_datetime }}</td><td>{{ a.expires_at|format_datetime }}</td>
+          <td>{{ a.pages_read }}</td><td>{{ a.last_read|format_datetime if a.last_read else '—' }}</td></tr>
+      {% else %}
+      <tr><td colspan="8" class="eb-sub" style="text-align:center;padding:1rem;">No readers yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
