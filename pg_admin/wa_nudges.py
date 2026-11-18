@@ -542,7 +542,12 @@ def resend_news_batch(news_ids, ref=''):
                                f"dlr IN ('delivered', 'read') AND (kind IN ({ph_k}) OR " +
                                ' OR '.join(['kind LIKE ?'] * len(kinds)) + ")",
                                tuple(kinds) + tuple(k + ':r%' for k in kinds)).fetchall()
-        todo = {r['user_id'] for r in tried} - {r['user_id'] for r in reached}
+        # … minus anyone already re-sent (a retry that stopped half-way — e.g. a deploy restart — is RESUMED, never
+        # repeated: nobody gets a third message; a re-send WhatsApp itself failed is not hammered again).
+        retried = conn.execute("SELECT DISTINCT user_id FROM pg_wa_nudge_log WHERE user_id IS NOT NULL AND "
+                               "status IN ('sent', 'sending') AND (" + ' OR '.join(['kind LIKE ?'] * len(kinds)) + ")",
+                               tuple(k + ':r%' for k in kinds)).fetchall()
+        todo = ({r['user_id'] for r in tried} - {r['user_id'] for r in reached}) - {r['user_id'] for r in retried}
         if not todo:
             return {}
         n_prev = conn.execute(f"SELECT COUNT(DISTINCT kind) AS n FROM pg_wa_nudge_log WHERE " +
@@ -551,7 +556,8 @@ def resend_news_batch(news_ids, ref=''):
             "SELECT id, scope, COALESCE(state,'') AS state, heading FROM pg_news n WHERE id IN (" +
             ','.join(['?'] * len(ids)) + ") AND COALESCE(is_published, TRUE) AND (to_jsonb(n)->>'deleted_at') IS NULL "
             "ORDER BY COALESCE(published_at, created_at) DESC, id DESC", tuple(ids)).fetchall()]
-        return _send_news(conn, news, f"{batches[-1]}:r{n_prev + 1}", ref + ' (re-send)', only_users=todo, cap=False)
+        # Same retry key while one is unfinished (resume), so the log shows one re-send per batch.
+        return _send_news(conn, news, f"{batches[-1]}:r{max(n_prev, 1)}", ref + ' (re-send)', only_users=todo, cap=False)
     except Exception as e:
         logger.error("wa news resend %s: %s", ids, e)
         try: conn.rollback()
