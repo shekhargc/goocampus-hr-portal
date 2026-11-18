@@ -49,6 +49,8 @@ def ensure(conn):
     if _READY['done']:
         return
     conn.execute("SET LOCAL lock_timeout = '3s'")
+    conn.execute("CREATE TABLE IF NOT EXISTS pg_kv (key TEXT PRIMARY KEY, value TEXT DEFAULT '', "
+                 "updated_by TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute('''CREATE TABLE IF NOT EXISTS pg_ebooks (
         id SERIAL PRIMARY KEY, code TEXT UNIQUE NOT NULL, country TEXT DEFAULT '', title TEXT DEFAULT '',
         subtitle TEXT DEFAULT '', price NUMERIC(12,2) DEFAULT 0, gst_percent NUMERIC(5,2) DEFAULT 18,
@@ -132,9 +134,7 @@ DEFAULT_PILOT = '9611996500'
 
 
 def _kv(conn, key, default=''):
-    try:
-        conn.execute("CREATE TABLE IF NOT EXISTS pg_kv (key TEXT PRIMARY KEY, value TEXT DEFAULT '', "
-                     "updated_by TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    try:                                   # pg_kv is created once per process in ensure() — never DDL per request
         r = conn.execute("SELECT value FROM pg_kv WHERE key = ?", (key,)).fetchone()
         return r['value'] if r and r['value'] is not None else default
     except Exception:
@@ -148,10 +148,18 @@ def _set_kv(conn, key, value, who):
                  "updated_at = CURRENT_TIMESTAMP", (key, value, who))
 
 
-def gate_settings(conn):
+_GATE = {'at': 0.0, 'val': None}
+
+
+def gate_settings(conn, fresh=False):
+    """(mode, pilot mobiles) — cached 30 s per worker (every dashboard page load asks for it)."""
+    if not fresh and _GATE['val'] and time.time() - _GATE['at'] < 30:
+        return _GATE['val']
     mode = _kv(conn, 'intl_mode', 'pilot')
     pilots = [m for m in re.split(r'[\s,;]+', _kv(conn, 'intl_pilot', DEFAULT_PILOT)) if m]
-    return (mode if mode in MODES else 'pilot'), [re.sub(r'\D', '', m)[-10:] for m in pilots]
+    val = ((mode if mode in MODES else 'pilot'), [re.sub(r'\D', '', m)[-10:] for m in pilots])
+    _GATE.update(at=time.time(), val=val)
+    return val
 
 
 def gate(conn, u):
@@ -520,7 +528,7 @@ def admin_page():
         conn.close()
     conn = get_db()
     try:
-        mode, pilots = gate_settings(conn)
+        mode, pilots = gate_settings(conn, fresh=True)
     finally:
         conn.close()
     return render_template('pg_admin/ebooks.html', books=books, chapters=chapters, access=access, orders=orders,
@@ -586,9 +594,11 @@ def admin_save_gate():
     pilots = [m for m in pilots if len(m) == 10]
     conn = get_db()
     try:
+        ensure(conn)
         _set_kv(conn, 'intl_mode', mode, a.get('name') or 'admin')
         _set_kv(conn, 'intl_pilot', ','.join(dict.fromkeys(pilots)), a.get('name') or 'admin')
         conn.commit()
+        _GATE.update(at=0.0, val=None)
         flash({'pilot': f'International dashboard: only {len(pilots)} pilot number(s) see it.',
                'all': 'International dashboard: open to EVERY doctor.',
                'off': 'International dashboard: hidden from everyone.'}[mode], 'success')
