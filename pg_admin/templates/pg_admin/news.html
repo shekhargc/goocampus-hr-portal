@@ -231,6 +231,12 @@ Result | 24 Oct | 14 Nov | 4 Dec"
     <div style="margin-top:10px;font-size:0.76rem;color:var(--gray-500);">Last combined email #{{ digest.last.id }}: {{ digest.last.created_at|format_datetime }}{% if digest.last.created_by %} by {{ digest.last.created_by }}{% endif %} —
       {% if digest.last.status == 'sent' %}sent to {{ digest.last.sent }} people{% if digest.last.failed %} ({{ digest.last.failed }} failed){% endif %}{% else %}sending… {{ digest.last.sent }} of {{ digest.last.recipients }} so far (the count updates every 50 emails){% endif %}.
       {% if digest.last.wa_done %}<span style="color:#166534;font-weight:600;margin-left:6px;">💬 WhatsApp sent</span>
+      <a href="/whatsapp/delivery?q=Combined+email+%23{{ digest.last.id }}" style="font-size:0.76rem;margin-left:6px;">delivery report</a>
+      <form method="POST" action="/admin/pg/news/digest/{{ digest.last.id }}/whatsapp" style="display:inline;margin-left:6px;"
+            onsubmit="return confirm('Re-send the WhatsApp for combined email #{{ digest.last.id }} to everyone whose message is NOT marked Delivered / Read?');">
+        <input type="hidden" name="resend" value="1">
+        <button type="submit" style="background:none;border:0;color:#b45309;font-weight:700;cursor:pointer;font-size:0.76rem;padding:0;">↻ Re-send to those it didn't reach</button>
+      </form>
       {% elif digest.last.wa_done is not none %}
       <form method="POST" action="/admin/pg/news/digest/{{ digest.last.id }}/whatsapp" style="display:inline;margin-left:6px;"
             onsubmit="return confirm('Send the WhatsApp news update for combined email #{{ digest.last.id }} now? Each doctor gets it once (max 3 a day).');">
