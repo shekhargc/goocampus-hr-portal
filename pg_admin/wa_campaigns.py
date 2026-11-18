@@ -68,9 +68,11 @@ def get_aud(conn, msg):
     if msg == 'enquiry':
         src = a.get('sources')
         return {'sources': [s for s in src if s in dict(ENQ_SOURCES)] if isinstance(src, list) else ['website', 'mgmt']}
-    allowed = ['free', 'paid', 'internal']
+    allowed = ['free', 'paid', 'internal', 'team']
+    # Default (nothing saved): news update also goes to team members (founder 2026-11-18); the sign-up messages don't.
+    default = list(allowed) if msg == 'daily' else ['free', 'paid', 'internal']
     t = a.get('types')
-    types = [x for x in t if x in allowed] if isinstance(t, list) else list(allowed)
+    types = [x for x in t if x in allowed] if isinstance(t, list) else default
     st = a.get('states') if isinstance(a.get('states'), list) else []
     return {'types': types, 'states': [s for s in st if s]}
 
@@ -97,10 +99,16 @@ def aud_label(msg, aud):
     return who + (', home state: ' + ', '.join(st[:6]) + (' …' if len(st) > 6 else '') if st else ', all states')
 
 
+def cat_sql(ualias='u'):
+    """The Registered Doctors category rule, with Counselling-Desk logins counted as Team."""
+    from pg_admin.routes.users_admin import _category_case
+    return (f"CASE WHEN COALESCE((to_jsonb({ualias})->>'desk_access')::int,0) = 1 THEN 'team' "
+            f"ELSE ({_category_case(ualias)}) END")
+
+
 def categories(conn, ids=None):
     """{user_id: 'team'|'internal'|'paid'|'free'} — the Registered Doctors list's own category rule."""
-    from pg_admin.routes.users_admin import _category_case
-    sql = f"SELECT u.id, ({_category_case('u')}) AS cat FROM pg_users u"
+    sql = f"SELECT u.id, ({cat_sql('u')}) AS cat FROM pg_users u"
     params = ()
     if ids is not None:
         ids = [int(i) for i in ids if i]
@@ -167,12 +175,10 @@ def audience(conn, f, need_name=False, need_state=False):
     types = f.get('types') or []
     if not types:
         return [], {}
-    cat = ua._category_case('u')
+    cat = cat_sql('u')
     conds = ["COALESCE(u.is_blocked,0) = 0", "COALESCE(u.mobile,'') <> ''",
              f"({cat}) IN (" + ','.join(['?'] * len(types)) + ")"]
     params = list(types)
-    if 'team' not in types:
-        conds.append("COALESCE((to_jsonb(u)->>'desk_access')::int,0) = 0")
     if f.get('states'):
         conds.append("LOWER(TRIM(COALESCE(u.state,''))) IN (" + ','.join(['?'] * len(f['states'])) + ")")
         params += [s.strip().lower() for s in f['states']]
@@ -407,7 +413,7 @@ def admin_audience():
     if msg == 'enquiry':
         aud = {'sources': [s for s in request.form.getlist('sources') if s in dict(ENQ_SOURCES)]}
     else:
-        allowed = ['free', 'paid', 'internal']
+        allowed = ['free', 'paid', 'internal', 'team']
         aud = {'types': [t for t in request.form.getlist('types') if t in allowed],
                'states': [] if msg == 'incomplete' else [s for s in request.form.getlist('states') if s]}
     conn = get_db()
