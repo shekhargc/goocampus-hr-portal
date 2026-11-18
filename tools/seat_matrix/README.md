@@ -327,3 +327,15 @@ Quota" (the Competent Authority body has no MQ seats). 4 colleges per page × MQ
 Quota-(Cat-B) MQ1-Local / MQ1-UR, NRI Quota-(Cat-C) MQ2-UR, Institutional Quota-(Cat-C) MQ3-UR (-MSM at the 4 Muslim
 minority colleges), 2025 KNRUHS wording. No totals printed: every printed number must be a parsed cell. 2026: 977 seats,
 23 colleges.
+
+## Punjab Round 2 (`punjab_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/punjab_round2.py <tentative_vacancy.pdf> <punjab_added_r2.json> <cutoffs2025.json> <out.json>
+Body "Punjab — Round 2 — State Counselling", authority `bfuhs`, round_no 2, list_type `vacancy`. BFUHS's "Tentative
+vacancy position for 2nd round" (13.11.2026, 30 pages, one table — college | course | branch | category | quota | vacant,
+no printed totals) + the 25 state-counselling seats of Public Notice 03/607 (18.11.2026, newly approved seats; 17 AIQ
+seats go to MCC) as new_in_round — the vacancy list predates them, so no double counting. 0-vacancy lines and the
+ultrasonography training seats are counted, not stored. Quotas / categories / courses use the same maps as
+tools/results/punjab.py (2025 college-family quotas). There is NO Punjab Round 1 seat-matrix body: BFUHS never
+published one as a file. 2026: 401 vacant + 25 added = 426 seats, 29 colleges (Round 2 on hold, MCC Notice 10).
+Note: the vacancy link on the BFUHS page has no ".pdf" ending in the href — the fetcher missed it; it is archived
+(inbox 1815).
