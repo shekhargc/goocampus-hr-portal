@@ -252,8 +252,25 @@ def report_page():
                                               'failed': 0, 'waiting': 0, 'not_sent': 0})
             t['total'] += 1
             t[r['st']] += 1
-        summary = sorted(by.values(), key=lambda t: -t['total'])
-        templates = sorted({r['template'] for r in conn.execute(
+        # Every APPROVED template is listed, even before its first send (founder 2026-11-18).
+        approved = []
+        try:
+            approved = [dict(r) for r in conn.execute(
+                "SELECT name, MAX(COALESCE(purpose, '')) AS purpose FROM wa_templates "
+                "WHERE UPPER(COALESCE(status, '')) = 'APPROVED' GROUP BY name ORDER BY name").fetchall()]
+        except Exception:
+            conn.rollback()
+        purpose = {a['name']: a['purpose'] for a in approved}
+        if not f['status'] and not f['type'] and not f['q'] and not f['from'] and not f['to']:
+            for a in approved:
+                if (not f['template'] or f['template'] == a['name']) and a['name'] not in by:
+                    by[a['name']] = {'template': a['name'], 'total': 0, 'delivered': 0, 'read': 0, 'failed': 0,
+                                     'waiting': 0, 'not_sent': 0}
+        for t in by.values():
+            t['purpose'] = purpose.get(t['template'], '')
+            t['approved'] = t['template'] in purpose
+        summary = sorted(by.values(), key=lambda t: (-t['total'], t['template']))
+        templates = sorted({a['name'] for a in approved} | {r['template'] for r in conn.execute(
             "SELECT DISTINCT template FROM pg_wa_nudge_log WHERE COALESCE(template,'') <> ''").fetchall()} |
             {r['template_name'] for r in conn.execute(
                 "SELECT DISTINCT template_name FROM wa_messages WHERE COALESCE(template_name,'') <> ''").fetchall()})
