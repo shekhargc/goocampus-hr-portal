@@ -180,7 +180,7 @@ def news_admin():
             "COALESCE(schedule,'') AS schedule, "
             "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'') <> '' OR authority_doc_id IS NOT NULL) AS has_pdf, pdf_name, is_published, published_at, created_by, created_at, "
             "COALESCE(source,'manual') AS source, deleted_at, COALESCE(deleted_by,'') AS deleted_by "
-            "FROM pg_news ORDER BY published_at DESC, id DESC").fetchall()]
+            "FROM pg_news ORDER BY created_at DESC, id DESC").fetchall()]     # newest POSTED first (founder 2026-11-18)
     except Exception as e:
         logging.error("news_admin list: %s", e)
         try: conn.rollback()
@@ -188,6 +188,11 @@ def news_admin():
     finally:
         conn.close()
     for it in items:
+        try:
+            from datetime import timedelta as _td
+            it['posted_ist'] = (it['created_at'] + _td(hours=5, minutes=30)).strftime('%Y-%m-%d') if it.get('created_at') else ''
+        except Exception:
+            it['posted_ist'] = ''
         try:
             import json as _json
             _kd = _json.loads(it.get('key_dates') or '{}') or {}

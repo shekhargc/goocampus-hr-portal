@@ -104,8 +104,17 @@ def summary(conn):
     singles = sum(len(p['items']) for p in people.values())
     last = conn.execute("SELECT id, created_at, created_by, status, recipients, sent, failed, news_ids "
                         "FROM pg_news_digest_batches ORDER BY id DESC LIMIT 1").fetchone()
-    return {'items': items, 'recipients': len(people), 'would_be_singles': singles,
-            'last': dict(last) if last else None}
+    last = dict(last) if last else None
+    if last:                    # WhatsApp news update already sent for this email's updates? (2026-11-18)
+        try:
+            ids = [int(x) for x in (last.get('news_ids') or '').split(',') if x.strip().isdigit()]
+            done = conn.execute("SELECT COUNT(*) AS n FROM pg_wa_news_done WHERE news_id IN (" +
+                                ','.join(['?'] * len(ids)) + ")", tuple(ids)).fetchone()['n'] if ids else 0
+            last['wa_done'] = bool(ids) and done >= len(ids)
+        except Exception:
+            conn.rollback()
+            last['wa_done'] = None
+    return {'items': items, 'recipients': len(people), 'would_be_singles': singles, 'last': last}
 
 
 def build(person):

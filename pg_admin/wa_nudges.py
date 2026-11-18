@@ -463,6 +463,33 @@ def news_send_for(news_ids):
         conn.close()
 
 
+def admin_digest_whatsapp(bid):
+    """POST /admin/pg/news/digest/<bid>/whatsapp — WhatsApp for an already-sent combined email (e.g. one sent before
+    the WhatsApp went with the email). Same claim rule: an update never goes on WhatsApp twice."""
+    from flask import redirect, url_for, flash
+    from pg_admin.routes.users_admin import _require_admin
+    if not _require_admin():
+        flash('Access denied', 'error'); return redirect(url_for('pg_news_admin'))
+    conn = get_db()
+    try:
+        ensure_tables(conn)
+        on = is_enabled(conn, 'daily')
+        r = conn.execute("SELECT news_ids FROM pg_news_digest_batches WHERE id = ?", (bid,)).fetchone()
+        ids = [int(x) for x in ((r or {}).get('news_ids') or '').split(',') if x.strip().isdigit()]
+    finally:
+        conn.close()
+    if not on:
+        flash('The WhatsApp News update switch is OFF (Registered Doctors → 💬 WhatsApp).', 'error')
+    elif not ids:
+        flash('No updates found for that email.', 'error')
+    elif (os.environ.get('RENDER_SERVICE_NAME') or '').endswith('staging'):
+        flash('Staging never sends WhatsApp — do this on goocampus.org.', 'error')
+    else:
+        trigger_news_send(ids)
+        flash(f'WhatsApp news update for combined email #{bid} is going out in the background.', 'success')
+    return redirect(url_for('pg_news_admin'))
+
+
 def trigger_news_send(news_ids):
     """Background thread so the email button returns at once."""
     import threading
@@ -737,6 +764,8 @@ def register(app):
     app.add_url_rule('/admin/pg/users/whatsapp/optout', 'pg_wa_nudges_optout', login_required(admin_optout),
                      methods=['POST'])
     app.add_url_rule('/api/wa/inbound', 'pg_wa_inbound', inbound, methods=['POST'])
+    app.add_url_rule('/admin/pg/news/digest/<int:bid>/whatsapp', 'pg_news_digest_whatsapp',
+                     login_required(admin_digest_whatsapp), methods=['POST'])
     from pg_admin import wa_campaigns
     wa_campaigns.register(app)
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
