@@ -740,3 +740,6 @@ def register_pg_admin(app):
     # International dashboard: country pathways + secure paid e-book reader (founder 2026-11-18).
     from pg_admin import ebooks as _ebooks
     _ebooks.register(app)
+    # International career file: plan choice, My Documents, Portfolio, CV data, Conferences & Events (2026-11-19).
+    from pg_admin import career_vault as _career
+    _career.register(app)
