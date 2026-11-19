@@ -482,18 +482,28 @@ def _save_profile(conn, u, country, d, route, exp, td, cid, cname, area):
             if not m:
                 return jsonify({'ok': False, 'error': 'bad_college'}), 400
             cname = m['college_name']
-        conn.execute("INSERT INTO pg_pathway_profile (user_id, country, route, mbbs_done, internship_done, has_pg, "
-                     "experience_years, target_date, mbbs_college_id, mbbs_college, target_area) "
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?::date, ?, ?, ?) ON CONFLICT (user_id, country) "
-                     "DO UPDATE SET route = EXCLUDED.route, mbbs_done = EXCLUDED.mbbs_done, internship_done = "
-                     "EXCLUDED.internship_done, has_pg = EXCLUDED.has_pg, experience_years = EXCLUDED.experience_years, "
-                     "target_date = COALESCE(EXCLUDED.target_date, pg_pathway_profile.target_date), "
-                     "mbbs_college_id = COALESCE(EXCLUDED.mbbs_college_id, pg_pathway_profile.mbbs_college_id), "
-                     "mbbs_college = COALESCE(NULLIF(EXCLUDED.mbbs_college, ''), pg_pathway_profile.mbbs_college), "
-                     "target_area = COALESCE(NULLIF(EXCLUDED.target_area, ''), pg_pathway_profile.target_area), "
-                     "updated_at = CURRENT_TIMESTAMP",
-                     (u['id'], country, route, bool(d.get('mbbs_done', True)), bool(d.get('internship_done')),
-                      bool(d.get('has_pg')), exp, td, cid, cname, area))
+        # PARTIAL-SAFE (2026-11-19, website wizard saves step by step): a field the request does not send keeps its
+        # saved value; a brand-new profile starts from the column defaults
+        conn.execute("INSERT INTO pg_pathway_profile (user_id, country) VALUES (?, ?) ON CONFLICT (user_id, country) "
+                     "DO NOTHING", (u['id'], country))
+        sets, vals = [], []
+        if 'route' in d:
+            sets.append('route = ?'); vals.append(route)
+        for k in ('mbbs_done', 'internship_done', 'has_pg'):
+            if k in d:
+                sets.append(f'{k} = ?'); vals.append(bool(d.get(k)))
+        if 'experience_years' in d:
+            sets.append('experience_years = ?'); vals.append(exp)
+        if td:
+            sets.append('target_date = ?::date'); vals.append(td)
+        if cid:
+            sets.append('mbbs_college_id = ?'); vals.append(cid)
+        if cname:
+            sets.append('mbbs_college = ?'); vals.append(cname)
+        if area:
+            sets.append('target_area = ?'); vals.append(area)
+        conn.execute("UPDATE pg_pathway_profile SET " + ", ".join(sets + ['updated_at = CURRENT_TIMESTAMP']) +
+                     " WHERE user_id = ? AND country = ?", vals + [u['id'], country])
         # Indian graduate / FMG answers (sent ones only; unanswered stays as it is)
         sets, vals = [], []
         mf = str(d.get('mbbs_from') or '').strip()
@@ -514,10 +524,15 @@ def _save_profile(conn, u, country, d, route, exp, td, cid, cname, area):
                 return jsonify({'ok': False, 'error': 'bad_target_timeline'}), 400
             conn.execute("UPDATE pg_pathway_profile SET target_timeline = ? WHERE user_id = ? AND country = ?",
                          (tl, u['id'], country))
-        if 'docs_ready' in d:
+        if any(k in d for k in ('docs_ready', 'docs_ready_add', 'docs_ready_remove')):
+            # docs_ready REPLACES the 'I have this' set; docs_ready_add / docs_ready_remove toggle single documents
             from pg_admin.career_vault import DOC_TYPES
             ok = {c for c, _l, _k in DOC_TYPES}
-            dr = [c for c in (d.get('docs_ready') or []) if c in ok]
+            cur = _jl(conn.execute("SELECT docs_ready FROM pg_pathway_profile WHERE user_id = ? AND country = ?",
+                                   (u['id'], country)).fetchone()['docs_ready'])
+            dr = list(d.get('docs_ready') or []) if 'docs_ready' in d else cur
+            dr += [c for c in (d.get('docs_ready_add') or []) if c not in dr]
+            dr = [c for c in dr if c in ok and c not in set(d.get('docs_ready_remove') or [])]
             conn.execute("UPDATE pg_pathway_profile SET docs_ready = ? WHERE user_id = ? AND country = ?",
                          (json.dumps(dr), u['id'], country))
         # picking an emirate completes the 'choose the emirate' stage for real (not only on screen)
@@ -535,7 +550,8 @@ def _save_profile(conn, u, country, d, route, exp, td, cid, cname, area):
 def api_onboard():
     """POST /api/pg/pathway/onboard {country, target_area, mbbs_from, mbbs_country?, abroad_internship_done?,
     fmge_cleared?, india_internship_done?, internship_done, has_pg, experience_years, route?, docs_ready:[codes],
-    done_stage_ids:[ids already completed before starting], target_timeline} → saves everything in one go, marks
+    done_stage_ids:[ids already completed before starting], target_timeline, preview?: true} → saves everything in one go
+    (preview: computes the plan for these answers and saves NOTHING), marks
     those stages done ('already done before starting'), stamps onboarded_at, returns the plan (founder 2026-11-19)."""
     d = request.get_json(silent=True) or {}
     country = str(d.get('country') or '').strip().lower()
@@ -556,7 +572,6 @@ def api_onboard():
         u, err = _doctor_gated(conn)
         if err:
             return err
-        d.setdefault('docs_ready', [])
         bad = _save_profile(conn, u, country, d, route, exp, None, None, '', area)
         if bad:
             return bad
@@ -567,6 +582,12 @@ def api_onboard():
                          "VALUES (?, ?, ?, 'done', CURRENT_DATE, 'Already done before starting') "
                          "ON CONFLICT (user_id, stage_id) DO UPDATE SET status = 'done', "
                          "done_date = COALESCE(pg_pathway_progress.done_date, CURRENT_DATE)", (u['id'], sid, country))
+        if d.get('preview'):
+            # wizard preview (estimate + realistic timeline options for the answers so far): computed inside the
+            # transaction, then rolled back — nothing is saved
+            out = plan(conn, u['id'], country)
+            conn.rollback()
+            return jsonify({'ok': True, 'preview': True, **out})
         conn.execute("UPDATE pg_pathway_profile SET onboarded_at = CURRENT_TIMESTAMP WHERE user_id = ? AND country = ?",
                      (u['id'], country))
         conn.commit()
