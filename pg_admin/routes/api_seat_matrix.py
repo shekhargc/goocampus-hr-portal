@@ -322,6 +322,7 @@ def api_pg_seat_matrix_facets():
             "SELECT counselling_body, academic_year, row_count, college_count, total_seats, "
             "(pdf_data IS NOT NULL) AS has_pdf, uploaded_at, COALESCE(section,'') AS section, "
             "COALESCE(authority_code,'') AS authority_code, COALESCE(sort_order,0) AS sort_order, "
+            "COALESCE(to_jsonb(pg_seat_matrix_source)->>'display_label', '') AS label, "
             "prev_row_count, prev_college_count, prev_total_seats, prev_replaced_at, prev_source_file_name, "
             "colleges_added, colleges_removed "
             "FROM pg_seat_matrix_source WHERE COALESCE(superseded,0)=0 "

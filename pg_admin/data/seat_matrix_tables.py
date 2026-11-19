@@ -77,8 +77,10 @@ def ensure_pg_seat_matrix():
                          ('new_reason', "TEXT DEFAULT ''"), ('cr_r1', 'INTEGER'), ('cr_r2', 'INTEGER'),
                          ('cr_r3', 'INTEGER'), ('cr_closing', 'INTEGER'), ('cutoff_fee', 'NUMERIC(14,2)')):
             conn.execute(f"ALTER TABLE pg_seat_matrix ADD COLUMN IF NOT EXISTS {col} {typ}")
+        # display_label (founder 2026-11-19): the tab text the website shows instead of the body-name suffix,
+        # e.g. "Competent Authority Quota" — the body name (a key in rankings, Desk, fees…) never changes.
         for col, typ in (('superseded', 'INTEGER DEFAULT 0'), ('section', "TEXT DEFAULT ''"),
-                         ('sort_order', 'INTEGER DEFAULT 0')):
+                         ('sort_order', 'INTEGER DEFAULT 0'), ('display_label', "TEXT DEFAULT ''")):
             conn.execute(f"ALTER TABLE pg_seat_matrix_source ADD COLUMN IF NOT EXISTS {col} {typ}")
         # Later counselling ROUNDS (founder 2026-11-11): Round 1 = the full matrix (round_no 1, as before).
         # A later round's seat list (e.g. MCC Round 2 "clear vacancy") is stored as its OWN body with

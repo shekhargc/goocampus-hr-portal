@@ -27,7 +27,7 @@ _PREV_COLS = (('prev_row_count', 'INTEGER'), ('prev_college_count', 'INTEGER'), 
 
 
 def ensure_prev_cols(conn):
-    for c, t in _PREV_COLS:
+    for c, t in _PREV_COLS + (('display_label', "TEXT DEFAULT ''"),):
         conn.execute(f"ALTER TABLE pg_seat_matrix_source ADD COLUMN IF NOT EXISTS {c} {t}")
 
 
@@ -181,6 +181,8 @@ def api_seat_matrix_source_update():
         sets.append("sort_order=?"); vals.append(int(d.get('sort_order') or 0))
     if 'notes' in d:
         sets.append("notes=?"); vals.append((d.get('notes') or '').strip())
+    if 'label' in d:                     # website tab text (body name unchanged) — 2026-11-19
+        sets.append("display_label=?"); vals.append((d.get('label') or '').strip()[:80])
     prev = d.get('previous') if isinstance(d.get('previous'), dict) else None
     if prev:      # record what an already-replaced version looked like (one-time backfill)
         for k, col in (('rows', 'prev_row_count'), ('colleges', 'prev_college_count'), ('seats', 'prev_total_seats'),
@@ -200,7 +202,8 @@ def api_seat_matrix_source_update():
                      "AND academic_year=?", vals + [body, year])
         conn.commit()
         row = conn.execute("SELECT counselling_body, COALESCE(superseded,0) AS superseded, "
-                           "COALESCE(section,'') AS section, COALESCE(sort_order,0) AS sort_order "
+                           "COALESCE(section,'') AS section, COALESCE(sort_order,0) AS sort_order, "
+                           "COALESCE(display_label,'') AS label "
                            "FROM pg_seat_matrix_source WHERE counselling_body=? AND academic_year=?",
                            [body, year]).fetchone()
         return jsonify({'ok': bool(row), 'source': dict(row) if row else None})
