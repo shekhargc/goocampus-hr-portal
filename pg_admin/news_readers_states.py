@@ -296,11 +296,11 @@ def read_drupal_news(url, include=None, exclude=None):
 
 
 # ===== ggsipu =====
-def read_pdf_links_soft(url, pages=None, include=None, exclude=None):
+def read_pdf_links_soft(url, pages=None, include=None, exclude=None, match_href=False):
     """read_pdf_links, but a page whose course filter matches nothing YET is not an error
     (e.g. GGSIPU before its first PGMC notice of the season). Use reader 'pdf_links_soft'."""
     try:
-        return read_pdf_links(url, pages, include, exclude)
+        return read_pdf_links(url, pages, include, exclude, match_href)
     except ValueError as e:
         if 'No notices found' in str(e):
             return []
@@ -760,7 +760,8 @@ DISPATCH = {
     'dmer_hr': lambda s: read_dmer_hr(s['url']),
     'row_table': lambda s: read_row_table(s.get('pages') or [s['url']], s.get('include'), s.get('exclude'), s.get('strip'), s.get('max_rows')),
     'drupal_news': lambda s: read_drupal_news(s['url'], s.get('include'), s.get('exclude')),
-    'pdf_links_soft': lambda s: read_pdf_links_soft(s['url'], s.get('pages'), s.get('include'), s.get('exclude')),
+    'pdf_links_soft': lambda s: read_pdf_links_soft(s['url'], s.get('pages'), s.get('include'), s.get('exclude'),
+                                                    s.get('match_href', False)),
     'gmch_chd': lambda s: read_gmch_chd(s['url']),
     'hnbumu_pg': lambda s: read_hnbumu_pg(s['url']),
     'jceceb_grid': lambda s: read_jceceb_grid(s.get('pages') or [s['url']], s.get('include'), s.get('exclude')),
