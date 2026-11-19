@@ -41,6 +41,8 @@ DOC_TYPES = [
     ('mbbs_degree', 'MBBS degree certificate', True),
     ('mbbs_marks', 'MBBS mark sheets / transcript', True),
     ('internship', 'Internship completion certificate', True),
+    ('internship_abroad', 'Internship certificate from the country of MBBS (FMG)', False),
+    ('fmge', 'FMGE pass certificate (NBEMS, for foreign medical graduates)', False),
     ('registration', 'Medical council registration (NMC / State)', True),
     ('good_standing', 'Good Standing certificate', True),
     ('experience', 'Experience letters (each job)', True),
