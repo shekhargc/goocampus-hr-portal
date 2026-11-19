@@ -35,6 +35,10 @@ DEFAULT_JOURNEY = [  # from the printed "Your Journey to the GCC" brochure (foun
 TARGETS = {'uae': [('dubai', 'Dubai', 'dha'), ('abu_dhabi', 'Abu Dhabi (incl. Al Ain)', 'doh'), ('sharjah', 'Sharjah', 'sha'),
                    ('northern', 'Northern Emirates (Ajman, Umm Al Quwain, Ras Al Khaimah, Fujairah)', 'mohap'),
                    ('undecided', 'Not sure yet', '')]}
+# where the MBBS was done (founder 2026-11-19): 'india' | 'abroad' (FMG). Details (dates, gaps) go to the profile's
+# academic section later; the starting point only asks these.
+ACADEMIC_COLS = (('mbbs_from', "TEXT DEFAULT ''"), ('mbbs_country', "TEXT DEFAULT ''"),
+                 ('abroad_internship_done', 'BOOLEAN'), ('fmge_cleared', 'BOOLEAN'), ('india_internship_done', 'BOOLEAN'))
 USD_TO_AED = 3.6725          # UAE dirham's official peg to the US dollar (for the approximate total only)
 _READY = {'done': False}
 
@@ -68,6 +72,11 @@ def ensure(conn):
     conn.execute("ALTER TABLE pg_pathway_stages ADD COLUMN IF NOT EXISTS doc_codes TEXT DEFAULT '[]'")
     conn.execute("ALTER TABLE pg_pathway_stages ADD COLUMN IF NOT EXISTS costs TEXT DEFAULT '[]'")
     conn.execute("ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS target_area TEXT DEFAULT ''")
+    # founder 2026-11-19 (evening): no target dates — record when a stage was started and finished instead
+    conn.execute("ALTER TABLE pg_pathway_progress ADD COLUMN IF NOT EXISTS started_date DATE")
+    # Indian graduate vs foreign medical graduate (FMG) — person-level, kept on pg_users so every dashboard shares it
+    for col, ddl in ACADEMIC_COLS:
+        conn.execute(f"ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS {col} {ddl}")
     for c, n, lbl in DEFAULT_PHASES:
         conn.execute("INSERT INTO pg_pathway_phases (country, phase_no, label) VALUES (?, ?, ?) "
                      "ON CONFLICT (country, phase_no) DO NOTHING", (c, n, lbl))
@@ -228,7 +237,30 @@ def _cost_total(stages, reg):
         if lines else None
 
 
-def _documents_needed(conn, user_id, stages):
+def _have_docs(conn, user_id):
+    try:
+        return {r['doc_type'] for r in conn.execute(
+            "SELECT DISTINCT doc_type FROM pg_doctor_documents WHERE user_id = ? AND deleted_at IS NULL",
+            (user_id,)).fetchall()}
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return set()
+
+
+def _academic(conn, user_id):
+    """Indian graduate / FMG answers from pg_users (shared by every dashboard). Booleans stay None = not answered."""
+    try:
+        r = conn.execute("SELECT " + ", ".join(c for c, _d in ACADEMIC_COLS) + " FROM pg_users WHERE id = ?",
+                         (user_id,)).fetchone()
+        return {c: (r[c] if r else None) for c, _d in ACADEMIC_COLS} if r else {}
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        return {}
+
+
+def _documents_needed(conn, user_id, stages, have=None):
     """One de-duplicated checklist of real documents for this doctor's route, ticked from My Documents."""
     labels = _doc_labels()
     order, where = [], {}
@@ -237,14 +269,8 @@ def _documents_needed(conn, user_id, stages):
             if c not in where:
                 order.append(c); where[c] = []
             where[c].append(s['position'])
-    have = set()
-    try:
-        have = {r['doc_type'] for r in conn.execute(
-            "SELECT DISTINCT doc_type FROM pg_doctor_documents WHERE user_id = ? AND deleted_at IS NULL",
-            (user_id,)).fetchall()}
-    except Exception:
-        try: conn.rollback()
-        except Exception: pass
+    if have is None:
+        have = _have_docs(conn, user_id)
     docs = [{'code': c, 'label': labels.get(c, c), 'stages': where[c], 'have': c in have} for c in order]
     return {'items': docs, 'ready': sum(1 for d in docs if d['have']), 'total': len(docs)}
 
@@ -255,6 +281,7 @@ def plan(conn, user_id, country):
     route = (prof or {}).get('route') or suggested_route(prof)
     tgt = _target(country, (prof or {}).get('target_area') or '')
     reg = (tgt or {}).get('regulator') or ''
+    acad = _academic(conn, user_id)
     titles = {r['chapter_no']: r['title'] for r in conn.execute(
         "SELECT chapter_no, title FROM pg_ebook_chapters WHERE ebook_code = ?", (country,)).fetchall()}
     ph = phases(conn, country)
@@ -266,15 +293,28 @@ def plan(conn, user_id, country):
         p = mine.get(s['id']) or {}
         stages.append({**_stage_out(dict(s), titles, ph),
                        'status': p.get('status') or 'todo',
+                       'started_date': p['started_date'].isoformat() if p.get('started_date') else None,
                        'target_date': p['target_date'].isoformat() if p.get('target_date') else None,
                        'done_date': p['done_date'].isoformat() if p.get('done_date') else None,
                        'note': p.get('note') or ''})
+    labels = _doc_labels()
+    have = _have_docs(conn, user_id)
     for i, st in enumerate(stages, start=1):   # the doctor's own numbering 1..n (master stage_no skips other routes)
         st['position'] = i
         st['costs'] = _cost_view(st['costs'], reg)
+        if acad.get('mbbs_from') == 'abroad' and 'internship' in st['doc_codes']:
+            # FMG: also the internship done abroad + the FMGE pass (after the Indian internship line)
+            k = st['doc_codes'].index('internship') + 1
+            st['doc_codes'] = st['doc_codes'][:k] + [c for c in ('internship_abroad', 'fmge')
+                                                     if c not in st['doc_codes']] + st['doc_codes'][k:]
+            st['needs'] = [labels.get(c, c) for c in st['doc_codes']]
+        # the step's own documents, ticked from My Documents — upload right inside the step
+        st['documents'] = [{'code': c, 'label': labels.get(c, c), 'have': c in have} for c in st['doc_codes']]
     counted = [s for s in stages if s['status'] != 'na']
     done = sum(1 for s in counted if s['status'] == 'done')
     nxt = next((s for s in stages if s['status'] in ('todo', 'doing')), None)
+    if prof is not None:
+        prof.update(acad)
     if prof:
         for k in ('target_date', 'updated_at'):
             if prof.get(k):
@@ -286,7 +326,9 @@ def plan(conn, user_id, country):
                                            'percent': round(100 * done / len(counted)) if counted else 0},
             'next_stage': nxt['id'] if nxt else None,
             'target': tgt, 'targets': [{'code': c, 'label': l, 'regulator': r} for c, l, r in TARGETS.get(country, [])],
-            'documents_needed': _documents_needed(conn, user_id, stages),
+            'documents_needed': _documents_needed(conn, user_id, stages, have),
+            'academic': acad, 'mbbs_from_options': [{'code': 'india', 'label': 'India'},
+                                                    {'code': 'abroad', 'label': 'Abroad (foreign medical graduate, FMG)'}],
             'cost_total': _cost_total(stages, reg)}
 
 
@@ -359,6 +401,20 @@ def api_profile():
                      "updated_at = CURRENT_TIMESTAMP",
                      (u['id'], country, route, bool(d.get('mbbs_done', True)), bool(d.get('internship_done')),
                       bool(d.get('has_pg')), exp, td, cid, cname, area))
+        # Indian graduate / FMG answers (sent ones only; unanswered stays as it is)
+        sets, vals = [], []
+        mf = str(d.get('mbbs_from') or '').strip()
+        if mf in ('india', 'abroad'):
+            sets.append('mbbs_from = ?'); vals.append(mf)
+        if 'mbbs_country' in d:
+            sets.append('mbbs_country = ?'); vals.append(str(d.get('mbbs_country') or '').strip()[:80])
+        for k in ('abroad_internship_done', 'fmge_cleared', 'india_internship_done'):
+            if k in d:
+                v = str(d.get(k)).strip().lower()
+                sets.append(f'{k} = ?')
+                vals.append(True if v in ('1', 'true', 'yes') else False if v in ('0', 'false', 'no') else None)
+        if sets:
+            conn.execute("UPDATE pg_users SET " + ", ".join(sets) + " WHERE id = ?", vals + [u['id']])
         conn.commit()
         return jsonify({'ok': True, **plan(conn, u['id'], country)})
     except Exception as e:
@@ -390,13 +446,17 @@ def api_stage():
         st = conn.execute("SELECT country FROM pg_pathway_stages WHERE id = ?", (sid,)).fetchone()
         if not st:
             return jsonify({'ok': False, 'error': 'bad_stage'}), 404
-        conn.execute("INSERT INTO pg_pathway_progress (user_id, stage_id, country, status, target_date, done_date, note) "
-                     "VALUES (?, ?, ?, ?, ?::date, CASE WHEN ? = 'done' THEN CURRENT_DATE END, ?) "
+        # no target dates any more (founder 2026-11-19): started_date is stamped the first time a stage moves to
+        # doing/done, done_date when it is done; an old target_date is left untouched unless one is sent
+        conn.execute("INSERT INTO pg_pathway_progress (user_id, stage_id, country, status, target_date, done_date, "
+                     "started_date, note) VALUES (?, ?, ?, ?, ?::date, CASE WHEN ? = 'done' THEN CURRENT_DATE END, "
+                     "CASE WHEN ? IN ('doing', 'done') THEN CURRENT_DATE END, ?) "
                      "ON CONFLICT (user_id, stage_id) DO UPDATE SET status = EXCLUDED.status, target_date = "
-                     "EXCLUDED.target_date, done_date = CASE WHEN EXCLUDED.status = 'done' THEN "
-                     "COALESCE(pg_pathway_progress.done_date, CURRENT_DATE) END, note = EXCLUDED.note, "
-                     "updated_at = CURRENT_TIMESTAMP",
-                     (u['id'], sid, st['country'], status, td, status, str(d.get('note') or '')[:1000]))
+                     "COALESCE(EXCLUDED.target_date, pg_pathway_progress.target_date), done_date = CASE WHEN "
+                     "EXCLUDED.status = 'done' THEN COALESCE(pg_pathway_progress.done_date, CURRENT_DATE) END, "
+                     "started_date = COALESCE(pg_pathway_progress.started_date, EXCLUDED.started_date), "
+                     "note = EXCLUDED.note, updated_at = CURRENT_TIMESTAMP",
+                     (u['id'], sid, st['country'], status, td, status, status, str(d.get('note') or '')[:1000]))
         conn.commit()
         return jsonify({'ok': True, **plan(conn, u['id'], st['country'])})
     except Exception as e:
