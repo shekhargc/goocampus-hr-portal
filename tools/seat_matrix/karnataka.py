@@ -113,7 +113,11 @@ COLLEGES = {  # KEA college code → (name exactly as printed, standard institut
     'M68': ('Haveri Institute of Medical Sciences, Haveri', 'Haveri Institute of Medical Sciences, Haveri'),
     'M69': ('Siddaganga Medical College and Research Institute, Tumakuru', 'Siddaganga Medical College and Research Institute, Tumakuru'),
     'M70': ('Sri Chamundeshwari Medical College Hospital & Research Institute', 'Sri Chamundeshwari Medical College Hospital & Research Institute, Channapatna'),
-    'M71': ('Sri Madhusudan Sai Institute of Medical Sciences & Research, Chikballapur', 'Sri Madhusudan Sai Institute of Medical Sciences and Research, Chikkaballapura')}
+    'M71': ('Sri Madhusudan Sai Institute of Medical Sciences & Research, Chikballapur', 'Sri Madhusudan Sai Institute of Medical Sciences and Research, Chikkaballapura'),
+    # first printed in KEA's Round 2 ADDITIONAL matrix (19.11.2026); standard name = College Database master (founder-approved 2026-11-19), not in 2025
+    'M76': ('BGS Medical College and Hospital, Nagaruru, Bangalore', 'BGS Medical College & Hospital, Nagaruru'),
+    'M77': ('PES University Institute Of Medical Sciences and Research, Bangalore', 'PES University Institute of Medical Sciences and Research, Bangalore'),
+    'M79': ('S R Patil Medical College and Hospital District Bagalkot', 'S R Patil Medical College, Bagalkot')}
 HOSPITALS = {  # DNB files: hospital code → (name as printed, standard name); Q… = DNB Regular, V… = DNB Diploma
     'Q001': ('General hospital 4th T Block, (beside RGUHS) Jayanagar, Bengaluru, Karnataka', 'General Hospital, Jayanagar, Bengaluru, Karnataka'),
     'Q002': ('KC General hospital #89 5th cross Malleshwaram, Bengaluru, Karnataka- 560003', 'K.C. General Hospital, Malleshwaram, Bengaluru, Karnataka'),
@@ -160,6 +164,8 @@ COURSES = {  # medical / St John's PDF: (course code, printed name in lower-case
     ('D7', 'mdimmunohaematologybloodtransfusion'): 'MD - Transfusion Medicine / Immuno-Haematology and Blood Transfusion',
     ('D8', 'physicalmedicineandrehabilitation'): 'MD - Physical Medicine and Rehabilitation',
     ('DA', 'mdsportsmedicine'): 'MD - Sports Medicine', ('H1', 'mdgeritrics'): 'MD - Geriatrics',
+    ('H2', 'palliativemedicine'): 'MD - Palliative Medicine', ('H3', 'mdlaboratorymedicine'): 'MD - Laboratory Medicine',
+    ('H4', 'mdnuclearmedicine'): 'MD - Nuclear Medicine',   # Round 2 additional matrix (19.11.2026)
     ('E1', 'diplomainclinicalpathology'): 'Diploma in Pathology', ('E4', 'diplomainpublichealthdph'): 'Diploma in Public Health',
     ('F4', 'diplomaintuberculosischestdiseases'): 'Diploma in Respiratory Medicine'}
 DNB_REG = {  # DNB Regular: (code, name) → course (section dnb)
@@ -469,7 +475,8 @@ def cat_match(x):
 
 cuts = load_cuts(CUTS, 'Karnataka')
 known = {c['institute'] for c in cuts}
-missing = sorted({v[1] for k, v in COLLEGES.items() if k != 'M66'} - known)
+NEW_2026 = {'M66', 'M76', 'M77', 'M79'}   # colleges with no 2025 KEA cut-off
+missing = sorted({v[1] for k, v in COLLEGES.items() if k not in NEW_2026} - known)
 if missing:
     raise SystemExit(f'college map points at names not in the 2025 cut-offs: {missing}')
 cut_type = {c['institute']: c['institute_type'] for c in cuts}

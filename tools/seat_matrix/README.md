@@ -328,9 +328,12 @@ both pinned by SHA-256. Parsing functions, COLLEGES / COURSES and the cut-off br
 labels equal Round 1 and the 18-Nov body. `round2.json` = karnataka_round2.py's output (2,583 vacancy rows, kept as is).
 Combined body "Karnataka — Round 2 — State Counselling": added seats on an existing college × course × quota × category
 line are added to it (seats and new_in_round += n), else a new line with new_in_round = seats. Every unknown college
-code / printed name / course / course type is listed up front and the run stops. 2026-11-19: stops on M76 BGS Medical
-College Nagaruru, M77 PES University IMSR, M79 S R Patil Medical College Bagalkot and courses H2 Palliative Medicine,
-H3 MD Laboratory Medicine, H4 MD Nuclear Medicine (not in Round 1) until their maps are confirmed in karnataka.py.
+code / printed name / course / course type is listed up front and the run stops. New in this file (maps added to
+karnataka.py, founder-approved 2026-11-19, College Database master names, no 2025 cut-off): M76 BGS Medical College &
+Hospital, Nagaruru (Deemed), M77 PES University Institute of Medical Sciences and Research, Bangalore (Deemed), M79 S R
+Patil Medical College, Bagalkot (Private); courses H2 / H3 / H4 → MD - Palliative / Laboratory / Nuclear Medicine.
+2026: 2,583 vacancy + 860 + 7 added = 3,450 seats, 68 colleges, new_in_round 867 (209 added lines merge into 18-Nov
+lines = 235 seats; 609 new lines = 632 seats).
 
 ## Telangana Management Quota (`telangana_mq.py`)
     /usr/bin/python3 tools/seat_matrix/telangana_mq.py <mq_phase1.pdf> <cutoffs2025.json> <out.json>
