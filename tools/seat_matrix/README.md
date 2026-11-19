@@ -320,6 +320,18 @@ SC-C (20%) per the PDF footer, …H = KK, P… = PwD, MNG = OTH(Q)); COLLEGES / 
 Checks: line = Total, each college's lines = its Total line (column by column), every column = Grand Total. 2026: 2,583
 seats, 65 colleges; no line above its Round 1 seats.
 
+## Karnataka Round 2 additional seats (`karnataka_round2_added.py`)
+    /usr/bin/python3 tools/seat_matrix/karnataka_round2_added.py <additional.pdf> <stjohns_additional.pdf> <round2.json> <cutoffs2025.json> <out.json>
+KEA "PG MEDICAL ADDITINAL PROVISIONAL SEAT MATRIX - 2026 (19/11/2026)" (inbox 1849, 860 seats, Round 1 medical layout:
+KK / RK lines, NON-INSERVICE / INSERVICE / PWD + private columns) + St John's additional RC seats (inbox 1850, 7 seats),
+both pinned by SHA-256. Parsing functions, COLLEGES / COURSES and the cut-off bridge are executed from karnataka.py, so
+labels equal Round 1 and the 18-Nov body. `round2.json` = karnataka_round2.py's output (2,583 vacancy rows, kept as is).
+Combined body "Karnataka — Round 2 — State Counselling": added seats on an existing college × course × quota × category
+line are added to it (seats and new_in_round += n), else a new line with new_in_round = seats. Every unknown college
+code / printed name / course / course type is listed up front and the run stops. 2026-11-19: stops on M76 BGS Medical
+College Nagaruru, M77 PES University IMSR, M79 S R Patil Medical College Bagalkot and courses H2 Palliative Medicine,
+H3 MD Laboratory Medicine, H4 MD Nuclear Medicine (not in Round 1) until their maps are confirmed in karnataka.py.
+
 ## Telangana Management Quota (`telangana_mq.py`)
     /usr/bin/python3 tools/seat_matrix/telangana_mq.py <mq_phase1.pdf> <cutoffs2025.json> <out.json>
 KNRUHS "ADMISSIONS UNDER MANAGEMENT QUOTA … SEAT MATRIX FOR FIRST PHASE" (18.11.2026). Own body "Telangana — Management
