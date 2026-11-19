@@ -91,6 +91,7 @@ def api_pg_news():
       all      '0' to hide All-India items (default: include them)
       body     optional exact body_label filter
       page, page_size (<=100)
+      id       one published post by id (any scope), returned inside items[]
     If the doctor's Bearer token is present, their home state + followed states are
     added automatically (so the site can just send the token)."""
     if not _authorized():
@@ -153,6 +154,11 @@ def api_pg_news():
         where = "is_published AND deleted_at IS NULL AND (" + " OR ".join(scope_parts) + ")"
         if body:
             where += " AND body_label = ?"; params.append(body)
+        # ?id=<n> → that one published post (any scope — the public site shows every state's news), same item
+        # shape inside items[]; post pages no longer depend on the list window (website request 2026-11-20)
+        _one = _s(request.args.get('id'))
+        if _one.isdigit():
+            where, params = "is_published AND deleted_at IS NULL AND id = ?", [int(_one)]
 
         ensure_news_seo_cols(conn)
         total = conn.execute(f"SELECT COUNT(*) AS n FROM pg_news WHERE {where}", params).fetchone()['n']
