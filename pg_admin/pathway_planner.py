@@ -39,6 +39,12 @@ TARGETS = {'uae': [('dubai', 'Dubai', 'dha'), ('abu_dhabi', 'Abu Dhabi (incl. Al
 # academic section later; the starting point only asks these.
 ACADEMIC_COLS = (('mbbs_from', "TEXT DEFAULT ''"), ('mbbs_country', "TEXT DEFAULT ''"),
                  ('abroad_internship_done', 'BOOLEAN'), ('fmge_cleared', 'BOOLEAN'), ('india_internship_done', 'BOOLEAN'))
+# overall "when do you want to be working there?" (founder 2026-11-19: one target at the start, not per step)
+TIMELINES = [('6m', 'Within 6 months', 6), ('1y', 'In about 1 year', 12), ('18m', 'In about 1½ years', 18),
+             ('2y', 'In about 2 years', 24), ('3y', 'In 3 years or more', 36), ('unsure', 'Not sure yet', None)]
+# experience the route needs before applying (UAE PQR: GP 2 years after internship; Indian MD/MS/DNB 3 years after PG)
+REQ_EXP_YEARS = {'gp': 2, 'specialist': 3, 'residency': 0}
+REG_SHORT = {'dha': 'DHA', 'doh': 'DoH', 'sha': 'SHA', 'mohap': 'MOHAP'}
 USD_TO_AED = 3.6725          # UAE dirham's official peg to the US dollar (for the approximate total only)
 _READY = {'done': False}
 
@@ -74,6 +80,13 @@ def ensure(conn):
     conn.execute("ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS target_area TEXT DEFAULT ''")
     # founder 2026-11-19 (evening): no target dates — record when a stage was started and finished instead
     conn.execute("ALTER TABLE pg_pathway_progress ADD COLUMN IF NOT EXISTS started_date DATE")
+    # onboarding (2026-11-19): typical duration per stage, an "already done?" question, auto-complete key; the doctor's
+    # overall timeline, documents they say they already hold, and when onboarding was finished
+    for col, ddl in (('duration', "TEXT DEFAULT '{}'"), ('done_q', "TEXT DEFAULT ''"), ('auto_key', "TEXT DEFAULT ''")):
+        conn.execute(f"ALTER TABLE pg_pathway_stages ADD COLUMN IF NOT EXISTS {col} {ddl}")
+    for col, ddl in (('target_timeline', "TEXT DEFAULT ''"), ('docs_ready', "TEXT DEFAULT '[]'"),
+                     ('onboarded_at', 'TIMESTAMP')):
+        conn.execute(f"ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS {col} {ddl}")
     # Indian graduate vs foreign medical graduate (FMG) — person-level, kept on pg_users so every dashboard shares it
     for col, ddl in ACADEMIC_COLS:
         conn.execute(f"ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS {col} {ddl}")
@@ -135,6 +148,39 @@ def _jl(v):
         return []
 
 
+def _jd(v):
+    try:
+        x = json.loads(v or '{}')
+        return x if isinstance(x, dict) else {}
+    except Exception:
+        return {}
+
+
+def _estimate(stages, prof, route):
+    """Months to start working from where the doctor is now: the still-open stages' typical durations (critical-path
+    increments) plus any experience the route still needs. Approximate by design."""
+    rem = [s for s in stages if s['status'] not in ('done', 'na')]
+    lo = sum(float(s['duration'].get('min') or 0) for s in rem)
+    hi = sum(float(s['duration'].get('max') or 0) for s in rem)
+    exp = float((prof or {}).get('experience_years') or 0)
+    gap = max(0.0, REQ_EXP_YEARS.get(route, 0) - exp) * 12
+    # documents / verification can run during the last months of experience, so the gap and the steps overlap a little
+    mn = max(gap, lo) if gap else lo
+    mx = (gap + hi) if gap else hi
+    return {'months_min': round(mn), 'months_max': round(max(mx, mn)), 'experience_gap_months': round(gap),
+            'experience_needed_years': REQ_EXP_YEARS.get(route, 0), 'remaining_steps': len(rem),
+            'note': 'Approximate: typical durations of the steps you still have (official processing times where '
+                    'published, otherwise GooCampus estimates) plus any experience your route still needs.'}
+
+
+def _timeline_options(est):
+    out = []
+    for code, label, months in TIMELINES:
+        if months is None or months >= est['months_min'] or (code == '3y'):
+            out.append({'code': code, 'label': label, 'months': months})
+    return out
+
+
 def _doc_labels():
     from pg_admin.career_vault import DOC_TYPES
     return {c: l for c, l, _k in DOC_TYPES}
@@ -147,6 +193,7 @@ def _stage_out(s, titles, ph):
             # 'needs' = the real documents when mapped (one shared list), else the old free-text lines
             'needs': [labels.get(c, c) for c in codes] if codes else _needs(s['needs']),
             'doc_codes': codes, 'costs': _jl(s.get('costs')), 'typical_time': s['typical_time'] or '',
+            'duration': _jd(s.get('duration')), 'done_question': s.get('done_q') or '', 'auto_key': s.get('auto_key') or '',
             'typical_cost': s['typical_cost'] or '', 'chapter_no': s['chapter_no'],
             'chapter_title': titles.get(s['chapter_no'], ''), 'service_tag': s['service_tag'] or '',
             'phase_no': s.get('phase_no'), 'phase': ph.get(s.get('phase_no'), '') if s.get('phase_no') else ''}
@@ -260,7 +307,7 @@ def _academic(conn, user_id):
         return {}
 
 
-def _documents_needed(conn, user_id, stages, have=None):
+def _documents_needed(conn, user_id, stages, have=None, declared=None):
     """One de-duplicated checklist of real documents for this doctor's route, ticked from My Documents."""
     labels = _doc_labels()
     order, where = [], {}
@@ -271,8 +318,13 @@ def _documents_needed(conn, user_id, stages, have=None):
             where[c].append(s['position'])
     if have is None:
         have = _have_docs(conn, user_id)
-    docs = [{'code': c, 'label': labels.get(c, c), 'stages': where[c], 'have': c in have} for c in order]
-    return {'items': docs, 'ready': sum(1 for d in docs if d['have']), 'total': len(docs)}
+    declared = set(declared or [])
+    # most documents are needed before DataFlow (PSV) — the first stage whose outcome is the PSV report
+    psv = next((s['position'] for s in stages if 'dataflow' in s['doc_codes']), None)
+    docs = [{'code': c, 'label': labels.get(c, c), 'stages': where[c], 'have': c in have,
+             'ready': c in have or c in declared, 'before_psv': bool(psv and where[c][0] < psv)} for c in order]
+    return {'items': docs, 'uploaded': sum(1 for d in docs if d['have']), 'ready': sum(1 for d in docs if d['ready']),
+            'total': len(docs), 'before_psv_total': sum(1 for d in docs if d['before_psv'])}
 
 
 def plan(conn, user_id, country):
@@ -299,6 +351,17 @@ def plan(conn, user_id, country):
                        'note': p.get('note') or ''})
     labels = _doc_labels()
     have = _have_docs(conn, user_id)
+    rs = REG_SHORT.get(reg, 'your authority')
+    for st in stages:
+        st['done_question'] = st['done_question'].replace('{REG}', rs)
+        # step 1 'Choose the emirate' completes itself once the doctor has picked one (founder 2026-11-19)
+        if st['auto_key'] == 'target_area':
+            if tgt and tgt['code'] != 'undecided':
+                st['answer'] = tgt['label'] + (f" ({REG_SHORT.get(reg, '')})" if reg else '')
+                if st['status'] == 'todo':
+                    st['status'] = 'done'
+            else:
+                st['answer'] = ''
     for i, st in enumerate(stages, start=1):   # the doctor's own numbering 1..n (master stage_no skips other routes)
         st['position'] = i
         st['costs'] = _cost_view(st['costs'], reg)
@@ -313,10 +376,20 @@ def plan(conn, user_id, country):
     counted = [s for s in stages if s['status'] != 'na']
     done = sum(1 for s in counted if s['status'] == 'done')
     nxt = next((s for s in stages if s['status'] in ('todo', 'doing')), None)
+    est = _estimate(stages, prof, route)
+    tl = next(({'code': c, 'label': l, 'months': m} for c, l, m in TIMELINES if c == (prof or {}).get('target_timeline')),
+              None)
+    declared = _jl((prof or {}).get('docs_ready'))
+    onboarding = {
+        'done': bool((prof or {}).get('onboarded_at')),
+        'questions': [{'stage_id': s['id'], 'position': s['position'], 'question': s['done_question'],
+                       'done': s['status'] == 'done'} for s in stages if s['done_question']],
+        'timeline_options': _timeline_options(est)}
     if prof is not None:
         prof.update(acad)
+        prof['docs_ready'] = declared
     if prof:
-        for k in ('target_date', 'updated_at'):
+        for k in ('target_date', 'updated_at', 'onboarded_at'):
             if prof.get(k):
                 prof[k] = prof[k].isoformat()
         prof['experience_years'] = float(prof.get('experience_years') or 0)
@@ -326,7 +399,8 @@ def plan(conn, user_id, country):
                                            'percent': round(100 * done / len(counted)) if counted else 0},
             'next_stage': nxt['id'] if nxt else None,
             'target': tgt, 'targets': [{'code': c, 'label': l, 'regulator': r} for c, l, r in TARGETS.get(country, [])],
-            'documents_needed': _documents_needed(conn, user_id, stages, have),
+            'documents_needed': _documents_needed(conn, user_id, stages, have, declared),
+            'estimate': est, 'timeline': tl, 'onboarding': onboarding,
             'academic': acad, 'mbbs_from_options': [{'code': 'india', 'label': 'India'},
                                                     {'code': 'abroad', 'label': 'Abroad (foreign medical graduate, FMG)'}],
             'cost_total': _cost_total(stages, reg)}
@@ -385,6 +459,24 @@ def api_profile():
         u, err = _doctor_gated(conn)
         if err:
             return err
+        bad = _save_profile(conn, u, country, d, route, exp, td, cid, cname, area)
+        if bad:
+            return bad
+        conn.commit()
+        return jsonify({'ok': True, **plan(conn, u['id'], country)})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logger.error("api pathway profile: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def _save_profile(conn, u, country, d, route, exp, td, cid, cname, area):
+    """Upsert the pathway profile + the shared Indian-graduate / FMG answers (+ timeline / documents held).
+    Blank college / target date keep what is saved (onboarding does not send them)."""
+    if True:
         if cid:                                   # the College Database name wins over typed text
             m = conn.execute("SELECT college_name FROM pg_college_master WHERE id = ?", (cid,)).fetchone()
             if not m:
@@ -395,8 +487,9 @@ def api_profile():
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?::date, ?, ?, ?) ON CONFLICT (user_id, country) "
                      "DO UPDATE SET route = EXCLUDED.route, mbbs_done = EXCLUDED.mbbs_done, internship_done = "
                      "EXCLUDED.internship_done, has_pg = EXCLUDED.has_pg, experience_years = EXCLUDED.experience_years, "
-                     "target_date = EXCLUDED.target_date, mbbs_college_id = EXCLUDED.mbbs_college_id, "
-                     "mbbs_college = EXCLUDED.mbbs_college, "
+                     "target_date = COALESCE(EXCLUDED.target_date, pg_pathway_profile.target_date), "
+                     "mbbs_college_id = COALESCE(EXCLUDED.mbbs_college_id, pg_pathway_profile.mbbs_college_id), "
+                     "mbbs_college = COALESCE(NULLIF(EXCLUDED.mbbs_college, ''), pg_pathway_profile.mbbs_college), "
                      "target_area = COALESCE(NULLIF(EXCLUDED.target_area, ''), pg_pathway_profile.target_area), "
                      "updated_at = CURRENT_TIMESTAMP",
                      (u['id'], country, route, bool(d.get('mbbs_done', True)), bool(d.get('internship_done')),
@@ -415,12 +508,73 @@ def api_profile():
                 vals.append(True if v in ('1', 'true', 'yes') else False if v in ('0', 'false', 'no') else None)
         if sets:
             conn.execute("UPDATE pg_users SET " + ", ".join(sets) + " WHERE id = ?", vals + [u['id']])
+        if 'target_timeline' in d:
+            tl = str(d.get('target_timeline') or '')
+            if tl and tl not in {c for c, _l, _m in TIMELINES}:
+                return jsonify({'ok': False, 'error': 'bad_target_timeline'}), 400
+            conn.execute("UPDATE pg_pathway_profile SET target_timeline = ? WHERE user_id = ? AND country = ?",
+                         (tl, u['id'], country))
+        if 'docs_ready' in d:
+            from pg_admin.career_vault import DOC_TYPES
+            ok = {c for c, _l, _k in DOC_TYPES}
+            dr = [c for c in (d.get('docs_ready') or []) if c in ok]
+            conn.execute("UPDATE pg_pathway_profile SET docs_ready = ? WHERE user_id = ? AND country = ?",
+                         (json.dumps(dr), u['id'], country))
+        # picking an emirate completes the 'choose the emirate' stage for real (not only on screen)
+        if area and area != 'undecided':
+            for r in conn.execute("SELECT id FROM pg_pathway_stages WHERE country = ? AND auto_key = 'target_area'",
+                                  (country,)).fetchall():
+                conn.execute("INSERT INTO pg_pathway_progress (user_id, stage_id, country, status, started_date, done_date, "
+                             "note) VALUES (?, ?, ?, 'done', CURRENT_DATE, CURRENT_DATE, '') ON CONFLICT (user_id, stage_id) "
+                             "DO UPDATE SET status = 'done', done_date = COALESCE(pg_pathway_progress.done_date, CURRENT_DATE), "
+                             "started_date = COALESCE(pg_pathway_progress.started_date, CURRENT_DATE)",
+                             (u['id'], r['id'], country))
+        return None
+
+
+def api_onboard():
+    """POST /api/pg/pathway/onboard {country, target_area, mbbs_from, mbbs_country?, abroad_internship_done?,
+    fmge_cleared?, india_internship_done?, internship_done, has_pg, experience_years, route?, docs_ready:[codes],
+    done_stage_ids:[ids already completed before starting], target_timeline} → saves everything in one go, marks
+    those stages done ('already done before starting'), stamps onboarded_at, returns the plan (founder 2026-11-19)."""
+    d = request.get_json(silent=True) or {}
+    country = str(d.get('country') or '').strip().lower()
+    route = str(d.get('route') or '').strip()
+    if route and route not in ROUTES:
+        return jsonify({'ok': False, 'error': 'bad_route'}), 400
+    try:
+        exp = max(0.0, min(60.0, float(d.get('experience_years') or 0)))
+        ids = [int(x) for x in (d.get('done_stage_ids') or [])][:60]
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'bad_input'}), 400
+    area = str(d.get('target_area') or '').strip()
+    if area and not _target(country, area):
+        return jsonify({'ok': False, 'error': 'bad_target_area'}), 400
+    conn = get_db()
+    try:
+        ensure(conn)
+        u, err = _doctor_gated(conn)
+        if err:
+            return err
+        d.setdefault('docs_ready', [])
+        bad = _save_profile(conn, u, country, d, route, exp, None, None, '', area)
+        if bad:
+            return bad
+        valid = {r['id'] for r in conn.execute("SELECT id FROM pg_pathway_stages WHERE country = ? AND is_active",
+                                               (country,)).fetchall()}
+        for sid in [i for i in ids if i in valid]:
+            conn.execute("INSERT INTO pg_pathway_progress (user_id, stage_id, country, status, done_date, note) "
+                         "VALUES (?, ?, ?, 'done', CURRENT_DATE, 'Already done before starting') "
+                         "ON CONFLICT (user_id, stage_id) DO UPDATE SET status = 'done', "
+                         "done_date = COALESCE(pg_pathway_progress.done_date, CURRENT_DATE)", (u['id'], sid, country))
+        conn.execute("UPDATE pg_pathway_profile SET onboarded_at = CURRENT_TIMESTAMP WHERE user_id = ? AND country = ?",
+                     (u['id'], country))
         conn.commit()
         return jsonify({'ok': True, **plan(conn, u['id'], country)})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
-        logger.error("api pathway profile: %s", e)
+        logger.error("api pathway onboard: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
@@ -573,6 +727,11 @@ def api_import():
             if 'costs' in s:
                 conn.execute("UPDATE pg_pathway_stages SET costs = ? WHERE country = ? AND stage_no = ?",
                              (json.dumps(list(s.get('costs') or [])), country, int(s['stage_no'])))
+            for k, col in (('duration', 'duration'), ('done_q', 'done_q'), ('auto_key', 'auto_key')):
+                if k in s:
+                    v = json.dumps(s[k] or {}) if k == 'duration' else str(s[k] or '')[:300]
+                    conn.execute(f"UPDATE pg_pathway_stages SET {col} = ? WHERE country = ? AND stage_no = ?",
+                                 (v, country, int(s['stage_no'])))
             if 'is_active' in s:
                 conn.execute("UPDATE pg_pathway_stages SET is_active = ? WHERE country = ? AND stage_no = ?",
                              (bool(s['is_active']), country, int(s['stage_no'])))
@@ -744,6 +903,7 @@ def register(app):
     from core.auth import login_required
     app.add_url_rule('/api/pg/pathway', 'api_pg_pathway', api_plan, methods=['GET'])
     app.add_url_rule('/api/pg/pathway/profile', 'api_pg_pathway_profile', api_profile, methods=['POST'])
+    app.add_url_rule('/api/pg/pathway/onboard', 'api_pg_pathway_onboard', api_onboard, methods=['POST'])
     app.add_url_rule('/api/pg/pathway/stage', 'api_pg_pathway_stage', api_stage, methods=['POST'])
     app.add_url_rule('/api/pg/pathway/stages/import', 'api_pg_pathway_import', api_import, methods=['POST'])
     app.add_url_rule('/admin/pg/pathway/stage', 'pg_pathway_save_stage', login_required(admin_save_stage),
