@@ -106,6 +106,9 @@ SOURCES = {
         # (founder 2026-10-13: titles like "PG Degree-Diploma …" / DNB were missed by a keyword filter)
         'form': {'ctl00$ContentPlaceHolder1$DropDownList1': '3', 'ctl00$ContentPlaceHolder1$Button1': 'Submit'},
         'exclude': r'\bMDS\b|dental|homoeo|ayurved|ayush|nursing',
+        # the PG seat matrices sit on their own page, not in the notification list (missed 2026-11-16..18)
+        'extra_pdf_pages': [{'url': 'https://drntr.uhsap.in/index/pgmedicalseatmatrix2026',
+                             'prefix': 'AP PG Medical 2026-27 seat matrix — '}],
         'enabled': True,
     },
     'tg_pg_medical': {
@@ -180,6 +183,7 @@ SOURCES = {
         'reader': 'pdf_links_soft',
         'include': 'MD\\s*[/-]?\\s*MS\\b|\\bMD\\b|PG\\s*MEDICAL|MEDICAL\\s*PG|POST\\s*-?\\s*GRADUATE\\s+MEDICAL|PCMS|IN[\\s-]*SERVICE|NEET[\\s-]*PG(?![\\s-]*MDS)|DNB|DIPLOMA',
         'exclude': '\\bMDS\\b|DENTAL|\\bBDS\\b|NURSING|AYUR|HOMOEO',
+        'match_href': True,          # 'Tentative Vacancy Position' → only the /MDMS/ folder names the course
         'enabled': True,
     },
     # Puducherry: no_pg_2026_yet — Official: centacpuducherry.in is linked from the Govt of Puducherry Directorate of Higher & Technical Education site (dhte.py.gov.in → https://www.centacpuducherry.in/); header "GO
@@ -687,10 +691,13 @@ def _get_pages(s, pages):
     return out
 
 
-def read_pdf_links(url, pages=None, include=None, exclude=None):
+def read_pdf_links(url, pages=None, include=None, exclude=None, match_href=False):
     """Generic: every <a href="...pdf">TITLE</a> on the given pages (MCC style). The date
     comes from the title if present, else from a yyyymmdd stamp in the file name.
-    item_key = the PDF URL (stable)."""
+    item_key = the PDF URL (stable).
+    match_href: the course filter also reads the file path — for sites whose link text has no
+    course word ('Tentative Vacancy Position' → ../PGET2026/MDMS/…pdf, BFUHS 2026-11-19)."""
+    from urllib.parse import unquote
     import requests
     from urllib.parse import urljoin
     items, seen = [], set()
@@ -705,7 +712,8 @@ def read_pdf_links(url, pages=None, include=None, exclude=None):
             if href in seen or not raw or raw.lower() in ('view', 'download', 'click here'):
                 continue
             seen.add(href)
-            if not _wanted(raw, include, exclude):
+            probe = raw + ' ' + unquote(href).replace('_', ' ') if match_href else raw
+            if not _wanted(probe, include, exclude):
                 continue
             title, d = split_title_date(raw)
             if not d:
@@ -894,6 +902,22 @@ READERS = {'kea_aspnet': read_kea_aspnet, 'pdf_links': read_pdf_links}
 def read_source(code):
     items = _read_source(code)
     have = {i['item_key'] for i in items}
+    # extra document pages of the same authority that the main reader doesn't see (e.g. AP's
+    # separate PG seat-matrix page, founder 2026-11-19). Soft: a failing/empty extra page never
+    # hides the main notices. Titles get the page's prefix so the inbox line says what it is.
+    for xp in SOURCES[code].get('extra_pdf_pages') or []:
+        try:
+            got = read_pdf_links(xp['url'], None, xp.get('include'), xp.get('exclude'), xp.get('match_href', False))
+        except Exception as e:
+            logging.warning("news scrape %s extra page %s: %s", code, xp['url'], e)
+            continue
+        for it in got:
+            if it['item_key'] in have:
+                continue
+            have.add(it['item_key'])
+            if xp.get('prefix'):
+                it['title'] = xp['prefix'] + re.sub(r'\s*\bPDF\s*$', '', it['title'], flags=re.I)
+            items.append(it)
     for fd in SOURCES[code].get('fixed_docs') or []:      # e.g. a brochure on another page
         if fd['url'] not in have:
             items.append({'item_key': fd['url'], 'raw_title': fd['title'], 'title': fd['title'],
@@ -904,7 +928,8 @@ def read_source(code):
 def _read_source(code):
     src = SOURCES[code]
     if src['reader'] == 'pdf_links':
-        return read_pdf_links(src['url'], src.get('pages'), src.get('include'), src.get('exclude'))
+        return read_pdf_links(src['url'], src.get('pages'), src.get('include'), src.get('exclude'),
+                              src.get('match_href', False))
     if src['reader'] == 'cee_kerala':
         return read_cee_kerala(src.get('pages') or [src['url']], src.get('home'))
     if src['reader'] == 'tn_tagged':

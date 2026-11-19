@@ -957,6 +957,29 @@ def _pipeline_audit(conn, part, only=''):
                                                  - {k[6:] for k in kinds})
     except Exception as e:
         conn.rollback(); out['desk_state_lists_missing'] = f'err {e}'
+    # results loaded but the seat list behind them is missing (AP CQ R1 + Punjab, 2026-11-18): per authority, every
+    # visible results round must have a seat-matrix body (Round 1 = full matrix, Round N = its vacancy list)
+    try:
+        import re as _re
+        have = {}
+        for r in conn.execute("SELECT COALESCE(authority_code,'') AS a, COALESCE(round_no,1) AS n FROM pg_seat_matrix_source "
+                              "WHERE academic_year='2026-27' AND COALESCE(superseded,0) IN (0,2) "
+                              "AND COALESCE(section,'') <> 'nmc_initial'").fetchall():
+            have.setdefault(r['a'], set()).add(int(r['n']))
+        gaps = []
+        for rd in rounds:
+            if rd['hidden']:
+                continue
+            m = _re.search(r'(\d+)', rd['round'] or '')
+            n = int(m.group(1)) if m and _re.match(r'\s*round', rd['round'] or '', _re.I) else None
+            if rd['auth'] not in have:
+                gaps.append({'auth': rd['auth'], 'round': rd['round'], 'problem': 'no seat matrix at all'})
+            elif n and n not in have[rd['auth']]:
+                gaps.append({'auth': rd['auth'], 'round': rd['round'],
+                             'problem': f'no Round {n} seat list (has rounds {sorted(have[rd["auth"]])})'})
+        out['results_without_seat_matrix'] = gaps
+    except Exception as e:
+        conn.rollback(); out['results_without_seat_matrix'] = f'err {e}'
     out['news_recent'] = q("SELECT id, LEFT(heading,90) AS heading, published_at::date::text AS date, is_published, "
                            "(pdf_data IS NOT NULL OR COALESCE(pdf_r2_key,'')<>'' OR authority_doc_id IS NOT NULL) AS has_file, "
                            "inbox_id, COALESCE(state,'') AS state FROM pg_news WHERE deleted_at IS NULL "

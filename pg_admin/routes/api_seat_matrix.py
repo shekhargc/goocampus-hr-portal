@@ -78,7 +78,9 @@ def _rounds(conn, year):
         "SELECT counselling_body, COALESCE(SUM(CASE WHEN " + _NO_DNB + " THEN seats ELSE 0 END),0) AS md, "
         "COALESCE(SUM(CASE WHEN " + _ONLY_DNB + " THEN seats ELSE 0 END),0) AS dnb, "
         "COALESCE(SUM(CASE WHEN " + _NO_DNB + " THEN COALESCE(new_in_round,0) ELSE 0 END),0) AS nr, "
-        "COALESCE(SUM(CASE WHEN " + _ONLY_DNB + " THEN COALESCE(new_in_round,0) ELSE 0 END),0) AS nr_dnb "
+        "COALESCE(SUM(CASE WHEN " + _ONLY_DNB + " THEN COALESCE(new_in_round,0) ELSE 0 END),0) AS nr_dnb, "
+        "COUNT(DISTINCT CASE WHEN " + _NO_DNB + " THEN COALESCE(NULLIF(college_code,''), college_name) END) AS c_md, "
+        "COUNT(DISTINCT CASE WHEN " + _ONLY_DNB + " THEN COALESCE(NULLIF(college_code,''), college_name) END) AS c_dnb "
         "FROM pg_seat_matrix WHERE academic_year=? GROUP BY counselling_body", [year]).fetchall()}
     def seats(b, section):
         a = agg.get(b)
@@ -101,8 +103,11 @@ def _rounds(conn, year):
                       'list_type': x['list_type'] or ('matrix' if x['round_no'] == 1 else 'vacancy'), 'bodies': []}
             out.append(idx[k])
         tot, dn, nr = seats(x['counselling_body'], x['section'])
+        _a = agg.get(x['counselling_body']) or {}
+        cc = int((_a.get('c_dnb') if x['section'] == 'dnb' else _a.get('c_md')) or 0)   # colleges in this list (2026-11-19)
         idx[k]['bodies'].append({
             'counselling_body': x['counselling_body'], 'section': x['section'], 'total_seats': tot,
+            'college_count': cc,
             'dnb_seats': dn, 'has_pdf': bool(x['has_pdf']), 'uploaded_at': str(x['uploaded_at'] or '')[:16],
             'new_in_round_seats': nr if x['round_no'] > 1 else 0,
             'round1_seats': r1.get((x['authority_code'], x['section'])) if x['round_no'] > 1 else None})
