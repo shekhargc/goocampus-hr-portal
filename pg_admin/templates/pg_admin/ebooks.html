@@ -100,6 +100,43 @@
     {% endif %}
   </div>
 
+  <div class="eb-card" id="journey">
+    <div class="eb-h">"Your journey" strip · {{ book|upper }}</div>
+    <div class="eb-sub" style="margin-bottom:0.5rem;">The horizontal GooCampus steps shown on the doctor's Overview (from our printed brochure). Clear a title to remove a step.</div>
+    <form method="post" action="{{ url_for('pg_pathway_save_journey') }}" style="display:grid;grid-template-columns:40px 1fr 2fr;gap:0.35rem 0.5rem;align-items:center;">
+      <input type="hidden" name="country" value="{{ book }}">
+      {% set nj = (journey|length) + 1 %}
+      {% for n in range(1, (nj if nj <= 12 else 12) + 1) %}
+      {% set j = (journey|selectattr('no', 'equalto', n)|list|first) %}
+      <span class="eb-sub"><b>{{ n }}</b></span>
+      <input class="eb-in" name="title_{{ n }}" value="{{ j.title if j else '' }}" placeholder="{{ 'add a step' if not j }}">
+      <input class="eb-in" name="detail_{{ n }}" value="{{ j.detail if j else '' }}" placeholder="one-line detail">
+      {% endfor %}
+      <div style="grid-column:1/-1;"><button class="eb-btn">Save journey</button></div>
+    </form>
+  </div>
+
+  <div class="eb-card" id="regulators">
+    <div class="eb-h">Emirates &amp; licensing exams · {{ book|upper }}</div>
+    <div class="eb-sub" style="margin-bottom:0.5rem;">One card per regulator, researched from our e-book and the official sites{% if reg_meta.verified_on %} (checked {{ reg_meta.verified_on }}){% endif %}. Each fact carries its source. Edits you save here are kept when the research is re-imported.</div>
+    {% for r in regs %}
+    <details style="border-top:1px solid var(--gray-100);padding:0.45rem 0;">
+      <summary style="cursor:pointer;font-size:0.86rem;"><b>{{ r.data.short or r.code|upper }}</b> · {{ r.data.name }}{% if r.data.covers %} <span class="eb-sub">— {{ r.data.covers if r.data.covers is string else r.data.covers|join(', ') }}</span>{% endif %}{% if not r.is_active %} <span class="eb-pill" style="background:#e5e7eb;color:#374151;">hidden</span>{% endif %}{% if r.admin_edited %} <span class="eb-sub">edited by {{ r.updated_by }}</span>{% endif %}</summary>
+      {% for x in (r.data.exams or []) %}
+      <div class="eb-sub" style="margin:0.25rem 0 0 0.5rem;">• <b>{{ x.title_level }}</b>: {{ x.exam_name or '—' }}{% if x.provider %} · {{ x.provider }}{% endif %}{% if x.mode %} · {{ x.mode }}{% endif %}{% if x.questions %} · {{ x.questions }} questions{% endif %}{% if x.duration %} · {{ x.duration }}{% endif %}{% if x.pass_mark %} · pass {{ x.pass_mark }}{% endif %}</div>
+      {% endfor %}
+      <form method="post" action="{{ url_for('pg_pathway_save_regulator') }}" style="margin-top:0.4rem;">
+        <input type="hidden" name="country" value="{{ book }}"><input type="hidden" name="code" value="{{ r.code }}">
+        <textarea class="eb-in" name="json" style="width:100%;min-height:260px;font-family:monospace;font-size:0.75rem;">{{ r.json }}</textarea>
+        <label class="eb-sub"><input type="checkbox" name="is_active" value="1" {{ 'checked' if r.is_active }}> show to doctors</label>
+        <button class="eb-btn">Save card</button>
+      </form>
+    </details>
+    {% else %}
+    <div class="eb-sub">No licensing cards yet for this country.</div>
+    {% endfor %}
+  </div>
+
   <div class="eb-card" id="stages">
     <div class="eb-h">Pathway Planner stages · {{ book|upper }}</div>
     <div class="eb-sub" style="margin-bottom:0.6rem;">The doctor's checklist for this country, in order. Route decides who sees a stage: All, GP (MBBS), Specialist (Indian MD/MS/DNB) or Residency. Phase groups the stages on the doctor's Overview. Your edits are never overwritten by a re-import.</div>
