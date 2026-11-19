@@ -102,15 +102,26 @@
 
   <div class="eb-card" id="stages">
     <div class="eb-h">Pathway Planner stages · {{ book|upper }}</div>
-    <div class="eb-sub" style="margin-bottom:0.6rem;">The doctor's checklist for this country, in order. Route decides who sees a stage: All, GP (MBBS), Specialist (Indian MD/MS/DNB) or Residency. Your edits are never overwritten by a re-import.</div>
+    <div class="eb-sub" style="margin-bottom:0.6rem;">The doctor's checklist for this country, in order. Route decides who sees a stage: All, GP (MBBS), Specialist (Indian MD/MS/DNB) or Residency. Phase groups the stages on the doctor's Overview. Your edits are never overwritten by a re-import.</div>
+    <details style="margin-bottom:0.6rem;"><summary class="eb-sub" style="cursor:pointer;"><b>Phases</b> ({{ phases|length }}): {% for n, l in phases.items() %}{{ n }}. {{ l }}{{ ' · ' if not loop.last }}{% endfor %}</summary>
+      <form method="post" action="{{ url_for('pg_pathway_save_phases') }}" style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-top:0.4rem;align-items:flex-end;">
+        <input type="hidden" name="country" value="{{ book }}">
+        {% for n in range(1, (phases|length) + 2) %}{% if n <= 8 %}
+        <label class="eb-sub">Phase {{ n }}<br><input class="eb-in" name="label_{{ n }}" value="{{ phases.get(n, '') }}" placeholder="{{ 'new phase' if n not in phases }}"></label>
+        {% endif %}{% endfor %}
+        <button class="eb-btn">Save phases</button>
+        <span class="eb-sub">Clear a name to remove a phase (only when no stage uses it).</span>
+      </form>
+    </details>
     {% for st in stages %}
     <details style="border-top:1px solid var(--gray-100);padding:0.45rem 0;" {{ 'open' if not st.title }}>
-      <summary style="cursor:pointer;font-size:0.86rem;"><b>{{ st.stage_no }}.</b> {{ st.title }} <span class="eb-pill" style="background:#eef2ff;color:#3730a3;">{{ routes.get(st.route, 'All routes') if st.route != 'all' else 'All routes' }}</span>{% if not st.is_active %} <span class="eb-pill" style="background:#e5e7eb;color:#374151;">hidden</span>{% endif %}{% if st.admin_edited %} <span class="eb-sub">edited by {{ st.updated_by }}</span>{% endif %}</summary>
+      <summary style="cursor:pointer;font-size:0.86rem;"><b>{{ st.stage_no }}.</b> {{ st.title }} <span class="eb-pill" style="background:#eef2ff;color:#3730a3;">{{ routes.get(st.route, 'All routes') if st.route != 'all' else 'All routes' }}</span>{% if st.phase_no %} <span class="eb-pill" style="background:#ecfdf5;color:#065f46;">Phase {{ st.phase_no }}{{ ': ' ~ phases[st.phase_no] if st.phase_no in phases }}</span>{% else %} <span class="eb-pill" style="background:#fef3c7;color:#92400e;">no phase</span>{% endif %}{% if not st.is_active %} <span class="eb-pill" style="background:#e5e7eb;color:#374151;">hidden</span>{% endif %}{% if st.admin_edited %} <span class="eb-sub">edited by {{ st.updated_by }}</span>{% endif %}</summary>
       <form method="post" action="{{ url_for('pg_pathway_save_stage') }}" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.45rem;margin-top:0.4rem;">
         <input type="hidden" name="id" value="{{ st.id }}"><input type="hidden" name="country" value="{{ book }}">
         <label class="eb-sub">Title<br><input class="eb-in" name="title" value="{{ st.title }}" style="width:100%;"></label>
         <label class="eb-sub">Route<br><select class="eb-in" name="route"><option value="all" {{ 'selected' if st.route == 'all' }}>All routes</option>{% for k, v in routes.items() %}<option value="{{ k }}" {{ 'selected' if st.route == k }}>{{ v }}</option>{% endfor %}</select></label>
         <label class="eb-sub">Book chapter no.<br><input class="eb-in" name="chapter_no" value="{{ st.chapter_no or '' }}"></label>
+        <label class="eb-sub">Phase<br><select class="eb-in" name="phase_no"><option value="">— none —</option>{% for n, l in phases.items() %}<option value="{{ n }}" {{ 'selected' if st.phase_no == n }}>{{ n }}. {{ l }}</option>{% endfor %}</select></label>
         <label class="eb-sub" style="grid-column:1/-1;">What this stage is<br><textarea class="eb-in" name="what" style="width:100%;min-height:48px;">{{ st.what }}</textarea></label>
         <label class="eb-sub" style="grid-column:1/-1;">Documents / items needed (comma-separated)<br><input class="eb-in" name="needs" value="{{ st.needs_text }}" style="width:100%;"></label>
         <label class="eb-sub">Typical time<br><input class="eb-in" name="typical_time" value="{{ st.typical_time or '' }}"></label>
@@ -129,6 +140,7 @@
         <label class="eb-sub">Title<br><input class="eb-in" name="title" required style="width:100%;"></label>
         <label class="eb-sub">Route<br><select class="eb-in" name="route"><option value="all">All routes</option>{% for k, v in routes.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
         <label class="eb-sub">Book chapter no.<br><input class="eb-in" name="chapter_no"></label>
+        <label class="eb-sub">Phase<br><select class="eb-in" name="phase_no"><option value="">— none —</option>{% for n, l in phases.items() %}<option value="{{ n }}" >{{ n }}. {{ l }}</option>{% endfor %}</select></label>
         <label class="eb-sub" style="grid-column:1/-1;">What this stage is<br><textarea class="eb-in" name="what" style="width:100%;min-height:48px;"></textarea></label>
         <label class="eb-sub" style="grid-column:1/-1;">Documents / items needed (comma-separated)<br><input class="eb-in" name="needs" style="width:100%;"></label>
         <div><button class="eb-btn">Add stage</button></div>

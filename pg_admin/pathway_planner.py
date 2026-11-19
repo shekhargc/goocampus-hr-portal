@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 ROUTES = {'gp': 'General practitioner (MBBS)', 'specialist': 'Specialist (Indian MD / MS / DNB)',
           'residency': 'Residency training in the country'}
 STATUSES = ('todo', 'doing', 'done', 'na')
+DEFAULT_PHASES = [('uae', 1, 'Decide & prepare'), ('uae', 2, 'Verify & get licensed'),
+                  ('uae', 3, 'Job & employer'), ('uae', 4, 'Visa & arrival')]
 _READY = {'done': False}
 
 
@@ -42,6 +44,15 @@ def ensure(conn):
         user_id INTEGER NOT NULL, stage_id INTEGER NOT NULL, country TEXT NOT NULL, status TEXT DEFAULT 'todo',
         target_date DATE, done_date DATE, note TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, stage_id))''')
+    # phases group the stages on the Overview (founder 2026-11-19); labels editable in admin
+    conn.execute('''CREATE TABLE IF NOT EXISTS pg_pathway_phases (
+        country TEXT NOT NULL, phase_no INTEGER NOT NULL, label TEXT DEFAULT '', PRIMARY KEY (country, phase_no))''')
+    conn.execute("ALTER TABLE pg_pathway_stages ADD COLUMN IF NOT EXISTS phase_no INTEGER")
+    conn.execute("ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS mbbs_college_id INTEGER")
+    conn.execute("ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS mbbs_college TEXT DEFAULT ''")
+    for c, n, lbl in DEFAULT_PHASES:
+        conn.execute("INSERT INTO pg_pathway_phases (country, phase_no, label) VALUES (?, ?, ?) "
+                     "ON CONFLICT (country, phase_no) DO NOTHING", (c, n, lbl))
     conn.commit()
     _READY['done'] = True
 
@@ -71,22 +82,50 @@ def suggested_route(prof):
     return 'specialist' if prof.get('has_pg') else 'gp'
 
 
+def phases(conn, country):
+    return {r['phase_no']: r['label'] for r in conn.execute(
+        "SELECT phase_no, label FROM pg_pathway_phases WHERE country = ? ORDER BY phase_no", (country,)).fetchall()}
+
+
+def _stage_out(s, titles, ph):
+    return {'id': s['id'], 'no': s['stage_no'], 'route': s['route'], 'title': s['title'], 'what': s['what'],
+            'needs': _needs(s['needs']), 'typical_time': s['typical_time'] or '',
+            'typical_cost': s['typical_cost'] or '', 'chapter_no': s['chapter_no'],
+            'chapter_title': titles.get(s['chapter_no'], ''), 'service_tag': s['service_tag'] or '',
+            'phase_no': s.get('phase_no'), 'phase': ph.get(s.get('phase_no'), '') if s.get('phase_no') else ''}
+
+
+def _routes(conn, country):
+    return [{'code': k, 'label': v} for k, v in ROUTES.items()
+            if conn.execute("SELECT 1 FROM pg_pathway_stages WHERE country = ? AND route = ? AND is_active LIMIT 1",
+                            (country, k)).fetchone()]
+
+
+def generic(conn, country):
+    """Explore-first Overview (founder 2026-11-19): every active stage of every route, with its phase; no statuses."""
+    titles = {r['chapter_no']: r['title'] for r in conn.execute(
+        "SELECT chapter_no, title FROM pg_ebook_chapters WHERE ebook_code = ?", (country,)).fetchall()}
+    ph = phases(conn, country)
+    stages = [_stage_out(dict(s), titles, ph) for s in conn.execute(
+        "SELECT * FROM pg_pathway_stages WHERE country = ? AND is_active ORDER BY stage_no", (country,)).fetchall()]
+    return {'country': country, 'generic': True, 'routes': _routes(conn, country),
+            'phases': [{'phase_no': n, 'label': l} for n, l in ph.items()], 'stages': stages}
+
+
 def plan(conn, user_id, country):
     prof = conn.execute("SELECT * FROM pg_pathway_profile WHERE user_id = ? AND country = ?", (user_id, country)).fetchone()
     prof = dict(prof) if prof else None
     route = (prof or {}).get('route') or suggested_route(prof)
     titles = {r['chapter_no']: r['title'] for r in conn.execute(
         "SELECT chapter_no, title FROM pg_ebook_chapters WHERE ebook_code = ?", (country,)).fetchall()}
+    ph = phases(conn, country)
     mine = {r['stage_id']: dict(r) for r in conn.execute(
         "SELECT * FROM pg_pathway_progress WHERE user_id = ? AND country = ?", (user_id, country)).fetchall()}
     stages = []
     for s in conn.execute("SELECT * FROM pg_pathway_stages WHERE country = ? AND is_active AND route IN ('all', ?) "
                           "ORDER BY stage_no", (country, route)).fetchall():
         p = mine.get(s['id']) or {}
-        stages.append({'id': s['id'], 'no': s['stage_no'], 'route': s['route'], 'title': s['title'], 'what': s['what'],
-                       'needs': _needs(s['needs']), 'typical_time': s['typical_time'] or '',
-                       'typical_cost': s['typical_cost'] or '', 'chapter_no': s['chapter_no'],
-                       'chapter_title': titles.get(s['chapter_no'], ''), 'service_tag': s['service_tag'] or '',
+        stages.append({**_stage_out(dict(s), titles, ph),
                        'status': p.get('status') or 'todo',
                        'target_date': p['target_date'].isoformat() if p.get('target_date') else None,
                        'done_date': p['done_date'].isoformat() if p.get('done_date') else None,
@@ -99,10 +138,8 @@ def plan(conn, user_id, country):
             if prof.get(k):
                 prof[k] = prof[k].isoformat()
         prof['experience_years'] = float(prof.get('experience_years') or 0)
-    return {'country': country, 'profile': prof, 'route': route,
-            'routes': [{'code': k, 'label': v} for k, v in ROUTES.items()
-                       if conn.execute("SELECT 1 FROM pg_pathway_stages WHERE country = ? AND route = ? AND is_active LIMIT 1",
-                                       (country, k)).fetchone()],
+    return {'country': country, 'profile': prof, 'route': route, 'routes': _routes(conn, country),
+            'phases': [{'phase_no': n, 'label': l} for n, l in ph.items()],
             'stages': stages, 'progress': {'done': done, 'total': len(counted),
                                            'percent': round(100 * done / len(counted)) if counted else 0},
             'next_stage': nxt['id'] if nxt else None}
@@ -110,7 +147,8 @@ def plan(conn, user_id, country):
 
 # ── doctor APIs (X-PG-Key + doctor Bearer token; International gate) ────────
 def api_plan():
-    """GET /api/pg/pathway?country=uae → the doctor's plan: profile, route, stages with their status, progress."""
+    """GET /api/pg/pathway?country=uae → the doctor's plan: profile, route, stages with their status, progress.
+    &generic=1 → the general pathway (all routes, phases, no statuses; profile ignored) for the explore-first Overview."""
     country = (request.args.get('country') or '').strip().lower()
     conn = get_db()
     try:
@@ -120,6 +158,8 @@ def api_plan():
             return err
         if not conn.execute("SELECT 1 FROM pg_pathway_stages WHERE country = ? AND is_active LIMIT 1", (country,)).fetchone():
             return jsonify({'ok': False, 'error': 'no_stages'}), 404
+        if (request.args.get('generic') or '') in ('1', 'true'):
+            return jsonify({'ok': True, **generic(conn, country)})
         return jsonify({'ok': True, **plan(conn, u['id'], country)})
     except Exception as e:
         try: conn.rollback()
@@ -131,7 +171,8 @@ def api_plan():
 
 
 def api_profile():
-    """POST /api/pg/pathway/profile {country, route?, mbbs_done, internship_done, has_pg, experience_years, target_date?}"""
+    """POST /api/pg/pathway/profile {country, route?, mbbs_done, internship_done, has_pg, experience_years, target_date?,
+    mbbs_college_id?, mbbs_college?}: the college id is pg_college_master.id from /api/pg/college-lookup?mbbs=1."""
     d = request.get_json(silent=True) or {}
     country = str(d.get('country') or '').strip().lower()
     route = str(d.get('route') or '').strip()
@@ -142,19 +183,31 @@ def api_profile():
     except (TypeError, ValueError):
         return jsonify({'ok': False, 'error': 'bad_experience'}), 400
     td = str(d.get('target_date') or '').strip()[:10] or None
+    try:
+        cid = int(d.get('mbbs_college_id')) if d.get('mbbs_college_id') not in (None, '') else None
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'bad_college'}), 400
+    cname = str(d.get('mbbs_college') or '').strip()[:250]
     conn = get_db()
     try:
         ensure(conn)
         u, err = _doctor_gated(conn)
         if err:
             return err
+        if cid:                                   # the College Database name wins over typed text
+            m = conn.execute("SELECT college_name FROM pg_college_master WHERE id = ?", (cid,)).fetchone()
+            if not m:
+                return jsonify({'ok': False, 'error': 'bad_college'}), 400
+            cname = m['college_name']
         conn.execute("INSERT INTO pg_pathway_profile (user_id, country, route, mbbs_done, internship_done, has_pg, "
-                     "experience_years, target_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?::date) ON CONFLICT (user_id, country) "
+                     "experience_years, target_date, mbbs_college_id, mbbs_college) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?::date, ?, ?) ON CONFLICT (user_id, country) "
                      "DO UPDATE SET route = EXCLUDED.route, mbbs_done = EXCLUDED.mbbs_done, internship_done = "
                      "EXCLUDED.internship_done, has_pg = EXCLUDED.has_pg, experience_years = EXCLUDED.experience_years, "
-                     "target_date = EXCLUDED.target_date, updated_at = CURRENT_TIMESTAMP",
+                     "target_date = EXCLUDED.target_date, mbbs_college_id = EXCLUDED.mbbs_college_id, "
+                     "mbbs_college = EXCLUDED.mbbs_college, updated_at = CURRENT_TIMESTAMP",
                      (u['id'], country, route, bool(d.get('mbbs_done', True)), bool(d.get('internship_done')),
-                      bool(d.get('has_pg')), exp, td))
+                      bool(d.get('has_pg')), exp, td, cid, cname))
         conn.commit()
         return jsonify({'ok': True, **plan(conn, u['id'], country)})
     except Exception as e:
@@ -234,6 +287,9 @@ def api_import():
                           str(s.get('what') or '')[:1200], json.dumps(list(s.get('needs') or [])),
                           str(s.get('typical_time') or '')[:120], str(s.get('typical_cost') or '')[:120],
                           int(s['chapter_no']) if s.get('chapter_no') else None, str(s.get('service_tag') or '')[:200]))
+            if s.get('phase_no'):                 # phase: fills only a blank (an admin's choice is kept)
+                conn.execute("UPDATE pg_pathway_stages SET phase_no = ? WHERE country = ? AND stage_no = ? "
+                             "AND phase_no IS NULL", (int(s['phase_no']), country, int(s['stage_no'])))
             n += 1
         conn.commit()
         return jsonify({'ok': True, 'country': country, 'stages': n})
@@ -273,19 +329,48 @@ def admin_save_stage():
         vals = (route, (f.get('title') or '').strip()[:200], (f.get('what') or '').strip()[:1200], json.dumps(needs),
                 (f.get('typical_time') or '').strip()[:120], (f.get('typical_cost') or '').strip()[:120],
                 int(f.get('chapter_no')) if (f.get('chapter_no') or '').strip().isdigit() else None,
-                (f.get('service_tag') or '').strip()[:200], f.get('is_active') == '1', a.get('name') or 'admin')
+                (f.get('service_tag') or '').strip()[:200], f.get('is_active') == '1', a.get('name') or 'admin',
+                int(f.get('phase_no')) if (f.get('phase_no') or '').strip().isdigit() else None)
         if sid:
             conn.execute("UPDATE pg_pathway_stages SET route = ?, title = ?, what = ?, needs = ?, typical_time = ?, "
-                         "typical_cost = ?, chapter_no = ?, service_tag = ?, is_active = ?, updated_by = ?, "
+                         "typical_cost = ?, chapter_no = ?, service_tag = ?, is_active = ?, updated_by = ?, phase_no = ?, "
                          "admin_edited = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", vals + (int(sid),))
         else:
             nxt = conn.execute("SELECT COALESCE(MAX(stage_no), 0) + 1 AS n FROM pg_pathway_stages WHERE country = ?",
                                (country,)).fetchone()['n']
             conn.execute("INSERT INTO pg_pathway_stages (route, title, what, needs, typical_time, typical_cost, chapter_no, "
-                         "service_tag, is_active, updated_by, admin_edited, country, stage_no) "
-                         "VALUES (?,?,?,?,?,?,?,?,?,?,TRUE,?,?)", vals + (country, nxt))
+                         "service_tag, is_active, updated_by, phase_no, admin_edited, country, stage_no) "
+                         "VALUES (?,?,?,?,?,?,?,?,?,?,?,TRUE,?,?)", vals + (country, nxt))
         conn.commit()
         flash('Stage saved.', 'success')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_ebooks_admin', book=country) + '#stages')
+
+
+def admin_save_phases():
+    """POST /admin/pg/pathway/phases {country, label_1..label_8}: rename / add phases; a blank label removes an unused one."""
+    from flask import redirect, url_for, flash
+    from pg_admin.ebooks import _admin
+    if not _admin():
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    f = request.form
+    country = (f.get('country') or '').strip().lower()
+    conn = get_db()
+    try:
+        ensure(conn)
+        for n in range(1, 9):
+            if f'label_{n}' not in f:
+                continue
+            lbl = (f.get(f'label_{n}') or '').strip()[:80]
+            if lbl:
+                conn.execute("INSERT INTO pg_pathway_phases (country, phase_no, label) VALUES (?, ?, ?) "
+                             "ON CONFLICT (country, phase_no) DO UPDATE SET label = EXCLUDED.label", (country, n, lbl))
+            elif not conn.execute("SELECT 1 FROM pg_pathway_stages WHERE country = ? AND phase_no = ? LIMIT 1",
+                                  (country, n)).fetchone():
+                conn.execute("DELETE FROM pg_pathway_phases WHERE country = ? AND phase_no = ?", (country, n))
+        conn.commit()
+        flash('Phases saved.', 'success')
     finally:
         conn.close()
     return redirect(url_for('pg_ebooks_admin', book=country) + '#stages')
@@ -298,4 +383,6 @@ def register(app):
     app.add_url_rule('/api/pg/pathway/stage', 'api_pg_pathway_stage', api_stage, methods=['POST'])
     app.add_url_rule('/api/pg/pathway/stages/import', 'api_pg_pathway_import', api_import, methods=['POST'])
     app.add_url_rule('/admin/pg/pathway/stage', 'pg_pathway_save_stage', login_required(admin_save_stage),
+                     methods=['POST'])
+    app.add_url_rule('/admin/pg/pathway/phases', 'pg_pathway_save_phases', login_required(admin_save_phases),
                      methods=['POST'])

@@ -1325,12 +1325,33 @@ PG_PROFILE_BLUEPRINT = [
     {'key': 'home_state_rank',   'label': 'Home-State Merit Rank',     'type': 'number', 'editable': True},
     {'key': 'target_speciality', 'label': 'Target Speciality',         'type': 'text',   'editable': True},
     {'key': 'college',           'label': 'MBBS College',              'type': 'text',   'editable': True},
+    # standardised profile (founder 2026-11-19): the MBBS college picked from the College Database
+    # (/api/pg/college-lookup?mbbs=1 → id); saving it also fills 'college' with the database name
+    {'key': 'mbbs_college_id',   'label': 'MBBS College (from list)',  'type': 'college', 'editable': True},
+    {'key': 'mbbs_year',         'label': 'MBBS completion year',      'type': 'text',   'editable': True},
+    {'key': 'internship_done',   'label': 'Internship completed',      'type': 'boolean', 'editable': True},
     {'key': 'city',              'label': 'City',                      'type': 'text',   'editable': True},
     {'key': 'email',             'label': 'Email',                     'type': 'email',  'editable': True},
     {'key': 'mobile',            'label': 'Mobile',                    'type': 'tel',    'editable': False},
     {'key': 'photo_url',         'label': 'Profile Photo',             'type': 'image',  'editable': True},
 ]
-_PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score', 'home_state_rank'}
+_PG_INT_FIELDS = {'neet_pg_rank', 'neet_pg_score', 'home_state_rank', 'mbbs_college_id'}
+_PG_BOOL_FIELDS = {'internship_done'}          # nullable: blank = not answered yet
+_PROFILE_COLS_READY = {'done': False}
+
+
+def _ensure_profile_cols(conn):
+    """Standardised-profile columns on pg_users — once per process (never DDL on every request)."""
+    if _PROFILE_COLS_READY['done']:
+        return
+    try:
+        conn.execute("SET LOCAL lock_timeout = '3s'")
+        for col, ddl in (('mbbs_college_id', 'INTEGER'), ('mbbs_year', "TEXT DEFAULT ''"), ('internship_done', 'BOOLEAN')):
+            conn.execute(f"ALTER TABLE pg_users ADD COLUMN IF NOT EXISTS {col} {ddl}")
+        conn.commit()
+        _PROFILE_COLS_READY['done'] = True
+    except Exception:
+        conn.rollback()
 # Once the doctor has CONFIRMED rank / score / home-state rank (My Allotments), Edit Profile shows them read-only:
 # further changes go through the one-time correction (/api/pg/my/rank-confirm) or the team. (founder 2026-10-26)
 _RANK_LOCKED = ('neet_pg_rank', 'neet_pg_score', 'home_state_rank')
@@ -1499,6 +1520,7 @@ def api_pg_profile():
             _al.ensure(conn)
         except Exception:
             conn.rollback()
+        _ensure_profile_cols(conn)
         row = _pg_user_by_token(conn, token)
         if not row:
             return jsonify({'ok': False, 'error': 'invalid_token'}), 401
@@ -1549,6 +1571,15 @@ def api_pg_profile():
                     val = int(s) if s != '' else None
                 except (ValueError, TypeError):
                     val = None
+                if k == 'mbbs_college_id' and val:
+                    m = conn.execute("SELECT college_name FROM pg_college_master WHERE id = ?", (val,)).fetchone()
+                    if not m:
+                        continue                  # unknown id: ignore rather than store a dangling link
+                    if 'college' not in data:     # keep the text field in step with the picked college
+                        sets.append("college = ?"); params.append(m['college_name'])
+            elif k in _PG_BOOL_FIELDS:
+                s = str(val).strip().lower() if val is not None else ''
+                val = True if s in ('1', 'true', 'yes', 'on') else False if s in ('0', 'false', 'no', 'off') else None
             else:
                 val = (str(val).strip() if val is not None else '')
             sets.append(f"{k} = ?")
