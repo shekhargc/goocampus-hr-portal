@@ -320,7 +320,8 @@ def api_regulators():
         regs, meta = regulators(conn, country)
         return jsonify({'ok': True, 'country': country, 'regulators': regs,
                         'verified_on': meta.get('verified_on'), 'residency': meta.get('residency') or {},
-                        'gcc_note': meta.get('gcc_note') or []})
+                        'gcc_note': meta.get('gcc_note') or [], 'within_uae': meta.get('within_uae') or [],
+                        'gcc_summary': meta.get('gcc_summary') or '', 'gcc_wide': meta.get('gcc_wide') or {}})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -346,7 +347,8 @@ def api_regulators_import():
         ensure(conn)
         rows = [(str(r.get('code') or '').strip().lower()[:40], i + 1, r) for i, r in enumerate(regs) if r.get('code')]
         rows.append(('_meta', 0, {'verified_on': d.get('verified_on'), 'residency': d.get('residency') or {},
-                                  'gcc_note': d.get('gcc_note') or []}))
+                                  'gcc_note': d.get('gcc_note') or [], 'within_uae': d.get('within_uae') or [],
+                                  'gcc_summary': d.get('gcc_summary') or '', 'gcc_wide': d.get('gcc_wide') or {}}))
         for code, order, data in rows:
             conn.execute("INSERT INTO pg_pathway_regulators (country, code, sort_order, data, updated_by) "
                          "VALUES (?, ?, ?, ?, 'import') ON CONFLICT (country, code) DO UPDATE SET "
@@ -380,6 +382,14 @@ def api_import():
     conn = get_db()
     try:
         ensure(conn)
+        # renumber first (founder 2026-11-19: new steps inserted mid-list): {old_stage_no → stage_no} moves the
+        # SAME row (same id, so doctors' ticks stay), via a negative temp number to dodge the unique key
+        moves = [(int(s['old_stage_no']), int(s['stage_no'])) for s in stages
+                 if s.get('old_stage_no') and int(s['old_stage_no']) != int(s['stage_no'])]
+        for old, _new in moves:
+            conn.execute("UPDATE pg_pathway_stages SET stage_no = ? WHERE country = ? AND stage_no = ?", (-old, country, old))
+        for old, new in moves:
+            conn.execute("UPDATE pg_pathway_stages SET stage_no = ? WHERE country = ? AND stage_no = ?", (new, country, -old))
         n = 0
         for s in stages:
             route = s.get('route') if s.get('route') in list(ROUTES) + ['all'] else 'all'
