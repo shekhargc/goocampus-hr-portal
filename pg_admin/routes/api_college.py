@@ -54,7 +54,8 @@ def api_pg_college_lookup():
     a single space), then EACH typed word must appear somewhere. So 'al ameen' finds
     'Al-Ameen Medical College' (hyphen ignored), 'ameen bijapur' finds it too (any order),
     and a middle/last word alone matches. Auth: X-PG-Key OR a logged-in admin/team
-    session (so the portal's own screens can reuse it). (founder 2026-10-05)"""
+    session (so the portal's own screens can reuse it). (founder 2026-10-05)
+    mbbs=1 → only colleges with an MBBS course in pg_college_course (2026-11-19)."""
     if not (_authorized() or session.get('is_admin')):
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     import re
@@ -72,8 +73,11 @@ def api_pg_college_lookup():
         norm = "btrim(regexp_replace(lower(m.college_name), '[^a-z0-9]+', ' ', 'g'))"
         hay = (norm + " || ' ' || COALESCE((SELECT string_agg(a.alias_key, ' ') "
                "FROM pg_college_alias a WHERE a.master_id = m.id), '')")
+        # ?mbbs=1 → only colleges that offer MBBS (the MBBS-college picker, founder 2026-11-19)
+        mb = (" AND EXISTS (SELECT 1 FROM pg_college_course cc WHERE cc.master_id = m.id "
+              "AND cc.course_category = 'mbbs')") if (request.args.get('mbbs') or '') in ('1', 'true') else ''
         inner = (f"SELECT m.id, m.college_name, m.city, m.state, {norm} AS nname, {hay} AS hay "
-                 f"FROM pg_college_master m WHERE m.kind = 'medical'")
+                 f"FROM pg_college_master m WHERE m.kind = 'medical'{mb}")
         # Match if EITHER every typed word appears somewhere (any order) OR — for a run-on
         # query like 'alameen' — the whole thing (spaces removed) is a substring of the
         # name with spaces removed. The run-on branch only kicks in at 4+ chars so short
