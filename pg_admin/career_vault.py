@@ -46,10 +46,12 @@ DOC_TYPES = [
     ('experience', 'Experience letters (each job)', True),
     ('pg_degree', 'PG degree (MD / MS / DNB)', False),
     ('pg_registration', 'PG registration (additional qualification)', False),
+    ('bls', 'BLS / life-support certificate (valid)', False),
     ('english_test', 'English test result (OET / IELTS)', False),
     ('licence_exam', 'Licensing exam result (e.g. DHA / Prometric)', False),
-    ('dataflow', 'DataFlow / PSV report', False),
+    ('dataflow', 'DataFlow (PSV) verification report', False),
     ('cv', 'CV (signed)', False),
+    ('contract', 'Job offer / employment contract', False),
     ('police', 'Police clearance certificate', False),
     ('other', 'Other document', False),
 ]
