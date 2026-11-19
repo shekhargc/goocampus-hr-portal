@@ -1,0 +1,62 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Conferences & Events{% endblock %}
+
+{% block section_content %}
+<style>
+  .cf-card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1.1rem 1.2rem; margin-bottom:1.1rem; }
+  .cf-h { font-weight:700; color:var(--navy); font-size:1rem; margin-bottom:0.6rem; }
+  .cf-sub { color:var(--gray-500); font-size:0.76rem; }
+  .cf-in { padding:0.42rem 0.55rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.84rem; font-family:inherit; width:100%; box-sizing:border-box; }
+  .cf-btn { padding:0.45rem 0.95rem; border-radius:8px; border:none; font-weight:700; cursor:pointer; font-size:0.83rem; background:var(--navy); color:#fff; }
+  .cf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:0.45rem 0.6rem; }
+  .cf-pill { display:inline-block; padding:1px 9px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+</style>
+{% macro form(c) %}
+<form method="post" class="cf-grid" style="margin-top:0.4rem;">
+  {% if c %}<input type="hidden" name="id" value="{{ c.id }}">{% endif %}
+  <label class="cf-sub" style="grid-column:1/-1;">Title *<input class="cf-in" name="title" required value="{{ c.title if c else '' }}"></label>
+  <label class="cf-sub">Country<select class="cf-in" name="country"><option value="">—</option>{% for k, v in countries.items() %}<option value="{{ k }}" {{ 'selected' if c and c.country == k }}>{{ v }}</option>{% endfor %}<option value="india" {{ 'selected' if c and c.country == 'india' }}>India</option></select></label>
+  <label class="cf-sub">City<input class="cf-in" name="city" value="{{ c.city if c else '' }}"></label>
+  <label class="cf-sub">Venue<input class="cf-in" name="venue" value="{{ c.venue if c else '' }}"></label>
+  <label class="cf-sub">Mode<select class="cf-in" name="mode">{% for m, l in [('in_person','In person'),('online','Online'),('hybrid','Hybrid')] %}<option value="{{ m }}" {{ 'selected' if c and c.mode == m }}>{{ l }}</option>{% endfor %}</select></label>
+  <label class="cf-sub">Starts<input class="cf-in" type="date" name="start_date" value="{{ c.start_date if c and c.start_date else '' }}"></label>
+  <label class="cf-sub">Ends<input class="cf-in" type="date" name="end_date" value="{{ c.end_date if c and c.end_date else '' }}"></label>
+  <label class="cf-sub">Abstract deadline<input class="cf-in" type="date" name="abstract_deadline" value="{{ c.abstract_deadline if c and c.abstract_deadline else '' }}"></label>
+  <label class="cf-sub">Speciality (blank = all)<input class="cf-in" name="speciality" value="{{ c.speciality if c else '' }}"></label>
+  <label class="cf-sub">Organiser<input class="cf-in" name="organiser" value="{{ c.organiser if c else '' }}"></label>
+  <label class="cf-sub">CPD / CME points<input class="cf-in" name="cpd_points" value="{{ c.cpd_points if c else '' }}"></label>
+  <label class="cf-sub">Fee<input class="cf-in" name="fee" value="{{ c.fee if c else '' }}" placeholder="e.g. AED 1,200 / free"></label>
+  <label class="cf-sub" style="grid-column:1/-1;">Official link<input class="cf-in" name="url" value="{{ c.url if c else '' }}" placeholder="https://"></label>
+  <label class="cf-sub" style="grid-column:1/-1;">About<textarea class="cf-in" name="description" style="min-height:56px;">{{ c.description if c else '' }}</textarea></label>
+  <label class="cf-sub"><input type="checkbox" name="is_active" value="1" {{ 'checked' if (not c) or c.is_active }}> show to doctors</label>
+  <div><button class="cf-btn">{{ 'Save event' if c else 'Add event' }}</button></div>
+</form>
+{% endmacro %}
+<div style="max-width:1100px;margin:0 auto;padding:1.5rem;">
+  <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.2rem;">Conferences &amp; Events</h1>
+  <p class="cf-sub" style="font-size:0.88rem;margin:0 0 1rem;">Shown in the goocampus.in International dashboard. Doctors filter by country and speciality, and mark each event interested / attending / attended. "Attended" can be copied into their portfolio for the CV. Past events move to the bottom.</p>
+
+  <div class="cf-card">
+    <details {{ 'open' if not rows }}><summary class="cf-h" style="cursor:pointer;margin:0;">＋ Add an event</summary>{{ form(None) }}</details>
+  </div>
+
+  <div class="cf-card">
+    <div class="cf-h">Events ({{ rows|length }})</div>
+    {% for c in rows %}
+    {% set past = (c.end_date or c.start_date) and (c.end_date or c.start_date) < today %}
+    <details style="border-top:1px solid var(--gray-100);padding:0.45rem 0;">
+      <summary style="cursor:pointer;font-size:0.86rem;{{ 'opacity:.6;' if past }}">
+        <b>{{ c.title }}</b>
+        <span class="cf-sub">· {{ c.start_date.strftime('%d %b %Y') if c.start_date else 'date tbc' }}{% if c.end_date and c.end_date != c.start_date %} – {{ c.end_date.strftime('%d %b %Y') }}{% endif %}{% if c.city %} · {{ c.city }}{% endif %}{% if c.country %}, {{ countries.get(c.country, c.country|title) }}{% endif %}{% if c.speciality %} · {{ c.speciality }}{% endif %}</span>
+        {% if past %}<span class="cf-pill" style="background:#e5e7eb;color:#374151;">past</span>{% endif %}
+        {% if not c.is_active %}<span class="cf-pill" style="background:#fee2e2;color:#991b1b;">hidden</span>{% endif %}
+        {% if c.saves %}<span class="cf-pill" style="background:#ecfdf5;color:#065f46;">{{ c.saves }} doctor{{ 's' if c.saves != 1 }} marked</span>{% endif %}
+      </summary>
+      {{ form(c) }}
+    </details>
+    {% else %}
+    <div class="cf-sub">No events yet. Add the first one above.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

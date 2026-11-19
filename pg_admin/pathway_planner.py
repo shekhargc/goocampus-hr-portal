@@ -23,6 +23,14 @@ ROUTES = {'gp': 'General practitioner (MBBS)', 'specialist': 'Specialist (Indian
 STATUSES = ('todo', 'doing', 'done', 'na')
 DEFAULT_PHASES = [('uae', 1, 'Decide & prepare'), ('uae', 2, 'Verify & get licensed'),
                   ('uae', 3, 'Job & employer'), ('uae', 4, 'Visa & arrival')]
+DEFAULT_JOURNEY = [  # from the printed "Your Journey to the GCC" brochure (founder 2026-11-19)
+    ('uae', 1, 'Foundation & Preparation', 'Enrolment & document checklist review'),
+    ('uae', 2, 'Exam Mastery & Booking Guidance', 'Live Prometric training'),
+    ('uae', 3, 'Document Processing', 'DataFlow submission & verification tracking'),
+    ('uae', 4, 'Licensing Applications', 'DHA / DoH / MOHAP / SHA applications filed & monitored'),
+    ('uae', 5, 'Job Market Preparation', 'CV and profile optimisation'),
+    ('uae', 6, 'Job Applications & Interview', 'Job search guidance & employer interview preparation'),
+    ('uae', 7, 'Final Steps', 'Attestation / visa & relocation support')]
 _READY = {'done': False}
 
 
@@ -53,6 +61,19 @@ def ensure(conn):
     for c, n, lbl in DEFAULT_PHASES:
         conn.execute("INSERT INTO pg_pathway_phases (country, phase_no, label) VALUES (?, ?, ?) "
                      "ON CONFLICT (country, phase_no) DO NOTHING", (c, n, lbl))
+    # the horizontal "Your journey" strip (our brochure's GooCampus steps), editable in admin (2026-11-19)
+    conn.execute('''CREATE TABLE IF NOT EXISTS pg_pathway_journey (
+        country TEXT NOT NULL, step_no INTEGER NOT NULL, title TEXT DEFAULT '', detail TEXT DEFAULT '',
+        PRIMARY KEY (country, step_no))''')
+    for c, n, t, dt in DEFAULT_JOURNEY:
+        conn.execute("INSERT INTO pg_pathway_journey (country, step_no, title, detail) VALUES (?, ?, ?, ?) "
+                     "ON CONFLICT (country, step_no) DO NOTHING", (c, n, t, dt))
+    # licensing regulators per country (DHA / DoH / SHA / MOHAP …): one JSON card each, code '_meta' holds
+    # verified_on + residency + gcc_note. Imported from the Mac (sourced research), editable in admin.
+    conn.execute('''CREATE TABLE IF NOT EXISTS pg_pathway_regulators (
+        country TEXT NOT NULL, code TEXT NOT NULL, sort_order INTEGER DEFAULT 0, data TEXT DEFAULT '{}',
+        is_active BOOLEAN DEFAULT TRUE, admin_edited BOOLEAN DEFAULT FALSE, updated_by TEXT DEFAULT '',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (country, code))''')
     conn.commit()
     _READY['done'] = True
 
@@ -95,6 +116,34 @@ def _stage_out(s, titles, ph):
             'phase_no': s.get('phase_no'), 'phase': ph.get(s.get('phase_no'), '') if s.get('phase_no') else ''}
 
 
+def journey(conn, country):
+    return [{'no': r['step_no'], 'title': r['title'], 'detail': r['detail'] or ''} for r in conn.execute(
+        "SELECT step_no, title, detail FROM pg_pathway_journey WHERE country = ? ORDER BY step_no", (country,)).fetchall()]
+
+
+def regulators(conn, country, admin=False):
+    """[(code, sort_order, data, is_active, admin_edited, updated_by)] → API shape. '_meta' row = verified_on etc."""
+    regs, meta = [], {}
+    for r in conn.execute("SELECT * FROM pg_pathway_regulators WHERE country = ? ORDER BY sort_order, code",
+                          (country,)).fetchall():
+        try:
+            d = json.loads(r['data'] or '{}')
+        except Exception:
+            d = {}
+        if r['code'] == '_meta':
+            meta = d
+            continue
+        if not admin and not r['is_active']:
+            continue
+        if admin:
+            regs.append({'code': r['code'], 'sort_order': r['sort_order'], 'is_active': r['is_active'],
+                         'admin_edited': r['admin_edited'], 'updated_by': r['updated_by'], 'data': d,
+                         'json': json.dumps(d, indent=1, ensure_ascii=False)})
+        else:
+            regs.append({**d, 'code': r['code']})
+    return regs, meta
+
+
 def _routes(conn, country):
     return [{'code': k, 'label': v} for k, v in ROUTES.items()
             if conn.execute("SELECT 1 FROM pg_pathway_stages WHERE country = ? AND route = ? AND is_active LIMIT 1",
@@ -109,7 +158,8 @@ def generic(conn, country):
     stages = [_stage_out(dict(s), titles, ph) for s in conn.execute(
         "SELECT * FROM pg_pathway_stages WHERE country = ? AND is_active ORDER BY stage_no", (country,)).fetchall()]
     return {'country': country, 'generic': True, 'routes': _routes(conn, country),
-            'phases': [{'phase_no': n, 'label': l} for n, l in ph.items()], 'stages': stages}
+            'phases': [{'phase_no': n, 'label': l} for n, l in ph.items()], 'journey': journey(conn, country),
+            'stages': stages}
 
 
 def plan(conn, user_id, country):
@@ -139,7 +189,7 @@ def plan(conn, user_id, country):
                 prof[k] = prof[k].isoformat()
         prof['experience_years'] = float(prof.get('experience_years') or 0)
     return {'country': country, 'profile': prof, 'route': route, 'routes': _routes(conn, country),
-            'phases': [{'phase_no': n, 'label': l} for n, l in ph.items()],
+            'phases': [{'phase_no': n, 'label': l} for n, l in ph.items()], 'journey': journey(conn, country),
             'stages': stages, 'progress': {'done': done, 'total': len(counted),
                                            'percent': round(100 * done / len(counted)) if counted else 0},
             'next_stage': nxt['id'] if nxt else None}
@@ -252,6 +302,63 @@ def api_stage():
         try: conn.rollback()
         except Exception: pass
         logger.error("api pathway stage: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_regulators():
+    """GET /api/pg/pathway/regulators?country=uae → {regulators:[card…], verified_on, residency, gcc_note}
+    (founder 2026-11-19: emirate-wise licensing exams; every field carries its source)."""
+    country = (request.args.get('country') or '').strip().lower()
+    conn = get_db()
+    try:
+        ensure(conn)
+        u, err = _doctor_gated(conn)
+        if err:
+            return err
+        regs, meta = regulators(conn, country)
+        return jsonify({'ok': True, 'country': country, 'regulators': regs,
+                        'verified_on': meta.get('verified_on'), 'residency': meta.get('residency') or {},
+                        'gcc_note': meta.get('gcc_note') or []})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logger.error("api pathway regulators: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
+
+
+def api_regulators_import():
+    """POST /api/pg/pathway/regulators/import {country, verified_on, regulators:[{code, …}], residency, gcc_note}
+    (X-News-Key). Upserts each card by code; cards the team edited in admin are never overwritten."""
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    country = str(d.get('country') or '').strip().lower()
+    regs = d.get('regulators') or []
+    if not country or not regs:
+        return jsonify({'ok': False, 'error': 'need country + regulators'}), 400
+    conn = get_db()
+    try:
+        ensure(conn)
+        rows = [(str(r.get('code') or '').strip().lower()[:40], i + 1, r) for i, r in enumerate(regs) if r.get('code')]
+        rows.append(('_meta', 0, {'verified_on': d.get('verified_on'), 'residency': d.get('residency') or {},
+                                  'gcc_note': d.get('gcc_note') or []}))
+        for code, order, data in rows:
+            conn.execute("INSERT INTO pg_pathway_regulators (country, code, sort_order, data, updated_by) "
+                         "VALUES (?, ?, ?, ?, 'import') ON CONFLICT (country, code) DO UPDATE SET "
+                         "sort_order = EXCLUDED.sort_order, data = EXCLUDED.data, updated_by = 'import', "
+                         "updated_at = CURRENT_TIMESTAMP WHERE NOT pg_pathway_regulators.admin_edited",
+                         (country, code, order, json.dumps(data, ensure_ascii=False)))
+        conn.commit()
+        return jsonify({'ok': True, 'country': country, 'regulators': len(rows) - 1})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logger.error("api pathway regulators import: %s", e)
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
@@ -376,6 +483,64 @@ def admin_save_phases():
     return redirect(url_for('pg_ebooks_admin', book=country) + '#stages')
 
 
+def admin_save_journey():
+    """POST /admin/pg/pathway/journey {country, title_N, detail_N}: the horizontal journey strip; blank title removes a step."""
+    from flask import redirect, url_for, flash
+    from pg_admin.ebooks import _admin
+    if not _admin():
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    f = request.form
+    country = (f.get('country') or '').strip().lower()
+    conn = get_db()
+    try:
+        ensure(conn)
+        for n in range(1, 13):
+            if f'title_{n}' not in f:
+                continue
+            t = (f.get(f'title_{n}') or '').strip()[:120]
+            if t:
+                conn.execute("INSERT INTO pg_pathway_journey (country, step_no, title, detail) VALUES (?, ?, ?, ?) "
+                             "ON CONFLICT (country, step_no) DO UPDATE SET title = EXCLUDED.title, detail = EXCLUDED.detail",
+                             (country, n, t, (f.get(f'detail_{n}') or '').strip()[:240]))
+            else:
+                conn.execute("DELETE FROM pg_pathway_journey WHERE country = ? AND step_no = ?", (country, n))
+        conn.commit()
+        flash('Journey saved.', 'success')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_ebooks_admin', book=country) + '#journey')
+
+
+def admin_save_regulator():
+    """POST /admin/pg/pathway/regulator {country, code, json, is_active}: edit one licensing card (kept on re-import)."""
+    from flask import redirect, url_for, flash
+    from pg_admin.ebooks import _admin
+    a = _admin()
+    if not a:
+        flash('Admin access required', 'error'); return redirect(url_for('dashboard'))
+    f = request.form
+    country = (f.get('country') or '').strip().lower()
+    code = (f.get('code') or '').strip().lower()[:40]
+    try:
+        data = json.loads(f.get('json') or '{}')
+        assert isinstance(data, dict)
+    except Exception:
+        flash('That card is not valid JSON — nothing saved. Check commas and quotes.', 'error')
+        return redirect(url_for('pg_ebooks_admin', book=country) + '#regulators')
+    conn = get_db()
+    try:
+        ensure(conn)
+        conn.execute("UPDATE pg_pathway_regulators SET data = ?, is_active = ?, admin_edited = TRUE, updated_by = ?, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE country = ? AND code = ?",
+                     (json.dumps(data, ensure_ascii=False), f.get('is_active') == '1', a.get('name') or 'admin',
+                      country, code))
+        conn.commit()
+        flash('Licensing card saved.', 'success')
+    finally:
+        conn.close()
+    return redirect(url_for('pg_ebooks_admin', book=country) + '#regulators')
+
+
 def register(app):
     from core.auth import login_required
     app.add_url_rule('/api/pg/pathway', 'api_pg_pathway', api_plan, methods=['GET'])
@@ -385,4 +550,11 @@ def register(app):
     app.add_url_rule('/admin/pg/pathway/stage', 'pg_pathway_save_stage', login_required(admin_save_stage),
                      methods=['POST'])
     app.add_url_rule('/admin/pg/pathway/phases', 'pg_pathway_save_phases', login_required(admin_save_phases),
+                     methods=['POST'])
+    app.add_url_rule('/admin/pg/pathway/journey', 'pg_pathway_save_journey', login_required(admin_save_journey),
+                     methods=['POST'])
+    app.add_url_rule('/admin/pg/pathway/regulator', 'pg_pathway_save_regulator', login_required(admin_save_regulator),
+                     methods=['POST'])
+    app.add_url_rule('/api/pg/pathway/regulators', 'api_pg_pathway_regulators', api_regulators, methods=['GET'])
+    app.add_url_rule('/api/pg/pathway/regulators/import', 'api_pg_pathway_regulators_import', api_regulators_import,
                      methods=['POST'])

@@ -558,11 +558,14 @@ def admin_page():
         from pg_admin import pathway_planner as PP
         stages = PP.stages_for_admin(conn, code)
         phases = PP.phases(conn, code)
+        journey = PP.journey(conn, code)
+        regs, reg_meta = PP.regulators(conn, code, admin=True)
     finally:
         conn.close()
     from pg_admin.pathway_planner import ROUTES
     return render_template('pg_admin/ebooks.html', books=books, chapters=chapters, access=access, orders=orders,
                            book=code, intl_mode=mode, intl_pilots=pilots, stages=stages, routes=ROUTES, phases=phases,
+                           journey=journey, regs=regs, reg_meta=reg_meta,
                            active_section='goocampus_in')
 
 
