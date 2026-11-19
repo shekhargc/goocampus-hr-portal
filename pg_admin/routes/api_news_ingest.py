@@ -1103,7 +1103,8 @@ def api_news_edit():
     """GET  /api/pg/news/edit?id=N  (X-News-Key) → the post's heading / summary / body_text as stored.
     POST /api/pg/news/edit  (X-News-Key) {news_id, by, edits: [{field, old, new}] | set: {field: text},
                                           attach_inbox_id: N (only for a news with no file yet),
-                                          set_date: 'YYYY-MM-DD', replace_with_inbox_id: N (reissued notice)}
+                                          set_date: 'YYYY-MM-DD', replace_with_inbox_id: N (reissued notice),
+                                          key_dates_replace: {old YYYY-MM-DD: new YYYY-MM-DD}}
     Text-only fix of an already-posted news item on the founder's behalf (founder 2026-11-05: "make these changes
     on my behalf"). Touches ONLY heading / summary / body_text — never dates, PDF, publish state or emails; each
     'old' must occur exactly once (else nothing is saved). Every change is logged in pg_news_edit_log (old + new
@@ -1173,6 +1174,30 @@ def api_news_edit():
             conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) VALUES (?,?,?,?,?)",
                          (nid, 'published_at', str(old or ''), sd, who))
             changed.append('published_at')
+        # key_dates_replace {"2026-12-21": "2026-11-21", …}: swap exact date values inside this post's "Important
+        # dates" (key_dates JSON) only — the calendar is fixed separately, nothing else changes (2026-11-19)
+        kdr = d.get('key_dates_replace') or {}
+        if kdr:
+            import re as _re
+            if not all(_re.match(r'^\d{4}-\d{2}-\d{2}$', str(a)) and _re.match(r'^\d{4}-\d{2}-\d{2}$', str(b))
+                       for a, b in kdr.items()):
+                return jsonify({'ok': False, 'error': 'key_dates_replace needs {"YYYY-MM-DD": "YYYY-MM-DD"}'}), 400
+            raw = conn.execute("SELECT COALESCE(key_dates,'') AS k FROM pg_news WHERE id = ?", (nid,)).fetchone()['k']
+            try:
+                kd = json.loads(raw or '{}') or {}
+            except Exception:
+                return jsonify({'ok': False, 'error': 'key_dates is not readable'}), 400
+            hits = 0
+            for ent in kd.values():
+                if isinstance(ent, dict) and ent.get('date') in kdr:
+                    ent['date'] = kdr[ent['date']]; hits += 1
+            if not hits:
+                return jsonify({'ok': False, 'error': 'none of those dates are in this post'}), 400
+            conn.execute("UPDATE pg_news SET key_dates = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                         (json.dumps(kd), nid))
+            conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) VALUES (?,?,?,?,?)",
+                         (nid, 'key_dates', raw, json.dumps(kd), who))
+            changed.append('key_dates')
         rid = int(d.get('replace_with_inbox_id') or 0)
         if rid:
             from pg_admin.data.auto_docs import doc_for_inbox
@@ -1193,12 +1218,12 @@ def api_news_edit():
                          (nid, 'pdf', f"doc {old['authority_doc_id']} blob={bool(old['blob'])} r2={old['r2']}",
                           f'doc {doc} (inbox {rid}, reissued)', who))
             changed.append('pdf')
-        if changed and not [f for f in changed if f not in ('pdf', 'published_at')]:
+        if changed and not [f for f in changed if f not in ('pdf', 'published_at', 'key_dates')]:
             conn.commit()
             return jsonify({'ok': True, 'changed': changed})
         if not changed:
             return jsonify({'ok': True, 'changed': []})
-        for f in [f for f in changed if f not in ('pdf', 'published_at')]:
+        for f in [f for f in changed if f not in ('pdf', 'published_at', 'key_dates')]:
             conn.execute(f"UPDATE pg_news SET {f} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new[f], nid))
             conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) "
                          "VALUES (?,?,?,?,?)", (nid, f, cur[f], new[f], who))
