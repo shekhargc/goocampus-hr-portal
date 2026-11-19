@@ -58,6 +58,9 @@ _ENDPOINT_TAGS = {
     # All-India rank fill for the 2025 cut-offs (both-ranks display) + news dates → calendar (2026-11-01)
     'api_rank_bridge_fill': ['cutoffs', 'colleges', 'seat-matrix', 'rankings', 'results'],
     'pg_calendar_news_dates': ['calendar', 'news'],
+    # Claude's on-behalf fixes (news text/date/file/key dates; calendar dates) refresh the site too (2026-11-19)
+    'api_news_edit': ['news', 'calendar'],
+    'api_pg_calendar_fix': ['calendar', 'news', 'authority'],
 }
 
 

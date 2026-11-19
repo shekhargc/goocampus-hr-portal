@@ -31,6 +31,11 @@ DEFAULT_JOURNEY = [  # from the printed "Your Journey to the GCC" brochure (foun
     ('uae', 5, 'Job Market Preparation', 'CV and profile optimisation'),
     ('uae', 6, 'Job Applications & Interview', 'Job search guidance & employer interview preparation'),
     ('uae', 7, 'Final Steps', 'Attestation / visa & relocation support')]
+# where the doctor wants to work → which licensing authority (founder 2026-11-19: "where do they enter which emirate?")
+TARGETS = {'uae': [('dubai', 'Dubai', 'dha'), ('abu_dhabi', 'Abu Dhabi (incl. Al Ain)', 'doh'), ('sharjah', 'Sharjah', 'sha'),
+                   ('northern', 'Northern Emirates (Ajman, Umm Al Quwain, Ras Al Khaimah, Fujairah)', 'mohap'),
+                   ('undecided', 'Not sure yet', '')]}
+USD_TO_AED = 3.6725          # UAE dirham's official peg to the US dollar (for the approximate total only)
 _READY = {'done': False}
 
 
@@ -58,6 +63,11 @@ def ensure(conn):
     conn.execute("ALTER TABLE pg_pathway_stages ADD COLUMN IF NOT EXISTS phase_no INTEGER")
     conn.execute("ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS mbbs_college_id INTEGER")
     conn.execute("ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS mbbs_college TEXT DEFAULT ''")
+    # 2026-11-19 clean-up: real documents per stage (career_vault DOC_TYPES codes → one de-duplicated checklist that
+    # ticks itself from My Documents), official approximate costs per authority, and the doctor's target emirate
+    conn.execute("ALTER TABLE pg_pathway_stages ADD COLUMN IF NOT EXISTS doc_codes TEXT DEFAULT '[]'")
+    conn.execute("ALTER TABLE pg_pathway_stages ADD COLUMN IF NOT EXISTS costs TEXT DEFAULT '[]'")
+    conn.execute("ALTER TABLE pg_pathway_profile ADD COLUMN IF NOT EXISTS target_area TEXT DEFAULT ''")
     for c, n, lbl in DEFAULT_PHASES:
         conn.execute("INSERT INTO pg_pathway_phases (country, phase_no, label) VALUES (?, ?, ?) "
                      "ON CONFLICT (country, phase_no) DO NOTHING", (c, n, lbl))
@@ -108,9 +118,26 @@ def phases(conn, country):
         "SELECT phase_no, label FROM pg_pathway_phases WHERE country = ? ORDER BY phase_no", (country,)).fetchall()}
 
 
+def _jl(v):
+    try:
+        x = json.loads(v or '[]')
+        return x if isinstance(x, list) else []
+    except Exception:
+        return []
+
+
+def _doc_labels():
+    from pg_admin.career_vault import DOC_TYPES
+    return {c: l for c, l, _k in DOC_TYPES}
+
+
 def _stage_out(s, titles, ph):
+    codes = [c for c in _jl(s.get('doc_codes')) if isinstance(c, str)]
+    labels = _doc_labels() if codes else {}
     return {'id': s['id'], 'no': s['stage_no'], 'route': s['route'], 'title': s['title'], 'what': s['what'],
-            'needs': _needs(s['needs']), 'typical_time': s['typical_time'] or '',
+            # 'needs' = the real documents when mapped (one shared list), else the old free-text lines
+            'needs': [labels.get(c, c) for c in codes] if codes else _needs(s['needs']),
+            'doc_codes': codes, 'costs': _jl(s.get('costs')), 'typical_time': s['typical_time'] or '',
             'typical_cost': s['typical_cost'] or '', 'chapter_no': s['chapter_no'],
             'chapter_title': titles.get(s['chapter_no'], ''), 'service_tag': s['service_tag'] or '',
             'phase_no': s.get('phase_no'), 'phase': ph.get(s.get('phase_no'), '') if s.get('phase_no') else ''}
@@ -162,10 +189,72 @@ def generic(conn, country):
             'stages': stages}
 
 
+def _target(country, code):
+    for c, label, reg in TARGETS.get(country, []):
+        if c == code:
+            return {'code': c, 'label': label, 'regulator': reg}
+    return None
+
+
+def _cost_view(items, reg):
+    """This stage's costs for the doctor's authority (+ the 'all' ones); every authority's when not chosen yet."""
+    return [i for i in items if i.get('reg') in ('all', '', None) or not reg or i.get('reg') == reg]
+
+
+def _cost_total(stages, reg):
+    """Approximate doctor-paid total for the chosen authority, in AED (USD at the official peg). None if no authority."""
+    if not reg:
+        return None
+    aed, inr, lines = 0.0, 0.0, 0
+    for s in stages:
+        for i in s['costs']:
+            # counted: what the doctor pays to GET licensed — not employer-paid items, not optional/conditional
+            # ones (in_total false: e.g. oral exam, licence applied for by the facility) and not yearly renewals
+            if i.get('payer') == 'employer' or i.get('in_total') is False or i.get('recurring') \
+                    or not isinstance(i.get('amount'), (int, float)):
+                continue
+            cur = (i.get('currency') or 'AED').upper()
+            if cur in ('AED', 'USD'):
+                aed += i['amount'] * (USD_TO_AED if cur == 'USD' else 1)
+            elif cur == 'INR':
+                inr += i['amount']
+            else:
+                continue
+            lines += 1
+    return {'aed': round(aed), 'inr': round(inr), 'items': lines,
+            'note': 'Approximate official fees you pay to get licensed: application, exam and Good Standing. Not included: '
+                    'DataFlow verification (no official price list), the licence fee (applied for by the hiring '
+                    'facility), visa and yearly renewal. USD fees converted at the official peg of AED 3.6725.'} \
+        if lines else None
+
+
+def _documents_needed(conn, user_id, stages):
+    """One de-duplicated checklist of real documents for this doctor's route, ticked from My Documents."""
+    labels = _doc_labels()
+    order, where = [], {}
+    for s in stages:
+        for c in s['doc_codes']:
+            if c not in where:
+                order.append(c); where[c] = []
+            where[c].append(s['position'])
+    have = set()
+    try:
+        have = {r['doc_type'] for r in conn.execute(
+            "SELECT DISTINCT doc_type FROM pg_doctor_documents WHERE user_id = ? AND deleted_at IS NULL",
+            (user_id,)).fetchall()}
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    docs = [{'code': c, 'label': labels.get(c, c), 'stages': where[c], 'have': c in have} for c in order]
+    return {'items': docs, 'ready': sum(1 for d in docs if d['have']), 'total': len(docs)}
+
+
 def plan(conn, user_id, country):
     prof = conn.execute("SELECT * FROM pg_pathway_profile WHERE user_id = ? AND country = ?", (user_id, country)).fetchone()
     prof = dict(prof) if prof else None
     route = (prof or {}).get('route') or suggested_route(prof)
+    tgt = _target(country, (prof or {}).get('target_area') or '')
+    reg = (tgt or {}).get('regulator') or ''
     titles = {r['chapter_no']: r['title'] for r in conn.execute(
         "SELECT chapter_no, title FROM pg_ebook_chapters WHERE ebook_code = ?", (country,)).fetchall()}
     ph = phases(conn, country)
@@ -180,6 +269,9 @@ def plan(conn, user_id, country):
                        'target_date': p['target_date'].isoformat() if p.get('target_date') else None,
                        'done_date': p['done_date'].isoformat() if p.get('done_date') else None,
                        'note': p.get('note') or ''})
+    for i, st in enumerate(stages, start=1):   # the doctor's own numbering 1..n (master stage_no skips other routes)
+        st['position'] = i
+        st['costs'] = _cost_view(st['costs'], reg)
     counted = [s for s in stages if s['status'] != 'na']
     done = sum(1 for s in counted if s['status'] == 'done')
     nxt = next((s for s in stages if s['status'] in ('todo', 'doing')), None)
@@ -192,7 +284,10 @@ def plan(conn, user_id, country):
             'phases': [{'phase_no': n, 'label': l} for n, l in ph.items()], 'journey': journey(conn, country),
             'stages': stages, 'progress': {'done': done, 'total': len(counted),
                                            'percent': round(100 * done / len(counted)) if counted else 0},
-            'next_stage': nxt['id'] if nxt else None}
+            'next_stage': nxt['id'] if nxt else None,
+            'target': tgt, 'targets': [{'code': c, 'label': l, 'regulator': r} for c, l, r in TARGETS.get(country, [])],
+            'documents_needed': _documents_needed(conn, user_id, stages),
+            'cost_total': _cost_total(stages, reg)}
 
 
 # ── doctor APIs (X-PG-Key + doctor Bearer token; International gate) ────────
@@ -222,6 +317,7 @@ def api_plan():
 
 def api_profile():
     """POST /api/pg/pathway/profile {country, route?, mbbs_done, internship_done, has_pg, experience_years, target_date?,
+    target_area? (uae: dubai | abu_dhabi | sharjah | northern | undecided; blank keeps the saved one),
     mbbs_college_id?, mbbs_college?}: the college id is pg_college_master.id from /api/pg/college-lookup?mbbs=1."""
     d = request.get_json(silent=True) or {}
     country = str(d.get('country') or '').strip().lower()
@@ -238,6 +334,9 @@ def api_profile():
     except (TypeError, ValueError):
         return jsonify({'ok': False, 'error': 'bad_college'}), 400
     cname = str(d.get('mbbs_college') or '').strip()[:250]
+    area = str(d.get('target_area') or '').strip()
+    if area and not _target(country, area):
+        return jsonify({'ok': False, 'error': 'bad_target_area'}), 400
     conn = get_db()
     try:
         ensure(conn)
@@ -250,14 +349,16 @@ def api_profile():
                 return jsonify({'ok': False, 'error': 'bad_college'}), 400
             cname = m['college_name']
         conn.execute("INSERT INTO pg_pathway_profile (user_id, country, route, mbbs_done, internship_done, has_pg, "
-                     "experience_years, target_date, mbbs_college_id, mbbs_college) "
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?::date, ?, ?) ON CONFLICT (user_id, country) "
+                     "experience_years, target_date, mbbs_college_id, mbbs_college, target_area) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?::date, ?, ?, ?) ON CONFLICT (user_id, country) "
                      "DO UPDATE SET route = EXCLUDED.route, mbbs_done = EXCLUDED.mbbs_done, internship_done = "
                      "EXCLUDED.internship_done, has_pg = EXCLUDED.has_pg, experience_years = EXCLUDED.experience_years, "
                      "target_date = EXCLUDED.target_date, mbbs_college_id = EXCLUDED.mbbs_college_id, "
-                     "mbbs_college = EXCLUDED.mbbs_college, updated_at = CURRENT_TIMESTAMP",
+                     "mbbs_college = EXCLUDED.mbbs_college, "
+                     "target_area = COALESCE(NULLIF(EXCLUDED.target_area, ''), pg_pathway_profile.target_area), "
+                     "updated_at = CURRENT_TIMESTAMP",
                      (u['id'], country, route, bool(d.get('mbbs_done', True)), bool(d.get('internship_done')),
-                      bool(d.get('has_pg')), exp, td, cid, cname))
+                      bool(d.get('has_pg')), exp, td, cid, cname, area))
         conn.commit()
         return jsonify({'ok': True, **plan(conn, u['id'], country)})
     except Exception as e:
@@ -404,6 +505,17 @@ def api_import():
                           str(s.get('what') or '')[:1200], json.dumps(list(s.get('needs') or [])),
                           str(s.get('typical_time') or '')[:120], str(s.get('typical_cost') or '')[:120],
                           int(s['chapter_no']) if s.get('chapter_no') else None, str(s.get('service_tag') or '')[:200]))
+            # documents / costs are data fields (not the team's wording) → always taken from the import when sent;
+            # is_active only when sent (hide a stage without deleting it)
+            if 'doc_codes' in s:
+                conn.execute("UPDATE pg_pathway_stages SET doc_codes = ? WHERE country = ? AND stage_no = ?",
+                             (json.dumps([str(c) for c in (s.get('doc_codes') or [])]), country, int(s['stage_no'])))
+            if 'costs' in s:
+                conn.execute("UPDATE pg_pathway_stages SET costs = ? WHERE country = ? AND stage_no = ?",
+                             (json.dumps(list(s.get('costs') or [])), country, int(s['stage_no'])))
+            if 'is_active' in s:
+                conn.execute("UPDATE pg_pathway_stages SET is_active = ? WHERE country = ? AND stage_no = ?",
+                             (bool(s['is_active']), country, int(s['stage_no'])))
             if s.get('phase_no'):                 # phase: fills only a blank (an admin's choice is kept)
                 conn.execute("UPDATE pg_pathway_stages SET phase_no = ? WHERE country = ? AND stage_no = ? "
                              "AND phase_no IS NULL", (int(s['phase_no']), country, int(s['stage_no'])))
@@ -425,6 +537,8 @@ def stages_for_admin(conn, country):
     for r in conn.execute("SELECT * FROM pg_pathway_stages WHERE country = ? ORDER BY stage_no", (country,)).fetchall():
         r = dict(r)
         r['needs_text'] = ', '.join(_needs(r['needs']))
+        r['doc_codes_text'] = ', '.join(c for c in _jl(r.get('doc_codes')) if isinstance(c, str))
+        r['costs_json'] = json.dumps(_jl(r.get('costs')), ensure_ascii=False) if _jl(r.get('costs')) else ''
         out.append(r)
     return out
 
@@ -458,6 +572,21 @@ def admin_save_stage():
             conn.execute("INSERT INTO pg_pathway_stages (route, title, what, needs, typical_time, typical_cost, chapter_no, "
                          "service_tag, is_active, updated_by, phase_no, admin_edited, country, stage_no) "
                          "VALUES (?,?,?,?,?,?,?,?,?,?,?,TRUE,?,?)", vals + (country, nxt))
+        # documents (codes) + costs (JSON list) — optional fields of the stage form (2026-11-19)
+        tgt_id = int(sid) if sid else conn.execute(
+            "SELECT id FROM pg_pathway_stages WHERE country = ? ORDER BY stage_no DESC LIMIT 1", (country,)).fetchone()['id']
+        if 'doc_codes' in f:
+            from pg_admin.career_vault import DOC_TYPES
+            ok = {c for c, _l, _k in DOC_TYPES}
+            codes = [c.strip() for c in (f.get('doc_codes') or '').split(',') if c.strip() in ok]
+            conn.execute("UPDATE pg_pathway_stages SET doc_codes = ? WHERE id = ?", (json.dumps(codes), tgt_id))
+        if (f.get('costs') or '').strip():
+            try:
+                cl = json.loads(f.get('costs'))
+                assert isinstance(cl, list)
+                conn.execute("UPDATE pg_pathway_stages SET costs = ? WHERE id = ?", (json.dumps(cl), tgt_id))
+            except Exception:
+                flash('Costs were not valid JSON — the rest was saved.', 'error')
         conn.commit()
         flash('Stage saved.', 'success')
     finally:

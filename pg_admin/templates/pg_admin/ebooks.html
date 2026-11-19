@@ -164,6 +164,8 @@
         <label class="eb-sub">Typical time<br><input class="eb-in" name="typical_time" value="{{ st.typical_time or '' }}"></label>
         <label class="eb-sub">Typical cost<br><input class="eb-in" name="typical_cost" value="{{ st.typical_cost or '' }}"></label>
         <label class="eb-sub">GooCampus can do this<br><input class="eb-in" name="service_tag" value="{{ st.service_tag or '' }}"></label>
+        <label class="eb-sub" style="grid-column:1/-1;">Documents for the checklist (codes: passport, photo, mbbs_degree, mbbs_marks, internship, registration, good_standing, experience, pg_degree, pg_registration, bls, english_test, licence_exam, dataflow, cv, contract, police)<br><input class="eb-in" name="doc_codes" value="{{ st.doc_codes_text }}" style="width:100%;"></label>
+        <label class="eb-sub" style="grid-column:1/-1;">Approx. official costs (JSON list: reg dha/doh/sha/mohap/all, label, amount, currency, payer, source)<br><textarea class="eb-in" name="costs" style="width:100%;min-height:40px;font-family:monospace;font-size:0.72rem;">{{ st.costs_json }}</textarea></label>
         <label class="eb-sub"><input type="checkbox" name="is_active" value="1" {{ 'checked' if st.is_active }}> show to doctors</label>
         <div><button class="eb-btn">Save stage</button></div>
       </form>
