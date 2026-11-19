@@ -205,18 +205,27 @@ def _cost_total(stages, reg):
     """Approximate doctor-paid total for the chosen authority, in AED (USD at the official peg). None if no authority."""
     if not reg:
         return None
-    aed, lines = 0.0, 0
+    aed, inr, lines = 0.0, 0.0, 0
     for s in stages:
         for i in s['costs']:
-            if i.get('payer') == 'employer' or not isinstance(i.get('amount'), (int, float)):
+            # counted: what the doctor pays to GET licensed — not employer-paid items, not optional/conditional
+            # ones (in_total false: e.g. oral exam, licence applied for by the facility) and not yearly renewals
+            if i.get('payer') == 'employer' or i.get('in_total') is False or i.get('recurring') \
+                    or not isinstance(i.get('amount'), (int, float)):
                 continue
             cur = (i.get('currency') or 'AED').upper()
-            if cur not in ('AED', 'USD'):
+            if cur in ('AED', 'USD'):
+                aed += i['amount'] * (USD_TO_AED if cur == 'USD' else 1)
+            elif cur == 'INR':
+                inr += i['amount']
+            else:
                 continue
-            aed += i['amount'] * (USD_TO_AED if cur == 'USD' else 1)
             lines += 1
-    return {'aed': round(aed), 'items': lines, 'note': 'Approximate official fees the doctor pays (employer-paid items '
-            'such as the visa are left out). USD fees converted at the official peg of AED 3.6725.'} if lines else None
+    return {'aed': round(aed), 'inr': round(inr), 'items': lines,
+            'note': 'Approximate official fees you pay to get licensed: application, exam and Good Standing. Not included: '
+                    'DataFlow verification (no official price list), the licence fee (applied for by the hiring '
+                    'facility), visa and yearly renewal. USD fees converted at the official peg of AED 3.6725.'} \
+        if lines else None
 
 
 def _documents_needed(conn, user_id, stages):
