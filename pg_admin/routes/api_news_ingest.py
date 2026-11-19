@@ -1102,7 +1102,8 @@ _EDITABLE = ('heading', 'summary', 'body_text')
 def api_news_edit():
     """GET  /api/pg/news/edit?id=N  (X-News-Key) → the post's heading / summary / body_text as stored.
     POST /api/pg/news/edit  (X-News-Key) {news_id, by, edits: [{field, old, new}] | set: {field: text},
-                                          attach_inbox_id: N (only for a news with no file yet)}
+                                          attach_inbox_id: N (only for a news with no file yet),
+                                          set_date: 'YYYY-MM-DD', replace_with_inbox_id: N (reissued notice)}
     Text-only fix of an already-posted news item on the founder's behalf (founder 2026-11-05: "make these changes
     on my behalf"). Touches ONLY heading / summary / body_text — never dates, PDF, publish state or emails; each
     'old' must occur exactly once (else nothing is saved). Every change is logged in pg_news_edit_log (old + new
@@ -1157,9 +1158,47 @@ def api_news_edit():
                          "VALUES (?,?,?,?,?)", (nid, 'pdf', '', f'attached inbox {iid} ({ib["name"]})', who))
             conn.commit()
             changed.append('pdf')
+        # authority REISSUED a corrected notice (KEA 19-11-2026: first copy misprinted as December) — founder
+        # 2026-11-19: fix the post's date and point it at the corrected file. Both files stay archived; the old one is
+        # only unlinked from this news. Never sends email / WhatsApp. Logged like every other edit.
+        sd = str(d.get('set_date') or '').strip()
+        if sd:
+            from datetime import datetime as _dt
+            try:
+                pub = _dt.strptime(sd, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'ok': False, 'error': 'set_date must be YYYY-MM-DD'}), 400
+            old = conn.execute("SELECT published_at FROM pg_news WHERE id = ?", (nid,)).fetchone()['published_at']
+            conn.execute("UPDATE pg_news SET published_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (pub, nid))
+            conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) VALUES (?,?,?,?,?)",
+                         (nid, 'published_at', str(old or ''), sd, who))
+            changed.append('published_at')
+        rid = int(d.get('replace_with_inbox_id') or 0)
+        if rid:
+            from pg_admin.data.auto_docs import doc_for_inbox
+            doc = doc_for_inbox(conn, rid)
+            if not doc:
+                return jsonify({'ok': False, 'error': 'that inbox item has no filed document to link'}), 400
+            old = conn.execute("SELECT authority_doc_id, COALESCE(pdf_name,'') AS n, (pdf_data IS NOT NULL) AS blob, "
+                               "COALESCE(pdf_r2_key,'') AS r2 FROM pg_news WHERE id = ?", (nid,)).fetchone()
+            nm = (d.get('pdf_name') or '').strip()[:200] or old['n'] or 'notice.pdf'
+            # a file stored ON the news row (blob / r2) is served before the linked document; swapping would mean
+            # removing that copy, so refuse and leave it to the admin form (nothing is ever deleted here)
+            if old['blob'] or old['r2']:
+                return jsonify({'ok': False, 'error': 'this news holds its own file copy — use the News admin form'}), 400
+            conn.execute("UPDATE pg_news SET authority_doc_id = ?, pdf_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                         (doc, nm, nid))
+            conn.execute("UPDATE pg_authority_docs SET is_published = TRUE, review_pending = FALSE WHERE id = ?", (doc,))
+            conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) VALUES (?,?,?,?,?)",
+                         (nid, 'pdf', f"doc {old['authority_doc_id']} blob={bool(old['blob'])} r2={old['r2']}",
+                          f'doc {doc} (inbox {rid}, reissued)', who))
+            changed.append('pdf')
+        if changed and not [f for f in changed if f not in ('pdf', 'published_at')]:
+            conn.commit()
+            return jsonify({'ok': True, 'changed': changed})
         if not changed:
             return jsonify({'ok': True, 'changed': []})
-        for f in [f for f in changed if f != 'pdf']:
+        for f in [f for f in changed if f not in ('pdf', 'published_at')]:
             conn.execute(f"UPDATE pg_news SET {f} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new[f], nid))
             conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) "
                          "VALUES (?,?,?,?,?)", (nid, f, cur[f], new[f], who))
