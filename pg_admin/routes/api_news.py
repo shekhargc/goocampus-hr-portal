@@ -224,6 +224,17 @@ DEADLINE_LABELS = {
 }
 
 
+def _hold_label(lbl, suffix):
+    """"Choice filling — ON HOLD (Madras High Court order)" + " closes" → "Choice filling closes (on hold — Madras
+    High Court order)": the opens/closes word goes before the hold text, not after it. (website 2026-11-21)"""
+    import re
+    m = re.search(r'\s*[—–-]\s*on hold\b\s*(?:\((.*)\))?\s*$', lbl or '', re.I)
+    if not m:
+        return f"{lbl}{suffix}"
+    why = (m.group(1) or '').strip()
+    return f"{lbl[:m.start()].strip()}{suffix} (on hold{' — ' + why if why else ''})"
+
+
 def api_pg_news_deadlines():
     """GET /api/pg/news/deadlines — upcoming key dates across published news, flattened +
     sorted, for an "Upcoming deadlines" strip (site, /news, dashboard). (2026-10-09)
@@ -299,7 +310,7 @@ def api_pg_news_deadlines():
                     suffix = {'start': ' opens', 'end': ' closes', 'on': ''}[kind]
                     _t, _full = CAL.short_time(r.get('time_text')) if kind != 'start' else (None, None)
                     out.append({'date': d.isoformat(), 'field': f"{r['event']}_{kind}",
-                                'label': f"{lbl}{suffix}", 'round': r['round'] or None,
+                                'label': _hold_label(lbl, suffix), 'round': r['round'] or None,
                                 'time': _t, 'note': _full,
                                 'news_id': r.get('news_id'), 'heading': headings.get(r.get('news_id'), ''),
                                 'body_label': 'All India MCC' if r['authority_code'] == 'mcc' else a.get('name', ''),
