@@ -24,12 +24,19 @@ NCOL = 13
 
 
 def read(pdf):
+    """2025 layout: 13 columns. 2026 layout (MCC Round 2, 20-11-2026): a 'Roll No' column after Rank (14 columns;
+    15 on pages where a merged 'Alloted Quota' heading leaves an empty column). Roll No is dropped, never stored."""
     out = []
     for pg in fitz.open(pdf):
         for t in pg.find_tables().tables:
             for r in t.extract():
-                if len(r) == NCOL and clean(r[0]).isdigit():
-                    out.append([clean(x) for x in r])
+                r = [clean(x) for x in r]
+                if len(r) == 15 and r[8] == '':               # empty column under the merged heading
+                    r = r[:8] + r[9:]
+                if len(r) == 14 and r[2].isdigit() and len(r[2]) >= 8:   # 2026: SNo, Rank, Roll No, …
+                    r = r[:2] + r[3:]
+                if len(r) == NCOL and r[0].isdigit():
+                    out.append(r)
     return out
 
 

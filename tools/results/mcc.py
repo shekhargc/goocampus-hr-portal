@@ -35,6 +35,7 @@ COURSES = {  # MCC wording → approved course name (pg_admin/data/specialty_she
     'M.D. Radio-Diagnosis /Radiology': 'MD - Radio-Diagnosis',
     'M.D. Respiratory Medicine/Tuberculosis and Respiratory Diseases': 'MD - Respiratory Medicine',
     'M.D. Sports Medicine': 'MD - Sports Medicine', 'M.D. Tropical Medicine': 'MD - Tropical Medicine',
+    'M.D. Aviation Medicine/Aerospace Medicine': 'MD - Aerospace Medicine',   # new in MCC 2026 Round 2
     'M.D.(COMMUNITY HEALTH ADMN.)': 'MD - Community Health & Administration',
     'M.S. General Surgery': 'MS - General Surgery', 'M.S. Obstetrics and Gynaecology': 'MS - Obstetrics and Gynaecology',
     'M.S. Ophthalmology': 'MS - Ophthalmology', 'M.S. Orthopaedics': 'MS - Orthopaedics',
