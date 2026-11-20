@@ -184,8 +184,10 @@ def calendar_remove():
         eid = 0
     conn = get_db()
     try:
-        conn.execute("UPDATE pg_counselling_events SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP "
-                     "WHERE id = ?", (eid,))
+        # a removal counts as today's manual decision: only a strictly NEWER notice may bring the step back (2026-11-20)
+        conn.execute("UPDATE pg_counselling_events SET is_active = FALSE, manual_edit = TRUE, "
+                     "source_notice_date = GREATEST(COALESCE(source_notice_date, CURRENT_DATE), CURRENT_DATE), "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (eid,))
         conn.commit()
         flash('Date removed from the calendar.', 'success')
     except Exception as ex:

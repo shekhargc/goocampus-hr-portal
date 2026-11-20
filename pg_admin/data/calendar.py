@@ -88,6 +88,15 @@ def ensure_calendar_table(conn=None):
                          ('prev_end', 'DATE'), ('change_count', 'INTEGER DEFAULT 0'),
                          ('manual_edit', 'BOOLEAN DEFAULT FALSE')):
             conn.execute(f"ALTER TABLE pg_counselling_events ADD COLUMN IF NOT EXISTS {col} {typ}")
+        # Each inbox draft's schedule is merged into the calendar ONCE (on arrival / re-draft), never again on
+        # every Calendar page view — re-merging every draft undid manual fixes and revived removed rows
+        # (2026-11-20: KEA's misprinted 19 Nov draft put 21/23 Dec back; a relabelled Punjab row came back).
+        # First time the column appears, every draft already there is marked synced (they were merged long ago).
+        had = conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'pg_news_inbox' "
+                           "AND column_name = 'calendar_synced_at'").fetchone()
+        if not had and conn.execute("SELECT to_regclass('pg_news_inbox') AS t").fetchone()['t']:
+            conn.execute("ALTER TABLE pg_news_inbox ADD COLUMN IF NOT EXISTS calendar_synced_at TIMESTAMP")
+            conn.execute("UPDATE pg_news_inbox SET calendar_synced_at = CURRENT_TIMESTAMP WHERE draft_json IS NOT NULL")
         conn.execute('''CREATE TABLE IF NOT EXISTS pg_counselling_event_log (
             id SERIAL PRIMARY KEY, event_id INTEGER NOT NULL,
             old_start DATE, old_end DATE, new_start DATE, new_end DATE,
@@ -215,6 +224,12 @@ def merge_events(conn, authority_code, events, news_id=None, inbox_id=None, noti
         if src and (nd is None or nd < src):
             stats['skipped_older'] += 1                 # an older / undated notice can't override
             continue
+        # A row the team fixed or removed by hand: an automatic AI merge changes it only for a STRICTLY newer
+        # notice (a same-day draft — e.g. the misprinted one a fix corrected — must not undo the fix). 2026-11-20
+        if who == 'AI (auto)' and (row.get('manual_edit') or row.get('is_active') is False) and src and nd is not None \
+                and nd <= src:
+            stats['skipped_older'] += 1
+            continue
         conn.execute("INSERT INTO pg_counselling_event_log (event_id, old_start, old_end, new_start, new_end, "
                      "inbox_id, notice_date, changed_by, note) VALUES (?,?,?,?,?,?,?,?,?)",
                      (row['id'], row['start_date'], row.get('end_date'), s0, e0, inbox_id, nd, who,
@@ -321,8 +336,20 @@ def sync_from_inbox(conn, inbox_id=None):
     ensure_calendar_table(conn)
     where = "draft_json IS NOT NULL AND status <> 'seen'"
     params = []
+    conn.execute("SAVEPOINT cal_col")
+    try:
+        conn.execute("SELECT calendar_synced_at FROM pg_news_inbox LIMIT 0")
+        has_col = True
+        conn.execute("RELEASE SAVEPOINT cal_col")
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT cal_col")
+        has_col = False
     if inbox_id:
-        where += " AND id = ?"; params.append(inbox_id)
+        where += " AND id = ?"; params.append(inbox_id)          # explicit (arrival / re-draft): always apply
+    elif has_col:
+        where += " AND calendar_synced_at IS NULL"               # catch-up: only drafts never merged yet
+    else:
+        return {'added': 0, 'changed': 0, 'unchanged': 0, 'skipped_older': 0}       # never re-merge everything
     tot = {'added': 0, 'changed': 0, 'unchanged': 0, 'skipped_older': 0}
     for r in conn.execute(f"SELECT id, source_code, news_id, notice_date, draft_json FROM pg_news_inbox "
                           f"WHERE {where} ORDER BY notice_date ASC NULLS FIRST, first_seen_at ASC, id ASC",
@@ -332,11 +359,12 @@ def sync_from_inbox(conn, inbox_id=None):
         except Exception:
             ev = []
         code = (NS.SOURCES.get(r['source_code']) or {}).get('authority_code')
-        if not ev or not code:
-            continue
-        st = merge_events(conn, code, ev, r['news_id'], r['id'], r['notice_date'])
-        for k in tot:
-            tot[k] += st[k]
+        if ev and code:
+            st = merge_events(conn, code, ev, r['news_id'], r['id'], r['notice_date'])
+            for k in tot:
+                tot[k] += st[k]
+        if has_col:
+            conn.execute("UPDATE pg_news_inbox SET calendar_synced_at = CURRENT_TIMESTAMP WHERE id = ?", (r['id'],))
     return tot
 
 
