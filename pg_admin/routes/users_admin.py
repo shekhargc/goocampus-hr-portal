@@ -289,6 +289,9 @@ def users_admin():
             try: conn.rollback()
             except Exception: pass
 
+        if request.args.get('export') == 'allotted':      # founder 2026-11-20: Excel of the filtered list's seats
+            return _export_allotted(conn, base, where, params)
+
         row = conn.execute(f"SELECT COUNT(*) AS n {base}{where}", tuple(params)).fetchone()
         total = int((row or {}).get('n') or 0)
         total_pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
@@ -445,6 +448,102 @@ def users_admin():
                            qualify_score=NEET_QUALIFY_SCORE, qual_cut=qual_cut,
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,
                            active_section='goocampus_in')
+
+
+def _export_allotted(conn, base, where, params):
+    """Excel of the doctors in the CURRENT filter who hold a seat (matched on their rank, 'not me' marks left out).
+    Sheet 1 = one row per doctor (latest seat), sheet 2 = every seat by authority + round. Name, mobile, email,
+    type (Internal / Paid / Free / Team). Built only on request — nothing is stored. (founder 2026-11-20)"""
+    import io
+    from flask import send_file
+    from openpyxl import Workbook
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+    from openpyxl.styles import Font, PatternFill
+    from core.helpers import format_dr_name
+    from pg_admin import allotments as _al
+    has = _allotted_sql()
+    w2 = (where + ' AND ' if where else ' WHERE ') + has
+    docs = [dict(r) for r in conn.execute(
+        f"SELECT u.id, u.name, u.mobile, u.email, u.state, u.neet_pg_rank, u.home_state_rank, u.neet_pg_score, "
+        f"({_category_case('u')}) AS client_category {base}{w2} ORDER BY u.id", tuple(params)).fetchall()]
+    # blank names: the counselling-form lead's name, same as the list does (display only)
+    def m10(v):
+        d = ''.join(ch for ch in (v or '') if ch.isdigit())
+        return d[-10:] if len(d) >= 10 else ''
+    want = {m10(d['mobile']) for d in docs if not (d.get('name') or '').strip() and m10(d['mobile'])}
+    if want:
+        try:
+            ph = ','.join(['?'] * len(want))
+            names = {r['m10']: r['lead_name'] for r in conn.execute(
+                f"SELECT RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) AS m10, MAX(lead_name) AS lead_name "
+                f"FROM sales_leads WHERE COALESCE(lead_name,'') <> '' AND "
+                f"RIGHT(regexp_replace(COALESCE(phone,''),'[^0-9]','','g'),10) IN ({ph}) GROUP BY 1", tuple(want)).fetchall()}
+            for d in docs:
+                if not (d.get('name') or '').strip():
+                    d['name'] = names.get(m10(d['mobile']), '')
+        except Exception:
+            conn.rollback()
+    alls = _al.for_users(conn, docs, include_not_me=False) if docs else {}
+
+    def clean(v):
+        return ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v
+
+    def auth_name(a):
+        return 'MCC (All India)' if a['authority_code'] == 'mcc' else a['authority_name']
+
+    def round_label(a):
+        return a['round'] + (' (final)' if a['status'] == 'final' else ' (provisional)' if a['status'] else '')
+
+    st_lbl = {'fresh': 'Fresh allotment', 'upgraded': 'Upgraded', 'retained': 'Retained earlier seat'}
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Allotted doctors'
+    ws2 = wb.create_sheet('All seats by round')
+    h1 = ['S.No', 'Doctor', 'Mobile', 'Email', 'Type', 'Home state', 'NEET-PG AIR', 'Score', 'Seats (all rounds)',
+          'Latest authority', 'Latest round', 'Course', 'MD/MS or DNB', 'College', 'College state', 'Quota',
+          'Allotted category', 'Confirmed by team']
+    h2 = ['S.No', 'Doctor', 'Mobile', 'Type', 'NEET-PG AIR', 'Authority', 'Round', 'Result', 'Round change',
+          'Course', 'MD/MS or DNB', 'College', 'College state', 'Quota', 'Allotted category', 'Rank in this list',
+          'Earlier seat (if upgraded)', 'Confirmed by team']
+    bold, fill = Font(bold=True, color='FFFFFF'), PatternFill('solid', fgColor='1E3A5F')
+    for sh, h in ((ws, h1), (ws2, h2)):
+        sh.append(h)
+        for c in sh[1]:
+            c.font, c.fill = bold, fill
+        sh.freeze_panes = 'C2'
+    n1 = n2 = 0
+    for d in docs:
+        seats = alls.get(d['id']) or []
+        if not seats:
+            continue
+        cat = _CATEGORY_LABELS.get(d['client_category'], d['client_category'] or '')
+        name = format_dr_name(d.get('name')) if (d.get('name') or '').strip() else ''
+        a = _al.latest(seats)
+        n1 += 1
+        ws.append([clean(x) for x in [
+            n1, name, d.get('mobile') or '', d.get('email') or '', cat, d.get('state') or '',
+            d.get('neet_pg_rank') or '', d.get('neet_pg_score') or '', len(seats),
+            auth_name(a), round_label(a), a['course'], 'DNB' if a['program'] == 'dnb' else 'MD/MS', a['college'],
+            a['state'], a['quota'], a['allotted_category'], 'Yes' if a['verdict'] == 'confirmed' else '']])
+        for a in sorted(seats, key=lambda a: (a['authority_code'] != 'mcc', a['authority_name'], -int(a['round_order'] or 0))):
+            n2 += 1
+            prev = ' — '.join(x for x in (a.get('prev_course'), a.get('prev_college')) if x)
+            ws2.append([clean(x) for x in [
+                n2, name, d.get('mobile') or '', cat, d.get('neet_pg_rank') or '', auth_name(a), a['round'],
+                (a['status'] or '').capitalize(), st_lbl.get(a.get('round_status') or '', ''), a['course'],
+                'DNB' if a['program'] == 'dnb' else 'MD/MS', a['college'], a['state'], a['quota'],
+                a['allotted_category'], a['rank'] or '', prev, 'Yes' if a['verdict'] == 'confirmed' else '']])
+    for sh, widths in ((ws, (6, 26, 15, 26, 10, 16, 11, 8, 9, 22, 22, 30, 10, 44, 16, 22, 14, 10)),
+                       (ws2, (6, 26, 15, 10, 11, 22, 12, 12, 18, 30, 10, 44, 16, 22, 14, 11, 40, 10))):
+        for i, wdt in enumerate(widths):
+            sh.column_dimensions[chr(65 + i)].width = wdt
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    ist = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime('%Y-%m-%d_%H%M')
+    logging.info("pg users allotted export: %s doctors, %s seats", n1, n2)
+    return send_file(bio, as_attachment=True, download_name=f'allotted_doctors_{ist}.xlsx',
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 # ── CRM tabs (pipeline stages) off the shared follow-up thread. (founder 2026-10-06) ──
