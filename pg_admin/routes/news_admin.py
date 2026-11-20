@@ -27,6 +27,22 @@ NEWS_DATE_FIELDS = [('registration_start', 'Registration starts'), ('registratio
                     ('result_date', 'Result / allotment date')]
 
 
+
+def _canon_authority(auth):
+    """'state:Jammu & Kashmir' → 'state:Jammu and Kashmir' (the form's own spelling). A state the dropdown doesn't list
+    made the form fall back to 'All India MCC' silently — J&K posts went to everyone and their dates landed in MCC's
+    calendar (founder 2026-11-20)."""
+    if not (auth or '').startswith('state:'):
+        return auth
+    import re as _re
+    from pg_admin.routes.users_admin import _canonical_states
+    key = lambda x: _re.sub(r'[^a-z]', '', (x or '').lower().replace('&', 'and'))
+    want = key(auth[6:])
+    for st in _canonical_states():
+        if key(st) == want or key(st).startswith(want) or want.startswith(key(st)):
+            return 'state:' + st
+    return auth
+
 def schedule_to_text(sch):
     """{"columns","rows"} → editable pipe text (header line first)."""
     if not isinstance(sch, dict) or not sch.get('rows'):
@@ -110,7 +126,7 @@ def news_admin():
                                                  (d['posted_news_id'],)).fetchone()
                     prefill = {'doc_id': d['id'], 'inbox_id': '', 'kind': 'doc', 'status': '',
                                'heading': title, 'source_url': d.get('source_url') or '',
-                               'authority': '__all__' if is_mcc else f"state:{a.get('state')}",
+                               'authority': '__all__' if is_mcc else _canon_authority(f"state:{a.get('state')}"),
                                'source_label': aname, 'is_state': not is_mcc, 'state_name': a.get('state') or '',
                                'news_date': (d.get('doc_date') or '')[:10],
                                'has_pdf': bool(d.get('file_name')), 'drafted': False,
@@ -148,7 +164,7 @@ def news_admin():
                     except Exception: dr = {}
                     prefill = {'inbox_id': r['id'], 'heading': dr.get('headline') or r['title'], 'source_url': r['url'],
                                'kind': r['kind'], 'status': r['status'],
-                               'authority': src.get('news_authority') or '__all__',
+                               'authority': _canon_authority(src.get('news_authority') or '__all__'),
                                'source_label': src.get('label') or r['source_code'],
                                'news_date': r['notice_date'].strftime('%Y-%m-%d') if r.get('notice_date') else '',
                                'has_pdf': bool(r.get('pdf_data') or r.get('pdf_r2_key') or r.get('pdf_doc_id')), 'drafted': bool(dr),
