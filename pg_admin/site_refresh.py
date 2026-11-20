@@ -61,6 +61,9 @@ _ENDPOINT_TAGS = {
     # Claude's on-behalf fixes (news text/date/file/key dates; calendar dates) refresh the site too (2026-11-19)
     'api_news_edit': ['news', 'calendar'],
     'api_pg_calendar_fix': ['calendar', 'news', 'authority'],
+    # a result round's amber notice line (API + Result Rounds admin page) (2026-11-20)
+    'api_results_notice': ['results', 'authority'],
+    'pg_result_rounds_notice': ['results', 'authority'],
 }
 
 

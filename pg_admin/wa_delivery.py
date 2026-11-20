@@ -193,6 +193,7 @@ def report_page():
         if f[k] and not re.fullmatch(r'\d{4}-\d{2}-\d{2}', f[k]):
             f[k] = ''
     rows, summary, templates, groups, batches = [], [], [], [], []
+    daily, daytot = [], []
     conn = get_db()
     try:
         w.ensure_tables(conn)
@@ -327,6 +328,35 @@ def report_page():
             g['total'] += 1
             g[st] += 1
         groups = [g for g in groups.values() if g['total']]
+        # MESSAGES PER DAY per template (founder 2026-11-20, after the Infobip balance ran out): every message counts
+        # (repeats / re-sends too — each one is billed), IST day, newest first, last 14 days of what the filters show.
+        from datetime import timedelta as _td
+        dd = {}
+        for r in rows:
+            t = r.get('created_at')
+            if not t:
+                continue
+            day = (t + _td(hours=5, minutes=30)).date() if hasattr(t, 'hour') else str(t)[:10]
+            x = dd.setdefault((day, r['template']), {'day': day, 'template': r['template'], 'messages': 0,
+                                                       'delivered': 0, 'read': 0, 'failed': 0, 'waiting': 0})
+            x['messages'] += 1
+            st = r['st']
+            if st in ('delivered', 'read'):
+                x['delivered'] += 1
+            if st == 'read':
+                x['read'] += 1
+            if st in ('failed', 'not_sent'):
+                x['failed'] += 1
+            if st == 'waiting':
+                x['waiting'] += 1
+        days = sorted({k[0] for k in dd}, reverse=True)[:14]
+        daily = sorted((v for k, v in dd.items() if k[0] in days), key=lambda v: (str(v['day']), v['messages']), reverse=True)
+        daytot = {}
+        for v in daily:
+            y = daytot.setdefault(v['day'], {'day': v['day'], 'messages': 0, 'delivered': 0, 'failed': 0})
+            for k in ('messages', 'delivered', 'failed'):
+                y[k] += v[k]
+        daytot = sorted(daytot.values(), key=lambda v: str(v['day']), reverse=True)
         if f['status']:
             rows = [r for r in rows if r['st'] == f['status']]
         # Every APPROVED template is listed, even before its first send (founder 2026-11-18).
@@ -360,6 +390,7 @@ def report_page():
     shown = rows[:1500]
     return render_template('wa_delivery.html', rows=shown, total=len(rows), summary=summary, templates=templates, f=f,
                            status_choices=STATUS_CHOICES, type_choices=TYPE_CHOICES, groups=groups, batches=batches,
+                           daily=daily, daytot=daytot,
                            totals={k: sum(t.get(k, 0) for t in summary) for k in ('total', 'delivered', 'read', 'failed',
                                                                                    'waiting', 'not_sent', 'attempts')})
 

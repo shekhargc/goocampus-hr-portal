@@ -242,7 +242,7 @@ def _deliver(conn, user, kind, template, placeholders, ref=''):
 # ── the sweep ───────────────────────────────────────────────────────────────
 def run():
     """One pass: welcome messages + 1h / 24h profile reminders for doctors created after switch-on."""
-    summary = {'welcome': 0, 'incomplete_1h': 0, 'incomplete_24h': 0, 'incomplete_72h': 0, 'failed': 0}
+    summary = {'welcome': 0, 'incomplete_1h': 0, 'incomplete_24h': 0, 'failed': 0}
     conn = get_db()
     try:
         ensure_tables(conn)
@@ -273,8 +273,9 @@ def run():
         # 2. Reminders — FREE doctors still missing name or state.
         # kind 'incomplete_1h' kept as the log key (history continuity) — the first reminder now goes at 15 min.
         windows = (('incomplete_1h', "INTERVAL '15 minutes'", "INTERVAL '23 hours'"),
-                   ('incomplete_24h', "INTERVAL '24 hours'", "INTERVAL '48 hours'"),
-                   ('incomplete_72h', "INTERVAL '72 hours'", "INTERVAL '96 hours'"))     # founder 2026-11-18
+                   ('incomplete_24h', "INTERVAL '24 hours'", "INTERVAL '48 hours'"))
+        # founder 2026-11-20: profile reminder only TWICE, then stop (the 72-hour third reminder is retired;
+        # its label stays in KINDS so the old log rows still read correctly).
         aud_inc = wc.get_aud(conn, 'incomplete')
         if not aud_inc['types']:
             windows = ()                     # "who gets it" = nobody → reminder off
@@ -394,8 +395,13 @@ def daily_run():
     try:
         ensure_tables(conn)
         day = _ist_today()
+        from pg_admin import wa_campaigns as wc
+        cats = wc.categories(conn)
         for d, n, label, latest in daily_plan(conn, day):
             if opted_out(conn, d.get('mobile')):
+                summary['skipped'] += 1
+                continue
+            if cats.get(d['id'], 'free') == 'free' and _free_got_news_recently(conn, d['id']):
                 summary['skipped'] += 1
                 continue
             ph = [welcome_name(d.get('name')), str(n), clean_placeholder(label, 60), clean_placeholder(latest, 120)]
@@ -417,11 +423,22 @@ def daily_run():
 
 
 NEWS_MAX_PER_DAY = 3     # at most this many news updates per doctor per IST day
+FREE_NEWS_GAP_HOURS = 48  # founder 2026-11-20: FREE doctors get the news WhatsApp at most once in 2 days
+                          # (paid / internal / team unchanged — morning + evening as usual). Welcome + reminders unaffected.
+
+
+def _free_got_news_recently(conn, uid):
+    return bool(conn.execute(
+        "SELECT 1 FROM pg_wa_nudge_log WHERE user_id = ? AND kind LIKE ? AND status = 'sent' "
+        "AND COALESCE(dlr, '') <> 'failed' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '%d hours' LIMIT 1"
+        % FREE_NEWS_GAP_HOURS, (uid, 'daily:%')).fetchone())
 
 
 def _send_news(conn, news, batch, ref='', only_users=None, cap=True):
     """One WhatsApp per doctor whose MCC / state is in `news` (gc_daily_account_update). Max NEWS_MAX_PER_DAY a day."""
-    summary = {'sent': 0, 'failed': 0, 'skipped': 0, 'capped': 0}
+    summary = {'sent': 0, 'failed': 0, 'skipped': 0, 'capped': 0, 'free_2day': 0}
+    from pg_admin import wa_campaigns as wc
+    cats = wc.categories(conn)
     day_start = conn.execute("SELECT (date_trunc('day', CURRENT_TIMESTAMP + INTERVAL '330 minutes') "
                              "- INTERVAL '330 minutes') AS t").fetchone()['t']
     for d, cnt, label, latest in plan_for_news(conn, news):
@@ -435,6 +452,9 @@ def _send_news(conn, news, batch, ref='', only_users=None, cap=True):
                                (d['id'], 'daily:%', day_start)).fetchone()['n']
         if cap and today_n >= NEWS_MAX_PER_DAY:
             summary['capped'] += 1
+            continue
+        if cap and cats.get(d['id'], 'free') == 'free' and _free_got_news_recently(conn, d['id']):
+            summary['free_2day'] += 1
             continue
         ph = [welcome_name(d.get('name')), str(cnt), clean_placeholder(label, 60), clean_placeholder(latest, 120)]
         res = _deliver(conn, d, 'daily:' + batch, DAILY_TPL, ph, ref=ref)

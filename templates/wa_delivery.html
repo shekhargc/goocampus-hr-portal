@@ -132,6 +132,27 @@
     </div>
     {% endif %}
 
+    {% if daily %}
+    <div class="wd-sub" style="margin-bottom:0.4rem;font-weight:700;color:var(--navy);">MESSAGES PER DAY (every message counts — each one is billed by Infobip) · last 14 days</div>
+    <div class="wd-card">
+        <table class="wd-t">
+            <thead><tr><th>S.No</th><th>Day (IST)</th><th class="wd-num">Messages</th><th class="wd-num">✓✓ Delivered</th><th class="wd-num">Failed / not sent</th></tr></thead>
+            <tbody>
+            {% for d in daytot %}<tr><td>{{ loop.index }}</td><td style="font-weight:700;">{{ d.day.strftime('%d %b %Y') if d.day.strftime is defined else d.day }}</td>
+                <td class="wd-num" style="font-weight:700;">{{ d.messages }}</td><td class="wd-num" style="color:#166534;">{{ d.delivered }}</td><td class="wd-num" style="color:#991b1b;">{{ d.failed }}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+        <details style="margin-top:0.6rem;"><summary class="wd-sub" style="cursor:pointer;font-weight:700;">Split by template ({{ daily|length }} lines)</summary>
+        <table class="wd-t" style="margin-top:0.4rem;">
+            <thead><tr><th>S.No</th><th>Day (IST)</th><th>Template</th><th class="wd-num">Messages</th><th class="wd-num">✓✓ Delivered</th><th class="wd-num">Read</th><th class="wd-num">Failed / not sent</th><th class="wd-num">No report yet</th></tr></thead>
+            <tbody>
+            {% for d in daily %}<tr><td>{{ loop.index }}</td><td style="white-space:nowrap;">{{ d.day.strftime('%d %b') if d.day.strftime is defined else d.day }}</td><td style="font-weight:600;">{{ d.template }}</td>
+                <td class="wd-num" style="font-weight:700;">{{ d.messages }}</td><td class="wd-num" style="color:#166534;">{{ d.delivered }}</td><td class="wd-num" style="color:#1e40af;">{{ d.read }}</td><td class="wd-num" style="color:#991b1b;">{{ d.failed }}</td><td class="wd-num">{{ d.waiting }}</td></tr>{% endfor %}
+            </tbody>
+        </table></details>
+    </div>
+    {% endif %}
+
     <div class="wd-sub" style="margin-bottom:0.4rem;font-weight:700;color:var(--navy);">EVERY ATTEMPT (including repeats / re-sends)</div>
     <div class="wd-sub" style="margin-bottom:0.4rem;">{{ total }} message{{ '' if total == 1 else 's' }}{% if total > rows|length %} — newest {{ rows|length }} shown, narrow the filters to see older ones{% endif %}.</div>
     <div class="wd-card">
