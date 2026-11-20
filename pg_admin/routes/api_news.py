@@ -560,9 +560,23 @@ def counselling_status(conn, code, today=None, headings=None):
                         'revised': rev}
     if not steps:
         return None
+    # A round whose result is already PUBLISHED on the portal (results page) has its result step done from that
+    # day — the calendar only dates it, so on result day it read "Result / seat allotment open — closes 20 Nov"
+    # after MCC's final list was out (website session 2026-11-20). {round: 'final' | 'provisional'}
+    published = {}
+    try:
+        from pg_admin.routes.results_api import YEAR as _RY
+        for r in conn.execute("SELECT round, status FROM pg_results_source WHERE authority_code = ? AND academic_year = ? "
+                              "AND COALESCE(is_hidden,0) = 0", (code, _RY)).fetchall():
+            published[r['round']] = r['status'] or ''
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
     rounds, flat = {}, []
     for (rnd, ev), v in steps.items():
         st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
+        if ev == 'result' and rnd in published:
+            st = 'done'
         item = {'round': rnd or None, 'step': ev, 'label': CAL.EVENT_LABELS.get(ev, ev),
                 'bar_label': BAR_STEPS.get(ev), 'start': v['start'].isoformat(), 'end': v['end'].isoformat(),
                 'time': CAL.short_time(v['time'])[0], 'note': CAL.short_time(v['time'])[1],
@@ -603,6 +617,16 @@ def counselling_status(conn, code, today=None, headings=None):
     elif nxt:
         headline = (f"Next: {nxt['round'] + ' ' if nxt['round'] else ''}{nxt['label'].lower()}"
                     f" from {_fmt_d(_date.fromisoformat(nxt['start']))}")
+    # Result just published and reporting is the round's next step → say so (website session 2026-11-20)
+    if not current:
+        rep = next((i for i in flat if i['step'] == 'reporting' and i['status'] in ('live', 'upcoming')
+                    and i['round'] in published
+                    and any(j['round'] == i['round'] and j['step'] == 'result' and j['status'] == 'done' for j in flat)), None)
+        if rep:
+            kind = 'final' if published.get(rep['round']) == 'final' else 'provisional'
+            headline = (f"{rep['round']} {kind} result out — report by {_fmt_d(_date.fromisoformat(rep['end']))}"
+                        + (f", {rep['time']}" if rep['time'] else '')
+                        + (' (no extension)' if 'no extension' in (rep['note'] or '').lower() else ''))
     # A step on hold in a round that isn't finished leads the headline.
     hold = next((i for i in flat if i['on_hold'] and any(j['round'] == i['round'] and j['status'] != 'done'
                                                          for j in flat)), None)
