@@ -1179,6 +1179,20 @@ def api_news_edit():
         # authority REISSUED a corrected notice (KEA 19-11-2026: first copy misprinted as December) — founder
         # 2026-11-19: fix the post's date and point it at the corrected file. Both files stay archived; the old one is
         # only unlinked from this news. Never sends email / WhatsApp. Logged like every other edit.
+        # set_state 'Jammu and Kashmir' → re-scope a post that went out as All India by mistake (the J&K '&' spelling
+        # bug, founder 2026-11-20). State must be one of the canonical states; never emails / WhatsApps; logged.
+        ss = str(d.get('set_state') or '').strip()
+        if ss:
+            from pg_admin.routes.users_admin import _canonical_states
+            if ss not in _canonical_states():
+                return jsonify({'ok': False, 'error': f'unknown state {ss!r}'}), 400
+            old = conn.execute("SELECT scope, COALESCE(state,'') AS state, COALESCE(body_label,'') AS bl FROM pg_news "
+                               "WHERE id = ?", (nid,)).fetchone()
+            conn.execute("UPDATE pg_news SET scope = 'state', state = ?, body_label = ?, updated_at = CURRENT_TIMESTAMP "
+                         "WHERE id = ?", (ss, ss, nid))
+            conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) VALUES (?,?,?,?,?)",
+                         (nid, 'scope', f"{old['scope']}|{old['state']}|{old['bl']}", f'state|{ss}|{ss}', who))
+            changed.append('scope')
         sd = str(d.get('set_date') or '').strip()
         if sd:
             from datetime import datetime as _dt
@@ -1235,12 +1249,12 @@ def api_news_edit():
                          (nid, 'pdf', f"doc {old['authority_doc_id']} blob={bool(old['blob'])} r2={old['r2']}",
                           f'doc {doc} (inbox {rid}, reissued)', who))
             changed.append('pdf')
-        if changed and not [f for f in changed if f not in ('pdf', 'published_at', 'key_dates')]:
+        if changed and not [f for f in changed if f not in ('pdf', 'published_at', 'key_dates', 'scope')]:
             conn.commit()
             return jsonify({'ok': True, 'changed': changed})
         if not changed:
             return jsonify({'ok': True, 'changed': []})
-        for f in [f for f in changed if f not in ('pdf', 'published_at', 'key_dates')]:
+        for f in [f for f in changed if f not in ('pdf', 'published_at', 'key_dates', 'scope')]:
             conn.execute(f"UPDATE pg_news SET {f} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new[f], nid))
             conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) "
                          "VALUES (?,?,?,?,?)", (nid, f, cur[f], new[f], who))
