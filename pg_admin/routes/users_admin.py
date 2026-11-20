@@ -151,6 +151,8 @@ _PROF_FILTERS = {       # key → (label, SQL). 'Incomplete' = domicile state (n
     'no_state': ('State missing', "COALESCE(TRIM(u.state),'') = ''"),
     'no_rank': ('Rank missing', "COALESCE(u.neet_pg_rank,0) <= 0"),
     'no_score': ('Score missing', "COALESCE(u.neet_pg_score,0) <= 0"),
+    'no_rank_or_score': ('Rank or score missing',       # founder 2026-11-20: one-time profile reminder group
+                         "(COALESCE(u.neet_pg_rank,0) <= 0 OR COALESCE(u.neet_pg_score,0) <= 0)"),
     'complete': ('Profile complete', "(COALESCE(TRIM(u.state),'') <> '' AND COALESCE(u.neet_pg_rank,0) > 0)"),
 }
 
