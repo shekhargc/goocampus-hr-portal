@@ -892,6 +892,23 @@ def _pipeline_audit(conn, part, only=''):
             r = tc.get(path, query_string=qs, environ_base={'pg.internal_check': True})
             return r.status_code, (r.get_json(silent=True) or {})
     out = {'ok': True}
+    if part == 'mbbs_colleges':
+        # founder 2026-11-20: how many doctors typed an MBBS college, and can it be matched to the College Database?
+        # Read-only. Only the typed college TEXT and its count — never names / mobiles / emails.
+        tot = q("SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE COALESCE(TRIM(college),'') <> '') AS with_college "
+                "FROM pg_users WHERE COALESCE(is_team_member,0) = 0")[0]
+        typed = q("SELECT TRIM(college) AS text, COUNT(*) AS n FROM pg_users WHERE COALESCE(TRIM(college),'') <> '' "
+                  "AND COALESCE(is_team_member,0) = 0 GROUP BY TRIM(college) ORDER BY n DESC, 1")
+        masters = q("SELECT m.id, m.college_name AS name, COALESCE(m.city,'') AS city, COALESCE(m.state,'') AS state, "
+                    "EXISTS (SELECT 1 FROM pg_college_course c WHERE c.master_id = m.id AND c.course_category = 'mbbs') "
+                    "AS mbbs, COALESCE((SELECT string_agg(a.alias_name, ' | ') FROM pg_college_alias a "
+                    "WHERE a.master_id = m.id), '') AS aliases FROM pg_college_master m WHERE m.kind = 'medical' ORDER BY m.id")
+        try:
+            has_id = q("SELECT COUNT(*) AS n FROM pg_users WHERE mbbs_college_id IS NOT NULL")[0]['n']
+        except Exception:
+            conn.rollback(); has_id = None
+        return {'ok': True, 'users': tot['n'], 'with_college': tot['with_college'], 'with_college_id': has_id,
+                'typed': typed, 'masters': masters}
     sm = q("SELECT counselling_body AS body, COALESCE(authority_code,'') AS auth, COALESCE(section,'') AS section, "
            "COALESCE(superseded,0) AS superseded, row_count, total_seats, (pdf_data IS NOT NULL) AS pdf, "
            "uploaded_at::text AS uploaded FROM pg_seat_matrix_source WHERE academic_year='2026-27' ORDER BY 1")
