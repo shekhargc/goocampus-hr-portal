@@ -70,6 +70,8 @@ def due_items(conn, today=None):
     out = []
     for r in rows:
         r = dict(r)
+        if CAL.is_dnb_only(r.get('label')) and not CAL.show_dnb(conn):
+            continue                                    # DNB hidden on the site → no DNB-only reminders either
         s, e = r.get('start_date'), r.get('end_date')
         last = e or (s if r['event'] in closing_single else None)
         if e and s == today and r['event'] in OPEN_EVENTS:

@@ -281,7 +281,7 @@ def api_pg_news_deadlines():
             from pg_admin.authorities import get_authority
             CAL.ensure_calendar_table(conn)
             codes = _codes_for_states(states if states else [], include_all)
-            for r in CAL.events_for(conn, codes, upcoming_only=True):
+            for r in CAL.events_for(conn, codes, upcoming_only=True, public=True):
                 a = get_authority(r['authority_code']) or {}
                 st = '' if r['authority_code'] == 'mcc' else a.get('state', '')
                 pairs = ([('start', r['start_date']), ('end', r['end_date'])] if r.get('end_date')
@@ -309,9 +309,12 @@ def api_pg_news_deadlines():
             logging.warning("deadlines calendar: %s", _e)
             try: conn.rollback()
             except Exception: pass
-        from pg_admin.data.calendar import short_time as _short
+        from pg_admin.data.calendar import short_time as _short, is_dnb_only as _dnb_only, show_dnb as _show_dnb
+        _hide_dnb = not _show_dnb(conn)
         # 2) News key dates — skipped when the calendar already has that step on that date.
         for r in rows:
+            if _hide_dnb and _dnb_only(r['heading']):
+                continue
             try:
                 kd = _json.loads(r['key_dates'] or '{}') or {}
             except Exception:
@@ -340,7 +343,12 @@ def api_pg_news_deadlines():
                             'news_id': r['id'], 'heading': r['heading'], 'body_label': r['body_label'],
                             'scope': r['scope'], 'state': st, 'source': 'news'})
         out.sort(key=lambda x: (x['date'], x.get('news_id') or 0))
-        return jsonify({'ok': True, 'days': days, 'count': len(out), 'deadlines': out})
+        try:   # website shows "Remind me — free login" only while the reminder emails are switched on (2026-11-21)
+            from pg_admin.deadline_reminders import is_enabled as _rem_on
+            reminders_on = _rem_on(conn)
+        except Exception:
+            reminders_on = False
+        return jsonify({'ok': True, 'days': days, 'count': len(out), 'deadlines': out, 'reminders_on': reminders_on})
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
@@ -412,7 +420,7 @@ def api_pg_calendar():
         else:
             codes = _codes_for_states(_viewer_states(conn, request.args.get('states')),
                                       _s(request.args.get('all')) != '0')
-        rows = CAL.events_for(conn, codes, upcoming_only=_s(request.args.get('upcoming')) == '1') if codes else []
+        rows = CAL.events_for(conn, codes, upcoming_only=_s(request.args.get('upcoming')) == '1', public=True) if codes else []
         order = {r: i for i, r in enumerate(CAL.ROUNDS)}
         by_auth = {}
         for r in rows:
@@ -532,7 +540,7 @@ def counselling_status(conn, code, today=None, headings=None):
     from pg_admin.data import calendar as CAL
     today = today or _ist_today()
     headings = headings or {}
-    rows = CAL.events_for(conn, [code])
+    rows = CAL.events_for(conn, [code], public=True)
     rorder = {r: i for i, r in enumerate(CAL.ROUNDS)}
     steps = {}
     # ON HOLD (2026-11-18, MCC Round 2 result stayed by the Madras High Court): a calendar step whose label says
