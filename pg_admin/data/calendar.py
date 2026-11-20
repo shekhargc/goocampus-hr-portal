@@ -251,8 +251,41 @@ def replace_events_for_news(conn, authority_code, news_id, inbox_id, events, who
     return st['added'] + st['changed']
 
 
-def events_for(conn, codes=None, upcoming_only=False):
-    """Active events (optionally for some authority codes), ordered by date."""
+_DNB_RE = None
+
+
+def is_dnb_only(text):
+    """True for a DNB-only step / notice ("DNB — submit NOC…", "Post-Diploma DNB — …"); False when MD/MS is
+    named too ("Choice filling (MD/MS/DNB)"). (website + founder 2026-11-21: site hides DNB for now)"""
+    global _DNB_RE
+    import re
+    if _DNB_RE is None:
+        _DNB_RE = (re.compile(r'\bDNB\b', re.I), re.compile(r'\b(MD|MS|MDS)\b', re.I))
+    t = text or ''
+    return bool(_DNB_RE[0].search(t)) and not _DNB_RE[1].search(t)
+
+
+def show_dnb(conn):
+    """Public feeds hide DNB-only steps unless pg_kv 'calendar_show_dnb' = 'on' (default hidden, like the
+    website's SHOW_DNB=false). The admin Calendar always lists them."""
+    try:
+        r = conn.execute("SELECT value FROM pg_kv WHERE key = 'calendar_show_dnb'").fetchone()
+        return bool(r and r['value'] == 'on')
+    except Exception:
+        conn.rollback()
+        return False
+
+
+def public_rows(conn, rows):
+    """Drop DNB-only steps from a public feed while DNB is hidden."""
+    if show_dnb(conn):
+        return rows
+    return [r for r in rows if not is_dnb_only(r.get('label'))]
+
+
+def events_for(conn, codes=None, upcoming_only=False, public=False):
+    """Active events (optionally for some authority codes), ordered by date. public=True (website feeds,
+    reminder emails) also hides DNB-only steps while DNB is hidden."""
     where, params = ["is_active"], []
     if codes:
         where.append("authority_code IN (" + ','.join(['?'] * len(codes)) + ")"); params.extend(codes)
@@ -267,7 +300,8 @@ def events_for(conn, codes=None, upcoming_only=False):
         "ORDER BY n.id DESC LIMIT 1) AS change_news_id FROM pg_counselling_events WHERE " + " AND ".join(where) +
         " ORDER BY start_date, CASE WHEN round = '' THEN 'zz' ELSE round END, id", params).fetchall()]
     hide = {d["id"] for d in duplicate_steps(conn, codes)}
-    return [r for r in rows if r["id"] not in hide]
+    rows = [r for r in rows if r["id"] not in hide]
+    return public_rows(conn, rows) if public else rows
 
 
 def duplicate_steps(conn, codes=None):
