@@ -466,6 +466,10 @@ def news_date_changes(conn, code, events):
             row = dict(row)
             if row['start_date'] == _d(e['start']) and (row.get('end_date') or None) == (_d(e['end']) if e['end'] else None):
                 continue
+            # the news form's single "last date" (reporting / payment) = the END of the calendar's range → same step,
+            # not a change (2026-11-21: Maharashtra joining 26–30 Nov was cut to "30 Nov" by news #404)
+            if not e['end'] and row.get('end_date') and row['end_date'] == _d(e['start']):
+                continue
             out.append((e, row, 'update'))
         else:
             out.append((e, None, 'add'))
