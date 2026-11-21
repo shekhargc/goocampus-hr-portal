@@ -496,7 +496,8 @@ def pending_news_dates(conn, codes=None):
     ensure_calendar_table(conn)
     out = []
     try:
-        rows = conn.execute("SELECT id, heading, scope, COALESCE(state,'') AS state, key_dates FROM pg_news "
+        rows = conn.execute("SELECT id, heading, scope, COALESCE(state,'') AS state, key_dates, "
+                            "CAST(COALESCE(published_at, created_at) AS DATE) AS ndate FROM pg_news "
                             "WHERE is_published AND deleted_at IS NULL AND COALESCE(key_dates,'') NOT IN ('', '{}') "
                             "ORDER BY id").fetchall()
     except Exception:
@@ -507,6 +508,14 @@ def pending_news_dates(conn, codes=None):
         if not code or (codes and code not in codes):
             continue
         for e, row, what in news_date_changes(conn, code, events_from_key_dates(n['key_dates'], n['heading'])):
+            # Only dates still worth acting on (founder 2026-11-21: 150 old items, adding them would undo revisions):
+            last = _d(e['end']) if e['end'] else _d(e['start'])
+            if last and last < date.today():
+                continue                      # already over
+            if row and n['ndate'] and row.get('source_notice_date') and n['ndate'] < row['source_notice_date']:
+                continue                      # the calendar has this step from a LATER notice
+            if row and not row.get('is_active') and row.get('manual_edit'):
+                continue                      # hidden by hand (e.g. step postponed) — don't bring it back
             out.append({'news_id': n['id'], 'heading': n['heading'], 'authority_code': code, 'event': e['event'],
                         'event_label': EVENT_LABELS.get(e['event'], e['event']), 'round': e['round'] or 'General',
                         'start': e['start'], 'end': e['end'], 'what': what,
