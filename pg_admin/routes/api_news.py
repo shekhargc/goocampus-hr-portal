@@ -224,7 +224,23 @@ DEADLINE_LABELS = {
 }
 
 
+_PLURAL_ENDS = ('options', 'choices', 'results', 'lists', 'documents', 'seats', 'orders', 'letters', 'dates')
+
+
 def _hold_label(lbl, suffix):
+    """Strip label + opens/closes, with "open"/"close" after a plural noun ("Phase-II web options open (CQ)",
+    website 2026-11-22)."""
+    out = _hold_label_raw(lbl, suffix)
+    v = suffix.strip().lower()
+    if v in ('opens', 'closes'):
+        i = out.find(' ' + v)
+        head = out[:i].rstrip() if i > 0 else ''
+        if head and head.split()[-1].lower().strip('.,') in _PLURAL_ENDS:
+            out = out[:i] + ' ' + v[:-1] + out[i + 1 + len(v):]
+    return out
+
+
+def _hold_label_raw(lbl, suffix):
     """"Choice filling — ON HOLD (Madras High Court order)" + " closes" → "Choice filling closes (on hold — Madras
     High Court order)": the opens/closes word goes before the hold text, not after it. (website 2026-11-21)"""
     import re
