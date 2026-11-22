@@ -359,7 +359,15 @@ def as_json_row(r):
                          'previous_start': r['prev_start'].isoformat() if r.get('prev_start') else '',
                          'previous_end': r['prev_end'].isoformat() if r.get('prev_end') else '',
                          'news_id': None if r.get('manual_edit') else r.get('change_news_id')}
-                        if r.get('change_count') else None)}
+                        if r.get('change_count') and not _collapse_restore(r) else None)}
+
+
+def _collapse_restore(r):
+    """True when the 'previous' date is only the LAST DAY of the current range (a news "last date" had cut the range
+    down to its end and it was restored, or the start was added back) — nothing changed for the doctor, so no
+    "Date changed — was …" tag (22 Nov 2026: Rajasthan choice filling "was 22 Nov → 14–22 Nov")."""
+    ps, pe, s, e = r.get('prev_start'), r.get('prev_end'), r.get('start_date'), r.get('end_date')
+    return bool(ps and e and s and s < e and ps == e and (pe is None or pe == e))
 
 
 def sync_from_inbox(conn, inbox_id=None):
