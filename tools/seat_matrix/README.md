@@ -369,3 +369,81 @@ cross-check, not extra seats. The reader asserts both checks; an all-zero NET GR
 college × course × area × S/NS. It is not exact per category, because the lists print the candidate's category on
 OC/pool seats. 2026-27: 1,947 seats / 1,827 rows / 36 colleges. Body `Andhra Pradesh — State Counselling` (MQ is
 its own body).
+
+## West Bengal Round 2 (`west_bengal_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/west_bengal_round2.py <round2.pdf> <round1_rows.json> <cutoffs2025.json> <out.json> [--accept-proposed]
+Body "West Bengal — Round 2 — State Counselling", authority `wbmcc`, round_no 2, list_type `vacancy` (Round 1 body
+untouched). WBMCC "Round No: 2 · Seat Matrix" (printed 21/11/2026 18:39, 107 pages, inbox 1909, sha256 pinned; 1908 =
+participating institute list, reference only). Same layout as Round 1: page_lines() and every map (COLLEGES /
+NEW_COLLEGES / PROGRAMS / QUOTAS / TYPES / column starts) are taken (ast) from west_bengal.py; only the heading says
+Round No: 2. It is Round 1 vacancies + added seats (1,026 vs 1,459 seats; of 496 college × course lines 214 equal Round 1,
+202 lower, 80 higher; 53 Round 1 lines gone), so `vacancy`; new_in_round = max(0, Round 2 − Round 1) per college +
+course (135, lower bound), placed on the lines that went up. Names not in Round 1 sit in PROPOSED_COLLEGES /
+PROPOSED_PROGRAMS (Jhargram GMC, Sarat Chandra Chattopadhyay GMC Uluberia, Deben Mahato GMC Purulia → Round 1's
+'Deben Mahato Sadar Hospital, Purulia' code, MD - Nuclear Medicine at SRIMS): a plain run stops until they are approved
+and moved into west_bengal.py; --accept-proposed for a dry run. Checks: as Round 1 (headings, page header, Page No.,
+SNo 1…756, line = Total Seats, whole-number cells, re-add) + sha256. 2026: 756 lines / 879 rows / 68 institutes —
+State 442, In-service 283, Management 123, NRI 64, Diploma (In-service) 81, DNB (In-service) 33.
+
+## Tripura Round 2 (`tripura_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/tripura_round2.py <round2.pdf> <round1_rows.json> <cutoffs2025.json> <out.json> [--accept-proposed]
+Body "Tripura — Round 2 — State Counselling", authority `dme_tripura`, round_no 2, list_type `vacancy`. "Seat Matrix of
+Round-2" dated 21-11-2026 (3 pages, inbox 1917, sha256 pinned): AGMC, TMC, IGM Hospital (NBEMS diplomas), Modern
+Psychiatric Hospital (DNB); LGBRIMH Tezpur not printed. COLLEGES / COURSES / CATS from tripura.py (ast); headings matched
+without spaces ("DR.BRAM"). Lines printed 0 are counted, not stored. New subjects in PROPOSED_COURSES ("Darmatoloty (MD)"
+→ MD - Dermatology, Physical Medicine & Rehabilitation (MD)); plain run stops until approved. AGMC Dermatology SC
+"1- WESM" = 1 SC seat. new_in_round as West Bengal (28). Checks: sha256, title, headings, Sl No, row = Total, every
+table column = its Total line, grand total 78 (news post). 2026: 78 seats (State 61, Open/TMC 17), 66 rows.
+
+## Andhra Pradesh CQ Phase-II added seats (`andhra_pradesh_cq_phase2.py`)
+    /usr/bin/python3 tools/seat_matrix/andhra_pradesh_cq_phase2.py <folder 1910-1916.pdf> <cutoffs2025.json> <round1_dump.json> <out.json> [--accept-proposed]
+Dr NTRUHS "Phase-II Seat Matrix for Enhanced/Newly Sanctioned seats" (21-11-2026, inbox 1910 notification + 1912 AU NS,
+1913 AU S, 1914 SVU NS, 1916 SVU S, 1915 Minority NS; all pinned by SHA-256). No SWI, Minority Service or NET GROUP
+files in Phase-II. Per the notification, the matrix lists ONLY the added seats. Phase-I not-reported and resignation
+vacancies are also allotted in Phase-II, but they are not published. Separate body `Andhra Pradesh — Phase 2 — State
+Counselling` (round_no 2, list_type vacancy, new_in_round = seats). The Round 1 body is untouched. Parsing, COLLEGES /
+COURSES, quota and category labels come from andhra_pradesh_cq.py. The minority sheet has an extra empty TOTAL column.
+Checks: titles, one course + one Total row per page, rows = Total row (column by column), every printed digit in the
+category columns = 2 x parsed seats, minority college Total, college codes = the Round 1 body's. New codes (proposed,
+used only with --accept-proposed): GMCP = Government Medical College, Paderu (new college, no 2025 PG cut-off) and
+PAM = MD - Palliative Medicine (1 seat, Homi Bhabha Cancer Hospital). 2026: 179 seats / 179 rows / 22 colleges, all
+MD/MS. 125 seats are on college x course lines already in Round 1 (enhanced intake), 48 open a course a college had
+no Round 1 seats in, and 6 are at Paderu.
+
+## Maharashtra Round 2 (`maharashtra_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/maharashtra_round2.py <matrix_1904.pdf> <virtual_1903.pdf> <round1_dump.json> <cutoffs2025.json> <out.json>
+Body "Maharashtra — Round 2 — State Counselling", authority `cetcell_mh`, round_no 2, list_type `vacancy` (the Round 1 body
+is untouched). Source: State CET Cell "Provisional Seat Matrix for CAP Round 2" (21.11.2026, inbox 1904, 23 pages,
+fixed-width text: per college one line per course code + quota letter S / I (IQ) / N (NRI) / A (AIQ — Vikhe Patil and
+NKP Salve, whose IQ column is headed "AIQ"), G + P (PwD) lines, 27 '|' fields, Total per college, Grand Total 1,880).
+It lists the seats open for Round 2, not the full matrix: every college is below its Round 1 seats. Labels are the Round 1
+labels (COLLEGES / SUBJECTS read from maharashtra.py; Round-2 printed names in CET_NAMES, subject code → course). ORP / ORC
+cells carry the seat's category ("1VJ", "1NC") → "<category>-Orphan". Checks: headings, date, page numbers, Sr. No, Tot
+Res per line, every course's cells = Tot., quota letter vs column, every college = its Total line (27 columns), columns =
+Grand Total, orphan A/B 8 + C 7. 2026: 1,880 seats / 1,622 rows / 54 colleges (State 1,086, In-service 273, Institutional
+269, NRI 162, AIQ 83, Minority 7; diploma 8). Above Round 1: Grant MD Paediatrics 7 vs 5, GMC Jalgaon MD Paediatrics 2 vs
+1 → new_in_round 3. The "Virtual Vacancy for round 2" list (inbox 1903, 825 seats, 53 colleges: seats held by candidates
+who did not fill the status-retention form) is outside the matrix (R2 + virtual ≤ Round 1 on every college × course);
+it is parsed and checked (per-college Total) but not stored.
+
+## Gujarat Round 2 newly added seats (`gujarat_added_r2.py`)
+    /usr/bin/python3 tools/seat_matrix/gujarat_added_r2.py <added.pdf> <round1_dump.json> <cutoffs2025.json> <out.json> [--accept-proposed]
+ACPPGMEC "Newly Added seats for MD/MS/DIPLOMA - 02" (21.11.2026, inbox 1895, pinned by SHA-256; 1894 = the 2nd-round
+choice-filling advertisement, 21-24.11.2026). Round 1 layout exactly; parsing functions and maps are executed from
+gujarat.py. Body "Gujarat — Round 2 — State Counselling" (round_no 2, list_type vacancy), every row new_in_round = seats.
+Checks: line = TOT, block = its total line, S.No., 1-MD/MS and Total lines, both p5 summaries, no IQ / diploma lines.
+2026: 305 seats, 20 colleges, all MD/MS (MD 219 incl. Anatomy + MS 86; State 187, Institutional 51, Management 47,
+NRI 20). New code PLMED (48 seats) is only PROPOSED as Banas Medical College and Research Institute, Palanpur —
+confirm, then add it to gujarat.py COLLEGES and drop --accept-proposed.
+
+## Tamil Nadu Round 2 vacancy (`tamil_nadu_round2_vacancy.py`)
+    /usr/bin/python3 tools/seat_matrix/tamil_nadu_round2_vacancy.py <vacancy.pdf> <round1_dump.json> <tn_added_r2.json> <cutoffs2025.json> <out.json> [--accept-proposed]
+Selection Committee "TENTATIVE VACANCY … AS ON 21-11-2026" (inbox 1918, 67 pages, pinned). Same tables as Round 1 but
+upright pages (rotation 0, same column rules), a TOTAL line can run on alone to the next page (p58), no CMC 50% split
+pages (CMC 50% stored with category ''), new speciality MD Sports Medicine. Maps executed from tamil_nadu.py. Body
+"Tamil Nadu — Round 2 — State Counselling" (round_no 2, list_type vacancy) = the whole Round 2 list (Round 1 vacancies +
+added seats); new_in_round = college × course × quota seats above Round 1 (put on the categories that grew).
+tamil_nadu_added_r2.py's notice-1152 totals are a cross-check only (government colleges: Round 2 − Round 1 ≤ notice per
+course, 197 of 214 visible; only MD General Medicine splits 27 open / 24 service vs the notice's 26 / 25). 2026: 1,790 seats, 61 colleges (govt 892 / self-financing 661 / private universities 237),
+new_in_round 387. 13 new colleges (11 district GMCs, Kanyakumari Medical Mission Research Center, Takshashila Medical
+College) are only PROPOSED names — confirm, add to tamil_nadu.py NEW_COLLEGES, drop --accept-proposed.
