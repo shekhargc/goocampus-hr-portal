@@ -359,7 +359,15 @@ def as_json_row(r):
                          'previous_start': r['prev_start'].isoformat() if r.get('prev_start') else '',
                          'previous_end': r['prev_end'].isoformat() if r.get('prev_end') else '',
                          'news_id': None if r.get('manual_edit') else r.get('change_news_id')}
-                        if r.get('change_count') else None)}
+                        if r.get('change_count') and not _collapse_restore(r) else None)}
+
+
+def _collapse_restore(r):
+    """True when the 'previous' date is only the LAST DAY of the current range (a news "last date" had cut the range
+    down to its end and it was restored, or the start was added back) — nothing changed for the doctor, so no
+    "Date changed — was …" tag (22 Nov 2026: Rajasthan choice filling "was 22 Nov → 14–22 Nov")."""
+    ps, pe, s, e = r.get('prev_start'), r.get('prev_end'), r.get('start_date'), r.get('end_date')
+    return bool(ps and e and s and s < e and ps == e and (pe is None or pe == e))
 
 
 def sync_from_inbox(conn, inbox_id=None):
@@ -465,6 +473,10 @@ def news_date_changes(conn, code, events):
         if row:
             row = dict(row)
             if row['start_date'] == _d(e['start']) and (row.get('end_date') or None) == (_d(e['end']) if e['end'] else None):
+                continue
+            # the news form's single "last date" (reporting / payment) = the END of the calendar's range → same step,
+            # not a change (2026-11-21: Maharashtra joining 26–30 Nov was cut to "30 Nov" by news #404)
+            if not e['end'] and row.get('end_date') and row['end_date'] == _d(e['start']):
                 continue
             out.append((e, row, 'update'))
         else:

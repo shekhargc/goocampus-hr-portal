@@ -230,6 +230,19 @@ def _hold_label(lbl, suffix):
     import re
     m = re.search(r'\s*[—–-]\s*on hold\b\s*(?:\((.*)\))?\s*$', lbl or '', re.I)
     if not m:
+        # a trailing bracketed note: "Choice filling & locking (opens 7 PM on 21 Nov)" → the verb goes before it
+        # ("… opens (7 PM on 21 Nov)"); a note that names the OTHER end ("opens …" on the closes card) is dropped.
+        b = re.search(r'\s*\(([^()]*)\)\s*$', lbl or '')
+        if b and suffix.strip():
+            base, note, verb = lbl[:b.start()].strip(), b.group(1).strip(), suffix.strip().lower()
+            first = note.split(' ', 1)[0].lower()
+            if first in ('opens', 'closes', 'open', 'close', 'from', 'till', 'until', 'upto', 'up'):
+                if not first.startswith(verb[:4]) and not (verb == 'opens' and first == 'from') \
+                        and not (verb == 'closes' and first in ('till', 'until', 'upto', 'up')):
+                    return f"{base}{suffix}"
+                if first.startswith(verb[:4]):
+                    note = note.split(' ', 1)[1] if ' ' in note else ''
+            return f"{base}{suffix}" + (f" ({note})" if note else '')
         return f"{lbl}{suffix}"
     why = (m.group(1) or '').strip()
     return f"{lbl[:m.start()].strip()}{suffix} (on hold{' — ' + why if why else ''})"
