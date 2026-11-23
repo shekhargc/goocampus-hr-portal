@@ -636,7 +636,8 @@ def counselling_status(conn, code, today=None, headings=None):
         flat.append(item)
     out_rounds = []
     for rnd in sorted(rounds, key=lambda x: rorder.get(x, 50)):
-        its = sorted(rounds[rnd], key=lambda i: (STEP_ORDER.index(i['step']), i['start']))
+        # date order first (Chhattisgarh / Karnataka verify documents AFTER the result), step order breaks ties
+        its = sorted(rounds[rnd], key=lambda i: (i['start'], STEP_ORDER.index(i['step'])))
         if all(i['status'] == 'done' for i in its):
             rst = 'done'
         elif all(i['status'] == 'upcoming' for i in its):
