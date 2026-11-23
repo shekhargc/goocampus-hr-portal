@@ -515,6 +515,21 @@ def _template_steps(code, rnd):
     return [s for s in TEMPLATE_STEPS if s != 'registration' or rnd == 'Round 1' or code == 'mcc']
 
 
+def _date_order(steps):
+    """Dated steps by start date (step order breaks ties) — Chhattisgarh verifies documents AFTER the result. A step
+    with no date yet keeps its usual place: right after the nearest earlier (in STEP_ORDER) step that has a date."""
+    idx = lambda i: STEP_ORDER.index(i['step']) if i['step'] in STEP_ORDER else 99
+    by_order = sorted(steps, key=idx)
+    keyed, last = [], ''
+    for i in by_order:
+        if i.get('start'):
+            last = i['start']
+            keyed.append(((i['start'], idx(i)), i))
+        else:
+            keyed.append(((last, idx(i)), i))
+    return [i for _, i in sorted(keyed, key=lambda x: x[0])]
+
+
 def add_template(code, st):
     """Fill a counselling_status result with the steps / rounds that have no dates yet: status 'awaited',
     start / end None, expected True (a round with no dates at all is status 'awaited'). Dated steps untouched."""
@@ -547,7 +562,7 @@ def add_template(code, st):
                 steps.append({'round': rnd, 'step': stp, 'label': CAL.EVENT_LABELS.get(stp, stp),
                               'bar_label': BAR_STEPS.get(stp), 'start': None, 'end': None, 'time': None, 'note': None,
                               'status': 'awaited', 'expected': True, 'news_id': None, 'revised': None})
-        steps.sort(key=lambda i: STEP_ORDER.index(i['step']) if i['step'] in STEP_ORDER else 99)
+        steps = _date_order(steps)
         if cur:
             # a round whose dated steps are all over but which still has awaited steps isn't finished — unless a
             # LATER round has already started (then those steps were never going to get dates; 2026-11-14:
