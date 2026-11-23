@@ -224,7 +224,23 @@ DEADLINE_LABELS = {
 }
 
 
+_PLURAL_ENDS = ('options', 'choices', 'results', 'lists', 'documents', 'seats', 'orders', 'letters', 'dates')
+
+
 def _hold_label(lbl, suffix):
+    """Strip label + opens/closes, with "open"/"close" after a plural noun ("Phase-II web options open (CQ)",
+    website 2026-11-22)."""
+    out = _hold_label_raw(lbl, suffix)
+    v = suffix.strip().lower()
+    if v in ('opens', 'closes'):
+        i = out.find(' ' + v)
+        head = out[:i].rstrip() if i > 0 else ''
+        if head and head.split()[-1].lower().strip('.,') in _PLURAL_ENDS:
+            out = out[:i] + ' ' + v[:-1] + out[i + 1 + len(v):]
+    return out
+
+
+def _hold_label_raw(lbl, suffix):
     """"Choice filling — ON HOLD (Madras High Court order)" + " closes" → "Choice filling closes (on hold — Madras
     High Court order)": the opens/closes word goes before the hold text, not after it. (website 2026-11-21)"""
     import re
@@ -620,7 +636,8 @@ def counselling_status(conn, code, today=None, headings=None):
         flat.append(item)
     out_rounds = []
     for rnd in sorted(rounds, key=lambda x: rorder.get(x, 50)):
-        its = sorted(rounds[rnd], key=lambda i: (STEP_ORDER.index(i['step']), i['start']))
+        # date order first (Chhattisgarh / Karnataka verify documents AFTER the result), step order breaks ties
+        its = sorted(rounds[rnd], key=lambda i: (i['start'], STEP_ORDER.index(i['step'])))
         if all(i['status'] == 'done' for i in its):
             rst = 'done'
         elif all(i['status'] == 'upcoming' for i in its):

@@ -795,7 +795,7 @@ def api_news_edit():
     """GET  /api/pg/news/edit?id=N  (X-News-Key) → the post's heading / summary / body_text as stored.
     POST /api/pg/news/edit  (X-News-Key) {news_id, by, edits: [{field, old, new}] | set: {field: text},
                                           attach_inbox_id: N (only for a news with no file yet),
-                                          set_date: 'YYYY-MM-DD', replace_with_inbox_id: N (reissued notice),
+                                          set_date: 'YYYY-MM-DD', replace_with_inbox_id: N (reissued notice), set_source_url: 'https://…',
                                           key_dates_replace: {old YYYY-MM-DD: new YYYY-MM-DD}}
     Text-only fix of an already-posted news item on the founder's behalf (founder 2026-11-05: "make these changes
     on my behalf"). Touches ONLY heading / summary / body_text — never dates, PDF, publish state or emails; each
@@ -856,6 +856,19 @@ def api_news_edit():
         # only unlinked from this news. Never sends email / WhatsApp. Logged like every other edit.
         # set_state 'Jammu and Kashmir' → re-scope a post that went out as All India by mistake (the J&K '&' spelling
         # bug, founder 2026-11-20). State must be one of the canonical states; never emails / WhatsApps; logged.
+        # set_source_url: replace the post's "Official notice" link when the authority removed the file it pointed to
+        # (CENTAC re-uploaded #428's notice 2026-11-23 → old Drive link 404). http(s) only; logged; never emails.
+        su = d.get('set_source_url')
+        if su is not None:
+            su = str(su).strip()
+            if not su.startswith(('https://', 'http://')) or len(su) > 500 or any(c.isspace() for c in su):
+                return jsonify({'ok': False, 'error': 'set_source_url must be one http(s) link'}), 400
+            old = conn.execute("SELECT COALESCE(source_url,'') AS u FROM pg_news WHERE id = ?", (nid,)).fetchone()['u']
+            if old != su:
+                conn.execute("UPDATE pg_news SET source_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (su, nid))
+                conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) VALUES (?,?,?,?,?)",
+                             (nid, 'source_url', old, su, who))
+                changed.append('source_url')
         ss = str(d.get('set_state') or '').strip()
         if ss:
             from pg_admin.routes.users_admin import _canonical_states
@@ -924,12 +937,12 @@ def api_news_edit():
                          (nid, 'pdf', f"doc {old['authority_doc_id']} blob={bool(old['blob'])} r2={old['r2']}",
                           f'doc {doc} (inbox {rid}, reissued)', who))
             changed.append('pdf')
-        if changed and not [f for f in changed if f not in ('pdf', 'published_at', 'key_dates', 'scope')]:
+        if changed and not [f for f in changed if f not in ('pdf', 'published_at', 'key_dates', 'scope', 'source_url')]:
             conn.commit()
             return jsonify({'ok': True, 'changed': changed})
         if not changed:
             return jsonify({'ok': True, 'changed': []})
-        for f in [f for f in changed if f not in ('pdf', 'published_at', 'key_dates', 'scope')]:
+        for f in [f for f in changed if f not in ('pdf', 'published_at', 'key_dates', 'scope', 'source_url')]:
             conn.execute(f"UPDATE pg_news SET {f} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new[f], nid))
             conn.execute("INSERT INTO pg_news_edit_log (news_id, field, old_text, new_text, edited_by) "
                          "VALUES (?,?,?,?,?)", (nid, f, cur[f], new[f], who))
