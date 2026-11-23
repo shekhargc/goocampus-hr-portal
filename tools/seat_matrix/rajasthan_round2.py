@@ -167,26 +167,30 @@ for k in ('p1_total', 'p2_total', 'p3_total'):
 dp = fitz.open(DIP)
 tabs = dp[0].find_tables().tables
 t = [x for tb in tabs for x in tb.extract()]
-if 'Round-2' not in clean(t[0][1]):
+# 14.11 layout: S.No | hospital | 8 diplomas | total.  Revised (22.11, "Round-2 Revised Provisional"): no S.No column.
+o = 0 if 'Name of Hospital' in clean(t[1][0]) else 1
+if 'Round-2' not in clean(t[0][o]):
     raise SystemExit('diploma: not the Round 2 matrix')
+checks['diploma_layout'] = 'revised (no S.No column)' if o == 0 else 'with S.No column'
 for i, raw in enumerate(DIPLOMA_RAW):
-    if raw.lower() not in clean(t[1][2 + i]).lower():
-        raise SystemExit(f'diploma column {i} is {t[1][2 + i]!r}')
+    if raw.lower() not in clean(t[1][1 + o + i]).lower():
+        raise SystemExit(f'diploma column {i} is {t[1][1 + o + i]!r}')
 dip, dip_tot, k = 0, None, 2
 while k < len(t):
     r = t[k]; k += 1
-    if not clean(r[0]).isdigit():
-        if 'Total' in clean(r[1]):
-            dip_tot = num(r[10]); break
-        if 'DNB' in clean(r[1]):
-            break
+    name_cell = clean(r[o])
+    if 'DNB' in name_cell:
+        break
+    if 'Total' in name_cell:
+        dip_tot = num(r[9 + o]); continue
+    if (o == 1 and not clean(r[0]).isdigit()) or not name_cell:
         continue
-    hosp = clean(r[1])
+    hosp = name_cell
     if hosp not in HOSPITALS:
         raise SystemExit(f'unknown hospital {hosp!r}')
     name = HOSPITALS[hosp] or NEW_NAMES[hosp]
-    vals = [num(r[2 + i]) for i in range(8)]
-    if sum(vals) != num(r[10]):
+    vals = [num(r[1 + o + i]) for i in range(8)]
+    if sum(vals) != num(r[9 + o]):
         raise SystemExit(f'diploma {hosp}: row total')
     for course, n in zip(DIPLOMA, vals):
         if n:
@@ -198,10 +202,10 @@ if checks['diploma_total'][0] != checks['diploma_total'][1]:
 dnb = 0
 for r in t[k:]:
     c = [clean(x) for x in r]
-    if c[0].isdigit():
-        if 'Jaipuria' not in c[1]:
-            raise SystemExit(f'DNB hospital {c[1]!r}')
-        for course, n in (('DNB - Emergency Medicine (Post-MBBS)', num(c[2])), ('DNB - Family Medicine (Post-MBBS)', num(c[3]))):
+    if (o == 1 and c[0].isdigit()) or (o == 0 and 'Jaipuria' in c[0]):
+        if 'Jaipuria' not in c[o]:
+            raise SystemExit(f'DNB hospital {c[o]!r}')
+        for course, n in (('DNB - Emergency Medicine (Post-MBBS)', num(c[1 + o])), ('DNB - Family Medicine (Post-MBBS)', num(c[2 + o]))):
             if n:
                 rows.append({'college': 'Government RDBP Jaipuria Hospital, Jaipur, Rajasthan', 'course': course,
                              'quota': 'DNB Quota (In-service)', 'seats': n, 'section': 'dnb'})
