@@ -93,3 +93,7 @@ column headed "NEET PERCENTILE" is the NEET score. Words are used, not find_tabl
 The FF (21) / PwD (1) / ESM (4) / MQ-Telugu (3) sub-lists are subsets of GQ-ALL / MQ-ALL (the reader refuses them);
 the "Overall list of candidates applied" (1,250, AIR order, no merit rank; 150 are in neither list, 71 of them below
 the 226 cut-off) is not a merit list and is not read. authority_code is `centac` (pg_admin/authorities.py).
+
+## Telangana CQ addendum 23.11.2026 (`read_knruhs_tg_addendum_2311.py`)
+5 court-order candidates (only S.No / rank / roll printed) appended to the CQ list (append + finish) at the S.No above
+their AIR; 3,619 → 3,624, 0 AIR mismatches. Base for placement = `read_knruhs_tg.py` output of the 13.11 final list.

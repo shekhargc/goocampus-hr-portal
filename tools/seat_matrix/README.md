@@ -460,3 +460,9 @@ for in-service candidates, which AMRU says are ADDED to the vacancies. Labels as
 `DNB - <course> (Post-MBBS)`, section dnb, In-service Quota (GDO). new_in_round = all of (B) + any vacancy above the
 Round 1 seats (none). 2026: 134 vacancies (Direct 34, GDO 41, Management 45, NRI 14) + 92 MD/MS + 22 DNB = 248.
 
+
+## Telangana Round 2 / Phase 2 vacancies (`telangana_round2.py`) — 2026-11-24
+KNRUHS CQ "Vacancies for second phase of counselling" (23.11.2026, inbox 1947): code-based layout (COLL/CRS/FEE S|NS/
+SPCAT PHO + 24 category columns). Body "Telangana — Round 2 — State Counselling" (vacancy), 741 seats / 44 colleges,
+bridge built like Round 1 (571/571 shared lines identical). College code AIMD (20 seats) is unknown (not in the Phase-1
+allotment, Round 1 matrix or 2025 cut-offs) → HELD OUT until its name is confirmed; add it to HOLD→COLLEGES then re-run.
