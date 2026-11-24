@@ -41,7 +41,8 @@ doc = fitz.open(PDF)
 if len(doc) != 1:
     raise SystemExit(f'expected 1 page, got {len(doc)}')
 t = grids(doc[0])[0]
-if clean(t[0][0]) != 'Provisional Vacant Seat Matrix for Second Round of NEET (PG)-2026':
+if clean(t[0][0]) not in ('Provisional Vacant Seat Matrix for Second Round of NEET (PG)-2026',
+                          'Revised Provisional Vacant Seat Matrix for Second Round of NEET (PG)-2026'):   # revised 23.11.2026
     raise SystemExit(f'title changed: {t[0][0]!r}')
 if [clean(x) for x in t[1]] != ['Sl. No.', 'Name of the Institute / College', 'Sl. No.', 'Name of the Course',
                                  '50% State Quota Seats', 'Vacancy For 2nd Round', 'In Service']:

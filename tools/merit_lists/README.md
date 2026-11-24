@@ -80,6 +80,9 @@ AMRU "Provisional Merit list of MD/MS/DNB 1st Round Counselling 2026" (notice 07
 with quota per row: HP Direct / In-service / Management / NRI. state_rank = merit no.; air = printed All India Merit
 Rank; score = "NEET Score + Service Incentive" (the merit basis; checked = NEET x (1 + incentive %)), so AIR is out of
 order only where the incentive lifts in-service rows. Application no. and name are never read.
+2nd round (23.11.2026, notice -7312, inbox 1934): "Merit list of MD/MS/DNB 2nd Round Counselling 2026-27", auto-detected →
+`amru_hp_r2.json`, its own list "MD/MS/DNB 2nd Round Merit List" (Round 1 list kept). 15 columns: an extra
+service-incentive AREA column (district, '0' when no incentive) is dropped. 826 rows, 0 AIR mismatches.
 
 ## Puducherry (`read_centac_py.py`) — 2026-11-08
 CENTAC "Draft Merit list of PG NEET Medical (M.D./M.S.) courses (2026-2027)", published 06-11-2026. The web page

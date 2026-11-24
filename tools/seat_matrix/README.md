@@ -281,6 +281,8 @@ the same college + course (round1_rows.json = the stored Round 1 body, MD/MS + D
 Checks: headings, Sl. No., every institute's Total line (3 columns), vacancy ≤ seats, new seats ≤ vacancy.
 2026: 66 State Quota + 2 In-service (Sadar Hospital DNB Pathology) = 68 vacancies; the matrix column is 155 vs 129 in
 Round 1 (26 new seats: RIMS Ranchi 17, SNMMCH Dhanbad 9).
+REVISED 23.11.2026 (inbox 1938, title "Revised Provisional Vacant Seat Matrix …", accepted by the reader): 70 vacancies
+(RIMS MS General Surgery 2 → 3, MS Obstetrics & Gynaecology 0 → 1); re-posted to the same body.
 
 ## Telangana (`telangana.py`)
     /usr/bin/python3 tools/seat_matrix/telangana.py <min_ns.pdf> <min_s.pdf> <ns_clin.pdf> <s_clin.pdf> <s_nonclin.pdf> <ns_nonclin.pdf> <cutoffs2025.json> <out.json>
@@ -447,3 +449,14 @@ tamil_nadu_added_r2.py's notice-1152 totals are a cross-check only (government c
 course, 197 of 214 visible; only MD General Medicine splits 27 open / 24 service vs the notice's 26 / 25). 2026: 1,790 seats, 61 colleges (govt 892 / self-financing 661 / private universities 237),
 new_in_round 387. 13 new colleges (11 district GMCs, Kanyakumari Medical Mission Research Center, Takshashila Medical
 College) are only PROPOSED names — confirm, add to tamil_nadu.py NEW_COLLEGES, drop --accept-proposed.
+
+## Himachal Pradesh Round 2 (`himachal_pradesh_round2.py`)
+    /usr/bin/python3 tools/seat_matrix/himachal_pradesh_round2.py <vacancy.pdf> <round1_dump.json> <cutoffs2025.json> <out.json> [<increased.pdf>]
+Body "Himachal Pradesh — Round 2 — State Counselling" (authority `amru_hp`, round_no 2, list_type vacancy) = (A) AMRU
+"Provisional Seat Vacancy for MD/MS/DNB 2nd Round Counselling 2026" (23.11.2026, inbox 1945, pp 1-19: one block per
+college × course with nested Category/Seats tables per quota, read by x position) + (B) the increased-seat notice of the
+same date (pp 20-25 = inbox 1933, checked text-for-text): increased 50% State Quota MD/MS seats + post-MBBS DNB seats
+for in-service candidates, which AMRU says are ADDED to the vacancies. Labels as the Round 1 body; post-MBBS DNB →
+`DNB - <course> (Post-MBBS)`, section dnb, In-service Quota (GDO). new_in_round = all of (B) + any vacancy above the
+Round 1 seats (none). 2026: 134 vacancies (Direct 34, GDO 41, Management 45, NRI 14) + 92 MD/MS + 22 DNB = 248.
+
