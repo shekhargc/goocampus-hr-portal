@@ -650,9 +650,15 @@ def counselling_status(conn, code, today=None, headings=None):
     for rnd, d in pub_on.items():
         if rnd in rounds_known and (rnd, 'result') not in steps:
             steps[(rnd, 'result')] = {'start': d, 'end': d, 'time': None, 'news_id': None, 'revised': None}
+    # rounds whose result list is loaded (and not older than the result step) — their seat-processing / choice-locking
+    # steps are over too (website 2026-11-24: TN read "Next: Seat allotment processing · Today" with R2 result out)
+    result_out = {rnd for (rnd, ev), v in steps.items()
+                  if ev == 'result' and rnd in published and pub_on.get(rnd, v['start']) >= v['start']}
     rounds, flat = {}, []
     for (rnd, ev), v in steps.items():
         st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
+        if ev in ('seat_processing', 'choice_locking') and rnd in result_out:
+            st = 'done'
         # the loaded list counts only if it isn't OLDER than the step (website 2026-11-24: Rajasthan's 23 Nov
         # INDICATIVE list marked the 24 Nov "provisional allotment list" step done before RUHS published it)
         by_list = ev == 'result' and rnd in published and pub_on.get(rnd, v['start']) >= v['start']
