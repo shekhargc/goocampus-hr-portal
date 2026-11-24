@@ -11,7 +11,7 @@ out a State seat for a non-Rajasthan candidate when the seat type is not printed
 Remark → round_status:
   'Fresh Allotment in Round 2'                              → fresh
   'Upgraded'                                                → upgraded (prev_* = the Round 1 seat)
-  'Filled choice not promoted' / 'Did not opt for upgradation' → retained (the line prints the kept Round 1 seat)
+  'Filled choice not promoted' / 'Retained R1 Seat' / 'Did not opt for upgradation' → retained (the line prints the kept Round 1 seat)
 Quota / category / course spellings are the Round 1 reader's (tools/results/rajasthan.py, read from its source).
 
 Seat type not printed: long college names are clipped in the PDF cell, so "(Seat Type)" is lost (and the name may be
@@ -55,7 +55,8 @@ HEAD = ['S. No.', 'Reg ID', 'NEET Roll No', 'Candidate Name', 'Gender', 'Domicil
         'Remark', 'Service Status', 'State Merit Rank', 'All India Rank', 'R1 Allotted College (Seat Type)',
         'R1 Allotted Course', 'R1 Joining Status']
 REMARK = {'Fresh Allotment in Round 2': 'fresh', 'Upgraded': 'upgraded',
-          'Filled choice not promoted': 'retained', 'Did not opt for upgradation': 'retained'}
+          'Filled choice not promoted': 'retained', 'Did not opt for upgradation': 'retained',
+          'Retained R1 Seat': 'retained'}   # provisional 24.11 list's wording for "Filled choice not promoted"
 JOIN = {'', 'Joined', 'Not Reported', 'Resigned'}
 SEAT_NAME = {'Government': 'Government Quota', 'State': 'State Quota', 'AI': 'All India Quota',
              'Management': 'Management Quota'}
@@ -182,6 +183,7 @@ if unknown:
 
 # ── Round 1 row of the same candidate (by AI rank + printed Round 1 seat) ──
 link = collections.Counter()
+r1_conflicts = []
 for x in parsed:
     x['r1'] = None
     if not x['p_course']:
@@ -196,7 +198,9 @@ for x in parsed:
             raise SystemExit(f'S.No {x["sno"]}: Round 1 seat not found in {R1} (AI rank {x["air"]})')
     if x['r1'] and x['p_seat'] and NAME_SEAT.get(x['r1']['quota'].split('-')[0]) not in (None, x['p_seat']):
         if not x['r1']['quota'].startswith(('Diploma', 'DNB')):
-            raise SystemExit(f'S.No {x["sno"]}: printed R1 seat type {x["p_seat"]} ≠ Round 1 result {x["r1"]["quota"]}')
+            # the 24.11 provisional list prints one such line (R1 "Management" vs the Round 1 result's All India
+            # seat): the Round 1 RESULT wins as prev_*; listed in checks.r1_seat_type_conflicts, not fatal
+            r1_conflicts.append({'sno': x['sno'], 'printed_r1_seat': x['p_seat'], 'round_1_result_quota': x['r1']['quota']})
     if x['rs'] == 'retained' and (x['inst'], x['course']) != (x['p_inst'], x['p_course']):
         raise SystemExit(f'S.No {x["sno"]}: retained but the Round 2 seat ≠ the Round 1 seat')
 
@@ -307,7 +311,7 @@ checks = {'lines': len(lines), 'sno_1_to_n': True, 'lines_per_page': dict(per_pa
           'not_in_2025_spellings': not_2025, 'colleges': len({x['institute_raw'] for x in rows}),
           'state_rank': [min(x['rank'] for x in rows), max(x['rank'] for x in rows)],
           'ai_rank': [min(x['rank_ai'] for x in rows), max(x['rank_ai'] for x in rows)], 'rank_ai': rank_checks,
-          'matrix': matrix_check}
+          'matrix': matrix_check, 'r1_seat_type_conflicts': r1_conflicts}
 title = m_title.group(1).title()
 out = {'authority_code': 'ruhs', 'round': opt.get('--round') or f'Round {rnd_no}',
        'round_order': int(opt.get('--round-order') or rnd_no), 'status': status,
