@@ -653,7 +653,10 @@ def counselling_status(conn, code, today=None, headings=None):
     rounds, flat = {}, []
     for (rnd, ev), v in steps.items():
         st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
-        if ev == 'result' and rnd in published:
+        # the loaded list counts only if it isn't OLDER than the step (website 2026-11-24: Rajasthan's 23 Nov
+        # INDICATIVE list marked the 24 Nov "provisional allotment list" step done before RUHS published it)
+        by_list = ev == 'result' and rnd in published and pub_on.get(rnd, v['start']) >= v['start']
+        if by_list:
             st = 'done'
         item = {'round': rnd or None, 'step': ev, 'label': CAL.EVENT_LABELS.get(ev, ev),
                 'bar_label': BAR_STEPS.get(ev), 'start': v['start'].isoformat(), 'end': v['end'].isoformat(),
@@ -661,7 +664,7 @@ def counselling_status(conn, code, today=None, headings=None):
                 'status': st, 'news_id': v['news_id'], 'revised': v['revised'],
                 'on_hold': (rnd, ev) in holds, 'hold_reason': holds.get((rnd, ev)) or None,
                 # result list loaded on the portal → 'provisional' | 'final' (website: "Provisional result out")
-                'result_status': (published.get(rnd) or 'provisional') if (ev == 'result' and rnd in published) else None}
+                'result_status': (published.get(rnd) or 'provisional') if by_list else None}
         rh = next((holds[k] for k in holds if k[0] == rnd and k[1] != ev), None)
         item['subject_to_hold'] = rh if (rh and not item['on_hold'] and st != 'done') else None
         rounds.setdefault(rnd, []).append(item)
