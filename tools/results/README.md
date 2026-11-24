@@ -307,7 +307,11 @@ Maps are read from `tamil_nadu_r1.py`'s source, plus 13 Round 2 colleges + MD Sp
 inside the seat cell — the split is the line break where the course part is a known course. `rank` = GRANK;
 `rank_ai` from the stored Round 1 result of the same list by GRANK (`--r1`: rows of /api/pg/results via the staging
 seatmatrix-dump `resget` proxy) or from merit-list bridge files (`--gq-bridge` / `--mq-bridge`, as in Round 1).
-Candidates with no Round 1 seat in that list need the bridge (TN lists print no AIR; the merit lists need the NBEMS
-roll → AIR file) — without it 750 of 2,037 rows have no rank_ai, so do not ingest until the bridge files are rebuilt.
+Candidates with no Round 1 seat in that list need the bridge (TN lists print no AIR). Rebuilt 2026-11-24: NBEMS roll →
+AIR from "NEET-PG 2026 Published Result_DS.pdf" (273,096 lines, 265,959 ranked; no names in it) → scratchpad
+neet_result/neet2026.json; then `MERIT_OUT=… sm4_tn_build.py` from the stored inbox copies (GQ 1444 + addenda 1470 /
+1504 = A / 1517 = B / 1559; MQ 1445 + 1558) → GQ 7,969 / MQ 3,644. LOADED 24 Nov: 2,037 rows (fresh 1,085 / upgraded
+261 / retained 691), rank_ai 2,036 (one MQ line prints GRANK 0), every rank_ai = the merit-list AIR for that GRANK.
+Team Excel: `cutoff_excel.py … --both-ranks "TN merit rank"` (AIR columns first, then the TN merit rank).
     /usr/bin/python3 tools/results/tamil_nadu_r2.py <gq.pdf> <mq.pdf> <out.json> --r1 <tn_r1_rows.json>
         [--gq-bridge dmer_tn_gq.json --mq-bridge dmer_tn_mq.json] [--seat-matrix <TN R2 matrix dump.json>]

@@ -2,6 +2,7 @@
 college × course × quota × allotted category, from the JSON a results reader writes (mcc.py / mcc_r2.py / state readers).
 
     cutoff_excel.py <rows.json> <out.xlsx> --title "MCC NEET-PG 2026 Round 2" [--prev <earlier_round_rows.json>]
+                    [--both-ranks "TN merit rank"]   (state lists: AIR columns first, then the state rank)
 
 Sheets
   Read me          — source, rules, counts
@@ -26,6 +27,7 @@ args = sys.argv[1:]
 SRC, OUT = args[0], args[1]
 TITLE = args[args.index('--title') + 1] if '--title' in args else 'Allotment result'
 PREV = args[args.index('--prev') + 1] if '--prev' in args else None
+STATE_LABEL = args[args.index('--both-ranks') + 1] if '--both-ranks' in args else None   # e.g. 'TN merit rank'
 
 rows = json.load(open(SRC))['rows']
 if PREV:
@@ -47,8 +49,9 @@ for r in rows:
     st = r.get('round_status') or ''
     if st in g:
         g[st] += 1
-    if competes(r):
+    if competes(r) and r['rank'] is not None:
         g['ranks'].append(r['rank'])
+        g.setdefault('pairs', []).append((r['rank'], r.get('rank_ai')))
 
 short = lambda n: (n or '').split(',')[0].strip()   # MCC prints "Name, City,Address" — name = before the first comma
 
@@ -87,6 +90,10 @@ if later_round:
     lines += [['Round 2+ rule', 'Only FRESH and UPGRADED seats set the closing rank. Candidates who kept their '
                                 'earlier seat (retained) did not compete in this round; they are counted in '
                                 '"Seats held after round".']]
+if STATE_LABEL:
+    lines += [['Both ranks', f'AIR first, {STATE_LABEL} after it. The list allots by {STATE_LABEL}; the AIR shown is '
+                             f'that same candidate\'s NEET-PG All-India rank (opening AIR = AIR of the opening '
+                             f'candidate, closing AIR = AIR of the closing candidate), from the merit lists.']]
 lines += [['Names', 'No candidate names are in this file.']]
 for l in lines:
     readme.append(l)
@@ -94,18 +101,24 @@ readme['A1'].font = Font(bold=True, size=14, color='1E3A8A')
 readme.column_dimensions['A'].width = 26
 readme.column_dimensions['B'].width = 110
 
-hdr = ['S.No', 'College / Institute', 'Course', 'Quota', 'Allotted category', 'Opening rank', 'Closing rank',
-       'Seats allotted this round']
+hdr = ['S.No', 'College / Institute', 'Course', 'Quota', 'Allotted category'] + (
+    ['Opening AIR', 'Closing AIR', f'Opening {STATE_LABEL}', f'Closing {STATE_LABEL}'] if STATE_LABEL else
+    ['Opening rank', 'Closing rank']) + ['Seats allotted this round']
 if later_round:
     hdr += ['Fresh', 'Upgraded', 'Retained (kept earlier seat)', 'Seats held after round']
 hdr += ['Full name + address as published']
-wid = [7, 55, 42, 30, 18, 13, 13, 14] + ([9, 11, 16, 14] if later_round else []) + [90]
+wid = [7, 55, 42, 30, 18] + ([12, 12, 14, 14] if STATE_LABEL else [13, 13]) + [14] + ([9, 11, 16, 14] if later_round else []) + [90]
 for dnb, name in ((False, 'MD-MS & Diploma'), (True, 'DNB')):
     data = []
     for k in sorted((k for k in groups if k[0] == dnb), key=lambda k: (k[1], k[2], k[3], k[4])):
         g = groups[k]
         rk = g['ranks']
-        line = [short(k[1]), k[2], k[3], k[4], min(rk) if rk else None, max(rk) if rk else None, len(rk)]
+        if STATE_LABEL:
+            pr = sorted(g.get('pairs', []))
+            line = [short(k[1]), k[2], k[3], k[4], pr[0][1] if pr else None, pr[-1][1] if pr else None,
+                    pr[0][0] if pr else None, pr[-1][0] if pr else None, len(rk)]
+        else:
+            line = [short(k[1]), k[2], k[3], k[4], min(rk) if rk else None, max(rk) if rk else None, len(rk)]
         if later_round:
             line += [g['fresh'], g['upgraded'], g['retained'], g['held']]
         data.append([len(data) + 1] + line + [k[1]])
