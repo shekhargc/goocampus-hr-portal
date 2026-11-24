@@ -346,14 +346,23 @@ def rank_state(conn, user_id):
             'corrections_left': left}
 
 
-def summary(conn):
-    """Per published round: doctors with the needed rank, how many got a seat (MD/MS vs DNB), by doctor type."""
+def summary(conn, overall=None):
+    """Per published round: doctors with the needed rank, how many got a seat (MD/MS vs DNB), by doctor type.
+    Pass a dict as `overall` to also get the season total (founder 2026-11-24): distinct doctors with at least one
+    seat in any published round, by doctor type — the same doctors the "Allotted" filter lists."""
     from pg_admin.routes.users_admin import _category_case
     users = [dict(r) for r in conn.execute(
         f"SELECT u.id, u.neet_pg_rank, u.home_state_rank, u.state, ({_category_case('u')}) AS cat "
         f"FROM pg_users u").fetchall()]
     allots = for_users(conn, users, include_not_me=False)
     auths = _authorities()
+    if overall is not None:
+        by = {c: 0 for c in ('internal', 'paid', 'free', 'team')}
+        for u in users:
+            if allots.get(u['id']):
+                by[u['cat']] = by.get(u['cat'], 0) + 1
+        overall.update({'doctors': sum(by.values()), 'by_type': by,
+                        'with_rank': sum(1 for u in users if (u['neet_pg_rank'] or 0) > 0)})
     rows = []
     for rd in _rounds(conn):
         code = rd['authority_code']

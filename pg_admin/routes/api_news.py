@@ -623,18 +623,33 @@ def counselling_status(conn, code, today=None, headings=None):
                         'revised': rev}
     if not steps:
         return None
+    # (moved below: `published` is needed to add a result step the calendar doesn't carry)
     # A round whose result is already PUBLISHED on the portal (results page) has its result step done from that
     # day — the calendar only dates it, so on result day it read "Result / seat allotment open — closes 20 Nov"
     # after MCC's final list was out (website session 2026-11-20). {round: 'final' | 'provisional'}
-    published = {}
+    import datetime as _dt
+    published, pub_on = {}, {}
     try:
         from pg_admin.routes.results_api import YEAR as _RY
-        for r in conn.execute("SELECT round, status FROM pg_results_source WHERE authority_code = ? AND academic_year = ? "
-                              "AND COALESCE(is_hidden,0) = 0", (code, _RY)).fetchall():
+        for r in conn.execute("SELECT round, status, published_on, uploaded_at FROM pg_results_source "
+                              "WHERE authority_code = ? AND academic_year = ? AND COALESCE(is_hidden,0) = 0",
+                              (code, _RY)).fetchall():
             published[r['round']] = r['status'] or ''
+            try:
+                pub_on[r['round']] = _dt.date.fromisoformat((r['published_on'] or '')[:10])
+            except ValueError:
+                pub_on[r['round']] = r['uploaded_at'].date() if r['uploaded_at'] else today
     except Exception:
         try: conn.rollback()
         except Exception: pass
+    # Every authority (founder 2026-11-24): a round whose result list is loaded shows its Result step as done
+    # ("provisional / final result out") even when the calendar has no 'result' step for it — e.g. KEA Round 2:
+    # the provisional list came late, the final date was withdrawn, and the tracker read "Result · dates awaited"
+    # while the banner said the result was out. Dated from the list's own date.
+    rounds_known = {k[0] for k in steps}
+    for rnd, d in pub_on.items():
+        if rnd in rounds_known and (rnd, 'result') not in steps:
+            steps[(rnd, 'result')] = {'start': d, 'end': d, 'time': None, 'news_id': None, 'revised': None}
     rounds, flat = {}, []
     for (rnd, ev), v in steps.items():
         st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
@@ -644,7 +659,9 @@ def counselling_status(conn, code, today=None, headings=None):
                 'bar_label': BAR_STEPS.get(ev), 'start': v['start'].isoformat(), 'end': v['end'].isoformat(),
                 'time': CAL.short_time(v['time'])[0], 'note': CAL.short_time(v['time'])[1],
                 'status': st, 'news_id': v['news_id'], 'revised': v['revised'],
-                'on_hold': (rnd, ev) in holds, 'hold_reason': holds.get((rnd, ev)) or None}
+                'on_hold': (rnd, ev) in holds, 'hold_reason': holds.get((rnd, ev)) or None,
+                # result list loaded on the portal → 'provisional' | 'final' (website: "Provisional result out")
+                'result_status': (published.get(rnd) or 'provisional') if (ev == 'result' and rnd in published) else None}
         rh = next((holds[k] for k in holds if k[0] == rnd and k[1] != ev), None)
         item['subject_to_hold'] = rh if (rh and not item['on_hold'] and st != 'done') else None
         rounds.setdefault(rnd, []).append(item)
