@@ -187,6 +187,7 @@ def users_admin():
     users, plans, tab_counts, states = [], [], {}, []
     qual_cut = None
     allot_summary = []
+    allot_overall = {}
     stats = {'total': 0, 'team': 0, 'internal': 0, 'paid': 0, 'free': 0,
              'blocked': 0, 'new_30d': 0}
     total_pages = 1
@@ -259,7 +260,7 @@ def users_admin():
                 has = _allotted_sql()
                 norank = "(COALESCE(u.neet_pg_rank,0) <= 0 AND COALESCE(u.home_state_rank,0) <= 0)"
                 conds.append({'yes': has, 'no': f"(NOT {norank} AND NOT {has})", 'norank': norank}[f_allot])
-            allot_summary = _al.summary(conn)
+            allot_summary = _al.summary(conn, overall=allot_overall)
         except Exception as _ae:
             logging.error("users_admin allotments: %s", _ae)
             try: conn.rollback()
@@ -443,7 +444,7 @@ def users_admin():
                            total_found=total,
                            f_reg=f_reg, reg_options=[(k, v[0]) for k, v in _REG_WINDOWS.items()],
                            f_prof=f_prof, prof_options=[(k, v[0]) for k, v in _PROF_FILTERS.items()],
-                           f_allot=f_allot, allot_summary=allot_summary,
+                           f_allot=f_allot, allot_summary=allot_summary, allot_overall=allot_overall,
                            f_qual=f_qual, qual_options=list(_QUAL_LABELS.items()),
                            qualify_score=NEET_QUALIFY_SCORE, qual_cut=qual_cut,
                            page=page, total_pages=total_pages, page_offset=(page - 1) * _PER_PAGE,

@@ -30,6 +30,11 @@
   .pu-sub { color:var(--gray-500); font-size:0.78rem; }
   .al-box { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.7rem 1rem; margin-bottom:1.2rem; }
   .al-box summary { font-weight:700; color:var(--navy); cursor:pointer; list-style-position:inside; }
+  .al-box .al-tot { font-weight:400; font-size:0.84rem; margin-left:0.5rem; display:inline-flex; flex-wrap:wrap; gap:0.35rem 0.5rem; align-items:center; }
+  .al-box .al-tot a { text-decoration:none; color:var(--navy); }
+  .al-box .al-tot .al-of { color:var(--gray-500); font-size:0.78rem; }
+  .al-box .al-t { border:1px solid var(--gray-200); border-radius:999px; padding:0.05rem 0.55rem; font-size:0.78rem; background:var(--gray-50,#f8fafc); }
+  .al-box .al-t:hover { border-color:var(--navy); }
   .al-box .al-note { font-weight:400; font-size:0.78rem; color:var(--gray-500); margin-left:0.3rem; }
   .al-grid { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:0.55rem; margin-top:0.7rem; }
   @media (max-width:1200px){ .al-grid{ grid-template-columns:repeat(4, minmax(0,1fr)); } }
@@ -107,7 +112,14 @@
 {% if allot_summary %}
 {# Seat allotments: one capsule per published round, 5 to a row, collapsible (founder 2026-11-09) #}
 <details id="allotBox" class="al-box" open>
-  <summary>🎓 Seat allotments <span class="al-note">matched by each doctor's All-India rank · use the filters below for type / plan / state</span></summary>
+  <summary>🎓 Seat allotments
+    {% if allot_overall and allot_overall.doctors is defined %}
+    <span class="al-tot" title="Distinct registered doctors with at least one seat in any published round (MCC + states), matched by All-India rank; 'not me' marks excluded">
+      <a href="?allot=yes"><b>{{ '{:,}'.format(allot_overall.doctors) }}</b> doctors got a seat</a>
+      <span class="al-of">of {{ '{:,}'.format(allot_overall.with_rank) }} with a rank</span>
+      {% for t, lbl in [('internal','Internal'),('paid','Paid'),('free','Free'),('team','Team')] %}<a class="al-t al-t-{{ t }}" href="?allot=yes&amp;type={{ t }}">{{ lbl }} <b>{{ '{:,}'.format(allot_overall.by_type[t] or 0) }}</b></a>{% endfor %}
+    </span>{% endif %}
+    <span class="al-note">matched by each doctor's All-India rank · use the filters below for type / plan / state</span></summary>
   <div class="al-grid">
   {% for r in allot_summary %}{% set n = r.total.mdms + r.total.dnb %}
     <div class="al-cap{{ ' al-zero' if not n }}" data-tip="{{ r.authority_name }}{% if r.state_label %} ({{ r.state_label }}){% endif %} · {{ r.round }} ({{ r.status }})&#10;{{ '{:,}'.format(r.total.with_rank) }} doctors with a rank → {{ n }} got a seat{% for t, lbl in [('internal','Internal'),('paid','Paid'),('free','Free'),('team','Team')] %}{% set c = r.by_type[t] %}{% if c.with_rank %}&#10;{{ lbl }}: {{ c.mdms + c.dnb }} of {{ c.with_rank }}{% endif %}{% endfor %}">
