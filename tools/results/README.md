@@ -299,3 +299,15 @@ one table per college, 12 columns, one row per allotted candidate. Stored as its
   (staging seatmatrix-dump of "Andhra Pradesh — State Counselling") — no college × course × seat category over its MQ seats.
 2026 Phase-I final (17.11.2026): 503 allotted (all MD/MS) in 23 colleges — Cat-B 430 (S-1B 350, S-1A 58, CA-SF 22),
 NRI S-2 62, Institutional S-3 11; MQ seat matrix 938 → 53.6% filled; none over the matrix.
+
+## Tamil Nadu Round 2 (`tamil_nadu_r2.py`) — 2026-11-24
+TN Selection Committee Round 2 provisional lists (GQ 1,551 + MQ 486 lines, 24.11.2026) → ONE body, round "Round 2".
+New ALLOTTED FROM + Status columns: Retained → retained; blank FROM → fresh; FROM ≠ TO → upgraded (prev_* = FROM seat).
+Maps are read from `tamil_nadu_r1.py`'s source, plus 13 Round 2 colleges + MD Sports Medicine. Long course names wrap
+inside the seat cell — the split is the line break where the course part is a known course. `rank` = GRANK;
+`rank_ai` from the stored Round 1 result of the same list by GRANK (`--r1`: rows of /api/pg/results via the staging
+seatmatrix-dump `resget` proxy) or from merit-list bridge files (`--gq-bridge` / `--mq-bridge`, as in Round 1).
+Candidates with no Round 1 seat in that list need the bridge (TN lists print no AIR; the merit lists need the NBEMS
+roll → AIR file) — without it 750 of 2,037 rows have no rank_ai, so do not ingest until the bridge files are rebuilt.
+    /usr/bin/python3 tools/results/tamil_nadu_r2.py <gq.pdf> <mq.pdf> <out.json> --r1 <tn_r1_rows.json>
+        [--gq-bridge dmer_tn_gq.json --mq-bridge dmer_tn_mq.json] [--seat-matrix <TN R2 matrix dump.json>]
