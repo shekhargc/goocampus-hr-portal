@@ -804,13 +804,19 @@ def api_results_facets():
             out.update(_facet_rows(rows, sel))
             out['matched'] = sum(1 for r in rows if all(r.get(d) == v for d, v in sel.items()))
         t = conn.execute(f"SELECT COUNT(*) AS n, MIN(rank) AS lo, MAX(rank) AS hi, COUNT(DISTINCT institute_raw) AS c, "
+                         f"MIN(r.rank_ai) AS lo_ai, MAX(r.rank_ai) AS hi_ai, "
+                         f"SUM(CASE WHEN r.rank_ai IS NOT NULL AND r.rank <> r.rank_ai THEN 1 ELSE 0 END) AS st, "
                          f"SUM(CASE WHEN r.round_status='retained' THEN 1 ELSE 0 END) AS kept, "
                          f"SUM(CASE WHEN r.round_status='upgraded' THEN 1 ELSE 0 END) AS up, "
                          f"SUM(CASE WHEN r.round_status='fresh' THEN 1 ELSE 0 END) AS fr "
                          f"FROM pg_results r WHERE {base}", p).fetchone()
         out['totals'] = {'allotted': t['n'], 'first_rank': t['lo'], 'last_rank': t['hi'], 'colleges': t['c'],
                          # Round 2+: of `allotted`, how many kept the earlier seat / moved / got a first seat
-                         'retained': int(t['kept'] or 0), 'upgraded': int(t['up'] or 0), 'fresh': int(t['fr'] or 0)}
+                         'retained': int(t['kept'] or 0), 'upgraded': int(t['up'] or 0), 'fresh': int(t['fr'] or 0),
+                         # both-ranks rule (website 2026-11-24): first/last_rank are the list's own rank — the STATE
+                         # merit rank for RJ/TN etc. — so the All-India figures + which basis rank is ride alongside
+                         'first_rank_ai': t['lo_ai'], 'last_rank_ai': t['hi_ai'],
+                         'rank_basis': 'state' if int(t['st'] or 0) else 'air'}
         return jsonify(out)
     except Exception as e:
         try: conn.rollback()

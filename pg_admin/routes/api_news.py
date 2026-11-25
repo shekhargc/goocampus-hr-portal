@@ -650,9 +650,15 @@ def counselling_status(conn, code, today=None, headings=None):
     for rnd, d in pub_on.items():
         if rnd in rounds_known and (rnd, 'result') not in steps:
             steps[(rnd, 'result')] = {'start': d, 'end': d, 'time': None, 'news_id': None, 'revised': None}
+    # rounds whose result list is loaded (and not older than the result step) — their seat-processing / choice-locking
+    # steps are over too (website 2026-11-24: TN read "Next: Seat allotment processing · Today" with R2 result out)
+    result_out = {rnd for (rnd, ev), v in steps.items()
+                  if ev == 'result' and rnd in published and pub_on.get(rnd, v['start']) >= v['start']}
     rounds, flat = {}, []
     for (rnd, ev), v in steps.items():
         st = 'done' if v['end'] < today else ('live' if v['start'] <= today <= v['end'] else 'upcoming')
+        if ev in ('seat_processing', 'choice_locking') and rnd in result_out:
+            st = 'done'
         # the loaded list counts only if it isn't OLDER than the step (website 2026-11-24: Rajasthan's 23 Nov
         # INDICATIVE list marked the 24 Nov "provisional allotment list" step done before RUHS published it)
         by_list = ev == 'result' and rnd in published and pub_on.get(rnd, v['start']) >= v['start']
@@ -694,6 +700,22 @@ def counselling_status(conn, code, today=None, headings=None):
                       'news_id': dl['news_id'], 'heading': headings.get(dl['news_id'], ''),
                       'on_hold': dl['on_hold'], 'subject_to_hold': dl['subject_to_hold'],
                       'hold_reason': dl['hold_reason'] or dl['subject_to_hold']} if dl else None)
+    # No main step live / upcoming but an extra calendar step ('other' — e.g. AP's management-quota Phase-2 web
+    # options next to the CQ round) is still open → it is the next deadline (website 2026-11-25: AP card had no
+    # "Next:" line while MQ options were open till 26 Nov 2 PM)
+    extra = None
+    if not dl:
+        ex = [r for r in rows if r['event'] == 'other' and 'on hold' not in (r.get('label') or '').lower()
+              and (r['end_date'] or r['start_date']) >= today]
+        if ex:
+            x = min(ex, key=lambda r: (r['end_date'] or r['start_date'], r['start_date']))
+            extra = {'round': x['round'] or None, 'label': x.get('label') or 'Other', 'start': x['start_date'],
+                     'end': x['end_date'] or x['start_date'], 'time': CAL.short_time(x.get('time_text'))[0],
+                     'note': CAL.short_time(x.get('time_text'))[1], 'news_id': x.get('news_id')}
+            next_deadline = {'date': extra['end'].isoformat(), 'label': extra['label'], 'round': extra['round'],
+                             'time': extra['time'], 'note': extra['note'], 'news_id': extra['news_id'],
+                             'heading': headings.get(extra['news_id'], ''), 'on_hold': False,
+                             'subject_to_hold': None, 'hold_reason': None}
     from datetime import date as _date
     if current:
         headline = (f"{current['round'] + ': ' if current['round'] else ''}{current['label']} open"
@@ -738,7 +760,20 @@ def counselling_status(conn, code, today=None, headings=None):
                         else 'Round 1 dates awaited')
         else:
             last = max((i['round'] for i in alloc), key=lambda r: rorder.get(r, 50))
-            headline = f'{last} completed — next round dates awaited'
+            # 'completed' only when that round's allotment has happened (result step done / list loaded); a round
+            # whose choice filling closed but whose allotment hasn't come is "allotment awaited" (website 2026-11-25)
+            allotted = last in published or any(i['round'] == last and i['step'] == 'result' and i['status'] == 'done'
+                                                for i in flat)
+            headline = (f'{last} completed — next round dates awaited' if allotted
+                        else f'{last}: allotment dates awaited')
+            if extra:
+                more = (f" · {extra['label'][0].lower() + extra['label'][1:]} open till {_fmt_d(extra['end'])}"
+                        + (f", {extra['time']}" if extra['time'] else ''))
+                if not allotted:
+                    headline = f'{last}: allotment awaited'
+                headline = (headline + more) if len(headline + more) <= 90 else (
+                    f"{last}: {extra['label']} open till {_fmt_d(extra['end'])}"
+                    + (f", {extra['time']}" if extra['time'] else ''))
     return {'status': status, 'stage': current or nxt, 'headline': headline[:90], 'next_deadline': next_deadline,
             'progress': round(100 * done / len(flat)) if flat else 0, 'rounds': out_rounds,
             'on_hold': [{'round': i['round'], 'step': i['step'], 'reason': i['hold_reason']} for i in flat if i['on_hold']]}

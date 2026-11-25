@@ -78,11 +78,13 @@ for pg in doc:
     if len(tabs) != 1:
         raise SystemExit(f'p{pg.number + 1}: {len(tabs)} tables')
     for r in tabs[0].extract():
+        if len(r) == 7:             # Round 2 layout (24.11.2026): no SERVICE column → insert an empty one
+            r = r[:5] + [''] + r[5:]
         if len(r) != 8:
             raise SystemExit(f'p{pg.number + 1}: a table line has {len(r)} columns')
         c0 = clean(r[0])
         if c0.startswith('SNO'):
-            if clean(' '.join(x or '' for x in r)) != HEAD:
+            if clean(' '.join(x or '' for x in r)) not in (HEAD, HEAD.replace(' SERVICE', '')):
                 raise SystemExit(f'p{pg.number + 1}: column headings changed: {c0}')
             continue
         if not c0.isdigit():

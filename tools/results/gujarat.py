@@ -19,14 +19,17 @@ categories OP SE EW SC ST (+ -PH), MQ, NRI. institute_raw = the college name pri
 the college code (the meritwise list prints only the code); the portal's name memory resolves it.
 Run with /usr/bin/python3 (PyMuPDF):
     gujarat.py <meritwise.pdf> <institutewise.pdf> <last_merit.pdf> <out.json> [--bridge <merit_bridge.json>]
+               [--prev <earlier round rows.json>]   (Round 2+: round_status retained / upgraded / fresh)
 --bridge: the loaded Gujarat merit list (rows with state_rank / air) — checks every (merit, AIQ rank) pair is in it."""
 import json, os, re, sys, collections
 import fitz
 
 args = [a for a in sys.argv[1:]]
-BRIDGE = None
+BRIDGE = PREV = None
 if '--bridge' in args:
     i = args.index('--bridge'); BRIDGE = args[i + 1]; del args[i:i + 2]
+if '--prev' in args:      # Round 2+: the earlier round's loaded rows ({"rows": [...]} from /api/pg/results)
+    i = args.index('--prev'); PREV = args[i + 1]; del args[i:i + 2]
 if len(args) != 4:
     raise SystemExit(__doc__)
 MERIT, INST, LAST, OUT = args
@@ -180,7 +183,8 @@ for x in lines:
         raise SystemExit(f'{w}: Cat / Cat Merit not readable')
     if not asg:
         raise SystemExit(f'{w}: ADM Cat / Seat Type not readable')
-    if x.get('round') != f'{ROUND:02d}' or not re.fullmatch(r'\d+', x.get('score', '')):
+    if not re.fullmatch(r'\d\d', x.get('round', '')) or not 1 <= int(x['round']) <= ROUND \
+            or not re.fullmatch(r'\d+', x.get('score', '')):
         raise SystemExit(f'{w}: Adm Round / Score not readable')
     if not re.fullmatch(r'[A-Z]+', x.get('college', '')) or not x.get('branch'):
         raise SystemExit(f'{w}: college code / branch not readable')
@@ -204,7 +208,7 @@ for x in lines:
                  'remarks': '; '.join(([f'merit {x["merit"]}'] if mer != int(mer) else []) +
                                       ([f'Adm Type Merit {tm}'] if tm else [])),
                  '_code': x['college'], '_merit': mer, '_catmerit': float(cg.group(2)) if cg.group(2) else None,
-                 '_tmerit': tm})
+                 '_tmerit': tm, '_adm_round': int(x['round'])})
 
 # ── 2. institute-wise list ──
 ICOLS = [('sr', 0), ('flag', 40), ('name', 53), ('merit', 235), ('cat', 272), ('score', 325), ('admcat', 360),
@@ -281,7 +285,7 @@ if diff_a or diff_b or len(ilines) != len(rows):
     raise SystemExit(f'institute-wise check failed: {sum(diff_a.values())} meritwise lines not in it, '
                      f'{sum(diff_b.values())} of its lines not in the meritwise list; group mismatches {group_mism[:20]}')
 inst_check = {'lines': len(ilines), 'lines_matched_seat_for_seat': len(rows), 'groups': len(gm),
-              'group_count_mismatches': group_mism, 'colleges': len(names), 'clipped_codes': {k: v for k, v in codes.items() if k != v}}
+              'group_count_mismatches': group_mism, 'colleges': len(names), 'college_names': names, 'clipped_codes': {k: v for k, v in codes.items() if k != v}}
 
 # ── 3. last merit (closing merit per college × branch × quota × category) ──
 ldoc = fitz.open(LAST)
@@ -386,7 +390,7 @@ for k in sorted(set(groups) | set(last)):
 lm_ph.sort()
 if [p for _, p, _ in lm_ph] != sorted(p for _, p, _ in lm_ph):
     raise SystemExit('last merit: PwD merits are not in general-merit order')
-if lm_mism:
+if lm_mism and not os.environ.get('GJ_LM_REPORT'):
     raise SystemExit(f'last merit check failed: {lm_mism[:20]}')
 if sum(x['seats'] for x in lm_unprinted) > 20:
     raise SystemExit(f'last merit: {len(lm_unprinted)} groups not printed — layout changed? {lm_unprinted[:10]}')
@@ -394,6 +398,39 @@ last_check = {'groups_printed': len(last), 'groups_matched': lm_ok, 'pwd_lines_z
               'pwd_groups': len(lm_ph), 'groups_with_seats_not_printed': lm_unprinted, 'mismatches': lm_mism,
               'rule': 'Government OPEN + Management = MERITNO; Government EWS/SC/ST/SE = Cat Merit; Institutional / '
                       'Inservice / NRI = Adm Type Merit number; PWD line = PwD merit (order-checked only)'}
+
+# ── 3b. Round 2+: Adm Round < this round = seat kept from that round (retained); else new in this round —
+#        fresh, or upgraded when the candidate held an earlier-round seat (--prev: checked seat for seat) ──
+prev_check = None
+if ROUND > 1:
+    prev = {}
+    if PREV:
+        for p in json.load(open(PREV))['rows']:
+            prev.setdefault((int(p['rank']), int(p['rank_ai'])), p)
+    link = collections.Counter()
+    for r in rows:
+        p = prev.get((r['rank'], r['rank_ai']))
+        same = bool(p) and (p['institute_raw'], p['course'], p['quota_raw']) == (r['institute_raw'], r['course'],
+                                                                                   r['quota_raw'])
+        if r['_adm_round'] < ROUND:
+            r['round_status'] = 'retained'
+            if PREV and p and not same:
+                link['retained but NOT the earlier-round seat'] += 1
+            elif PREV and not p:
+                link['retained, earlier-round row not in --prev'] += 1
+        elif p and not same:
+            r['round_status'] = 'upgraded'
+            r.update(prev_quota_raw=p['quota_raw'], prev_quota=p['quota'], prev_institute_raw=p['institute_raw'],
+                     prev_course_raw=p['course_raw'], prev_course=p['course'])
+        else:
+            r['round_status'] = 'fresh'
+            if p:
+                link['new in this round, same seat as earlier round'] += 1
+        r['round_status_raw'] = f"Adm Round {r['_adm_round']:02d}"
+        link[r['round_status'] + (' (in earlier round)' if p else '')] += 1
+    if link.get('retained but NOT the earlier-round seat'):
+        raise SystemExit(f'Round {ROUND}: retained lines that are not the earlier-round seat: {dict(link)}')
+    prev_check = {'prev_rows': len(prev), 'link': dict(link)}
 
 # ── 4. optional: every (merit, AIQ rank) pair is in the loaded merit list ──
 bridge_check = None
@@ -418,7 +455,8 @@ checks = {'lines': len(rows), 'sr_1_to_n': True, 'pages': len(md), 'by_section':
           'by_quota_raw': C('quota_raw'), 'by_allotted_category': C('allotted_category'), 'by_course': C('course'),
           'colleges': len({x['institute_raw'] for x in rows}),
           'institutewise': inst_check, 'truncated_branch_headings_institutewise': dict(TRUNCATED),
-          'last_merit': last_check, 'merit_list_bridge': bridge_check,
+          'last_merit': last_check, 'merit_list_bridge': bridge_check, 'earlier_round': prev_check,
+          'by_round_status': C('round_status') if ROUND > 1 else None,
           'rank_ai': {'source': "printed 'AIQ Rank' column (N.0)", 'filled': sum(1 for x in rows if x['rank_ai']),
                       'of': len(rows)},
           'half_merit_rows': sum(1 for x in rows if x['remarks'].startswith('merit ')),
