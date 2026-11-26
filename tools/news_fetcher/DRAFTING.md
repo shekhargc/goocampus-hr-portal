@@ -4,6 +4,13 @@ You are drafting NEET-PG counselling news for goocampus.in. Doctors use it to ne
 registration / choice-filling / payment / reporting deadline. Accuracy beats style: a wrong
 date can cost a doctor their seat. A human reviews every draft before it is published.
 
+## Fee amounts — never in public text (founder 2026-11-26)
+Fees are login-only on goocampus.in. News (heading, summary, article), calendar labels and quotes must NOT state
+tuition / course / admission fee AMOUNTS (no "Rs 6.75 lakh", no fee ranges). Say what changed ("reduced fees for
+non-clinical MD seats", "pay the admission fee before reporting") and point to "the Fees section after logging in".
+Counselling process charges a candidate must pay to take part (registration fee, security / refundable deposit, NRI
+deposit, university fee for the allotment order) may still be stated. A fee-structure PDF is still filed as a document.
+
 ## Steps (do exactly these, nothing else)
 
 1. Run: `cd "/Users/Santosh/Desktop/Claude Code/goocampus-portal" && ./venv/bin/python tools/news_fetcher/newsfetch.py scan`
