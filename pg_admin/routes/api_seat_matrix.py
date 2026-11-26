@@ -5,6 +5,7 @@ Data is served VERBATIM from pg_seat_matrix (authority's own college/course name
 unmatched to our master). X-PG-Key guarded, except the PDF stream which is a public
 government document (so the user's browser can open it directly).
 """
+import collections
 import logging
 from flask import request, jsonify, Response
 from db import get_db
@@ -112,6 +113,95 @@ def _rounds(conn, year):
             'new_in_round_seats': nr if x['round_no'] > 1 else 0,
             'round1_seats': r1.get((x['authority_code'], x['section'])) if x['round_no'] > 1 else None})
     return out
+
+
+# Round summary line (founder 2026-11-26, MCC first — other authorities after he reviews it): under each round's
+# seat list, how many seats were allotted and how many are left. MD/MS + Diploma only (DNB hidden, like the lists).
+#   Round 1:  seats = full matrix; allotted = Round 1 result lines; left = seats - allotted (exact).
+#   Round 2+: seats = that round's official vacant list; the round also re-allots the seats doctors give up when they
+#             upgrade, so available = list + upgraded; allotted = fresh + upgraded; left = available - allotted,
+#             floored at 0 — an ESTIMATE (joining / not joining / resignations are unknown) until the authority
+#             publishes the next round's list, then left = that list minus its newly added seats (OFFICIAL).
+#   back_on_next_list: the share of this round's seats that came back on the next official list (clinical /
+#   non-clinical split) — the market trend.
+SUMMARY_AUTHS = ('mcc',)
+
+
+def _round_summaries(conn, year, rounds):
+    from pg_admin.data import specialty_groups as SG
+    by_auth = {}
+    for rd in rounds:
+        if rd['authority_code'] in SUMMARY_AUTHS:
+            by_auth.setdefault(rd['authority_code'], {})[int(rd['round_no'])] = rd
+    if not by_auth:
+        return
+    ctx = None
+    for auth, rds in by_auth.items():
+        try:
+            res = collections.defaultdict(collections.Counter)
+            rinfo = {}
+            for r in conn.execute(
+                    "SELECT s.round_order AS ro, s.round, s.status, COALESCE(r.round_status,'') AS st, COUNT(*) AS n "
+                    "FROM pg_results r JOIN pg_results_source s ON s.authority_code=r.authority_code "
+                    "AND s.academic_year=r.academic_year AND s.round=r.round WHERE r.authority_code=? "
+                    "AND r.academic_year=? AND COALESCE(s.is_hidden,0)=0 AND s.round NOT LIKE '%%(%%' "
+                    "AND COALESCE(r.section,'')<>'dnb' GROUP BY 1,2,3,4", [auth, year]).fetchall():
+                res[int(r['ro'])][r['st']] += int(r['n'])
+                rinfo[int(r['ro'])] = {'round': r['round'], 'status': r['status'] or 'provisional'}
+            per_course = {}
+            for r in conn.execute(
+                    "SELECT COALESCE(s.round_no,1) AS rn, COALESCE(NULLIF(m.cutoff_course,''), m.course_name) AS c, "
+                    "SUM(m.seats) AS n, SUM(COALESCE(m.new_in_round,0)) AS nr FROM pg_seat_matrix m "
+                    "JOIN pg_seat_matrix_source s ON s.counselling_body=m.counselling_body AND s.academic_year=m.academic_year "
+                    "WHERE s.academic_year=? AND COALESCE(s.authority_code,'')=? AND COALESCE(s.superseded,0) IN (0,2) "
+                    "AND COALESCE(s.section,'') NOT IN ('nmc_initial','dnb') AND " + _NO_DNB.replace('course_name', 'm.course_name')
+                    .replace("COALESCE(section", "COALESCE(m.section") + " GROUP BY 1,2", [year, auth]).fetchall():
+                per_course.setdefault(int(r['rn']), {})[r['c']] = (int(r['n'] or 0), int(r['nr'] or 0))
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.warning("_round_summaries %s: %s", auth, e)
+            continue
+        if ctx is None:
+            ctx = SG.context(conn, year)
+        def split(rn, net=False):
+            out = collections.Counter()
+            for c, (n, nr) in (per_course.get(rn) or {}).items():
+                g = SG.public_group(SG.group_of(c, ctx)) or 'clinical'
+                out[g] += (n - nr) if net else n
+            return out
+        for rn, rd in sorted(rds.items()):
+            seats = sum(b['total_seats'] for b in rd['bodies'] if b['section'] != 'dnb')
+            added = sum(b['new_in_round_seats'] for b in rd['bodies'] if b['section'] != 'dnb')
+            c = res.get(rn)
+            sm = {'seats': seats, 'added_seats': added, 'result': rinfo.get(rn)}
+            if not c:
+                sm.update(allotted=None, left=None, basis='results_awaited')
+            elif rn == 1:
+                al = sum(c.values())
+                sm.update(allotted=al, left=max(0, seats - al), basis='exact',
+                          pct_allotted=round(100 * al / seats) if seats else None)
+            else:
+                fresh, up, kept = c.get('fresh', 0), c.get('upgraded', 0), c.get('retained', 0)
+                al, avail = fresh + up, seats + up
+                sm.update(allotted=al, fresh=fresh, upgraded=up, retained=kept, freed_by_upgrades=up,
+                          available=avail, left=max(0, avail - al), basis='estimate',
+                          over_available=max(0, al - avail),
+                          pct_allotted=min(100, round(100 * al / avail)) if avail else None)
+            nxt = rds.get(rn + 1)
+            if nxt:
+                nb = sum(b['total_seats'] for b in nxt['bodies'] if b['section'] != 'dnb')
+                na = sum(b['new_in_round_seats'] for b in nxt['bodies'] if b['section'] != 'dnb')
+                back = max(0, nb - na)
+                a, b2 = split(rn), split(rn + 1, net=True)
+                sm['back_on_next_list'] = {
+                    'round_no': rn + 1, 'seats': back, 'pct': round(100 * back / seats) if seats else None,
+                    'clinical_pct': round(100 * b2['clinical'] / a['clinical']) if a['clinical'] else None,
+                    'non_clinical_pct': round(100 * b2['non_clinical'] / a['non_clinical']) if a['non_clinical'] else None}
+                if rn >= 2 and c:          # the next official list replaces the estimate
+                    sm.update(left=back, basis='official',
+                              pct_allotted=round(100 * (1 - back / sm['available'])) if sm.get('available') else None)
+            rd['summary'] = sm
 
 
 DEFAULT_BODY = 'All India MCC'
@@ -307,6 +397,7 @@ def api_pg_seat_matrix_facets():
         rounds, this_round = [], None
         if _round_cols(conn):
             rounds = _rounds(conn, year)
+            _round_summaries(conn, year, rounds)
             tr = conn.execute(
                 "SELECT COALESCE(round_no,1) AS round_no, COALESCE(round_label,'') AS round_label, "
                 "COALESCE(list_type,'') AS list_type, COALESCE(pdf_body,'') AS pdf_body, "
