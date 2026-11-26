@@ -37,7 +37,7 @@ import fitz
 
 args = sys.argv[1:]
 opt = {'--round': 'Round 1', '--round-order': '1', '--status': 'provisional'}
-for f in ('--seat-matrix', '--round', '--round-order', '--status'):
+for f in ('--seat-matrix', '--round', '--round-order', '--status', '--prev'):
     if f in args:
         i = args.index(f); opt[f] = args[i + 1]; del args[i:i + 2]
 if len(args) != 4:
@@ -184,7 +184,7 @@ doc = fitz.open(PDF)
 lines, forms_in_text, printed = [], 0, set()
 for pg in doc:
     text = pg.get_text()
-    if f'Pg : - {pg.number + 1} -' not in text or 'Admissions to MD/MS/DIPLOMA Courses, 2026-2027 (Round: 1.0)' not in text \
+    if f'Pg : - {pg.number + 1} -' not in text or f'Admissions to MD/MS/DIPLOMA Courses, 2026-2027 (Round: {int(opt["--round-order"])}.0)' not in text \
             or 'PROVISIONAL SELECTION LIST FOR NEET(PG)-CET 2026' not in text:
         raise SystemExit(f'p{pg.number + 1}: page header changed')
     printed.update(re.findall(r'Printed On:(\d{2})/(\d{2})/(\d{4})', text))
@@ -194,7 +194,7 @@ for pg in doc:
             for s in ln['spans']:
                 t = ''.join(c['c'] for c in s['chars'])
                 if re.fullmatch(r'26\d{7}', t[17:26]):
-                    if len(t) != 141 or t[26:29] != '   ' or t[51] != ' ':
+                    if not 141 <= len(t) <= 150 or t[26:29] != '   ' or t[51] != ' ':   # Round 2+: longer remark (status) column
                         raise SystemExit(f'p{pg.number + 1}: line layout changed')
                     lines.append((pg.number + 1, t[:17] + ' ' * 35 + t[52:]))   # form no + name never kept
 if len(printed) != 1:
@@ -256,6 +256,12 @@ for n, (page, t) in enumerate(lines, 1):
         raise SystemExit(f'p{page} SrNo {n}: subject code {sc} / {subj_p!r}')
     college = COLLEGES[cc][2]
     _, course, section = SUBJECTS[sc]
+    # Round 2+: a status remark after the quota remark — (Ret.) / (No Change) / (No Pref) — kept as round_status_raw
+    # (the fixed-width line can cut the status short at its end, e.g. "(Minority) (No" — kept as printed)
+    st_tok = re.findall(r'\((?:Ret\.|No Change|No Pref)\)|\((?:Ret|No)[\w .]*$', rem)
+    if len(st_tok) > 1:
+        raise SystemExit(f'p{page} SrNo {n}: two status remarks {rem!r}')
+    rem = re.sub(r'\s*(?:\((?:Ret\.|No Change|No Pref)\)|\((?:Ret|No)[\w .]*$)', '', rem).strip()
     quota, cat, note = quota_cat(sfx, q, rem)
     if quota == 'State Quota-Inservice' and not mark:
         raise SystemExit(f'SrNo {n}: in-service seat to a candidate not marked in-service')
@@ -273,7 +279,30 @@ for n, (page, t) in enumerate(lines, 1):
                  'quota_raw': q + (' (AIQ)' if sfx == 'A' else ''), 'quota': quota,
                  'institute_raw': f'{coll_p}, {city_p}', 'institute': college,
                  'course_raw': subj_p, 'course': course, 'section': section,
-                 'allotted_category': cat, 'allotted_category_raw': q, 'candidate_category': cand, 'remarks': remarks})
+                 'allotted_category': cat, 'allotted_category_raw': q, 'candidate_category': cand, 'remarks': remarks,
+                 '_status_raw': st_tok[0] if st_tok else ''})
+# Round 2+: link to the earlier round's loaded rows by SML (--prev {"rows": [...]}): same college + course + quota →
+# retained; another seat → upgraded (prev_* = the earlier seat); no earlier seat → fresh. Printed status kept as raw.
+link = collections.Counter()
+if int(opt['--round-order']) > 1:
+    prev = {}
+    if '--prev' in opt:
+        for p in json.load(open(opt['--prev']))['rows']:
+            prev[int(p['rank'])] = p
+    for x in rows:
+        p = prev.get(x['rank'])
+        if p and (p['institute'], p['course'], p['quota']) == (x['institute'], x['course'], x['quota']):
+            x['round_status'] = 'retained'
+        elif p:
+            x['round_status'] = 'upgraded'
+            x.update(prev_quota_raw=p['quota_raw'], prev_quota=p['quota'], prev_institute_raw=p['institute_raw'],
+                     prev_course_raw=p['course_raw'], prev_course=p['course'])
+        else:
+            x['round_status'] = 'fresh'
+        x['round_status_raw'] = x['_status_raw']
+        link[f"{x['round_status']} / printed {x['_status_raw'] or '(blank)'}"] += 1
+for x in rows:
+    x.pop('_status_raw', None)
 if len(cat_off) > 3:
     raise SystemExit(f'{len(cat_off)} lines whose Cat. differs from the merit-list category, e.g. SML {cat_off[:10]}')
 
@@ -283,7 +312,8 @@ checks = {'lines': len(lines), 'allotted': len(rows), 'choice_not_available': su
           'form_numbers_in_text': forms_in_text, 'candidate_category_matches_merit_list': len(lines) - len(cat_off),
           'candidate_category_differs_sml': cat_off,
           'rank_ai': dict(ver), 'inservice_candidates': sum(1 for _, t in lines if t[4:6].strip()),
-          'inservice_vs_inservice_merit_list': dict(ins_check), 'inservice_not_in_list_sml': ins_missing}
+          'inservice_vs_inservice_merit_list': dict(ins_check), 'inservice_not_in_list_sml': ins_missing,
+          'link_to_earlier_round': dict(link)}
 if len(ins_missing) > 3:
     raise SystemExit(f'in-service candidates not in the in-service merit list: SML {ins_missing}')
 if sm is not None:
@@ -312,7 +342,7 @@ out = {'authority_code': 'cetcell_mh', 'round': opt['--round'], 'round_order': i
        'status': opt['--status'],
        'title': f'Provisional Selection List — {opt["--round"]}, State Quota PG Medical (MD/MS/Diploma), Maharashtra',
        'published_on': published, 'source_file_name': os.path.basename(PDF),
-       'notes': ('State CET Cell Maharashtra, NEET(PG)-CET 2026 Round 1.0 provisional selection list. rank = SML (state '
+       'notes': (f'State CET Cell Maharashtra, NEET(PG)-CET 2026 Round {int(opt["--round-order"])}.0 provisional selection list. rank = SML (state '
                  'merit list no.), rank_ai = NEET PG AIR from the final provisional common state merit list by SML. '
                  'I.Q. = Institutional Quota (incl. the Vikhe Patil / NKP Salve seats the seat matrix calls AIQ); IS = '
                  'State Quota-Inservice; EM<cat> = earmarked seat of that category; PH = PwD seat. "Choice Not '

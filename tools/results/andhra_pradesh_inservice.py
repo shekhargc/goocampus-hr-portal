@@ -25,6 +25,8 @@ Strict: anything unexpected -> SystemExit.
 """
 import sys, os, re, json, collections
 import fitz
+PHASE = 1                 # set to 2 by main() when --prev is given (Phase-II list)
+PHASES = ('Phase-1',)
 
 ROLL = re.compile(r'^2666\d{7}$')
 INT = re.compile(r'^\d+$')
@@ -81,7 +83,7 @@ def read(path, merit):
     assert {v for v in COURSES.values() if v} <= approved
     d = fitz.open(path)
     t1 = ' '.join(d[1].get_text().split())
-    m = re.search(r'College wise (Final|Provisional) Allotment List of PG \(Medical\) Admissions, CQ Service Phase-I, 2026-27', t1)
+    m = re.search(r'College wise (Final|Provisional) Allotment List of PG \(Medical\) Admissions, CQ Service Phase-' + ('I' if PHASE == 1 else 'II') + ', 2026-27', t1)
     if not m:
         raise SystemExit('page 2 title changed')
     status = m.group(1).lower()
@@ -95,6 +97,10 @@ def read(path, merit):
         for t in p.find_tables().tables:
             for r in t.extract():
                 c = [' '.join((x or '').split()) for x in r]
+                if len(c) == 10 and re.fullmatch(r'-\s*Phase-[12]', c[9]):   # a wrapped '-' of the details cell
+                    c[9] = c[9].lstrip('- ')
+                if len(c) == 10:     # '---' before the seat no. can wrap as '-- -', '- --' (Phase-II PDFs)
+                    c[8] = re.sub(r'(?<=[A-Z]) [- ]*-[- ]* (\d+)$', r' --- \1', c[8])
                 if len(c) != 10:
                     raise SystemExit(f'p{p.number + 1}: table with {len(c)} columns')
                 if c[0] and not any(c[1:]):
@@ -105,11 +111,11 @@ def read(path, merit):
                 where = f'p{p.number + 1} sno {c[0] if INT.match(c[0]) else "?"}'
                 if not (INT.match(c[0]) and INT.match(c[1]) and ROLL.match(c[2]) and INT.match(c[3])):
                     raise SystemExit(f'{where}: unexpected row shape')
-                if c[5] not in ('M', 'F', 'T') or c[6] not in CATS or c[7] not in AREAS or c[9] != 'Phase-1':
+                if c[5] not in ('M', 'F', 'T') or c[6] not in CATS or c[7] not in AREAS or c[9] not in PHASES:
                     raise SystemExit(f'{where}: gender / category / area / phase value')
                 dm = DETAIL.match(c[8])
                 if not dm:
-                    raise SystemExit(f'{where}: allotment details shape')
+                    raise SystemExit(f'{where}: allotment details shape [{c[8]}]')
                 ccode, course, seat_area, seat_cat, gf, mrc, _n = dm.groups()
                 if college is None or code_of.setdefault(ccode, college) != college:
                     raise SystemExit(f'{where}: college code {ccode} does not match its college heading')
@@ -126,7 +132,7 @@ def read(path, merit):
                 rows.append({'sno': len(rows) + 1, 'rank': mr['sl'], 'rank_ai': int(c[1]), 'quota_raw': seat_area,
                              'quota': quota, 'institute_raw': college, 'course_raw': COURSE_RAW[course],
                              'course': COURSES[course] or '', 'section': 'mdms', 'allotted_category': cat,
-                             'allotted_category_raw': c[8], 'candidate_category': c[6], 'remarks': 'MRC' if mrc else '',
+                             'allotted_category_raw': c[8], 'candidate_category': c[6], 'remarks': 'MRC' if mrc else '', '_phase': c[9],
                              '_sno': int(c[0]), '_college': college})
     if text_rolls != len(rows):
         raise SystemExit(f'rolls in text {text_rolls} != rows {len(rows)}')
@@ -153,17 +159,50 @@ def read(path, merit):
     return status, checks['notice_date'], rows, checks
 
 
+def link_phase2(rows, prev_path):
+    """Phase-II list: the Phase column says where the seat came from. Phase-1 = kept from Phase-I (must equal the loaded
+    Phase-I seat → retained); Phase-2 = allotted in Phase-II → upgraded when the candidate held a Phase-I seat
+    (prev_* filled), else fresh. Returns a count dict for checks."""
+    prev = {int(p['rank_ai']): p for p in json.load(open(prev_path))['rows']}
+    link = collections.Counter()
+    for r in rows:
+        p = prev.get(r['rank_ai'])
+        same = bool(p) and (p['institute_raw'], p['course_raw'], p['quota']) == (r['institute_raw'], r['course_raw'], r['quota'])
+        if r['_phase'] == 'Phase-1':
+            r['round_status'] = 'retained'
+            link['retained' + ('' if same else ' — NOT the loaded Phase-I seat' if p else ' — no Phase-I row loaded')] += 1
+        elif p and not same:
+            r['round_status'] = 'upgraded'
+            r.update(prev_quota_raw=p['quota_raw'], prev_quota=p['quota'], prev_institute_raw=p['institute_raw'],
+                     prev_course_raw=p['course_raw'], prev_course=p['course'])
+            link['upgraded'] += 1
+        else:
+            r['round_status'] = 'fresh'
+            link['fresh' + (' (same seat as Phase-I, re-allotted)' if p else '')] += 1
+        r['round_status_raw'] = r['_phase']
+    return dict(link)
+
+
 def main():
     a = sys.argv[1:]
     if '--merit' not in a:
         raise SystemExit(__doc__)
     i = a.index('--merit'); merit_pdf = a[i + 1]; del a[i:i + 2]
+    global PHASE, PHASES
+    prev_path = None
+    if '--prev' in a:     # Phase-II list: link to the loaded Phase-I rows
+        i = a.index('--prev'); prev_path = a[i + 1]; del a[i:i + 2]
+        PHASE, PHASES = 2, ('Phase-1', 'Phase-2')
     if len(a) != 2:
         raise SystemExit(__doc__)
     pdf, out = a
     status, date, rows, checks = read(pdf, read_merit(merit_pdf))
-    body = {'authority_code': 'ntruhs', 'round': 'Round 1 (In-service)', 'round_order': 1, 'status': status,
-            'title': f'PG (Medical) CQ 2026-27 - In-service Phase-I College wise {status.title()} Allotment List',
+    if PHASE == 2:
+        checks['link_to_phase_1'] = link_phase2(rows, prev_path)
+    for r in rows:
+        r.pop('_phase', None)
+    body = {'authority_code': 'ntruhs', 'round': 'Round 1 (In-service)'.replace('Round 1', f'Round {PHASE}'), 'round_order': PHASE, 'status': status,
+            'title': f'PG (Medical) CQ 2026-27 - In-service Phase-' + ('I' if PHASE == 1 else 'II') + f' College wise {status.title()} Allotment List',
             'published_on': date, 'source_file_name': os.path.basename(pdf),
             'notes': ('Dr NTRUHS Competent Authority Quota, IN-SERVICE candidates, Phase-I (= Round 1), college-wise list. '
                       'Own round so the non-service Phase-I list does not replace it. rank = Sl.No in the CQ in-service '
