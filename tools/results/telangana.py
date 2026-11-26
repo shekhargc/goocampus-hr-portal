@@ -15,16 +15,18 @@ are never read into the output; roll numbers are used only to look up the state 
   wording (OPEN-GEN, BCB-FEM, SC2-GEN, OPEN-GEN-PHO, MIN-GEN-MSM ...). MRC rows get remarks 'MRC' (KNRUHS flag).
 - candidate_category = CAT (+ ' MSM' when MIN says MSM, + ' PH' when PH says PHO).
 Strict: anything unexpected -> SystemExit.
-Usage: /usr/bin/python3 telangana.py <allotment.pdf> <knruhs_cq_merit.json> <out.json>"""
+Usage: /usr/bin/python3 telangana.py <allotment.pdf> <knruhs_cq_merit.json> <out.json> [--prev <phase-1 rows.json>]
+(--prev = Phase 2 list: 'COLLEGE WISE ALLOTMENT LIST IN SECOND PHASE', tags -P1/-P2 → round_status)"""
 import sys, os, re, json, collections
 import fitz
 
 ROLL = re.compile(r'^2666\d{7}$')
 HEAD = ['RANK', 'ROLL_NO', 'SCORE', 'CANDIDATE_NAME', 'CAT', 'SX', 'MIN', 'PH', 'Adm', 'Details']
 CATS = {'OC', 'BCA', 'BCB', 'BCC', 'BCD', 'BCE', 'SC1', 'SC2', 'SC3', 'ST', 'EWS'}
-ADM = re.compile(r'^(NS|S)-((?:OPEN|BC[A-E]|SC[1-3]|ST|EWS|BC-POOL)-(?:GEN|FEM)(?:-PHO)?|MIN-(?:GEN|FEM)-MSM(?:-PHO)?)(-MRC)?-P1$')
+ADM = re.compile(r'^(NS|S)-((?:OPEN|BC[A-E]|SC[1-3]|ST|EWS|BC-POOL)-(?:GEN|FEM)(?:-PHO)?|MIN-(?:GEN|FEM)-MSM(?:-PHO)?)(-MRC)?-P([12])$')
 QUOTA = {'NS': 'Govt Quota - Non Service-Local', 'S': 'Govt Quota - Service-Local'}
 COLLEGES = {   # COLL code -> standard name (same names as the Telangana seat matrix, tools/seat_matrix/telangana.py)
+    'AIMD': 'Arundathi Institute of Medical Sciences, Dundigal',   # first seen Phase 2 (25.11.2026), printed name
     'APLO': 'Apollo Institute of Medical Sciences and Research, Hyderabad',
     'AYAN': 'Ayaan Institute of Medical Sciences, Kanaka Mamidi',
     'BASK': 'Bhaskar Medical College, Moinabad, Ranga Reddy, Hyderabad',
@@ -57,6 +59,7 @@ COLLEGES = {   # COLL code -> standard name (same names as the Telangana seat ma
     'SURB': 'Surabhi Institute of Medical Sciences, Siddipet', 'SVSM': 'S V S Medical College, Mahabubnagar',
     'TRRM': 'TRR Institute of Medical Sciences, Patancheru', 'VRKW': 'Dr. VRK Womens Medical College, Aziznagar'}
 COURSES = {   # CRS code -> (printed name, approved course, section)
+    'FAM': ('MD(FAMILY MEDICINE)', 'MD - Family Medicine', 'mdms'),   # first seen Phase 2 (25.11.2026)
     'GM': ('MD(GENERAL MEDICINE)', 'MD - General Medicine', 'mdms'), 'PAED': ('MD(PAEDIATRICS)', 'MD - Paediatrics', 'mdms'),
     'ANES': ('MD(ANAESTHESIA)', 'MD - Anaesthesiology', 'mdms'), 'PM': ('MD(RESPIRATORY_MEDICINE)', 'MD - Respiratory Medicine', 'mdms'),
     'DVL': ('MD(DVL)', 'MD - Dermatology', 'mdms'), 'RD': ('MD(RADIODIAGNOSIS)', 'MD - Radio-Diagnosis', 'mdms'),
@@ -85,16 +88,22 @@ SHEET = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'pg
 
 
 def main():
-    if len(sys.argv) != 4:
+    args = sys.argv[1:]
+    PREV = None
+    if '--prev' in args:          # Phase 2: the loaded Phase-1 rows ({"rows": [...]}) → round_status
+        i = args.index('--prev'); PREV = args[i + 1]; del args[i:i + 2]
+    if len(args) != 3:
         raise SystemExit(__doc__)
-    pdf, merit_path, out = sys.argv[1:4]
+    pdf, merit_path, out = args
+    PHASE = 2 if PREV else 1
     approved = {c['course'] for c in json.load(open(SHEET))['courses']}
     assert {v[1] for v in COURSES.values()} <= approved
     merit = {r['roll']: r for r in json.load(open(merit_path))['rows']}
     d = fitz.open(pdf)
     t0 = ' '.join(d[0].get_text().split())
     for need in ('KALOJI NARAYANA RAO UNIVERSITY OF HEALTH SCIENCES', 'COMPETENT AUTHORITY QUOTA FOR THE AY 2026-27',
-                 'COLLEGE WISE REVISED ALLOTMENT LIST IN FIRST PHASE OF COUNSELLING'):
+                 'COLLEGE WISE REVISED ALLOTMENT LIST IN FIRST PHASE OF COUNSELLING' if PHASE == 1 else
+                 'COLLEGE WISE ALLOTMENT LIST IN SECOND PHASE OF COUNSELLING'):
         if need not in t0:
             raise SystemExit('title changed: missing ' + need)
     last = ' '.join(d[-1].get_text().split())
@@ -145,6 +154,8 @@ def main():
                     and cat in ([c] for c in CATS) and mino in ([], ['MSM']) and ph in ([], ['PHO']) and len(adm) == 1):
                 raise SystemExit(f'p{p.number + 1}: row shape (rank {rk})')
             ma = ADM.match(adm[0])
+            if ma and int(ma.group(4)) > PHASE:
+                ma = None
             if not ma:
                 raise SystemExit(f'p{p.number + 1}: unknown Adm Details {adm[0]!r}')
             mr = merit.get(roll[0][4])
@@ -162,7 +173,29 @@ def main():
                          'institute_raw': COLLEGES[coll], 'course_raw': name, 'course': course, 'section': section,
                          'allotted_category': ma.group(2), 'allotted_category_raw': adm[0],
                          'candidate_category': cat[0] + (' MSM' if mino else '') + (' PH' if ph else ''),
-                         'remarks': 'MRC' if ma.group(3) else ''})
+                         'remarks': 'MRC' if ma.group(3) else '', '_phase': int(ma.group(4))})
+    link = collections.Counter()
+    if PHASE == 2:      # Adm Details tag -P1 = seat from Phase 1 (retained), -P2 = allotted in Phase 2
+        prev = {int(p['rank_ai']): p for p in json.load(open(PREV))['rows']}
+        for r in rows:
+            p = prev.get(r['rank_ai'])
+            same = bool(p) and (p['institute_raw'], p['course'], p['quota']) == (r['institute_raw'], r['course'], r['quota'])
+            if r['_phase'] == 1:
+                if not same:
+                    raise SystemExit(f"AIR {r['rank_ai']}: tagged P1 but not the loaded Phase-1 seat")
+                r['round_status'] = 'retained'
+            elif p and not same:
+                r['round_status'] = 'upgraded'
+                r.update(prev_quota_raw=p['quota_raw'], prev_quota=p['quota'], prev_institute_raw=p['institute_raw'],
+                         prev_course_raw=p['course_raw'], prev_course=p['course'])
+            else:
+                r['round_status'] = 'fresh'
+                if p:
+                    link['P2 tag but same seat as Phase 1'] += 1
+            r['round_status_raw'] = f"P{r['_phase']}"
+            link[r['round_status']] += 1
+    for r in rows:
+        r.pop('_phase', None)
     if len(rows) != text_rolls:
         raise SystemExit(f'rows {len(rows)} != rolls in text {text_rolls}')
     if len({(r['rank_ai']) for r in rows}) != len(rows):
@@ -174,9 +207,22 @@ def main():
               'by_section': dict(collections.Counter(r['section'] for r in rows)),
               'by_category': dict(collections.Counter(r['allotted_category'] for r in rows).most_common()),
               'mrc_rows': sum(1 for r in rows if r['remarks'] == 'MRC'),
-              'air_equals_merit_air': len(rows), **dict(stat),
+              'air_equals_merit_air': len(rows), **dict(stat), 'link_to_phase_1': dict(link),
               'rank': [min(r['rank'] for r in rows), max(r['rank'] for r in rows)],
               'rank_ai': [min(r['rank_ai'] for r in rows), max(r['rank_ai'] for r in rows)]}
+    if PHASE == 2:
+        body = {'authority_code': 'knruhs', 'round': 'Round 2', 'round_order': 2, 'status': 'final',
+                'title': 'KNRUHS Telangana PG Medical 2026 — Competent Authority Quota, Phase 2 College-wise Allotment List',
+                'published_on': checks['date'], 'source_file_name': os.path.basename(pdf),
+                'notes': ('KNRUHS CQ (convenor) Phase-2 college-wise allotment list. KNRUHS prints neither "provisional" nor '
+                          '"final" (Phase 1 stored as final, same here). Adm Details -P1 = seat kept from Phase 1 (retained, '
+                          'checked = loaded Phase-1 seat), -P2 = allotted in Phase 2 (upgraded if the candidate held a Phase-1 '
+                          'seat, else fresh). rank = state merit rank (CQ final merit list + all addenda incl. 25.11), '
+                          'rank_ai = printed NEET PG rank. No names, gender or roll numbers stored.'),
+                'rows': rows, 'checks': checks}
+        json.dump(body, open(out, 'w'), indent=1, ensure_ascii=False)
+        print(out); print(json.dumps(checks, indent=1, ensure_ascii=False))
+        return
     body = {'authority_code': 'knruhs', 'round': 'Round 1', 'round_order': 1, 'status': 'final',
             'title': 'KNRUHS Telangana PG Medical 2026 — Competent Authority Quota, Phase 1 College-wise Revised Allotment List',
             'published_on': checks['date'], 'source_file_name': os.path.basename(pdf),
