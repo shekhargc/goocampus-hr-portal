@@ -336,7 +336,9 @@ def _pick_round(conn, auth, year, rnd):
     if rnd:
         r = conn.execute(q + " AND round=?", [auth, year, rnd]).fetchone()
     else:
-        r = conn.execute(q + " ORDER BY round_order DESC LIMIT 1", [auth, year]).fetchone()
+        # same round_order: the main list ('Round 2') before its side lists ('Round 2 (PwD)') — website 2026-11-26
+        r = conn.execute(q + " ORDER BY round_order DESC, (round LIKE '%%(%%') ASC, row_count DESC LIMIT 1",
+                         [auth, year]).fetchone()
     return dict(r) if r else None
 
 
@@ -400,7 +402,8 @@ def api_results_rounds():
             "matched_rows, (pdf_data IS NOT NULL) AS has_pdf, uploaded_at, prev_status, prev_replaced_at, "
             "COALESCE(is_revised, 0) AS is_revised, COALESCE(notice, '') AS notice, "
             "COALESCE(notice_url, '') AS notice_url FROM pg_results_source "
-            "WHERE COALESCE(is_hidden,0)=0 ORDER BY (authority_code<>'mcc'), authority_code, round_order").fetchall()
+            "WHERE COALESCE(is_hidden,0)=0 ORDER BY (authority_code<>'mcc'), authority_code, round_order, "
+            "(round LIKE '%%(%%'), round").fetchall()   # main list before its side lists ('Round 2 (PwD)') on a tie
         out = []
         for r in rows:
             r = dict(r)
@@ -519,7 +522,8 @@ def result_rounds_admin():
                 "matched_rows, COALESCE(is_revised, 0) AS is_revised, COALESCE(is_hidden, 0) AS is_hidden, "
                 "COALESCE(notice, '') AS notice, COALESCE(notice_url, '') AS notice_url, "
                 "COALESCE(notice_by, '') AS notice_by, notice_at, uploaded_at FROM pg_results_source "
-                "ORDER BY (authority_code<>'mcc'), authority_code, academic_year, round_order").fetchall():
+                "ORDER BY (authority_code<>'mcc'), authority_code, academic_year, round_order, "
+                "(round LIKE '%%(%%'), round").fetchall():
             r = dict(r)
             r['short_name'] = short_name(r['authority_code'])
             r['notice_at'] = _ist(r['notice_at'])
