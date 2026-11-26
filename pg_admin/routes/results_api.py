@@ -660,6 +660,9 @@ def _facet_rows(rows, sel, field=None):
     return out
 
 
+LEFTOVER_OK = ('mcc',)     # authorities whose per-seat 'seats left' list is reliable (Round 1 only)
+
+
 def _leftover_rows(conn, auth, year, rd):
     """Every seat type with seats still left after this round (no filters) → (rows, seats, taken).
     Round 1: the authority's current full seat matrix minus every seat allotted so far.
@@ -677,7 +680,10 @@ def _leftover_rows(conn, auth, year, rd):
     # seats given up by upgrades) and quota/category spellings differ between lists, so "list − allotted" per seat
     # line was wrong (e.g. MCC R2 4,559, KEA R2 2,117). The seats still open after Round N are the authority's
     # official Round N+1 list (Seat Matrix); the totals estimate lives in the seat-matrix round summary.
-    if later:
+    # Round 1 too, except where the seat-line match is near complete (2026-11-26 audit: MCC 99%; states 33–78% because
+    # results print the candidate's category / another quota spelling than the matrix, e.g. Goa showed 29 "left" with
+    # all 72 seats filled). Totals per round come from the seat-matrix round summary (counts, no matching).
+    if later or auth not in LEFTOVER_OK:
         return [], seats, defaultdict(int)
     meta = {}
     if later:
@@ -1331,9 +1337,9 @@ def api_results_leftover():
                         'seats_allotted': sum(min(taken.get(k, 0), s) for k, s in seats.items()),
                         'seats_left': sum(r['left'] for r in rows), 'rows': rows[(page - 1) * size: page * size],
                         'total_matched': len(rows), 'page': page, 'total_pages': (len(rows) + size - 1) // size,
-                        'hidden': later,
+                        'hidden': later or auth not in LEFTOVER_OK,
                         'note': (f"Seats still open after {rd['round']} are shown when the authority publishes the next "
-                                 "round's official vacant seat list (see Seat Matrix)." if later else
+                                 "round's official vacant seat list (see Seat Matrix)." if (later or auth not in LEFTOVER_OK) else
                                  'Seat matrix minus seats allotted so far. Seats freed by resignations / non-joining '
                                  'are not in this count until the authority publishes them.')})
     except Exception as e:
