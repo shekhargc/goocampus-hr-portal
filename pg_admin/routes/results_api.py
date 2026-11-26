@@ -673,6 +673,12 @@ def _leftover_rows(conn, auth, year, rd):
     rnd_no = int(rd.get('round_order') or 1)
     later = rnd_no >= 2
     seats, added = defaultdict(int), defaultdict(int)
+    # Round 2+ hidden (founder 2026-11-26): a round also re-allots seats that are on no published list (non-joiners,
+    # seats given up by upgrades) and quota/category spellings differ between lists, so "list − allotted" per seat
+    # line was wrong (e.g. MCC R2 4,559, KEA R2 2,117). The seats still open after Round N are the authority's
+    # official Round N+1 list (Seat Matrix); the totals estimate lives in the seat-matrix round summary.
+    if later:
+        return [], seats, defaultdict(int)
     meta = {}
     if later:
         src_cond = ("COALESCE(s.superseded,0)=2 AND COALESCE(s.round_no,1)=? AND "
@@ -1325,9 +1331,9 @@ def api_results_leftover():
                         'seats_allotted': sum(min(taken.get(k, 0), s) for k, s in seats.items()),
                         'seats_left': sum(r['left'] for r in rows), 'rows': rows[(page - 1) * size: page * size],
                         'total_matched': len(rows), 'page': page, 'total_pages': (len(rows) + size - 1) // size,
-                        'note': ((f"{rd['round']} seat list (vacant + added seats) minus seats allotted in "
-                                  f"{rd['round']}." if seats else
-                                  f"The {rd['round']} seat list is not published yet.") if later else
+                        'hidden': later,
+                        'note': (f"Seats still open after {rd['round']} are shown when the authority publishes the next "
+                                 "round's official vacant seat list (see Seat Matrix)." if later else
                                  'Seat matrix minus seats allotted so far. Seats freed by resignations / non-joining '
                                  'are not in this count until the authority publishes them.')})
     except Exception as e:
