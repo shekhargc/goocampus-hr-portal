@@ -48,6 +48,9 @@
       <div class="nm-tile"><div class="k">{{ k }} names known</div><div class="v">{{ (counts.get((k,'ok')) or 0) }}</div></div>
       <div class="nm-tile"><div class="k">{{ k }} — needs review</div><div class="v" style="color:#b45309">{{ waiting.get(k) or 0 }}</div></div>
     {% endfor %}
+    {% if waiting.get('college_dnb') %}
+      <div class="nm-tile"><div class="k">DNB-only hospitals — not needed now</div><div class="v" style="color:#6b7280">{{ waiting.get('college_dnb') }}</div></div>
+    {% endif %}
   </div>
 
   {% if rounds %}
@@ -63,11 +66,16 @@
   <div class="nm-tabs">
     {% for k in ['college', 'course'] %}<a href="?kind={{ k }}&show={{ show }}" class="{{ 'on' if kind==k }}">{{ k|capitalize }}s</a>{% endfor %}
     <span style="width:14px"></span>
-    {% for s, l in [('review','Needs review'), ('unmatched','No match found'), ('learned','Learned from files'), ('all','All')] %}
+    {% for s, l in [('review','Needs review'), ('dnb','DNB-only hospitals'), ('unmatched','No match found'), ('learned','Learned from files'), ('all','All')] %}
       <a href="?kind={{ kind }}&show={{ s }}" class="{{ 'on' if show==s }}">{{ l }}</a>
     {% endfor %}
   </div>
 
+  {% if show == 'dnb' %}
+    <div style="background:#f9fafb;border:1px solid var(--gray-200);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:0.82rem;color:#4b5563;">
+      Hospitals that appear only on <b>DNB</b> seats in the imported results. DNB is hidden from doctors and does not feed the
+      MD/MS cut-offs, so these can wait. Match them here when DNB is shown on the website.</div>
+  {% endif %}
   {% if not rows %}
     <div style="background:#fff;border:1px solid var(--gray-200);border-radius:10px;padding:22px;text-align:center;color:var(--gray-500);">Nothing here ✓</div>
   {% else %}

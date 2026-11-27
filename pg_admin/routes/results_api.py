@@ -1427,8 +1427,29 @@ def name_memory_admin():
         waiting_sql = "(status='review' OR (status='unmatched' AND COALESCE(how,'') <> 'confirmed'))"
         waiting = {r['kind']: r['n'] for r in conn.execute(
             f"SELECT kind, COUNT(*) AS n FROM pg_name_memory WHERE {waiting_sql} GROUP BY kind").fetchall()}
+        # DNB-only names (founder 2026-11-27): a hospital that appears ONLY on DNB seats in the imported results is
+        # hidden from doctors (HIDE_DNB) and never feeds the MD/MS cut-offs, so it waits in its own tab and does not
+        # crowd 'Needs review'. Key = the same normalised spelling the confirm step uses.
+        dnb_only = set()
+        if kind == 'college':
+            try:
+                md_keys, dnb_keys = set(), set()
+                for r in conn.execute(
+                        "SELECT institute_raw AS n, (COALESCE(section,'') = 'dnb') AS dnb FROM pg_results "
+                        "WHERE COALESCE(institute_raw,'') <> '' GROUP BY 1, 2").fetchall():
+                    (dnb_keys if r['dnb'] else md_keys).add(NM.norm(r['n']))
+                dnb_only = dnb_keys - md_keys
+            except Exception:
+                conn.rollback()
+        if dnb_only:
+            n_dnb = 0
+            for r in conn.execute(f"SELECT raw_key FROM pg_name_memory WHERE kind='college' AND {waiting_sql}").fetchall():
+                if r['raw_key'] in dnb_only:
+                    n_dnb += 1
+            waiting['college_dnb'] = n_dnb
+            waiting['college'] = max(0, (waiting.get('college') or 0) - n_dnb)
         where, params = "kind=?", [kind]
-        if show == 'review':
+        if show in ('review', 'dnb'):
             where += " AND " + waiting_sql
         elif show == 'unmatched':
             where += " AND status=?"; params.append(show)
@@ -1437,7 +1458,12 @@ def name_memory_admin():
         rows = [dict(r) for r in conn.execute(
             f"SELECT id, raw_name, raw_key, std_name, authority_code, how, score, status, candidates, seen_count, "
             f"confirmed_by, confirmed_at, first_seen FROM pg_name_memory WHERE {where} "
-            f"ORDER BY (status='review') DESC, seen_count DESC, raw_name LIMIT 500", params).fetchall()]
+            f"ORDER BY (status='review') DESC, seen_count DESC, raw_name LIMIT 3000", params).fetchall()]
+        if show == 'review' and dnb_only:
+            rows = [r for r in rows if r['raw_key'] not in dnb_only]
+        elif show == 'dnb':
+            rows = [r for r in rows if r['raw_key'] in dnb_only]
+        rows = rows[:500]
         import json as _j
         for r in rows:
             try:

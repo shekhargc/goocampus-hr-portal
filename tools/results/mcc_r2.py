@@ -8,7 +8,7 @@ From Round 2 on, MCC prints BOTH rounds on one line (13 columns):
 One output row per candidate who HOLDS a seat after this round, with round_status:
   fresh     — got a seat for the first time in this round ("Fresh Allotted in 2nd Round …")
   upgraded  — moved from the earlier-round seat ("Upgraded"); prev_* = the earlier seat
-  retained  — kept the earlier-round seat (earlier Remarks "Reported" and no new seat: "Did not opt for
+  retained  — kept the earlier-round seat: this round's Remarks "Retained" (seat reprinted), or earlier Remarks "Reported" and no new seat: "Did not opt for
               Upgradation." / "No Upgradation" / "Did not fill up fresh choices."). MCC prints no category for it —
               the portal fills allotted_category from the earlier round's row of the same rank.
 Candidates with no seat after the round (not reported / surrendered and nothing new) are left out.
@@ -56,7 +56,13 @@ def convert(raw):
         combos[(rem1 or '-', 'new seat' if not blank(q2) else 'no new seat', re.sub(r'\(.*', '', rem2).strip())] += 1
         prev = None
         if not blank(q2):                                   # a seat in this round
-            status = 'upgraded' if rem2.lower().startswith('upgraded') else 'fresh'
+            # MCC reprints a kept seat in this round's columns with Remarks "Retained" (opted for upgradation, not
+            # upgraded) — that is NOT a fresh allotment (2026-11-26: 6,091 MCC R2 lines were miscounted as fresh)
+            low = rem2.lower()
+            status = 'upgraded' if low.startswith('upgraded') else 'retained' if low.startswith('retained') else 'fresh'
+            if status == 'fresh' and not low.startswith('fresh'):
+                unknown['this-round remark with a seat: ' + re.sub(r'\(.*', '', rem2).strip()] += 1
+                continue
             m = map_seat(q2, c2, acat2, unknown)
             if not m:
                 continue
