@@ -58,7 +58,7 @@
         · {{ m.courses }} courses{% if m.favs %} · {{ m.favs }} favourites{% endif %}</div>
       <div style="margin-top:5px;">
         {% if m.cut %}{% for n, auths in m.cut.items() %}
-          <div><span class="cm-tag cut">2025 cut-off</span><span class="cm-sub">{{ n }} — {% for a, k in auths.items() %}{{ a }} ({{ k }}){% if not loop.last %}, {% endif %}{% endfor %}</span></div>
+          <div><span class="cm-tag cut">2025 cut-off</span><span class="cm-sub">{{ n }} — {% for a, k in auths.items() %}{{ a }} ({{ k }} cut-off lines){% if not loop.last %}, {% endif %}{% endfor %}</span></div>
         {% endfor %}{% else %}<span class="cm-tag none">no 2025 cut-off</span>{% endif %}
         {% if m.res %}<div><span class="cm-tag res">2026 results</span><span class="cm-sub">{% for a, k in m.res.items() %}{{ a }} {{ k }} seats{% if not loop.last %} · {% endif %}{% endfor %}</span></div>{% endif %}
       </div>
@@ -97,20 +97,23 @@
     {% endfor %}
 
   {% elif show == 'links' %}
-    <p class="cm-sub" style="margin:0 0 10px;">These colleges carry two different 2025 cut-off spellings. Usually that is right
+    <p class="cm-sub" style="margin:0 0 10px;"><b>Red</b> = a 2025 cut-off name that shares no word with this college's own name — it probably
+      belongs to another college (like NIMS on JNU): move it to the right one. The rest carry two different 2025 cut-off spellings. Usually that is right
       (the state list and MCC print the same college differently). If a spelling belongs to a <b>different</b> college,
       move it to the right one — or unlink it if that college is not in our list.</p>
     {% for m in links %}
       <div class="cm-pair">
-        <div class="cm-name">{{ m.college_name }} <span class="cm-sub">#{{ m.id }} · {{ m.city }}, {{ m.state }}</span></div>
+        <div class="cm-name">{{ m.college_name }} <span class="cm-sub">#{{ m.id }} · {{ m.city }}, {{ m.state }}</span>
+          {% if m.suspect %}<span class="cm-prio p1">check: this cut-off name looks like a different college</span>{% endif %}</div>
         {% for a in m.aliases if a.alias_source == 'cutoff' %}
           <form method="post" action="{{ url_for('pg_college_merge_move_alias') }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:0.8rem;">
             <input type="hidden" name="alias_id" value="{{ a.id }}">
-            <span style="flex:1;min-width:280px;">{{ a.alias_name }}
+            <span style="flex:1;min-width:280px;{% if a.alias_name in m.suspect %}color:#991b1b;font-weight:700;{% endif %}">{{ a.alias_name }}
               <span class="cm-sub">— {% for au, k in (m.cut.get(a.alias_name) or {}).items() %}{{ au }} ({{ k }}){% if not loop.last %}, {% endif %}{% endfor %}</span></span>
             <select name="target" style="max-width:320px;padding:4px;font-size:0.78rem;">
               <option value="">— not this college: unlink —</option>
-              {% for n, i, st in all_names if st == m.state and i != m.id %}<option value="{{ i }}">{{ n }} (#{{ i }})</option>{% endfor %}
+              {% set sug = (m.better or {}).get(a.alias_name) %}
+              {% for n, i, st in all_names if st == m.state and i != m.id %}<option value="{{ i }}" {{ 'selected' if sug and sug[0] == i }}>{{ n }} (#{{ i }}){{ ' — suggested' if sug and sug[0] == i }}</option>{% endfor %}
             </select>
             <button class="cm-btn" type="submit" onclick="return confirm('Move this spelling off {{ m.college_name|e }}?');">Move</button>
           </form>

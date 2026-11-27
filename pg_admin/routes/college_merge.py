@@ -227,13 +227,60 @@ def _pairs(conn, ms):
 
 
 def _wrong_links(ms):
-    """Colleges holding 2+ different 2025 cut-off spellings — usually the same college printed two ways
-    (state vs MCC), but sometimes a different college's name got attached here."""
+    """Colleges whose 2025 cut-off spelling may belong to ANOTHER college (founder 2026-11-27: NIMS sat on JNU,
+    Tantia on GMC Sri Ganganagar). 'Suspect' = the cut-off name reads clearly more like a different college in the
+    same state than like this one — that college is offered as the move target. Also lists colleges holding 2+
+    cut-off spellings (usually state vs MCC printing, fine)."""
+    from difflib import SequenceMatcher
+    states = set()
+    for m in ms.values():
+        states |= set(norm(m['state']).split())
+    tok_c = {}
+
+    def toks(x):                               # real words of a name: no boiler-plate, no state names
+        if x not in tok_c:
+            tok_c[x] = {t for t in norm(re.sub(r"['’`]", '', x or '')).split()
+                        if t not in GEN and t not in states and len(t) > 1}
+        return tok_c[x]
+
+    def same(x, y):
+        return x == y or (len(x) >= 4 and len(y) >= 4 and (x.startswith(y) or y.startswith(x) or x.endswith(y)
+                                                           or y.endswith(x) or SequenceMatcher(None, x, y).ratio() >= 0.85))
+
+    def ratio(n, names):
+        c = ' '.join(sorted(toks(n)))
+        return max([SequenceMatcher(None, c, ' '.join(sorted(toks(o)))).ratio() for o in names] or [0])
+
+    def sim(n, names):                         # how many of the cut-off name's words this college's names have
+        w = toks(n)
+        return max([sum(1 for x in w if any(same(x, y) for y in toks(o))) for o in names] or [0])
+    by_state = defaultdict(list)
+    for m in ms.values():
+        by_state[_nstate(m['state'])].append(m)
     out = []
     for m in ms.values():
-        if len(m['cut']) > 1:
+        own_names = [m['college_name']] + [a['alias_name'] for a in m['aliases'] if a['alias_source'] != 'cutoff']
+        m['suspect'], m['better'] = [], {}
+        for n in m['cut']:
+            mine, mine_r = sim(n, own_names), ratio(n, own_names)
+            best, best_r, who = 0, 0, None
+            for o in by_state[_nstate(m['state'])]:
+                if o['id'] == m['id']:
+                    continue
+                o_names = [o['college_name']] + [a['alias_name'] for a in o['aliases'] if a['alias_source'] != 'cutoff']
+                sc = sim(n, o_names)
+                if sc < 2 or sc < best:
+                    continue
+                r = ratio(n, o_names)
+                if sc > best or r > best_r:
+                    best, best_r, who = sc, r, o
+            # clearly more of its words belong to the other college — or as many, but the spelling is far closer
+            if who and (best > mine or (best == mine and best_r - mine_r >= 0.2)):
+                m['suspect'].append(n)
+                m['better'][n] = (who['id'], who['college_name'])
+        if m['suspect'] or len(m['cut']) > 1:
             out.append(m)
-    out.sort(key=lambda m: (m['state'], m['college_name']))
+    out.sort(key=lambda m: (not m['suspect'], m['state'], m['college_name']))
     return out
 
 
