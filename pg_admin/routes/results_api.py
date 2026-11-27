@@ -1053,9 +1053,10 @@ def _closing_rows(conn, auth, year, rd, a):
     # result HERE goes to the New tab even if another authority had it — the note says where it was)
     here = cutoff_authority(auth)
     auths_2025 = defaultdict(set)
+    cn = _college_key_fn(conn)        # 2025 + 2026 spellings of ONE College Database college compare as one (2026-11-27)
     for c in conn.execute("SELECT DISTINCT institute, authority FROM pg_cutoffs "
                           "WHERE year=2025 AND COALESCE(institute,'')<>''").fetchall():
-        auths_2025[c['institute']].add(c['authority'] or '')
+        auths_2025[cn(c['institute'])].add(c['authority'] or '')
     known_2025 = set(auths_2025)
     from pg_admin.data import rank_bridge as _RB
     _RB.ensure_cols(conn)
@@ -1065,14 +1066,14 @@ def _closing_rows(conn, auth, year, rd, a):
             f"{_RB.SELECT_AI} FROM pg_cutoffs WHERE authority=? AND year=2025", [cutoff_authority(auth)]).fetchall():
         c0 = dict(c0)
         q = _qn(c0['quota'])
-        k = (c0['institute'], c0['course'], q, c0['category'])
+        k = (cn(c0['institute']), c0['course'], q, c0['category'])
         if c0.get('rank_basis') == 'state' and c0.get(col) is not None:
             if k not in prev_state or c0[col] > prev_state[k]:
                 prev_state[k] = c0[col]
         # compare on the All-India value: the *_ai columns once filled (state ranks converted, NULL if not)
         c = {kk: (c0.get(_RB.AI_COL[kk]) if c0.get('rank_basis') in ('air', 'state') else c0.get(kk))
              if kk in _RB.AI_COL else c0.get(kk) for kk in c0}
-        inst.add(c['institute']); ic.add(k[:2]); icq.add(k[:3]); cats_2025.add(c['category'])
+        inst.add(k[0]); ic.add(k[:2]); icq.add(k[:3]); cats_2025.add(c['category'])
         v = c[col]
         if v is not None:
             if k not in prev or v > (prev[k][0] or 0):
@@ -1088,7 +1089,7 @@ def _closing_rows(conn, auth, year, rd, a):
     for r in rows:
         r.pop('institute_raw', None)
         unlisted = r.pop('unlisted', False)
-        k = (r['institute'], r['course'], r['quota'], r['category'])
+        k = (cn(r['institute']), r['course'], r['quota'], r['category'])
         p = prev.get(k)
         r['closing_2025'] = r['closing_2025_round'] = r['change'] = r['change_pct'] = None
         r['closing_2025_state'] = prev_state.get(k)    # the 2025 state rank as published (state-rank cut-offs)
@@ -1104,12 +1105,12 @@ def _closing_rows(conn, auth, year, rd, a):
             r['closing_2025'], r['closing_2025_round'], r['compare'] = v, rn, 'later_round'
             r['fee_2025'] = float(fee) if fee is not None else r['fee_2025']
             r['filled_earlier'] = True        # 2025: needed a later round · 2026: gone in this round
-        elif unlisted or r['institute'] not in known_2025:
+        elif unlisted or k[0] not in known_2025:
             r['compare'] = 'new_college'      # in no authority's 2025 cut-offs — a genuinely new college
             r['new_note'] = 'New college'
-        elif r['institute'] not in inst:
+        elif k[0] not in inst:
             r['compare'] = 'new_to_authority'  # existed in 2025 (another authority, e.g. state quota) but not here
-            r['new_note'] = _was_in_note(auths_2025[r['institute']] - {here})
+            r['new_note'] = _was_in_note(auths_2025[k[0]] - {here})
         elif k[:2] not in ic:
             r['compare'] = 'new_course'       # course new at this college
         elif k[:3] not in icq:
@@ -1140,6 +1141,27 @@ def _closing_rows(conn, auth, year, rd, a):
         r['fee_year'] = 2025 if r.get('fee_2025') is not None else None
     _FEES.attach(conn, out, authority=cutoff_authority(auth))
     return out
+
+
+def _college_key_fn(conn):
+    """name → one key per College Database college (its master id), so every spelling of a college — 2025 cut-off,
+    2026 result, former name — compares as the same college. Names with no College Database link keep their own name."""
+    k2m = {}
+    try:
+        for r in conn.execute("SELECT a.alias_key, a.master_id FROM pg_college_alias a JOIN pg_college_master m "
+                              "ON m.id = a.master_id WHERE COALESCE(a.is_active,1)=1 AND m.kind = 'medical' "
+                              "AND COALESCE(a.alias_key,'')<>'' ORDER BY a.master_id").fetchall():
+            k2m.setdefault(r['alias_key'], r['master_id'])
+        for r in conn.execute("SELECT id, college_name FROM pg_college_master WHERE kind='medical' ORDER BY id").fetchall():
+            k2m.setdefault(re.sub(r'[^a-z0-9]+', ' ', (r['college_name'] or '').lower()).strip(), r['id'])
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+
+    def key(name):
+        mid = k2m.get(re.sub(r'[^a-z0-9]+', ' ', (name or '').lower()).strip())
+        return ('college', mid) if mid else name
+    return key
 
 
 _DNB_STATE = {'at': 0.0, 'auth': None, 'exact': {}, 'first': {}, 'pats': []}
@@ -1263,6 +1285,12 @@ def api_results_cutoffs():
             rows = [r for r in rows if r['closing'] >= rank]
         group_counts = {'compared': 0, 'new': 0}                       # for the tab badges (0 sent explicitly)
         group_counts.update(Counter(r['compare_group'] for r in rows))
+        group_seats, group_colleges = {'compared': 0, 'new': 0}, {'compared': set(), 'new': set()}
+        for r in rows:                        # seats (sum of allotted) + distinct colleges per tab (2026-11-27)
+            g = r['compare_group']
+            group_seats[g] = group_seats.get(g, 0) + (r.get('allotted') or 0)
+            group_colleges.setdefault(g, set()).add(r['institute'])
+        group_colleges = {g: len(s) for g, s in group_colleges.items()}
         reason_counts = dict(Counter(r['compare'] for r in rows))
         grp, cmp_ = _s(a.get('compare_group')), _s(a.get('compare'))
         if grp:                                   # compared | new
@@ -1280,7 +1308,8 @@ def api_results_cutoffs():
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'program': 'dnb' if dnb else 'mdms',
                         'compared_with': None if dnb else f"2025 {rd['round']}", 'states': states,
                         'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india',
-                        'group_counts': group_counts, 'reason_counts': reason_counts,
+                        'group_counts': group_counts, 'group_seats': group_seats,
+                        'group_colleges': group_colleges, 'reason_counts': reason_counts,
                         'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,
                         'page_size': size, 'total_pages': (total + size - 1) // size})
     except Exception as e:

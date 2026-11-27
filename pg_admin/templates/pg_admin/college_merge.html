@@ -1,0 +1,260 @@
+{% extends "pg_admin/pg_admin_base.html" %}
+{% block title %}Duplicate colleges · goocampus.in{% endblock %}
+
+{% block section_content %}
+<style>
+  .cm-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  .cm-tabs { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
+  .cm-tabs a { padding:6px 12px; border-radius:999px; border:1px solid var(--gray-300); background:#fff; font-size:0.8rem; text-decoration:none; color:var(--gray-700); }
+  .cm-tabs a.on { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .cm-pair { background:#fff; border:1px solid var(--gray-200); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  .cm-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:800px) { .cm-grid { grid-template-columns:1fr; } }
+  .cm-col { border:1px solid var(--gray-100); border-radius:8px; padding:9px 11px; font-size:0.8rem; }
+  .cm-col.keep { border-color:#86efac; background:#f0fdf4; }
+  .cm-name { font-weight:700; color:var(--navy); font-size:0.88rem; }
+  .cm-sub { color:var(--gray-500); font-size:0.74rem; }
+  .cm-tag { display:inline-block; padding:1px 7px; border-radius:999px; font-size:0.68rem; font-weight:700; margin:2px 3px 0 0; }
+  .cm-tag.cut { background:#dbeafe; color:#1e40af; } .cm-tag.res { background:#fef3c7; color:#92400e; }
+  .cm-tag.none { background:#f3f4f6; color:#6b7280; }
+  .cm-btn { border:1px solid var(--gray-300); background:#fff; border-radius:6px; padding:5px 11px; font-size:0.78rem; cursor:pointer; color:#2952a3; }
+  .cm-btn.go { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .cm-why { font-size:0.74rem; color:#6b7280; margin:0 0 8px; }
+  .cm-prio { font-size:0.68rem; font-weight:700; padding:1px 8px; border-radius:999px; }
+  .cm-prio.p1 { background:#fee2e2; color:#991b1b; } .cm-prio.p2 { background:#fef3c7; color:#92400e; } .cm-prio.p3 { background:#f3f4f6; color:#4b5563; }
+  .cm-bg { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:1190; }
+  .cm-drawer { position:fixed; top:0; right:-580px; width:540px; max-width:100%; height:100vh; background:#fff; z-index:1200;
+               box-shadow:-8px 0 24px rgba(0,0,0,.12); padding:22px 22px 0; transition:right .2s; overflow-y:auto; box-sizing:border-box; }
+  .cm-drawer.open { right:0; } .cm-bg.open { display:block; }
+  .cm-foot { position:sticky; bottom:0; background:#fff; display:flex; gap:10px; margin-top:20px; padding:14px 0 18px; border-top:1px solid var(--gray-200); }
+  .cm-drawer table { width:100%; border-collapse:collapse; font-size:0.8rem; }
+  .cm-drawer td { padding:5px 4px; border-top:1px solid var(--gray-100); }
+</style>
+<div class="cm-wrap">
+  <h1 style="margin:0 0 6px;font-size:1.4rem;font-weight:700;color:var(--navy);">Duplicate colleges</h1>
+  <p style="margin:0 0 14px;font-size:0.88rem;color:var(--gray-500);max-width:940px;">
+    One college must be listed <b>once</b> in the College Database. Every other spelling — former name, the 2025
+    cut-off spelling, the 2026 result spelling — is kept as a remembered name of that one college, so 2025 and 2026
+    always match. Check each pair below: <b>Same college</b> merges them (nothing is deleted; the extra listing is
+    hidden and every name is remembered), <b>Different colleges</b> stops it being suggested again.
+  </p>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}{% for cat, m in msgs %}
+      <div style="padding:9px 13px;border-radius:8px;margin-bottom:10px;font-size:0.86rem;background:{{ '#DCFCE7' if cat=='success' else '#FEE2E2' }};color:{{ '#166534' if cat=='success' else '#991B1B' }};">{{ m }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <div class="cm-tabs">
+    <a href="?show=pairs" class="{{ 'on' if show=='pairs' }}">Possible duplicates</a>
+    <a href="?show=links" class="{{ 'on' if show=='links' }}">Colleges with 2 cut-off spellings</a>
+    <a href="?show=log" class="{{ 'on' if show=='log' }}">Done ({{ log|length }}) · Different ({{ not_same|length }})</a>
+  </div>
+
+  {% macro col(m, is_keep) %}
+    <div class="cm-col {{ 'keep' if is_keep }}">
+      <div class="cm-name">{{ m.college_name }}</div>
+      <div class="cm-sub">#{{ m.id }} · {{ m.city or '—' }}, {{ m.state }}{% if m.college_type %} · {{ m.college_type }}{% endif %}
+        · {{ m.courses }} courses{% if m.favs %} · {{ m.favs }} favourites{% endif %}</div>
+      <div style="margin-top:5px;">
+        {% if m.cut %}{% for n, auths in m.cut.items() %}
+          <div><span class="cm-tag cut">2025 cut-off</span><span class="cm-sub">{{ n }} — {% for a, k in auths.items() %}{{ a }} ({{ k }} cut-off lines){% if not loop.last %}, {% endif %}{% endfor %}</span></div>
+        {% endfor %}{% else %}<span class="cm-tag none">no 2025 cut-off</span>{% endif %}
+        {% if m.res %}<div><span class="cm-tag res">2026 results</span><span class="cm-sub">{% for a, k in m.res.items() %}{{ a }} {{ k }} seats{% if not loop.last %} · {% endif %}{% endfor %}</span></div>{% endif %}
+      </div>
+      {% set others = m.names[1:] %}
+      {% if others %}<div class="cm-sub" style="margin-top:4px;">Also known as: {{ others|join(' · ') }}</div>{% endif %}
+    </div>
+  {% endmacro %}
+
+  {% if show == 'pairs' %}
+    <div class="cm-pair" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <b style="font-size:0.82rem;">Found one yourself?</b>
+      <input id="cmPickKeep" list="cmAll" placeholder="College to KEEP…" style="flex:1;min-width:260px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;">
+      <input id="cmPickDup" list="cmAll" placeholder="Duplicate listing to merge into it…" style="flex:1;min-width:260px;padding:6px 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;">
+      <button class="cm-btn go" type="button" onclick="cmPick()">Check &amp; merge…</button>
+      <datalist id="cmAll">{% for n, i, st in all_names %}<option value="{{ n }} (#{{ i }}, {{ st }})">{% endfor %}</datalist>
+    </div>
+    <p class="cm-sub" style="margin:0 0 10px;">{{ pairs|length }} pairs to check.
+      <span class="cm-prio p1">first</span> = 2026 results sit on one listing and the 2025 cut-offs on the other (history is split).
+      <span class="cm-prio p2">next</span> = only one has 2025 cut-offs.
+      <span class="cm-prio p3">check</span> = both or neither have cut-offs (often two genuinely different colleges in one town).
+      The green side is the one we suggest keeping.</p>
+    {% for p in pairs %}
+      {% set k = p.a if p.keep == p.a.id else p.b %}{% set d = p.b if p.keep == p.a.id else p.a %}
+      <div class="cm-pair" data-ids="{{ p.a.id }},{{ p.b.id }}">
+        <div class="cm-why"><span class="cm-prio p{{ p.prio }}">{{ {1:'first',2:'next',3:'check'}[p.prio] }}</span>
+          {{ p.why }}{% if p.both_cut %} · <b>both were separate colleges in the 2025 cut-offs</b>{% endif %}</div>
+        <div class="cm-grid">{{ col(k, True) }}{{ col(d, False) }}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <button class="cm-btn go" type="button" onclick="cmOpen({{ k.id }}, {{ d.id }})">Same college — keep the green one…</button>
+          <button class="cm-btn" type="button" onclick="cmOpen({{ d.id }}, {{ k.id }})">Same college — keep the other…</button>
+          <button class="cm-btn" type="button" onclick="cmNotSame(this, {{ p.a.id }}, {{ p.b.id }})">Different colleges</button>
+        </div>
+      </div>
+    {% else %}
+      <div class="cm-pair" style="text-align:center;color:var(--gray-500);">Nothing to check ✓</div>
+    {% endfor %}
+
+  {% elif show == 'links' %}
+    <p class="cm-sub" style="margin:0 0 10px;"><b>Red</b> = a 2025 cut-off name that shares no word with this college's own name — it probably
+      belongs to another college (like NIMS on JNU): move it to the right one. The rest carry two different 2025 cut-off spellings. Usually that is right
+      (the state list and MCC print the same college differently). If a spelling belongs to a <b>different</b> college,
+      move it to the right one — or unlink it if that college is not in our list.</p>
+    {% for m in links %}
+      <div class="cm-pair">
+        <div class="cm-name">{{ m.college_name }} <span class="cm-sub">#{{ m.id }} · {{ m.city }}, {{ m.state }}</span>
+          {% if m.suspect %}<span class="cm-prio p1">check: this cut-off name looks like a different college</span>{% endif %}</div>
+        {% for a in m.aliases if a.alias_source == 'cutoff' %}
+          <form method="post" action="{{ url_for('pg_college_merge_move_alias') }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:0.8rem;">
+            <input type="hidden" name="alias_id" value="{{ a.id }}">
+            <span style="flex:1;min-width:280px;{% if a.alias_name in m.suspect %}color:#991b1b;font-weight:700;{% endif %}">{{ a.alias_name }}
+              <span class="cm-sub">— {% for au, k in (m.cut.get(a.alias_name) or {}).items() %}{{ au }} ({{ k }}){% if not loop.last %}, {% endif %}{% endfor %}</span></span>
+            <select name="target" style="max-width:320px;padding:4px;font-size:0.78rem;">
+              <option value="">— not this college: unlink —</option>
+              {% set sug = (m.better or {}).get(a.alias_name) %}
+              {% for n, i, st in all_names if st == m.state and i != m.id %}<option value="{{ i }}" {{ 'selected' if sug and sug[0] == i }}>{{ n }} (#{{ i }}){{ ' — suggested' if sug and sug[0] == i }}</option>{% endfor %}
+            </select>
+            <button class="cm-btn" type="submit" onclick="return confirm('Move this spelling off {{ m.college_name|e }}?');">Move</button>
+          </form>
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+  {% else %}
+    <div class="cm-pair"><b>Merged / moved</b>
+      {% for r in log %}<div class="cm-sub" style="margin-top:4px;">{{ r.done_at|string|truncate(16, True, '') }} · {{ r.action }} ·
+        {% if r.action == 'merge' %}#{{ r.dup_id }} {{ r.dup_name }} → #{{ r.keep_id }} {{ r.keep_name }}
+          {% if r.id not in undone %}<button class="cm-btn" type="button" style="margin-left:6px;padding:2px 9px;" onclick="cmUndo({{ r.id }}, this)">Undo…</button>{% else %}<b> · undone</b>{% endif %}
+        {% elif r.action == 'undo' %}undo of a merge: #{{ r.dup_id }} {{ r.dup_name }} is a separate college again{% else %}“{{ r.dup_name }}” from #{{ r.dup_id }} → {{ ('#' ~ r.keep_id) if r.keep_id else 'unlinked' }}{% endif %}
+        · {{ r.done_by }}</div>{% else %}<div class="cm-sub">None yet.</div>{% endfor %}
+    </div>
+    <div class="cm-pair"><b>Marked as different colleges</b>
+      {% for r in not_same %}<div class="cm-sub" style="margin-top:4px;">#{{ r.a_id }} {{ (ms.get(r.a_id) or {}).get('college_name', '') }} ≠ #{{ r.b_id }} {{ (ms.get(r.b_id) or {}).get('college_name', '') }} · {{ r.decided_by }}</div>{% else %}<div class="cm-sub">None yet.</div>{% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<div id="cmToast" style="display:none;position:fixed;top:90px;right:24px;z-index:1300;max-width:460px;padding:11px 14px;border-radius:9px;font-size:0.86rem;box-shadow:0 6px 18px rgba(0,0,0,.12);"></div>
+<div class="cm-bg" id="cmBg" onclick="cmClose()"></div>
+<div class="cm-drawer" id="cmUndoDrawer">
+  <h3 style="margin:0 0 6px;color:var(--navy);">Undo this merge</h3>
+  <div id="cmUndoBody" class="cm-sub">Loading…</div>
+  <div class="cm-foot">
+    <button class="cm-btn go" type="button" id="cmUndoGo" disabled onclick="cmUndoGo()">Confirm undo</button>
+    <button class="cm-btn" type="button" onclick="cmUndoClose()">Cancel</button>
+  </div>
+</div>
+<div class="cm-drawer" id="cmDrawer">
+  <h3 style="margin:0 0 6px;color:var(--navy);">Merge into one college</h3>
+  <div id="cmBody" class="cm-sub">Loading…</div>
+  <form method="post" action="{{ url_for('pg_college_merge_apply') }}" onsubmit="return cmConfirm(event)">
+    <input type="hidden" name="keep" id="cmKeep"><input type="hidden" name="dup" id="cmDup">
+    <input type="hidden" name="show" value="{{ show }}">
+    <div class="cm-foot">
+      <button class="cm-btn go" type="submit" id="cmGo" disabled>Confirm merge</button>
+      <button class="cm-btn" type="button" onclick="cmClose()">Cancel</button>
+    </div>
+  </form>
+</div>
+<script>
+const CM_URL = {apply: '{{ url_for("pg_college_merge_apply") }}', notSame: '{{ url_for("pg_college_merge_not_same") }}'};
+function cmPost(url, data) {
+  const fd = new FormData(); Object.keys(data).forEach(k => fd.append(k, data[k]));
+  return fetch(url, {method: 'POST', body: fd, credentials: 'same-origin', headers: {'X-Requested-With': 'fetch'}}).then(r => r.json());
+}
+function cmGone(ids) {                     // remove every card that involves a merged / decided college
+  document.querySelectorAll('.cm-pair[data-ids]').forEach(el => {
+    const x = el.dataset.ids.split(',').map(Number);
+    if (ids.some(i => x.includes(i))) el.remove();
+  });
+}
+function cmToast(msg, ok) {
+  const t = document.getElementById('cmToast');
+  t.textContent = msg; t.style.background = ok ? '#DCFCE7' : '#FEE2E2'; t.style.color = ok ? '#166534' : '#991B1B';
+  t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 6000);
+}
+function cmConfirm(ev) {
+  ev.preventDefault();
+  const go = document.getElementById('cmGo'), keep = +document.getElementById('cmKeep').value, dup = +document.getElementById('cmDup').value;
+  if (go.disabled) return false;
+  go.disabled = true; go.textContent = 'Merging… please wait';
+  cmPost(CM_URL.apply, {keep: keep, dup: dup}).then(j => {
+    go.textContent = 'Confirm merge';
+    if (!j.ok) { go.disabled = false; cmToast('Merge failed — nothing changed: ' + j.error, false); return; }
+    cmClose(); cmGone([dup]);
+    cmToast('Merged ✓ #' + dup + ' is now part of #' + keep + ' (' + j.counts.std_after + '). ' + j.counts.results_2026_rows + ' 2026 seats moved. Nothing deleted.', true);
+  }).catch(e => { go.disabled = false; go.textContent = 'Confirm merge'; cmToast('Could not reach the server — nothing changed. ' + e, false); });
+  return false;
+}
+function cmNotSame(btn, a, b) {
+  btn.disabled = true; btn.textContent = 'Saving…';
+  cmPost(CM_URL.notSame, {a: a, b: b}).then(j => {
+    if (!j.ok) { btn.disabled = false; btn.textContent = 'Different colleges'; cmToast('Could not save.', false); return; }
+    btn.closest('.cm-pair').remove(); cmToast('Saved: different colleges — will not be suggested again.', true);
+  }).catch(() => { btn.disabled = false; btn.textContent = 'Different colleges'; });
+}
+let cmUndoId = 0, cmUndoBtn = null;
+function cmUndoClose() { document.getElementById('cmUndoDrawer').classList.remove('open'); document.getElementById('cmBg').classList.remove('open'); }
+function cmUndo(id, btn) {
+  cmUndoId = id; cmUndoBtn = btn;
+  const body = document.getElementById('cmUndoBody'), go = document.getElementById('cmUndoGo');
+  body.textContent = 'Loading…'; go.disabled = true; go.textContent = 'Confirm undo';
+  document.getElementById('cmUndoDrawer').classList.add('open'); document.getElementById('cmBg').classList.add('open');
+  fetch('{{ url_for("pg_college_merge_undo") }}?log=' + id, {credentials: 'same-origin'}).then(r => r.json()).then(j => {
+    if (!j.ok) { body.textContent = 'Cannot undo: ' + j.error; return; }
+    const p = j.plan, esc = s => String(s).replace(/[&<>"]/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x]));
+    const li = a => a.length ? a.map(esc).join('<br>') : '—';
+    body.innerHTML = '<p>The hidden listing comes back as its own college, and these move back to it:</p><table>' +
+      '<tr><td>Names</td><td><b>' + li(p.aliases) + '</b></td></tr>' +
+      '<tr><td>Courses</td><td><b>' + li(p.courses) + '</b></td></tr>' +
+      '<tr><td>2026 result seats</td><td><b>' + p.results + '</b></td></tr>' +
+      '<tr><td>Name-matching spellings</td><td><b>' + li(p.name_memory) + '</b></td></tr>' +
+      (p.warnings.length ? '<tr><td style="color:#b45309">Please check</td><td style="color:#b45309">' + li(p.warnings) + '</td></tr>' : '') +
+      '</table><p class="cm-sub">The pair is then marked "different colleges" so it is not suggested again.</p>';
+    go.disabled = false;
+  });
+}
+function cmUndoGo() {
+  const go = document.getElementById('cmUndoGo'); go.disabled = true; go.textContent = 'Undoing… please wait';
+  cmPost('{{ url_for("pg_college_merge_undo") }}', {log: cmUndoId}).then(j => {
+    if (!j.ok) { go.disabled = false; go.textContent = 'Confirm undo'; cmToast('Undo failed — nothing changed: ' + j.error, false); return; }
+    cmUndoClose(); if (cmUndoBtn) cmUndoBtn.outerHTML = '<b> · undone</b>';
+    cmToast('Undone ✓ — the two colleges are separate again.', true);
+  }).catch(e => { go.disabled = false; go.textContent = 'Confirm undo'; cmToast('Could not reach the server — nothing changed.', false); });
+}
+function cmPick() {
+  const id = v => { const m = /\(#(\d+),/.exec(v || ''); return m ? +m[1] : 0; };
+  const k = id(document.getElementById('cmPickKeep').value), d = id(document.getElementById('cmPickDup').value);
+  if (!k || !d || k === d) { alert('Pick two different colleges from the list.'); return; }
+  cmOpen(k, d);
+}
+function cmClose() { document.getElementById('cmDrawer').classList.remove('open'); document.getElementById('cmBg').classList.remove('open'); }
+function cmOpen(keep, dup) {
+  document.getElementById('cmKeep').value = keep; document.getElementById('cmDup').value = dup;
+  const body = document.getElementById('cmBody'), go = document.getElementById('cmGo');
+  body.textContent = 'Loading…'; go.disabled = true; go.textContent = 'Confirm merge';
+  document.getElementById('cmDrawer').classList.add('open'); document.getElementById('cmBg').classList.add('open');
+  fetch('{{ url_for("pg_college_merge_preview") }}?keep=' + keep + '&dup=' + dup, {credentials: 'same-origin'})
+    .then(r => r.json()).then(j => {
+      if (!j.ok) { body.textContent = 'Cannot merge: ' + j.error; return; }
+      const c = j.counts, esc = s => String(s).replace(/[&<>"]/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x]));
+      const rows = [
+        ['Kept college (#' + keep + ') — standard name after merge', esc(c.std_after)],
+        ['Hidden listing', '#' + dup + ' (kept on record, not deleted)'],
+        ['Names remembered on the kept college', c.aliases_moved + 1],
+        ['2025 cut-off spellings that now link here', (c.cutoffs_2025_names || []).map(esc).join('<br>') || '—'],
+        ['2025 cut-off lines now shown under the kept college', c.cutoffs_2025_rows_linked + ' (2025 data itself untouched)'],
+        ['2026 result seats moved to the kept name', c.results_2026_rows],
+        ['Name-matching entries moved', c.name_memory_rows],
+        ['Seat-matrix links moved', c.seat_matrix_rows],
+        ['Courses moved', c.courses_moved + (c.courses_already_there ? ' (' + c.courses_already_there + ' already there, left on the hidden listing)' : '')],
+        ['Favourites moved', c.favourites_moved],
+        ['Choice-list items', c['pg_choice_items.master_id'] || 0],
+      ];
+      body.innerHTML = '<table>' + rows.map(r => '<tr><td>' + r[0] + '</td><td><b>' + r[1] + '</b></td></tr>').join('') + '</table>';
+      go.disabled = false;
+    }).catch(e => { body.textContent = 'Could not load: ' + e; });
+}
+</script>
+{% endblock %}

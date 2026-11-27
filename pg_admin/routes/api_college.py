@@ -106,6 +106,21 @@ def api_pg_college_lookup():
         conn.close()
 
 
+
+def _follow_merge(conn, college_id):
+    """A college merged into another (founder 2026-11-27) → its old id opens the kept college."""
+    try:
+        r = conn.execute("SELECT kind FROM pg_college_master WHERE id = ?", [college_id]).fetchone()
+        if r and r['kind'] == 'merged':
+            k = conn.execute("SELECT keep_id FROM pg_college_merge_log WHERE dup_id = ? AND action = 'merge' "
+                             "ORDER BY id DESC LIMIT 1", [college_id]).fetchone()
+            if k and k['keep_id']:
+                return k['keep_id']
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    return college_id
+
 # ── College Database ─────────────────────────────────────────────────────────
 def api_pg_pg_colleges():
     """GET /api/pg/pg-colleges?cat=&state=&q=&page="""
@@ -117,7 +132,7 @@ def api_pg_pg_colleges():
     page = _page()
     conn = get_db()
     try:
-        where, params = ["1=1"], []
+        where, params = ["m.kind <> 'merged'"], []
         if q:
             frag, fp = smart_name_clause("m.college_name", q); where.append(frag); params.extend(fp)
         if cat in _CAT_KEYS:
@@ -176,12 +191,12 @@ def api_pg_pg_colleges_facets():
     out = {'ok': True, 'states': [], 'categories': [], 'total': 0}
     try:
         out['states'] = [r['state'] for r in conn.execute(
-            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' AND kind <> 'merged' ORDER BY state").fetchall()]
         counts = {r['course_category']: r['n'] for r in conn.execute(
             "SELECT course_category, COUNT(DISTINCT master_id) AS n FROM pg_college_course "
             "GROUP BY course_category").fetchall()}
         out['categories'] = [{'key': k, 'label': lbl, 'count': counts.get(k, 0)} for k, lbl in _CAT_LABELS]
-        out['total'] = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master").fetchone()['n']
+        out['total'] = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master WHERE kind <> 'merged'").fetchone()['n']
     except Exception as e:
         logging.error("api_pg_pg_colleges_facets: %s", e)
     finally:
@@ -195,6 +210,7 @@ def api_pg_pg_college_detail(college_id):
         return jsonify({'ok': False, 'error': 'unauthorized'}), 401
     conn = get_db()
     try:
+        college_id = _follow_merge(conn, college_id)
         m = conn.execute("SELECT * FROM pg_college_master WHERE id = ?", [college_id]).fetchone()
         if not m:
             conn.close()
@@ -321,6 +337,7 @@ def api_pg_stipend_detail(college_id):
     deg_clause, deg_param = _fam(family)
     conn = get_db()
     try:
+        college_id = _follow_merge(conn, college_id)
         m = conn.execute("SELECT id, college_name, kind, city, state FROM pg_college_master "
                          "WHERE id = ?", [college_id]).fetchone()
         if not m:
@@ -515,6 +532,7 @@ def api_pg_fees_college(college_id):
     fam = (request.args.get('family') or '').strip()
     conn = get_db()
     try:
+        college_id = _follow_merge(conn, college_id)
         m = conn.execute("SELECT id, college_name, kind, city, state FROM pg_college_master "
                          "WHERE id = ?", [college_id]).fetchone()
         if not m:
@@ -592,7 +610,7 @@ def api_pg_college_favorites():
                 "SELECT m.id, m.college_name, m.kind, m.city, m.state, m.college_type, "
                 "m.logo_url, f.added_at "
                 "FROM pg_college_favorites f JOIN pg_college_master m ON m.id = f.master_id "
-                "WHERE f.user_id = ? ORDER BY f.added_at DESC", [uid]).fetchall()
+                "WHERE f.user_id = ? AND m.kind <> 'merged' ORDER BY f.added_at DESC", [uid]).fetchall()
             favs = [{'id': r['id'], 'name': r['college_name'], 'kind': r['kind'],
                      'city': r['city'], 'state': r['state'], 'college_type': r['college_type'],
                      'logo_url': r['logo_url'], 'added_at': str(r['added_at'])} for r in rows]

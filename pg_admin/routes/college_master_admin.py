@@ -515,7 +515,7 @@ def college_database_list():
     rows, states, total, cat_counts = [], [], 0, {}
     try:
         _ensure_course_categories(conn)
-        where, params = [], []
+        where, params = ["m.kind <> 'merged'"], []
         if q:
             frag, fp = smart_name_clause("m.college_name", q); where.append(frag); params.extend(fp)
         if cat in _CAT_KEYS:
@@ -531,14 +531,14 @@ def college_database_list():
             f"(SELECT COUNT(*) FROM pg_college_course c WHERE c.master_id = m.id) AS n_courses "
             f"FROM pg_college_master m{wsql} ORDER BY m.college_name LIMIT 400", params).fetchall()
         states = [r['state'] for r in conn.execute(
-            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' ORDER BY state").fetchall()]
+            "SELECT DISTINCT state FROM pg_college_master WHERE COALESCE(state,'') <> '' AND kind <> 'merged' ORDER BY state").fetchall()]
         all_names = [r['college_name'] for r in conn.execute(
-            "SELECT college_name FROM pg_college_master ORDER BY college_name").fetchall()]
+            "SELECT college_name FROM pg_college_master WHERE kind <> 'merged' ORDER BY college_name").fetchall()]
         # colleges offering ≥1 course in each bucket
         for r in conn.execute("SELECT course_category AS cat, COUNT(DISTINCT master_id) AS n "
                               "FROM pg_college_course GROUP BY course_category").fetchall():
             cat_counts[r['cat']] = r['n']
-        n_total = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master").fetchone()['n']
+        n_total = conn.execute("SELECT COUNT(*) AS n FROM pg_college_master WHERE kind <> 'merged'").fetchone()['n']
         # which buckets each shown college offers (for card chips)
         order = {k: i for i, (k, _l) in enumerate(_CAT_LABELS)}
         cat_by_college = {}
@@ -623,7 +623,7 @@ def _dup_groups(conn):
         "COUNT(*) AS n, string_agg(m.id::text, ',' ORDER BY m.id) AS ids, "
         "string_agg(m.college_name || ' — ' || COALESCE(m.state,'') || '  (#' || m.id::text || ')', "
         "'   |   ' ORDER BY m.id) AS detail "
-        "FROM pg_college_master m "
+        "FROM pg_college_master m WHERE m.kind <> 'merged' "
         f"GROUP BY m.kind, {_DUP_NAME_KEY}, {_DUP_STATE_KEY} "
         "HAVING COUNT(*) > 1 ORDER BY n DESC, detail").fetchall()
     out = []

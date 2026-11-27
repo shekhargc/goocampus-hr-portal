@@ -109,6 +109,8 @@ def ensure_college_master_tables():
                      "ON pg_college_favorites (user_id, master_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pg_college_favorites_user "
                      "ON pg_college_favorites (user_id)")
+        from pg_admin.routes.college_merge import ensure_merge_tables   # merge log + pair decisions (2026-11-27)
+        ensure_merge_tables(conn)
         conn.commit()
         logging.info("pg_college_master tables ensured")
     except Exception as e:
