@@ -774,7 +774,8 @@ def college_rename_bulk():
                 continue
             old = m['college_name']
             std_before = _std_name(conn, mid)
-            follow = std_before == old                 # the old name was also the matching name
+            is_cut = bool(conn.execute("SELECT 1 FROM pg_cutoffs WHERE institute=? LIMIT 1", [old]).fetchone())
+            follow = std_before == old and not is_cut  # old name was the matching name and is not a 2025 cut-off spelling
             if dry:
                 done.append({'id': mid, 'old': old, 'new': new, 'moves_2026_rows': follow})
                 continue
