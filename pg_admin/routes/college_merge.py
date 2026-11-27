@@ -310,6 +310,7 @@ def _has_col(conn, table, col):
 
 _ID_LINKS = [('pg_choice_items', 'master_id'), ('pg_users', 'mbbs_college_id'), ('pg_users', 'pg_college_id'),
              ('pg_pathway_profile', 'mbbs_college_id')]
+_ROW_KEY = {'pg_pathway_profile': ('user_id', 'country')}      # tables without an id column (2026-11-27)
 
 
 def _merge(conn, keep, dup, who, dry):
@@ -384,7 +385,9 @@ def _merge(conn, keep, dup, who, dry):
     moved['favorite'] = ids("UPDATE pg_college_favorites d SET master_id=? WHERE d.master_id=? AND NOT EXISTS (SELECT 1 FROM "
                             "pg_college_favorites k WHERE k.master_id=? AND k.user_id=d.user_id)", [keep, dup, keep])
     for t, col in links:
-        moved[f'{t}.{col}'] = ids(f"UPDATE {t} SET {col}=? WHERE {col}=?", [keep, dup])
+        kc = _ROW_KEY.get(t, ('id',))
+        moved[f'{t}.{col}'] = [[r[k] for k in kc] for r in conn.execute(
+            f"UPDATE {t} SET {col}=? WHERE {col}=? RETURNING {', '.join(kc)}", [keep, dup]).fetchall()]
     std_after = _std_name(conn, keep)
     old = [x for x in dup_names + [std_before] if x != std_after]
     moved['results'] = [[r['id'], r['institute']] for r in conn.execute(
@@ -569,7 +572,10 @@ def _undo(conn, log_id, who, dry):
         for k, v in mv.items():
             if '.' in k and v:
                 t, col = k.split('.', 1)
-                conn.execute(f"UPDATE {t} SET {col}=? WHERE id = ANY(?)", [dup, v])
+                kc = _ROW_KEY.get(t, ('id',))
+                for key in v:
+                    key = key if isinstance(key, list) else [key]
+                    conn.execute(f"UPDATE {t} SET {col}=? WHERE " + ' AND '.join(f'{c}=?' for c in kc), [dup] + key)
         for i, was in mv.get('results', []):
             conn.execute("UPDATE pg_results SET institute=? WHERE id=? AND institute=?", [was, i, std_after])
         for i, was in mv.get('name_memory', []):
