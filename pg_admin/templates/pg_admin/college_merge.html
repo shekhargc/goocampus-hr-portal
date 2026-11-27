@@ -82,17 +82,14 @@
       The green side is the one we suggest keeping.</p>
     {% for p in pairs %}
       {% set k = p.a if p.keep == p.a.id else p.b %}{% set d = p.b if p.keep == p.a.id else p.a %}
-      <div class="cm-pair">
+      <div class="cm-pair" data-ids="{{ p.a.id }},{{ p.b.id }}">
         <div class="cm-why"><span class="cm-prio p{{ p.prio }}">{{ {1:'first',2:'next',3:'check'}[p.prio] }}</span>
           {{ p.why }}{% if p.both_cut %} · <b>both were separate colleges in the 2025 cut-offs</b>{% endif %}</div>
         <div class="cm-grid">{{ col(k, True) }}{{ col(d, False) }}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <button class="cm-btn go" type="button" onclick="cmOpen({{ k.id }}, {{ d.id }})">Same college — keep the green one…</button>
           <button class="cm-btn" type="button" onclick="cmOpen({{ d.id }}, {{ k.id }})">Same college — keep the other…</button>
-          <form method="post" action="{{ url_for('pg_college_merge_not_same') }}" style="margin:0;">
-            <input type="hidden" name="a" value="{{ p.a.id }}"><input type="hidden" name="b" value="{{ p.b.id }}">
-            <button class="cm-btn" type="submit">Different colleges</button>
-          </form>
+          <button class="cm-btn" type="button" onclick="cmNotSame(this, {{ p.a.id }}, {{ p.b.id }})">Different colleges</button>
         </div>
       </div>
     {% else %}
@@ -133,11 +130,12 @@
   {% endif %}
 </div>
 
+<div id="cmToast" style="display:none;position:fixed;top:90px;right:24px;z-index:1300;max-width:460px;padding:11px 14px;border-radius:9px;font-size:0.86rem;box-shadow:0 6px 18px rgba(0,0,0,.12);"></div>
 <div class="cm-bg" id="cmBg" onclick="cmClose()"></div>
 <div class="cm-drawer" id="cmDrawer">
   <h3 style="margin:0 0 6px;color:var(--navy);">Merge into one college</h3>
   <div id="cmBody" class="cm-sub">Loading…</div>
-  <form method="post" action="{{ url_for('pg_college_merge_apply') }}">
+  <form method="post" action="{{ url_for('pg_college_merge_apply') }}" onsubmit="return cmConfirm(event)">
     <input type="hidden" name="keep" id="cmKeep"><input type="hidden" name="dup" id="cmDup">
     <input type="hidden" name="show" value="{{ show }}">
     <div class="cm-foot">
@@ -147,6 +145,42 @@
   </form>
 </div>
 <script>
+const CM_URL = {apply: '{{ url_for("pg_college_merge_apply") }}', notSame: '{{ url_for("pg_college_merge_not_same") }}'};
+function cmPost(url, data) {
+  const fd = new FormData(); Object.keys(data).forEach(k => fd.append(k, data[k]));
+  return fetch(url, {method: 'POST', body: fd, credentials: 'same-origin', headers: {'X-Requested-With': 'fetch'}}).then(r => r.json());
+}
+function cmGone(ids) {                     // remove every card that involves a merged / decided college
+  document.querySelectorAll('.cm-pair[data-ids]').forEach(el => {
+    const x = el.dataset.ids.split(',').map(Number);
+    if (ids.some(i => x.includes(i))) el.remove();
+  });
+}
+function cmToast(msg, ok) {
+  const t = document.getElementById('cmToast');
+  t.textContent = msg; t.style.background = ok ? '#DCFCE7' : '#FEE2E2'; t.style.color = ok ? '#166534' : '#991B1B';
+  t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 6000);
+}
+function cmConfirm(ev) {
+  ev.preventDefault();
+  const go = document.getElementById('cmGo'), keep = +document.getElementById('cmKeep').value, dup = +document.getElementById('cmDup').value;
+  if (go.disabled) return false;
+  go.disabled = true; go.textContent = 'Merging… please wait';
+  cmPost(CM_URL.apply, {keep: keep, dup: dup}).then(j => {
+    go.textContent = 'Confirm merge';
+    if (!j.ok) { go.disabled = false; cmToast('Merge failed — nothing changed: ' + j.error, false); return; }
+    cmClose(); cmGone([dup]);
+    cmToast('Merged ✓ #' + dup + ' is now part of #' + keep + ' (' + j.counts.std_after + '). ' + j.counts.results_2026_rows + ' 2026 seats moved. Nothing deleted.', true);
+  }).catch(e => { go.disabled = false; go.textContent = 'Confirm merge'; cmToast('Could not reach the server — nothing changed. ' + e, false); });
+  return false;
+}
+function cmNotSame(btn, a, b) {
+  btn.disabled = true; btn.textContent = 'Saving…';
+  cmPost(CM_URL.notSame, {a: a, b: b}).then(j => {
+    if (!j.ok) { btn.disabled = false; btn.textContent = 'Different colleges'; cmToast('Could not save.', false); return; }
+    btn.closest('.cm-pair').remove(); cmToast('Saved: different colleges — will not be suggested again.', true);
+  }).catch(() => { btn.disabled = false; btn.textContent = 'Different colleges'; });
+}
 function cmPick() {
   const id = v => { const m = /\(#(\d+),/.exec(v || ''); return m ? +m[1] : 0; };
   const k = id(document.getElementById('cmPickKeep').value), d = id(document.getElementById('cmPickDup').value);
@@ -157,7 +191,7 @@ function cmClose() { document.getElementById('cmDrawer').classList.remove('open'
 function cmOpen(keep, dup) {
   document.getElementById('cmKeep').value = keep; document.getElementById('cmDup').value = dup;
   const body = document.getElementById('cmBody'), go = document.getElementById('cmGo');
-  body.textContent = 'Loading…'; go.disabled = true;
+  body.textContent = 'Loading…'; go.disabled = true; go.textContent = 'Confirm merge';
   document.getElementById('cmDrawer').classList.add('open'); document.getElementById('cmBg').classList.add('open');
   fetch('{{ url_for("pg_college_merge_preview") }}?keep=' + keep + '&dup=' + dup, {credentials: 'same-origin'})
     .then(r => r.json()).then(j => {

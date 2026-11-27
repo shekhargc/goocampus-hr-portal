@@ -20,6 +20,7 @@ A merge never deletes anything:
 import json
 import logging
 import re
+import time
 from collections import defaultdict
 from itertools import combinations
 from flask import render_template, request, redirect, url_for, flash, jsonify
@@ -33,6 +34,7 @@ GEN = set((
     'sri smt late pt pandit new campus amp prev previously known as erstwhile india formerly formely sector road '
     'mc gmc s rajkiya allopathic super speciality multi teaching rural for in at with attached associated group '
     'post graduate education civil hq headquarters head quarter quarters').split())
+_CACHE = {}          # pair list kept 15 min until a merge / decision / alias change (speed, 2026-11-27)
 GOVT = {'government', 'govt', 'autonomous', 'rajkiya', 'gmc', 'state'}
 
 
@@ -152,10 +154,18 @@ def _pairs(conn, ms):
         c = city(m)
         return not c or c == ' '.join(toks(m['state'])) or 'prev' in c.split() or len(c) > 30
 
+    core_c, close_c = {}, {}
+
+    def core(x):
+        if x not in core_c:
+            core_c[x] = ' '.join(t for t in toks(x) if t not in GEN)
+        return core_c[x]
+
     def close_names(a, b):                    # compare without the boiler-plate words (medical, college, …)
-        def core(x):
-            return ' '.join(t for t in toks(x) if t not in GEN)
-        return max(SequenceMatcher(None, core(x), core(y)).ratio() for x in a['names'] for y in b['names'])
+        k = (a['id'], b['id'])
+        if k not in close_c:
+            close_c[k] = max(SequenceMatcher(None, core(x), core(y)).ratio() for x in a['names'] for y in b['names'])
+        return close_c[k]
 
     def same_place(a, b):
         ca, cb = city(a), city(b)
@@ -177,7 +187,7 @@ def _pairs(conn, ms):
     out = []
     for group in by_state.values():
         for a, b in combinations(sorted(group, key=lambda m: m['id']), 2):
-            if (a['id'], b['id']) in decided:
+            if (a['id'], b['id']) in decided or not same_place(a, b):     # different towns: skip early (speed)
                 continue
             best, why = 0.0, ''
             for x in a['names']:
@@ -194,7 +204,7 @@ def _pairs(conn, ms):
                 clash = (da and db and not jac(da, db)[0]) or ((not da or not db) and govtish(a) != govtish(b))
                 if not clash:
                     best, why = 0.9, 'nearly the same name'
-            if best < 0.5 or not same_place(a, b):
+            if best < 0.5:
                 continue
             if why.startswith('both named') and not (govtish(a) or govtish(b)):
                 continue
@@ -237,9 +247,15 @@ def college_merge_page():
     conn = get_db()
     pairs, links, log, ms = [], [], [], {}
     try:
-        ms = _load(conn)
+        ver = tuple(conn.execute(
+            "SELECT (SELECT COALESCE(MAX(id),0) FROM pg_college_merge_log) AS a, "
+            "(SELECT COALESCE(MAX(id),0) FROM pg_college_pair_decision) AS b, "
+            "(SELECT COUNT(*) FROM pg_college_alias) AS c, (SELECT COUNT(*) FROM pg_college_master) AS d").fetchone().values())
+        hit = _CACHE.get('ver') == ver and time.time() - _CACHE.get('at', 0) < 900
+        ms = _CACHE['ms'] if hit else _load(conn)
         if show == 'pairs':
-            pairs = _pairs(conn, ms)
+            pairs = _CACHE['pairs'] if hit and _CACHE.get('pairs') is not None else _pairs(conn, ms)
+            _CACHE.update(ver=ver, at=time.time(), ms=ms, pairs=pairs)
         elif show == 'links':
             links = _wrong_links(ms)
         log = [dict(r) for r in conn.execute(
@@ -400,6 +416,8 @@ def college_merge_apply():
     try:
         c = _merge(conn, keep, dup, _who(u), dry=False)
         conn.commit()
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True, 'keep': keep, 'dup': dup, 'counts': c})
         flash(f"Merged: #{dup} is now part of #{keep} ({c['std_after']}). Moved {c['aliases_moved']} names, "
               f"{c['courses_moved']} courses, {c['results_2026_rows']} 2026 result seats. Nothing was deleted.",
               'success')
@@ -407,6 +425,8 @@ def college_merge_apply():
         try: conn.rollback()
         except Exception: pass
         logging.error("college_merge_apply: %s", e)
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': False, 'error': str(e)})
         flash(f'Merge failed — nothing changed: {e}', 'error')
     finally:
         conn.close()
@@ -424,6 +444,8 @@ def college_merge_not_same():
         conn.execute("INSERT INTO pg_college_pair_decision (a_id, b_id, decision, decided_by) VALUES (?,?,?,?) "
                      "ON CONFLICT (a_id, b_id) DO NOTHING", [a, b, 'not_same', _who(u)])
         conn.commit()
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return jsonify({'ok': True})
         flash('Saved: these are two different colleges — they will not be suggested again.', 'success')
     except Exception as e:
         try: conn.rollback()
