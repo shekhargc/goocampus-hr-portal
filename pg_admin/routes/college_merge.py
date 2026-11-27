@@ -243,9 +243,15 @@ def _wrong_links(ms):
                         if t not in GEN and t not in states and len(t) > 1}
         return tok_c[x]
 
+    same_c = {}
+
     def same(x, y):
-        return x == y or (len(x) >= 4 and len(y) >= 4 and (x.startswith(y) or y.startswith(x) or x.endswith(y)
-                                                           or y.endswith(x) or SequenceMatcher(None, x, y).ratio() >= 0.85))
+        k = (x, y)
+        if k not in same_c:
+            same_c[k] = x == y or (len(x) >= 4 and len(y) >= 4 and (
+                x.startswith(y) or y.startswith(x) or x.endswith(y) or y.endswith(x)
+                or (abs(len(x) - len(y)) <= 3 and SequenceMatcher(None, x, y).ratio() >= 0.85)))
+        return same_c[k]
 
     def ratio(n, names):
         c = ' '.join(sorted(toks(n)))
@@ -255,8 +261,12 @@ def _wrong_links(ms):
         w = toks(n)
         return max([sum(1 for x in w if any(same(x, y) for y in toks(o))) for o in names] or [0])
     by_state = defaultdict(list)
+    index = defaultdict(set)                   # word (and its first 4 letters) → colleges, so only likely ones are compared
     for m in ms.values():
         by_state[_nstate(m['state'])].append(m)
+        for nme in [m['college_name']] + [a['alias_name'] for a in m['aliases'] if a['alias_source'] != 'cutoff']:
+            for t in toks(nme):
+                index[t].add(m['id']); index[t[:4]].add(m['id'])
     out = []
     for m in ms.values():
         own_names = [m['college_name']] + [a['alias_name'] for a in m['aliases'] if a['alias_source'] != 'cutoff']
@@ -264,8 +274,12 @@ def _wrong_links(ms):
         for n in m['cut']:
             mine, mine_r = sim(n, own_names), ratio(n, own_names)
             best, best_r, who = 0, 0, None
-            for o in by_state[_nstate(m['state'])]:
-                if o['id'] == m['id']:
+            cand = set()
+            for t in toks(n):
+                cand |= index.get(t, set()) | index.get(t[:4], set())
+            st = _nstate(m['state'])
+            for o in (ms[i] for i in cand if i in ms):
+                if o['id'] == m['id'] or _nstate(o['state']) != st:
                     continue
                 o_names = [o['college_name']] + [a['alias_name'] for a in o['aliases'] if a['alias_source'] != 'cutoff']
                 sc = sim(n, o_names)
