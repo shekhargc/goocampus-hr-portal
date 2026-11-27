@@ -175,8 +175,9 @@ def _pairs(conn, ms):
             return True
         for x, y in ((a, b), (b, a)):            # "Saifai, Etawah": the other's town is written in this name
             cx = city(x)
-            if cx and len(cx) >= 4 and any(f' {cx} ' in f' {nm(n)} ' for n in y['names']):
-                return True
+            if cx and len(cx) >= 4 and cx not in ' '.join(toks(y['state'])) and any(
+                    f' {cx} ' in f" {nm(n).replace(nm(y['state']), ' ')} " for n in y['names']):
+                return True                     # …but not "Jammu" read out of "…, Jammu & Kashmir" (2026-11-27)
         return False
 
     decided = {(r['a_id'], r['b_id']) for r in conn.execute(
