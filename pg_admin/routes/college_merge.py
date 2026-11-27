@@ -322,6 +322,10 @@ def college_merge_page():
             _CACHE.update(ver=ver, at=time.time(), ms=ms, pairs=pairs)
         elif show == 'links':
             links = _wrong_links(ms)
+            cid = request.args.get('college', type=int)            # open any one college's names (2026-11-27)
+            if cid and cid in ms and all(m['id'] != cid for m in links):
+                ms[cid].setdefault('suspect', []); ms[cid].setdefault('better', {})
+                links = [ms[cid]] + links
         log = [dict(r) for r in conn.execute(
             "SELECT id, keep_id, dup_id, keep_name, dup_name, action, done_by, done_at FROM pg_college_merge_log "
             "ORDER BY id DESC LIMIT 200").fetchall()]
