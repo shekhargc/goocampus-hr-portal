@@ -126,6 +126,7 @@
       {% for r in log %}<div class="cm-sub" style="margin-top:4px;">{{ r.done_at|string|truncate(16, True, '') }} · {{ r.action }} ·
         {% if r.action == 'merge' %}#{{ r.dup_id }} {{ r.dup_name }} → #{{ r.keep_id }} {{ r.keep_name }}
           {% if r.id not in undone %}<button class="cm-btn" type="button" style="margin-left:6px;padding:2px 9px;" onclick="cmUndo({{ r.id }}, this)">Undo…</button>{% else %}<b> · undone</b>{% endif %}
+        {% elif r.action == 'rename' %}#{{ r.keep_id }} renamed: “{{ r.dup_name }}” → “{{ r.keep_name }}” (old name kept as a remembered spelling)
         {% elif r.action == 'undo' %}undo of a merge: #{{ r.dup_id }} {{ r.dup_name }} is a separate college again{% else %}“{{ r.dup_name }}” from #{{ r.dup_id }} → {{ ('#' ~ r.keep_id) if r.keep_id else 'unlinked' }}{% endif %}
         · {{ r.done_by }}</div>{% else %}<div class="cm-sub">None yet.</div>{% endfor %}
     </div>
