@@ -138,6 +138,8 @@ def register_pg_admin(app):
                      college_merge.college_merge_not_same, methods=['POST'])
     app.add_url_rule('/admin/pg/college-merge/move-alias', 'pg_college_merge_move_alias',
                      college_merge.college_merge_move_alias, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-merge/undo', 'pg_college_merge_undo',
+                     college_merge.college_merge_undo, methods=['GET', 'POST'])
     app.add_url_rule('/admin/pg/college-dupes', 'pg_college_dupes',
                      college_master_admin.college_dupes, methods=['GET'])
     app.add_url_rule('/admin/pg/college-dupes/merge', 'pg_college_dupes_merge',

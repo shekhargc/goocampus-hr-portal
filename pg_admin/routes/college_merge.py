@@ -250,7 +250,9 @@ def college_merge_page():
         ver = tuple(conn.execute(
             "SELECT (SELECT COALESCE(MAX(id),0) FROM pg_college_merge_log) AS a, "
             "(SELECT COALESCE(MAX(id),0) FROM pg_college_pair_decision) AS b, "
-            "(SELECT COUNT(*) FROM pg_college_alias) AS c, (SELECT COUNT(*) FROM pg_college_master) AS d").fetchone().values())
+            "(SELECT COUNT(*) FROM pg_college_alias) AS c, (SELECT COUNT(*) FROM pg_college_master) AS d, "
+            "(SELECT COALESCE(SUM(LENGTH(COALESCE(city,'')) + LENGTH(kind)), 0) FROM pg_college_master) AS e"
+        ).fetchone().values())
         hit = _CACHE.get('ver') == ver and time.time() - _CACHE.get('at', 0) < 900
         ms = _CACHE['ms'] if hit else _load(conn)
         if show == 'pairs':
@@ -261,6 +263,10 @@ def college_merge_page():
         log = [dict(r) for r in conn.execute(
             "SELECT id, keep_id, dup_id, keep_name, dup_name, action, done_by, done_at FROM pg_college_merge_log "
             "ORDER BY id DESC LIMIT 200").fetchall()]
+        undone = set()
+        for r in conn.execute("SELECT detail FROM pg_college_merge_log WHERE action='undo'").fetchall():
+            try: undone.add(json.loads(r['detail'] or '{}').get('undo_of'))
+            except Exception: pass
         nd = [dict(r) for r in conn.execute(
             "SELECT a_id, b_id, decided_by, decided_at FROM pg_college_pair_decision ORDER BY id DESC LIMIT 200"
         ).fetchall()]
@@ -269,11 +275,11 @@ def college_merge_page():
         except Exception: pass
         logging.error("college_merge_page: %s", e)
         flash(f'Could not load the review list: {e}', 'error')
-        nd = []
+        nd, undone = [], set()
     finally:
         conn.close()
     all_names = sorted((m['college_name'], m['id'], m['state']) for m in ms.values())
-    return render_template('pg_admin/college_merge.html', show=show, pairs=pairs, links=links, log=log,
+    return render_template('pg_admin/college_merge.html', show=show, pairs=pairs, links=links, log=log, undone=undone,
                            not_same=nd, ms=ms, all_names=all_names, active_section='goocampus_in')
 
 
@@ -358,26 +364,40 @@ def _merge(conn, keep, dup, who, dry):
         c['std_after'] = std_after
         return c
     note = f"from #{dup} ({dm['college_name']}) merged by {who}"
-    conn.execute("UPDATE pg_college_alias SET master_id=?, alias_source=CASE WHEN alias_source='canonical' "
-                 "THEN 'variant' ELSE alias_source END, note=TRIM(COALESCE(note,'') || ' ' || ?) WHERE master_id=?",
-                 [keep, note, dup])
+    moved = {}                                   # exact row ids, so Undo puts back exactly these (2026-11-27)
+
+    def ids(sql, p):
+        return [r['id'] for r in conn.execute(sql + " RETURNING id", p).fetchall()]
+    moved['alias_canonical'] = [r['id'] for r in conn.execute(
+        "SELECT id FROM pg_college_alias WHERE master_id=? AND alias_source='canonical'", [dup]).fetchall()]
+    moved['alias'] = ids("UPDATE pg_college_alias SET master_id=?, alias_source=CASE WHEN alias_source='canonical' "
+                         "THEN 'variant' ELSE alias_source END, note=TRIM(COALESCE(note,'') || ' ' || ?) WHERE master_id=?",
+                         [keep, note, dup])
+    moved['alias_added'] = []
     if not conn.execute("SELECT 1 FROM pg_college_alias WHERE master_id=? AND alias_key=?",
                         [keep, norm(dm['college_name'])]).fetchone():
-        conn.execute("INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source, note) "
-                     "VALUES (?,?,?,?,?)", [keep, dm['college_name'], norm(dm['college_name']), 'variant', note])
-    conn.execute("UPDATE pg_college_course d SET master_id=? WHERE d.master_id=? AND NOT EXISTS (SELECT 1 FROM "
-                 "pg_college_course k WHERE k.master_id=? AND lower(COALESCE(k.course,''))=lower(COALESCE(d.course,'')) "
-                 "AND COALESCE(k.course_category,'')=COALESCE(d.course_category,''))", [keep, dup, keep])
-    conn.execute("UPDATE pg_college_favorites d SET master_id=? WHERE d.master_id=? AND NOT EXISTS (SELECT 1 FROM "
-                 "pg_college_favorites k WHERE k.master_id=? AND k.user_id=d.user_id)", [keep, dup, keep])
+        moved['alias_added'] = ids("INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source, note) "
+                                   "VALUES (?,?,?,?,?)", [keep, dm['college_name'], norm(dm['college_name']), 'variant', note])
+    moved['course'] = ids("UPDATE pg_college_course d SET master_id=? WHERE d.master_id=? AND NOT EXISTS (SELECT 1 FROM "
+                          "pg_college_course k WHERE k.master_id=? AND lower(COALESCE(k.course,''))=lower(COALESCE(d.course,'')) "
+                          "AND COALESCE(k.course_category,'')=COALESCE(d.course_category,''))", [keep, dup, keep])
+    moved['favorite'] = ids("UPDATE pg_college_favorites d SET master_id=? WHERE d.master_id=? AND NOT EXISTS (SELECT 1 FROM "
+                            "pg_college_favorites k WHERE k.master_id=? AND k.user_id=d.user_id)", [keep, dup, keep])
     for t, col in links:
-        conn.execute(f"UPDATE {t} SET {col}=? WHERE {col}=?", [keep, dup])
+        moved[f'{t}.{col}'] = ids(f"UPDATE {t} SET {col}=? WHERE {col}=?", [keep, dup])
     std_after = _std_name(conn, keep)
     old = [x for x in dup_names + [std_before] if x != std_after]
+    moved['results'] = [[r['id'], r['institute']] for r in conn.execute(
+        "SELECT id, institute FROM pg_results WHERE institute = ANY(?)", [old]).fetchall()]
     conn.execute("UPDATE pg_results SET institute=? WHERE institute = ANY(?)", [std_after, old])
+    moved['name_memory'] = [[r['id'], r['std_name']] for r in conn.execute(
+        "SELECT id, std_name FROM pg_name_memory WHERE kind='college' AND std_name = ANY(?)", [old]).fetchall()]
     conn.execute("UPDATE pg_name_memory SET std_name=? WHERE kind='college' AND std_name = ANY(?)", [std_after, old])
     sm_old = [x for x in old if x not in cut_names]
+    moved['seat_matrix'] = []
     if sm_old:
+        moved['seat_matrix'] = [[r['id'], r['cutoff_institute']] for r in conn.execute(
+            "SELECT id, cutoff_institute FROM pg_seat_matrix WHERE cutoff_institute = ANY(?)", [sm_old]).fetchall()]
         conn.execute("UPDATE pg_seat_matrix SET cutoff_institute=? WHERE cutoff_institute = ANY(?)", [std_after, sm_old])
     conn.execute("UPDATE pg_college_master SET kind='merged', master_key=COALESCE(master_key,'') || '|merged#' || id::text "
                  "WHERE id=?", [dup])
@@ -386,6 +406,7 @@ def _merge(conn, keep, dup, who, dry):
     conn.execute("INSERT INTO pg_college_merge_log (keep_id, dup_id, keep_name, dup_name, action, done_by, detail) "
                  "VALUES (?,?,?,?,?,?,?)", [keep, dup, km['college_name'], dm['college_name'], 'merge', who,
                                             json.dumps({'counts': c, 'dup_names': dup_names, 'std_before': std_before,
+                                                        'std_after': std_after, 'note': note, 'moved': moved,
                                                         'dup_row': snap})])
     return c
 
@@ -494,3 +515,166 @@ def college_merge_move_alias():
     finally:
         conn.close()
     return redirect(url_for('pg_college_merge', show='links'))
+
+
+# ── undo a merge ─────────────────────────────────────────────────────────────
+def _undo(conn, log_id, who, dry):
+    """Put a merged college back exactly as it was. Merges logged after 2026-11-27 carry the exact moved row ids;
+    older ones are reversed from the log's names + counts (the preview lists every row before anything changes)."""
+    from difflib import SequenceMatcher
+    lg = conn.execute("SELECT * FROM pg_college_merge_log WHERE id=? AND action='merge'", [log_id]).fetchone()
+    if not lg:
+        raise ValueError('merge not found')
+    if conn.execute("SELECT 1 FROM pg_college_merge_log WHERE action='undo' AND detail LIKE ?",
+                    [f'%"undo_of": {log_id},%']).fetchone():
+        raise ValueError('this merge was already undone')
+    d = json.loads(lg['detail'] or '{}')
+    keep, dup = lg['keep_id'], lg['dup_id']
+    dm = conn.execute("SELECT kind FROM pg_college_master WHERE id=?", [dup]).fetchone()
+    if not dm or dm['kind'] != 'merged':
+        raise ValueError('that listing is not hidden any more')
+    snap, counts, mv = d.get('dup_row') or {}, d.get('counts') or {}, d.get('moved')
+    std_after = d.get('std_after') or counts.get('std_after') or _std_name(conn, keep)
+    dup_names = d.get('dup_names') or [lg['dup_name']]
+    plan = {'exact': bool(mv), 'aliases': [], 'courses': [], 'results': 0, 'name_memory': [], 'seat_matrix': 0,
+            'favourites': 0, 'links': {}, 'warnings': []}
+
+    if mv:                                                     # exact reversal
+        al = mv.get('alias', [])
+        plan['aliases'] = [r['alias_name'] for r in conn.execute(
+            "SELECT alias_name FROM pg_college_alias WHERE id = ANY(?)", [al]).fetchall()] if al else []
+        plan['courses'] = [r['course'] for r in conn.execute(
+            "SELECT course FROM pg_college_course WHERE id = ANY(?)", [mv.get('course', [])]).fetchall()] \
+            if mv.get('course') else []
+        plan['results'] = len(mv.get('results', []))
+        plan['name_memory'] = [x[1] for x in mv.get('name_memory', [])]
+        plan['seat_matrix'] = len(mv.get('seat_matrix', []))
+        plan['favourites'] = len(mv.get('favorite', []))
+        plan['links'] = {k: len(v) for k, v in mv.items() if '.' in k and v}
+        if dry:
+            return plan
+        note = d.get('note', '')
+        if al:
+            conn.execute("UPDATE pg_college_alias SET master_id=?, note=TRIM(REPLACE(COALESCE(note,''), ?, '')) "
+                         "WHERE id = ANY(?)", [dup, note, al])
+        if mv.get('alias_canonical'):
+            conn.execute("UPDATE pg_college_alias SET alias_source='canonical' WHERE id = ANY(?)", [mv['alias_canonical']])
+        if mv.get('alias_added'):
+            conn.execute("UPDATE pg_college_alias SET is_active=0, note=TRIM(COALESCE(note,'') || ' undone') "
+                         "WHERE id = ANY(?)", [mv['alias_added']])
+        if mv.get('course'):
+            conn.execute("UPDATE pg_college_course SET master_id=? WHERE id = ANY(?)", [dup, mv['course']])
+        if mv.get('favorite'):
+            conn.execute("UPDATE pg_college_favorites SET master_id=? WHERE id = ANY(?)", [dup, mv['favorite']])
+        for k, v in mv.items():
+            if '.' in k and v:
+                t, col = k.split('.', 1)
+                conn.execute(f"UPDATE {t} SET {col}=? WHERE id = ANY(?)", [dup, v])
+        for i, was in mv.get('results', []):
+            conn.execute("UPDATE pg_results SET institute=? WHERE id=? AND institute=?", [was, i, std_after])
+        for i, was in mv.get('name_memory', []):
+            conn.execute("UPDATE pg_name_memory SET std_name=? WHERE id=? AND std_name=?", [was, i, std_after])
+        for i, was in mv.get('seat_matrix', []):
+            conn.execute("UPDATE pg_seat_matrix SET cutoff_institute=? WHERE id=? AND cutoff_institute=?",
+                         [was, i, std_after])
+    else:                                                      # older merge: rebuild from names + counts
+        tag = f"from #{dup} ("
+        al = conn.execute("SELECT id, alias_name, alias_key, alias_source, note FROM pg_college_alias "
+                          "WHERE master_id=? AND note LIKE ?", [keep, f'%{tag}%']).fetchall()
+        plan['aliases'] = [a['alias_name'] for a in al]
+        # courses: the moved ones are the kept college's courses imported in the duplicate's id block
+        n_c = int(counts.get('courses_moved') or 0)
+        kc = conn.execute("SELECT id, course FROM pg_college_course WHERE master_id=? ORDER BY id", [keep]).fetchall()
+        left = [r['id'] for r in conn.execute("SELECT id FROM pg_college_course WHERE master_id=?", [dup]).fetchall()]
+        pick = []
+        if n_c:
+            runs, cur = [], [kc[0]] if kc else []
+            for r in kc[1:]:
+                if r['id'] - cur[-1]['id'] > 3:
+                    runs.append(cur); cur = [r]
+                else:
+                    cur.append(r)
+            if cur:
+                runs.append(cur)
+            if left:
+                runs.sort(key=lambda run: min(abs(r['id'] - x) for r in run for x in left))
+            else:
+                runs.sort(key=lambda run: run[0]['id'], reverse=keep < dup)   # import order follows college id
+            for run in runs:
+                if len(pick) + len(run) <= n_c:
+                    pick += run
+            if len(pick) != n_c:
+                plan['warnings'].append(f'courses: found {len(pick)} of {n_c} moved — check the course list after undo')
+        plan['courses'] = [r['course'] for r in pick]
+        # name matching: the spellings that read like the duplicate rather than the kept college
+        keep_names = [r['alias_name'] for r in conn.execute(
+            "SELECT alias_name FROM pg_college_alias WHERE master_id=? AND NOT (COALESCE(note,'') LIKE ?)", [keep, f'%{tag}%']).fetchall()]
+
+        def close(a, names):
+            return max([SequenceMatcher(None, norm(a), norm(x)).ratio() for x in names] or [0])
+        nmr = conn.execute("SELECT id, raw_name, raw_key FROM pg_name_memory WHERE kind='college' AND std_name=?",
+                           [std_after]).fetchall()
+        n_nm = int(counts.get('name_memory_rows') or 0)
+        scored = sorted(((close(r['raw_name'], dup_names) - close(r['raw_name'], keep_names), r) for r in nmr),
+                        key=lambda x: -x[0])
+        nm_pick = [r for sc, r in scored[:n_nm] if sc > 0]
+        plan['name_memory'] = [r['raw_name'] for r in nm_pick]
+        raw_keys = [r['raw_key'] for r in nm_pick]
+        res = conn.execute("SELECT id, institute_raw FROM pg_results WHERE institute=?", [std_after]).fetchall()
+        res_ids = [r['id'] for r in res if norm(r['institute_raw']) in raw_keys]
+        plan['results'] = len(res_ids)
+        if plan['results'] != int(counts.get('results_2026_rows') or 0):
+            plan['warnings'].append(f"2026 seats: matched {plan['results']} of {counts.get('results_2026_rows')} moved")
+        for k in ('favourites_moved', 'seat_matrix_rows'):
+            if counts.get(k):
+                plan['warnings'].append(f'{k}: {counts[k]} — not reversible automatically, tell Claude')
+        for k, v in counts.items():
+            if '.' in k and v:
+                plan['warnings'].append(f'{k}: {v} — not reversible automatically, tell Claude')
+        if dry:
+            return plan
+        note = None
+        for a in al:
+            canon = a['alias_source'] == 'variant' and a['alias_key'] == norm(snap.get('college_name') or '')
+            conn.execute("UPDATE pg_college_alias SET master_id=?, alias_source=?, note=? WHERE id=?",
+                         [dup, 'canonical' if canon else a['alias_source'],
+                          re.sub(r'from #\d+ \(.*?\) merged by \S+', '', a['note'] or '').strip(), a['id']])
+        if pick:
+            conn.execute("UPDATE pg_college_course SET master_id=? WHERE id = ANY(?)", [dup, [r['id'] for r in pick]])
+        conn.execute("UPDATE pg_college_master SET kind=?, master_key=? WHERE id=?",
+                     [snap.get('kind') or 'medical', snap.get('master_key'), dup])
+        dstd = _std_name(conn, dup)
+        if nm_pick:
+            conn.execute("UPDATE pg_name_memory SET std_name=? WHERE id = ANY(?)", [dstd, [r['id'] for r in nm_pick]])
+        if res_ids:
+            conn.execute("UPDATE pg_results SET institute=? WHERE id = ANY(?)", [dstd, res_ids])
+    conn.execute("UPDATE pg_college_master SET kind=?, master_key=? WHERE id=?",
+                 [snap.get('kind') or 'medical', snap.get('master_key'), dup])
+    conn.execute("INSERT INTO pg_college_pair_decision (a_id, b_id, decision, decided_by) VALUES (?,?,?,?) "
+                 "ON CONFLICT (a_id, b_id) DO NOTHING", [min(keep, dup), max(keep, dup), 'not_same', who])
+    conn.execute("INSERT INTO pg_college_merge_log (keep_id, dup_id, keep_name, dup_name, action, done_by, detail) "
+                 "VALUES (?,?,?,?,?,?,?)", [keep, dup, lg['keep_name'], lg['dup_name'], 'undo', who,
+                                            json.dumps({'undo_of': log_id, 'plan': plan})])
+    return plan
+
+
+@login_required
+def college_merge_undo():
+    """GET ?log=ID → preview (JSON). POST log=ID → undo. Also marks the pair 'different' so it is not re-suggested."""
+    u = _admin()
+    if not u:
+        return jsonify({'ok': False, 'error': 'admin only'}), 403
+    log_id = int(request.values.get('log') or 0)
+    conn = get_db()
+    try:
+        plan = _undo(conn, log_id, _who(u), dry=request.method == 'GET')
+        if request.method == 'POST':
+            conn.commit()
+        return jsonify({'ok': True, 'plan': plan})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("college_merge_undo: %s", e)
+        return jsonify({'ok': False, 'error': str(e)})
+    finally:
+        conn.close()

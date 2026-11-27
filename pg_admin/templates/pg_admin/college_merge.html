@@ -121,7 +121,9 @@
   {% else %}
     <div class="cm-pair"><b>Merged / moved</b>
       {% for r in log %}<div class="cm-sub" style="margin-top:4px;">{{ r.done_at|string|truncate(16, True, '') }} · {{ r.action }} ·
-        {% if r.action == 'merge' %}#{{ r.dup_id }} {{ r.dup_name }} → #{{ r.keep_id }} {{ r.keep_name }}{% else %}“{{ r.dup_name }}” from #{{ r.dup_id }} → {{ ('#' ~ r.keep_id) if r.keep_id else 'unlinked' }}{% endif %}
+        {% if r.action == 'merge' %}#{{ r.dup_id }} {{ r.dup_name }} → #{{ r.keep_id }} {{ r.keep_name }}
+          {% if r.id not in undone %}<button class="cm-btn" type="button" style="margin-left:6px;padding:2px 9px;" onclick="cmUndo({{ r.id }}, this)">Undo…</button>{% else %}<b> · undone</b>{% endif %}
+        {% elif r.action == 'undo' %}undo of a merge: #{{ r.dup_id }} {{ r.dup_name }} is a separate college again{% else %}“{{ r.dup_name }}” from #{{ r.dup_id }} → {{ ('#' ~ r.keep_id) if r.keep_id else 'unlinked' }}{% endif %}
         · {{ r.done_by }}</div>{% else %}<div class="cm-sub">None yet.</div>{% endfor %}
     </div>
     <div class="cm-pair"><b>Marked as different colleges</b>
@@ -132,6 +134,14 @@
 
 <div id="cmToast" style="display:none;position:fixed;top:90px;right:24px;z-index:1300;max-width:460px;padding:11px 14px;border-radius:9px;font-size:0.86rem;box-shadow:0 6px 18px rgba(0,0,0,.12);"></div>
 <div class="cm-bg" id="cmBg" onclick="cmClose()"></div>
+<div class="cm-drawer" id="cmUndoDrawer">
+  <h3 style="margin:0 0 6px;color:var(--navy);">Undo this merge</h3>
+  <div id="cmUndoBody" class="cm-sub">Loading…</div>
+  <div class="cm-foot">
+    <button class="cm-btn go" type="button" id="cmUndoGo" disabled onclick="cmUndoGo()">Confirm undo</button>
+    <button class="cm-btn" type="button" onclick="cmUndoClose()">Cancel</button>
+  </div>
+</div>
 <div class="cm-drawer" id="cmDrawer">
   <h3 style="margin:0 0 6px;color:var(--navy);">Merge into one college</h3>
   <div id="cmBody" class="cm-sub">Loading…</div>
@@ -180,6 +190,35 @@ function cmNotSame(btn, a, b) {
     if (!j.ok) { btn.disabled = false; btn.textContent = 'Different colleges'; cmToast('Could not save.', false); return; }
     btn.closest('.cm-pair').remove(); cmToast('Saved: different colleges — will not be suggested again.', true);
   }).catch(() => { btn.disabled = false; btn.textContent = 'Different colleges'; });
+}
+let cmUndoId = 0, cmUndoBtn = null;
+function cmUndoClose() { document.getElementById('cmUndoDrawer').classList.remove('open'); document.getElementById('cmBg').classList.remove('open'); }
+function cmUndo(id, btn) {
+  cmUndoId = id; cmUndoBtn = btn;
+  const body = document.getElementById('cmUndoBody'), go = document.getElementById('cmUndoGo');
+  body.textContent = 'Loading…'; go.disabled = true; go.textContent = 'Confirm undo';
+  document.getElementById('cmUndoDrawer').classList.add('open'); document.getElementById('cmBg').classList.add('open');
+  fetch('{{ url_for("pg_college_merge_undo") }}?log=' + id, {credentials: 'same-origin'}).then(r => r.json()).then(j => {
+    if (!j.ok) { body.textContent = 'Cannot undo: ' + j.error; return; }
+    const p = j.plan, esc = s => String(s).replace(/[&<>"]/g, x => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x]));
+    const li = a => a.length ? a.map(esc).join('<br>') : '—';
+    body.innerHTML = '<p>The hidden listing comes back as its own college, and these move back to it:</p><table>' +
+      '<tr><td>Names</td><td><b>' + li(p.aliases) + '</b></td></tr>' +
+      '<tr><td>Courses</td><td><b>' + li(p.courses) + '</b></td></tr>' +
+      '<tr><td>2026 result seats</td><td><b>' + p.results + '</b></td></tr>' +
+      '<tr><td>Name-matching spellings</td><td><b>' + li(p.name_memory) + '</b></td></tr>' +
+      (p.warnings.length ? '<tr><td style="color:#b45309">Please check</td><td style="color:#b45309">' + li(p.warnings) + '</td></tr>' : '') +
+      '</table><p class="cm-sub">The pair is then marked "different colleges" so it is not suggested again.</p>';
+    go.disabled = false;
+  });
+}
+function cmUndoGo() {
+  const go = document.getElementById('cmUndoGo'); go.disabled = true; go.textContent = 'Undoing… please wait';
+  cmPost('{{ url_for("pg_college_merge_undo") }}', {log: cmUndoId}).then(j => {
+    if (!j.ok) { go.disabled = false; go.textContent = 'Confirm undo'; cmToast('Undo failed — nothing changed: ' + j.error, false); return; }
+    cmUndoClose(); if (cmUndoBtn) cmUndoBtn.outerHTML = '<b> · undone</b>';
+    cmToast('Undone ✓ — the two colleges are separate again.', true);
+  }).catch(e => { go.disabled = false; go.textContent = 'Confirm undo'; cmToast('Could not reach the server — nothing changed.', false); });
 }
 function cmPick() {
   const id = v => { const m = /\(#(\d+),/.exec(v || ''); return m ? +m[1] : 0; };
