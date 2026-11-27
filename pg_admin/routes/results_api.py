@@ -1433,12 +1433,12 @@ def name_memory_admin():
         dnb_only = set()
         if kind == 'college':
             try:
+                md_keys, dnb_keys = set(), set()
                 for r in conn.execute(
-                        "SELECT btrim(regexp_replace(lower(institute_raw), '[^a-z0-9]+', ' ', 'g')) AS k, "
-                        "bool_or(COALESCE(section,'') <> 'dnb') AS md FROM pg_results "
-                        "WHERE COALESCE(institute_raw,'') <> '' GROUP BY 1").fetchall():
-                    if not r['md']:
-                        dnb_only.add(r['k'])
+                        "SELECT institute_raw AS n, (COALESCE(section,'') = 'dnb') AS dnb FROM pg_results "
+                        "WHERE COALESCE(institute_raw,'') <> '' GROUP BY 1, 2").fetchall():
+                    (dnb_keys if r['dnb'] else md_keys).add(NM.norm(r['n']))
+                dnb_only = dnb_keys - md_keys
             except Exception:
                 conn.rollback()
         if dnb_only:
