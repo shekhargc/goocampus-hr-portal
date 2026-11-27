@@ -128,6 +128,16 @@ def register_pg_admin(app):
                      college_master_admin.college_master_cutoff_audit, methods=['GET'])
     app.add_url_rule('/admin/pg/college-master/purge-blank-cutoffs', 'pg_college_master_purge_blank',
                      college_master_admin.college_master_purge_blank, methods=['POST'])
+    from pg_admin.routes import college_merge
+    app.add_url_rule('/admin/pg/college-merge', 'pg_college_merge', college_merge.college_merge_page, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-merge/preview', 'pg_college_merge_preview',
+                     college_merge.college_merge_preview, methods=['GET'])
+    app.add_url_rule('/admin/pg/college-merge/apply', 'pg_college_merge_apply',
+                     college_merge.college_merge_apply, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-merge/not-same', 'pg_college_merge_not_same',
+                     college_merge.college_merge_not_same, methods=['POST'])
+    app.add_url_rule('/admin/pg/college-merge/move-alias', 'pg_college_merge_move_alias',
+                     college_merge.college_merge_move_alias, methods=['POST'])
     app.add_url_rule('/admin/pg/college-dupes', 'pg_college_dupes',
                      college_master_admin.college_dupes, methods=['GET'])
     app.add_url_rule('/admin/pg/college-dupes/merge', 'pg_college_dupes_merge',
