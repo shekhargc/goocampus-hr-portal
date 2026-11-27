@@ -19,8 +19,9 @@
   .nm-pill.unmatched { background:#FEE2E2; color:#991B1B; }
   .nm-sub { color:var(--gray-500); font-size:0.74rem; }
   .nm-btn { border:1px solid var(--gray-300); background:#fff; border-radius:6px; padding:3px 10px; font-size:0.76rem; cursor:pointer; color:#2952a3; }
-  .nm-drawer-bg { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:50; }
-  .nm-drawer { position:fixed; top:0; right:-560px; width:520px; max-width:100%; height:100vh; background:#fff; z-index:51; box-shadow:-8px 0 24px rgba(0,0,0,.12); padding:22px; transition:right .2s; overflow-y:auto; }
+  .nm-drawer-bg { display:none; position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:1190; }   /* above the top menu (z 100/1000) */
+  .nm-drawer { position:fixed; top:0; right:-560px; width:520px; max-width:100%; height:100vh; background:#fff; z-index:1200; box-shadow:-8px 0 24px rgba(0,0,0,.12); padding:22px 22px 0; transition:right .2s; overflow-y:auto; box-sizing:border-box; }
+  .nm-drawer-foot { position:sticky; bottom:0; background:#fff; display:flex; gap:10px; margin-top:20px; padding:14px 0 18px; border-top:1px solid var(--gray-200); }
   .nm-drawer.open { right:0; } .nm-drawer-bg.open { display:block; }
   .nm-drawer label { display:block; font-size:0.75rem; font-weight:700; color:var(--gray-600); margin:14px 0 4px; }
   .nm-drawer input[type=text] { width:100%; padding:8px 10px; border:1px solid var(--gray-300); border-radius:8px; font-size:0.85rem; box-sizing:border-box; }
@@ -109,7 +110,7 @@
     <input type="text" name="std_name" id="nmStd" list="nmStdList" autocomplete="off" placeholder="Start typing the college / course…">
     <datalist id="nmStdList">{% for n in std %}<option value="{{ n }}">{% endfor %}</datalist>
     <div class="nm-sub" style="margin-top:6px;">Leave empty and save = "not a {{ kind }} in our list" (e.g. a new 2026 college).</div>
-    <div style="display:flex;gap:10px;margin-top:20px;">
+    <div class="nm-drawer-foot">
       <button class="nm-save" type="submit">Save</button>
       <button class="nm-btn" type="button" onclick="nmClose()">Cancel</button>
     </div>
