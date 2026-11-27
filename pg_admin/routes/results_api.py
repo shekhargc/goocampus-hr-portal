@@ -1263,6 +1263,12 @@ def api_results_cutoffs():
             rows = [r for r in rows if r['closing'] >= rank]
         group_counts = {'compared': 0, 'new': 0}                       # for the tab badges (0 sent explicitly)
         group_counts.update(Counter(r['compare_group'] for r in rows))
+        group_seats, group_colleges = {'compared': 0, 'new': 0}, {'compared': set(), 'new': set()}
+        for r in rows:                        # seats (sum of allotted) + distinct colleges per tab (2026-11-27)
+            g = r['compare_group']
+            group_seats[g] = group_seats.get(g, 0) + (r.get('allotted') or 0)
+            group_colleges.setdefault(g, set()).add(r['institute'])
+        group_colleges = {g: len(s) for g, s in group_colleges.items()}
         reason_counts = dict(Counter(r['compare'] for r in rows))
         grp, cmp_ = _s(a.get('compare_group')), _s(a.get('compare'))
         if grp:                                   # compared | new
@@ -1280,7 +1286,8 @@ def api_results_cutoffs():
         return jsonify({'ok': True, 'authority': auth, 'round': rd, 'program': 'dnb' if dnb else 'mdms',
                         'compared_with': None if dnb else f"2025 {rd['round']}", 'states': states,
                         'rank_basis': 'state' if auth in STATE_RANK_CUTOFFS else 'all_india',
-                        'group_counts': group_counts, 'reason_counts': reason_counts,
+                        'group_counts': group_counts, 'group_seats': group_seats,
+                        'group_colleges': group_colleges, 'reason_counts': reason_counts,
                         'rows': rows[(page - 1) * size: page * size], 'total_matched': total, 'page': page,
                         'page_size': size, 'total_pages': (total + size - 1) // size})
     except Exception as e:
