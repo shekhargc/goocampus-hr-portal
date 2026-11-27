@@ -21,6 +21,7 @@ DNB courses stay hidden from doctors (HIDE_DNB), like everywhere else.
 """
 import base64
 import logging
+import re
 import statistics
 import time
 from collections import defaultdict, Counter
@@ -178,6 +179,10 @@ def api_results_ingest():
     year = _s(d.get('year')) or YEAR
     rows = d.get('rows') or []
     mode = _s(d.get('mode')) or 'all'
+    # NBEMS post-MBBS diplomas printed as plain diplomas by state lists → DNB (hidden), like MCC (founder 2026-11-27)
+    for r in rows:
+        if _s(r.get('section')) == 'diploma' and re.search(NBEMS_DIPLOMA_RE, _s(r.get('course_raw')), re.I):
+            r['section'] = 'dnb'
     if mode not in ('all', 'start', 'append', 'finish'):
         return jsonify({'ok': False, 'error': 'bad mode'}), 400
     if not auth or not rnd or (not rows and mode != 'finish'):
@@ -440,6 +445,48 @@ def _set_notice(conn, auth, year, rnd, notice, url, who):
     return len(conn.execute("UPDATE pg_results_source SET notice=?, notice_url=?, notice_by=?, notice_at=CURRENT_TIMESTAMP "
                             "WHERE authority_code=? AND academic_year=? AND round=? RETURNING id",
                             [notice, url, who, auth, year, rnd]).fetchall())
+
+
+NBEMS_DIPLOMA_RE = r'(post[ _]*mbbs[ _]*(pg[ _]*)?dip|nbems|\(post mbbs diploma\))'
+
+
+def api_results_reclassify():
+    """POST /api/pg/results/reclassify (X-News-Key) {authority_code, round, year?, dry_run?, by}
+    — file NBEMS seats a state list printed as a plain diploma ("Post MBBS Diploma", "POST MBBS PG DIP",
+    "(NBEMS-DIPLOMA) …", "… (POST MBBS DIPLOMA)") as DNB, like MCC's DNB quota (founder 2026-11-27: hidden for now;
+    a 2026 DNB cut-off + DNB hospital list come later). Only `section` changes; every other field stays.
+    Returns the rows matched per course before / after."""
+    from pg_admin.routes.api_news_ingest import _ok
+    if not _ok():
+        return jsonify({'ok': False, 'error': 'unauthorized'}), 401
+    d = request.get_json(silent=True) or {}
+    auth, rnd, year = _s(d.get('authority_code')), _s(d.get('round')), _s(d.get('year')) or YEAR
+    if not auth or not rnd:
+        return jsonify({'ok': False, 'error': 'authority_code and round needed'}), 400
+    conn = get_db()
+    try:
+        where = ("authority_code=? AND academic_year=? AND round=? AND COALESCE(section,'')='diploma' "
+                 "AND course_raw ~* ?")
+        params = [auth, year, rnd, NBEMS_DIPLOMA_RE]
+        found = [dict(r) for r in conn.execute(
+            f"SELECT course_raw, COUNT(*) AS n FROM pg_results WHERE {where} GROUP BY 1 ORDER BY 1", params).fetchall()]
+        n = sum(int(r['n']) for r in found)
+        if not d.get('dry_run') and n:
+            conn.execute(f"UPDATE pg_results SET section='dnb' WHERE {where}", params)
+            _recount_matched(conn)
+            conn.execute("UPDATE pg_results_source SET notes = COALESCE(notes,'') || ? WHERE authority_code=? "
+                         "AND academic_year=? AND round=?",
+                         [f" [{_s(d.get('by')) or 'portal'}: {n} NBEMS post-MBBS diploma lines filed as DNB (hidden) — "
+                          "founder 2026-11-27]", auth, year, rnd])
+            conn.commit()
+        return jsonify({'ok': True, 'dry_run': bool(d.get('dry_run')), 'lines': n, 'by_course': found})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("api_results_reclassify: %s", e)
+        return jsonify({'ok': False, 'error': 'server_error'}), 500
+    finally:
+        conn.close()
 
 
 def api_results_notice():
