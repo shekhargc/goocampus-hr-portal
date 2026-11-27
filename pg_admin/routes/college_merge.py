@@ -750,3 +750,64 @@ def college_merge_undo():
         return jsonify({'ok': False, 'error': str(e)})
     finally:
         conn.close()
+
+
+# ── clean display names (founder 2026-11-27: one clean name everywhere, every old spelling remembered) ─────
+@login_required
+def college_rename_bulk():
+    """POST JSON {renames: [{id, name}], dry_run}. Sets the College Database name. The old name is kept as a
+    remembered spelling (alias 'former'). When the old name was also this college's matching name (no 2025 cut-off
+    spelling), our 2026 results / name memory / seat-matrix links follow it. Each change is logged."""
+    u = _admin()
+    if not u:
+        return jsonify({'ok': False, 'error': 'admin only'}), 403
+    body = request.get_json(silent=True) or {}
+    dry = bool(body.get('dry_run'))
+    conn = get_db()
+    done, skipped = [], []
+    try:
+        for it in body.get('renames') or []:
+            mid, new = int(it.get('id') or 0), re.sub(r'\s+', ' ', (it.get('name') or '')).strip()
+            m = conn.execute("SELECT id, college_name, kind FROM pg_college_master WHERE id=?", [mid]).fetchone()
+            if not m or m['kind'] == 'merged' or not new or new == m['college_name']:
+                skipped.append({'id': mid, 'why': 'not found / merged / unchanged'})
+                continue
+            old = m['college_name']
+            std_before = _std_name(conn, mid)
+            is_cut = bool(conn.execute("SELECT 1 FROM pg_cutoffs WHERE institute=? LIMIT 1", [old]).fetchone())
+            follow = std_before == old and not is_cut  # old name was the matching name and is not a 2025 cut-off spelling
+            if dry:
+                done.append({'id': mid, 'old': old, 'new': new, 'moves_2026_rows': follow})
+                continue
+            note = f"name until {time.strftime('%Y-%m-%d')} — renamed by {_who(u)}"
+            if not conn.execute("SELECT 1 FROM pg_college_alias WHERE master_id=? AND alias_key=?", [mid, norm(old)]).fetchone():
+                conn.execute("INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source, note) VALUES (?,?,?,?,?)",
+                             [mid, old, norm(old), 'former', note])
+            if not conn.execute("SELECT 1 FROM pg_college_alias WHERE master_id=? AND alias_key=?", [mid, norm(new)]).fetchone():
+                conn.execute("INSERT INTO pg_college_alias (master_id, alias_name, alias_key, alias_source, note) VALUES (?,?,?,?,?)",
+                             [mid, new, norm(new), 'canonical', f"display name set {time.strftime('%Y-%m-%d')} by {_who(u)}"])
+            conn.execute("UPDATE pg_college_master SET college_name=? WHERE id=?", [new, mid])
+            moved = {}
+            if follow:
+                cut_names = {r['institute'] for r in conn.execute(
+                    "SELECT DISTINCT institute FROM pg_cutoffs WHERE institute = ?", [old]).fetchall()}
+                moved['results'] = [r['id'] for r in conn.execute(
+                    "UPDATE pg_results SET institute=? WHERE institute=? RETURNING id", [new, old]).fetchall()]
+                moved['name_memory'] = [r['id'] for r in conn.execute(
+                    "UPDATE pg_name_memory SET std_name=? WHERE kind='college' AND std_name=? RETURNING id", [new, old]).fetchall()]
+                moved['seat_matrix'] = [] if cut_names else [r['id'] for r in conn.execute(
+                    "UPDATE pg_seat_matrix SET cutoff_institute=? WHERE cutoff_institute=? RETURNING id", [new, old]).fetchall()]
+            conn.execute("INSERT INTO pg_college_merge_log (keep_id, dup_id, keep_name, dup_name, action, done_by, detail) "
+                         "VALUES (?,?,?,?,?,?,?)", [mid, None, new, old, 'rename', _who(u),
+                                                    json.dumps({'old': old, 'new': new, 'moved': moved})])
+            done.append({'id': mid, 'old': old, 'new': new, 'results_moved': len(moved.get('results', []))})
+        if not dry:
+            conn.commit()
+        return jsonify({'ok': True, 'dry_run': dry, 'done': done, 'skipped': skipped})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error("college_rename_bulk: %s", e)
+        return jsonify({'ok': False, 'error': str(e)})
+    finally:
+        conn.close()
