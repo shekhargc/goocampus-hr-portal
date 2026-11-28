@@ -212,8 +212,12 @@ def rank_list(conn, *, key, rows, row_in_list, cat_ok25, c26, cats26, clinical, 
     return by, best25, best26
 
 
-def tiers_for(by):
-    """Computed tier per college (Top 30 / Good 35 / Average 35) over every college with a score."""
-    known = sorted([d for d in by.values() if d['score'] is not None],
+MIN_COURSES = 3      # founder 2026-11-28: 1–2-course institutes are listed apart, not tiered with full colleges
+
+
+def tiers_for(by, min_courses=0):
+    """Computed tier per college (Top 30 / Good 35 / Average 35) over every college with a score and at least
+    `min_courses` MD/MS courses in the list."""
+    known = sorted([d for d in by.values() if d['score'] is not None and (d.get('courses') or 0) >= min_courses],
                    key=lambda d: (d['score'], d['closing_2026'] or d['closing_2025'] or 10 ** 9))
     return {d['college_code']: band(i, len(known)) for i, d in enumerate(known)}

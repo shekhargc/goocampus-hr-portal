@@ -27,16 +27,20 @@ def _item(d, tier):
             'new_in_2026': bool(d['new_college']), 'score': d['score'], 'tier_source': tier[1]}
 
 
-def _assemble(by, draft, team, follow=None):
-    """→ (tiers{Top,Good,Average: [items]}, new[items]) — team tier wins, then (NRI) the Deemed Paid tier it
-    follows, then the computed one; colleges with no Round 1–2 rank in either year: history → Average end,
-    none → 'new'."""
-    tiers, new = {t: [] for t in _TIERS}, []
+def _assemble(by, draft, team, follow=None, min_courses=0):
+    """→ (tiers{Top,Good,Average: [items]}, new[items], specialist[items]) — team tier wins, then (NRI) the
+    Deemed Paid tier it follows, then the computed one; colleges with fewer than `min_courses` MD/MS courses
+    (speciality institutes, colleges just starting) go to `specialist`, ordered by fill speed; colleges with no
+    Round 1–2 rank in either year: history → Average end, none → 'new'."""
+    tiers, new, specialist = {t: [] for t in _TIERS}, [], []
     for d in sorted(by.values(), key=lambda x: (x['score'] if x['score'] is not None else 9,
                                                x['closing_2026'] or x['closing_2025'] or 10 ** 9, x['college'])):
         code = d['college_code']
         if team.get(code) in _TIERS:
             t = (team[code], 'team')
+        elif min_courses and (d.get('courses') or 0) < min_courses and d['score'] is not None:
+            specialist.append(_item(d, ('Speciality institute', 'fewer than %d courses' % min_courses)))
+            continue
         elif follow and follow.get(code) in _TIERS:
             t = (follow[code], 'follows deemed paid')
         elif code in draft:
@@ -47,7 +51,7 @@ def _assemble(by, draft, team, follow=None):
             new.append(_item(d, ('New', 'new')))
             continue
         tiers[t[0]].append(_item(d, t))
-    return tiers, new
+    return tiers, new, specialist
 
 
 def _mcc_team(conn, key):
@@ -79,14 +83,16 @@ def mcc_lists(conn, speciality='', cats_sel=None):
             speciality=speciality or None, spec_match=spec)
         if not by:
             continue
-        draft = E.tiers_for(by)
+        mc = 0 if speciality else E.MIN_COURSES
+        draft = E.tiers_for(by, mc)
         use_team = cat == dflt and not speciality
         team = _mcc_team(conn, key) if use_team else {}
         follow = final.get('deemed_paid_open') if key == 'nri_deemed' and use_team else None
-        tiers, new = _assemble(by, draft, team, follow)
+        tiers, new, specialist = _assemble(by, draft, team, follow, mc)
         final[key] = {i['college_code']: t for t, items in tiers.items() for i in items}
-        lists.append({'key': key, 'label': meta['label'], 'tiers': tiers, 'new': new,
-                      'counts': {**{t: len(v) for t, v in tiers.items()}, 'New': len(new)},
+        lists.append({'key': key, 'label': meta['label'], 'tiers': tiers, 'new': new, 'specialist': specialist,
+                      'specialist_label': 'Speciality institutes & colleges with 1–2 MD/MS courses (by fill speed)',
+                      'counts': {**{t: len(v) for t, v in tiers.items()}, 'New': len(new), 'Specialist': len(specialist)},
                       'categories': cats, 'category': cat, 'default_category': dflt, 'team_edited': use_team})
     return lists
 
@@ -109,12 +115,14 @@ def state_lists(conn, authority, rows, speciality='', cats_sel=None):
             speciality=speciality or None, spec_match=spec)
         if not by:
             continue
-        draft = E.tiers_for(by)
+        mc = 0 if speciality else E.MIN_COURSES
+        draft = E.tiers_for(by, mc)
         use_team = cat == dflt and not speciality
         team = {c: s.get('tier') for c, s in srk._stored(conn, authority, key).items()} if use_team else {}
-        tiers, new = _assemble(by, draft, team)
-        lists.append({'key': key, 'label': label, 'tiers': tiers, 'new': new,
-                      'counts': {**{t: len(v) for t, v in tiers.items()}, 'New': len(new)},
+        tiers, new, specialist = _assemble(by, draft, team, None, mc)
+        lists.append({'key': key, 'label': label, 'tiers': tiers, 'new': new, 'specialist': specialist,
+                      'specialist_label': 'Speciality institutes & colleges with 1–2 MD/MS courses (by fill speed)',
+                      'counts': {**{t: len(v) for t, v in tiers.items()}, 'New': len(new), 'Specialist': len(specialist)},
                       'categories': cats, 'category': cat, 'default_category': dflt, 'team_edited': use_team})
     return lists
 
@@ -123,7 +131,8 @@ def method_note(conn, authority):
     n = E.rounds_done(conn, authority)
     yr26 = ('2026 Rounds 1 and 2' if n >= 2 else '2026 Round 1' if n == 1 else 'no 2026 round yet')
     return (f"Order = how fast each college's seats went to top rankers: 2025 Rounds 1–2 and {yr26}, counted "
-            "equally, course against course. Top = first 30 %, Good = next 35 %, Average = last 35 %. "
+            "equally, course against course. Top = first 30 %, Good = next 35 %, Average = last 35 % of colleges with "
+            "3+ MD/MS courses; institutes with 1–2 courses are listed separately by fill speed. "
             "Closing rank = the highest rank that got a seat by the end of Round 2 (typical over the college's "
             "clinical courses; in a speciality view, that course).")
 
