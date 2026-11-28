@@ -9,7 +9,7 @@ Founder's rules:
   * 2025 (last year's cut-offs, Rounds 1–2) and 2026 (this year's results, Rounds 1–2 as far as published)
     count EQUALLY. A college new in 2026 is ranked on 2026 alone.
   * Course against course: in every course offered by 2+ colleges, each college's place (0 = filled first,
-    1 = last); a year's score = its average place over its clinical courses (all courses if it has none);
+    1 = last); a year's score = its average place over ALL its courses, clinical courses counting twice;
     the college's score = the average of its 2025 and 2026 scores.
   * Tiers: Top = first 30 %, Good = next 35 %, Average = last 35 %. A tier set by a team member on the Desk
     always wins over the computed one.
@@ -189,7 +189,10 @@ def rank_list(conn, *, key, rows, row_in_list, cat_ok25, c26, cats26, clinical, 
             order = sorted(cols, key=lambda c: cols[c])
             for i, c in enumerate(order):
                 places[c][0 if clinical(course) else 1].append(i / (len(order) - 1))
-        return {c: (sum(v[0] or v[1]) / len(v[0] or v[1])) for c, v in places.items() if (v[0] or v[1])}
+        # every course counts, clinical twice — so each college is judged on the same basis (a college whose open
+        # seats this year were only in late-filling non-clinical courses is not scored against non-clinical
+        # seats alone) while clinical demand still weighs most (2026-11-28)
+        return {c: (2 * sum(v[0]) + sum(v[1])) / (2 * len(v[0]) + len(v[1])) for c, v in places.items() if (v[0] or v[1])}
 
     s25, s26 = year_scores(best25), year_scores(best26)
     for code, d in by.items():
