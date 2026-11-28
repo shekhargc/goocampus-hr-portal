@@ -83,13 +83,15 @@ def rounds_done(conn, authority):
 
 
 def closings_2026(conn, authority, classify, ck):
-    """{(list_key, category, course_key, college_key): {'rank': closing, 'name': institute, 'state', 'type'}} from
+    """{(list_key, category, course_key, college_key): {'rank': closing ALL-INDIA rank, 'rank_state': the same seat's
+    state merit rank (state lists), 'name', 'state', 'type'}} from
     this year's Round 1–2 results (every list of those rounds; seats taken IN the round — retained excluded;
     DNB left out). classify(quota, college_type) → list key or None."""
     out = {}
     try:
         rows = conn.execute(
-            "SELECT r.institute, r.course, r.quota, r.allotted_category AS cat, r.college_type, r.state, r.rank "
+            "SELECT r.institute, r.course, r.quota, r.allotted_category AS cat, r.college_type, r.state, "
+            "COALESCE(r.rank_ai, r.rank) AS rank, CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END AS rank_state "
             "FROM pg_results r JOIN pg_results_source s ON s.authority_code=r.authority_code "
             "AND s.academic_year=r.academic_year AND s.round=r.round "
             "WHERE r.authority_code=? AND r.academic_year=? AND s.round_order IN (1,2) AND COALESCE(s.is_hidden,0)=0 "
@@ -105,9 +107,10 @@ def closings_2026(conn, authority, classify, ck):
             continue
         k = (lk, (r['cat'] or '').strip(), norm(r['course']), ck(r['institute']))
         cur = out.get(k)
-        if cur is None or r['rank'] > cur['rank']:
-            out[k] = {'rank': int(r['rank']), 'name': r['institute'], 'state': r['state'] or '',
-                      'type': r['college_type'] or '', 'course': r['course']}
+        if cur is None or r['rank'] > cur['rank']:          # All-India rank decides; the state rank rides along
+            out[k] = {'rank': int(r['rank']), 'rank_state': int(r['rank_state']) if r['rank_state'] else None,
+                      'name': r['institute'], 'state': r['state'] or '', 'type': r['college_type'] or '',
+                      'course': r['course']}
     return out
 
 
@@ -151,7 +154,8 @@ def rank_list(conn, *, key, rows, row_in_list, cat_ok25, c26, cats26, clinical, 
     for code, k in code_ck.items():
         ck_code.setdefault(k, code)
 
-    best25, best26 = defaultdict(dict), defaultdict(dict)       # course → {college_code: closing}
+    best25, best26 = defaultdict(dict), defaultdict(dict)       # course → {college_code: closing (All-India)}
+    best26s = defaultdict(dict)                                  # course → {college_code: that seat's state rank}
     for r in rows:
         if not row_in_list(r) or not cat_ok25(r):
             continue
@@ -180,6 +184,8 @@ def rank_list(conn, *, key, rows, row_in_list, cat_ok25, c26, cats26, clinical, 
         cur = best26[course].get(code)
         if cur is None or v['rank'] < cur:
             best26[course][code] = v['rank']
+            if v.get('rank_state'):
+                best26s[course][code] = v['rank_state']
 
     def year_scores(best):
         places = defaultdict(lambda: ([], []))
@@ -208,13 +214,14 @@ def rank_list(conn, *, key, rows, row_in_list, cat_ok25, c26, cats26, clinical, 
             return _median(vals)
         d['closing_2025'] = typical(best25)
         d['closing_2026'] = typical(best26)
+        d['closing_2026_state'] = typical(best26s)
         d['new_college'] = not d['hist'] and d['closing_2025'] is None
         d['has_clinical'] = code in clin_any       # a clinical seat in this category in 2025 or 2026 Rounds 1–2
         d['courses'] = len(d['_c'])
         d['course_names'] = sorted(d['_c'])
         for k in ('_c', '_name', '_raw'):
             d.pop(k, None)
-    return by, best25, best26
+    return by, best25, best26, best26s
 
 
 MIN_COURSES = 3      # founder 2026-11-28: 1–2-course institutes are listed apart, not tiered with full colleges

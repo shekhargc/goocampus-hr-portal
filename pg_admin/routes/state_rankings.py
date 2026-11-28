@@ -442,8 +442,8 @@ def rankings_data(conn, authority, speciality='', cats_sel=None):
     base['method'] = rv2.method_note(conn, authority)
     if speciality:
         return {**base, 'speciality': speciality,
-                'lists': rv2.state_lists(conn, authority, rows, speciality, cats_sel), 'new_colleges': []}
-    lists, news = rv2.state_lists(conn, authority, rows, '', cats_sel), {}
+                'lists': rv2.state_lists(conn, authority, rows, speciality, cats_sel, a['body']), 'new_colleges': []}
+    lists, news = rv2.state_lists(conn, authority, rows, '', cats_sel, a['body']), {}
     for l in lists:                                       # colleges with no Round 1-2 rank in either year
         for c in l.get('new') or []:
             n = news.setdefault(c['college_code'], {**c, 'seats': 0, 'lists': [], 'seats_by_list': {}})

@@ -24,6 +24,7 @@ def _item(d, tier):
     return {'college': d['college'], 'state': d['state'], 'institute_type': d['institute_type'], 'seats': d['seats'],
             'college_code': d['college_code'], 'courses': d.get('courses'), 'course_names': d.get('course_names'),
             'closing_2025': d['closing_2025'], 'closing_2026': d['closing_2026'],
+            'closing_2026_state': d.get('closing_2026_state'), 'rank_basis': 'air',
             'new_in_2026': bool(d['new_college']), 'score': d['score'], 'tier_source': tier[1]}
 
 
@@ -78,7 +79,7 @@ def mcc_lists(conn, speciality='', cats_sel=None):
             continue
         cats, dflt = srk.categories_of(rows, rk._MCC_PREF)
         cat = rk._pick(cats, dflt, (cats_sel or {}).get(key))
-        by, _, _ = E.rank_list(
+        by, _, _, _ = E.rank_list(
             conn, key=key, rows=rows, row_in_list=lambda r: True,
             cat_ok25=lambda r, c=cat: (r.get('cutoff_category') or '') == c, c26=c26, cats26={cat},
             clinical=clinical, ck=ck, short_name=rec._short_name, type_label=rk._type_label,
@@ -99,8 +100,20 @@ def mcc_lists(conn, speciality='', cats_sel=None):
     return lists
 
 
-def state_lists(conn, authority, rows, speciality='', cats_sel=None):
+def _air_rows(conn, body, rows):
+    """2025 cr_* in All-India ranks for every state (Tamil Nadu's 2025 cut-offs are TN merit ranks — converted
+    the same way the predictor does; unconvertible → None)."""
+    from pg_admin.data import rank_bridge as rb
+    try:
+        return rb.present_seat_rows(conn, body, [dict(r) for r in rows])
+    except Exception:
+        conn.rollback()
+        return rows
+
+
+def state_lists(conn, authority, rows, speciality='', cats_sel=None, body=''):
     from pg_admin.routes import state_rankings as srk
+    rows = _air_rows(conn, body, rows) if body else rows
     ck = E.college_key_fn(conn)
     c26 = E.closings_2026(conn, authority, srk.list_of, ck)
     clinical = srk._clinical_fn(conn)
@@ -110,7 +123,7 @@ def state_lists(conn, authority, rows, speciality='', cats_sel=None):
         cats, dflt = srk.list_categories(rows, key)
         want = (cats_sel or {}).get(key)
         cat = want if want and want in {c['code'] for c in cats} else dflt
-        by, _, _ = E.rank_list(
+        by, _, _, _ = E.rank_list(
             conn, key=key, rows=rows, row_in_list=lambda r, k=key: srk.list_of(r['quota'], r['institute_type']) == k,
             cat_ok25=lambda r, k=key, c=cat: srk._cat_ok(r, k, c), c26=c26, cats26={cat} if cat else None,
             clinical=clinical, ck=ck, short_name=rec._short_name, type_label=srk._type_label,
@@ -160,7 +173,7 @@ def _list_inputs(conn, authority, key, cats_sel):
     a = srk._body(conn, authority)
     if not a or key not in srk.LISTS:
         return None
-    rows = srk._rows(conn, a['body'])
+    rows = _air_rows(conn, a['body'], srk._rows(conn, a['body']))
     cats, dflt = srk.list_categories(rows, key)
     cat = cats_sel if cats_sel and cats_sel in {c['code'] for c in cats} else dflt
     c26 = E.closings_2026(conn, authority, srk.list_of, ck)
@@ -177,7 +190,7 @@ def build_xlsx(conn, authority, key, category='', speciality=''):
     if not p:
         return None, None
     spec = _spec_fn(speciality)
-    by, b25, b26 = E.rank_list(conn, key=key, rows=p['rows'], row_in_list=p['row_in_list'], cat_ok25=p['cat_ok25'],
+    by, b25, b26, b26s = E.rank_list(conn, key=key, rows=p['rows'], row_in_list=p['row_in_list'], cat_ok25=p['cat_ok25'],
                                c26=p['c26'], cats26=p['cats26'], clinical=p['clinical'], ck=p['ck'],
                                short_name=rec._short_name, type_label=p['type_label'],
                                speciality=speciality or None, spec_match=spec)
@@ -202,7 +215,9 @@ def build_xlsx(conn, authority, key, category='', speciality=''):
         ws.append([f"Closing rank = highest rank that got a seat by the end of Round 2. 2025: Rounds 1–2. "
                    f"2026: {'Rounds 1–2' if n26 >= 2 else 'Round 1' if n26 == 1 else 'no round yet'}."])
         ws.append([])
-        ws.append(['S.No', 'College (2025)', 'Closing rank 2025', '', 'S.No', 'College (2026)', 'Closing rank 2026'])
+        st_col = any(b26s.get(course, {}).values())
+        ws.append(['S.No', 'College (2025)', 'Closing rank 2025 (AIR)', '', 'S.No', 'College (2026)',
+                   'Closing rank 2026 (AIR)'] + (['2026 state rank'] if st_col else []))
         for c in ws[4]:
             if c.value:
                 c.font = Font(bold=True, color='FFFFFF'); c.fill = head_fill
@@ -212,8 +227,10 @@ def build_xlsx(conn, authority, key, category='', speciality=''):
                 row[0:3] = [n + 1, by[a25[n][0]]['college'], a25[n][1]]
             if n < len(a26):
                 row[4:7] = [n + 1, by[a26[n][0]]['college'], a26[n][1]]
+                if st_col:
+                    row.append(b26s.get(course, {}).get(a26[n][0]))
             ws.append(row)
-        for col, w in zip('ABCDEFG', (6, 52, 16, 3, 6, 52, 16)):
+        for col, w in zip('ABCDEFGH', (6, 52, 18, 3, 6, 52, 18, 14)):
             ws.column_dimensions[col].width = w
         ws.freeze_panes = 'A5'
     if not wb.sheetnames:
