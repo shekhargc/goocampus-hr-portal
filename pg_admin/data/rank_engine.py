@@ -91,7 +91,7 @@ def closings_2026(conn, authority, classify, ck):
     try:
         rows = conn.execute(
             "SELECT r.institute, r.course, r.quota, r.allotted_category AS cat, r.college_type, r.state, "
-            "COALESCE(r.rank_ai, r.rank) AS rank, CASE WHEN r.rank_ai IS NOT NULL THEN r.rank END AS rank_state "
+            "COALESCE(r.rank_ai, r.rank) AS rank, CASE WHEN r.rank_ai IS NOT NULL AND r.rank_ai <> r.rank THEN r.rank END AS rank_state "
             "FROM pg_results r JOIN pg_results_source s ON s.authority_code=r.authority_code "
             "AND s.academic_year=r.academic_year AND s.round=r.round "
             "WHERE r.authority_code=? AND r.academic_year=? AND s.round_order IN (1,2) AND COALESCE(s.is_hidden,0)=0 "
