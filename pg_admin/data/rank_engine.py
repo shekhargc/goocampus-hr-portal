@@ -195,6 +195,7 @@ def rank_list(conn, *, key, rows, row_in_list, cat_ok25, c26, cats26, clinical, 
         return {c: (2 * sum(v[0]) + sum(v[1])) / (2 * len(v[0]) + len(v[1])) for c, v in places.items() if (v[0] or v[1])}
 
     s25, s26 = year_scores(best25), year_scores(best26)
+    clin_any = {c for best in (best25, best26) for course, cols in best.items() if clinical(course) for c in cols}
     for code, d in by.items():
         ys = [s for s in (s25.get(code), s26.get(code)) if s is not None]
         d['score'] = round(sum(ys) / len(ys), 4) if ys else None
@@ -208,6 +209,7 @@ def rank_list(conn, *, key, rows, row_in_list, cat_ok25, c26, cats26, clinical, 
         d['closing_2025'] = typical(best25)
         d['closing_2026'] = typical(best26)
         d['new_college'] = not d['hist'] and d['closing_2025'] is None
+        d['has_clinical'] = code in clin_any       # a clinical seat in this category in 2025 or 2026 Rounds 1–2
         d['courses'] = len(d['_c'])
         d['course_names'] = sorted(d['_c'])
         for k in ('_c', '_name', '_raw'):
@@ -221,6 +223,7 @@ MIN_COURSES = 3      # founder 2026-11-28: 1–2-course institutes are listed ap
 def tiers_for(by, min_courses=0):
     """Computed tier per college (Top 30 / Good 35 / Average 35) over every college with a score and at least
     `min_courses` MD/MS courses in the list."""
-    known = sorted([d for d in by.values() if d['score'] is not None and (d.get('courses') or 0) >= min_courses],
+    known = sorted([d for d in by.values() if d['score'] is not None and (d.get('courses') or 0) >= min_courses
+                    and (d.get('has_clinical') or not min_courses)],
                    key=lambda d: (d['score'], d['closing_2026'] or d['closing_2025'] or 10 ** 9))
     return {d['college_code']: band(i, len(known)) for i, d in enumerate(known)}

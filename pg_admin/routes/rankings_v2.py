@@ -45,6 +45,8 @@ def _assemble(by, draft, team, follow=None, min_courses=0):
             t = (follow[code], 'follows deemed paid')
         elif code in draft:
             t = (draft[code], 'computed')
+        elif min_courses and d['score'] is not None and not d.get('has_clinical'):
+            t = ('Average', 'no clinical seat in this category yet')
         elif d['hist']:
             t = ('Average', 'no Round 1-2 seat in this category')
         else:
