@@ -33,7 +33,7 @@ from pg_admin.routes import (mentors_admin, api, predictor_admin,
                              diag_home_state, diag_states, diag_neet_scores, seat_matrix_admin, api_seat_matrix,
                              news_admin, api_news, authority_admin, api_authorities,
                              specialty_admin, news_inbox_admin, api_news_ingest,
-                             calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, team_college_lists, my_payments,
+                             calendar_admin, desk_api, seat_matrix_ingest, recommended, rankings, rankings_v2, team_college_lists, my_payments,
                              mgmt_inquiries, archive_admin, results_api, neet_result_api, fees_api)
 from pg_admin import news_scraper as _news_scraper
 
@@ -501,6 +501,7 @@ def register_pg_admin(app):
          my_payments.api_balance_create_order, ['POST']),
         ('/api/pg/my-plan-payments/balance/verify', 'api_pg_balance_verify', my_payments.api_balance_verify, ['POST']),
         ('/api/pg/rankings/pdf', 'api_pg_rankings_pdf', rankings.api_rankings_pdf, ['GET']),
+        ('/api/pg/rankings/xlsx', 'api_pg_rankings_xlsx', rankings_v2.api_rankings_xlsx, ['GET']),
         ('/api/pg/desk/rankings/email', 'api_pg_desk_rankings_email', rankings.desk_rankings_email, ['GET', 'POST']),
         ('/api/pg/desk/college-lists', 'api_pg_desk_college_lists', team_college_lists.lists_index, ['GET', 'POST']),
         ('/api/pg/desk/college-lists/<int:lid>', 'api_pg_desk_college_list', team_college_lists.list_detail,

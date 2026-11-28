@@ -211,7 +211,7 @@ def _stored(conn, authority, key):
 
 
 def _band(i, n):
-    return 'Top' if i < n * 0.2 else 'Good' if i < n * 0.55 else 'Average'
+    return 'Top' if i < n * 0.30 else 'Good' if i < n * 0.65 else 'Average'   # 30/35/35 (founder 2026-11-28)
 
 
 # ── Category picker (founder 2026-10-31) ─────────────────────────────────────
@@ -438,12 +438,20 @@ def rankings_data(conn, authority, speciality='', cats_sel=None):
                             f"{a['name']}'s 2026 seat matrix is not out yet - these rankings use last year's (2025) "
                             "colleges, courses and allotments. They switch to the 2026 matrix as soon as it is published."),
             'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
+    from pg_admin.routes import rankings_v2 as rv2      # 2025 + 2026 Rounds 1-2, 30/35/35 (founder 2026-11-28)
+    base['method'] = rv2.method_note(conn, authority)
     if speciality:
         return {**base, 'speciality': speciality,
-                'lists': _speciality_lists(conn, authority, a['body'], speciality, rows, cats_sel), 'new_colleges': []}
+                'lists': rv2.state_lists(conn, authority, rows, speciality, cats_sel, a['body']), 'new_colleges': []}
+    lists, news = rv2.state_lists(conn, authority, rows, '', cats_sel, a['body']), {}
+    for l in lists:                                       # colleges with no Round 1-2 rank in either year
+        for c in l.get('new') or []:
+            n = news.setdefault(c['college_code'], {**c, 'seats': 0, 'lists': [], 'seats_by_list': {}})
+            n['lists'].append(l['label']); n['seats_by_list'][l['label']] = c['seats']; n['seats'] += c['seats']
+    if lists:
+        return {**base, 'lists': lists, 'new_colleges': sorted(news.values(), key=lambda x: x['college'])}
     clinical = _clinical_fn(conn)
-    lists, news = [], {}
-    for key, label in LISTS.items():
+    for key, label in LISTS.items():                      # old path kept only as a fallback
         cats, dflt = list_categories(rows, key)
         want = (cats_sel or {}).get(key)
         cat = want if want and want in {c['code'] for c in cats} else dflt
