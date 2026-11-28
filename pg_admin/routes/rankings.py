@@ -37,8 +37,11 @@ _QUOTA_LABEL = {'All India': 'All India Quota', 'Self-Financed Merit Seat': 'Dee
 
 def _type_label(it):
     it = (it or '').lower()
-    return 'Deemed University' if 'deemed' in it else 'Central University' if it.startswith('central') \
-        else 'Government' if it else ''
+    if 'deemed' in it:
+        return 'Deemed University'
+    if it.startswith('central'):        # RML / Safdarjung are central-government hospitals, not universities
+        return 'Central University' if 'universit' in it else 'Central Government'
+    return 'Government' if it else ''
 
 
 # ── Category picker for MCC (founder 2026-10-31) ─────────────────────────────
@@ -270,7 +273,10 @@ def _table(pdf, rows, heads, widths, aligns):
 
 def build_rankings_pdf(conn, speciality='', only='', plain=False, category=''):
     """only = one list key (aiq_open | deemed_paid_open | ciq_open | nri_deemed) → just that list.
-    plain = one continuous numbered list per list (same order: Top, Good, Average), no tier headings."""
+    plain = one continuous numbered list per list (same order: Top, Good, Average), no tier headings.
+    Since 2026-11-28 the same content as the page (rankings_v2.build_pdf)."""
+    from pg_admin.routes import rankings_v2 as _rv2
+    return _rv2.build_pdf(conn, 'mcc', speciality, only, plain, category)
     from pg_admin.choice_pdf import _t, _NAVY, _GREY
     data = rankings_data(conn, speciality, {only: category} if (only and category) else None)
     used = ''

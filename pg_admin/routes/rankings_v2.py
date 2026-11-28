@@ -12,12 +12,20 @@ from pg_admin.routes import recommended as rec
 _TIERS = ('Top', 'Good', 'Average')
 
 
-def _spec_fn(speciality):
+def _spec_fn(speciality, courses=None):
+    """Course matcher for a picked speciality: the exact course when it exists (MS - OBG never pulls in the DGO
+    diploma), else the course core (founder 2026-11-28)."""
     if not speciality:
         return None
     from pg_admin.routes.api_choice import _spec_core
     core, want = _spec_core(speciality).lower(), speciality.strip().lower()
+    if courses is not None and want in {(c or '').strip().lower() for c in courses}:
+        return lambda c: bool(c) and c.strip().lower() == want
     return lambda c: bool(c) and (c.lower() == want or (core and core in c.lower()))
+
+
+def _courses(rows, c26):
+    return {r.get('cutoff_course') for r in rows if r.get('cutoff_course')} | {v['course'] for v in c26.values()}
 
 
 def _item(d, tier):
@@ -71,12 +79,12 @@ def mcc_lists(conn, speciality='', cats_sel=None):
     ck = E.college_key_fn(conn)
     c26 = E.closings_2026(conn, 'mcc', lambda q, t: E.MCC_QUOTA_LIST.get((q or '').strip()), ck)
     clinical = srk._clinical_fn(conn)
-    spec = _spec_fn(speciality)
     lists, final = [], {}
     for key, meta in rec.TIER_LISTS.items():
         rows = rk._mcc_rows(conn, key)
         if not rows:
             continue
+        spec = _spec_fn(speciality, _courses(rows, c26))
         cats, dflt = srk.categories_of(rows, rk._MCC_PREF)
         cat = rk._pick(cats, dflt, (cats_sel or {}).get(key))
         by, _, _, _ = E.rank_list(
@@ -117,7 +125,7 @@ def state_lists(conn, authority, rows, speciality='', cats_sel=None, body=''):
     ck = E.college_key_fn(conn)
     c26 = E.closings_2026(conn, authority, srk.list_of, ck)
     clinical = srk._clinical_fn(conn)
-    spec = _spec_fn(speciality)
+    spec = _spec_fn(speciality, _courses(rows, c26))
     lists = []
     for key, label in srk.LISTS.items():
         cats, dflt = srk.list_categories(rows, key)
@@ -189,7 +197,7 @@ def build_xlsx(conn, authority, key, category='', speciality=''):
     p = _list_inputs(conn, authority, key, category)
     if not p:
         return None, None
-    spec = _spec_fn(speciality)
+    spec = _spec_fn(speciality, _courses(p['rows'], p['c26']))
     by, b25, b26, b26s = E.rank_list(conn, key=key, rows=p['rows'], row_in_list=p['row_in_list'], cat_ok25=p['cat_ok25'],
                                c26=p['c26'], cats26=p['cats26'], clinical=p['clinical'], ck=p['ck'],
                                short_name=rec._short_name, type_label=p['type_label'],
@@ -266,3 +274,84 @@ def api_rankings_xlsx():
         return jsonify({'ok': False, 'error': 'server_error'}), 500
     finally:
         conn.close()
+
+
+# ── PDF, same content as the page (founder 2026-11-28) ─────────────────────────────────────────────────────
+def build_pdf(conn, authority, speciality='', only='', plain=False, category=''):
+    """authority 'mcc' or a state code; only = one list key; plain = one numbered list per list (no tier headings);
+    category applies to `only`. Columns: # · College · State · Type · 2025 · 2026 (All-India closing ranks, the 2026
+    state rank in a last column where it differs)."""
+    import re as _re
+    from pg_admin.choice_pdf import _t, _NAVY, _GREY
+    from pg_admin.routes.rankings import _pdf_base, _table
+    sel = {only: category} if (only and category) else None
+    if authority == 'mcc':
+        from pg_admin.routes.rankings import rankings_data as _mcc_data
+        data = _mcc_data(conn, speciality, sel)
+        name, labels = 'MCC', {k: v['label'] for k, v in rec.TIER_LISTS.items()}
+    else:
+        from pg_admin.routes import state_rankings as srk
+        data = srk.rankings_data(conn, authority, speciality, sel)
+        if not data:
+            return None, None
+        name, labels = data['name'], dict(srk.LISTS)
+    if only:
+        data['lists'] = [l for l in data['lists'] if l['key'] == only]
+    used = next((l.get('category') or '' for l in data['lists']), '') if only else ''
+    detail = ' · '.join(x for x in (speciality, labels.get(only, '') if only else '',
+                                    f'{used} category' if used else '') if x)
+    pdf = _pdf_base(f'{name} College Rankings 2026',
+                    'GooCampus guidance · ' + ('colleges in order' if plain else 'Top · Good · Average colleges'), detail)
+    pdf.footer_note = 'GooCampus guidance from 2025 and 2026 Rounds 1-2. A suggestion only - verify before locking your choices.'
+    pdf.set_font('Helvetica', '', 8.6); pdf.set_text_color(*_GREY)
+    intro = (data.get('method') or '') + f" Prepared by the GooCampus team on {data.get('generated_at', '')}."
+    if speciality:
+        intro = f'Speciality: {speciality}. ' + intro
+    if plain:
+        intro = intro.replace('Top = first 30 %, Good = next 35 %, Average = last 35 % of colleges with 3+ MD/MS courses; ', '')
+    pdf.multi_cell(0, 4.4, _t(intro), new_x='LMARGIN', new_y='NEXT')
+    TIER_COL = {'Top': (22, 101, 52), 'Good': (37, 99, 235), 'Average': (107, 114, 128)}
+
+    def fmt(v):
+        return f'{v:,}' if isinstance(v, int) else '-'
+
+    def block(title, rows, colour, courses=False):
+        if not rows:
+            return
+        if pdf.get_y() > 250:
+            pdf.add_page()
+        pdf.ln(1); pdf.set_font('Helvetica', 'B', 10.5); pdf.set_text_color(*colour)
+        pdf.multi_cell(0, 6.5, _t(f'{title} ({len(rows)})'), new_x='LMARGIN', new_y='NEXT')
+        st = any(r.get('closing_2026_state') for r in rows)
+        heads = ['#', 'College', 'State', 'Type', '2025', '2026'] + (['2026 state'] if st else [])
+        widths = [8, 92 if not st else 80, 26, 24, 18, 18] + ([16] if st else [])
+        body = []
+        for i, r in enumerate(rows, 1):
+            nm = r['college'] + (f" ({', '.join(r.get('course_names') or [])})" if courses and r.get('course_names') else '')
+            nm += ' [New in 2026]' if r.get('new_in_2026') else ''
+            body.append([str(i), nm, r.get('state') or '', r.get('institute_type') or '',
+                         fmt(r.get('closing_2025')), fmt(r.get('closing_2026'))] +
+                        ([fmt(r.get('closing_2026_state'))] if st else []))
+        _table(pdf, body, tuple(heads), tuple(widths),
+               ('CENTER', 'LEFT', 'LEFT', 'LEFT', 'RIGHT', 'RIGHT', 'RIGHT')[:len(heads)])
+
+    for lst in data['lists']:
+        if not any(lst['tiers'].values()) and not lst.get('new') and not lst.get('specialist'):
+            continue
+        if pdf.get_y() > 240:
+            pdf.add_page()
+        pdf.ln(4); pdf.set_font('Helvetica', 'B', 13); pdf.set_text_color(*_NAVY)
+        pdf.multi_cell(0, 7, _t(lst['label'] + (f" · {lst['category']} category" if lst.get('category') else '')),
+                       new_x='LMARGIN', new_y='NEXT')
+        if plain:
+            block('Colleges', [r for t in _TIERS for r in (lst['tiers'].get(t) or [])], _NAVY)
+        else:
+            for t in _TIERS:
+                block(f'{t} colleges', lst['tiers'].get(t) or [], TIER_COL[t])
+        block(lst.get('specialist_label') or 'Speciality institutes', lst.get('specialist') or [], (124, 58, 237), True)
+        block('New in 2026 - no Round 1-2 allotment yet', lst.get('new') or [], (154, 52, 18))
+    slug = _re.sub(r'[^A-Za-z0-9]+', '_', name).strip('_')
+    sp = ('_' + _re.sub(r'[^A-Za-z0-9]+', '_', speciality).strip('_')[:40]) if speciality else ''
+    one = ('_' + _re.sub(r'[^A-Za-z0-9]+', '_', labels.get(only, '')).strip('_')) if only else ''
+    one += ('_' + _re.sub(r'[^A-Za-z0-9]+', '_', used).strip('_')) if used else ''
+    return bytes(pdf.output()), f"GooCampus_{slug}_College_Rankings_2026{sp}{one}{'_List' if plain else ''}.pdf"

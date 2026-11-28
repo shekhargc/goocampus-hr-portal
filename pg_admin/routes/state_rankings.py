@@ -474,7 +474,10 @@ def rankings_data(conn, authority, speciality='', cats_sel=None):
 # ── PDFs ─────────────────────────────────────────────────────────────────────
 def build_pdf(conn, authority, speciality='', only='', plain=False, category=''):
     """only = one list key (govt|private|management|nri) → just that list + its new colleges.
-    plain = one continuous numbered list per list (same order: Top, Good, Average), no tier headings."""
+    plain = one continuous numbered list per list (same order: Top, Good, Average), no tier headings.
+    Since 2026-11-28 the same content as the page (rankings_v2.build_pdf)."""
+    from pg_admin.routes import rankings_v2 as _rv2
+    return _rv2.build_pdf(conn, authority, speciality, only, plain, category)
     from pg_admin.choice_pdf import _t, _NAVY, _GREY
     from pg_admin.routes.rankings import _pdf_base, _table
     data = rankings_data(conn, authority, speciality, {only: category} if (only and category) else None)
