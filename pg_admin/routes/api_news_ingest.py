@@ -730,6 +730,17 @@ def api_seatmatrix_dump():
                             'source_total': (f.get('source') or {}).get('total_seats'),
                             'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []],
                             'round': f.get('round'), 'rounds': f.get('rounds'), 'has_pdf': f.get('has_pdf')})
+        if request.args.get('rankings'):          # College Rankings engine check, read-only (staging, 2026-11-28)
+            auth = request.args.get('rankings').strip().lower()
+            sp, lk, ck_ = request.args.get('speciality') or '', request.args.get('list') or '', request.args.get('category') or ''
+            sel = {lk: ck_} if (lk and ck_) else None
+            if auth == 'mcc':
+                from pg_admin.routes import rankings as _rk
+                d = _rk.rankings_data(conn, sp, sel)
+            else:
+                from pg_admin.routes import state_rankings as _srk
+                d = _srk.rankings_data(conn, auth, sp, sel)
+            return jsonify({'ok': True, 'data': d})
         if (request.args.get('resget') or '').startswith('/api/pg/results'):   # read-only results API check (2026-11-11)
             from flask import current_app
             qs = {k: v for k, v in request.args.items() if k not in ('resget', 'n')}

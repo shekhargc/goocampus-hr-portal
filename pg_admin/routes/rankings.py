@@ -165,11 +165,14 @@ def rankings_data(conn, speciality='', cats_sel=None):
     """{lists:[{key,label,tiers:{Top:[..],Good:[..],Average:[..]},counts}], new_colleges:[..]}
     With `speciality`: the per-speciality order (each list also gets `new` for that course)."""
     rec.ensure_rec_tables(conn)
+    from pg_admin.routes import rankings_v2 as rv2      # 2025 + 2026 Rounds 1-2, 30/35/35 (founder 2026-11-28)
+    method = rv2.method_note(conn, 'mcc')
     if speciality:
-        return {'speciality': speciality, 'lists': _speciality_lists(conn, speciality, cats_sel), 'new_colleges': [],
-                'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
-    lists, new_by_code = [], {}
-    for key, meta in rec.TIER_LISTS.items():
+        return {'speciality': speciality, 'lists': rv2.mcc_lists(conn, speciality, cats_sel), 'new_colleges': [],
+                'method': method, 'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
+    lists, new_by_code = rv2.mcc_lists(conn, '', cats_sel), {}
+    tiered = {i['college_code'] for l in lists for items in l['tiers'].values() for i in items}
+    for key, meta in ({} if lists else rec.TIER_LISTS).items():   # old path kept only as a fallback
         mrows = _mcc_rows(conn, key)
         cats, dflt = mcc_categories(conn, key, mrows)
         cat = _pick(cats, dflt, (cats_sel or {}).get(key))
@@ -208,11 +211,14 @@ def rankings_data(conn, speciality='', cats_sel=None):
             if q not in n['seats_by_list']:
                 n['lists'].append(q)
             n['seats_by_list'][q] = int(r['seats'] or 0)
-    news = sorted(new_by_code.values(), key=lambda x: (x['state'], x['college']))
+    # a college new in 2026 that already has 2026 Round 1-2 seats is ranked in its list (founder 2026-11-28)
+    news = sorted([n for n in new_by_code.values() if n['college_code'] not in tiered],
+                  key=lambda x: (x['state'], x['college']))
     for n in news:
         n['seats'] = sum(n['seats_by_list'].values())
     _add_2025_notes(conn, news, bodies)
-    return {'lists': lists, 'new_colleges': news, 'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
+    return {'lists': lists, 'new_colleges': news, 'method': method,
+            'generated_at': _ist_now().strftime('%d %b %Y, %I:%M %p IST')}
 
 
 # ── PDFs ─────────────────────────────────────────────────────────────────────
