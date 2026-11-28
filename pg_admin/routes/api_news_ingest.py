@@ -730,6 +730,16 @@ def api_seatmatrix_dump():
                             'source_total': (f.get('source') or {}).get('total_seats'),
                             'available': [(a['counselling_body'], a['total_seats']) for a in f.get('available') or []],
                             'round': f.get('round'), 'rounds': f.get('rounds'), 'has_pdf': f.get('has_pdf')})
+        if request.args.get('rankxlsx'):          # Rankings Excel check: sheet names + first rows (staging, 2026-11-28)
+            import io, openpyxl
+            from pg_admin.routes import rankings_v2 as _rv2
+            data, fname = _rv2.build_xlsx(conn, request.args.get('rankxlsx'), request.args.get('list') or 'govt',
+                                          request.args.get('category') or '', request.args.get('speciality') or '')
+            if data is None:
+                return jsonify({'ok': False})
+            wb = openpyxl.load_workbook(io.BytesIO(data))
+            return jsonify({'ok': True, 'file': fname, 'sheets': wb.sheetnames,
+                            'first': [[c for c in r] for r in wb.worksheets[0].iter_rows(max_row=9, values_only=True)]})
         if request.args.get('rankings'):          # College Rankings engine check, read-only (staging, 2026-11-28)
             auth = request.args.get('rankings').strip().lower()
             sp, lk, ck_ = request.args.get('speciality') or '', request.args.get('list') or '', request.args.get('category') or ''
